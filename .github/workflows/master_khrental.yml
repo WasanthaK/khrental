@@ -43,11 +43,21 @@ jobs:
           npm run build --if-present
           npm run test --if-present
 
+      - name: Create startup script
+        run: |
+          echo "#!/bin/sh" > startup.sh
+          echo "cd /home/site/wwwroot" >> startup.sh
+          echo "npm install -g serve" >> startup.sh
+          echo "serve -s . -l 8080" >> startup.sh
+          chmod +x startup.sh
+
       - name: Prepare deployment package
         run: |
           cp web.config dist/
           cp startup.sh dist/
-          chmod +x dist/startup.sh
+          rm -f dist/server.js
+          echo "Listing deployment package contents:"
+          ls -la dist/
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -78,7 +88,8 @@ jobs:
           ls -la
           echo "Checking web.config exists:"
           cat web.config
-          echo "Checking startup.sh exists:"
+          echo "Checking startup.sh exists and is executable:"
+          ls -l startup.sh
           cat startup.sh
 
       - name: Login to Azure
@@ -95,4 +106,5 @@ jobs:
           app-name: 'khrental'
           slot-name: 'Production'
           package: .
+          startup-command: '/home/site/wwwroot/startup.sh'
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
