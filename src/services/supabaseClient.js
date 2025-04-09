@@ -3,14 +3,23 @@ import { isValidUUID } from '../utils/validators.js';
 
 // Initialize the Supabase client
 const getEnvVar = (key) => {
-  return import.meta.env[key];
+  const value = import.meta.env[key];
+  if (!value) {
+    // Check for runtime environment variables
+    const runtimeValue = window?._env_?.[key] || process.env?.[key];
+    if (runtimeValue) {
+      return runtimeValue;
+    }
+    console.error(`Environment variable ${key} is missing`);
+  }
+  return value;
 };
 
 const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing. Please check your environment variables.');
+  throw new Error('Supabase URL and Anon Key are required. Please check your environment variables.');
 }
 
 // Create a single Supabase client instance
