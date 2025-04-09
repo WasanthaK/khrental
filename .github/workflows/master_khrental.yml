@@ -1,3 +1,25 @@
+Skip to content
+Navigation Menu
+WasanthaK
+khrental
+
+Type / to search
+Code
+Issues
+Pull requests
+Actions
+Projects
+Wiki
+Security
+1
+Insights
+Settings
+Build and deploy Node.js app to Azure Web App - khrental
+Fix environment variables loading in production #26
+Jobs
+Run details
+Workflow file for this run
+.github/workflows/master_khrental.yml at f754dea
 name: Build and deploy Node.js app to Azure Web App - khrental
 
 on:
@@ -37,7 +59,6 @@ jobs:
           echo "VITE_API_ENDPOINT=$VITE_API_ENDPOINT" >> .env
           echo "VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL" >> .env
           npm run build
-
       - name: Create deployment package
         run: |
           mkdir -p deploy
@@ -107,7 +128,6 @@ jobs:
           
           # Create custom startup command file
           echo 'CUSTOM_STARTUP_COMMAND="/home/site/wwwroot/startup.sh"' > deploy/startup.txt
-
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
@@ -127,6 +147,14 @@ jobs:
         with:
           name: node-app
 
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
+
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
@@ -136,3 +164,4 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
+Fix environment variables loading in production · WasanthaK/khrental@f754dea 
