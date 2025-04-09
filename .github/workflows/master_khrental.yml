@@ -42,25 +42,14 @@ jobs:
           echo "VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL" >> .env
           npm run build
 
-      - name: Create deployment package
+      - name: Prepare deployment files
         run: |
-          mkdir -p deploy
-          cp -r dist/* deploy/
-          
-          # Create runtime environment file
-          echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > deploy/.env
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> deploy/.env
-          echo "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.EVIA_SIGN_CLIENT_ID }}" >> deploy/.env
-          echo "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" >> deploy/.env
-          echo "VITE_API_ENDPOINT=${{ secrets.API_ENDPOINT }}" >> deploy/.env
-          echo "VITE_WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" >> deploy/.env
-          
-          # Create startup script
-          echo '#!/bin/bash' > deploy/startup.sh
-          echo 'cd /home/site/wwwroot' >> deploy/startup.sh
-          echo 'npm install -g serve' >> deploy/startup.sh
-          echo 'serve -s . -l 8080' >> deploy/startup.sh
-          chmod +x deploy/startup.sh
+          # Create startup script first (in root)
+          echo '#!/bin/bash
+          cd /home/site/wwwroot
+          npm install -g serve
+          serve -s . -p 8080' > startup.sh
+          chmod +x startup.sh
           
           # Create web.config
           echo '<?xml version="1.0" encoding="utf-8"?>
@@ -84,16 +73,30 @@ jobs:
                 </rules>
               </rewrite>
             </system.webServer>
-          </configuration>' > deploy/web.config
+          </configuration>' > web.config
           
-          # Create custom startup command file
-          echo 'CUSTOM_STARTUP_COMMAND="/home/site/wwwroot/startup.sh"' > deploy/startup.txt
+          # Copy build files
+          cp -r dist/* .
+          
+          # Verify files
+          echo "Checking deployment files:"
+          ls -la
+          echo "Checking startup script:"
+          cat startup.sh
+          echo "Checking startup script permissions:"
+          ls -l startup.sh
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: deploy/
+          path: |
+            ./*
+            startup.sh
+            web.config
+            !node_modules
+            !src
+            !.git
 
   deploy:
     runs-on: ubuntu-latest
@@ -107,7 +110,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          path: deploy/
+          path: .
+
+      - name: Verify deployment files
+        run: |
+          echo "Checking deployment files:"
+          ls -la
+          echo "Checking startup script:"
+          cat startup.sh
+          echo "Ensuring startup script is executable:"
+          chmod +x startup.sh
 
       - name: Login to Azure
         uses: azure/login@v2
