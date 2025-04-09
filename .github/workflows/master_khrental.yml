@@ -141,4 +141,3 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
-Fix environment variables loading in production · WasanthaK/khrental@f754dea 
