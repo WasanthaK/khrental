@@ -3,9 +3,6 @@ import { isValidUUID } from '../utils/validators.js';
 
 // Initialize the Supabase client
 const getEnvVar = (key) => {
-  if (typeof window !== 'undefined' && window.env && window.env[key]) {
-    return window.env[key];
-  }
   return import.meta.env[key];
 };
 
@@ -51,13 +48,16 @@ export const getSupabaseClient = () => {
   return supabaseInstance;
 };
 
-// Export the singleton instance
+// Initialize environment variables immediately
+
+// Export the singleton instance getter
 export const supabase = getSupabaseClient();
 
 // Authentication helpers
 export const signUp = async (email, password) => {
+  const client = getSupabaseClient();
   console.log('[Supabase] Signing up user:', email);
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await client.auth.signUp({
     email,
     password,
   });
@@ -67,9 +67,10 @@ export const signUp = async (email, password) => {
 
 // Enhanced sign in with debug logging
 export const signIn = async (email, password) => {
+  const client = getSupabaseClient();
   console.log('[Supabase] Attempting sign in for:', email);
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await client.auth.signInWithPassword({
       email,
       password,
     });
@@ -104,8 +105,9 @@ export const signOut = async () => {
 };
 
 export const getCurrentUser = async () => {
+  const client = getSupabaseClient();
   console.log('[Supabase] Getting current user');
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await client.auth.getUser();
   console.log('[Supabase] Get current user result:', { 
     success: !error, 
     hasUser: !!data?.user,

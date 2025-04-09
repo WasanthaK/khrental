@@ -69,7 +69,7 @@ jobs:
           echo '}' >> deploy/startup.sh
           echo 'EOL' >> deploy/startup.sh
           echo 'cat > env.js << EOL' >> deploy/startup.sh
-          echo 'window.env = {' >> deploy/startup.sh
+          echo 'export default {' >> deploy/startup.sh
           echo '  VITE_SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",' >> deploy/startup.sh
           echo '  VITE_SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",' >> deploy/startup.sh
           echo '  VITE_EVIA_SIGN_CLIENT_ID: "${{ secrets.EVIA_SIGN_CLIENT_ID }}",' >> deploy/startup.sh
