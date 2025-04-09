@@ -46,6 +46,16 @@ jobs:
           npm run build --if-present
           npm run test --if-present
 
+      - name: Debug - List build output
+        run: |
+          echo "Contents of dist directory:"
+          ls -la dist/
+          echo "Checking for index.html:"
+          cat dist/index.html | head -n 5
+
+      - name: Copy web.config to build output
+        run: cp web.config dist/
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
@@ -64,7 +74,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          path: dist/
+          path: .
+
+      - name: Debug - List files to be deployed
+        run: |
+          echo "Files to be deployed:"
+          ls -la
+          echo "Checking web.config exists:"
+          cat web.config
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -79,6 +96,6 @@ jobs:
         with:
           app-name: 'khrental'
           slot-name: 'Production'
-          package: dist/
+          package: .
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           
