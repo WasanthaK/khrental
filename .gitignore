@@ -1,0 +1,52 @@
+# Dependency directories
+node_modules/
+webhook-server/node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+webhook-server/.env
+webhook-server/.env.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+webhook-server/logs/
+webhook-server/data/*.log
+
+# Runtime data and local storage
+webhook-server/data/
+.pnp.*
+.npm
+.eslintcache
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.vs/
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# Azure deployment
+.azure/
+.publish/
+.deployment
+
+# Misc
+.DS_Store
+*.pem
+.cache/

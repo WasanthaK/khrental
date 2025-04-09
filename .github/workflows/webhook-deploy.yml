@@ -1,0 +1,51 @@
+name: Deploy Webhook Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'webhook-server/**'
+      - '.github/workflows/webhook-deploy.yml'
+
+jobs:
+  deploy_webhook:
+    runs-on: ubuntu-latest
+    name: Deploy Webhook Server
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: webhook-server/package-lock.json
+
+      - name: Install Webhook Server Dependencies
+        run: |
+          cd webhook-server
+          npm ci
+
+      - name: Create .env file
+        run: |
+          cd webhook-server
+          echo "PORT=8080" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" >> .env
+          echo "EVIA_SIGN_WEBHOOK_URL=${{ secrets.EVIA_SIGN_WEBHOOK_URL }}" >> .env
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'kh-rentals-webhook'
+          slot-name: 'production'
+          publish-profile: ${{ secrets.WEBHOOK_PUBLISH_PROFILE }}
+          package: ./webhook-server
+
+      - name: Notify Webhook Deployment Success
+        if: success()
+        run: |
+          echo "✅ Webhook server deployed successfully to Azure App Service"
+          echo "🔗 URL: https://kh-rentals-webhook.azurewebsites.net" 

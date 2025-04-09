@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+Rule Name: conditional-braces
+Description: All conditional statements (if, else, for, while, etc.) must use braces, even for single-line bodies. This improves code consistency and reduces potential bugs when statements are modified in the future.
+
+Files: 
+- src/components/agreements/AgreementActions.jsx
+- src/components/agreements/AgreementFormContainer.jsx

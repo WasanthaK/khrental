@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+During refactoring or normal actions, do not delete existing files without reasoning about the "why". Also explain how deleting one or more files will improve the current codebase.

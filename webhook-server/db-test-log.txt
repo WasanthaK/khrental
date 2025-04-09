@@ -1,0 +1,238 @@
+[2025-04-05T13:29:41.662Z] =================================================
+[2025-04-05T13:29:41.663Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:29:41.663Z] Test started at 2025-04-05T13:29:41.663Z
+[2025-04-05T13:29:41.664Z] =================================================
+
+[2025-04-05T13:29:41.664Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:29:41.952Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:29:41.952Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:29:41.953Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"test-request-1743859781953","EventTime":"2025-04-05T13:29:41.953Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:29:41.960Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"test-request-1743859781953","event_id":1,"event_time":"2025-04-05T13:29:41.953Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"test-request-1743859781953\",\"EventTime\":\"2025-04-05T13:29:41.953Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:29:41.960Z","processed":false}
+[2025-04-05T13:29:42.076Z] ❌ Direct insert error: invalid input syntax for type uuid: "test-request-1743859781953"
+[2025-04-05T13:29:42.076Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:29:42.248Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:29:42.248Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:29:42.441Z] ❌ Service insert error: invalid input syntax for type uuid: "test-request-1743859781953"
+[2025-04-05T13:29:42.441Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:29:42.442Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:29:42.642Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:29:42.643Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:29:42.643Z","updatedat":"2025-04-05T13:29:42.643Z"}
+[2025-04-05T13:29:42.747Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:29:42.643Z","updatedat":"2025-04-05T13:29:43.06359+00:00"}]
+[2025-04-05T13:29:42.748Z] Attempting signature status update with: {"signature_status":"test_status","status":"test_state","updatedat":"2025-04-05T13:29:42.748Z"}
+[2025-04-05T13:29:42.940Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:29:42.940Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:29:42.941Z] 
+=================================================
+[2025-04-05T13:29:42.941Z] TEST SUMMARY:
+[2025-04-05T13:29:42.941Z] Database Connection: ✅ PASS
+[2025-04-05T13:29:42.942Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:29:42.942Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:29:42.942Z] =================================================
+[2025-04-05T13:29:42.943Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:30:23.743Z] =================================================
+[2025-04-05T13:30:23.743Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:30:23.743Z] Test started at 2025-04-05T13:30:23.743Z
+[2025-04-05T13:30:23.744Z] =================================================
+
+[2025-04-05T13:30:23.744Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:30:24.423Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:30:24.424Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:30:24.424Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"test-request-1743859824424","EventTime":"2025-04-05T13:30:24.424Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:30:24.425Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"test-request-1743859824424","event_id":1,"event_time":"2025-04-05T13:30:24.424Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"test-request-1743859824424\",\"EventTime\":\"2025-04-05T13:30:24.424Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:30:24.425Z","processed":false}
+[2025-04-05T13:30:24.613Z] ❌ Direct insert error: invalid input syntax for type uuid: "test-request-1743859824424"
+[2025-04-05T13:30:24.613Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:30:24.719Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:30:24.720Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:30:24.912Z] ❌ Service insert error: invalid input syntax for type uuid: "test-request-1743859824424"
+[2025-04-05T13:30:24.912Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:30:24.913Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:30:25.030Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:30:25.031Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:30:25.031Z","updatedat":"2025-04-05T13:30:25.031Z"}
+[2025-04-05T13:30:25.232Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:30:25.031Z","updatedat":"2025-04-05T13:30:25.535091+00:00"}]
+[2025-04-05T13:30:25.233Z] Attempting signature status update with: {"signature_status":"test_status","status":"test_state","updatedat":"2025-04-05T13:30:25.233Z"}
+[2025-04-05T13:30:25.421Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:30:25.422Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:30:25.422Z] 
+=================================================
+[2025-04-05T13:30:25.422Z] TEST SUMMARY:
+[2025-04-05T13:30:25.423Z] Database Connection: ✅ PASS
+[2025-04-05T13:30:25.423Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:30:25.423Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:30:25.424Z] =================================================
+[2025-04-05T13:30:25.424Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:34:00.692Z] =================================================
+[2025-04-05T13:34:00.692Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:34:00.693Z] Test started at 2025-04-05T13:34:00.693Z
+[2025-04-05T13:34:00.693Z] =================================================
+
+[2025-04-05T13:34:00.693Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:34:01.053Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:34:01.054Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:34:01.055Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"2359807d-53c0-417a-81e4-0348a357803f","EventTime":"2025-04-05T13:34:01.055Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:34:01.055Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"2359807d-53c0-417a-81e4-0348a357803f","event_id":1,"event_time":"2025-04-05T13:34:01.055Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"2359807d-53c0-417a-81e4-0348a357803f\",\"EventTime\":\"2025-04-05T13:34:01.055Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:34:01.055Z","processed":false}
+[2025-04-05T13:34:01.242Z] ❌ Direct insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:34:01.242Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:34:01.455Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:34:01.456Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:34:01.665Z] ❌ Service insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:34:01.665Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:34:01.665Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:34:01.866Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:34:01.866Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:34:01.866Z","updatedat":"2025-04-05T13:34:01.866Z"}
+[2025-04-05T13:34:02.008Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:34:01.866Z","updatedat":"2025-04-05T13:34:02.278179+00:00"}]
+[2025-04-05T13:34:02.008Z] Attempting signature status update with: {"signature_status":"pending_signature","status":"awaiting_signature","updatedat":"2025-04-05T13:34:02.008Z"}
+[2025-04-05T13:34:02.149Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:34:02.149Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:34:02.149Z] 
+=================================================
+[2025-04-05T13:34:02.150Z] TEST SUMMARY:
+[2025-04-05T13:34:02.150Z] Database Connection: ✅ PASS
+[2025-04-05T13:34:02.150Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:34:02.151Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:34:02.151Z] =================================================
+[2025-04-05T13:34:02.151Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:44:51.665Z] =================================================
+[2025-04-05T13:44:51.665Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:44:51.665Z] Test started at 2025-04-05T13:44:51.665Z
+[2025-04-05T13:44:51.665Z] =================================================
+
+[2025-04-05T13:44:51.666Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:44:52.205Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:44:52.206Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:44:52.207Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"0816c6fe-4264-4185-86cb-77a806dfb1dc","EventTime":"2025-04-05T13:44:52.207Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:44:52.207Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"0816c6fe-4264-4185-86cb-77a806dfb1dc","event_id":1,"event_time":"2025-04-05T13:44:52.207Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"0816c6fe-4264-4185-86cb-77a806dfb1dc\",\"EventTime\":\"2025-04-05T13:44:52.207Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:44:52.207Z","processed":false}
+[2025-04-05T13:44:52.372Z] ❌ Direct insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:44:52.372Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:44:52.467Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:44:52.467Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:44:52.564Z] ❌ Service insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:44:52.564Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:44:52.565Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:44:52.652Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:44:52.652Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:44:52.652Z","updatedat":"2025-04-05T13:44:52.652Z"}
+[2025-04-05T13:44:52.808Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:44:52.652Z","updatedat":"2025-04-05T13:44:53.129435+00:00"}]
+[2025-04-05T13:44:52.808Z] Attempting signature status update with: {"signature_status":"pending_signature","status":"awaiting_signature","updatedat":"2025-04-05T13:44:52.808Z"}
+[2025-04-05T13:44:52.993Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:44:52.993Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:44:52.994Z] 
+=================================================
+[2025-04-05T13:44:52.995Z] TEST SUMMARY:
+[2025-04-05T13:44:52.995Z] Database Connection: ✅ PASS
+[2025-04-05T13:44:52.996Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:44:52.996Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:44:52.996Z] =================================================
+[2025-04-05T13:44:52.996Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:45:33.311Z] =================================================
+[2025-04-05T13:45:33.312Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:45:33.312Z] Test started at 2025-04-05T13:45:33.312Z
+[2025-04-05T13:45:33.313Z] =================================================
+
+[2025-04-05T13:45:33.313Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:45:33.616Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:45:33.616Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:45:33.617Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"0d846ff7-d95c-4506-acb8-5e41b7cb68f5","EventTime":"2025-04-05T13:45:33.617Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:45:33.617Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"0d846ff7-d95c-4506-acb8-5e41b7cb68f5","event_id":1,"event_time":"2025-04-05T13:45:33.617Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"0d846ff7-d95c-4506-acb8-5e41b7cb68f5\",\"EventTime\":\"2025-04-05T13:45:33.617Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:45:33.617Z","processed":false}
+[2025-04-05T13:45:33.719Z] ❌ Direct insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:45:33.719Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:45:33.820Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:45:33.820Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:45:34.026Z] ❌ Service insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:45:34.026Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:45:34.027Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:45:34.189Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:45:34.189Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:45:34.189Z","updatedat":"2025-04-05T13:45:34.189Z"}
+[2025-04-05T13:45:34.290Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:45:34.189Z","updatedat":"2025-04-05T13:45:34.603573+00:00"}]
+[2025-04-05T13:45:34.290Z] Attempting signature status update with: {"signature_status":"pending_signature","status":"awaiting_signature","updatedat":"2025-04-05T13:45:34.290Z"}
+[2025-04-05T13:45:34.405Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:45:34.406Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:45:34.406Z] 
+=================================================
+[2025-04-05T13:45:34.406Z] TEST SUMMARY:
+[2025-04-05T13:45:34.406Z] Database Connection: ✅ PASS
+[2025-04-05T13:45:34.407Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:45:34.407Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:45:34.407Z] =================================================
+[2025-04-05T13:45:34.407Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:46:28.028Z] =================================================
+[2025-04-05T13:46:28.028Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:46:28.028Z] Test started at 2025-04-05T13:46:28.028Z
+[2025-04-05T13:46:28.029Z] =================================================
+
+[2025-04-05T13:46:28.029Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:46:28.362Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:46:28.363Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:46:28.364Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"178ad8fe-39e6-4588-b712-bfba41d1717c","EventTime":"2025-04-05T13:46:28.364Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:46:28.364Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"178ad8fe-39e6-4588-b712-bfba41d1717c","event_id":1,"event_time":"2025-04-05T13:46:28.364Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"178ad8fe-39e6-4588-b712-bfba41d1717c\",\"EventTime\":\"2025-04-05T13:46:28.364Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:46:28.364Z","processed":false}
+[2025-04-05T13:46:28.472Z] ❌ Direct insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:46:28.472Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:46:28.579Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:46:28.579Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:46:28.795Z] ❌ Service insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:46:28.795Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:46:28.795Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:46:28.902Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:46:28.902Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:46:28.902Z","updatedat":"2025-04-05T13:46:28.902Z"}
+[2025-04-05T13:46:29.014Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:46:28.902Z","updatedat":"2025-04-05T13:46:29.323337+00:00"}]
+[2025-04-05T13:46:29.014Z] Attempting signature status update with: {"signature_status":"pending_signature","status":"awaiting_signature","updatedat":"2025-04-05T13:46:29.014Z"}
+[2025-04-05T13:46:29.215Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:46:29.215Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:46:29.216Z] 
+=================================================
+[2025-04-05T13:46:29.216Z] TEST SUMMARY:
+[2025-04-05T13:46:29.216Z] Database Connection: ✅ PASS
+[2025-04-05T13:46:29.217Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:46:29.217Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:46:29.217Z] =================================================
+[2025-04-05T13:46:29.218Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.
+[2025-04-05T13:48:25.476Z] =================================================
+[2025-04-05T13:48:25.476Z] WEBHOOK SERVER DATABASE DIAGNOSTICS
+[2025-04-05T13:48:25.477Z] Test started at 2025-04-05T13:48:25.477Z
+[2025-04-05T13:48:25.477Z] =================================================
+
+[2025-04-05T13:48:25.477Z] ======= TESTING DATABASE CONNECTION =======
+[2025-04-05T13:48:26.084Z] ✅ Database connection successful, found 1 agreements
+[2025-04-05T13:48:26.084Z] 
+======= TESTING WEBHOOK EVENT INSERT =======
+[2025-04-05T13:48:26.085Z] Attempting to insert test webhook event: {"EventId":1,"EventDescription":"SignRequestReceived","RequestId":"f01136ed-ba7c-482a-b6de-348b0b9acc58","EventTime":"2025-04-05T13:48:26.085Z","UserName":"Test User","Email":"test@example.com","Subject":"Test Webhook"}
+[2025-04-05T13:48:26.085Z] Direct insert data: {"event_type":"SignRequestReceived","request_id":"f01136ed-ba7c-482a-b6de-348b0b9acc58","event_id":1,"event_time":"2025-04-05T13:48:26.085Z","user_name":"Test User","user_email":"test@example.com","subject":"Test Webhook","raw_data":"{\"EventId\":1,\"EventDescription\":\"SignRequestReceived\",\"RequestId\":\"f01136ed-ba7c-482a-b6de-348b0b9acc58\",\"EventTime\":\"2025-04-05T13:48:26.085Z\",\"UserName\":\"Test User\",\"Email\":\"test@example.com\",\"Subject\":\"Test Webhook\"}","createdat":"2025-04-05T13:48:26.085Z","processed":false}
+[2025-04-05T13:48:26.290Z] ❌ Direct insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:48:26.291Z] ⚠️ This might be a schema mismatch issue. Checking webhook_events table columns...
+[2025-04-05T13:48:26.495Z] ❌ Could not get columns: relation "public.information_schema.columns" does not exist
+[2025-04-05T13:48:26.496Z] 
+Attempting to insert using insertWebhookEvent service function...
+[2025-04-05T13:48:26.898Z] ❌ Service insert error: column "eviasignreference_uuid" does not exist
+[2025-04-05T13:48:26.898Z] ⚠️ Webhook event insert test failed. Continuing with other tests...
+[2025-04-05T13:48:26.898Z] 
+======= TESTING AGREEMENT UPDATE =======
+[2025-04-05T13:48:27.014Z] Found agreement to update: {"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","status":"pending","signature_status":"failed","eviasignreference":"c8603412-ef26-4a19-9d0f-3074ca3081c7"}
+[2025-04-05T13:48:27.014Z] Attempting to update agreement with data: {"notes":"Test update from webhook test at 2025-04-05T13:48:27.014Z","updatedat":"2025-04-05T13:48:27.014Z"}
+[2025-04-05T13:48:27.137Z] ✅ Agreement update successful: [{"id":"b322e485-8ec0-4827-a9c3-132ec0ffea4f","notes":"Test update from webhook test at 2025-04-05T13:48:27.014Z","updatedat":"2025-04-05T13:48:27.463726+00:00"}]
+[2025-04-05T13:48:27.139Z] Attempting signature status update with: {"signature_status":"pending_signature","status":"awaiting_signature","updatedat":"2025-04-05T13:48:27.139Z"}
+[2025-04-05T13:48:27.258Z] ❌ Signature status update error: new row for relation "agreements" violates check constraint "agreements_signature_status_check"
+[2025-04-05T13:48:27.259Z] ⚠️ Agreement update test failed.
+[2025-04-05T13:48:27.260Z] 
+=================================================
+[2025-04-05T13:48:27.267Z] TEST SUMMARY:
+[2025-04-05T13:48:27.268Z] Database Connection: ✅ PASS
+[2025-04-05T13:48:27.268Z] Webhook Event Insert: ❌ FAIL
+[2025-04-05T13:48:27.269Z] Agreement Update: ❌ FAIL
+[2025-04-05T13:48:27.269Z] =================================================
+[2025-04-05T13:48:27.270Z] ⚠️ Some tests failed. Review the log above for details on what went wrong.

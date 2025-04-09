@@ -1,0 +1,409 @@
+import { supabase, inviteUser } from './supabaseClient';
+import { sendEmailNotification } from './notificationService';
+import { USER_ROLES } from '../utils/constants';
+
+/**
+ * Utility function to ensure a record has valid timestamp fields
+ * @param {Object} record - Record to validate
+ * @returns {Object} - Record with valid timestamp fields
+ */
+export const ensureValidTimestamps = (record) => {
+  if (!record) return record;
+  
+  const now = new Date().toISOString();
+  return {
+    ...record,
+    createdat: record.createdat || now,
+    updatedat: record.updatedat || record.createdat || now
+  };
+};
+
+/**
+ * Create a new app user (staff or rentee)
+ * @param {Object} userData - User data
+ * @param {string} userType - 'staff' or 'rentee'
+ * @returns {Promise<Object>} - Result of the creation
+ */
+export const createAppUser = async (userData, userType) => {
+  if (!userData) {
+    return { success: false, error: 'No user data provided' };
+  }
+
+  try {
+    // Format data for insertion
+    const now = new Date().toISOString();
+    const dataToInsert = {
+      ...userData,
+      user_type: userType,
+      createdat: now,
+      updatedat: now,
+      // Extract email from contact_details if not directly provided
+      email: userData.email || (userData.contact_details && userData.contact_details.email) || (userData.contactDetails && userData.contactDetails.email)
+    };
+
+    // Validate email
+    if (!dataToInsert.email) {
+      return { success: false, error: 'Email is required' };
+    }
+
+    const { data, error } = await supabase
+      .from('app_users')
+      .insert(dataToInsert)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Error creating user:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (userType === USER_ROLES.RENTEE && dataToInsert.email) {
+      // Send welcome email to new rentee
+      await sendEmailNotification({
+        to: dataToInsert.email,
+        subject: 'Welcome to KH Rentals',
+        body: `Welcome to KH Rentals, ${userData.name}! Your account has been created.`
+      });
+    }
+
+    return { success: true, data: ensureValidTimestamps(data) };
+  } catch (error) {
+    console.error('Error in createAppUser:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Invite a user to create an account
+ * @param {string} email - User's email
+ * @param {string} name - User's name
+ * @param {string} userType - 'staff' or 'rentee'
+ * @param {string} userId - ID of the user in app_users table
+ * @returns {Promise<Object>} - Result of the invitation
+ */
+export const inviteAppUser = async (email, name, userType, userId) => {
+  try {
+    if (!email || !name || !userType || !userId) {
+      return { success: false, error: 'Missing required parameters for invitation' };
+    }
+    
+    // Determine auth role based on user type
+    let authRole = userType === 'staff' ? 'staff' : 'rentee';
+    
+    // Send invitation through Supabase
+    const { success, data, error } = await inviteUser(email, authRole);
+    
+    if (!success) {
+      return { success: false, error: error || 'Failed to invite user' };
+    }
+    
+    // Update the user record to mark as invited
+    const { error: updateError } = await supabase
+      .from('app_users')
+      .update({ invited: true })
+      .eq('id', userId);
+    
+    if (updateError) {
+      console.error('Error updating user as invited:', updateError);
+      // Continue with the invitation process even if update fails
+    }
+    
+    // Send a custom email notification with more information
+    const subject = userType === 'staff' 
+      ? 'Welcome to KH Rentals Staff Portal' 
+      : 'Welcome to KH Rentals - Complete Your Registration';
+    
+    const message = userType === 'staff'
+      ? `
+Hello ${name},
+
+You have been invited to join KH Rentals as a ${authRole}. To complete your registration and access the staff portal, please click the link sent in a separate email to create your account.
+
+Once your account is set up, you will be able to access all the features and tools necessary for your role.
+
+If you have any questions, please contact the admin team.
+
+Regards,
+KH Rentals Team
+      `
+      : `
+Hello ${name},
+
+You have been registered as a rentee with KH Rentals. To complete your registration and access your rentee portal, please click the link sent in a separate email to create your account.
+
+Once your account is set up, you will be able to:
+- View your rental agreements
+- Submit maintenance requests
+- Pay invoices
+- Communicate with your property manager
+
+If you have any questions, please contact your property manager.
+
+Regards,
+KH Rentals Team
+      `;
+    
+    try {
+      await sendEmailNotification(email, subject, message);
+    } catch (emailError) {
+      console.error('Error sending custom email notification:', emailError);
+      // Continue with the invitation process even if email fails
+    }
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error inviting user:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Link a Supabase auth user to an app_user record
+ * @param {string} authId - Auth user ID from Supabase
+ * @param {string} appUserId - ID of the app_user record
+ * @returns {Promise<Object>} - Result of the linking operation
+ */
+export const linkAppUser = async (authId, appUserId) => {
+  try {
+    // Update the app_user record with the auth user ID
+    const { data, error } = await supabase
+      .from('app_users')
+      .update({ auth_id: authId, invited: true })
+      .eq('id', appUserId)
+      .select();
+    
+    if (error) {
+      throw error;
+    }
+    
+    return { success: true, data: data[0] };
+  } catch (error) {
+    console.error('Error linking user record:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Find app_user by email
+ * @param {string} email - User's email
+ * @returns {Promise<Object>} - Result with user data
+ */
+export const findAppUserByEmail = async (email) => {
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle();
+    
+    if (error) {
+      throw error;
+    }
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error finding user by email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Find app_user by auth ID
+ * @param {string} authId - Auth user ID
+ * @returns {Promise<Object>} - Result with user data
+ */
+export const findAppUserByAuthId = async (authId) => {
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('auth_id', authId)
+      .maybeSingle();
+    
+    if (error) {
+      throw error;
+    }
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error finding user by auth ID:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Check if an invitation has been sent to a user
+ * @param {string} userId - ID of the app_user
+ * @returns {Promise<Object>} - Result with invitation status
+ */
+export const checkAppUserInvitationStatus = async (userId) => {
+  console.log(`Checking invitation status for user ${userId}`);
+  
+  try {
+    if (!userId) {
+      console.error('No userId provided to checkAppUserInvitationStatus');
+      throw new Error('User ID is required');
+    }
+    
+    // First check if the app_users table exists
+    try {
+      // Use a simpler query that's less likely to cause parsing errors
+      const { data: testData, error: testError } = await supabase
+        .from('app_users')
+        .select('id')
+        .limit(1);
+      
+      if (testError) {
+        console.error('Error checking app_users table:', testError);
+        throw new Error(`The app_users table might not exist: ${testError.message}`);
+      }
+    } catch (tableError) {
+      console.error('Error checking app_users table:', tableError);
+      throw new Error(`The app_users table might not exist: ${tableError.message}`);
+    }
+    
+    // If we get here, the table exists, so we can check the user
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, email, invited, auth_id')
+      .eq('id', userId)
+      .single();
+    
+    if (error) {
+      console.error(`Error fetching user ${userId} from app_users:`, error);
+      throw error;
+    }
+    
+    console.log(`User data for ${userId}:`, data);
+    
+    // Determine status
+    let status = 'not_invited';
+    if (data.auth_id) {
+      status = 'registered';
+    } else if (data.invited) {
+      status = 'invited';
+    }
+    
+    console.log(`Determined status for ${userId}: ${status}`);
+    
+    return { 
+      success: true, 
+      data: {
+        ...data,
+        status
+      }
+    };
+  } catch (error) {
+    console.error(`Error checking invitation status for ${userId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Update an existing app user (staff or rentee)
+ * @param {string} id - ID of the user to update
+ * @param {Object} userData - Updated user data
+ * @returns {Promise<Object>} - Result of the update
+ */
+export const updateAppUser = async (id, userData) => {
+  if (!id || !userData) {
+    return { success: false, error: 'User ID and update data are required' };
+  }
+
+  try {
+    // Always update the updatedat timestamp
+    const dataToUpdate = {
+      ...userData,
+      updatedat: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('app_users')
+      .update(dataToUpdate)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Error updating user:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: ensureValidTimestamps(data) };
+  } catch (error) {
+    console.error('Error in updateAppUser:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Fetch app_user by ID
+ * @param {string} id - ID of the user
+ * @returns {Promise<Object>} - Result with user data
+ */
+export const fetchAppUser = async (id) => {
+  if (!id) {
+    throw new Error('User ID is required');
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user:', error);
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error('User not found');
+    }
+
+    return ensureValidTimestamps(data);
+  } catch (error) {
+    console.error('Error in fetchAppUser:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch multiple app_users
+ * @param {string} userType - Filter by user type
+ * @param {Object} filters - Additional filters
+ * @returns {Promise<Array<Object>>} - Result with user data
+ */
+export const fetchAppUsers = async (userType, filters = {}) => {
+  try {
+    let query = supabase
+      .from('app_users')
+      .select('*');
+    
+    // Filter by user_type if provided
+    if (userType) {
+      query = query.eq('user_type', userType);
+    }
+    
+    // Apply any additional filters
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        query = query.eq(key, value);
+      }
+    });
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching users:', error);
+      throw error;
+    }
+    
+    // Apply timestamp validation to all records
+    return data ? data.map(record => ensureValidTimestamps(record)) : [];
+  } catch (error) {
+    console.error('Error in fetchAppUsers:', error);
+    throw error;
+  }
+}; 
