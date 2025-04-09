@@ -9,56 +9,59 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js version
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '20.x'
 
-      - name: npm install
+      - name: npm install and build
         run: |
           npm install
           npm install terser --save-dev
+          npm run build
 
-      - name: Create .env file for build
-        run: |
-          echo "Creating .env file for main application..."
-          touch .env
-          echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
-          echo "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.EVIA_SIGN_CLIENT_ID }}" >> .env
-          echo "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" >> .env
-          echo "VITE_API_ENDPOINT=${{ secrets.API_ENDPOINT }}" >> .env
-          echo "VITE_WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" >> .env
-          cat .env | grep -v SECRET
-          echo ".env file created with required variables"
-
-      - name: Build and test
-        run: |
-          npm run build --if-present
-          npm run test --if-present
-
-      - name: Create startup script
-        run: |
-          echo "#!/bin/sh" > startup.sh
-          echo "cd /home/site/wwwroot" >> startup.sh
-          echo "npm install -g serve@latest" >> startup.sh
-          echo "serve -s . -p 8080" >> startup.sh
-          chmod +x startup.sh
-
-      - name: Prepare deployment package
+      - name: Create deployment package
         run: |
           mkdir -p deploy
           cp -r dist/* deploy/
-          cp web.config deploy/
-          cp startup.sh deploy/
-          echo "Listing deployment package contents:"
-          ls -la deploy/
+          
+          # Create startup script
+          echo '#!/bin/sh' > deploy/startup.sh
+          echo 'cd /home/site/wwwroot' >> deploy/startup.sh
+          echo 'npm install -g serve' >> deploy/startup.sh
+          echo 'serve -s . -p 8080' >> deploy/startup.sh
+          chmod +x deploy/startup.sh
+          
+          # Create web.config
+          echo '<?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <system.webServer>
+              <handlers>
+                <add name="StaticFileModuleHtml" path="*.html" verb="*" modules="StaticFileModule" resourceType="File" requireAccess="Read" />
+                <add name="StaticFileModuleJs" path="*.js" verb="*" modules="StaticFileModule" resourceType="File" requireAccess="Read" />
+                <add name="StaticFileModuleCss" path="*.css" verb="*" modules="StaticFileModule" resourceType="File" requireAccess="Read" />
+              </handlers>
+              <rewrite>
+                <rules>
+                  <rule name="React Routes" stopProcessing="true">
+                    <match url=".*" />
+                    <conditions logicalGrouping="MatchAll">
+                      <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+                      <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+                    </conditions>
+                    <action type="Rewrite" url="/" />
+                  </rule>
+                </rules>
+              </rewrite>
+            </system.webServer>
+          </configuration>' > deploy/web.config
+          
+          # Create custom startup command file
+          echo 'CUSTOM_STARTUP_COMMAND="/home/site/wwwroot/startup.sh"' > deploy/startup.txt
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -69,9 +72,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      id-token: write
-      contents: read
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -81,31 +81,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          path: .
-
-      - name: Debug - List files to be deployed
-        run: |
-          echo "Files to be deployed:"
-          ls -la
-          echo "Checking web.config exists:"
-          cat web.config
-          echo "Checking startup.sh exists and is executable:"
-          ls -l startup.sh
-          cat startup.sh
-
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
           app-name: 'khrental'
           slot-name: 'Production'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
