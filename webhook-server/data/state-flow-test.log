@@ -1,0 +1,13 @@
+State Flow Test - Started at 2025-04-05T16:32:07.079Z
+
+Creating test agreement...
+Test property created with ID: a5f9d423-82bb-44c2-8812-a4fd3d9ec4a5
+Test agreement created with ID: 84eb9078-d771-44bc-a31b-54a10cb03be4
+RequestId (eviasignreference): 8db81ae5-ae96-45f7-9c03-21de86bad78b
+
+Processing events in sequence:
+
+[1/4] Processing SignRequestReceived event...
+✅ Event processed successfully
+
+❌ State flow test failed: Cannot read properties of undefined (reading 'status')

@@ -1,0 +1,73 @@
+[2025-04-05T16:14:05.940Z] Processing event 1 (SignRequestReceived) for request 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:14:05.941Z] Looking for agreement with RequestId: 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:14:06.201Z] Found exact match, agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7
+[2025-04-05T16:14:06.201Z] Found agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7, current status: pending
+[2025-04-05T16:14:06.202Z] Processing SignRequestReceived event
+[2025-04-05T16:14:06.202Z] Updating agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 with new data
+[2025-04-05T16:14:06.296Z] Agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 updated successfully
+[2025-04-05T16:16:23.877Z] Processing event 2 (SignatoryCompleted) for request 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:16:23.877Z] Looking for agreement with RequestId: 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:16:24.501Z] Found exact match, agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7
+[2025-04-05T16:16:24.501Z] Found agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7, current status: pending_activation
+[2025-04-05T16:16:24.502Z] Processing SignatoryCompleted event
+[2025-04-05T16:16:24.503Z] Updating agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 with new data
+[2025-04-05T16:16:24.648Z] Agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 updated successfully
+[2025-04-05T16:17:48.851Z] Processing event 2 (SignatoryCompleted) for request 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:17:48.852Z] Looking for agreement with RequestId: 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:17:48.979Z] Processing event 3 (RequestCompleted) for request 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:17:48.979Z] Looking for agreement with RequestId: 9ff4e366-abae-4732-9461-6e5ada811d71
+[2025-04-05T16:17:49.208Z] Found exact match, agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7
+[2025-04-05T16:17:49.209Z] Found agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7, current status: pending_activation
+[2025-04-05T16:17:49.210Z] Processing SignatoryCompleted event
+[2025-04-05T16:17:49.210Z] Updating agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 with new data
+[2025-04-05T16:17:49.222Z] Found exact match, agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7
+[2025-04-05T16:17:49.222Z] Found agreement ID: 11af528b-2d40-4b35-a8ed-56aa4946cbb7, current status: pending_activation
+[2025-04-05T16:17:49.223Z] Processing RequestCompleted event
+[2025-04-05T16:17:49.223Z] Found signed document in webhook data
+[2025-04-05T16:17:49.224Z] Saving signed document for agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7
+[2025-04-05T16:17:49.226Z] Document saved to: C:\Users\User\khrentals\webhook-server\data\signed-documents\signed_11af528b-2d40-4b35-a8ed-56aa4946cbb7_2025-04-05T16-17-49-225Z.pdf
+[2025-04-05T16:17:49.226Z] Signed document saved: file://C:\Users\User\khrentals\webhook-server\data\signed-documents\signed_11af528b-2d40-4b35-a8ed-56aa4946cbb7_2025-04-05T16-17-49-225Z.pdf
+[2025-04-05T16:17:49.226Z] Updating agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 with new data
+[2025-04-05T16:17:49.379Z] Agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 updated successfully
+[2025-04-05T16:17:49.429Z] Agreement 11af528b-2d40-4b35-a8ed-56aa4946cbb7 updated successfully
+[2025-04-05T16:29:44.822Z] Processing event 1 (SignRequestReceived) for request d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:29:44.823Z] Looking for agreement with RequestId: d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:29:45.083Z] Found exact match, agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe
+[2025-04-05T16:29:45.083Z] Found agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe, current status: pending
+[2025-04-05T16:29:45.083Z] Processing SignRequestReceived event
+[2025-04-05T16:29:45.084Z] Updating agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe with new data
+[2025-04-05T16:29:45.245Z] Agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe updated successfully
+[2025-04-05T16:30:29.159Z] Processing event 2 (SignatoryCompleted) for request d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:30:29.159Z] Looking for agreement with RequestId: d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:30:29.405Z] Found exact match, agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe
+[2025-04-05T16:30:29.405Z] Found agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe, current status: pending_activation
+[2025-04-05T16:30:29.406Z] Processing SignatoryCompleted event
+[2025-04-05T16:30:29.406Z] Updating agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe with new data
+[2025-04-05T16:30:29.567Z] Agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe updated successfully
+[2025-04-05T16:31:16.211Z] Processing event 2 (SignatoryCompleted) for request d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:31:16.211Z] Looking for agreement with RequestId: d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:31:16.244Z] Processing event 3 (RequestCompleted) for request d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:31:16.244Z] Looking for agreement with RequestId: d7765c74-106b-4000-883a-c4d585508649
+[2025-04-05T16:31:16.441Z] Found exact match, agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe
+[2025-04-05T16:31:16.442Z] Found agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe, current status: pending_activation
+[2025-04-05T16:31:16.442Z] Processing SignatoryCompleted event
+[2025-04-05T16:31:16.443Z] Updating agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe with new data
+[2025-04-05T16:31:16.470Z] Found exact match, agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe
+[2025-04-05T16:31:16.471Z] Found agreement ID: d8d646c4-cbf7-4847-9c70-1a3df4ebbefe, current status: pending_activation
+[2025-04-05T16:31:16.471Z] Processing RequestCompleted event
+[2025-04-05T16:31:16.472Z] Found signed document in webhook data
+[2025-04-05T16:31:16.472Z] Saving signed document for agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe
+[2025-04-05T16:31:16.479Z] Document saved to: C:\Users\User\khrentals\webhook-server\data\signed-documents\signed_d8d646c4-cbf7-4847-9c70-1a3df4ebbefe_2025-04-05T16-31-16-472Z.pdf
+[2025-04-05T16:31:16.479Z] Signed document saved locally: file://C:\Users\User\khrentals\webhook-server\data\signed-documents\signed_d8d646c4-cbf7-4847-9c70-1a3df4ebbefe_2025-04-05T16-31-16-472Z.pdf
+[2025-04-05T16:31:16.479Z] Uploading to Supabase: agreements/d8d646c4-cbf7-4847-9c70-1a3df4ebbefe/signed_agreement_d8d646c4-cbf7-4847-9c70-1a3df4ebbefe_2025_04_05T16_31_16_479Z.pdf
+[2025-04-05T16:31:16.567Z] Agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe updated successfully
+[2025-04-05T16:31:16.888Z] Document uploaded to Supabase: https://vcorwfilylgtvzktszvi.supabase.co/storage/v1/object/public/files/agreements/d8d646c4-cbf7-4847-9c70-1a3df4ebbefe/signed_agreement_d8d646c4-cbf7-4847-9c70-1a3df4ebbefe_2025_04_05T16_31_16_479Z.pdf
+[2025-04-05T16:31:16.888Z] Updating agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe with new data
+[2025-04-05T16:31:16.994Z] Agreement d8d646c4-cbf7-4847-9c70-1a3df4ebbefe updated successfully
+[2025-04-05T16:32:07.727Z] Processing event 1 (SignRequestReceived) for request 8db81ae5-ae96-45f7-9c03-21de86bad78b
+[2025-04-05T16:32:07.727Z] Looking for agreement with RequestId: 8db81ae5-ae96-45f7-9c03-21de86bad78b
+[2025-04-05T16:32:07.995Z] Found exact match, agreement ID: 84eb9078-d771-44bc-a31b-54a10cb03be4
+[2025-04-05T16:32:07.996Z] Found agreement ID: 84eb9078-d771-44bc-a31b-54a10cb03be4, current status: created
+[2025-04-05T16:32:07.996Z] Processing SignRequestReceived event
+[2025-04-05T16:32:07.997Z] Updating agreement 84eb9078-d771-44bc-a31b-54a10cb03be4 with new data
+[2025-04-05T16:32:08.131Z] Agreement 84eb9078-d771-44bc-a31b-54a10cb03be4 updated successfully
