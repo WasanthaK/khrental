@@ -1,6 +1,163 @@
+/* eslint-disable */
+/* stylelint-disable */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  /* Increase base font size for better readability on small screens */
+  html {
+    font-size: 16px;
+  }
+  
+  /* Improve touch target sizes for better mobile UX */
+  button, 
+  input[type="button"], 
+  input[type="submit"],
+  a.btn,
+  .btn,
+  .clickable {
+    min-height: 44px;  /* Minimum recommended touch target size */
+    min-width: 44px;
+  }
+  
+  /* Make form elements more touch-friendly */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem;
+  }
+  
+  /* Improve checkbox and radio touch targets */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+  
+  /* Add space at the bottom to prevent content being hidden by bottom nav */
+  .main-content {
+    padding-bottom: 5rem;
+  }
+  
+  /* Improve table readability on mobile */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  
+  /* Increase spacing for better visual separation */
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  /* Adjust headings to be more proportional on mobile */
+  h1 {
+    font-size: 1.75rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+  
+  h3 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Fix iOS-specific input issues */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+  
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    min-height: 44px;
+  }
+}
+
+/* Add better active state for mobile tap feedback */
+@media (hover: none) {
+  .btn:active,
+  button:active,
+  .mobile-touch:active {
+    background-color: rgb(var(--color-primary-600));
+    transform: scale(0.98);
+    transition: transform 0.1s;
+  }
+}
+
+/* Fixed bottom padding for pages with a mobile navigation bar */
+.has-bottom-nav {
+  padding-bottom: 5rem !important;
+}
+
+/* Enhanced scrolling for iOS */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Improved visibility in bright light */
+@media (prefers-color-scheme: light) {
+  input, select, textarea {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+  }
+  
+  .form-card {
+    background-color: #ffffff;
+    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Dark mode adjustments for OLED screens */
+@media (prefers-color-scheme: dark) {
+  .dark\:bg-true-black {
+    background-color: #000000;
+  }
+  
+  .dark\:border-gray-800 {
+    border-color: #1f2937;
+  }
+}
+
+/* Responsive typography */
+.responsive-text-xs {
+  font-size: clamp(0.75rem, 2vw, 0.875rem);
+}
+
+.responsive-text-sm {
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+}
+
+.responsive-text-base {
+  font-size: clamp(1rem, 3vw, 1.125rem);
+}
+
+.responsive-text-lg {
+  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
+}
+
+.responsive-text-xl {
+  font-size: clamp(1.25rem, 4vw, 1.5rem);
+}
+
+/* Utility class for safer clickable areas */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 :root {
   --background: 0 0% 100%;
@@ -199,159 +356,4 @@ label .text-red-500 {
   button {
     background-color: #f3f4f6;
   }
-}
-
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  /* Increase base font size for better readability on small screens */
-  html {
-    font-size: 16px;
-  }
-  
-  /* Improve touch target sizes for better mobile UX */
-  button, 
-  input[type="button"], 
-  input[type="submit"],
-  a.btn,
-  .btn,
-  .clickable {
-    min-height: 44px;  /* Minimum recommended touch target size */
-    min-width: 44px;
-  }
-  
-  /* Make form elements more touch-friendly */
-  input:not([type="checkbox"]):not([type="radio"]),
-  select,
-  textarea {
-    min-height: 44px;
-    padding: 0.625rem 0.75rem;
-    font-size: 1rem;
-  }
-  
-  /* Improve checkbox and radio touch targets */
-  input[type="checkbox"],
-  input[type="radio"] {
-    min-width: 24px;
-    min-height: 24px;
-  }
-  
-  /* Add space at the bottom to prevent content being hidden by bottom nav */
-  .main-content {
-    padding-bottom: 5rem;
-  }
-  
-  /* Improve table readability on mobile */
-  table {
-    display: block;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  
-  /* Increase spacing for better visual separation */
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-  
-  /* Adjust headings to be more proportional on mobile */
-  h1 {
-    font-size: 1.75rem;
-  }
-  
-  h2 {
-    font-size: 1.5rem;
-  }
-  
-  h3 {
-    font-size: 1.25rem;
-  }
-}
-
-/* Fix iOS-specific input issues */
-@supports (-webkit-touch-callout: none) {
-  input,
-  textarea {
-    font-size: 16px; /* Prevents iOS zoom on focus */
-  }
-  
-  input[type="date"],
-  input[type="time"],
-  input[type="datetime-local"] {
-    min-height: 44px;
-  }
-}
-
-/* Add better active state for mobile tap feedback */
-@media (hover: none) {
-  .btn:active,
-  button:active,
-  .mobile-touch:active {
-    background-color: rgb(var(--color-primary-600));
-    transform: scale(0.98);
-    transition: transform 0.1s;
-  }
-}
-
-/* Fixed bottom padding for pages with a mobile navigation bar */
-.has-bottom-nav {
-  padding-bottom: 5rem !important;
-}
-
-/* Enhanced scrolling for iOS */
-.smooth-scroll {
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Improved visibility in bright light */
-@media (prefers-color-scheme: light) {
-  input, select, textarea {
-    background-color: #ffffff;
-    border: 1px solid #d1d5db;
-  }
-  
-  .form-card {
-    background-color: #ffffff;
-    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
-  }
-}
-
-/* Dark mode adjustments for OLED screens */
-@media (prefers-color-scheme: dark) {
-  .dark\:bg-true-black {
-    background-color: #000000;
-  }
-  
-  .dark\:border-gray-800 {
-    border-color: #1f2937;
-  }
-}
-
-/* Responsive typography */
-.responsive-text-xs {
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
-}
-
-.responsive-text-sm {
-  font-size: clamp(0.875rem, 2.5vw, 1rem);
-}
-
-.responsive-text-base {
-  font-size: clamp(1rem, 3vw, 1.125rem);
-}
-
-.responsive-text-lg {
-  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
-}
-
-.responsive-text-xl {
-  font-size: clamp(1.25rem, 4vw, 1.5rem);
-}
-
-/* Utility class for safer clickable areas */
-.touch-target {
-  min-height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }

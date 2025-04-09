@@ -584,7 +584,43 @@ export const getSignatureStatus = async (signatureId) => {
       return { error: `Status ${response.status}: ${response.statusText}` };
     }
 
-    const data = await response.json();
+    [{
+	"resource": "/c:/Users/User/khrentals/src/index.css",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "unknownAtRules",
+	"severity": 4,
+	"message": "Unknown at rule @tailwind",
+	"source": "css",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 10,
+	"modelVersionId": 4
+},{
+	"resource": "/c:/Users/User/khrentals/src/index.css",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "unknownAtRules",
+	"severity": 4,
+	"message": "Unknown at rule @tailwind",
+	"source": "css",
+	"startLineNumber": 2,
+	"startColumn": 1,
+	"endLineNumber": 2,
+	"endColumn": 10,
+	"modelVersionId": 4
+},{
+	"resource": "/c:/Users/User/khrentals/src/index.css",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "unknownAtRules",
+	"severity": 4,
+	"message": "Unknown at rule @tailwind",
+	"source": "css",
+	"startLineNumber": 3,
+	"startColumn": 1,
+	"endLineNumber": 3,
+	"endColumn": 10,
+	"modelVersionId": 4
+}];
     return data;
   } catch (error) {
     console.error("Error getting signature status:", error);
@@ -946,11 +982,8 @@ async function updateAgreementStatus(agreementId, updates) {
     const sanitizedUpdates = { ...updates };
     
     // If there's a signatories_status array, make sure it's valid JSON
-    if (sanitizedUpdates.signatories_status) {
-      // Make sure it's an array
-      if (!Array.isArray(sanitizedUpdates.signatories_status)) {
-        sanitizedUpdates.signatories_status = [];
-      }
+    if (sanitizedUpdates.signatories_status && !Array.isArray(sanitizedUpdates.signatories_status)) {
+      sanitizedUpdates.signatories_status = [];
     }
     
     const { data, error } = await supabase
@@ -1269,7 +1302,9 @@ export async function updateAgreementSignatureStatus(agreementId, eviaRequestId)
         // Get the most recent event with the highest event_id (completed takes precedence)
         const sortedEvents = webhookEvents.sort((a, b) => {
           // First sort by event_id in descending order (3 > 2 > 1)
-          if (b.event_id !== a.event_id) return b.event_id - a.event_id;
+          if (b.event_id !== a.event_id) {
+            return b.event_id - a.event_id;
+          }
           // Then by event_time (most recent first)
           return new Date(b.event_time) - new Date(a.event_time);
         });

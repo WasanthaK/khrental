@@ -46,7 +46,9 @@ const UtilityReadingsReview = () => {
         .eq('utilitytype', filter.utilityType)
         .order('readingdate', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       setReadings(data || []);
     } catch (error) {
       console.error('Error fetching readings:', error);
@@ -102,7 +104,9 @@ const UtilityReadingsReview = () => {
         })
         .eq('id', reading.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        throw updateError;
+      }
       
       // Store billing data in a separate utility_billing table for the invoice module to use
       const { error: billingError } = await supabase
@@ -145,7 +149,9 @@ const UtilityReadingsReview = () => {
         .update({ status: 'rejected' })
         .eq('id', reading.id);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       toast.success('Reading rejected');
       fetchReadings();

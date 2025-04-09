@@ -9,23 +9,24 @@ import { supabase } from '../../services/supabaseClient';
 import { toast } from 'react-toastify';
 
 const DashboardLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
   // State for dropdown menus and mobile sidebar
   const [invoicesOpen, setInvoicesOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [invoiceHover, setInvoiceHover] = useState(false);
   
   // Check if the current route is in a specific section
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
   
-  // Open dropdown if the current route is within that section
+  // Force invoicesOpen state to true when on invoice routes
   useEffect(() => {
     if (isInvoiceRoute) {
       setInvoicesOpen(true);
     }
-  }, [isInvoiceRoute]);
+  }, [isInvoiceRoute, location.pathname]);
   
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -75,7 +76,9 @@ const DashboardLayout = () => {
           updated_at: new Date()
         });
         
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
       // Update local user state
       setUser({
@@ -92,11 +95,11 @@ const DashboardLayout = () => {
   
   // Sidebar content - extracted to avoid duplication
   const SidebarContent = () => (
-    <>
+    <div className="flex flex-col h-full relative">
       <div className="p-5 border-b border-blue-700">
         <h1 className="text-2xl font-bold text-white">KH Rentals</h1>
       </div>
-      <div className="py-4 px-3">
+      <div className="py-4 px-3 flex-1 overflow-y-auto" style={{ paddingBottom: 200 }}>
         <nav className="space-y-1.5">
           <NavLink
             to="/dashboard"
@@ -128,11 +131,14 @@ const DashboardLayout = () => {
           <div className="relative z-20">
             <button
               onClick={() => setInvoicesOpen(!invoicesOpen)}
-              className={`flex items-center justify-between w-full px-3 py-2.5 rounded-md transition-colors text-sm font-medium ${
-                isInvoiceRoute 
-                  ? 'bg-white text-blue-800 shadow-sm' 
-                  : 'text-white hover:bg-blue-700/50'
-              }`}
+              onMouseEnter={() => setInvoiceHover(true)}
+              onMouseLeave={() => setInvoiceHover(false)}
+              className="flex items-center justify-between w-full px-3 py-2.5 rounded-md transition-colors text-sm font-medium text-white"
+              style={{ 
+                backgroundColor: (isInvoiceRoute || invoicesOpen) 
+                  ? '#1d4ed8' 
+                  : (invoiceHover ? 'rgba(29, 78, 216, 0.5)' : 'transparent')
+              }}
             >
               <span className="font-medium">Invoices</span>
               {invoicesOpen ? (
@@ -143,7 +149,7 @@ const DashboardLayout = () => {
             </button>
             
             {invoicesOpen && (
-              <div className="mt-1 ml-3 space-y-1 border-l-2 border-blue-600 pl-2 z-30 py-2 bg-blue-800">
+              <div className="mt-1 ml-3 space-y-1 border-l-2 border-blue-600 pl-2 z-40 py-2 bg-blue-800">
                 <NavLink
                   to="/dashboard/invoices"
                   end
@@ -220,21 +226,20 @@ const DashboardLayout = () => {
           )}
         </nav>
       </div>
-      <div className="absolute bottom-0 w-full border-t border-blue-700 p-4 bg-blue-900/50">
+      <div className="absolute bottom-0 left-0 right-0 border-t border-blue-700 p-4 bg-blue-900/50 z-30">
         <div className="flex flex-col space-y-2">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
+          <div className="flex items-start">
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0 mr-3">
               {user?.email?.charAt(0)?.toUpperCase() || 'U'}
             </div>
-            <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex-1 min-w-0 overflow-hidden text-left">
+              <p className="text-xs text-blue-200 capitalize font-medium">{user?.role || 'User'}</p>
               <p className="font-medium text-white truncate text-sm leading-tight">{user?.email}</p>
-              <p className="text-xs text-blue-200 mt-1 capitalize leading-tight">{user?.role || 'User'}</p>
             </div>
           </div>
           
           {/* Language Selector */}
-          <div className="mb-3">
-            <p className="text-xs text-blue-200 mb-1 px-1">Language</p>
+          <div className="mt-1">
             <UserLanguageSelector 
               value={user?.preferred_language || 'en'} 
               onChange={handleLanguageChange} 
@@ -249,7 +254,7 @@ const DashboardLayout = () => {
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
   
   return (
@@ -286,11 +291,13 @@ const DashboardLayout = () => {
               <XMarkIcon className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
-          <SidebarContent />
+          <div className="h-full overflow-hidden">
+            <SidebarContent />
+          </div>
         </div>
         
         {/* Desktop sidebar */}
-        <div className="hidden lg:block w-64 bg-gradient-to-b from-blue-900 to-blue-800 text-white shadow-xl h-screen overflow-y-auto flex-shrink-0">
+        <div className="hidden lg:block w-64 bg-gradient-to-b from-blue-900 to-blue-800 text-white shadow-xl h-screen overflow-hidden flex-shrink-0 relative">
           <SidebarContent />
         </div>
         
@@ -305,4 +312,4 @@ const DashboardLayout = () => {
   );
 };
 
-export default DashboardLayout; 
+export default DashboardLayout;

@@ -187,7 +187,9 @@ const saveSignedDocument = async (documentData, agreementId, documentName) => {
  * Determine the signature type based on email/name patterns
  */
 const determineSignatoryType = (email, name) => {
-  if (!email && !name) return null;
+  if (!email && !name) {
+    return null;
+  }
   
   const emailLower = (email || '').toLowerCase();
   const nameLower = (name || '').toLowerCase();

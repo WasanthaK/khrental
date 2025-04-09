@@ -354,7 +354,7 @@ const AgreementTemplateForm = () => {
               .from(STORAGE_BUCKETS.FILES)
               .getPublicUrl(filePath);
             
-            const publicUrl = urlData.publicUrl;
+            const {publicUrl} = urlData;
             console.log('Template public URL generated:', publicUrl);
             
             // Update the template with the file URL

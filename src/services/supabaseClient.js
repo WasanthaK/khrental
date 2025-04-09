@@ -165,55 +165,16 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
     // For count queries
     if (query.count) {
       try {
-        // For count queries, we need to use a simpler approach
-        let countBuilder = supabase.from(table);
-        
-        console.log(`[Count Query] Starting count query for table: ${table}`);
-        console.log(`[Count Query] Filters:`, JSON.stringify(query.filters));
-        
-        // Important: First call select() to establish the query type
-        countBuilder = countBuilder.select('*', { count: 'exact', head: true });
-        
-        // Apply filters if provided
-        if (query.filters && Array.isArray(query.filters)) {
-          for (const filter of query.filters) {
-            const column = filter.column.toLowerCase();
-            console.log(`[Count Query] Applying filter: ${column} ${filter.operator} ${filter.value}`);
-            
-            try {
-              if (filter.operator === 'eq') {
-                countBuilder = countBuilder.eq(column, filter.value);
-                console.log(`[Count Query] Applied equals filter on ${column}`);
-              } else if (filter.operator === 'neq') {
-                countBuilder = countBuilder.neq(column, filter.value);
-                console.log(`[Count Query] Applied not-equals filter on ${column}`);
-              } else if (filter.operator === 'in' && Array.isArray(filter.value)) {
-                countBuilder = countBuilder.in(column, filter.value);
-                console.log(`[Count Query] Applied in filter on ${column}`);
-              } else if (filter.operator === 'like') {
-                countBuilder = countBuilder.like(column, `%${filter.value}%`);
-                console.log(`[Count Query] Applied like filter on ${column}`);
-              } else if (filter.operator === 'ilike') {
-                countBuilder = countBuilder.ilike(column, `%${filter.value}%`);
-                console.log(`[Count Query] Applied ilike filter on ${column}`);
-              }
-            } catch (filterError) {
-              console.error(`[Count Query] Error applying filter ${column}:`, filterError);
-              // Continue with other filters
-            }
-          }
-        }
-        
-        // Execute the query
-        console.log(`[Count Query] Executing count query for ${table}`);
-        const { count, error } = await countBuilder;
+        // Create a simple count query
+        const { count, error } = await supabase
+          .from(table)
+          .select('*', { count: 'exact', head: true });
         
         if (error) {
-          console.error(`[Count Query] Count query error for ${table}:`, error);
+          console.error('Count query error:', error);
           return { error };
         }
         
-        console.log(`[Count Query] Count result for ${table}: ${count}`);
         return { count, error: null };
       } catch (countError) {
         console.error(`[Count Query] Error in count query for ${table}:`, countError);
@@ -240,13 +201,10 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
           description
         )
       `);
+    } else if (Array.isArray(query.columns)) {
+      queryBuilder = queryBuilder.select(query.columns.join(','));
     } else {
-      // Select specific columns if provided
-      if (Array.isArray(query.columns)) {
-        queryBuilder = queryBuilder.select(query.columns.join(','));
-      } else {
-        queryBuilder = queryBuilder.select();
-      }
+      queryBuilder = queryBuilder.select();
     }
     
     // Apply filters if provided
@@ -256,17 +214,15 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
         const column = filter.column.toLowerCase();
         
         // Special validation for UUID fields
-        if ((column === 'id' || column.endsWith('id'))) {
-          if (!isValidUUID(filter.value)) {
-            console.error(`Invalid UUID value for ${column} filter:`, filter.value);
-            return { 
-              error: { 
-                message: `Invalid UUID value for ${column} filter: ${filter.value}`,
-                code: 'INVALID_UUID' 
-              },
-              data: null 
-            };
-          }
+        if ((column === 'id' || column.endsWith('id')) && !isValidUUID(filter.value)) {
+          console.error(`Invalid UUID value for ${column} filter:`, filter.value);
+          return { 
+            error: { 
+              message: `Invalid UUID value for ${column} filter: ${filter.value}`,
+              code: 'INVALID_UUID' 
+            },
+            data: null 
+          };
         }
         
         if (filter.operator === 'eq') {
@@ -310,16 +266,18 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
     // Execute the query
     const { data, error } = await queryBuilder;
     
-    return { data, error };
+    return await queryBuilder;
   } catch (error) {
-    console.error('Error in fetchData:', error);
-    return { error: { message: error.message } };
+    console.error('[Supabase] Error in fetchData:', error);
+    return { error };
   }
 };
 
 // Helper function to convert camelCase to lowercase for database
 export const toDatabaseFormat = (data) => {
-  if (!data) return data;
+  if (!data) {
+    return data;
+  }
   
   const formatted = {};
   Object.entries(data).forEach(([key, value]) => {
@@ -356,16 +314,13 @@ export const insertData = async (table, data) => {
   
   // Add timestamps
   const now = new Date().toISOString();
-  const dataWithTimestamps = {
+  
+  // Insert data with timestamps and select the result
+  return supabase.from(table).insert({
     ...cleanedData,
     createdat: now,
     updatedat: now
-  };
-  
-  const { data: result, error } = await supabase.from(table).insert(dataWithTimestamps).select();
-  
-  // Return data in the original database format (lowercase)
-  return { data: result, error };
+  }).select();
 };
 
 export const updateData = async (table, id, data) => {
@@ -418,26 +373,18 @@ export const updateData = async (table, id, data) => {
   }
 };
 
-export const deleteData = async (table, id) => {
-  const { error } = await supabase.from(table).delete().eq('id', id);
-  return { error };
-};
+export const deleteData = async (table, id) => 
+  supabase.from(table).delete().eq('id', id);
 
 // Storage helpers
-export const uploadFile = async (bucket, path, file) => {
-  const { data, error } = await supabase.storage.from(bucket).upload(path, file);
-  return { data, error };
-};
+export const uploadFile = async (bucket, path, file) => 
+  supabase.storage.from(bucket).upload(path, file);
 
-export const getFileUrl = (bucket, path) => {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
-};
+export const getFileUrl = (bucket, path) => 
+  supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 
-export const deleteFile = async (bucket, path) => {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  return { error };
-};
+export const deleteFile = async (bucket, path) => 
+  supabase.storage.from(bucket).remove([path]);
 
 // Helper function to clean data before sending to the database
 const cleanDataForDatabase = (data) => {
@@ -446,12 +393,15 @@ const cleanDataForDatabase = (data) => {
   // Handle numeric fields
   Object.keys(cleanedData).forEach(key => {
     // If the field is a numeric type but has an empty string value, set it to null
-    if (cleanedData[key] === '') {
-      if (key === 'squarefeet' || key === 'yearbuilt' || 
-          key.includes('amount') || key.includes('reading') || 
-          key.includes('rate') || key.includes('fee')) {
-        cleanedData[key] = null;
-      }
+    if (cleanedData[key] === '' && (
+      key === 'squarefeet' || 
+      key === 'yearbuilt' || 
+      key.includes('amount') || 
+      key.includes('reading') || 
+      key.includes('rate') || 
+      key.includes('fee')
+    )) {
+      cleanedData[key] = null;
     }
   });
   

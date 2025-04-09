@@ -49,7 +49,15 @@ const InvoiceDetails = () => {
         };
         
         if (commonRoutes[id]) {
-          navigate(commonRoutes[id]);
+          // Prevent infinite loop by checking if we're already at this URL
+          const currentPath = window.location.pathname;
+          if (currentPath !== commonRoutes[id]) {
+            navigate(commonRoutes[id]);
+          } else {
+            // We're already at this path, but this component shouldn't handle it
+            // Set an error that will be caught below
+            throw new Error(`This route should be handled by a different component`);
+          }
           return;
         }
         
