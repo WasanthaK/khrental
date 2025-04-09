@@ -43,11 +43,42 @@ jobs:
           mkdir -p deploy
           cp -r dist/* deploy/
           
+          # Create runtime environment file
+          echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > deploy/.env
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> deploy/.env
+          echo "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.EVIA_SIGN_CLIENT_ID }}" >> deploy/.env
+          echo "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" >> deploy/.env
+          echo "VITE_API_ENDPOINT=${{ secrets.API_ENDPOINT }}" >> deploy/.env
+          echo "VITE_WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" >> deploy/.env
+          
           # Create startup script
           echo '#!/bin/sh' > deploy/startup.sh
           echo 'cd /home/site/wwwroot' >> deploy/startup.sh
           echo 'npm install -g serve' >> deploy/startup.sh
-          echo 'serve -s . -p 8080' >> deploy/startup.sh
+          echo 'cat > serve.json << EOL' >> deploy/startup.sh
+          echo '{' >> deploy/startup.sh
+          echo '  "rewrites": [{ "source": "/**", "destination": "/index.html" }],' >> deploy/startup.sh
+          echo '  "headers": [' >> deploy/startup.sh
+          echo '    {' >> deploy/startup.sh
+          echo '      "source": "/**",' >> deploy/startup.sh
+          echo '      "headers": [' >> deploy/startup.sh
+          echo '        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }' >> deploy/startup.sh
+          echo '      ]' >> deploy/startup.sh
+          echo '    }' >> deploy/startup.sh
+          echo '  ]' >> deploy/startup.sh
+          echo '}' >> deploy/startup.sh
+          echo 'EOL' >> deploy/startup.sh
+          echo 'cat > env.js << EOL' >> deploy/startup.sh
+          echo 'window.env = {' >> deploy/startup.sh
+          echo '  VITE_SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",' >> deploy/startup.sh
+          echo '  VITE_SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",' >> deploy/startup.sh
+          echo '  VITE_EVIA_SIGN_CLIENT_ID: "${{ secrets.EVIA_SIGN_CLIENT_ID }}",' >> deploy/startup.sh
+          echo '  VITE_EVIA_SIGN_CLIENT_SECRET: "${{ secrets.EVIA_SIGN_CLIENT_SECRET }}",' >> deploy/startup.sh
+          echo '  VITE_API_ENDPOINT: "${{ secrets.API_ENDPOINT }}",' >> deploy/startup.sh
+          echo '  VITE_WEBHOOK_URL: "${{ secrets.WEBHOOK_URL }}"' >> deploy/startup.sh
+          echo '};' >> deploy/startup.sh
+          echo 'EOL' >> deploy/startup.sh
+          echo 'serve -s . --config serve.json -p 8080' >> deploy/startup.sh
           chmod +x deploy/startup.sh
           
           # Create web.config
