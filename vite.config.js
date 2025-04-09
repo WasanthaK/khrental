@@ -52,9 +52,16 @@ export default defineConfig(({ command, mode }) => {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
     },
     build: {
-      // Improve production build
-      minify: 'terser',
+      outDir: 'dist',
       sourcemap: false,
+      // Optimize for production
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+      },
       cssCodeSplit: true,
       rollupOptions: {
         output: {
