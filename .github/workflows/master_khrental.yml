@@ -47,23 +47,24 @@ jobs:
         run: |
           echo "#!/bin/sh" > startup.sh
           echo "cd /home/site/wwwroot" >> startup.sh
-          echo "npm install -g serve" >> startup.sh
-          echo "serve -s . -l 8080" >> startup.sh
+          echo "npm install -g serve@latest" >> startup.sh
+          echo "serve -s . -p 8080" >> startup.sh
           chmod +x startup.sh
 
       - name: Prepare deployment package
         run: |
-          cp web.config dist/
-          cp startup.sh dist/
-          rm -f dist/server.js
+          mkdir -p deploy
+          cp -r dist/* deploy/
+          cp web.config deploy/
+          cp startup.sh deploy/
           echo "Listing deployment package contents:"
-          ls -la dist/
+          ls -la deploy/
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: dist/
+          path: deploy/
 
   deploy:
     runs-on: ubuntu-latest
