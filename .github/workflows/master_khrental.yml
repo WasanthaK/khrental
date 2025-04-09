@@ -9,8 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -52,7 +50,7 @@ jobs:
           echo 'serve -s . -p 8080' >> deploy/startup.sh
           chmod +x deploy/startup.sh
           
-          # Create web.config
+          # Create web.config with environment variables
           echo '<?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
@@ -73,6 +71,16 @@ jobs:
                   </rule>
                 </rules>
               </rewrite>
+              <aspNetCore>
+                <environmentVariables>
+                  <environmentVariable name="VITE_SUPABASE_URL" value="${{ secrets.SUPABASE_URL }}" />
+                  <environmentVariable name="VITE_SUPABASE_ANON_KEY" value="${{ secrets.SUPABASE_ANON_KEY }}" />
+                  <environmentVariable name="VITE_EVIA_SIGN_CLIENT_ID" value="${{ secrets.EVIA_SIGN_CLIENT_ID }}" />
+                  <environmentVariable name="VITE_EVIA_SIGN_CLIENT_SECRET" value="${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" />
+                  <environmentVariable name="VITE_API_ENDPOINT" value="${{ secrets.API_ENDPOINT }}" />
+                  <environmentVariable name="VITE_WEBHOOK_URL" value="${{ secrets.WEBHOOK_URL }}" />
+                </environmentVariables>
+              </aspNetCore>
             </system.webServer>
           </configuration>' > deploy/web.config
           
@@ -88,9 +96,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      id-token: write
-      contents: read
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -101,29 +106,12 @@ jobs:
         with:
           name: node-app
 
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
-
-      - name: Set Web App Settings
-        run: |
-          az webapp config appsettings set --name khrental --resource-group khrental_group \
-            --settings \
-              VITE_SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-              VITE_SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
-              VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.EVIA_SIGN_CLIENT_ID }}" \
-              VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" \
-              VITE_API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-              VITE_WEBHOOK_URL="${{ secrets.WEBHOOK_URL }}"
-
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
         with:
           app-name: 'khrental'
           slot-name: 'Production'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
