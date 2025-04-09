@@ -23,15 +23,43 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: npm install, build, and test
+      - name: npm install
         run: |
           npm install
           npm install terser --save-dev
+
+      - name: Create .env file for build
+        run: |
+          echo "Creating .env file for main application..."
+          touch .env
+          echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
+          echo "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.EVIA_SIGN_CLIENT_ID }}" >> .env
+          echo "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" >> .env
+          echo "VITE_API_ENDPOINT=${{ secrets.API_ENDPOINT }}" >> .env
+          echo "VITE_WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" >> .env
+          cat .env | grep -v SECRET
+          echo ".env file created with required variables"
+
+      - name: Build and test
+        run: |
           npm run build --if-present
           npm run test --if-present
 
+      - name: List all files (including dotfiles)
+        run: |
+          echo "Listing all files including dotfiles:"
+          ls -la
+          echo "Checking for specific dotfiles:"
+          find . -type f -name ".*" | sort
+          echo "Checking .env file status:"
+          if [ -f ".env" ]; then echo ".env exists"; else echo ".env doesn't exist"; fi
+
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: |
+          # Make sure dotfiles are included
+          echo "Creating zip with all files including dotfiles..."
+          zip -r release.zip . -x "node_modules/*" "*.git*"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
