@@ -50,7 +50,7 @@ jobs:
           echo 'serve -s . -p 8080' >> deploy/startup.sh
           chmod +x deploy/startup.sh
           
-          # Create web.config with environment variables
+          # Create web.config
           echo '<?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
@@ -71,16 +71,6 @@ jobs:
                   </rule>
                 </rules>
               </rewrite>
-              <aspNetCore>
-                <environmentVariables>
-                  <environmentVariable name="VITE_SUPABASE_URL" value="${{ secrets.SUPABASE_URL }}" />
-                  <environmentVariable name="VITE_SUPABASE_ANON_KEY" value="${{ secrets.SUPABASE_ANON_KEY }}" />
-                  <environmentVariable name="VITE_EVIA_SIGN_CLIENT_ID" value="${{ secrets.EVIA_SIGN_CLIENT_ID }}" />
-                  <environmentVariable name="VITE_EVIA_SIGN_CLIENT_SECRET" value="${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" />
-                  <environmentVariable name="VITE_API_ENDPOINT" value="${{ secrets.API_ENDPOINT }}" />
-                  <environmentVariable name="VITE_WEBHOOK_URL" value="${{ secrets.WEBHOOK_URL }}" />
-                </environmentVariables>
-              </aspNetCore>
             </system.webServer>
           </configuration>' > deploy/web.config
           
@@ -106,12 +96,12 @@ jobs:
         with:
           name: node-app
 
-      - name: Deploy to Azure Web App
+      - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v1
+        uses: azure/webapps-deploy@v2
         with:
           app-name: 'khrental'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
