@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -46,26 +46,11 @@ jobs:
           npm run build --if-present
           npm run test --if-present
 
-      - name: List all files (including dotfiles)
-        run: |
-          echo "Listing all files including dotfiles:"
-          ls -la
-          echo "Checking for specific dotfiles:"
-          find . -type f -name ".*" | sort
-          echo "Checking .env file status:"
-          if [ -f ".env" ]; then echo ".env exists"; else echo ".env doesn't exist"; fi
-
-      - name: Zip artifact for deployment
-        run: |
-          # Make sure dotfiles are included
-          echo "Creating zip with all files including dotfiles..."
-          zip -r release.zip . -x "node_modules/*" "*.git*"
-
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: release.zip
+          path: dist/
 
   deploy:
     runs-on: ubuntu-latest
@@ -73,19 +58,14 @@ jobs:
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: node-app
+          path: dist/
 
-      - name: Unzip artifact for deployment
-        run: unzip release.zip
-      
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -99,5 +79,6 @@ jobs:
         with:
           app-name: 'khrental'
           slot-name: 'Production'
-          package: .
+          package: dist/
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           
