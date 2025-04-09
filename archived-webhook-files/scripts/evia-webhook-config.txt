@@ -1,6 +1,0 @@
-
-# Evia Sign Webhook Configuration
-# Generated on 2025-04-02T09:32:21.592Z
-
-WEBHOOK_URL=https://vcorwfilylgtvzktszvi.supabase.co/functions/v1/evia-webhook
-AUTH_HEADER=Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjb3J3ZmlseWxndHZ6a3RzenZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE1NzIyODUsImV4cCI6MjA1NzE0ODI4NX0.SS7Z6iXHn4QoZsGK37xkQTWq_aqpGA3kT8VXpxgdblc
