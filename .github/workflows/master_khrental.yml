@@ -1,7 +1,3 @@
-The error message indicates that the job failed because it was unable to fetch the federated token from GitHub. Specifically, the error mentions that the `ACTIONS_ID_TOKEN_REQUEST_URL` environment variable is missing and suggests to double-check the `auth-type`.
-
-To fix this issue, you need to grant `id-token: write` permission in the job's permissions. Here's the updated workflow file with the necessary permissions:
-
 ```yaml
 name: Build and deploy Node.js app to Azure Web App - khrental
 
