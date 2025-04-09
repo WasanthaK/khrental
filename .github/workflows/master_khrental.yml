@@ -56,7 +56,7 @@ jobs:
           echo "VITE_WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" >> deploy/.env
           
           # Create startup script
-          echo '#!/bin/sh' > deploy/startup.sh
+          echo '#!/bin/bash' > deploy/startup.sh
           echo 'cd /home/site/wwwroot' >> deploy/startup.sh
           echo 'npm install -g serve' >> deploy/startup.sh
           echo 'serve -s . -l 8080' >> deploy/startup.sh
