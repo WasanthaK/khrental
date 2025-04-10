@@ -223,9 +223,12 @@ jobs:
             echo "Warning: Main application not responding with 200 OK"
           fi
           
-          # Check application logs
-          echo "Fetching application logs..."
-          az webapp log tail --name khrental --resource-group ThreeCreeks
+          # Test env-config.js
+          ENV_CONFIG_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL/env-config.js)
+          echo "env-config.js HTTP status: $ENV_CONFIG_STATUS"
+          if [ "$ENV_CONFIG_STATUS" != "200" ]; then
+            echo "Warning: env-config.js not accessible"
+          fi
           
           # Check environment variables
           echo "Checking environment variables..."
@@ -234,7 +237,21 @@ jobs:
             --resource-group ThreeCreeks \
             --query "[?starts_with(name, 'VITE_')].{Name:name, Value:value}" \
             -o table
+          
+          # Fetch recent logs instead of tailing
+          echo "Fetching recent application logs..."
+          az webapp log download \
+            --name khrental \
+            --resource-group ThreeCreeks \
+            --log-file logs.zip
+          
+          if [ -f logs.zip ]; then
+            unzip -p logs.zip */docker.log | tail -n 50
+            rm logs.zip
+          fi
 
       - name: Verify deployment
         run: |
           echo "Deployment verification complete."
+          echo "Please check the application at: https://khrental.azurewebsites.net"
+          echo "If you encounter any issues, check the Azure portal for detailed logs."
