@@ -137,13 +137,13 @@ jobs:
           echo "Ensuring startup script is executable:"
           chmod +x startup.sh
 
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
-
+          - name: Login to Azure
+          uses: azure/login@v2
+          with:
+            client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
+            tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
+            subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
+            
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
