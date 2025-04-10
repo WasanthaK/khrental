@@ -96,13 +96,17 @@ jobs:
           echo "  VITE_EVIA_SIGN_CLIENT_ID: \"$VITE_EVIA_SIGN_CLIENT_ID\"," >> env-config.js
           echo "  VITE_EVIA_SIGN_CLIENT_SECRET: \"$VITE_EVIA_SIGN_CLIENT_SECRET\"," >> env-config.js
           echo "  VITE_API_ENDPOINT: \"$VITE_API_ENDPOINT\"," >> env-config.js
-          echo "  VITE_WEBHOOK_URL: \"$VITE_WEBHOOK_URL\"" >> env-config.js
+          
+          # Ensure webhook URL always has https:// protocol
+          FORMATTED_WEBHOOK_URL="$VITE_WEBHOOK_URL"
+          # Remove any existing protocol
+          FORMATTED_WEBHOOK_URL="${FORMATTED_WEBHOOK_URL#http://}"
+          FORMATTED_WEBHOOK_URL="${FORMATTED_WEBHOOK_URL#https://}"
+          # Add https:// protocol
+          FORMATTED_WEBHOOK_URL="https://$FORMATTED_WEBHOOK_URL"
+          echo "  VITE_WEBHOOK_URL: \"$FORMATTED_WEBHOOK_URL\"" >> env-config.js
+          
           echo '};' >> env-config.js
-          echo '' >> env-config.js
-          echo '// Ensure webhook URL has proper protocol' >> env-config.js
-          echo 'if (window._env_.VITE_WEBHOOK_URL && !window._env_.VITE_WEBHOOK_URL.startsWith("https://")) {' >> env-config.js
-          echo '  window._env_.VITE_WEBHOOK_URL = "https://" + window._env_.VITE_WEBHOOK_URL.replace(/^https?:\/\//, "");' >> env-config.js
-          echo '}' >> env-config.js
           echo '' >> env-config.js
           echo 'console.log("Environment variables loaded:", {' >> env-config.js
           echo '  ...window._env_,' >> env-config.js

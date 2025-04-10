@@ -41,8 +41,17 @@ const EVIA_SIGN_API = {
 
 const EVIA_API_URL = 'https://evia.enadocapp.com/_apis/sign/api';
 
+// Helper function to ensure URL has a protocol
+const ensureHttpsProtocol = (url) => {
+  if (!url) return '';
+  if (url.startsWith('https://')) return url;
+  if (url.startsWith('http://')) return `https://${url.substring(7)}`;
+  return `https://${url}`;
+};
+
 // Get the webhook URL from environment or use a fallback
-const DEFAULT_WEBHOOK_URL = import.meta.env.VITE_EVIA_WEBHOOK_URL || 'http://1f0e-119-160-185-98.ngrok-free.app/webhook/evia-sign';
+const rawWebhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || 'kh-reantals-webhook.azurewebsites.net/webhook/evia-sign';
+const DEFAULT_WEBHOOK_URL = ensureHttpsProtocol(rawWebhookUrl);
 
 // Status mappings for better compatibility
 const STATUS_MAPPINGS = {
