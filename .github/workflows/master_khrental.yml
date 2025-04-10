@@ -108,6 +108,66 @@ jobs:
           
           echo '};' >> env-config.js
           echo '' >> env-config.js
+
+          # Add more comprehensive URL validation and fixing
+          echo '// Fix all URL environment variables to ensure they have proper protocols' >> env-config.js
+          echo '(function fixAllEnvURLs() {' >> env-config.js
+          echo '  if (!window._env_) return;' >> env-config.js
+          echo '' >> env-config.js
+          echo '  // List of keys that should be URLs' >> env-config.js
+          echo '  const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL"];' >> env-config.js
+          echo '' >> env-config.js
+          echo '  // Fix all URL keys' >> env-config.js
+          echo '  urlKeys.forEach(key => {' >> env-config.js
+          echo '    const value = window._env_[key];' >> env-config.js
+          echo '    if (value && typeof value === "string") {' >> env-config.js
+          echo '      if (!value.match(/^https?:\/\//)) {' >> env-config.js
+          echo '        console.log(`Fixing URL environment variable ${key}: ${value}`);' >> env-config.js
+          echo '        window._env_[key] = "https://" + value.replace(/^https?:\/\//, "");' >> env-config.js
+          echo '      }' >> env-config.js
+          echo '    } else if (!value) {' >> env-config.js
+          echo '      console.warn(`Environment variable ${key} is empty or missing`);' >> env-config.js
+          echo '      window._env_[key] = "https://example.com";  // Provide a fallback' >> env-config.js
+          echo '    }' >> env-config.js
+          echo '  });' >> env-config.js
+          echo '' >> env-config.js
+          echo '  console.log("Fixed URL environment variables:", {' >> env-config.js
+          echo '    VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,' >> env-config.js
+          echo '    VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,' >> env-config.js
+          echo '    VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL' >> env-config.js
+          echo '  });' >> env-config.js
+          echo '})();' >> env-config.js
+          echo '' >> env-config.js
+          
+          # Monkey patch URL constructor for safety
+          echo '// Monkey patch URL constructor to debug and fix invalid URLs' >> env-config.js
+          echo 'const OriginalURL = URL;' >> env-config.js
+          echo 'class SafeURL extends OriginalURL {' >> env-config.js
+          echo '  constructor(url, base) {' >> env-config.js
+          echo '    try {' >> env-config.js
+          echo '      if (typeof url === "string") {' >> env-config.js
+          echo '        if (!url) {' >> env-config.js
+          echo '          console.error("Empty URL string passed to URL constructor");' >> env-config.js
+          echo '          url = "https://example.com";' >> env-config.js
+          echo '        } else if (!url.includes("://")) {' >> env-config.js
+          echo '          console.error(`Invalid URL without protocol: "${url}"`);' >> env-config.js
+          echo '          url = "https://" + url;' >> env-config.js
+          echo '        }' >> env-config.js
+          echo '      }' >> env-config.js
+          echo '      super(url, base);' >> env-config.js
+          echo '    } catch (e) {' >> env-config.js
+          echo '      console.error(`URL constructor error for "${url}": ${e.message}`);' >> env-config.js
+          echo '      // Create a stack trace with detailed information' >> env-config.js
+          echo '      const error = new Error(`URL constructor failed for: ${url}`);' >> env-config.js
+          echo '      console.error(error.stack);' >> env-config.js
+          echo '      // Fall back to a valid URL to prevent app crash' >> env-config.js
+          echo '      super("https://example.com");' >> env-config.js
+          echo '    }' >> env-config.js
+          echo '  }' >> env-config.js
+          echo '}' >> env-config.js
+          echo 'URL = SafeURL;' >> env-config.js
+          echo '' >> env-config.js
+          
           echo 'console.log("Environment variables loaded:", {' >> env-config.js
           echo '  ...window._env_,' >> env-config.js
           echo '  VITE_SUPABASE_ANON_KEY: "***",' >> env-config.js

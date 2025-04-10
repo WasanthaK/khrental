@@ -22,11 +22,25 @@ const getEnvVar = (key: keyof EnvConfig): string => {
   return import.meta.env[key] || '';
 };
 
+// Ensure URL environment variables have proper protocol
+const ensureProtocol = (url: string): string => {
+  if (!url) return 'https://example.com'; // Provide a fallback valid URL
+  return url.startsWith('http://') || url.startsWith('https://') 
+    ? url 
+    : `https://${url}`;
+};
+
+// Create URL-safe getters for environment variables
+const getSafeURL = (key: keyof EnvConfig): string => {
+  return ensureProtocol(getEnvVar(key));
+};
+
+// Export environment variables with proper handling
 export const ENV = {
-  SUPABASE_URL: getEnvVar('VITE_SUPABASE_URL'),
+  SUPABASE_URL: getSafeURL('VITE_SUPABASE_URL'),
   SUPABASE_ANON_KEY: getEnvVar('VITE_SUPABASE_ANON_KEY'),
   EVIA_SIGN_CLIENT_ID: getEnvVar('VITE_EVIA_SIGN_CLIENT_ID'),
   EVIA_SIGN_CLIENT_SECRET: getEnvVar('VITE_EVIA_SIGN_CLIENT_SECRET'),
-  API_ENDPOINT: getEnvVar('VITE_API_ENDPOINT'),
-  WEBHOOK_URL: getEnvVar('VITE_WEBHOOK_URL'),
+  API_ENDPOINT: getSafeURL('VITE_API_ENDPOINT'),
+  WEBHOOK_URL: getSafeURL('VITE_WEBHOOK_URL'),
 } as const; 
