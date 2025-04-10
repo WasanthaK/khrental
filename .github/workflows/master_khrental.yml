@@ -14,17 +14,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      VITE_EVIA_SIGN_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID }}
-      VITE_EVIA_SIGN_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET }}
-      VITE_API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
-      VITE_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_EVIA_SIGN_CLIENT_ID: ${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}
+      VITE_EVIA_SIGN_CLIENT_SECRET: ${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}
+      VITE_API_ENDPOINT: ${{ secrets.VITE_API_ENDPOINT }}
+      VITE_WEBHOOK_URL: ${{ secrets.VITE_WEBHOOK_URL }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js version
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
@@ -38,11 +39,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
-      - name: npm install and build
+      - name: Install and build project
         run: |
           npm install
           npm install terser --save-dev
-          # Create .env file for build
+          # Create .env file
           echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env
           echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
           echo "VITE_EVIA_SIGN_CLIENT_ID=$VITE_EVIA_SIGN_CLIENT_ID" >> .env
@@ -62,54 +63,17 @@ jobs:
             echo "Build output file 'dist/index.html' not found!"
             exit 1
           fi
-          echo "Build output verified successfully"
+          echo "Build output verified successfully."
 
       - name: Prepare deployment files
         run: |
-          # Create startup script first (in root)
+          # Create startup script
           echo '#!/bin/bash
           cd /home/site/wwwroot
           npm install -g serve
-          
-          # Create env-config.js with environment variables
-          cat > env-config.js << EOL
-          window._env_ = {
-            VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || "${VITE_SUPABASE_URL}",
-            VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || "${VITE_SUPABASE_ANON_KEY}",
-            VITE_EVIA_SIGN_CLIENT_ID: process.env.VITE_EVIA_SIGN_CLIENT_ID || "${VITE_EVIA_SIGN_CLIENT_ID}",
-            VITE_EVIA_SIGN_CLIENT_SECRET: process.env.VITE_EVIA_SIGN_CLIENT_SECRET || "${VITE_EVIA_SIGN_CLIENT_SECRET}",
-            VITE_API_ENDPOINT: process.env.VITE_API_ENDPOINT || "${VITE_API_ENDPOINT}",
-            VITE_WEBHOOK_URL: process.env.VITE_WEBHOOK_URL || "${VITE_WEBHOOK_URL}"
-          };
-          console.log("Environment variables loaded:", window._env_);
-          EOL
-          
-          # Create a debug script to check environment variables
-          cat > debug-env.sh << EOL
-          #!/bin/bash
-          echo "Checking environment variables..."
-          echo "VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:+set}"
-          echo "VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:+set}"
-          echo "VITE_EVIA_SIGN_CLIENT_ID: ${VITE_EVIA_SIGN_CLIENT_ID:+set}"
-          echo "VITE_EVIA_SIGN_CLIENT_SECRET: ${VITE_EVIA_SIGN_CLIENT_SECRET:+set}"
-          echo "VITE_API_ENDPOINT: ${VITE_API_ENDPOINT:+set}"
-          echo "VITE_WEBHOOK_URL: ${VITE_WEBHOOK_URL:+set}"
-          echo "Checking process.env variables..."
-          echo "VITE_SUPABASE_URL: ${process.env.VITE_SUPABASE_URL:+set}"
-          echo "VITE_SUPABASE_ANON_KEY: ${process.env.VITE_SUPABASE_ANON_KEY:+set}"
-          echo "VITE_EVIA_SIGN_CLIENT_ID: ${process.env.VITE_EVIA_SIGN_CLIENT_ID:+set}"
-          echo "VITE_EVIA_SIGN_CLIENT_SECRET: ${process.env.VITE_EVIA_SIGN_CLIENT_SECRET:+set}"
-          echo "VITE_API_ENDPOINT: ${process.env.VITE_API_ENDPOINT:+set}"
-          echo "VITE_WEBHOOK_URL: ${process.env.VITE_WEBHOOK_URL:+set}"
-          EOL
-          chmod +x debug-env.sh
-          
-          # Run the debug script
-          ./debug-env.sh
-          
           serve -s . -p 8080' > startup.sh
           chmod +x startup.sh
-          
+
           # Create web.config
           echo '<?xml version="1.0" encoding="utf-8"?>
           <configuration>
@@ -133,18 +97,11 @@ jobs:
               </rewrite>
             </system.webServer>
           </configuration>' > web.config
-          
+
           # Copy build files
           cp -r dist/* .
-          
-          # Verify files
-          echo "Checking deployment files:"
-          ls -la
-          echo "Checking startup script:"
-          cat startup.sh
-          echo "Checking startup script permissions:"
-          ls -l startup.sh
-      - name: Upload artifact for deployment job
+
+      - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: node-app
@@ -155,6 +112,7 @@ jobs:
             !node_modules
             !src
             !.git
+
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -163,7 +121,7 @@ jobs:
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
-      - name: Download artifact from build job
+      - name: Download deployment artifact
         uses: actions/download-artifact@v4
         with:
           name: node-app
@@ -173,52 +131,40 @@ jobs:
         run: |
           echo "Checking deployment files:"
           ls -la
-          echo "Checking startup script:"
-          cat startup.sh
           echo "Ensuring startup script is executable:"
           chmod +x startup.sh
 
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EEDC2329EBDE4906AAD5DBEFBDBD8982 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62093CB513E141DEBC62ACAB8F0862DB }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
 
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
           app-name: 'khrental'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
 
-      - name: 'Set environment variables'
+      - name: Set environment variables in Azure
         run: |
-          # Extract credentials from publish profile
-          PUBLISH_PROFILE=${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
-          USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*')
-          PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*')
-          
-          # Login with publish profile credentials
-          az login --service-principal -u "$USERNAME" -p "$PASSWORD" --tenant "${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}"
-          
-          # Set environment variables
           az webapp config appsettings set \
             --name khrental \
             --resource-group khrental \
             --settings \
-            VITE_SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            VITE_SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
-            VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.EVIA_SIGN_CLIENT_ID }}" \
-            VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.EVIA_SIGN_CLIENT_SECRET }}" \
-            VITE_API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            VITE_WEBHOOK_URL="${{ secrets.WEBHOOK_URL }}"
+            VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+            VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
+            VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
+            VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
+            VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
 
       - name: Verify deployment
         run: |
           echo "Waiting for deployment to stabilize..."
           sleep 30
-          echo "Deployment verification complete"
+          echo "Deployment verification complete."
