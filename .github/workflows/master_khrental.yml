@@ -67,20 +67,22 @@ jobs:
 
       - name: Prepare deployment files
         run: |
-          # Create a local folder for the web files (relative to the repo root)
+          # Create a folder (webroot) for the built files.
           WEB_ROOT=webroot
           mkdir -p "$WEB_ROOT"
       
-          # Create startup script that will run on Azure. On Azure Web Apps for Linux, the default web root is /home/site/wwwroot.
+          # Create startup script that will run on Azure.
+          # On Azure Web Apps for Linux, the default web root is /home/site/wwwroot.
+          # Here we change into that directory and then run "npm start" (adjust if needed).
           cat << 'EOF' > startup.sh
           #!/bin/bash
-          set -e  # Exit immediately if a command exits with a non-zero status
+          set -e
           cd /home/site/wwwroot
-          # (Optional: you can add commands to launch your Node.js server here if needed)
+          npm start
           EOF
           chmod +x startup.sh
       
-          # Create web.config (if needed for static file handling or rewrites)
+          # Create web.config (if needed for static file handling or routing)
           cat << 'EOF' > web.config
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
@@ -106,7 +108,7 @@ jobs:
           </configuration>
           EOF
       
-          # Copy the build output into the webroot folder.
+          # Copy the build output (dist) into the webroot folder.
           cp -r dist/* "$WEB_ROOT"
 
       - name: Upload deployment artifact
@@ -141,15 +143,8 @@ jobs:
           echo "Ensuring startup script is executable:"
           chmod +x startup.sh
 
-      - name: Verify deployment files
-        run: |
-          echo "Checking deployment files:"
-          ls -la
-          echo "Checking startup script:"
-          cat startup.sh
-          echo "Ensuring startup script is executable:"
-          chmod +x startup.sh
-  
+      - name: Debug startup script
+        run: bash -x startup.sh
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -163,30 +158,21 @@ jobs:
         with:
           app-name: 'khrental'
           slot-name: 'Production'
-          # Deploy the entire artifact. The webapps-deploy action will extract the contents
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
 
       - name: Set environment variables in Azure
         run: |
-          # First, remove all existing environment variables
-          az webapp config appsettings list --name khrental --resource-group ThreeCreeks --query "[].name" -o tsv | xargs -I {} az webapp config appsettings delete --name khrental --resource-group ThreeCreeks --setting-names {}
-          
-          # Then set the new environment variables
           az webapp config appsettings set \
             --name khrental \
             --resource-group ThreeCreeks \
             --settings \
-            VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
-            VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
-            VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
-            VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
-            VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
-          
-          # Verify the settings were set correctly
-          echo "Verifying environment variables..."
-          az webapp config appsettings list --name khrental --resource-group ThreeCreeks --query "[?contains(name, 'VITE_')]" -o table
+              VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+              VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+              VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
+              VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
+              VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
+              VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
 
       - name: Verify deployment
         run: |
