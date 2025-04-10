@@ -18,8 +18,8 @@ jobs:
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       VITE_EVIA_SIGN_CLIENT_ID: ${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}
       VITE_EVIA_SIGN_CLIENT_SECRET: ${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}
-      VITE_API_ENDPOINT: "https://khrental.azurewebsites.net/api"
-      VITE_WEBHOOK_URL: "kh-reantals-webhook.azurewebsites.net"
+      VITE_API_ENDPOINT: ${{ secrets.VITE_API_ENDPOINT }}
+      VITE_WEBHOOK_URL: ${{ secrets.VITE_WEBHOOK_URL }}
 
     steps:
       - name: Checkout repository
@@ -258,10 +258,7 @@ jobs:
             --log-file logs.zip
           
           if [ -f logs.zip ]; then
-            echo "Extracting logs from downloaded zip file..."
-            unzip -l logs.zip
-            echo "Showing most recent logs:"
-            unzip -p logs.zip '*.log' 2>/dev/null | tail -n 50 || echo "No log files found in the archive"
+            unzip -p logs.zip */docker.log | tail -n 50
             rm logs.zip
           fi
 
