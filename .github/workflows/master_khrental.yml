@@ -169,16 +169,24 @@ jobs:
 
       - name: Set environment variables in Azure
         run: |
+          # First, remove all existing environment variables
+          az webapp config appsettings list --name khrental --resource-group ThreeCreeks --query "[].name" -o tsv | xargs -I {} az webapp config appsettings delete --name khrental --resource-group ThreeCreeks --setting-names {}
+          
+          # Then set the new environment variables
           az webapp config appsettings set \
             --name khrental \
             --resource-group ThreeCreeks \
             --settings \
-              VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
-              VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-              VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
-              VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
-              VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
-              VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
+            VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+            VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
+            VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
+            VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
+            VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
+          
+          # Verify the settings were set correctly
+          echo "Verifying environment variables..."
+          az webapp config appsettings list --name khrental --resource-group ThreeCreeks --query "[?contains(name, 'VITE_')]" -o table
 
       - name: Verify deployment
         run: |
