@@ -67,19 +67,20 @@ jobs:
 
       - name: Prepare deployment files
         run: |
-          # Use a writable directory for the web root
-          WEB_ROOT=/home/runner/work/khrental/webroot
+          # Create a local folder for the web files (relative to the repo root)
+          WEB_ROOT=webroot
           mkdir -p "$WEB_ROOT"
       
-          # Create startup script
+          # Create startup script that will run on Azure. On Azure Web Apps for Linux, the default web root is /home/site/wwwroot.
           cat << 'EOF' > startup.sh
           #!/bin/bash
           set -e  # Exit immediately if a command exits with a non-zero status
-          cd /home/runner/work/khrental/webroot
+          cd /home/site/wwwroot
+          # (Optional: you can add commands to launch your Node.js server here if needed)
           EOF
           chmod +x startup.sh
       
-          # Create web.config
+          # Create web.config (if needed for static file handling or rewrites)
           cat << 'EOF' > web.config
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
@@ -105,7 +106,7 @@ jobs:
           </configuration>
           EOF
       
-          # Copy build files
+          # Copy the build output into the webroot folder.
           cp -r dist/* "$WEB_ROOT"
 
       - name: Upload deployment artifact
@@ -113,7 +114,7 @@ jobs:
         with:
           name: node-app
           path: |
-            ./*
+            webroot
             startup.sh
             web.config
             !node_modules
@@ -155,6 +156,7 @@ jobs:
         with:
           app-name: 'khrental'
           slot-name: 'Production'
+          # Deploy the entire artifact. The webapps-deploy action will extract the contents
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
 
