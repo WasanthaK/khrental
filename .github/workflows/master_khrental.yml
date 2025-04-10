@@ -71,16 +71,47 @@ jobs:
           WEB_ROOT=webroot
           mkdir -p "$WEB_ROOT"
       
-          # Create startup script that will run on Azure.
-          # On Azure Web Apps for Linux, the default web root is /home/site/wwwroot.
-          # Since we are serving a static site, we use `npx serve` to serve the contents of wwwroot.
+          # Create startup script that will run on Azure
           cat << 'EOF' > startup.sh
           #!/bin/bash
-          set -e
+          set -e  # Exit immediately if a command exits with a non-zero status
+          
           cd /home/site/wwwroot
-          # Use the PORT environment variable if available, default to 8080.
-          npx serve -s . -l ${PORT:-8080}
+          
+          # Debug: Print current directory and contents
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          
+          # Debug: Print environment variables (masking sensitive values)
+          echo "Environment variables:"
+          env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
+          
+          # Install serve if not already installed
+          if ! command -v serve &> /dev/null; then
+            echo "Installing serve..."
+            npm install -g serve
+          fi
+          
+          # Create a simple test page to verify environment variables
+          cat << 'TESTEOF' > env-test.html
+          <!DOCTYPE html>
+          <html>
+            <head><title>Environment Test</title></head>
+            <body>
+              <h1>Environment Variables Test</h1>
+              <script>
+                document.write('<pre>' + JSON.stringify(window._env_, null, 2) + '</pre>');
+              </script>
+            </body>
+          </html>
+          TESTEOF
+          
+          # Start the server
+          echo "Starting server..."
+          serve -s . -p 8080
           EOF
+          
           chmod +x startup.sh
       
           # Create web.config (if needed for static file handling or routing)
@@ -168,15 +199,37 @@ jobs:
           package: .
           startup-command: '/home/site/wwwroot/startup.sh'
 
-      - name: Set environment variables in Azure
+      - name: Test deployment and environment variables
         run: |
-          az webapp config appsettings set \
-            --name khrental \
-            --resource-group ThreeCreeks \
-            --settings "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" "VITE_API_ENDPOINT=${{ secrets.VITE_API_ENDPOINT }}" "VITE_WEBHOOK_URL=${{ secrets.VITE_WEBHOOK_URL }}"
-            
-      - name: Verify deployment
-        run: |
+          echo "Testing deployment and environment variables..."
+          
+          # Wait for deployment to stabilize
           echo "Waiting for deployment to stabilize..."
           sleep 30
+          
+          # Get the app URL
+          APP_URL="https://khrental.azurewebsites.net"
+          echo "Testing application at: $APP_URL"
+          
+          # Test the main application
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL)
+          echo "Main application HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Warning: Main application not responding with 200 OK"
+          fi
+          
+          # Check application logs
+          echo "Fetching application logs..."
+          az webapp log tail --name khrental --resource-group ThreeCreeks
+          
+          # Check environment variables
+          echo "Checking environment variables..."
+          az webapp config appsettings list \
+            --name khrental \
+            --resource-group ThreeCreeks \
+            --query "[?starts_with(name, 'VITE_')].{Name:name, Value:value}" \
+            -o table
+
+      - name: Verify deployment
+        run: |
           echo "Deployment verification complete."
