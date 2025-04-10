@@ -67,6 +67,12 @@ Ensure the following environment variables are set in your Azure Web App:
 
 ## Recent Updates
 
+### URL Encoding Fix for HTML Content (2024-04-10)
+
+- Added URL encoding for path parameters that contain HTML content
+- Fixes "431 Request Header Fields Too Large" errors when navigating with large HTML content
+- Prevents infinite loops when attempting to navigate to URLs with embedded agreement content
+
 ### URL Handling Fix (2024-04-10)
 
 - Fixed URL handling in env-config.js to properly process relative paths starting with "/"
