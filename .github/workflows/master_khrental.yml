@@ -125,15 +125,38 @@ jobs:
           echo "    window._env_.VITE_SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
           echo '  }' >> env-config.js
           echo '' >> env-config.js
-          echo '  // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL' >> env-config.js
+          echo '  // Replace any instances of the literal string "VITE_SUPABASE_UR" with the actual URL' >> env-config.js
           echo '  const originalFetch = window.fetch;' >> env-config.js
           echo '  window.fetch = function(url, options) {' >> env-config.js
-          echo '    if (typeof url === "string" && url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
-          echo '      const fixedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
-          echo '      console.log(`Fixed Supabase URL: ${url} -> ${fixedUrl}`);' >> env-config.js
-          echo '      return originalFetch(fixedUrl, options);' >> env-config.js
+          echo '    let modifiedUrl = url;' >> env-config.js
+          echo '    if (typeof url === "string") {' >> env-config.js
+          echo '      if (url.includes("VITE_SUPABASE_UR")) {' >> env-config.js
+          echo '        modifiedUrl = url.replace("VITE_SUPABASE_UR", window._env_.VITE_SUPABASE_URL);' >> env-config.js
+          echo '        console.log(`Fixed Supabase URL: ${url} -> ${modifiedUrl}`);' >> env-config.js
+          echo '      }' >> env-config.js
           echo '    }' >> env-config.js
-          echo '    return originalFetch(url, options);' >> env-config.js
+          echo '    return originalFetch(modifiedUrl, options).then(response => {' >> env-config.js
+          echo '      const originalJson = response.json;' >> env-config.js
+          echo '      response.json = function() {' >> env-config.js
+          echo '        return originalJson.call(this).catch(err => {' >> env-config.js
+          echo '          if (err.message && err.message.includes("Unexpected token")) {' >> env-config.js
+          echo '            console.error(`JSON parsing error for URL: ${modifiedUrl}`);' >> env-config.js
+          echo '            // Return empty JSON instead of crashing' >> env-config.js
+          echo '            return {};' >> env-config.js
+          echo '          }' >> env-config.js
+          echo '          throw err; // Re-throw other errors' >> env-config.js
+          echo '        });' >> env-config.js
+          echo '      };' >> env-config.js
+          echo '      return response;' >> env-config.js
+          echo '    }).catch(error => {' >> env-config.js
+          echo '      console.error(`Fetch error for ${modifiedUrl}:`, error);' >> env-config.js
+          echo '      // Create a mock response to prevent app crash' >> env-config.js
+          echo '      const mockResponse = new Response(JSON.stringify({ error: "Failed to fetch" }), {' >> env-config.js
+          echo '        status: 500,' >> env-config.js
+          echo '        headers: { "Content-Type": "application/json" }' >> env-config.js
+          echo '      });' >> env-config.js
+          echo '      return mockResponse;' >> env-config.js
+          echo '    });' >> env-config.js
           echo '  };' >> env-config.js
           echo '})();' >> env-config.js
           echo '' >> env-config.js
