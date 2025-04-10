@@ -67,6 +67,9 @@ jobs:
 
       - name: Prepare deployment files
         run: |
+          # Create the directory if it does not exist
+          mkdir -p /home/site/wwwroot
+      
           # Create startup script
           cat << 'EOF' > startup.sh
           #!/bin/bash
@@ -76,7 +79,7 @@ jobs:
           serve -s . -p 8080
           EOF
           chmod +x startup.sh
-
+      
           # Create web.config
           cat << 'EOF' > web.config
           <?xml version="1.0" encoding="utf-8"?>
@@ -102,9 +105,9 @@ jobs:
             </system.webServer>
           </configuration>
           EOF
-
+      
           # Copy build files
-          cp -r dist/* .
+          cp -r dist/* /home/site/wwwroot
 
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
