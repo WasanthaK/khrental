@@ -132,7 +132,9 @@ function PropertyProvider({ children }) {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       
       if (userError) {
-        throw new Error(userError.message);
+        console.warn('Auth session missing!');
+        setAccessiblePropertyIds([]);
+        return [];
       }
 
       if (!userData?.user) {
@@ -159,7 +161,7 @@ function PropertyProvider({ children }) {
       console.error('Error loading user property access:', err);
       // Default to empty array on error
       setAccessiblePropertyIds([]);
-      throw err;
+      return [];
     }
   };
 
