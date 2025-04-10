@@ -75,7 +75,7 @@ jobs:
           cat << 'EOF' > startup.sh
           #!/bin/bash
           set -e  # Exit immediately if a command exits with a non-zero status
-          cd ${WEB_ROOT}
+          cd /home/runner/work/khrental/webroot
           EOF
           chmod +x startup.sh
       
@@ -162,14 +162,14 @@ jobs:
         run: |
           az webapp config appsettings set \
             --name khrental \
-            --resource-group khrental \
+            --resource-group ThreeCreeks \
             --settings \
-            VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
-            VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
-            VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
-            VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
-            VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
+              VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+              VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+              VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
+              VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
+              VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
+              VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
 
       - name: Verify deployment
         run: |
