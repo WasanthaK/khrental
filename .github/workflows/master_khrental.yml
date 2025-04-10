@@ -197,7 +197,15 @@ jobs:
 
       - name: 'Set environment variables'
         run: |
-          # Set environment variables using Azure CLI
+          # Extract credentials from publish profile
+          PUBLISH_PROFILE=${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890 }}
+          USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*')
+          PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*')
+          
+          # Login with publish profile credentials
+          az login --service-principal -u "$USERNAME" -p "$PASSWORD" --tenant "${{ secrets.AZUREAPPSERVICE_TENANTID_B76BB5BB72494662B2E55987D0F9FEC7 }}"
+          
+          # Set environment variables
           az webapp config appsettings set \
             --name khrental \
             --resource-group khrental \
