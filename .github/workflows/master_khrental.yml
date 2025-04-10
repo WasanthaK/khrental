@@ -76,8 +76,6 @@ jobs:
           #!/bin/bash
           set -e  # Exit immediately if a command exits with a non-zero status
           cd ${WEB_ROOT}
-          npm install -g serve
-          serve -s . -p 8080
           EOF
           chmod +x startup.sh
       
