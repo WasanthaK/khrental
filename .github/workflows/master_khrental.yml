@@ -204,7 +204,19 @@ jobs:
           echo '        } else if (url.startsWith("/")) {' >> env-config.js
           echo '          // Special case for React Router paths' >> env-config.js
           echo '          const origin = window.location.origin;' >> env-config.js
-          echo '          url = origin + url;' >> env-config.js
+          echo '          // Check for HTML content in URLs and encode it' >> env-config.js
+          echo '          if (url.length > 500 || url.includes("<") || url.includes(">")) {' >> env-config.js
+          echo '            // URL likely contains HTML content - encode path parts only' >> env-config.js
+          echo '            const pathParts = url.split("/");' >> env-config.js
+          echo '            const safeParts = pathParts.map((part, index) => {' >> env-config.js
+          echo '              // Only encode parts after the first slash' >> env-config.js
+          echo '              return index === 0 ? part : encodeURIComponent(part);' >> env-config.js
+          echo '            });' >> env-config.js
+          echo '            url = origin + safeParts.join("/");' >> env-config.js 
+          echo '            console.log(`Encoded long/HTML URL for safety: ${url.substring(0, 100)}...`);' >> env-config.js
+          echo '          } else {' >> env-config.js
+          echo '            url = origin + url;' >> env-config.js
+          echo '          }' >> env-config.js
           echo '        } else if (url.includes("VITE_SUPABASE_UR")) {' >> env-config.js
           echo '          // Replace VITE_SUPABASE_UR with actual URL' >> env-config.js
           echo '          url = url.replace("VITE_SUPABASE_UR", window._env_.VITE_SUPABASE_URL);' >> env-config.js
