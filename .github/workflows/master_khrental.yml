@@ -89,28 +89,34 @@ jobs:
           echo "Environment variables:"
           env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
-          # Create env-config.js with environment variables and ensure proper URL formatting
-          cat > env-config.js << ENVEOF
-          window._env_ = {
-            VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
-            VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
-            VITE_EVIA_SIGN_CLIENT_ID: "${VITE_EVIA_SIGN_CLIENT_ID}",
-            VITE_EVIA_SIGN_CLIENT_SECRET: "${VITE_EVIA_SIGN_CLIENT_SECRET}",
-            VITE_API_ENDPOINT: "${VITE_API_ENDPOINT}",
-            VITE_WEBHOOK_URL: "${VITE_WEBHOOK_URL#https://}"
-          };
+          # Create env-config.js with environment variables
+          echo 'window._env_ = {' > env-config.js
+          echo "  VITE_SUPABASE_URL: \"$VITE_SUPABASE_URL\"," >> env-config.js
+          echo "  VITE_SUPABASE_ANON_KEY: \"$VITE_SUPABASE_ANON_KEY\"," >> env-config.js
+          echo "  VITE_EVIA_SIGN_CLIENT_ID: \"$VITE_EVIA_SIGN_CLIENT_ID\"," >> env-config.js
+          echo "  VITE_EVIA_SIGN_CLIENT_SECRET: \"$VITE_EVIA_SIGN_CLIENT_SECRET\"," >> env-config.js
+          echo "  VITE_API_ENDPOINT: \"$VITE_API_ENDPOINT\"," >> env-config.js
+          echo "  VITE_WEBHOOK_URL: \"$VITE_WEBHOOK_URL\"" >> env-config.js
+          echo '};' >> env-config.js
+          echo '' >> env-config.js
+          echo '// Ensure webhook URL has proper protocol' >> env-config.js
+          echo 'if (window._env_.VITE_WEBHOOK_URL && !window._env_.VITE_WEBHOOK_URL.startsWith("https://")) {' >> env-config.js
+          echo '  window._env_.VITE_WEBHOOK_URL = "https://" + window._env_.VITE_WEBHOOK_URL.replace(/^https?:\/\//, "");' >> env-config.js
+          echo '}' >> env-config.js
+          echo '' >> env-config.js
+          echo 'console.log("Environment variables loaded:", {' >> env-config.js
+          echo '  ...window._env_,' >> env-config.js
+          echo '  VITE_SUPABASE_ANON_KEY: "***",' >> env-config.js
+          echo '  VITE_EVIA_SIGN_CLIENT_SECRET: "***"' >> env-config.js
+          echo '});' >> env-config.js
           
-          # Ensure URLs have proper protocol
-          if (!window._env_.VITE_WEBHOOK_URL.startsWith('https://')) {
-            window._env_.VITE_WEBHOOK_URL = 'https://' + window._env_.VITE_WEBHOOK_URL.replace(/^https?:\/\//, '');
-          }
-          
-          console.log("Environment variables loaded:", {
-            ...window._env_,
-            VITE_SUPABASE_ANON_KEY: '***',
-            VITE_EVIA_SIGN_CLIENT_SECRET: '***'
-          });
-          ENVEOF
+          # Now substitute the environment variables
+          sed -i "s|\${VITE_SUPABASE_URL}|$VITE_SUPABASE_URL|g" env-config.js
+          sed -i "s|\${VITE_SUPABASE_ANON_KEY}|$VITE_SUPABASE_ANON_KEY|g" env-config.js
+          sed -i "s|\${VITE_EVIA_SIGN_CLIENT_ID}|$VITE_EVIA_SIGN_CLIENT_ID|g" env-config.js
+          sed -i "s|\${VITE_EVIA_SIGN_CLIENT_SECRET}|$VITE_EVIA_SIGN_CLIENT_SECRET|g" env-config.js
+          sed -i "s|\${VITE_API_ENDPOINT}|$VITE_API_ENDPOINT|g" env-config.js
+          sed -i "s|\${VITE_WEBHOOK_URL}|$VITE_WEBHOOK_URL|g" env-config.js
           
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
