@@ -67,16 +67,18 @@ jobs:
           
       - name: Prepare deployment files
         run: |
-          # Create a folder (webroot) for the built files.
-          WEB_ROOT=webroot
-          mkdir -p "$WEB_ROOT"
-      
-          # Create startup script that will run on Azure
+          # Create a folder for the web files
+          mkdir -p webroot
+          
+          # Copy the build output into webroot
+          cp -r dist/* webroot/
+          
+          # Create startup script
           cat << 'EOF' > startup.sh
           #!/bin/bash
-          set -e  # Exit immediately if a command exits with a non-zero status
+          set -e
           
-          cd /home/site/wwwroot
+          cd /home/site/wwwroot/webroot
           
           # Debug: Print current directory and contents
           echo "Current directory: $(pwd)"
@@ -87,35 +89,33 @@ jobs:
           echo "Environment variables:"
           env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
+          # Create env-config.js with environment variables
+          cat > env-config.js << ENVEOF
+          window._env_ = {
+            VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
+            VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
+            VITE_EVIA_SIGN_CLIENT_ID: "${VITE_EVIA_SIGN_CLIENT_ID}",
+            VITE_EVIA_SIGN_CLIENT_SECRET: "${VITE_EVIA_SIGN_CLIENT_SECRET}",
+            VITE_API_ENDPOINT: "${VITE_API_ENDPOINT}",
+            VITE_WEBHOOK_URL: "${VITE_WEBHOOK_URL}"
+          };
+          ENVEOF
+          
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
             echo "Installing serve..."
             npm install -g serve
           fi
           
-          # Create a simple test page to verify environment variables
-          cat << 'TESTEOF' > env-test.html
-          <!DOCTYPE html>
-          <html>
-            <head><title>Environment Test</title></head>
-            <body>
-              <h1>Environment Variables Test</h1>
-              <script>
-                document.write('<pre>' + JSON.stringify(window._env_, null, 2) + '</pre>');
-              </script>
-            </body>
-          </html>
-          TESTEOF
-          
-          # Start the server
+          # Start the server from the webroot directory
           echo "Starting server..."
-          serve -s . -p 8080
+          exec serve -s . -l 8080
           EOF
           
           chmod +x startup.sh
-      
-          # Create web.config (if needed for static file handling or routing)
-          cat << 'EOF' > web.config
+          
+          # Create web.config in webroot
+          cat << 'EOF' > webroot/web.config
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <system.webServer>
@@ -136,24 +136,24 @@ jobs:
                   </rule>
                 </rules>
               </rewrite>
+              <staticContent>
+                <mimeMap fileExtension=".json" mimeType="application/json" />
+                <mimeMap fileExtension=".webmanifest" mimeType="application/manifest+json" />
+              </staticContent>
             </system.webServer>
           </configuration>
           EOF
-      
-          # Copy the build output (dist) into the webroot folder.
-          cp -r dist/* "$WEB_ROOT"
 
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: |
-            webroot
+            webroot/
             startup.sh
-            web.config
-            !node_modules
-            !src
-            !.git
+            !node_modules/
+            !src/
+            !.git/
 
   deploy:
     runs-on: ubuntu-latest
