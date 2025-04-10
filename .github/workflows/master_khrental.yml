@@ -201,7 +201,7 @@ jobs:
           echo '        if (!url) {' >> env-config.js
           echo '          console.error("Empty URL string passed to URL constructor");' >> env-config.js
           echo '          url = "https://example.com";' >> env-config.js
-          echo '        } else if (url === "/" || url === "/login") {' >> env-config.js
+          echo '        } else if (url.startsWith("/")) {' >> env-config.js
           echo '          // Special case for React Router paths' >> env-config.js
           echo '          const origin = window.location.origin;' >> env-config.js
           echo '          url = origin + url;' >> env-config.js
