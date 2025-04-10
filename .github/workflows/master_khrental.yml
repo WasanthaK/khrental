@@ -109,7 +109,36 @@ jobs:
           echo '};' >> env-config.js
           echo '' >> env-config.js
 
-          # Add more comprehensive URL validation and fixing
+          # Add direct variable references to avoid substitution issues
+          echo '// Expose direct references to key URLs for easier debugging' >> env-config.js
+          echo "window.SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
+          echo "window.API_ENDPOINT = \"$VITE_API_ENDPOINT\";" >> env-config.js
+          echo "window.WEBHOOK_URL = \"$FORMATTED_WEBHOOK_URL\";" >> env-config.js
+          echo '' >> env-config.js
+          
+          # Add Supabase URL patch to fix API requests
+          echo '// Fix Supabase URL issues' >> env-config.js
+          echo '(function fixSupabaseURL() {' >> env-config.js
+          echo '  // Check for correct Supabase URL' >> env-config.js
+          echo '  if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {' >> env-config.js
+          echo "    console.error('Supabase URL is invalid, setting to real value');" >> env-config.js
+          echo "    window._env_.VITE_SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
+          echo '  }' >> env-config.js
+          echo '' >> env-config.js
+          echo '  // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL' >> env-config.js
+          echo '  const originalFetch = window.fetch;' >> env-config.js
+          echo '  window.fetch = function(url, options) {' >> env-config.js
+          echo '    if (typeof url === "string" && url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
+          echo '      const fixedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
+          echo '      console.log(`Fixed Supabase URL: ${url} -> ${fixedUrl}`);' >> env-config.js
+          echo '      return originalFetch(fixedUrl, options);' >> env-config.js
+          echo '    }' >> env-config.js
+          echo '    return originalFetch(url, options);' >> env-config.js
+          echo '  };' >> env-config.js
+          echo '})();' >> env-config.js
+          echo '' >> env-config.js
+          
+          # Fix all URL environment variables
           echo '// Fix all URL environment variables to ensure they have proper protocols' >> env-config.js
           echo '(function fixAllEnvURLs() {' >> env-config.js
           echo '  if (!window._env_) return;' >> env-config.js
@@ -149,6 +178,14 @@ jobs:
           echo '        if (!url) {' >> env-config.js
           echo '          console.error("Empty URL string passed to URL constructor");' >> env-config.js
           echo '          url = "https://example.com";' >> env-config.js
+          echo '        } else if (url === "/" || url === "/login") {' >> env-config.js
+          echo '          // Special case for React Router paths' >> env-config.js
+          echo '          const origin = window.location.origin;' >> env-config.js
+          echo '          url = origin + url;' >> env-config.js
+          echo '        } else if (url.includes("VITE_SUPABASE_UR")) {' >> env-config.js
+          echo '          // Replace VITE_SUPABASE_UR with actual URL' >> env-config.js
+          echo '          url = url.replace("VITE_SUPABASE_UR", window._env_.VITE_SUPABASE_URL);' >> env-config.js
+          echo '          console.log(`Fixed Supabase URL in URL constructor: ${url}`);' >> env-config.js
           echo '        } else if (!url.includes("://")) {' >> env-config.js
           echo '          console.error(`Invalid URL without protocol: "${url}"`);' >> env-config.js
           echo '          url = "https://" + url;' >> env-config.js
@@ -173,14 +210,6 @@ jobs:
           echo '  VITE_SUPABASE_ANON_KEY: "***",' >> env-config.js
           echo '  VITE_EVIA_SIGN_CLIENT_SECRET: "***"' >> env-config.js
           echo '});' >> env-config.js
-          
-          # Now substitute the environment variables
-          sed -i "s|\${VITE_SUPABASE_URL}|$VITE_SUPABASE_URL|g" env-config.js
-          sed -i "s|\${VITE_SUPABASE_ANON_KEY}|$VITE_SUPABASE_ANON_KEY|g" env-config.js
-          sed -i "s|\${VITE_EVIA_SIGN_CLIENT_ID}|$VITE_EVIA_SIGN_CLIENT_ID|g" env-config.js
-          sed -i "s|\${VITE_EVIA_SIGN_CLIENT_SECRET}|$VITE_EVIA_SIGN_CLIENT_SECRET|g" env-config.js
-          sed -i "s|\${VITE_API_ENDPOINT}|$VITE_API_ENDPOINT|g" env-config.js
-          sed -i "s|\${VITE_WEBHOOK_URL}|$VITE_WEBHOOK_URL|g" env-config.js
           
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
