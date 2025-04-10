@@ -138,10 +138,12 @@ jobs:
 
       - name: Verify deployment files
         run: |
-          echo "Checking deployment files:"
-          ls -la
-          echo "Ensuring startup script is executable:"
-          chmod +x startup.sh
+              echo "Checking deployment files:"
+              ls -la
+              echo "Checking startup script:"
+              cat startup.sh
+              echo "Ensuring startup script is executable:"
+              chmod +x startup.sh
 
       - name: Debug startup script
         run: bash -x startup.sh
