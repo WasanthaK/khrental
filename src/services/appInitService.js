@@ -278,119 +278,83 @@ const updateBucketConfig = async (bucketName, options = {}) => {
  * Initialize storage buckets and folders
  */
 export async function initializeStorage() {
-  // If we're already initializing, return the existing promise
-  if (initializationPromise) {
-    return initializationPromise;
-  }
-
-  // If already initialized, return immediately
   if (storageInitialized) {
-    console.log('Storage already initialized, skipping...');
     return true;
   }
 
-  // Create a new promise for this initialization
-  initializationPromise = (async () => {
-    try {
-      console.log('Initializing storage...');
-      
-      // Get current session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        console.log('No active session, skipping storage initialization');
-        return false;
-      }
+  try {
+    // Get current session
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return false;
+    }
 
-      // Initialize each bucket
-      for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-        console.log(`Verifying bucket: ${bucketName}`);
-        const exists = await verifyBucketExists(bucketName);
+    // Initialize each bucket
+    for (const bucketName of Object.values(STORAGE_BUCKETS)) {
+      const exists = await verifyBucketExists(bucketName);
+      
+      if (!exists) {
+        const created = await createBucket(bucketName, {
+          public: true,
+          fileSizeLimit: 52428800,
+          allowedMimeTypes: bucketName === 'images'
+            ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            : ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        });
         
-        if (!exists) {
-          console.log(`Creating bucket: ${bucketName}`);
-          const created = await createBucket(bucketName, {
-            public: true,
-            fileSizeLimit: 52428800,
-            allowedMimeTypes: bucketName === 'images'
-              ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-              : ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-          });
-          
-          if (!created) {
-            console.error(`Failed to create bucket: ${bucketName}`);
-            return false;
-          }
+        if (!created) {
+          return false;
         }
       }
-      
-      // Try to create folder structure in existing buckets only
-      for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-        try {
-          console.log(`Verifying bucket: ${bucketName}`);
-          
-          // Try to list the contents of the bucket to check if it exists
-          const { data, error } = await supabase.storage
-            .from(bucketName)
-            .list('', { limit: 1 });
-          
-          if (error) {
-            console.log(`Bucket ${bucketName} is not accessible or does not exist`);
-            continue;
-          }
-          
-          console.log(`Bucket ${bucketName} exists and is accessible`);
-          
-          // Try to create folder structure in existing buckets only
-          if (data !== null) {
-            const folders = BUCKET_FOLDERS[bucketName] || [];
-            for (const folder of folders) {
-              try {
-                // Check if folder already exists first
-                const { data: folderData, error: folderListError } = await supabase.storage
+    }
+    
+    // Try to create folder structure in existing buckets only
+    for (const bucketName of Object.values(STORAGE_BUCKETS)) {
+      try {
+        // Try to list the contents of the bucket to check if it exists
+        const { data, error } = await supabase.storage
+          .from(bucketName)
+          .list('', { limit: 1 });
+        
+        if (error) {
+          continue;
+        }
+        
+        // Try to create folder structure in existing buckets only
+        if (data !== null) {
+          const folders = BUCKET_FOLDERS[bucketName] || [];
+          for (const folder of folders) {
+            try {
+              // Check if folder already exists first
+              const { data: folderData, error: folderListError } = await supabase.storage
+                .from(bucketName)
+                .list(folder);
+                
+              if (!folderListError && (!folderData || folderData.length === 0)) {
+                // Only create the folder if it doesn't exist
+                const folderPath = `${folder}/.keep`;
+                await supabase.storage
                   .from(bucketName)
-                  .list(folder);
-                  
-                if (folderListError) {
-                  console.log(`Could not check if folder ${folder} exists in ${bucketName}: ${folderListError.message}`);
-                } else if (!folderData || folderData.length === 0) {
-                  // Only create the folder if it doesn't exist
-                  const folderPath = `${folder}/.keep`;
-                  const { error: uploadError } = await supabase.storage
-                    .from(bucketName)
-                    .upload(folderPath, new Blob([''], { type: 'text/plain' }), {
-                      upsert: true
-                    });
-                    
-                  if (uploadError) {
-                    console.log(`Error creating folder ${folder} in ${bucketName}: ${uploadError.message || 'Unknown error'}`);
-                  } else {
-                    console.log(`Created folder ${folder} in ${bucketName}`);
-                  }
-                }
-              } catch (folderError) {
-                console.log(`Error handling folder ${folder} in ${bucketName}: ${folderError.message || 'Unknown error'}`);
+                  .upload(folderPath, new Blob([''], { type: 'text/plain' }), {
+                    upsert: true
+                  });
               }
+            } catch (folderError) {
+              // Silently handle folder errors
             }
           }
-        } catch (bucketError) {
-          console.error(`Error checking bucket ${bucketName}:`, bucketError);
         }
+      } catch (bucketError) {
+        // Silently handle bucket errors
       }
-      
-      console.log('Storage initialization completed successfully');
-      storageInitialized = true;
-      return true;
-    } catch (error) {
-      console.error('Error initializing storage:', error);
-      return false;
-    } finally {
-      // Clear the promise when done
-      initializationPromise = null;
     }
-  })();
-
-  return initializationPromise;
+    
+    storageInitialized = true;
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
 // Export the initialization function
@@ -413,5 +377,4 @@ export const initializeApp = async () => {
 // Add a function to force re-initialization if needed (e.g. for admin purposes)
 export const forceStorageReinitialization = () => {
   storageInitialized = false;
-  initializationPromise = null;
 }; 

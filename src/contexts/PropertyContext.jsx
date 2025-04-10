@@ -79,8 +79,6 @@ function PropertyProvider({ children }) {
         // Retry logic for critical failures
         if (retryCount.current < 3) {
           retryCount.current += 1;
-          console.log(`Retrying initialization (attempt ${retryCount.current}/3) in ${RETRY_DELAY/1000}s...`);
-          
           setTimeout(() => {
             initializeContext();
           }, RETRY_DELAY);
@@ -104,19 +102,17 @@ function PropertyProvider({ children }) {
   // Load properties from the database
   const loadProperties = async () => {
     try {
-      console.log('Loading properties from database...');
-      const { data, error } = await supabase
+      const { data: properties, error } = await supabase
         .from('properties')
-        .select('id, name, address, status, images')
-        .order('name');
+        .select('*')
+        .order('createdat', { ascending: false });
 
       if (error) {
         throw new Error(error.message);
       }
 
-      console.log(`Loaded ${data?.length || 0} properties`);
-      setProperties(data || []);
-      return data;
+      setProperties(properties || []);
+      return properties;
     } catch (err) {
       console.error('Error loading properties:', err);
       setError(err);
@@ -127,18 +123,14 @@ function PropertyProvider({ children }) {
   // Load user's accessible properties
   const loadUserAccessibleProperties = async () => {
     try {
-      console.log('Checking user access to properties...');
       // Get current user
       const { data: userData, error: userError } = await supabase.auth.getUser();
       
       if (userError) {
-        console.warn('Auth session missing!');
-        setAccessiblePropertyIds([]);
-        return [];
+        throw new Error(userError.message);
       }
 
       if (!userData?.user) {
-        console.warn('No authenticated user found, access to all properties may be limited');
         setAccessiblePropertyIds([]);
         return [];
       }
@@ -154,25 +146,22 @@ function PropertyProvider({ children }) {
       }
       
       const propertyIds = allProperties.map(p => p.id);
-      console.log(`User has access to ${propertyIds.length} properties`);
       setAccessiblePropertyIds(propertyIds);
       return propertyIds;
     } catch (err) {
       console.error('Error loading user property access:', err);
       // Default to empty array on error
       setAccessiblePropertyIds([]);
-      return [];
+      throw err;
     }
   };
 
   // Load recent properties from localStorage
   const loadRecentPropertiesFromStorage = () => {
     try {
-      console.log('Loading recent properties from localStorage');
       const storedProperties = localStorage.getItem('recentProperties');
       if (storedProperties) {
         const parsed = JSON.parse(storedProperties);
-        console.log(`Found ${parsed.length} recent properties in localStorage`);
         setRecentProperties(parsed);
         return parsed;
       }
@@ -198,7 +187,6 @@ function PropertyProvider({ children }) {
     const property = properties.find(p => p.id === propertyId);
     
     if (!property) {
-      console.warn(`Property with ID ${propertyId} not found`);
       return;
     }
 
@@ -220,14 +208,12 @@ function PropertyProvider({ children }) {
   const hasAccessToProperty = useCallback((propertyId) => {
     // If not initialized yet or loading is still in progress, assume access for now
     if (!initialized || loading) {
-      console.warn('Property access check called before initialization completed');
       return true;
     }
     
     // If no accessible properties loaded or error occurred, assume access
     // This prevents blocking UI in case of errors
     if (accessiblePropertyIds.length === 0) {
-      console.warn('No accessible properties found, assuming access');
       return true;
     }
     
@@ -237,7 +223,6 @@ function PropertyProvider({ children }) {
   // Select a property (single select mode)
   const selectProperty = useCallback((propertyId) => {
     if (!hasAccessToProperty(propertyId)) {
-      console.warn(`User does not have access to property: ${propertyId}`);
       toast.error('You do not have access to this property');
       navigateToUnauthorized();
       return;

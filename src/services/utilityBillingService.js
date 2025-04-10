@@ -1091,8 +1091,6 @@ export const fetchReadingById = async (readingId) => {
  */
 export const ensureUtilityReadingsSchema = async () => {
   try {
-    console.log('Checking utility_readings schema compatibility...');
-    
     // First try to get schema information
     const { data: columns, error: schemaError } = await supabase
       .rpc('get_table_columns', { table_name: 'utility_readings' })
@@ -1100,8 +1098,6 @@ export const ensureUtilityReadingsSchema = async () => {
     
     // If RPC doesn't exist or fails, try direct query
     if (schemaError) {
-      console.warn('Could not check schema via RPC, trying direct fetch:', schemaError);
-      
       // Try fetching a record to see what columns exist
       const { data: sampleData, error: fetchError } = await supabase
         .from('utility_readings')
@@ -1113,12 +1109,9 @@ export const ensureUtilityReadingsSchema = async () => {
         return false;
       }
       
-      // Log the columns we found
+      // Check for missing columns that we need
       if (sampleData && sampleData.length > 0) {
         const existingColumns = Object.keys(sampleData[0]);
-        console.log('Found columns in utility_readings:', existingColumns);
-        
-        // Check for missing columns that we need
         const requiredColumns = [
           'status', 
           'billing_status', 
@@ -1132,14 +1125,11 @@ export const ensureUtilityReadingsSchema = async () => {
         
         if (missingColumns.length > 0) {
           console.warn('Missing required columns:', missingColumns);
-          // In a production app, you might auto-create these columns
-          // For now, just log the issue
         }
       }
     } else {
       // We have column info from RPC
       const columnNames = columns.map(c => c.column_name);
-      console.log('Utility readings columns:', columnNames);
     }
     
     return true;
@@ -1151,9 +1141,7 @@ export const ensureUtilityReadingsSchema = async () => {
 
 // Run schema check on module load
 ensureUtilityReadingsSchema().then(result => {
-  if (result) {
-    console.log('Schema compatibility check completed');
-  } else {
+  if (!result) {
     console.warn('Schema compatibility check failed, some features may not work correctly');
   }
 });
