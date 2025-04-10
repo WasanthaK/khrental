@@ -82,6 +82,24 @@ export const getSupabaseClient = () => {
 // Export the singleton instance getter
 export const supabase = getSupabaseClient();
 
+// Test the connection on initialization
+supabase.auth.getSession()
+  .then(({ data: { session }, error }) => {
+    if (error) {
+      console.error('[Supabase] Error testing connection:', error);
+    } else {
+      console.log('[Supabase] Connection test successful');
+      if (session) {
+        console.log('[Supabase] Active session found');
+      } else {
+        console.log('[Supabase] No active session');
+      }
+    }
+  })
+  .catch(error => {
+    console.error('[Supabase] Error testing connection:', error);
+  });
+
 // Authentication helpers
 export const signUp = async (email, password) => {
   const client = getSupabaseClient();
