@@ -70,6 +70,19 @@ jobs:
           echo '#!/bin/bash
           cd /home/site/wwwroot
           npm install -g serve
+          
+          # Create env-config.js with environment variables
+          cat > env-config.js << EOL
+          window._env_ = {
+            VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
+            VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
+            VITE_EVIA_SIGN_CLIENT_ID: "${VITE_EVIA_SIGN_CLIENT_ID}",
+            VITE_EVIA_SIGN_CLIENT_SECRET: "${VITE_EVIA_SIGN_CLIENT_SECRET}",
+            VITE_API_ENDPOINT: "${VITE_API_ENDPOINT}",
+            VITE_WEBHOOK_URL: "${VITE_WEBHOOK_URL}"
+          };
+          EOL
+          
           serve -s . -p 8080' > startup.sh
           chmod +x startup.sh
           

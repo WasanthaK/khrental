@@ -3,22 +3,42 @@ import { isValidUUID } from '../utils/validators.js';
 
 // Initialize the Supabase client
 const getEnvVar = (key) => {
-  const value = import.meta.env[key];
-  if (!value) {
-    // Check for runtime environment variables
-    const runtimeValue = window?._env_?.[key] || process.env?.[key];
-    if (runtimeValue) {
-      return runtimeValue;
-    }
-    console.error(`Environment variable ${key} is missing`);
+  // First try Vite's import.meta.env
+  const viteValue = import.meta.env[key];
+  if (viteValue) {
+    return viteValue;
   }
-  return value;
+
+  // Then try window._env_ (for production)
+  const windowValue = window?._env_?.[key];
+  if (windowValue) {
+    return windowValue;
+  }
+
+  // Finally try process.env (for Node.js environment)
+  const processValue = process.env?.[key];
+  if (processValue) {
+    return processValue;
+  }
+
+  // If we get here, the variable is missing
+  console.error(`Environment variable ${key} is missing. Check your environment configuration.`);
+  return null;
 };
 
 const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 
 if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase configuration error:', {
+    url: supabaseUrl ? 'present' : 'missing',
+    key: supabaseAnonKey ? 'present' : 'missing',
+    env: {
+      vite: import.meta.env.VITE_SUPABASE_URL ? 'present' : 'missing',
+      window: window?._env_?.VITE_SUPABASE_URL ? 'present' : 'missing',
+      process: process.env?.VITE_SUPABASE_URL ? 'present' : 'missing'
+    }
+  });
   throw new Error('Supabase URL and Anon Key are required. Please check your environment variables.');
 }
 
