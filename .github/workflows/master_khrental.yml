@@ -38,6 +38,7 @@ jobs:
           key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
+            
       - name: Install and build project
         run: |
           npm install
@@ -50,6 +51,7 @@ jobs:
           echo "VITE_API_ENDPOINT=$VITE_API_ENDPOINT" >> .env
           echo "VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL" >> .env
           npm run build
+          
       - name: Verify build output
         run: |
           echo "Verifying build output..."
@@ -62,6 +64,7 @@ jobs:
             exit 1
           fi
           echo "Build output verified successfully."
+          
       - name: Prepare deployment files
         run: |
           # Create a folder (webroot) for the built files.
@@ -70,12 +73,13 @@ jobs:
       
           # Create startup script that will run on Azure.
           # On Azure Web Apps for Linux, the default web root is /home/site/wwwroot.
-          # Here we change into that directory and then run "npm start" (adjust if needed).
+          # Since we are serving a static site, we use `npx serve` to serve the contents of wwwroot.
           cat << 'EOF' > startup.sh
           #!/bin/bash
           set -e
           cd /home/site/wwwroot
-          npm start
+          # Use the PORT environment variable if available, default to 8080.
+          npx serve -s . -l ${PORT:-8080}
           EOF
           chmod +x startup.sh
       
@@ -119,6 +123,7 @@ jobs:
             !node_modules
             !src
             !.git
+
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -139,14 +144,15 @@ jobs:
           echo "Ensuring startup script is executable:"
           chmod +x startup.sh
           
-      - name: Verify deployment files
+      - name: Verify deployment files detailed
         run: |
           echo "Checking deployment files:"
           ls -la
-          echo "Checking startup script:"
+          echo "Checking startup script content:"
           cat startup.sh
           echo "Ensuring startup script is executable:"
           chmod +x startup.sh
+          
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -167,13 +173,8 @@ jobs:
           az webapp config appsettings set \
             --name khrental \
             --resource-group ThreeCreeks \
-            --settings \
-              VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
-              VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-              VITE_EVIA_SIGN_CLIENT_ID="${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" \
-              VITE_EVIA_SIGN_CLIENT_SECRET="${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" \
-              VITE_API_ENDPOINT="${{ secrets.VITE_API_ENDPOINT }}" \
-              VITE_WEBHOOK_URL="${{ secrets.VITE_WEBHOOK_URL }}"
+            --settings "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" "VITE_EVIA_SIGN_CLIENT_ID=${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}" "VITE_EVIA_SIGN_CLIENT_SECRET=${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}" "VITE_API_ENDPOINT=${{ secrets.VITE_API_ENDPOINT }}" "VITE_WEBHOOK_URL=${{ secrets.VITE_WEBHOOK_URL }}"
+            
       - name: Verify deployment
         run: |
           echo "Waiting for deployment to stabilize..."
