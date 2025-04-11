@@ -148,7 +148,7 @@ const AgreementFormContainer = () => {
         status: status,
         terms: termsObject,
         notes: formData.notes,
-        documenturl: formData.processedContent,
+        documenturl: typeof formData.processedContent === 'string' ? formData.processedContent : null,
         needs_document_generation: status === AGREEMENT_STATUS.REVIEW || status === AGREEMENT_STATUS.PENDING
       };
 

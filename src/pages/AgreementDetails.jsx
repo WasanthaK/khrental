@@ -39,49 +39,36 @@ const AgreementDetails = () => {
         }
         
         if (agreementData) {
-          setAgreement(agreementData);
-          
           // Debug log for content fields
           console.log('Agreement content fields:', {
             id: agreementData.id,
             hasProcessedContent: !!agreementData.processedcontent,
-            hasContent: !!agreementData.content,
             hasTemplateContent: !!agreementData.templatecontent,
             hasDocumentUrl: !!agreementData.documenturl,
             hasPdfUrl: !!agreementData.pdfurl,
             status: agreementData.status
           });
           
-          // If there's no PDF URL, default to content view
-          if (!agreementData.pdfurl) {
-            setViewMode('content');
-          }
+          setAgreement(agreementData);
+          setProperty(agreementData.property);
+          setRentee(agreementData.rentee);
           
-          // Set property from joined data
-          if (agreementData.property) {
-            setProperty(agreementData.property);
-          }
-          
-          // Set rentee from joined data
-          if (agreementData.rentee) {
-            setRentee(agreementData.rentee);
-          }
-          
-          // Fetch associated template if needed
+          // Fetch template details if template ID exists
           if (agreementData.templateid) {
-            const { data: templateData, error: templateError } = await fetchData('agreement_templates', {
-              filters: [{ column: 'id', operator: 'eq', value: agreementData.templateid }],
-            });
-            
+            const { data: templateData, error: templateError } = await supabase
+              .from('agreement_templates')
+              .select('*')
+              .eq('id', agreementData.templateid);
+              
             if (templateError) {
-              throw templateError;
+              console.error('Error fetching template:', templateError);
             }
             
             if (templateData && templateData.length > 0) {
               setTemplate(templateData[0]);
             }
           }
-
+          
           // Prepare signatories data for the progress tracker
           // This is a simplified approach - in a real app you might fetch actual signatories
           const status = agreementData.signature_status || agreementData.status;
