@@ -360,9 +360,10 @@ export async function initializeStorage() {
 // Export the initialization function
 export const initializeApp = async () => {
   try {
+    // Try to initialize storage but don't fail the whole app if it doesn't work
     const storageResult = await initializeStorage();
     if (!storageResult) {
-      throw new Error("Storage initialization failed");
+      console.warn("Storage initialization failed, but application will continue. Some file upload features may not work properly.");
     }
     return { success: true };
   } catch (error) {
