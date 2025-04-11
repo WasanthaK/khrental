@@ -44,6 +44,7 @@ const AgreementDetails = () => {
           // Debug log for content fields
           console.log('Agreement content fields:', {
             id: agreementData.id,
+            hasProcessedContent: !!agreementData.processedcontent,
             hasContent: !!agreementData.content,
             hasTemplateContent: !!agreementData.templatecontent,
             hasDocumentUrl: !!agreementData.documenturl,
@@ -543,7 +544,9 @@ const AgreementDetails = () => {
               </div>
             ) : (
               <div className="prose max-w-none">
-                {agreement.content ? (
+                {agreement.processedcontent ? (
+                  <div dangerouslySetInnerHTML={{ __html: agreement.processedcontent }} />
+                ) : agreement.content ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.content }} />
                 ) : agreement.templatecontent ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.templatecontent }} />
