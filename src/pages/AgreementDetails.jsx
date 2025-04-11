@@ -25,58 +25,50 @@ const AgreementDetails = () => {
       try {
         setLoading(true);
         
-        // Fetch agreement details
-        const { data: agreementData, error: agreementError } = await fetchData('agreements', {
-          filters: [{ column: 'id', operator: 'eq', value: id }],
-        });
+        // Fetch agreement details with all content fields
+        const { data: agreementData, error: agreementError } = await supabase
+          .from('agreements')
+          .select('*, property:properties(*), unit:property_units(*), rentee:app_users!agreements_renteeid_fkey(*)')
+          .eq('id', id)
+          .single();
         
         if (agreementError) {
           throw agreementError;
         }
         
-        if (agreementData && agreementData.length > 0) {
-          setAgreement(agreementData[0]);
+        if (agreementData) {
+          setAgreement(agreementData);
+          
+          // Debug log for content fields
+          console.log('Agreement content fields:', {
+            id: agreementData.id,
+            hasProcessedContent: !!agreementData.processedContent,
+            hasContent: !!agreementData.content,
+            hasTemplateContent: !!agreementData.templatecontent,
+            hasDocumentUrl: !!agreementData.documenturl,
+            hasPdfUrl: !!agreementData.pdfurl,
+            status: agreementData.status
+          });
           
           // If there's no PDF URL, default to content view
-          if (!agreementData[0].pdfurl) {
+          if (!agreementData.pdfurl) {
             setViewMode('content');
           }
           
-          // Fetch property details
-          if (agreementData[0].propertyid) {
-            const { data: propertyData, error: propertyError } = await fetchData('properties', {
-              filters: [{ column: 'id', operator: 'eq', value: agreementData[0].propertyid }],
-            });
-            
-            if (propertyError) {
-              throw propertyError;
-            }
-            
-            if (propertyData && propertyData.length > 0) {
-              setProperty(propertyData[0]);
-            }
+          // Set property from joined data
+          if (agreementData.property) {
+            setProperty(agreementData.property);
           }
           
-          // Fetch rentee details from app_users table
-          if (agreementData[0].renteeid) {
-            const { data: renteeData, error: renteeError } = await supabase
-              .from('app_users')
-              .select('*')
-              .eq('id', agreementData[0].renteeid)
-              .eq('user_type', 'rentee')
-              .single();
-            
-            if (renteeError) {
-              throw renteeError;
-            }
-            
-            setRentee(renteeData);
+          // Set rentee from joined data
+          if (agreementData.rentee) {
+            setRentee(agreementData.rentee);
           }
           
-          // Fetch associated template
-          if (agreementData[0].templateid) {
+          // Fetch associated template if needed
+          if (agreementData.templateid) {
             const { data: templateData, error: templateError } = await fetchData('agreement_templates', {
-              filters: [{ column: 'id', operator: 'eq', value: agreementData[0].templateid }],
+              filters: [{ column: 'id', operator: 'eq', value: agreementData.templateid }],
             });
             
             if (templateError) {
@@ -90,7 +82,7 @@ const AgreementDetails = () => {
 
           // Prepare signatories data for the progress tracker
           // This is a simplified approach - in a real app you might fetch actual signatories
-          const status = agreementData[0].signature_status || agreementData[0].status;
+          const status = agreementData.signature_status || agreementData.status;
           const signatoryList = [];
           
           // Add landlord
@@ -102,11 +94,11 @@ const AgreementDetails = () => {
           });
           
           // Add tenant if available
-          if (renteeData) {
+          if (rentee) {
             signatoryList.push({
-              id: renteeData.id,
-              name: renteeData.name,
-              email: renteeData.contact_details?.email,
+              id: rentee.id,
+              name: rentee.name,
+              email: rentee.contact_details?.email,
               role: 'Tenant',
               completed: status === 'signed' || status === 'completed'
             });
@@ -178,14 +170,14 @@ const AgreementDetails = () => {
       }
       
       // 2. Mark the property as available
-      if (agreement.propertyid) {
+      if (property) {
         const { error: propertyError } = await supabase
           .from('properties')
           .update({
             status: 'available',
             updatedat: new Date().toISOString()
           })
-          .eq('id', agreement.propertyid);
+          .eq('id', property.id);
           
         if (propertyError) {
           console.error('Error updating property status:', propertyError);
@@ -208,7 +200,7 @@ const AgreementDetails = () => {
       }
       
       // 4. Add property to rentee's associated properties if not already there
-      if (agreement.renteeid && agreement.propertyid) {
+      if (agreement.renteeid && property) {
         // First get the rentee's current associated properties
         const { data: userData, error: userError } = await supabase
           .from('app_users')
@@ -221,8 +213,8 @@ const AgreementDetails = () => {
         } else {
           // Add property to the associated_property_ids array if not already there
           const currentProperties = userData.associated_property_ids || [];
-          if (!currentProperties.includes(agreement.propertyid)) {
-            const updatedProperties = [...currentProperties, agreement.propertyid];
+          if (!currentProperties.includes(property.id)) {
+            const updatedProperties = [...currentProperties, property.id];
             
             // Update the rentee's record
             const { error: updateError } = await supabase
@@ -236,7 +228,7 @@ const AgreementDetails = () => {
             if (updateError) {
               console.error('Error updating rentee associated properties:', updateError);
             } else {
-              console.log(`Property ${agreement.propertyid} added to rentee's associated properties`);
+              console.log(`Property ${property.id} added to rentee's associated properties`);
             }
           } else {
             console.log('Property already associated with this rentee');
@@ -548,7 +540,9 @@ const AgreementDetails = () => {
               </div>
             ) : (
               <div className="prose max-w-none">
-                {agreement.content ? (
+                {agreement.processedContent ? (
+                  <div dangerouslySetInnerHTML={{ __html: agreement.processedContent }} />
+                ) : agreement.content ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.content }} />
                 ) : agreement.templatecontent ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.templatecontent }} />
