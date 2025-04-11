@@ -79,7 +79,7 @@ const AgreementFormContainer = () => {
           *,
           property:properties(*),
           unit:property_units(*),
-          rentee:app_users!agreements_renteeid_fkey(*)
+          rentee:app_users(*)
         `)
         .eq('id', id)
         .single();

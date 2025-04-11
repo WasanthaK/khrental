@@ -28,7 +28,7 @@ const AgreementDetails = () => {
         // Fetch agreement details with all content fields - avoid fields that might not exist in database
         const { data: agreementData, error: agreementError } = await supabase
           .from('agreements')
-          .select('*, property:properties(*), unit:property_units(*), rentee:app_users!agreements_renteeid_fkey(*)')
+          .select('*, property:properties(*), unit:property_units(*), rentee:app_users(*)')
           .eq('id', id)
           .single();
         
