@@ -70,9 +70,9 @@ Ensure the following environment variables are set in your Azure Web App:
 ### Fix for Agreement Loading Errors (2024-04-10)
 
 - Fixed 400 Bad Request errors when loading agreements
-- Removed references to a non-existent `processedContent` database column
+- Removed references to a non-existent `processedcontent` database column
 - Added better error handling to display load failures
-- Note: To properly support template content processing, add a `processed_content` column to your Supabase `agreements` table
+- Note: To properly support template content processing, add a `processedcontent` column to your Supabase `agreements` table
 
 ### URL Encoding Fix for HTML Content (2024-04-10)
 
