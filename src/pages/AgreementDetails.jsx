@@ -25,7 +25,7 @@ const AgreementDetails = () => {
       try {
         setLoading(true);
         
-        // Fetch agreement details with all content fields
+        // Fetch agreement details with all content fields - avoid fields that might not exist in database
         const { data: agreementData, error: agreementError } = await supabase
           .from('agreements')
           .select('*, property:properties(*), unit:property_units(*), rentee:app_users!agreements_renteeid_fkey(*)')
@@ -33,6 +33,8 @@ const AgreementDetails = () => {
           .single();
         
         if (agreementError) {
+          console.error('Supabase error fetching agreement:', agreementError);
+          setError(`Error loading agreement: ${agreementError.message || 'Unknown error'}`);
           throw agreementError;
         }
         
@@ -42,7 +44,6 @@ const AgreementDetails = () => {
           // Debug log for content fields
           console.log('Agreement content fields:', {
             id: agreementData.id,
-            hasProcessedContent: !!agreementData.processedContent,
             hasContent: !!agreementData.content,
             hasTemplateContent: !!agreementData.templatecontent,
             hasDocumentUrl: !!agreementData.documenturl,
@@ -261,13 +262,15 @@ const AgreementDetails = () => {
   
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-10">
-        <div className="bg-red-50 border border-red-300 text-red-700 p-4 rounded">
-          <h2 className="text-lg font-medium mb-2">Error</h2>
-          <p>{error}</p>
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+        <div className="flex justify-start">
           <button
             onClick={() => navigate('/dashboard/agreements')}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Back to Agreements
           </button>
@@ -540,9 +543,7 @@ const AgreementDetails = () => {
               </div>
             ) : (
               <div className="prose max-w-none">
-                {agreement.processedContent ? (
-                  <div dangerouslySetInnerHTML={{ __html: agreement.processedContent }} />
-                ) : agreement.content ? (
+                {agreement.content ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.content }} />
                 ) : agreement.templatecontent ? (
                   <div dangerouslySetInnerHTML={{ __html: agreement.templatecontent }} />
