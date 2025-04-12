@@ -10,7 +10,7 @@ import { toast } from 'react-hot-toast';
 // UI Components
 import FormInput from '../components/ui/FormInput';
 import FormTextarea from '../components/ui/FormTextarea';
-import ImageUpload from '../components/maintenance/ImageUpload';
+import ImageUpload from '../components/common/ImageUpload';
 import DynamicList from '../components/ui/DynamicList';
 import KeyValuePairs from '../components/ui/KeyValuePairs';
 import PropertyAmenities from '../components/properties/PropertyAmenities';

@@ -3,17 +3,69 @@ import { supabase } from '../../services/supabaseClient';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, saveFile } from '../../services/fileService';
 import { toast } from 'react-hot-toast';
 
+/**
+ * Generic image upload component that handles different types of uploads
+ * 
+ * This component is used throughout the application for multiple purposes:
+ * - Property images (properties folder)
+ * - Maintenance request images (maintenance folder)
+ * - Utility meter readings (utility-readings folder)
+ * - ID document uploads (id-copies folder)
+ * - Payment proofs (payment-proofs folder)
+ * 
+ * The component automatically determines the appropriate storage folder
+ * based on the current page URL, or you can explicitly specify a folder.
+ */
 const ImageUpload = ({ 
   onImagesChange, 
   maxImages = 5, 
   initialImages = [],
   bucket = STORAGE_BUCKETS.IMAGES,
-  folder = BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].PROPERTIES // Default to properties folder
+  folder = null // Set to null to automatically determine the folder based on URL
 }) => {
   const [images, setImages] = useState(initialImages);
   const [error, setError] = useState(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Determine the appropriate folder based on the bucket if none is provided
+  const determineFolder = () => {
+    if (folder) return folder;
+    
+    // If we're using the images bucket
+    if (bucket === STORAGE_BUCKETS.IMAGES) {
+      // Check the current URL path to guess the context
+      const pathname = window.location.pathname.toLowerCase();
+      
+      if (pathname.includes('maintenance')) {
+        return 'maintenance';
+      } else if (pathname.includes('utility') || pathname.includes('reading')) {
+        return 'utility-readings';
+      } else if (pathname.includes('id') || pathname.includes('document')) {
+        return 'id-copies';
+      } else {
+        return 'properties'; // default for images bucket
+      }
+    } 
+    // If we're using the files bucket
+    else if (bucket === STORAGE_BUCKETS.FILES) {
+      // Check the current URL path to guess the context
+      const pathname = window.location.pathname.toLowerCase();
+      
+      if (pathname.includes('agreement')) {
+        return 'agreements';
+      } else if (pathname.includes('payment')) {
+        return 'payment-proofs';
+      } else if (pathname.includes('id') || pathname.includes('document')) {
+        return 'id-copies';
+      } else {
+        return 'documents'; // default for files bucket
+      }
+    }
+    
+    // Default fallback
+    return 'maintenance';
+  };
 
   // Compress image function
   const compressImage = async (file) => {
@@ -89,18 +141,12 @@ const ImageUpload = ({
       setIsUploading(true);
       setError(null);
 
-      // Validate folder path before trying to upload
-      if (!folder) {
-        // Use a default folder if none is provided
-        console.warn("No folder specified, using 'maintenance' as default");
-        folder = 'maintenance';
-      }
-
-      // Use default bucket if not specified or invalid
+      // Determine the correct folder to use
+      const targetFolder = determineFolder();
       const targetBucket = bucket || STORAGE_BUCKETS.IMAGES;
       
       // Log the bucket we're trying to use - helps with debugging
-      console.log(`Using storage bucket: ${targetBucket}, folder: ${folder}`);
+      console.log(`Using storage bucket: ${targetBucket}, folder: ${targetFolder}`);
 
       const uploadPromises = files.map(async (file) => {
         // First compress the image
@@ -112,7 +158,7 @@ const ImageUpload = ({
           // Then upload it using the provided bucket and folder
           const result = await saveFile(compressedFile, {
             bucket: targetBucket,
-            folder: folder 
+            folder: targetFolder 
           });
 
           if (!result.success) {
@@ -126,7 +172,7 @@ const ImageUpload = ({
           console.log('Attempting direct upload as fallback...');
           
           const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.jpg`;
-          const filePath = `${folder}/${fileName}`;
+          const filePath = `${targetFolder}/${fileName}`;
           
           const { data, error } = await supabase.storage
             .from(targetBucket)
