@@ -20,6 +20,7 @@ import StatusTracker from '../components/maintenance/StatusTracker';
 import StaffAssignment from '../components/maintenance/StaffAssignment';
 import CommentSection from '../components/maintenance/CommentSection';
 import ImageUpload from '../components/common/ImageUpload';
+import MaintenanceImageUpload from '../components/maintenance/MaintenanceImageUpload';
 
 const MaintenanceDetails = () => {
   const { id } = useParams();
@@ -198,32 +199,43 @@ const MaintenanceDetails = () => {
       toast.error('Please provide completion notes');
       return;
     }
-
+    
     try {
       setActionLoading(true);
+      setError(null);
       
-      // Extract file objects from the completionImages array
-      const preparedImages = completionImages.map(img => {
-        if (typeof img === 'string') {
-          return img; // Already a URL
-        }
-        return img; // File object
-      });
-
+      // Create completion data object with notes and any uploaded images
       const completionData = {
         notes: completionNotes,
-        images: preparedImages
+        images: completionImages.map(img => ({
+          ...img,
+          type: img.type || 'completion'  // Ensure type is set for all images
+        })),
+        userId: user?.id
       };
-
-      await completeMaintenanceRequest(id, completionData);
-      toast.success('Maintenance request completed successfully');
-      navigate('/dashboard/maintenance');
+      
+      console.log('Completing request with data:', completionData);
+      
+      const result = await completeMaintenanceRequest(id, completionData);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to complete request');
+      }
+      
+      setShowCompleteDialog(false);
+      setCompletionNotes('');
+      setCompletionImages([]);
+      
+      // Refresh all data
+      await fetchRequestData();
+      
+      toast.success('Maintenance request has been completed successfully');
     } catch (error) {
-      console.error('Error completing maintenance request:', error);
-      toast.error('Failed to complete maintenance request');
+      console.error('Error completing request:', error.message);
+      setError(error.message);
+      toast.error(error.message || 'Failed to complete request');
     } finally {
       setActionLoading(false);
-      setShowCompleteDialog(false);
     }
   };
   
@@ -458,39 +470,83 @@ const MaintenanceDetails = () => {
                 </div>
               </div>
               
-              {/* Images */}
+              {/* Images grouped by stage */}
               {request.maintenance_request_images?.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-md font-medium mb-2">Images</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {request.maintenance_request_images.map((image, index) => (
-                      <div 
-                        key={index}
-                        className="relative group cursor-pointer"
-                        onClick={() => {
-                          setActiveImageIndex(index);
-                          setShowImageViewer(true);
-                          setImageCollection({
-                            images: request.maintenance_request_images.map(img => img.image_url),
-                            title: 'Request Images'
-                          });
-                        }}
-                      >
-                        <img 
-                          src={image.image_url} 
-                          alt={`Request ${request.id} image ${index + 1}`} 
-                          className="w-full h-32 object-cover rounded border border-gray-200 transition-all duration-200 group-hover:opacity-90"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="bg-black bg-opacity-50 rounded-full p-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                          </div>
-                        </div>
+                  <h3 className="text-lg font-medium mb-4">Images by Stage</h3>
+                  
+                  {/* Group images by image_type */}
+                  {(() => {
+                    // Group images by type
+                    const imagesByType = request.maintenance_request_images.reduce((acc, image) => {
+                      const type = image.image_type || 'initial';
+                      if (!acc[type]) acc[type] = [];
+                      acc[type].push(image);
+                      return acc;
+                    }, {});
+                    
+                    // Define display names and order for image types
+                    const typeLabels = {
+                      'initial': 'Initial Request',
+                      'progress': 'Work in Progress',
+                      'completion': 'Completion',
+                      'additional': 'Additional Images'
+                    };
+                    
+                    const typeOrder = ['initial', 'progress', 'completion', 'additional'];
+                    
+                    return (
+                      <div className="space-y-6">
+                        {typeOrder.map(type => {
+                          const images = imagesByType[type];
+                          if (!images || images.length === 0) return null;
+                          
+                          return (
+                            <div key={type} className="border rounded-lg p-4">
+                              <h4 className="text-md font-medium mb-3">{typeLabels[type]} ({images.length})</h4>
+                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                {images.map((image, index) => (
+                                  <div 
+                                    key={`${type}-${index}`}
+                                    className="relative group cursor-pointer"
+                                    onClick={() => {
+                                      setActiveImageIndex(index);
+                                      setShowImageViewer(true);
+                                      setImageCollection({
+                                        images: images.map(img => img.image_url),
+                                        title: typeLabels[type]
+                                      });
+                                    }}
+                                  >
+                                    <img 
+                                      src={image.image_url} 
+                                      alt={`${typeLabels[type]} image ${index + 1}`} 
+                                      className="w-full h-32 object-cover rounded border border-gray-200 transition-all duration-200 group-hover:opacity-90"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <div className="bg-black bg-opacity-50 rounded-full p-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                    {image.description && (
+                                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-xs p-1 truncate">
+                                        {image.description}
+                                      </div>
+                                    )}
+                                    <span className="absolute top-0 right-0 bg-black bg-opacity-60 text-white text-xs p-1 rounded-bl-md">
+                                      {new Date(image.uploaded_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
               
@@ -665,9 +721,9 @@ const MaintenanceDetails = () => {
       {/* Complete Dialog */}
       {showCompleteDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
             <h2 className="text-xl font-semibold mb-4">Complete Maintenance Request</h2>
-            <p className="mb-4">Please provide details about the completed work.</p>
+            <p className="mb-4">Please provide details about the completion of this maintenance request.</p>
             
             <div className="mb-4">
               <label htmlFor="completionNotes" className="block text-sm font-medium text-gray-700 mb-1">
@@ -675,23 +731,24 @@ const MaintenanceDetails = () => {
               </label>
               <textarea
                 id="completionNotes"
-                rows="3"
+                rows="4"
                 value={completionNotes}
                 onChange={(e) => setCompletionNotes(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Describe the work that was done"
+                placeholder="Describe the work that was completed"
                 required
               ></textarea>
             </div>
             
-            <div className="mb-4">
+            <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Completion Images (Optional)
+                Completion Images
               </label>
-              <ImageUpload
-                onImagesChange={handleCompletionImagesChange}
-                maxImages={5}
-                initialImages={[]}
+              <MaintenanceImageUpload
+                onImagesChange={setCompletionImages}
+                maxImages={8}
+                initialImages={completionImages}
+                imageType="completion"
               />
             </div>
             

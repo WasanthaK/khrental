@@ -7,147 +7,122 @@ import { saveFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
 
 /**
  * Create a new maintenance request
- * @param {Object} input - The maintenance request input data
- * @param {string} userId - The ID of the user creating the request
- * @returns {Promise<Object>} The created maintenance request
+ * @param {Object} input - Request data including images
+ * @param {string} userId - Current user ID
+ * @returns {Promise<Object>} - Response with success/error
  */
 export const createMaintenanceRequest = async (input, userId) => {
   try {
-    console.log('Creating maintenance request with:', { input, userId });
+    console.log('Creating maintenance request with input:', input);
     
-    // Create maintenance request first (without images)
-    const requestData = { ...input };
-    delete requestData.images; // Remove images from the main request data
-
-    // Fetch user data to verify role and get user information
-    const { data: userData, error: userError } = await supabase
-      .from('app_users')
-      .select('id, role, associated_property_ids')
-      .eq('auth_id', userId)
-      .single();
-
-    if (userError) {
-      console.error('Error fetching user data:', userError);
-      throw new Error('Could not verify user information');
+    // Check for required fields
+    if (!input.title || !input.description || !input.propertyid || !input.renteeid) {
+      return {
+        success: false,
+        error: 'Missing required fields'
+      };
     }
-
-    if (!userData) {
-      console.error('User not found in app_users');
-      throw new Error('User not found');
-    }
-
-    console.log('Found user in app_users:', userData);
-
-    // Ensure propertyid is set correctly
-    let propertyId = requestData.propertyid || requestData.propertyId;
-
-    // If no property ID is provided, try to get it from user's associated properties
-    if (!propertyId && userData.associated_property_ids && userData.associated_property_ids.length > 0) {
-      propertyId = userData.associated_property_ids[0];
-      console.log('Using first associated property:', propertyId);
-    }
-
-    if (!propertyId) {
-      console.error('No property ID provided or found in user data');
-      throw new Error('Property ID is required for maintenance requests');
-    }
-
-    console.log('Using property ID for request:', propertyId);
-
-    // Convert camelCase to snake_case for database
-    const dbRequestData = {
-      propertyid: propertyId,
-      renteeid: userData.id,
-      title: requestData.title,
-      description: requestData.description,
-      priority: requestData.priority,
-      status: 'pending',
-      requesttype: requestData.requesttype || requestData.requestType,
-      notes: requestData.notes || ''
+    
+    // Construct the request object
+    const request = {
+      title: input.title,
+      description: input.description,
+      propertyid: input.propertyid,
+      renteeid: input.renteeid,
+      status: MAINTENANCE_STATUS.PENDING,
+      priority: input.priority || MAINTENANCE_PRIORITY.MEDIUM,
+      requesttype: input.requesttype || '',
+      notes: input.notes || '',
+      createdat: new Date().toISOString(),
+      updatedat: new Date().toISOString()
     };
-
-    console.log('Creating maintenance request with data:', dbRequestData);
-
-    const { data: request, error: requestError } = await supabase
+    
+    // Insert the request first
+    const { data: insertedRequest, error: insertError } = await supabase
       .from('maintenance_requests')
-      .insert(dbRequestData)
-      .select(`
-        *,
-        property:properties(*),
-        rentee:app_users!renteeid(*),
-        maintenance_request_images(*)
-      `)
-      .single();
-
-    if (requestError) {
-      console.error('Error creating maintenance request:', requestError);
-      throw requestError;
+      .insert(request)
+      .select('*');
+    
+    if (insertError) {
+      console.error('Error inserting maintenance request:', insertError);
+      throw insertError;
     }
-
-    console.log('Created maintenance request:', request);
-
+    
+    if (!insertedRequest || insertedRequest.length === 0) {
+      throw new Error('Failed to create maintenance request');
+    }
+    
+    const createdRequest = insertedRequest[0];
+    console.log('Created maintenance request:', createdRequest);
+    
     // Upload images and create entries in maintenance_request_images if images exist
-    if (input.images && Array.isArray(input.images) && input.images.length > 0) {
-      console.log('Processing images:', input.images);
+    let imageUrls = [];
+    
+    if (input.images && input.images.length > 0) {
+      // First, upload the images to storage
+      imageUrls = await uploadMaintenanceImages(createdRequest.id, input.images, 'initial');
+      console.log('Uploaded image URLs:', imageUrls);
       
-      for (const imageUrl of input.images) {
-        try {
-          console.log('Creating image record for URL:', imageUrl);
-          
-          // Create entry in maintenance_request_images table
-          const { data: imageData, error: imageError } = await supabase
-            .from('maintenance_request_images')
-            .insert({
-              maintenance_request_id: request.id,
-              image_url: imageUrl,
-              image_type: 'initial',
-              uploaded_by: userData.id,
-              uploaded_at: new Date().toISOString(),
-              description: 'Initial maintenance request image'
-            })
-            .select()
-            .single();
-
-          if (imageError) {
-            console.error('Error creating image record:', imageError);
-            // Don't throw here, just log and continue
-            continue;
-          }
-
-          console.log('Successfully created image record:', imageData);
-        } catch (imageError) {
-          console.error('Error processing image:', imageError);
-          // Don't throw here, just log and continue
-          continue;
+      // Then create entries in maintenance_request_images table
+      for (const imageData of input.images) {
+        const imageUrl = typeof imageData === 'string' ? imageData : 
+                        (imageData.url ? imageData.url : null);
+        
+        if (!imageUrl) continue;
+        
+        // Determine image type, falling back to 'initial' for backward compatibility
+        const imageType = imageData.type || 'initial';
+        const imageDescription = imageData.description || '';
+        
+        // Create entry in maintenance_request_images table
+        const { error: imageInsertError } = await supabase
+          .from('maintenance_request_images')
+          .insert({
+            maintenance_request_id: createdRequest.id,
+            image_url: imageUrl,
+            image_type: imageType,
+            description: imageDescription,
+            uploaded_by: userId,
+            uploaded_at: new Date().toISOString()
+          });
+        
+        if (imageInsertError) {
+          console.error('Error inserting image record:', imageInsertError);
+          // Continue with other images even if one fails
         }
       }
-    } else {
-      console.log('No images to process');
     }
-
-    // Fetch the complete request with images
-    const { data: completeRequest, error: fetchError } = await supabase
+    
+    // Fetch the complete request data with images
+    const { data: requestWithImages, error: fetchError } = await supabase
       .from('maintenance_requests')
       .select(`
         *,
         property:properties(*),
-        rentee:app_users!renteeid(*),
-        assigned_staff:app_users!assignedto(*),
+        rentee:app_users!maintenance_requests_renteeid_fkey(*),
         maintenance_request_images(*)
       `)
-      .eq('id', request.id)
+      .eq('id', createdRequest.id)
       .single();
-
+    
     if (fetchError) {
-      console.error('Error fetching complete request:', fetchError);
-      return request; // Return the original request if we can't fetch the complete one
+      console.error('Error fetching created request:', fetchError);
+      throw fetchError;
     }
-
-    console.log('Complete request with images:', completeRequest);
-    return completeRequest;
+    
+    // Notify staff about new request
+    await notifyStaffAboutNewRequest(requestWithImages);
+    
+    return {
+      success: true,
+      data: requestWithImages
+    };
   } catch (error) {
-    console.error('Error creating maintenance request:', error);
-    throw error;
+    console.error('Error creating maintenance request:', error.message || error);
+    return {
+      success: false,
+      error: error.message || 'An error occurred while creating the maintenance request'
+    };
   }
 };
 
@@ -324,7 +299,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
               .insert({
                 maintenance_request_id: id,
                 image_url: imageUrl,
-                image_type: 'progress',
+                image_type: 'additional',
                 uploaded_by: assignmentData.staffId,
                 uploaded_at: new Date().toISOString(),
                 description: 'Assignment inspection image'
@@ -409,45 +384,128 @@ export const startMaintenanceWork = async (id) => {
 
 /**
  * Complete a maintenance request
- * @param {string} id - The request ID
- * @param {Object} completionData - The completion data
- * @returns {Promise<Object>} - Result object with success, data, and error properties
+ * @param {string} id - Request ID
+ * @param {Object} completionData - Data for completion
+ * @returns {Promise<Object>} - Response with success/error
  */
 export const completeMaintenanceRequest = async (id, completionData) => {
   try {
-    // Upload completion images if any
-    let completionImageUrls = [];
-    if (completionData.images && completionData.images.length > 0) {
-      completionImageUrls = await uploadMaintenanceImages(id, completionData.images, 'completion');
-      console.log('Uploaded completion images:', completionImageUrls);
+    // Validate input
+    if (!id) {
+      return {
+        success: false,
+        error: 'Missing request ID'
+      };
     }
     
-    // Create update object
-    const updateObject = {
+    // Fetch the current request data
+    const { data: currentRequest, error: fetchError } = await supabase
+      .from('maintenance_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError) {
+      throw fetchError;
+    }
+    
+    if (!currentRequest) {
+      return {
+        success: false,
+        error: 'Maintenance request not found'
+      };
+    }
+    
+    // Only allow completion from in_progress status
+    if (currentRequest.status !== MAINTENANCE_STATUS.IN_PROGRESS) {
+      return {
+        success: false,
+        error: `Request must be in '${MAINTENANCE_STATUS.IN_PROGRESS}' status to mark as completed`
+      };
+    }
+    
+    // Process completion data
+    const updateData = {
       status: MAINTENANCE_STATUS.COMPLETED,
       completedat: new Date().toISOString(),
-      notes: completionData.notes,
-      updatedat: new Date().toISOString()
+      updatedat: new Date().toISOString(),
+      // Include notes if provided
+      ...(completionData.notes ? { notes: completionData.notes } : {})
     };
     
-    console.log('Updating maintenance request with completion data:', updateObject);
+    // Update the maintenance request
+    const { error: updateError } = await supabase
+      .from('maintenance_requests')
+      .update(updateData)
+      .eq('id', id);
     
-    // Update the request
-    const { data, error } = await updateData('maintenance_requests', id, updateObject);
-    
-    if (error) {
-      throw error;
+    if (updateError) {
+      throw updateError;
     }
     
-    // Notify the rentee that the request has been completed
-    await notifyRenteeAboutCompletion(data);
+    // Upload completion images if provided
+    if (completionData.images && completionData.images.length > 0) {
+      // Upload the images to storage
+      const imageUrls = await uploadMaintenanceImages(id, completionData.images, 'completion');
+      
+      // Create entries in maintenance_request_images table
+      for (const imageData of completionData.images) {
+        const imageUrl = typeof imageData === 'string' ? imageData : 
+                        (imageData.url ? imageData.url : null);
+        
+        if (!imageUrl) continue;
+        
+        // Get additional image metadata if available
+        const imageType = imageData.type || 'completion'; // Default to 'completion' for this function
+        const imageDescription = imageData.description || '';
+        
+        // Insert image record
+        const { error: imageInsertError } = await supabase
+          .from('maintenance_request_images')
+          .insert({
+            maintenance_request_id: id,
+            image_url: imageUrl,
+            image_type: imageType,
+            description: imageDescription,
+            uploaded_by: completionData.userId || null,
+            uploaded_at: new Date().toISOString()
+          });
+        
+        if (imageInsertError) {
+          console.error('Error inserting completion image record:', imageInsertError);
+          // Continue with other images even if one fails
+        }
+      }
+    }
     
-    return { success: true, data };
+    // Fetch the updated request data with all related information
+    const { data: updatedRequest, error: refetchError } = await supabase
+      .from('maintenance_requests')
+      .select(`
+        *,
+        property:properties(*),
+        rentee:app_users!maintenance_requests_renteeid_fkey(*),
+        maintenance_request_images(*)
+      `)
+      .eq('id', id)
+      .single();
+    
+    if (refetchError) {
+      throw refetchError;
+    }
+    
+    // Notify the rentee about completion
+    await notifyRenteeAboutCompletion(updatedRequest);
+    
+    return {
+      success: true,
+      data: updatedRequest
+    };
   } catch (error) {
     console.error('Error completing maintenance request:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Failed to complete maintenance request' 
+    return {
+      success: false,
+      error: error.message || 'An error occurred while completing the maintenance request'
     };
   }
 };
@@ -627,7 +685,7 @@ export const addMaintenanceComment = async (requestId, commentData) => {
 /**
  * Upload images for a maintenance request
  * @param {string} requestId - The request ID
- * @param {Array} images - Array of image files or objects
+ * @param {Array} images - Array of image files or objects with url, type, and description properties
  * @param {string} prefix - Optional prefix for the image filenames
  * @returns {Promise<Array>} - Array of image URLs
  */
@@ -655,7 +713,6 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
       // If the image is a new file, upload it using fileService
       if (image && (image.file || image instanceof File)) {
         const file = image.file || image;
-        const subfolder = `${requestId}`;
         
         // Use fileService to save the file
         const result = await saveFile(file, {
