@@ -48,3 +48,10 @@ build/
 webhook-server/
 WEBHOOK_README.md
 .github/workflows/webhook-deploy.yml
+
+# Development-only files that should not be deployed to production
+# These files can be excluded using .production file (similar to .dockerignore)
+# /scripts               # Development and migration scripts
+# /src/db/migrations     # Database migration scripts
+# README.md              # Documentation files
+# *.md                   # All markdown files

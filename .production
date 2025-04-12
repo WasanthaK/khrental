@@ -1,0 +1,28 @@
+# Files and directories to exclude from production builds
+# Similar to .dockerignore
+
+# Development scripts
+/scripts/
+
+# Database migrations (should be run separately)
+/src/db/migrations/
+
+# Documentation
+/*.md
+/docs/
+/src/docs/
+
+# Development configs
+/.github/
+/.vscode/
+
+# Tests
+/__tests__/
+/**/*.test.js
+/**/*.test.jsx
+/**/*.spec.js
+/**/*.spec.jsx
+
+# Logs and temp files
+/logs/
+*.log 
