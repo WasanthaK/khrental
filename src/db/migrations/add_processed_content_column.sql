@@ -10,4 +10,4 @@ USING gin(to_tsvector('english', coalesce(processedcontent,'')));
 COMMENT ON COLUMN agreements.processedcontent IS 'Fully processed HTML content with all placeholders replaced';
 
 -- Send success message
-SELECT 'processedcontent column added successfully to agreements table' as result; 
+SELECT 'processedcontent column added successfully to agreements table' as result;
