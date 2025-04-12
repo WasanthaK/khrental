@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { formatDate } from '../../utils/helpers';
-import ImageUpload from './ImageUpload';
+import ImageUpload from '../common/ImageUpload';
 
 const StaffAssignment = ({ 
   requestId,

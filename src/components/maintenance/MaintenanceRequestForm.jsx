@@ -5,7 +5,7 @@ import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../../hooks/useAuth';
-import ImageUpload from './ImageUpload';
+import ImageUpload from '../common/ImageUpload';
 import { createMaintenanceRequest } from '../../services/maintenanceService';
 
 const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false, initialData = null }) => {

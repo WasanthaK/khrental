@@ -19,7 +19,7 @@ import { toast } from 'react-hot-toast';
 import StatusTracker from '../components/maintenance/StatusTracker';
 import StaffAssignment from '../components/maintenance/StaffAssignment';
 import CommentSection from '../components/maintenance/CommentSection';
-import ImageUpload from '../components/maintenance/ImageUpload';
+import ImageUpload from '../components/common/ImageUpload';
 
 const MaintenanceDetails = () => {
   const { id } = useParams();
