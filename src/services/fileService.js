@@ -88,54 +88,44 @@ let _storageStatus = {
  * @returns {Promise<boolean>} - Whether storage and the specified bucket are available
  */
 const isStorageAvailable = async (bucketName = null) => {
-  // If we've already checked and no specific bucket is requested
-  if (_storageStatus.checked && !bucketName) {
-    return _storageStatus.available;
-  }
-  
-  // If we're checking a specific bucket we've already verified
-  if (_storageStatus.checked && bucketName && _storageStatus.buckets[bucketName] !== undefined) {
-    return _storageStatus.buckets[bucketName];
-  }
-  
   try {
-    // Try to list buckets - this will fail if storage is not configured correctly
+    // Try a simple list operation to check if the bucket exists
+    // This is more reliable than checking _storageStatus
+    if (bucketName) {
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .list('', { limit: 1 });
+      
+      // If we can list something (even an empty folder), the bucket exists
+      if (!error) {
+        return true;
+      }
+      
+      // Log the error but continue checking with other methods
+      console.warn(`Initial bucket check for ${bucketName} failed:`, error.message);
+    }
+    
+    // Fall back to listing all buckets
     const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
     if (listError) {
       console.error('Storage is not available:', listError.message);
-      _storageStatus.checked = true;
-      _storageStatus.available = false;
       return false;
     }
     
-    // Storage is available, now check specific buckets
-    _storageStatus.available = true;
-    
-    // Create a map of bucket availability
-    if (Array.isArray(buckets)) {
-      for (const bucket of buckets) {
-        _storageStatus.buckets[bucket.name] = true;
-      }
+    // If we just want to check if any storage is available
+    if (!bucketName) {
+      return true;
     }
     
-    _storageStatus.checked = true;
-    
-    // If checking a specific bucket
-    if (bucketName) {
-      const bucketExists = _storageStatus.buckets[bucketName] === true;
-      if (!bucketExists) {
-        console.log(`Bucket ${bucketName} does not exist or is not accessible`);
-      }
-      return bucketExists;
-    }
-    
-    return true;
+    // Check if our specific bucket exists in the list
+    return buckets.some(bucket => bucket.name === bucketName);
   } catch (error) {
     console.error('Error checking storage availability:', error);
-    _storageStatus.checked = true;
-    _storageStatus.available = false;
-    return false;
+    
+    // If there was an error, we'll assume storage might still be available
+    // This prevents blocking uploads in case of temporary errors
+    return true;
   }
 };
 

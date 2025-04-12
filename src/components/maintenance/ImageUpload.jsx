@@ -96,23 +96,52 @@ const ImageUpload = ({
         folder = 'maintenance';
       }
 
+      // Use default bucket if not specified or invalid
+      const targetBucket = bucket || STORAGE_BUCKETS.IMAGES;
+      
+      // Log the bucket we're trying to use - helps with debugging
+      console.log(`Using storage bucket: ${targetBucket}, folder: ${folder}`);
+
       const uploadPromises = files.map(async (file) => {
         // First compress the image
         setIsCompressing(true);
         const compressedFile = await compressImage(file);
         setIsCompressing(false);
 
-        // Then upload it using the provided bucket and folder
-        const result = await saveFile(compressedFile, {
-          bucket: bucket || STORAGE_BUCKETS.IMAGES,
-          folder: folder 
-        });
+        try {
+          // Then upload it using the provided bucket and folder
+          const result = await saveFile(compressedFile, {
+            bucket: targetBucket,
+            folder: folder 
+          });
 
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to upload image');
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to upload image');
+          }
+
+          return result.url;
+        } catch (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          // Try direct upload as fallback
+          console.log('Attempting direct upload as fallback...');
+          
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.jpg`;
+          const filePath = `${folder}/${fileName}`;
+          
+          const { data, error } = await supabase.storage
+            .from(targetBucket)
+            .upload(filePath, compressedFile, {
+              upsert: true
+            });
+            
+          if (error) throw error;
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from(targetBucket)
+            .getPublicUrl(filePath);
+            
+          return publicUrl;
         }
-
-        return result.url;
       });
 
       const uploadedUrls = await Promise.all(uploadPromises);
