@@ -206,7 +206,8 @@ const StaffAssignment = ({
         staffName: selectedStaff.name,
         scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : null,
         requestId: requestId,
-        assignmentImages: imageUrls // Pass all image URLs
+        assignmentImages: imageUrls, // Pass all image URLs
+        notes: `Assigned to ${selectedStaff.name} on ${new Date().toLocaleDateString()}`
       });
       
     } catch (err) {

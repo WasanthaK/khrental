@@ -324,7 +324,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
               .insert({
                 maintenance_request_id: id,
                 image_url: imageUrl,
-                image_type: 'assignment',
+                image_type: 'progress',
                 uploaded_by: assignmentData.staffId,
                 uploaded_at: new Date().toISOString(),
                 description: 'Assignment inspection image'

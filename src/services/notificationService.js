@@ -31,7 +31,7 @@ export const notifyUser = async (userId, notification) => {
           title: notification.title || 'Notification',
           type: notification.type || 'general',
           reference_id: notification.referenceId || null,
-          created_at: new Date().toISOString(),
+          createdat: new Date().toISOString(),
           is_read: false
         });
 
@@ -143,7 +143,7 @@ export const getUserNotifications = async (userId) => {
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('createdat', { ascending: false });
 
     if (error) {
       throw error;
