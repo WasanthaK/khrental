@@ -89,6 +89,13 @@ const ImageUpload = ({
       setIsUploading(true);
       setError(null);
 
+      // Validate folder path before trying to upload
+      if (!folder) {
+        // Use a default folder if none is provided
+        console.warn("No folder specified, using 'maintenance' as default");
+        folder = 'maintenance';
+      }
+
       const uploadPromises = files.map(async (file) => {
         // First compress the image
         setIsCompressing(true);
@@ -97,8 +104,8 @@ const ImageUpload = ({
 
         // Then upload it using the provided bucket and folder
         const result = await saveFile(compressedFile, {
-          bucket: bucket,
-          folder: folder
+          bucket: bucket || STORAGE_BUCKETS.IMAGES,
+          folder: folder 
         });
 
         if (!result.success) {

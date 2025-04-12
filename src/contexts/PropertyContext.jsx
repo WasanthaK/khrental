@@ -123,14 +123,18 @@ function PropertyProvider({ children }) {
   // Load user's accessible properties
   const loadUserAccessibleProperties = async () => {
     try {
-      // Get current user
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      // Get current user session instead of just user
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (userError) {
-        throw new Error(userError.message);
+      if (sessionError) {
+        console.warn("Session error:", sessionError.message);
+        setAccessiblePropertyIds([]);
+        return [];
       }
 
-      if (!userData?.user) {
+      // If no session, don't throw an error - just return empty array
+      if (!session) {
+        console.log("No auth session found, user might need to log in");
         setAccessiblePropertyIds([]);
         return [];
       }
@@ -152,7 +156,9 @@ function PropertyProvider({ children }) {
       console.error('Error loading user property access:', err);
       // Default to empty array on error
       setAccessiblePropertyIds([]);
-      throw err;
+      
+      // Don't propagate the error so the initialization can complete
+      return [];
     }
   };
 
