@@ -41,12 +41,18 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
   useEffect(() => {
     let intervalId = null;
     
+    // We'll use polling as a fallback if we have a reference and status isn't completed
     if (agreement.eviasignreference && 
-        agreement.status !== STATUS.SIGNED && 
-        agreement.status !== STATUS.REJECTED) {
+        (agreement.status !== STATUS.SIGNED && 
+         signatureStatus !== 'completed')) {
+      
+      // Check every 2 minutes
       intervalId = setInterval(() => {
-        refreshSignatureStatus();
-      }, 120000); // Check every 2 minutes
+        console.log('Polling signature status...');
+        checkSignatureStatus();
+      }, 120000); // 2 minutes
+      
+      console.log('Set up polling for signature status updates');
     }
     
     return () => {
@@ -54,7 +60,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         clearInterval(intervalId);
       }
     };
-  }, [agreement.eviasignreference, agreement.status]);
+  }, [agreement.eviasignreference, agreement.status, signatureStatus]);
   
   // Update previous status when current status changes
   useEffect(() => {
@@ -62,6 +68,60 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       setPrevSignatureStatus(signatureStatus);
     }
   }, [signatureStatus]);
+
+  // Add real-time subscription to agreement updates
+  useEffect(() => {
+    if (!agreement?.id) return;
+    
+    const handleAgreementUpdate = (payload) => {
+      console.log('Real-time agreement update received:', payload);
+      const updatedAgreement = payload.new;
+      
+      if (!updatedAgreement) return;
+      
+      // Update local status
+      if (updatedAgreement.signature_status !== signatureStatus) {
+        setPrevSignatureStatus(signatureStatus);
+        setSignatureStatus(updatedAgreement.signature_status);
+        setLastChecked(new Date().toISOString());
+        
+        // Show appropriate notification based on status
+        if (updatedAgreement.signature_status === 'completed') {
+          toast.success('Agreement has been fully signed!');
+        } else if (updatedAgreement.signature_status === 'in_progress') {
+          toast.info('A signatory has completed their signature');
+        } else if (updatedAgreement.signature_status === 'pending') {
+          toast.info('Signature request has been received');
+        }
+      }
+      
+      // Call parent handler if agreement status changed
+      if (onStatusChange && updatedAgreement.status !== agreement.status) {
+        onStatusChange(updatedAgreement.status);
+      }
+    };
+    
+    // Subscribe to agreement changes
+    const agreementSubscription = supabase
+      .channel(`agreement_${agreement.id}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE',
+        schema: 'public', 
+        table: 'agreements',
+        filter: `id=eq.${agreement.id}`
+      }, handleAgreementUpdate)
+      .subscribe();
+    
+    console.log(`Subscribed to real-time updates for agreement ${agreement.id}`);
+    
+    // Cleanup
+    return () => {
+      if (agreementSubscription) {
+        supabase.removeChannel(agreementSubscription);
+        console.log(`Unsubscribed from real-time updates for agreement ${agreement.id}`);
+      }
+    };
+  }, [agreement?.id, onStatusChange]);
 
   const refreshSignatureStatus = async () => {
     if (!agreement.eviasignreference) {
@@ -178,6 +238,19 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         throw landlordError;
       }
 
+      // Use our own webhook endpoint instead of relying on environment variable
+      // Only use webhooks in production environment or if specifically configured
+      let webhookUrl = null;
+      const isProduction = window.location.hostname !== 'localhost' && 
+                         window.location.hostname !== '127.0.0.1';
+                         
+      if (isProduction) {
+        webhookUrl = window.location.origin + '/api/evia-webhook';
+        console.log('Using internal webhook URL:', webhookUrl);
+      } else {
+        console.log('Running in development environment - webhook notifications disabled');
+      }
+
       // Prepare signature data
       const signatureData = {
         documentUrl: agreement.documenturl,
@@ -199,14 +272,14 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
             mobile: renteeData.contact_details?.phone
           }
         ],
-        // Add webhook URL explicitly from env
-        webhookUrl: import.meta.env.VITE_EVIA_WEBHOOK_URL
+        // Add webhook parameters for real-time status updates only if we have a URL
+        ...(webhookUrl && {
+          callbackUrl: webhookUrl,
+          completedDocumentsAttached: true
+        })
       };
 
-      // Log webhook URL for debugging
-      console.log('Using webhook URL:', import.meta.env.VITE_EVIA_WEBHOOK_URL);
-
-      // Send directly for signature instead of showing form
+      // Send directly for signature
       const result = await sendDocumentForSignature(signatureData);
 
       if (!result.success) {
@@ -239,7 +312,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       
       // Set up webhook for status updates
       console.log('Signature request created with ID:', result.requestId);
-      console.log('Status updates will be received via internal webhook endpoint at:', import.meta.env.VITE_EVIA_WEBHOOK_URL);
+      console.log('Status updates will be received via webhook at:', webhookUrl);
 
     } catch (error) {
       console.error('Error sending for signature:', error);

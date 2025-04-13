@@ -1,94 +1,158 @@
-          // Call the markWebhookEventProcessed function, ignoring any errors
-          const markResult = await markWebhookEventProcessed(supabaseEventId, processingResult);
+// Simple Express server for handling API endpoints
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import { createServer as createViteServer } from 'vite';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-          // Filter out processed_at errors from the logs
-          if (markResult.success) {
-            console.log(`✅ Event ${supabaseEventId} marked as processed in Supabase`);
-            logToFile(`Event ${supabaseEventId} marked as processed in Supabase`);
-          } else if (markResult.error && (markResult.error.includes('processed_at') || markResult.error.includes('schema cache') || markResult.error.includes('column'))) {
-            // Completely ignore this specific error, don't log it at all
-            console.log(`✅ Event ${supabaseEventId} processed successfully (ignoring schema warning)`);    
-            logToFile(`Event ${supabaseEventId} processed successfully`);
-          } else {
-          } 
+// Load environment variables
+dotenv.config();
 
-          try {
-            // Call the markWebhookEventProcessed function, ignoring any errors
-            const markResult = await markWebhookEventProcessed(supabaseEventId, processingResult);
+// Create a Supabase client
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-            // Filter out processed_at errors from the logs
-            if (markResult.success) {
-              console.log(`✅ Event ${supabaseEventId} marked as processed in Supabase`);
-              logToFile(`Event ${supabaseEventId} marked as processed in Supabase`);
-            } else if (markResult.error && (markResult.error.includes('processed_at') || markResult.error.includes('schema cache') || markResult.error.includes('column'))) {
-              // Completely ignore this specific error, don't log it at all
-              console.log(`✅ Event ${supabaseEventId} processed successfully (ignoring schema warning)`);    
-              logToFile(`Event ${supabaseEventId} processed successfully`);
-            } else {
-            }
-          } catch (error) {
-            // Filter the error message
-            const errorMsg = error?.message || String(error);
-            if (errorMsg.includes('processed_at') || errorMsg.includes('schema cache') || errorMsg.includes('column')) {
-              // Completely ignore these schema-related errors
-              console.log(`✅ Event ${supabaseEventId} processed successfully (ignoring schema error)`);
-              logToFile(`Event ${supabaseEventId} processed successfully`);
-            } else {
-            }
-          } 
-
-// Add a utility function to filter out schema cache warnings
-function filterLogMessage(message) {
-  // Filter out schema-related warnings
-  if (message && typeof message === 'string' && 
-      (message.includes("processed_at") || 
-       message.includes("schema cache") || 
-       (message.includes("Could not find") && message.includes("column") && message.includes("webhook_events")))) {
-    return null; // Don't log this message at all
-  }
-  return message;
-} 
-
-// Function to store webhook events in the local JSON database
-async function storeEventLocally(event) {
-  try {
-    console.log('Storing event locally:', event.EventId || 'unknown event');
-    console.log('DB object exists:', !!db);
-    
-    // Make sure the db object is properly loaded
-    if (!db) {
-      console.error('❌ Database object not initialized!');
-      return false;
-    }
-    
-    // Make sure the addEvent method exists
-    if (typeof db.addEvent !== 'function') {
-      console.error('❌ db.addEvent is not a function!', typeof db.addEvent);
-      return false;
-    }
-    
-    return db.addEvent(event);
-  } catch (error) {
-    console.error('Error storing event locally:', error);
-    logToFile(`Error storing event locally: ${error.message}`);
-    return false; // Return false instead of re-throwing
-  }
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing Supabase credentials. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file');
+  process.exit(1);
 }
 
-// Start the server with better error handling
-app.listen(PORT, () => {
-  console.log(`🚀 Webhook server running at http://localhost:${PORT}`);
-  console.log(`- Dashboard: http://localhost:${PORT}/`);
-  console.log(`- Status: http://localhost:${PORT}/status`);
-  console.log(`- Logs: http://localhost:${PORT}/logs`);
-  console.log(`- Webhook endpoint: http://localhost:${PORT}/webhook/evia-sign`);
-  logToFile(`Webhook server started on port ${PORT}`);
-}).on('error', (err) => {
-  console.error(`❌ Error starting server: ${err.message}`);
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Is another instance of the server running?`);
-    console.error('Try changing the PORT in .env file or stopping the other server.');
-  }
-  logToFile(`Error starting server: ${err.message}`);
-  process.exit(1);
-}); 
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function createServer() {
+  const app = express();
+  
+  // Middleware
+  app.use(cors());
+  app.use(bodyParser.json());
+  
+  // Create a separate router for API endpoints
+  const apiRouter = express.Router();
+  
+  // Webhook endpoint for Evia Sign
+  apiRouter.post('/webhooks/evia', async (req, res) => {
+    try {
+      console.log('✅ Received webhook:', {
+        eventId: req.body.EventId,
+        eventType: req.body.EventDescription,
+        requestId: req.body.RequestId
+      });
+      
+      // Store the raw webhook data for debugging/testing
+      const { data, error } = await supabase
+        .from('webhook_events')
+        .insert([{
+          event_type: req.body.EventDescription || 'unknown',
+          request_id: req.body.RequestId?.toString(),
+          user_name: req.body.UserName || null,
+          user_email: req.body.Email || null,
+          subject: req.body.Subject || null,
+          event_id: req.body.EventId || null,
+          event_time: req.body.EventTime || new Date().toISOString(),
+          raw_data: req.body
+        }]);
+      
+      if (error) {
+        console.error('❌ Error storing webhook:', error);
+      } else {
+        console.log('✅ Webhook stored successfully');
+      }
+      
+      if (req.body.RequestId) {
+        // Find the agreement with this reference ID
+        const { data: agreement, error: agreementError } = await supabase
+          .from('agreements')
+          .select('*')
+          .eq('eviasignreference', req.body.RequestId)
+          .single();
+          
+        if (!agreementError && agreement) {
+          console.log('✅ Found agreement:', agreement.id);
+          
+          // Update the agreement status based on the event
+          let signatureStatus = 'pending';
+          let agreementStatus = 'draft';
+          
+          if (req.body.EventId === 2) {
+            signatureStatus = 'in_progress';
+            agreementStatus = 'partially_signed';
+          } else if (req.body.EventId === 3) {
+            signatureStatus = 'completed';
+            agreementStatus = 'signed';
+          }
+          
+          const { data: updateData, error: updateError } = await supabase
+            .from('agreements')
+            .update({
+              signature_status: signatureStatus,
+              status: agreementStatus,
+              updatedat: new Date().toISOString()
+            })
+            .eq('id', agreement.id);
+            
+          if (updateError) {
+            console.error('❌ Error updating agreement:', updateError);
+          } else {
+            console.log('✅ Agreement updated successfully');
+          }
+        }
+      }
+      
+      // Return a more detailed success response
+      res.status(200).json({ 
+        success: true,
+        message: `Webhook processed successfully: ${req.body.EventDescription || 'unknown event'}`,
+        timestamp: new Date().toISOString(),
+        received: {
+          eventId: req.body.EventId,
+          eventType: req.body.EventDescription,
+          requestId: req.body.RequestId
+        }
+      });
+    } catch (error) {
+      console.error('❌ Webhook error:', error);
+      // Still return 200 to acknowledge receipt
+      res.status(200).json({ 
+        success: false, 
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
+  // Add a GET endpoint for checking webhook status
+  apiRouter.get('/webhooks/evia', async (req, res) => {
+    res.status(200).json({
+      status: 'active',
+      message: 'Evia Sign webhook endpoint is active and ready to receive events',
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        post: '/api/webhooks/evia',
+        supportedEvents: [
+          { id: 1, name: 'SignRequestReceived' },
+          { id: 2, name: 'SignatoryCompleted' },
+          { id: 3, name: 'RequestCompleted' }
+        ]
+      }
+    });
+  });
+  
+  // Mount the API router before Vite middleware
+  app.use('/api', apiRouter);
+  
+  // Vite dev server for frontend
+  const vite = await createViteServer({
+    server: { middlewareMode: true }
+  });
+  app.use(vite.middlewares);
+  
+  // Start server
+  const port = process.env.PORT || 5174;
+  app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Webhook endpoint: http://localhost:${port}/api/webhooks/evia`);
+  });
+}
+
+createServer(); 

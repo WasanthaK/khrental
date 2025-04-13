@@ -5,11 +5,16 @@
 
 // Export Evia Sign API functions
 export {
+  // Document signing methods
   sendDocumentForSignature,
   getSignatureStatus,
   checkSignatureStatus,
   downloadSignedDocument,
-  handleSignatureWebhook
+  
+  // Webhook handlers
+  handleSignatureWebhook,
+  webhookRequestHandler,
+  nextApiHandler
 } from './evia-sign';
 
 // Add other API exports here as they're migrated

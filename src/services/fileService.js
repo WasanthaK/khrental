@@ -89,8 +89,12 @@ let _storageStatus = {
  */
 const isStorageAvailable = async (bucketName = null) => {
   try {
+    // If we have cached results for this bucket and they're positive, use them
+    if (bucketName && _storageStatus.buckets[bucketName] === true) {
+      return true;
+    }
+    
     // Try a simple list operation to check if the bucket exists
-    // This is more reliable than checking _storageStatus
     if (bucketName) {
       const { data, error } = await supabase.storage
         .from(bucketName)
@@ -98,34 +102,84 @@ const isStorageAvailable = async (bucketName = null) => {
       
       // If we can list something (even an empty folder), the bucket exists
       if (!error) {
+        // Cache the positive result
+        _storageStatus.buckets[bucketName] = true;
+        _storageStatus.available = true;
+        _storageStatus.checked = true;
         return true;
       }
       
       // Log the error but continue checking with other methods
       console.warn(`Initial bucket check for ${bucketName} failed:`, error.message);
+      
+      // If it's an authentication error, but we know the bucket should exist,
+      // return true anyway to allow the operation to proceed
+      if (error.message?.includes('JWT') || error.status === 401) {
+        console.log('Authentication issue when checking bucket, assuming it exists');
+        return true;
+      }
     }
     
     // Fall back to listing all buckets
     const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
     if (listError) {
-      console.error('Storage is not available:', listError.message);
+      console.error('Storage list buckets error:', listError.message);
+      
+      // If it's just a permissions error but storage might still be available,
+      // return true to allow operations to proceed
+      if (listError.message?.includes('permission') || 
+          listError.status === 403 || 
+          listError.code === 'PGRST301') {
+        console.log('Permission issue when listing buckets, storage might still be available');
+        return true;
+      }
+      
+      // For other errors, we'll still try direct access as a last resort
+      if (bucketName) {
+        try {
+          // Try a direct public URL check, which might work even with limited permissions
+          const { data: publicUrlData } = supabase.storage
+            .from(bucketName)
+            .getPublicUrl('test-path');
+            
+          if (publicUrlData?.publicUrl) {
+            console.log(`Successfully generated public URL for ${bucketName}, assuming it exists`);
+            return true;
+          }
+        } catch (directCheckError) {
+          console.error('Direct bucket check failed:', directCheckError);
+        }
+      }
+      
       return false;
     }
     
     // If we just want to check if any storage is available
     if (!bucketName) {
+      _storageStatus.available = true;
+      _storageStatus.checked = true;
       return true;
     }
     
     // Check if our specific bucket exists in the list
-    return buckets.some(bucket => bucket.name === bucketName);
+    const bucketExists = buckets.some(bucket => bucket.name === bucketName);
+    if (bucketExists) {
+      _storageStatus.buckets[bucketName] = true;
+    }
+    
+    return bucketExists;
   } catch (error) {
     console.error('Error checking storage availability:', error);
     
     // If there was an error, we'll assume storage might still be available
     // This prevents blocking uploads in case of temporary errors
-    return true;
+    if (error.message?.includes('fetch') || error.message?.includes('network')) {
+      console.log('Network error when checking storage, assuming it might be available');
+      return true;
+    }
+    
+    return false;
   }
 };
 
@@ -309,9 +363,9 @@ const deleteFile = async (bucket, path) => {
 };
 
 /**
- * List files in a bucket/folder with improved validation
- * @param {string} bucket - The storage bucket name
- * @param {string} path - Optional path within the bucket
+ * List files in a bucket and path with improved error handling
+ * @param {string} bucket - The bucket to list files from
+ * @param {string} path - The path within the bucket (optional)
  * @returns {Promise<{data: Array|null, error: Error|null}>}
  */
 const listFiles = async (bucket, path = '') => {
@@ -320,14 +374,39 @@ const listFiles = async (bucket, path = '') => {
       return { data: null, error: new Error('Invalid bucket') };
     }
 
-    // Ensure we have a valid session
-    await ensureAuthSession();
+    // Try to ensure we have a valid session
+    try {
+      await ensureAuthSession();
+    } catch (sessionError) {
+      console.warn('Session validation failed, attempting list operation anyway:', sessionError);
+      // Continue without valid session - might still work with public buckets
+    }
 
+    // First try to check if bucket exists
+    try {
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      
+      if (!bucketsError && buckets && !buckets.some(b => b.name === bucket)) {
+        console.warn(`Bucket "${bucket}" not found in available buckets`);
+      }
+    } catch (bucketsError) {
+      console.warn('Error checking buckets, will still try to list files:', bucketsError);
+      // Continue even if we can't check buckets
+    }
+
+    // Attempt to list files
     const { data, error } = await supabase.storage
       .from(bucket)
       .list(path);
 
-    if (error) { throw error; }
+    if (error) { 
+      // Add extra debugging information to the error
+      error.originalMessage = error.message;
+      error.message = `Error listing files in ${bucket}${path ? '/' + path : ''}: ${error.message}`;
+      error.bucket = bucket;
+      error.path = path;
+      throw error; 
+    }
     return { data, error: null };
   } catch (error) {
     console.error('Error listing files:', error);

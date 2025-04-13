@@ -1244,13 +1244,12 @@ CREATE POLICY "Allow all access to utility_billing" ON utility_billing FOR ALL T
 DO $$
 BEGIN
     -- Create storage buckets if they don't exist
-    PERFORM storage.create_bucket('agreements', 'Rental agreement documents', public => false);
-    PERFORM storage.create_bucket('utility-readings', 'Utility meter reading photos', public => false);
-    PERFORM storage.create_bucket('maintenance-images', 'Maintenance request images', public => false);
-    PERFORM storage.create_bucket('documents', 'General documents', public => false);
-    PERFORM storage.create_bucket('id-documents', 'Identity documents for rentees', public => false);
-    PERFORM storage.create_bucket('property-images', 'Property listing images', public => false);
-    PERFORM storage.create_bucket('payment-proofs', 'Payment receipt proofs', public => false);
+    PERFORM storage.create_bucket('images', 'Image storage for properties, maintenance, and more', public => false);
+    PERFORM storage.create_bucket('files', 'Document storage for agreements and other files', public => false);
+
+    -- Note: The actual structure is organized with folders within these buckets
+    -- images bucket contains folders: id-copies, maintenance, properties, utility-readings
+    -- files bucket contains folders: agreements, documents, id-copies, payment-proofs
 EXCEPTION
     WHEN OTHERS THEN
         RAISE NOTICE 'Error creating buckets: %', SQLERRM;

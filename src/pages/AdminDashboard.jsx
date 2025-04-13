@@ -32,8 +32,41 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     if (selectedBucket) {
-      loadFiles(selectedBucket, selectedFolder);
-      loadBucketPermissions(selectedBucket);
+      // First try to check if the bucket exists using the direct method
+      const checkBucket = async () => {
+        try {
+          const { data, error } = await supabase.storage
+            .from(selectedBucket)
+            .list('', { limit: 1 });
+          
+          if (error) {
+            console.error(`Error checking if bucket ${selectedBucket} exists:`, error);
+            
+            // If we can't find the bucket, try the alternative bucket
+            if (error.status === 404 || error.message?.includes('not found')) {
+              // If IMAGES fails, try FILES and vice versa
+              const alternateBucket = selectedBucket === STORAGE_BUCKETS.IMAGES 
+                ? STORAGE_BUCKETS.FILES 
+                : STORAGE_BUCKETS.IMAGES;
+              
+              console.log(`Trying alternate bucket: ${alternateBucket}`);
+              setSelectedBucket(alternateBucket);
+              return;
+            }
+          }
+          
+          // Continue with loading files and permissions
+          loadFiles(selectedBucket, selectedFolder);
+          loadBucketPermissions(selectedBucket);
+        } catch (err) {
+          console.error('Error in bucket check:', err);
+          // Fall back to just trying the regular functions
+          loadFiles(selectedBucket, selectedFolder);
+          loadBucketPermissions(selectedBucket);
+        }
+      };
+      
+      checkBucket();
     }
   }, [selectedBucket, selectedFolder]);
 
@@ -86,11 +119,34 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       const { data, error } = await listFiles(bucketName, folderPath);
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Error loading files:', error);
+        
+        // Handle common error cases
+        if (error.message?.includes('does not have permission') || 
+            error.status === 403 || error.code === 'PGRST301') {
+          // Permission issue
+          setError('You do not have permissions to list files in this bucket');
+          setFiles([]);
+          return;
+        }
+        
+        if (error.message?.includes('not found') || error.status === 404) {
+          // Bucket not found
+          setError(`Bucket ${bucketName} does not exist`);
+          setFiles([]);
+          return;
+        }
+        
+        throw error;
+      }
+      
       setFiles(data?.filter(file => !file.name.endsWith('.keep')) || []);
     } catch (err) {
       console.error('Error loading files:', err);
       setError(err.message);
+      setFiles([]);
       toast.error('Failed to load files');
     } finally {
       setLoading(false);
@@ -104,10 +160,76 @@ const AdminDashboard = () => {
       // First check if the bucket exists
       const { data: buckets, error: listError } = await supabase.storage.listBuckets();
       
-      if (listError) throw listError;
+      if (listError) {
+        console.error('Error listing buckets:', listError);
+        
+        // Special handling for permission errors
+        if (listError.message?.includes('does not have permission') || 
+            listError.code === 'PGRST301' || listError.status === 403) {
+          setBucketPermissions({
+            name: bucketName,
+            public: false,
+            fileSizeLimit: 10 * 1024 * 1024, // Default 10MB
+            allowedMimeTypes: ['*/*'],
+            owner: 'Unknown (limited permissions)',
+            created_at: null,
+            updated_at: null
+          });
+          
+          // We'll still try to list files to see if we can access the bucket directly
+          return;
+        }
+        
+        throw listError;
+      }
+      
+      // If buckets is null or empty, try to access the bucket directly
+      if (!buckets || buckets.length === 0) {
+        console.warn('No buckets returned from API, attempting direct bucket access');
+        
+        // Try to list files in the bucket to see if it exists
+        const { data: filesCheck, error: filesError } = await supabase.storage
+          .from(bucketName)
+          .list('', { limit: 1 });
+        
+        if (!filesError) {
+          // Bucket might exist but we don't have permission to list buckets
+          setBucketPermissions({
+            name: bucketName,
+            public: false, // Default assumption
+            fileSizeLimit: 10 * 1024 * 1024, // Default 10MB
+            allowedMimeTypes: ['*/*'],
+            owner: 'Unknown (limited permissions)',
+            created_at: null,
+            updated_at: null
+          });
+          return;
+        } else {
+          throw new Error(`Bucket ${bucketName} may not exist or you don't have access to it`);
+        }
+      }
       
       const bucket = buckets.find(b => b.name === bucketName);
       if (!bucket) {
+        // Check if we can still access the bucket directly
+        const { data: filesCheck, error: filesError } = await supabase.storage
+          .from(bucketName)
+          .list('', { limit: 1 });
+        
+        if (!filesError) {
+          // Bucket exists but might have a different name in the API
+          setBucketPermissions({
+            name: bucketName,
+            public: false, // Default assumption
+            fileSizeLimit: 10 * 1024 * 1024, // Default 10MB
+            allowedMimeTypes: ['*/*'],
+            owner: 'Unknown (limited permissions)',
+            created_at: null,
+            updated_at: null
+          });
+          return;
+        }
+        
         throw new Error(`Bucket ${bucketName} not found`);
       }
 
@@ -349,7 +471,19 @@ const AdminDashboard = () => {
           <div className="mb-4">
             <h3 className="font-semibold mb-2 text-sm">Folders</h3>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(BUCKET_FOLDERS[selectedBucket]).map(([key, folder]) => (
+              <button
+                onClick={() => setSelectedFolder('')}
+                className={`px-2 py-1 rounded text-xs ${
+                  selectedFolder === ''
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                Root
+              </button>
+              
+              {/* Use the array-based folder structure */}
+              {Array.isArray(BUCKET_FOLDERS[selectedBucket]) && BUCKET_FOLDERS[selectedBucket].map((folder) => (
                 <button
                   key={folder}
                   onClick={() => setSelectedFolder(folder)}
@@ -359,7 +493,7 @@ const AdminDashboard = () => {
                       : 'bg-gray-200 hover:bg-gray-300'
                   }`}
                 >
-                  {key}
+                  {folder}
                 </button>
               ))}
             </div>

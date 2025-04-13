@@ -1,23 +1,36 @@
 /**
  * Evia Sign API Integration
  * 
- * This is a transitional module that re-exports from the existing eviaSignService
- * In the future, we'll split this into separate modules like auth.js, documents.js, etc.
+ * This module exports the Evia Sign API integration components
  */
 
-// For now, just re-export from the existing service to avoid breaking changes
+// Import from the service for now
 import {
   sendDocumentForSignature,
   getSignatureStatus,
   checkSignatureStatus,
-  downloadSignedDocument,
-  handleSignatureWebhook
+  downloadSignedDocument
 } from '../../services/eviaSignService';
 
+// Import from our consolidated webhook handler
+import { 
+  handleSignatureWebhook, 
+  webhookRequestHandler, 
+  nextApiHandler,
+  getSignatureStatusFromWebhooks
+} from './webhookHandler';
+
+// Export everything
 export {
+  // Document signing methods
   sendDocumentForSignature,
   getSignatureStatus,
   checkSignatureStatus,
   downloadSignedDocument,
-  handleSignatureWebhook
+  
+  // Webhook handlers
+  handleSignatureWebhook,
+  webhookRequestHandler,
+  nextApiHandler,
+  getSignatureStatusFromWebhooks
 }; 

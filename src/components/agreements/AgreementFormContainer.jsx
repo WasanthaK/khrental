@@ -258,12 +258,23 @@ const AgreementFormContainer = () => {
         
         console.log('[AgreementFormContainer] Sending document for signature with URL:', docxUrl);
         
+        // IMPORTANT: Make sure to include the webhook URL
+        // This is the key to removing polling - we'll get updates via webhook instead
+        const webhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || null;
+        if (!webhookUrl) {
+          console.warn("[AgreementFormContainer] No webhook URL configured. Status updates will require manual refresh.");
+        }
+        
         const signatureResult = await sendDocumentForSignature({
           documentUrl: docxUrl,
           title: signatureData.title || "Rental Agreement",
           message: signatureData.message || "Please sign this rental agreement",
           signatories: signatureData.signatories,
-          webhookUrl: import.meta.env.VITE_EVIA_WEBHOOK_URL || null
+          webhookUrl: webhookUrl,
+          // Make sure documents are attached in the webhooks
+          completedDocumentsAttached: true,
+          // Include our agreement ID for reference
+          agreementId: agreement.id
         });
         
         console.log('[AgreementFormContainer] Evia Sign API response:', signatureResult);
@@ -288,7 +299,8 @@ const AgreementFormContainer = () => {
           .update({ 
             status: AGREEMENT_STATUS.PENDING,
             eviasignreference: eviaSignReference || null,
-            signature_status: 'pending'
+            signature_status: 'pending',
+            signature_sent_at: new Date().toISOString()
           })
           .eq('id', agreement.id)
           .select();
@@ -302,14 +314,7 @@ const AgreementFormContainer = () => {
         toast.success('Agreement sent for signature successfully');
         setShowSignatureForm(false);
         
-        // Start checking signature status periodically
-        if (eviaSignReference) {
-          console.log('[AgreementFormContainer] Starting signature status monitoring');
-          // Initial delay before first check
-          setTimeout(() => {
-            checkSignatureStatus(agreement.id, eviaSignReference);
-          }, 15000); // Check after 15 seconds
-        }
+        // No polling needed - the webhook will update the status automatically
         
         // Navigate to agreements list
         console.log('[AgreementFormContainer] Navigating to agreements list');
@@ -393,91 +398,6 @@ const AgreementFormContainer = () => {
 
   const handleSignatureFormCancel = () => {
     setShowSignatureForm(false);
-  };
-
-  // Function to periodically check signature status
-  const checkSignatureStatus = async (agreementId, eviaSignReference) => {
-    try {
-      console.log('[AgreementFormContainer] Checking signature status for agreement:', agreementId);
-      
-      // Import the function dynamically to avoid circular dependencies
-      const { updateAgreementSignatureStatus } = await import('../../services/eviaSignService');
-      
-      // Update the status
-      const result = await updateAgreementSignatureStatus(agreementId, eviaSignReference);
-      console.log('[AgreementFormContainer] Status update result:', result);
-      
-      // If API check failed with not found, check webhook events as a fallback
-      if (result?.success === false && result?.status === 'unknown') {
-        console.log('[AgreementFormContainer] API status check failed, checking webhook events...');
-        
-        try {
-          // Check if we have any webhook events for this request ID
-          const { data: webhookEvents } = await supabase
-            .from('webhook_events')
-            .select('*')
-            .eq('request_id', eviaSignReference)
-            .order('event_time', { ascending: false })
-            .limit(5);
-            
-          if (webhookEvents && webhookEvents.length > 0) {
-            console.log('[AgreementFormContainer] Found webhook events:', webhookEvents.length);
-            
-            // Process the latest webhook event
-            const latestEvent = webhookEvents[0];
-            if (latestEvent.event_id === 3) { // RequestCompleted
-              console.log('[AgreementFormContainer] Found completed webhook event, updating agreement');
-              
-              // Update the agreement status to signed
-              await supabase
-                .from('agreements')
-                .update({
-                  status: 'signed',
-                  signature_status: 'completed',
-                  updatedat: new Date().toISOString()
-                })
-                .eq('id', agreementId);
-                
-              console.log('[AgreementFormContainer] Agreement updated to signed status from webhook event');
-              return;
-            }
-          }
-        } catch (webhookError) {
-          console.error('[AgreementFormContainer] Error checking webhook events:', webhookError);
-        }
-      }
-      
-      // Check if the result has a status property indicating status
-      if (result && (
-          // Success states
-          (result[0]?.signature_status === 'completed') || 
-          // Error states that should stop polling
-          (result.status === 'unknown') || 
-          (result.success === false && result.message?.includes('not found'))
-        )) {
-        console.log('[AgreementFormContainer] Signature check complete or request not found, stopping polling');
-        return;
-      }
-      
-      // Schedule next check in 30 seconds if still in progress
-      setTimeout(() => {
-        checkSignatureStatus(agreementId, eviaSignReference);
-      }, 30000); // 30 seconds
-    } catch (error) {
-      console.error('[AgreementFormContainer] Error checking signature status:', error);
-      // Stop polling on error after a few retries
-      if (error.retryCount && error.retryCount >= 3) {
-        console.log('[AgreementFormContainer] Too many errors, stopping status checks');
-        return;
-      }
-      
-      // Retry with exponential backoff
-      setTimeout(() => {
-        // Add retry count to error for tracking
-        error.retryCount = (error.retryCount || 0) + 1;
-        checkSignatureStatus(agreementId, eviaSignReference);
-      }, 30000 * (error.retryCount || 1)); // 30s, 60s, 90s backoff
-    }
   };
 
   if (loading) {

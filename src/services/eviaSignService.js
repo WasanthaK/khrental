@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import axios from 'axios';
 import { STATUS as AGREEMENT_STATUS } from '../contexts/AgreementFormContext';
 import { formatFileSize } from '../utils/helpers';
+import { getSignatureStatusFromWebhooks } from '../api/evia-sign';
 
 // Evia Sign API configuration
 const EVIA_SIGN_API_BASE_URL = 'https://evia.enadocapp.com/_apis';
@@ -34,8 +35,8 @@ const EVIA_SIGN_API = {
     TOKEN: '/falcon/auth/api/v1/Token',
     DOCUMENT_UPLOAD: '/sign/thumbs/api/Requests/document',
     SEND_REQUEST: '/sign/api/Requests',
-    CHECK_STATUS: '/sign/api/Requests/status',
-    DOWNLOAD_DOCUMENT: '/sign/api/Requests/document'
+    CHECK_STATUS: '/sign/api/Requests',
+    DOWNLOAD_DOCUMENT: '/sign/api/Requests'
   }
 };
 
@@ -50,8 +51,8 @@ const ensureHttpsProtocol = (url) => {
 };
 
 // Get the webhook URL from environment or use a fallback
-const rawWebhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || 'kh-reantals-webhook.azurewebsites.net/webhook/evia-sign';
-const DEFAULT_WEBHOOK_URL = ensureHttpsProtocol(rawWebhookUrl);
+const rawWebhookUrl = '';
+const DEFAULT_WEBHOOK_URL = '';
 
 // Status mappings for better compatibility
 const STATUS_MAPPINGS = {
@@ -402,16 +403,18 @@ export async function sendDocumentForSignature(params) {
     console.log('[eviaSignService] Starting document signature process with params:', {
       title: params.title,
       documentUrl: params.documentUrl ? (typeof params.documentUrl === 'string' ? `${params.documentUrl.substring(0, 30)}...` : 'Not a string') : 'Missing',
-      signatories: params.signatories ? params.signatories.length : 0
+      signatories: params.signatories ? params.signatories.length : 0,
+      webhookUrl: params.webhookUrl ? 'Provided' : 'Not provided',
+      completedDocumentsAttached: params.completedDocumentsAttached
     });
     
     // Get access token
-      const accessToken = await getAccessToken();
+    const accessToken = await getAccessToken();
     console.log('[eviaSignService] Retrieved access token:', accessToken ? 'Token obtained' : 'Failed to get token');
       
     // Upload document
     console.log('[eviaSignService] Uploading document...');
-      const documentToken = await uploadDocument(params.documentUrl, accessToken);
+    const documentToken = await uploadDocument(params.documentUrl, accessToken);
     console.log('[eviaSignService] Document uploaded successfully, received token:', documentToken);
     
     // Validate documentToken
@@ -421,21 +424,38 @@ export async function sendDocumentForSignature(params) {
     
     console.log('[eviaSignService] Preparing signature request with document token:', documentToken);
 
-    // Get the webhook URL
-    const webhookUrl = params.webhookUrl || DEFAULT_WEBHOOK_URL;
-    console.log('[eviaSignService] Using webhook URL:', webhookUrl);
+    // Get the webhook URL - look in multiple places with clear priorities
+    // 1. First use the one explicitly provided in the function params
+    // 2. Then fall back to the environment variable
+    // 3. Finally fall back to the default webhook URL
+    const envWebhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || '';
+    const defaultWebhookUrl = 'https://khrentals.com/api/evia-webhook';
+    
+    // Priority chain for webhook URL
+    const webhookUrl = params.webhookUrl || params.callbackUrl || envWebhookUrl || defaultWebhookUrl;
+    
+    console.log('[eviaSignService] 📣 WEBHOOK URL: ' + webhookUrl);
+    console.log('[eviaSignService] Webhook URL source:', 
+      params.webhookUrl ? 'From params.webhookUrl' : 
+      params.callbackUrl ? 'From params.callbackUrl' : 
+      envWebhookUrl ? 'From environment variable' : 
+      'Using default URL');
+    
+    // Determine whether to attach documents in webhook
+    const completedDocumentsAttached = params.completedDocumentsAttached === undefined ? true : !!params.completedDocumentsAttached;
     
     // Add debugs for the webhook parameters specifically
     console.log('[eviaSignService] Setting up webhook parameters:');
     console.log('  - CallbackUrl:', webhookUrl);
-    console.log('  - CompletedDocumentsAttached:', true);
+    console.log('  - CompletedDocumentsAttached:', completedDocumentsAttached);
 
     // According to the Evia docs minimum requirement for type 3 request, using the exact format
     const requestJson = {
       "Message": params.message || "Please sign this document",
       "Title": params.title || "Rental Agreement",
+      // CRITICAL: Include the webhook URL and completedDocumentsAttached parameters here
       "CallbackUrl": webhookUrl,
-      "CompletedDocumentsAttached": true,
+      "CompletedDocumentsAttached": completedDocumentsAttached,
       "Documents": [
         documentToken
       ],
@@ -506,6 +526,12 @@ export async function sendDocumentForSignature(params) {
       },
       "Connections": []
     };
+
+    // Add webhook parameters if URL is provided
+    if (webhookUrl) {
+      requestJson.CallbackUrl = webhookUrl;
+      requestJson.CompletedDocumentsAttached = completedDocumentsAttached;
+    }
 
     console.log('[eviaSignService] Request JSON prepared (Auto-stamping mode):', JSON.stringify(requestJson).substring(0, 200) + '...');
 
@@ -681,22 +707,78 @@ export async function downloadSignedDocument(requestId) {
     console.log('[eviaSignService] Downloading signed document for request ID:', requestId);
     
     // Get access token
-      const accessToken = await getAccessToken();
+    const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error('Authentication required to download document');
     }
       
-    // Request the document from Evia Sign API
-      const response = await axios.get(
-      `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.DOWNLOAD_DOCUMENT}/${requestId}`,
+    // Try different endpoint formats due to potential inconsistency in API paths
+    let response;
+    let error;
+    
+    try {
+      // Try first format with /document at the end
+      const endpoint1 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}/document`;
+      console.log('[eviaSignService] Trying endpoint 1:', endpoint1);
+      
+      response = await axios.get(
+        endpoint1,
         {
           headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        responseType: 'arraybuffer' // Important for handling PDF data
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          responseType: 'arraybuffer'
+        }
+      );
+    } catch (error1) {
+      console.log('[eviaSignService] Endpoint 1 failed:', error1.message);
+      error = error1;
+      
+      try {
+        // Try second format with /Document (capital D)
+        const endpoint2 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}/Document`;
+        console.log('[eviaSignService] Trying endpoint 2:', endpoint2);
+        
+        response = await axios.get(
+          endpoint2,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            responseType: 'arraybuffer'
+          }
+        );
+      } catch (error2) {
+        console.log('[eviaSignService] Endpoint 2 also failed:', error2.message);
+        
+        // Try a third format from docs
+        try {
+          const endpoint3 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/document/${requestId}`;
+          console.log('[eviaSignService] Trying endpoint 3:', endpoint3);
+          
+          response = await axios.get(
+            endpoint3,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              },
+              responseType: 'arraybuffer'
+            }
+          );
+        } catch (error3) {
+          console.log('[eviaSignService] All endpoints failed. Last error:', error3.message);
+          // Rethrow the original error
+          throw error;
+        }
       }
-    );
+    }
+    
+    if (!response) {
+      throw new Error('Failed to get document from any endpoint');
+    }
     
     console.log('[eviaSignService] Document download response received:', {
       status: response.status,
@@ -837,252 +919,6 @@ export async function getDocumentThumbnail(documentToken) {
 }
 
 /**
- * Handle webhook events from Evia Sign
- * @param {Object} payload - The webhook payload
- * @returns {Promise<Object>} - Processing result
- */
-export async function handleSignatureWebhook(payload) {
-  try {
-    console.log('[eviaSignService] Received webhook payload:', {
-      eventId: payload.EventId,
-      eventDescription: payload.EventDescription,
-      requestId: payload.RequestId,
-      userName: payload.UserName,
-      email: payload.Email,
-      hasDocuments: !!payload.Documents
-    });
-
-    const { RequestId, EventId, EventDescription, UserName, Email } = payload;
-
-    // Map event type to status using the central mapping
-    let status = STATUS_MAPPINGS.eventToStatus[EventId] || 'pending';
-    
-    console.log(`[eviaSignService] Webhook: ${EventDescription} for ${RequestId}, setting status to ${status}`);
-
-    // Find the agreement using the RequestId
-    const { data: agreement, error: findError } = await supabase
-        .from('agreements')
-      .select('*')
-      .eq('eviasignreference', RequestId)
-        .single();
-    
-    if (findError) {
-      console.error('[eviaSignService] Error finding agreement:', findError);
-      throw new Error(`Agreement not found for RequestId: ${RequestId}`);
-      }
-      
-      if (!agreement) {
-      console.error('[eviaSignService] No agreement found for RequestId:', RequestId);
-      throw new Error(`No agreement found for RequestId: ${RequestId}`);
-    }
-
-    console.log('[eviaSignService] Found agreement:', {
-      id: agreement.id,
-      status: agreement.status,
-      signature_status: agreement.signature_status
-    });
-
-    // Handle different event types
-    switch (EventId) {
-      case 1: // SignRequestReceived
-        console.log('[eviaSignService] Processing SignRequestReceived event');
-        await updateAgreementStatus(agreement.id, {
-          signature_status: 'pending',
-          signatories_status: []
-        });
-        break;
-
-      case 2: // SignatoryCompleted
-        console.log('[eviaSignService] Processing SignatoryCompleted event for:', Email);
-        const { data: currentAgreement } = await supabase
-        .from('agreements')
-          .select('signatories_status')
-          .eq('id', agreement.id)
-          .single();
-
-        // Create signatories_status array if it doesn't exist
-        const currentSignatories = currentAgreement?.signatories_status || [];
-        const updatedSignatories = Array.isArray(currentSignatories) 
-          ? [...currentSignatories] 
-          : [];
-        
-        const signatoryIndex = updatedSignatories.findIndex(s => s.email === Email);
-        
-        if (signatoryIndex >= 0) {
-          updatedSignatories[signatoryIndex] = {
-            ...updatedSignatories[signatoryIndex],
-            status: 'completed',
-            signedAt: EventTime
-          };
-        } else {
-          updatedSignatories.push({
-            name: UserName,
-            email: Email,
-            status: 'completed',
-            signedAt: EventTime
-          });
-        }
-
-        console.log('[eviaSignService] Updating signatory status:', updatedSignatories);
-        await updateAgreementStatus(agreement.id, {
-          signature_status: 'in_progress',
-          signatories_status: updatedSignatories
-        });
-        break;
-
-      case 3: // RequestCompleted
-        console.log('[eviaSignService] Processing RequestCompleted event');
-        let signedPdfUrl = null;
-        
-        if (Documents && Documents.length > 0) {
-          console.log('[eviaSignService] Signed document received in webhook');
-          try {
-            const signedDoc = Documents[0];
-            signedPdfUrl = await uploadSignedDocument(signedDoc, agreement.id);
-            console.log('[eviaSignService] Uploaded signed document:', signedPdfUrl);
-          } catch (docError) {
-            console.error('[eviaSignService] Error uploading signed document:', docError);
-            // Continue even if document upload fails
-          }
-        } else {
-          console.log('[eviaSignService] No documents attached to webhook - trying to fetch the completed document');
-          try {
-            // Try to get the document
-            const docResult = await downloadSignedDocument(RequestId);
-            if (docResult.success && docResult.documentUrl) {
-              signedPdfUrl = docResult.documentUrl;
-              console.log('[eviaSignService] Retrieved signed document:', signedPdfUrl);
-            }
-          } catch (fetchError) {
-            console.error('[eviaSignService] Error fetching signed document:', fetchError);
-          }
-        }
-
-        console.log('[eviaSignService] Updating agreement to signed status');
-        await updateAgreementStatus(agreement.id, {
-          status: AGREEMENT_STATUS.SIGNED,
-          signature_status: 'completed',
-          signeddate: new Date(EventTime).toISOString(),
-          signatureurl: signedPdfUrl
-        });
-        break;
-
-      default:
-        console.warn(`[eviaSignService] Unknown event type: ${EventId}`);
-    }
-
-    return { success: true, message: `Processed ${EventDescription} event` };
-  } catch (error) {
-    console.error('[eviaSignService] Webhook processing error:', error);
-    throw error;
-  }
-}
-
-/**
- * Helper function to update agreement status
- * @param {string} agreementId - The agreement ID
- * @param {Object} updates - The updates to apply
- */
-async function updateAgreementStatus(agreementId, updates) {
-  try {
-    console.log(`[eviaSignService] Updating agreement ${agreementId} with:`, updates);
-    
-    // Ensure JSON data is valid for Postgres
-    const sanitizedUpdates = { ...updates };
-    
-    // If there's a signatories_status array, make sure it's valid JSON
-    if (sanitizedUpdates.signatories_status && !Array.isArray(sanitizedUpdates.signatories_status)) {
-      sanitizedUpdates.signatories_status = [];
-    }
-    
-    const { data, error } = await supabase
-      .from('agreements')
-      .update({
-        ...sanitizedUpdates,
-        updatedat: new Date().toISOString()
-      })
-      .eq('id', agreementId)
-      .select();
-
-    if (error) {
-      console.error('[eviaSignService] Error updating agreement:', error);
-      throw error;
-    }
-    
-    console.log('[eviaSignService] Agreement updated successfully:', data);
-    return data;
-  } catch (err) {
-    console.error('[eviaSignService] Error in updateAgreementStatus:', err);
-    throw err;
-  }
-}
-
-/**
- * Helper function to upload signed document
- * @param {Object} signedDoc - The signed document from webhook
- * @param {string} agreementId - The agreement ID
- * @returns {Promise<string>} - The public URL of the uploaded document
- */
-async function uploadSignedDocument(signedDoc, agreementId) {
-  try {
-    if (!signedDoc || !signedDoc.DocumentContent) {
-      throw new Error('Invalid document data: DocumentContent is missing');
-    }
-    
-    // Get document name or create one
-    const documentName = signedDoc.DocumentName || `signed_agreement_${agreementId}.pdf`;
-    
-    console.log(`[eviaSignService] Preparing to upload signed document: ${documentName}`);
-    
-    // Convert base64 to blob
-    const byteCharacters = atob(signedDoc.DocumentContent);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'application/pdf' });
-
-    console.log(`[eviaSignService] Created blob with size: ${formatFileSize(blob.size)}`);
-
-    // Upload to Supabase Storage
-    const fileName = `signed_${agreementId}_${Date.now()}.pdf`;
-    const filePath = `agreements/${fileName}`;
-    
-    console.log(`[eviaSignService] Uploading to Supabase storage: ${filePath}`);
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('files')  // Use the files bucket
-      .upload(filePath, blob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-
-    if (uploadError) { 
-      console.error('[eviaSignService] Storage upload error:', uploadError);
-      throw uploadError; 
-    }
-
-    console.log('[eviaSignService] Document uploaded successfully:', uploadData);
-
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from('files')
-      .getPublicUrl(filePath);
-
-    if (!urlData || !urlData.publicUrl) {
-      throw new Error('Failed to get public URL for signed document');
-    }
-
-    console.log('[eviaSignService] Public URL generated:', urlData.publicUrl);
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('[eviaSignService] Error uploading signed document:', error);
-    throw error;
-  }
-}
-
-/**
  * Get an access token for the Evia Sign API
  * This is a private helper function
  * 
@@ -1146,25 +982,46 @@ async function getAccessToken() {
 }
 
 /**
- * Check signature status directly from Evia Sign
+ * Check the status of a signature request
  * 
  * @param {string} requestId - The Evia Sign request ID
- * @returns {Promise<Object>} The status information
+ * @returns {Promise<Object>} - The signature status
  */
 export async function checkSignatureStatus(requestId) {
   try {
-    console.log('[eviaSignService] Checking signature status for request ID:', requestId);
+    console.log(`[eviaSignService] Checking signature status for request: ${requestId}`);
     
-    // Get access token
+    // First check the database for webhook events - this is more reliable than API calls
+    // especially if the document has been deleted from Evia Sign
+    try {
+      const webhookResult = await getSignatureStatusFromWebhooks(requestId);
+      
+      // If we found status info in webhook events, use that
+      if (webhookResult.success && webhookResult.fromWebhook) {
+        console.log('[eviaSignService] Using status from stored webhook events:', webhookResult.status);
+        return webhookResult;
+      } else {
+        console.log('[eviaSignService] No useful status from webhook events, will try API');
+      }
+    } catch (webhookError) {
+      console.error('[eviaSignService] Error getting status from webhook events:', webhookError);
+      // Continue with API calls if webhook check fails
+    }
+    
+    // Get access token for API calls
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error('Authentication required to check signature status');
     }
     
     try {
-      // Make request to Evia Sign API to get status
+      // Use the correct Evia Sign API endpoint based on their documentation
+      // First try the standard request endpoint (without /Status or /status suffix)
+      const requestEndpoint = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}`;
+      console.log('[eviaSignService] Using request endpoint:', requestEndpoint);
+      
       const response = await axios.get(
-        `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.CHECK_STATUS}/${requestId}`,
+        requestEndpoint,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -1173,87 +1030,114 @@ export async function checkSignatureStatus(requestId) {
         }
       );
       
-      console.log('[eviaSignService] Status check response:', response.data);
+      console.log('[eviaSignService] Request check response:', response.data);
+      
+      // Check if we need to get signatories separately
+      let signatories = [];
+      try {
+        const signatoriesEndpoint = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}/signatories`;
+        const signatoriesResponse = await axios.get(
+          signatoriesEndpoint,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        signatories = signatoriesResponse.data || [];
+      } catch (signatoriesError) {
+        console.warn('[eviaSignService] Could not fetch signatories:', signatoriesError.message);
+        // Continue without signatories data
+      }
       
       return {
         success: true,
         status: response.data.status || 'unknown',
-        signatories: response.data.signatories || [],
+        signatories: signatories,
         completed: response.data.status === 'Completed'
       };
     } catch (apiError) {
-      // If we get 404, try the alternate endpoint for completed requests
+      console.error('[eviaSignService] API error when checking request:', apiError.message);
+      
+      // Try one more endpoint format as a last resort - according to older API docs
       if (apiError.response && apiError.response.status === 404) {
-        console.log('[eviaSignService] Request not found at status endpoint, trying to check if completed...');
-        
-        // Try to download the document as a way to check if it's completed
         try {
-          const docResult = await downloadSignedDocument(requestId);
+          // Try with just /status endpoint (lowercase)
+          const statusEndpoint = `${EVIA_SIGN_API_BASE_URL}/sign/api/Drafts/${requestId}`;
+          console.log('[eviaSignService] Trying draft endpoint:', statusEndpoint);
           
-          // If we can download the document, the request is completed
-          if (docResult.success && docResult.documentUrl) {
-            console.log('[eviaSignService] Successfully retrieved signed document, request is completed');
-            return {
-              success: true,
-              status: 'Completed',
-              signatories: [],
-              completed: true,
-              documentUrl: docResult.documentUrl
-            };
+          const draftResponse = await axios.get(
+            statusEndpoint,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          
+          console.log('[eviaSignService] Draft check response:', draftResponse.data);
+          
+          return {
+            success: true,
+            status: draftResponse.data.status || 'unknown',
+            signatories: draftResponse.data.signatories || [],
+            completed: draftResponse.data.status === 'Completed',
+            fromDrafts: true
+          };
+        } catch (draftError) {
+          console.error('[eviaSignService] Draft endpoint also failed:', draftError.message);
+          
+          // If all API calls fail, rely on our webhook events database
+          console.log('[eviaSignService] All API endpoints failed, using webhook events data exclusively');
+          const webhookResult = await getSignatureStatusFromWebhooks(requestId);
+          
+          // If we have webhook data, use that
+          if (webhookResult.success) {
+            return webhookResult;
           }
-        } catch (downloadError) {
-          console.log('[eviaSignService] Could not download document either:', downloadError);
-        }
-        
-        // Try to check if this ID exists in webhook_events table as completed
-        try {
-          const { data: webhookEvents } = await supabase
-            .from('webhook_events')
-            .select('*')
-            .eq('request_id', requestId)
-            .in('event_id', [2, 3]) // SignatoryCompleted (2) or RequestCompleted (3) events
-            .order('event_time', { ascending: false })
-            .limit(10);
+          
+          // If even the webhook data isn't available, check if this is a 404 Not Found
+          // which likely means the document has been processed and removed from the Evia system
+          if (apiError.response && apiError.response.status === 404) {
+            console.log('[eviaSignService] Document likely completed and removed from Evia Sign - checking agreements table');
             
-          if (webhookEvents && webhookEvents.length > 0) {
-            // Check if any are completed events (EventId = 3)
-            const completedEvent = webhookEvents.find(event => event.event_id === 3);
-            if (completedEvent) {
-              console.log('[eviaSignService] Found completed webhook event for this request');
+            // Check our database for the agreement status
+            const { data: agreement, error } = await supabase
+              .from('agreements')
+              .select('status, signature_status, signatories_status')
+              .eq('eviasignreference', requestId)
+              .single();
+            
+            if (agreement && !error) {
+              const status = agreement.signature_status || 'unknown';
+              console.log(`[eviaSignService] Found agreement with status: ${status}`);
+              
+              // Return what we know from our database
               return {
-                success: true,
-                status: 'Completed',
-                signatories: [],
-                completed: true,
-                fromWebhook: true
+                success: true, 
+                status: status,
+                signatories: agreement.signatories_status || [],
+                completed: status === 'completed',
+                fromDatabase: true
               };
             }
-            
-            // Check if there are any signatory completed events (EventId = 2)
-            const signatoryEvents = webhookEvents.filter(event => event.event_id === 2);
-            if (signatoryEvents.length > 0) {
-              console.log('[eviaSignService] Found partially signed webhook events for this request');
-              return {
-                success: true,
-                status: 'In Progress',
-                signatories: signatoryEvents.map(event => ({
-                  name: event.payload?.UserName || '',
-                  email: event.payload?.Email || '',
-                  status: 'Completed',
-                  completedAt: event.event_time
-                })),
-                completed: false,
-                fromWebhook: true
-              };
-            }
           }
-        } catch (dbError) {
-          console.log('[eviaSignService] Error checking webhook events:', dbError);
+          
+          // If we can't determine the status from any source, return unknown
+          return {
+            success: true,
+            status: 'unknown',
+            signatories: [],
+            completed: false,
+            noDataAvailable: true
+          };
         }
       }
       
-      // Re-throw the original error if fallbacks fail
-      throw apiError;
+      // For any other error, fall back to webhook data
+      return await getSignatureStatusFromWebhooks(requestId);
     }
   } catch (error) {
     console.error('[eviaSignService] Error checking signature status:', error);
@@ -1262,18 +1146,18 @@ export async function checkSignatureStatus(requestId) {
       console.error('[eviaSignService] Response data:', error.response.data);
     }
     
-    // For 404 errors, provide a more user-friendly message
-    if (error.response && error.response.status === 404) {
-      return {
-        success: false,
-        error: 'Request not found in Evia Sign system. It may have been deleted or expired.',
-        notFound: true
-      };
+    // Always try to get webhook status as last resort
+    try {
+      return await getSignatureStatusFromWebhooks(requestId);
+    } catch (webhookError) {
+      console.error('[eviaSignService] Final fallback to webhook also failed:', webhookError);
     }
     
+    // Return a generic error if all else fails
     return {
       success: false,
-      error: error.message || 'Failed to check signature status'
+      error: error.message || 'Failed to check signature status',
+      fromServer: true
     };
   }
 }
