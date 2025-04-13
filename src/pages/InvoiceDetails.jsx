@@ -35,30 +35,33 @@ const InvoiceDetails = () => {
         // Debug logging
         console.log(`InvoiceDetails - Received ID param: "${id}"`);
         
-        // Validate ID is a UUID before querying
-        if (!id || !UUID_REGEX.test(id)) {
-          throw new Error(`Invalid invoice ID format: ${id}`);
-        }
-        
-        // Check for specific route paths that should be handled differently
-        const commonRoutes = {
+        // Check for special route paths first
+        const specialRoutes = {
           'batch-generate': '/dashboard/invoices/batch-generate',
           'new': '/dashboard/invoices/new',
           'dashboard': '/dashboard/invoices/dashboard',
           'generate': '/dashboard/invoices/generate'
         };
         
-        if (commonRoutes[id]) {
-          // Prevent infinite loop by checking if we're already at this URL
+        // If this is a special route, navigate to it and skip the rest of the logic
+        if (specialRoutes[id]) {
+          console.log(`Detected special route: ${id} -> ${specialRoutes[id]}`);
+          
+          // Avoid infinite loop by checking if we're already at this URL
           const currentPath = window.location.pathname;
-          if (currentPath !== commonRoutes[id]) {
-            navigate(commonRoutes[id]);
+          if (currentPath !== specialRoutes[id]) {
+            navigate(specialRoutes[id]);
+            return;
           } else {
-            // We're already at this path, but this component shouldn't handle it
-            // Set an error that will be caught below
-            throw new Error(`This route should be handled by a different component`);
+            // This component shouldn't display for special routes
+            // Just wait for the navigation to happen
+            return;
           }
-          return;
+        }
+        
+        // For normal invoice IDs, validate UUID format
+        if (!id || !UUID_REGEX.test(id)) {
+          throw new Error(`Invalid invoice ID format: ${id}`);
         }
         
         // Fetch invoice details

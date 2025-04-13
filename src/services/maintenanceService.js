@@ -1,9 +1,17 @@
 import { supabase } from './supabaseClient';
-import { MAINTENANCE_STATUS } from '../utils/constants';
+import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
 import { notifyUser } from './notificationService';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
-import { fetchData, insertData, updateData, deleteData } from './supabaseClient';
-import { saveFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import { fetchData, insertData, updateData, deleteData, checkUserExists } from './supabaseClient';
+import { saveFile, uploadFile, STORAGE_BUCKETS, BUCKET_FOLDERS, saveImage } from './fileService';
+import { 
+  notifyStaffAboutNewRequest, 
+  notifyAboutAssignment,
+  notifyRenteeAboutWorkStarted,
+  notifyRenteeAboutCompletion,
+  notifyAboutCancellation,
+  notifyAboutNewComment
+} from './notificationService';
 
 /**
  * Create a new maintenance request
@@ -15,20 +23,48 @@ export const createMaintenanceRequest = async (input, userId) => {
   try {
     console.log('Creating maintenance request with input:', input);
     
-    // Check for required fields
-    if (!input.title || !input.description || !input.propertyid || !input.renteeid) {
+    // Check for required fields - Modified to match what the form provides
+    if (!input.title || !input.description || !input.propertyid) {
       return {
         success: false,
         error: 'Missing required fields'
       };
     }
     
-    // Construct the request object
+    // Before creating request, get the user's profile ID from app_users
+    let profileId = null;
+    
+    if (userId) {
+      // Use the checkUserExists utility function with isAuthId=true since userId is an auth ID
+      const { data: userData, exists, error: userError } = await checkUserExists(userId, true);
+      
+      if (userError) {
+        console.error('Error fetching user profile:', userError);
+      } else if (exists && userData) {
+        profileId = userData.id;
+        console.log('Found user profile ID:', profileId);
+      } else {
+        console.error('No user profile found for auth ID:', userId);
+        return {
+          success: false,
+          error: 'User profile not found. Please contact support.'
+        };
+      }
+    }
+    
+    if (!profileId) {
+      return {
+        success: false,
+        error: 'Unable to determine user profile ID for maintenance request'
+      };
+    }
+    
+    // Construct the request object with the correct profileId as renteeid
     const request = {
       title: input.title,
       description: input.description,
       propertyid: input.propertyid,
-      renteeid: input.renteeid,
+      renteeid: profileId, // Use the profile ID from app_users table
       status: MAINTENANCE_STATUS.PENDING,
       priority: input.priority || MAINTENANCE_PRIORITY.MEDIUM,
       requesttype: input.requesttype || '',
@@ -36,6 +72,8 @@ export const createMaintenanceRequest = async (input, userId) => {
       createdat: new Date().toISOString(),
       updatedat: new Date().toISOString()
     };
+    
+    console.log('Creating maintenance request with data:', request);
     
     // Insert the request first
     const { data: insertedRequest, error: insertError } = await supabase
@@ -64,15 +102,8 @@ export const createMaintenanceRequest = async (input, userId) => {
       console.log('Uploaded image URLs:', imageUrls);
       
       // Then create entries in maintenance_request_images table
-      for (const imageData of input.images) {
-        const imageUrl = typeof imageData === 'string' ? imageData : 
-                        (imageData.url ? imageData.url : null);
-        
+      for (const imageUrl of imageUrls) {
         if (!imageUrl) continue;
-        
-        // Determine image type, falling back to 'initial' for backward compatibility
-        const imageType = imageData.type || 'initial';
-        const imageDescription = imageData.description || '';
         
         // Create entry in maintenance_request_images table
         const { error: imageInsertError } = await supabase
@@ -80,8 +111,8 @@ export const createMaintenanceRequest = async (input, userId) => {
           .insert({
             maintenance_request_id: createdRequest.id,
             image_url: imageUrl,
-            image_type: imageType,
-            description: imageDescription,
+            image_type: 'initial',
+            description: '',
             uploaded_by: userId,
             uploaded_at: new Date().toISOString()
           });
@@ -179,7 +210,7 @@ export async function updateMaintenanceRequest(id, updateData) {
             // Use fileService instead of uploadImage
             const { url } = await saveFile(image.file, {
               bucket: STORAGE_BUCKETS.IMAGES,
-              folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].MAINTENANCE
+              folder: 'maintenance'
             });
             return url;
           }
@@ -280,7 +311,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
           if (image instanceof File) {
             const result = await saveFile(image, {
               bucket: STORAGE_BUCKETS.IMAGES,
-              folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].MAINTENANCE
+              folder: 'maintenance'
             });
             if (!result.success) {
               console.error('Failed to upload image:', result.error);
@@ -318,11 +349,9 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
     
     // Try to send notifications
     try {
-      // Notify the assigned staff member
-      await notifyStaffAboutAssignment(updatedRequest);
-      
-      // Notify the rentee about the assignment
-      await notifyRenteeAboutAssignment(updatedRequest);
+      // Send notifications about the assignment
+      const notificationStatus = await notifyAboutAssignment(updatedRequest);
+      console.log('Notification status:', notificationStatus);
     } catch (notificationError) {
       console.error('Error sending notifications:', notificationError.message || JSON.stringify(notificationError));
       // Continue even if notifications fail
@@ -390,123 +419,101 @@ export const startMaintenanceWork = async (id) => {
  */
 export const completeMaintenanceRequest = async (id, completionData) => {
   try {
-    // Validate input
+    const { notes = '', images = [], userId = null } = completionData;
+    
     if (!id) {
-      return {
-        success: false,
-        error: 'Missing request ID'
-      };
+      console.error('Cannot complete maintenance request: Missing request ID');
+      return { success: false, error: 'Request ID is required' };
     }
     
-    // Fetch the current request data
-    const { data: currentRequest, error: fetchError } = await supabase
-      .from('maintenance_requests')
-      .select('*')
-      .eq('id', id)
-      .single();
+    // Get the current user information
+    let userRole = 'staff';
+    let userName = 'System';
     
-    if (fetchError) {
-      throw fetchError;
-    }
-    
-    if (!currentRequest) {
-      return {
-        success: false,
-        error: 'Maintenance request not found'
-      };
-    }
-    
-    // Only allow completion from in_progress status
-    if (currentRequest.status !== MAINTENANCE_STATUS.IN_PROGRESS) {
-      return {
-        success: false,
-        error: `Request must be in '${MAINTENANCE_STATUS.IN_PROGRESS}' status to mark as completed`
-      };
-    }
-    
-    // Process completion data
-    const updateData = {
-      status: MAINTENANCE_STATUS.COMPLETED,
-      completedat: new Date().toISOString(),
-      updatedat: new Date().toISOString(),
-      // Include notes if provided
-      ...(completionData.notes ? { notes: completionData.notes } : {})
-    };
-    
-    // Update the maintenance request
-    const { error: updateError } = await supabase
-      .from('maintenance_requests')
-      .update(updateData)
-      .eq('id', id);
-    
-    if (updateError) {
-      throw updateError;
-    }
-    
-    // Upload completion images if provided
-    if (completionData.images && completionData.images.length > 0) {
-      // Upload the images to storage
-      const imageUrls = await uploadMaintenanceImages(id, completionData.images, 'completion');
-      
-      // Create entries in maintenance_request_images table
-      for (const imageData of completionData.images) {
-        const imageUrl = typeof imageData === 'string' ? imageData : 
-                        (imageData.url ? imageData.url : null);
-        
-        if (!imageUrl) continue;
-        
-        // Get additional image metadata if available
-        const imageType = imageData.type || 'completion'; // Default to 'completion' for this function
-        const imageDescription = imageData.description || '';
-        
-        // Insert image record
-        const { error: imageInsertError } = await supabase
-          .from('maintenance_request_images')
-          .insert({
-            maintenance_request_id: id,
-            image_url: imageUrl,
-            image_type: imageType,
-            description: imageDescription,
-            uploaded_by: completionData.userId || null,
-            uploaded_at: new Date().toISOString()
-          });
-        
-        if (imageInsertError) {
-          console.error('Error inserting completion image record:', imageInsertError);
-          // Continue with other images even if one fails
-        }
+    if (userId) {
+      const { data: userData, exists } = await checkUserExists(userId);
+      if (exists && userData) {
+        userName = userData.name || 'Staff Member';
+        userRole = userData.role || 'staff';
       }
     }
     
-    // Fetch the updated request data with all related information
-    const { data: updatedRequest, error: refetchError } = await supabase
-      .from('maintenance_requests')
-      .select(`
-        *,
-        property:properties(*),
-        rentee:app_users!maintenance_requests_renteeid_fkey(*),
-        maintenance_request_images(*)
-      `)
-      .eq('id', id)
-      .single();
+    // Create a timestamp for the completion
+    const timestamp = new Date().toISOString();
     
-    if (refetchError) {
-      throw refetchError;
+    // Format the completion note as a JSON object
+    const formattedNote = [{
+      content: notes,
+      createdBy: {
+        name: userName,
+        role: userRole
+      },
+      createdat: timestamp,
+      role: userRole,
+      name: userName,
+      isAdminMessage: userRole === 'admin',
+      isInternal: false
+    }];
+    
+    console.log('Formatted completion note:', formattedNote);
+    
+    // Process completion images if provided
+    let uploadedImages = [];
+    if (images && images.length > 0) {
+      try {
+        // Use the utility function to upload multiple images
+        uploadedImages = await uploadMaintenanceImages(id, images, 'completion');
+        console.log(`Successfully uploaded ${uploadedImages.length} completion images`);
+      } catch (imageError) {
+        console.error('Error uploading completion images:', imageError);
+        // Continue with completion even if image upload fails
+      }
     }
     
-    // Notify the rentee about completion
-    await notifyRenteeAboutCompletion(updatedRequest);
+    // Prepare the update data
+    const updateData = {
+      status: MAINTENANCE_STATUS.COMPLETED,
+      completedat: timestamp,
+      notes: JSON.stringify(formattedNote),
+      updatedat: timestamp
+    };
     
-    return {
-      success: true,
-      data: updatedRequest
+    // Update the maintenance request in the database
+    const { data: updatedRequest, error: updateError } = await supabase
+      .from('maintenance_requests')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (updateError) {
+      console.error('Error updating maintenance request status:', updateError);
+      return { success: false, error: updateError.message };
+    }
+    
+    console.log('Maintenance request completed successfully:', updatedRequest);
+    
+    // Notify the rentee about the completion if applicable
+    if (updatedRequest?.renteeid) {
+      try {
+        const notificationResult = await notifyRenteeAboutCompletion(updatedRequest);
+        console.log('Rentee notification result:', notificationResult);
+      } catch (notificationError) {
+        console.error('Error notifying rentee about completion:', notificationError);
+        // Continue even if notification fails
+      }
+    }
+    
+    return { 
+      success: true, 
+      data: { 
+        ...updatedRequest,
+        uploadedImages
+      } 
     };
   } catch (error) {
     console.error('Error completing maintenance request:', error);
-    return {
-      success: false,
-      error: error.message || 'An error occurred while completing the maintenance request'
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -684,29 +691,35 @@ export const addMaintenanceComment = async (requestId, commentData) => {
 
 /**
  * Upload images for a maintenance request
- * @param {string} requestId - The request ID
- * @param {Array} images - Array of image files or objects with url, type, and description properties
- * @param {string} prefix - Optional prefix for the image filenames
- * @returns {Promise<Array>} - Array of image URLs
+ * @param {string} requestId - The maintenance request ID
+ * @param {Array} images - Array of image files
+ * @param {string} prefix - Image type/prefix
+ * @returns {Promise<Array>} - Array of uploaded image URLs
  */
 const uploadMaintenanceImages = async (requestId, images, prefix = 'request') => {
-  const imageUrls = [];
-  const errors = [];
-  
-  if (!images || images.length === 0) {
+  if (!images || !Array.isArray(images) || images.length === 0) {
     console.log('No images to upload');
-    return imageUrls;
+    return [];
   }
   
   console.log(`Uploading ${images.length} images for request ${requestId} with prefix ${prefix}`);
   
+  const imageUrls = [];
+  const errors = [];
+  
   for (const image of images) {
     try {
-      // If the image is already a URL (not a new file), add it to the array
-      if (typeof image === 'string' || (image && image.url)) {
-        const url = typeof image === 'string' ? image : image.url;
-        imageUrls.push(url);
-        console.log(`Added existing image URL: ${url}`);
+      console.log('Processing image:', image);
+      
+      // Check if it's already a string URL
+      if (typeof image === 'string') {
+        imageUrls.push(image);
+        continue;
+      }
+      
+      // Check if it's an object with url property
+      if (image && typeof image === 'object' && image.url) {
+        imageUrls.push(image.url);
         continue;
       }
       
@@ -714,13 +727,12 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
       if (image && (image.file || image instanceof File)) {
         const file = image.file || image;
         
-        // Use fileService to save the file
-        const result = await saveFile(file, {
-          bucket: STORAGE_BUCKETS.IMAGES,
-          folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].MAINTENANCE
+        // Use the saveImage function instead of saveFile
+        const result = await saveImage(file, {
+          folder: 'maintenance'
         });
         
-        if (result.error) {
+        if (!result.success) {
           console.error('Error uploading image:', result.error);
           errors.push(result.error);
           continue;
@@ -730,7 +742,7 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
           imageUrls.push(result.url);
           console.log(`Uploaded new image: ${result.url}`);
         } else {
-          console.error('No URL returned from saveFile');
+          console.error('No URL returned from saveImage');
           errors.push('No URL returned from file upload');
         }
       }
@@ -790,120 +802,6 @@ const handleStatusChange = async (id, newStatus, requestData) => {
       // Notify relevant parties
       await notifyAboutCancellation(requestData);
       break;
-  }
-};
-
-// Notification helper functions
-// In a real app, these would send actual notifications
-
-const notifyStaffAboutNewRequest = async (request) => {
-  // This is a placeholder for notification functionality
-  if (!request) {
-    console.log('Cannot notify staff: request data is missing');
-    return;
-  }
-  console.log(`Notifying staff about new maintenance request #${request.id}`);
-};
-
-const notifyStaffAboutAssignment = async (request) => {
-  if (!request) {
-    console.log('Cannot notify staff about assignment: request data is missing');
-    return;
-  }
-  if (!request.assignedto) {
-    console.log(`Cannot notify staff about assignment to request #${request.id}: assignedto data is missing`);
-    return;
-  }
-  
-  console.log(`Notifying staff member about assignment to request #${request.id}`);
-  
-  try {
-    await notifyUser(request.assignedto, {
-      title: 'New Maintenance Assignment',
-      message: `You have been assigned to maintenance request #${request.id}`,
-      type: 'maintenance_assignment',
-      referenceId: request.id
-    });
-  } catch (error) {
-    console.error('Error notifying staff:', error);
-  }
-};
-
-const notifyRenteeAboutAssignment = async (request) => {
-  if (!request) {
-    console.log('Cannot notify rentee about assignment: request data is missing');
-    return;
-  }
-  if (!request.renteeid) {
-    console.log(`Cannot notify rentee about request #${request.id}: renteeid is missing`);
-    return;
-  }
-  
-  console.log(`Notifying rentee about maintenance request #${request.id} assignment`);
-  
-  try {
-    const assignedtoName = 'a staff member'; // In a real app, you'd fetch the staff member's name
-    const scheduledInfo = request.assignedat ? ` and scheduled for ${new Date(request.assignedat).toLocaleDateString()}` : '';
-    
-    await notifyUser(request.renteeid, {
-      title: 'Maintenance Request Update',
-      message: `Your maintenance request has been assigned to ${assignedtoName}${scheduledInfo}.`,
-      type: 'maintenance_update',
-      referenceId: request.id
-    });
-  } catch (error) {
-    console.error('Error notifying rentee:', error);
-  }
-};
-
-const notifyRenteeAboutWorkStarted = async (request) => {
-  // This is a placeholder for notification functionality
-  if (!request) {
-    console.log('Cannot notify rentee: request data is missing');
-    return;
-  }
-  console.log(`Notifying rentee that work has started on request #${request.id}`);
-};
-
-const notifyRenteeAboutCompletion = async (request) => {
-  // This is a placeholder for notification functionality
-  if (!request) {
-    console.log('Cannot notify rentee: request data is missing');
-    return;
-  }
-  console.log(`Notifying rentee that request #${request.id} has been completed`);
-};
-
-const notifyAboutCancellation = async (request) => {
-  // This is a placeholder for notification functionality
-  if (!request) {
-    console.log('Cannot notify about cancellation: request data is missing');
-    return;
-  }
-  console.log(`Notifying about cancellation of request #${request.id}`);
-};
-
-const notifyAboutNewComment = async (request, comment) => {
-  // This is a placeholder for notification functionality
-  if (!request || !comment) {
-    console.log('Cannot notify about new comment: request or comment data is missing');
-    return;
-  }
-  
-  console.log(`Notifying about new comment on request #${request.id}`);
-  
-  // Don't notify about internal comments to rentees
-  if (comment.isInternal) {
-    return;
-  }
-  
-  // In a real app, you would determine who to notify based on the comment author
-  if (comment.createdBy && comment.createdBy.role === 'rentee' && request.assignedto) {
-    // Notify assigned staff about rentee comment
-    console.log(`Notifying staff member about new comment from rentee`);
-  } else if (comment.createdBy && comment.createdBy.role !== 'rentee' && request.renteeid) {
-    // Notify rentee about staff comment
-    console.log(`Notifying rentee about new comment from staff`);
   }
 };
 
@@ -1063,5 +961,159 @@ export const getMaintenanceRequests = async (userId, role) => {
   } catch (error) {
     console.error('Error fetching maintenance requests:', error);
     throw error;
+  }
+};
+
+// Update the attachImageToMaintenanceRequest function to handle user ID validation more reliably
+const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 'additional', userId = null, description = '') => {
+  // Validate required parameters
+  if (!requestId) {
+    console.error('Cannot attach image: Missing request ID');
+    return { success: false, error: 'Missing maintenance request ID' };
+  }
+  
+  if (!imageUrl) {
+    console.error('Cannot attach image: Missing image URL');
+    return { success: false, error: 'Missing image URL' };
+  }
+
+  try {
+    console.log(`Attaching image ${imageUrl} to maintenance request ${requestId}`);
+    
+    // Validate and normalize the image URL
+    let normalizedUrl = imageUrl;
+    
+    // Check if the URL is properly formatted
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      // Check if it's a relative path from Supabase storage
+      if (imageUrl.startsWith('maintenance/') || imageUrl.startsWith('/maintenance/')) {
+        // Construct the full URL using Supabase storage URL
+        const storageUrl = import.meta.env.VITE_SUPABASE_URL + '/storage/v1/object/public/images/';
+        normalizedUrl = storageUrl + imageUrl.replace(/^\//, ''); // remove leading slash if present
+        console.log('Normalized relative URL to full URL:', normalizedUrl);
+      }
+    }
+    
+    // Prepare the data object with required fields
+    const imageData = {
+      maintenance_request_id: requestId,
+      image_url: normalizedUrl,
+      image_type: imageType || 'additional',
+      uploaded_at: new Date().toISOString(),
+      description: description || ''
+    };
+    
+    // Handle user ID validation with our utility function
+    if (userId) {
+      const { exists } = await checkUserExists(userId);
+      if (exists) {
+        imageData.uploaded_by = userId;
+        console.log('Successfully validated user ID for image upload:', userId);
+      } else {
+        console.warn('User validation failed or user not found - omitting uploaded_by field');
+        // Continue without user ID to avoid foreign key constraint error
+      }
+    }
+    
+    // Insert the image record in the maintenance_request_images table
+    const { data, error } = await supabase
+      .from('maintenance_request_images')
+      .insert(imageData)
+      .select();
+    
+    if (error) {
+      console.error('Error attaching image to maintenance request:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('Successfully attached image to maintenance request:', data);
+    return { success: true, data };
+  } catch (err) {
+    console.error('Exception attaching image to maintenance request:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Add an image to a maintenance request
+ * @param {Object} params - Parameters for the image
+ * @param {string} params.maintenance_request_id - The request ID
+ * @param {File|string} params.image - The image file or URL
+ * @param {string} params.image_type - The type of image (initial, progress, etc.)
+ * @param {string} params.description - Optional description
+ * @param {string} params.userId - Optional user ID
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+export const addMaintenanceRequestImage = async ({
+  maintenance_request_id,
+  image,
+  image_type = 'additional',
+  description = '',
+  userId = null
+}) => {
+  try {
+    if (!maintenance_request_id) {
+      throw new Error('Missing maintenance request ID');
+    }
+
+    if (!image) {
+      throw new Error('No image provided');
+    }
+    
+    // Validate user ID if provided
+    let validatedUserId = null;
+    if (userId) {
+      const { exists, data } = await checkUserExists(userId);
+      if (exists && data) {
+        validatedUserId = userId;
+        console.log('User ID validated for image upload:', validatedUserId);
+      } else {
+        console.warn('Invalid user ID provided for image upload, continuing without user attribution');
+      }
+    }
+    
+    // Handle file upload if the image is a File object
+    let imageUrl = '';
+    if (image instanceof File) {
+      // Upload the file to storage using the new saveImage function
+      console.log('Uploading file to storage:', image.name);
+      const result = await saveImage(image, {
+        folder: 'maintenance',
+        compress: true,
+        maxSize: 10 * 1024 * 1024 // 10MB
+      });
+      
+      if (!result.success || !result.url) {
+        console.error('Failed to upload image file:', result.error);
+        throw new Error(`Failed to upload image: ${result.error || 'Unknown error'}`);
+      }
+      
+      imageUrl = result.url;
+      console.log('File uploaded successfully, URL:', imageUrl);
+    } else if (typeof image === 'string') {
+      // If the image is already a URL string
+      imageUrl = image;
+      console.log('Using existing image URL:', imageUrl);
+    } else {
+      throw new Error('Invalid image format. Expected File object or URL string.');
+    }
+    
+    // Attach the image to the maintenance request
+    const attachResult = await attachImageToMaintenanceRequest(
+      maintenance_request_id,
+      imageUrl,
+      image_type || 'additional',
+      validatedUserId, // Use the validated user ID
+      description
+    );
+    
+    if (!attachResult.success) {
+      throw new Error(`Failed to attach image to maintenance request: ${attachResult.error}`);
+    }
+    
+    return { success: true, data: attachResult.data };
+  } catch (error) {
+    console.error('Error in addMaintenanceRequestImage:', error);
+    return { success: false, error: error.message };
   }
 }; 

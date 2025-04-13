@@ -317,8 +317,8 @@ const PropertyForm = () => {
         amenities: Array.isArray(formData.amenities) ? formData.amenities : [],
         images: Array.isArray(formData.images) ? formData.images : [],
         unitconfiguration: formData.unitconfiguration?.trim() || '',
-        electricity_rate: formData.electricity_rate?.trim() || '',
-        water_rate: formData.water_rate?.trim() || '',
+        electricity_rate: formData.electricity_rate ? parseFloat(formData.electricity_rate) : null,
+        water_rate: formData.water_rate ? parseFloat(formData.water_rate) : null,
         updatedat: new Date().toISOString()
       };
 

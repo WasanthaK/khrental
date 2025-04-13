@@ -111,6 +111,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
   
   // Handle image changes
   const handleImagesChange = (imageUrls) => {
+    console.log('Images changed:', imageUrls);
     setSelectedImages(imageUrls);
     setFormData(prev => ({
       ...prev,
@@ -138,17 +139,23 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         throw new Error('Please enter a description');
       }
 
-      if (!userData?.id) {
+      if (!user) {
         throw new Error('User information not available');
       }
 
       console.log('Submitting form data:', formData);
+      console.log('Current auth user:', user);
+      console.log('Current user data:', userData);
 
       // Create maintenance request using auth_id
-      const result = await createMaintenanceRequest({
+      const requestData = {
         ...formData,
-        images: formData.images || [] // Ensure images is always an array
-      }, user.id); // Use user.id (auth_id) instead of userData.id
+        images: selectedImages || [] // Ensure images is always an array
+      };
+      
+      console.log('Final request data being sent:', requestData);
+      
+      const result = await createMaintenanceRequest(requestData, user.id);
 
       if (result.error) {
         throw new Error(result.error);
@@ -302,6 +309,8 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
           onImagesChange={handleImagesChange}
           maxImages={5}
           initialImages={selectedImages}
+          bucket="images"
+          folder="maintenance"
         />
       </div>
 

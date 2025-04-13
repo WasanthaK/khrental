@@ -489,4 +489,38 @@ export const inviteUser = async (email, role = 'rentee') => {
     console.error('Error inviting user:', error.message);
     return { success: false, data: null, error: error.message };
   }
+};
+
+/**
+ * Utility to safely check if a user exists by ID
+ * Uses filter instead of eq to avoid 406 errors
+ * @param {string} userId - The user ID to check
+ * @param {boolean} isAuthId - Whether userId is an auth_id (true) or regular id (false)
+ * @returns {Promise<{exists: boolean, data: object|null, error: object|null}>}
+ */
+export const checkUserExists = async (userId, isAuthId = false) => {
+  if (!userId) {
+    return { exists: false, data: null, error: 'No user ID provided' };
+  }
+  
+  try {
+    // Choose the correct field to filter on
+    const idField = isAuthId ? 'auth_id' : 'id';
+    
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, name, email, auth_id')
+      .filter(idField, 'eq', userId)
+      .maybeSingle();
+    
+    if (error) {
+      console.error(`Error checking if user exists by ${idField}:`, error);
+      return { exists: false, data: null, error };
+    }
+    
+    return { exists: !!data, data, error: null };
+  } catch (error) {
+    console.error('Exception checking if user exists:', error);
+    return { exists: false, data: null, error };
+  }
 }; 

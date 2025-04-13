@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchData, supabase } from '../services/supabaseClient';
+import { fetchData, supabase, checkUserExists } from '../services/supabaseClient';
 import { 
   updateMaintenanceRequest, 
   assignMaintenanceRequest, 
   startMaintenanceWork, 
   completeMaintenanceRequest, 
   cancelMaintenanceRequest,
-  addMaintenanceComment
+  addMaintenanceComment,
+  addMaintenanceRequestImage
 } from '../services/maintenanceService';
 import { formatDate } from '../utils/helpers';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../utils/constants';
@@ -63,8 +64,8 @@ const MaintenanceDetails = () => {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageCollection, setImageCollection] = useState({ images: [], title: '' });
+  const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState('');
   
   // Define fetchRequestData as a reusable function at component level
   const fetchRequestData = async () => {
@@ -93,6 +94,23 @@ const MaintenanceDetails = () => {
       
       if (!requestData) {
         throw new Error('Maintenance request not found');
+      }
+      
+      // Detailed inspection of request images
+      console.log('Maintenance request images:', requestData.maintenance_request_images);
+      if (requestData.maintenance_request_images) {
+        console.log(`Found ${requestData.maintenance_request_images.length} images for this request`);
+        // Log detailed info about each image
+        requestData.maintenance_request_images.forEach((img, index) => {
+          console.log(`Image ${index + 1}:`, {
+            id: img.id,
+            url: img.image_url,
+            type: img.image_type,
+            uploaded_at: img.uploaded_at
+          });
+        });
+      } else {
+        console.log('No images found for this maintenance request');
       }
       
       // Only log in development
@@ -293,22 +311,108 @@ const MaintenanceDetails = () => {
     setCompletionImages(images);
   };
   
-  // Parse notes from string to array of comments
+  // Modify the parseNotes function to better handle JSON format
   const parseNotes = (notes) => {
     if (!notes) return [];
     
     try {
+      // Try to parse as JSON
       const parsedNotes = JSON.parse(notes);
       if (Array.isArray(parsedNotes)) {
-        return parsedNotes;
-      } else {
+        // Add proper display formatting for admin messages
+        return parsedNotes.map(note => ({
+          ...note,
+          isAdminMessage: note.role === 'admin' || !!note.isAdminMessage,
+          // Ensure content is extracted correctly
+          content: note.content || note.text || ''
+        }));
+      } else if (typeof parsedNotes === 'object') {
         // If notes is a JSON object but not an array, wrap it in an array
-        return [{ content: notes, createdat: new Date().toISOString() }];
+        return [{
+          content: parsedNotes.content || parsedNotes.text || JSON.stringify(parsedNotes),
+          createdat: parsedNotes.createdat || new Date().toISOString(),
+          isAdminMessage: parsedNotes.role === 'admin' || !!parsedNotes.isAdminMessage
+        }];
       }
     } catch (e) {
       // If notes is not valid JSON, treat it as a single comment
-      return [{ content: notes, createdat: new Date().toISOString() }];
+      console.log("Failed to parse notes as JSON:", e);
+      return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
     }
+    
+    // Fallback
+    return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
+  };
+  
+  // Update the organizeImagesByStage function to be more forgiving with data
+  const organizeImagesByStage = (images) => {
+    // Debug output to check what we're receiving
+    console.log('Images received for organization:', images);
+    
+    if (!images || images.length === 0) {
+      console.log('No images found to organize');
+      return [];
+    }
+    
+    // Clone the images array and ensure each image has all required properties
+    const sortedImages = [...images].map(img => ({
+      ...img,
+      image_url: img.image_url || '',
+      image_type: img.image_type || 'initial',
+      uploaded_at: img.uploaded_at || new Date().toISOString()
+    }));
+    
+    // Filter out any images with empty URLs
+    const validImages = sortedImages.filter(img => !!img.image_url);
+    
+    if (validImages.length < sortedImages.length) {
+      console.log(`Filtered out ${sortedImages.length - validImages.length} images with empty URLs`);
+    }
+    
+    // Sort images by uploaded_at date
+    validImages.sort((a, b) => {
+      const dateA = new Date(a.uploaded_at || 0);
+      const dateB = new Date(b.uploaded_at || 0);
+      return dateA - dateB;
+    });
+    
+    // Debug output for sorted images
+    console.log('Images after sorting:', validImages);
+    
+    // Group images by type
+    const groupedImages = validImages.reduce((acc, image) => {
+      // Make sure we have a valid type
+      const type = image.image_type || 'initial';
+      if (!acc[type]) acc[type] = [];
+      acc[type].push(image);
+      return acc;
+    }, {});
+    
+    // Debug output for grouped images
+    console.log('Images after grouping by type:', groupedImages);
+    
+    // Define stage order and labels
+    const stageOrder = ['initial', 'additional', 'progress', 'completion'];
+    const stageLabels = {
+      'initial': 'Initial Request Images',
+      'additional': 'Additional Images',
+      'progress': 'Work in Progress Images',
+      'completion': 'Completion Images'
+    };
+    
+    // Create the final structure
+    const organizedImages = stageOrder
+      .filter(stage => groupedImages[stage] && groupedImages[stage].length > 0)
+      .map(stage => ({
+        stage,
+        label: stageLabels[stage],
+        images: groupedImages[stage]
+      }));
+    
+    // Debug output for final organized structure
+    console.log('Final organized images by stage:', organizedImages);
+    
+    return organizedImages;
   };
   
   // Get priority label
@@ -346,6 +450,95 @@ const MaintenanceDetails = () => {
   // Check if user can perform actions
   const canPerformActions = () => {
     return user && (user.role === 'admin' || user.role === 'staff' || user.role === 'maintenance');
+  };
+  
+  // Add this function at the end of the component but before the return statement
+  const debugFetchImages = async () => {
+    try {
+      console.log('Fetching images directly from database for debugging');
+      
+      const { data: images, error } = await supabase
+        .from('maintenance_request_images')
+        .select('*')
+        .eq('maintenance_request_id', id);
+      
+      if (error) {
+        console.error('Error fetching images:', error);
+        return;
+      }
+      
+      console.log(`Direct query found ${images?.length || 0} images for request ${id}:`, images);
+      
+      // If we found images but they're not showing in the UI, force update
+      if (images && images.length > 0 && (!request.maintenance_request_images || request.maintenance_request_images.length === 0)) {
+        console.log('Found images directly but not in request - updating request data');
+        const updatedRequest = {...request, maintenance_request_images: images};
+        setRequest(updatedRequest);
+      }
+    } catch (err) {
+      console.error('Error in debug fetch images:', err);
+    }
+  };
+  
+  // Add this function before the return statement
+  const handleAddMultipleImages = async (files) => {
+    try {
+      setActionLoading(true);
+      let errorCount = 0;
+      let successCount = 0;
+      
+      // First check if we have a valid user ID
+      let validUserId = null;
+      if (user?.id) {
+        // Use our utility function for more reliable user checking
+        const { exists, data } = await checkUserExists(user.id);
+        if (exists && data) {
+          validUserId = user.id;
+          console.log('Valid user ID confirmed for image upload:', validUserId);
+        } else {
+          console.warn('Could not validate user ID - will upload without attribution');
+        }
+      }
+      
+      // Process files one by one
+      for (const file of files) {
+        try {
+          const result = await addMaintenanceRequestImage({
+            maintenance_request_id: id,
+            image: file,
+            image_type: 'additional',
+            description: '',
+            userId: validUserId // Only pass the user ID if we've verified it exists
+          });
+          
+          if (result.success) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error('Failed to add image:', result.error);
+          }
+        } catch (err) {
+          errorCount++;
+          console.error('Error adding image:', err);
+        }
+      }
+      
+      // Refresh data to show updated images
+      await fetchRequestData();
+      
+      if (successCount > 0) {
+        toast.success(`Successfully added ${successCount} image${successCount !== 1 ? 's' : ''}`);
+      }
+      
+      if (errorCount > 0) {
+        toast.error(`Failed to add ${errorCount} image${errorCount !== 1 ? 's' : ''}`);
+      }
+    } catch (error) {
+      console.error('Error adding images:', error);
+      toast.error('Failed to add images');
+    } finally {
+      setActionLoading(false);
+    }
   };
   
   // Render loading state
@@ -392,7 +585,18 @@ const MaintenanceDetails = () => {
   }
   
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Debug button - only visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <button 
+          onClick={debugFetchImages}
+          className="mb-4 px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+          title="Debug: Fetch images directly"
+        >
+          Debug Images
+        </button>
+      )}
+      
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Maintenance Request Details</h1>
@@ -470,91 +674,204 @@ const MaintenanceDetails = () => {
                 </div>
               </div>
               
-              {/* Images grouped by stage */}
-              {request.maintenance_request_images?.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-4">Images by Stage</h3>
-                  
-                  {/* Group images by image_type */}
-                  {(() => {
-                    // Group images by type
-                    const imagesByType = request.maintenance_request_images.reduce((acc, image) => {
-                      const type = image.image_type || 'initial';
-                      if (!acc[type]) acc[type] = [];
-                      acc[type].push(image);
-                      return acc;
-                    }, {});
-                    
-                    // Define display names and order for image types
-                    const typeLabels = {
-                      'initial': 'Initial Request',
-                      'progress': 'Work in Progress',
-                      'completion': 'Completion',
-                      'additional': 'Additional Images'
-                    };
-                    
-                    const typeOrder = ['initial', 'progress', 'completion', 'additional'];
-                    
-                    return (
-                      <div className="space-y-6">
-                        {typeOrder.map(type => {
-                          const images = imagesByType[type];
-                          if (!images || images.length === 0) return null;
-                          
-                          return (
-                            <div key={type} className="border rounded-lg p-4">
-                              <h4 className="text-md font-medium mb-3">{typeLabels[type]} ({images.length})</h4>
-                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                {images.map((image, index) => (
-                                  <div 
-                                    key={`${type}-${index}`}
-                                    className="relative group cursor-pointer"
-                                    onClick={() => {
-                                      setActiveImageIndex(index);
-                                      setShowImageViewer(true);
-                                      setImageCollection({
-                                        images: images.map(img => img.image_url),
-                                        title: typeLabels[type]
-                                      });
-                                    }}
-                                  >
-                                    <img 
-                                      src={image.image_url} 
-                                      alt={`${typeLabels[type]} image ${index + 1}`} 
-                                      className="w-full h-32 object-cover rounded border border-gray-200 transition-all duration-200 group-hover:opacity-90"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <div className="bg-black bg-opacity-50 rounded-full p-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                      </div>
-                                    </div>
-                                    {image.description && (
-                                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-xs p-1 truncate">
-                                        {image.description}
-                                      </div>
-                                    )}
-                                    <span className="absolute top-0 right-0 bg-black bg-opacity-60 text-white text-xs p-1 rounded-bl-md">
-                                      {new Date(image.uploaded_at).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
+              {/* Sequential Image Gallery */}
+              {(() => {
+                // Debug section to help troubleshoot
+                console.log('Maintenance request data for images:', request);
+                console.log('Maintenance request images:', request.maintenance_request_images);
+                
+                // Add a placeholder if no images
+                if (!request.maintenance_request_images || request.maintenance_request_images.length === 0) {
+                  console.log('No maintenance request images found');
+                  return (
+                    <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="text-lg font-medium">Maintenance Request Images</h3>
+                        <p className="text-sm text-gray-500 mt-1">No images available for this maintenance request</p>
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                      
+                      <div className="px-6 py-4 text-center text-gray-500">
+                        <div className="mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <p>No images have been uploaded for this maintenance request.</p>
+                        {canPerformActions() && (
+                          <p className="mt-2">
+                            <label 
+                              htmlFor="add-images-input"
+                              className="text-blue-500 hover:text-blue-700 font-medium cursor-pointer"
+                            >
+                              Add Images
+                            </label>
+                            <input
+                              id="add-images-input"
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => handleAddMultipleImages(Array.from(e.target.files))}
+                              disabled={actionLoading}
+                            />
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // Handle empty or invalid images array
+                if (!Array.isArray(request.maintenance_request_images)) {
+                  console.error('Maintenance request images is not an array:', request.maintenance_request_images);
+                  return <div className="bg-red-100 p-4 rounded-md mb-6">Error: Could not process maintenance request images</div>;
+                }
+                
+                // Process the organized images
+                const organizedImages = organizeImagesByStage(request.maintenance_request_images);
+                console.log('Organized images result:', organizedImages);
+                
+                return (
+                  <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+                    <div className="px-6 py-4 border-b">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="text-lg font-medium">Maintenance Request Images</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            All images ({request.maintenance_request_images.length}) uploaded during the maintenance process
+                          </p>
+                        </div>
+                        {canPerformActions() && (
+                          <div>
+                            <label
+                              htmlFor="add-more-images-input"
+                              className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-sm font-medium cursor-pointer inline-flex items-center"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Add More Images
+                            </label>
+                            <input
+                              id="add-more-images-input"
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => handleAddMultipleImages(Array.from(e.target.files))}
+                              disabled={actionLoading}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="px-6 py-4">
+                      {organizedImages.length > 0 ? (
+                        organizedImages.map((stage, stageIndex) => (
+                          <div key={stage.stage} className={`${stageIndex > 0 ? 'mt-8' : ''}`}>
+                            <div className="flex items-center mb-3">
+                              <div className={`w-3 h-3 rounded-full mr-2 ${
+                                stage.stage === 'initial' ? 'bg-blue-500' :
+                                stage.stage === 'progress' ? 'bg-yellow-500' :
+                                stage.stage === 'completion' ? 'bg-green-500' : 'bg-gray-500'
+                              }`}></div>
+                              <h4 className="text-md font-medium">{stage.label} ({stage.images.length})</h4>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                              {stage.images.map((image, imageIndex) => (
+                                <div key={`${stage.stage}-${imageIndex}`} className="relative group">
+                                  <div className="aspect-square overflow-hidden rounded-lg border border-gray-200">
+                                    <img
+                                      src={image.image_url}
+                                      alt={`${stage.label} ${imageIndex + 1}`}
+                                      className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => {
+                                        console.log('Image clicked:', image);
+                                        setSelectedImage(image.image_url);
+                                        setShowImageModal(true);
+                                      }}
+                                      onError={(e) => {
+                                        console.error('Error loading image:', image.image_url);
+                                        e.target.src = 'https://via.placeholder.com/150?text=Image+Error';
+                                        e.target.alt = 'Failed to load image';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="mt-1">
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {image.uploaded_at ? formatDate(image.uploaded_at, true) : 'No date'}
+                                    </p>
+                                    {image.description && (
+                                      <p className="text-xs text-gray-400 truncate">{image.description}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 text-gray-500">
+                          <p>No images could be organized by stage.</p>
+                          <p className="mt-2 text-sm">Raw image count: {request.maintenance_request_images.length}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               
               {/* Completion Notes */}
               {request.status === MAINTENANCE_STATUS.COMPLETED && request.notes && (
                 <div className="mb-6">
                   <h3 className="text-md font-medium mb-2">Completion Notes</h3>
-                  <p className="text-gray-700 whitespace-pre-wrap">{request.notes}</p>
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    {(() => {
+                      try {
+                        // Try to parse the notes as JSON
+                        const notesData = JSON.parse(request.notes);
+                        
+                        if (Array.isArray(notesData)) {
+                          return notesData.map((note, index) => (
+                            <div key={index} className="mb-3 last:mb-0">
+                              <div className="flex items-start">
+                                <div className={`p-3 rounded-lg ${note.role === 'admin' || note.isAdminMessage ? 'bg-blue-100' : 'bg-white border border-gray-200'} flex-grow`}>
+                                  <div className="flex justify-between mb-1">
+                                    <span className="font-semibold text-sm">{note.name || 'System'}</span>
+                                    <span className="text-xs text-gray-500">{formatDate(note.createdat)}</span>
+                                  </div>
+                                  <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ));
+                        } else if (typeof notesData === 'object') {
+                          // Handle single object
+                          return (
+                            <div className="mb-3">
+                              <div className="flex items-start">
+                                <div className={`p-3 rounded-lg ${notesData.role === 'admin' || notesData.isAdminMessage ? 'bg-blue-100' : 'bg-white border border-gray-200'} flex-grow`}>
+                                  <div className="flex justify-between mb-1">
+                                    <span className="font-semibold text-sm">{notesData.name || 'System'}</span>
+                                    <span className="text-xs text-gray-500">{formatDate(notesData.createdat)}</span>
+                                  </div>
+                                  <p className="text-gray-700 whitespace-pre-wrap">{notesData.content}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        // Fallback to plain text if JSON parsing didn't yield expected results
+                        return <p className="text-gray-700 whitespace-pre-wrap">{request.notes}</p>;
+                      } catch (e) {
+                        // If it's not valid JSON, display as plain text
+                        return <p className="text-gray-700 whitespace-pre-wrap">{request.notes}</p>;
+                      }
+                    })()}
+                  </div>
                 </div>
               )}
               
@@ -772,76 +1089,26 @@ const MaintenanceDetails = () => {
         </div>
       )}
       
-      {/* Image Viewer Modal */}
-      {showImageViewer && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col z-50">
-          <div className="p-4 flex justify-between items-center bg-black bg-opacity-50">
-            <h3 className="text-white text-lg font-medium">{imageCollection.title} ({activeImageIndex + 1} of {imageCollection.images.length})</h3>
+      {/* Image Modal */}
+      {showImageModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div className="max-w-4xl max-h-screen p-2" onClick={e => e.stopPropagation()}>
             <button 
-              onClick={() => setShowImageViewer(false)}
-              className="text-white hover:text-gray-300"
+              className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-lg z-10"
+              onClick={() => setShowImageModal(false)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
-          
-          <div className="flex-grow flex items-center justify-center p-4">
             <img 
-              src={imageCollection.images[activeImageIndex]} 
-              alt={`Image ${activeImageIndex + 1}`}
-              className="max-h-full max-w-full object-contain"
+              src={selectedImage} 
+              alt="Full size preview" 
+              className="max-w-full max-h-screen object-contain"
             />
-          </div>
-          
-          <div className="p-4 flex justify-between items-center bg-black bg-opacity-50">
-            <button 
-              onClick={() => setActiveImageIndex(prev => (prev > 0 ? prev - 1 : imageCollection.images.length - 1))}
-              className="text-white hover:text-gray-300 p-2"
-              disabled={imageCollection.images.length <= 1}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            
-            <div className="text-white">
-              {activeImageIndex + 1} / {imageCollection.images.length}
-            </div>
-            
-            <button 
-              onClick={() => setActiveImageIndex(prev => (prev < imageCollection.images.length - 1 ? prev + 1 : 0))}
-              className="text-white hover:text-gray-300 p-2"
-              disabled={imageCollection.images.length <= 1}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {/* Image Modal */}
-      {showImageModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="max-w-4xl w-full mx-4">
-            <div className="relative">
-              <img
-                src={selectedImage}
-                alt="Full size"
-                className="w-full h-auto rounded-lg"
-              />
-              <button
-                onClick={() => setShowImageModal(false)}
-                className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
           </div>
         </div>
       )}

@@ -464,6 +464,113 @@ const determineBucket = (file, category) => {
   return DEFAULT_BUCKET;
 };
 
+/**
+ * Specialized function for uploading images with validation and processing
+ * @param {File} file - The image file to upload
+ * @param {Object} options - Upload options
+ * @param {string} options.bucket - The storage bucket (defaults to IMAGES)
+ * @param {string} options.folder - The target folder
+ * @param {boolean} options.compress - Whether to compress the image (default: true)
+ * @param {number} options.maxSize - Maximum file size in bytes (default: 10MB)
+ * @param {number} options.maxWidth - Maximum image width for compression (default: 1920px)
+ * @returns {Promise<{success: boolean, url?: string, error?: string}>}
+ */
+const saveImage = async (file, options) => {
+  try {
+    // Set default options
+    const {
+      bucket = STORAGE_BUCKETS.IMAGES,
+      folder,
+      compress = true,
+      maxSize = 10 * 1024 * 1024, // 10MB
+      maxWidth = 1920
+    } = options || {};
+
+    // Validate it's an image file
+    if (!file.type.startsWith('image/')) {
+      return { 
+        success: false, 
+        error: `The file is not a valid image. File type: ${file.type}` 
+      };
+    }
+
+    // Check file size
+    if (file.size > maxSize) {
+      return { 
+        success: false,
+        error: `The image exceeds the maximum size of ${Math.round(maxSize / (1024 * 1024))}MB`
+      };
+    }
+
+    // Optionally compress the image
+    let processedFile = file;
+    if (compress && file.type !== 'image/gif') { // Don't compress GIFs
+      try {
+        // Create a canvas element
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create an image element
+        const img = new Image();
+        
+        // Create a promise to handle image loading
+        const loadImage = new Promise((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Failed to load image for compression'));
+          img.src = URL.createObjectURL(file);
+        });
+        
+        // Wait for image to load
+        await loadImage;
+        
+        // Calculate new dimensions (preserving aspect ratio)
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw image on canvas with new dimensions
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to Blob with quality 0.8 (80%)
+        const blob = await new Promise(resolve => {
+          canvas.toBlob(resolve, 'image/jpeg', 0.8);
+        });
+        
+        // Clean up
+        URL.revokeObjectURL(img.src);
+        
+        // Create a new File object
+        processedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+          type: 'image/jpeg',
+          lastModified: Date.now()
+        });
+        
+        console.log(`Compressed image from ${file.size} to ${processedFile.size} bytes`);
+      } catch (compressionError) {
+        console.warn('Image compression failed, using original file:', compressionError);
+        // Use the original file if compression fails
+      }
+    }
+
+    // Use the standard saveFile function to upload the processed image
+    return await saveFile(processedFile, { bucket, folder });
+  } catch (error) {
+    console.error('Error in saveImage:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to save image'
+    };
+  }
+};
+
 // Export all functions and constants as named exports only
 export {
   saveFile,
@@ -478,5 +585,6 @@ export {
   STORAGE_BUCKETS,
   BUCKET_FOLDERS,
   STORAGE_CATEGORIES,
-  DEFAULT_BUCKET
+  DEFAULT_BUCKET,
+  saveImage
 };

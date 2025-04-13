@@ -155,7 +155,9 @@ const StatusTracker = ({ request, assignedTeamMember }) => {
                   <div className="mt-2">
                     <p className="text-sm font-medium text-gray-700 mb-1">Assessment Photos:</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {request.maintenance_request_images.map((image, imgIndex) => (
+                      {request.maintenance_request_images
+                        .filter(image => image.image_type === 'progress')
+                        .map((image, imgIndex) => (
                         <div key={imgIndex} className="relative">
                           <img
                             src={image.image_url}
@@ -178,11 +180,14 @@ const StatusTracker = ({ request, assignedTeamMember }) => {
                     )}
                     
                     {/* Show completion images if available */}
-                    {request.maintenance_request_images && request.maintenance_request_images.length > 0 && (
+                    {request.maintenance_request_images && request.maintenance_request_images
+                      .filter(image => image.image_type === 'completion').length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Completion Images</h4>
                         <div className="grid grid-cols-2 gap-2">
-                          {request.maintenance_request_images.map((image, imgIndex) => (
+                          {request.maintenance_request_images
+                            .filter(image => image.image_type === 'completion')
+                            .map((image, imgIndex) => (
                             <div key={imgIndex} className="relative">
                               <img
                                 src={image.image_url}
