@@ -217,9 +217,9 @@ jobs:
           echo '          } else {' >> env-config.js
           echo '            url = origin + url;' >> env-config.js
           echo '          }' >> env-config.js
-          echo '        } else if (url.includes("VITE_SUPABASE_UR")) {' >> env-config.js
-          echo '          // Replace VITE_SUPABASE_UR with actual URL' >> env-config.js
-          echo '          url = url.replace("VITE_SUPABASE_UR", window._env_.VITE_SUPABASE_URL);' >> env-config.js
+          echo '        } else if (url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
+          echo '          // Replace VITE_SUPABASE_URL with actual URL' >> env-config.js
+          echo '          url = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
           echo '          console.log(`Fixed Supabase URL in URL constructor: ${url}`);' >> env-config.js
           echo '        } else if (!url.includes("://")) {' >> env-config.js
           echo '          console.error(`Invalid URL without protocol: "${url}"`);' >> env-config.js
