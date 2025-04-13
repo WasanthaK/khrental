@@ -125,13 +125,13 @@ jobs:
           echo "    window._env_.VITE_SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
           echo '  }' >> env-config.js
           echo '' >> env-config.js
-          echo '  // Replace any instances of the literal string "VITE_SUPABASE_UR" with the actual URL' >> env-config.js
+          echo '  // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL' >> env-config.js
           echo '  const originalFetch = window.fetch;' >> env-config.js
           echo '  window.fetch = function(url, options) {' >> env-config.js
           echo '    let modifiedUrl = url;' >> env-config.js
           echo '    if (typeof url === "string") {' >> env-config.js
-          echo '      if (url.includes("VITE_SUPABASE_UR")) {' >> env-config.js
-          echo '        modifiedUrl = url.replace("VITE_SUPABASE_UR", window._env_.VITE_SUPABASE_URL);' >> env-config.js
+          echo '      if (url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
+          echo '        modifiedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
           echo '        console.log(`Fixed Supabase URL: ${url} -> ${modifiedUrl}`);' >> env-config.js
           echo '      }' >> env-config.js
           echo '    }' >> env-config.js
