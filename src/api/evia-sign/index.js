@@ -2,9 +2,10 @@
  * Evia Sign API Integration
  * 
  * This module exports the Evia Sign API integration components
+ * Note: Webhook handling is now done via database triggers
  */
 
-// Import from the service for now
+// Import document signing methods from the service
 import {
   sendDocumentForSignature,
   getSignatureStatus,
@@ -12,25 +13,10 @@ import {
   downloadSignedDocument
 } from '../../services/eviaSignService';
 
-// Import from our consolidated webhook handler
-import { 
-  handleSignatureWebhook, 
-  webhookRequestHandler, 
-  nextApiHandler,
-  getSignatureStatusFromWebhooks
-} from './webhookHandler';
-
-// Export everything
+// Export only signing-related methods
 export {
-  // Document signing methods
   sendDocumentForSignature,
   getSignatureStatus,
   checkSignatureStatus,
-  downloadSignedDocument,
-  
-  // Webhook handlers
-  handleSignatureWebhook,
-  webhookRequestHandler,
-  nextApiHandler,
-  getSignatureStatusFromWebhooks
-}; 
+  downloadSignedDocument
+};

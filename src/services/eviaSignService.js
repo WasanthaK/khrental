@@ -1,8 +1,6 @@
 import { supabase } from './supabaseClient';
 import axios from 'axios';
-import { STATUS as AGREEMENT_STATUS } from '../contexts/AgreementFormContext';
 import { formatFileSize } from '../utils/helpers';
-import { getSignatureStatusFromWebhooks } from '../api/evia-sign';
 
 // Evia Sign API configuration
 const EVIA_SIGN_API_BASE_URL = 'https://evia.enadocapp.com/_apis';
@@ -34,6 +32,7 @@ const EVIA_SIGN_API = {
     AUTHORIZE: '/falcon/auth/oauth2/authorize',
     TOKEN: '/falcon/auth/api/v1/Token',
     DOCUMENT_UPLOAD: '/sign/thumbs/api/Requests/document',
+    WEB_HOOK: 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-sign',
     SEND_REQUEST: '/sign/api/Requests',
     CHECK_STATUS: '/sign/api/Requests',
     DOWNLOAD_DOCUMENT: '/sign/api/Requests'
@@ -424,27 +423,16 @@ export async function sendDocumentForSignature(params) {
     
     console.log('[eviaSignService] Preparing signature request with document token:', documentToken);
 
-    // Get the webhook URL - look in multiple places with clear priorities
-    // 1. First use the one explicitly provided in the function params
-    // 2. Then fall back to the environment variable
-    // 3. Finally fall back to the default webhook URL
-    const envWebhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || '';
-    const defaultWebhookUrl = 'https://khrentals.com/api/evia-webhook';
-    
-    // Priority chain for webhook URL
-    const webhookUrl = params.webhookUrl || params.callbackUrl || envWebhookUrl || defaultWebhookUrl;
-    
+    // Always use the dedicated webhook server URL - simplifies the integration
+    const webhookUrl = 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-sign';
+
     console.log('[eviaSignService] 📣 WEBHOOK URL: ' + webhookUrl);
-    console.log('[eviaSignService] Webhook URL source:', 
-      params.webhookUrl ? 'From params.webhookUrl' : 
-      params.callbackUrl ? 'From params.callbackUrl' : 
-      envWebhookUrl ? 'From environment variable' : 
-      'Using default URL');
-    
+    console.log('[eviaSignService] Using dedicated webhook server');
+
     // Determine whether to attach documents in webhook
     const completedDocumentsAttached = params.completedDocumentsAttached === undefined ? true : !!params.completedDocumentsAttached;
-    
-    // Add debugs for the webhook parameters specifically
+
+    // Add debugs for the webhook parameters
     console.log('[eviaSignService] Setting up webhook parameters:');
     console.log('  - CallbackUrl:', webhookUrl);
     console.log('  - CompletedDocumentsAttached:', completedDocumentsAttached);
@@ -991,17 +979,45 @@ export async function checkSignatureStatus(requestId) {
   try {
     console.log(`[eviaSignService] Checking signature status for request: ${requestId}`);
     
-    // First check the database for webhook events - this is more reliable than API calls
+    // First check the database for webhook events directly - this is more reliable than API calls
     // especially if the document has been deleted from Evia Sign
     try {
-      const webhookResult = await getSignatureStatusFromWebhooks(requestId);
+      // Query for webhook events from our database
+      const { data: webhookEvents, error: webhookError } = await supabase
+        .from('webhook_events')
+        .select('*')
+        .eq('request_id', requestId)
+        .order('event_id', { ascending: false })
+        .order('event_time', { ascending: false })
+        .limit(5);
       
-      // If we found status info in webhook events, use that
-      if (webhookResult.success && webhookResult.fromWebhook) {
-        console.log('[eviaSignService] Using status from stored webhook events:', webhookResult.status);
-        return webhookResult;
+      if (webhookError) {
+        throw webhookError;
+      }
+      
+      // If we found webhook events, use the most recent one for status
+      if (webhookEvents && webhookEvents.length > 0) {
+        const latestEvent = webhookEvents[0];
+        
+        // Map event ID to status
+        let status;
+        switch (latestEvent.event_id) {
+          case 3: status = 'completed'; break;
+          case 2: status = 'in_progress'; break;
+          default: status = 'pending';
+        }
+        
+        console.log('[eviaSignService] Using status from stored webhook events:', status);
+        
+        return {
+          success: true,
+          status: status,
+          fromWebhook: true,
+          completed: status === 'completed',
+          event: latestEvent
+        };
       } else {
-        console.log('[eviaSignService] No useful status from webhook events, will try API');
+        console.log('[eviaSignService] No webhook events found, will try API');
       }
     } catch (webhookError) {
       console.error('[eviaSignService] Error getting status from webhook events:', webhookError);
@@ -1060,84 +1076,47 @@ export async function checkSignatureStatus(requestId) {
     } catch (apiError) {
       console.error('[eviaSignService] API error when checking request:', apiError.message);
       
-      // Try one more endpoint format as a last resort - according to older API docs
-      if (apiError.response && apiError.response.status === 404) {
-        try {
-          // Try with just /status endpoint (lowercase)
-          const statusEndpoint = `${EVIA_SIGN_API_BASE_URL}/sign/api/Drafts/${requestId}`;
-          console.log('[eviaSignService] Trying draft endpoint:', statusEndpoint);
+      // For any other error, fall back to webhook data directly from database
+      // Try to find webhook events in the database
+      try {
+        const { data: webhookEvents, error: webhookError } = await supabase
+          .from('webhook_events')
+          .select('*')
+          .eq('request_id', requestId)
+          .order('event_id', { ascending: false })
+          .order('event_time', { ascending: false })
+          .limit(1);
+        
+        if (!webhookError && webhookEvents && webhookEvents.length > 0) {
+          const latestEvent = webhookEvents[0];
           
-          const draftResponse = await axios.get(
-            statusEndpoint,
-            {
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-          
-          console.log('[eviaSignService] Draft check response:', draftResponse.data);
+          // Map event ID to status
+          let status;
+          switch (latestEvent.event_id) {
+            case 3: status = 'completed'; break;
+            case 2: status = 'in_progress'; break;
+            default: status = 'pending';
+          }
           
           return {
             success: true,
-            status: draftResponse.data.status || 'unknown',
-            signatories: draftResponse.data.signatories || [],
-            completed: draftResponse.data.status === 'Completed',
-            fromDrafts: true
-          };
-        } catch (draftError) {
-          console.error('[eviaSignService] Draft endpoint also failed:', draftError.message);
-          
-          // If all API calls fail, rely on our webhook events database
-          console.log('[eviaSignService] All API endpoints failed, using webhook events data exclusively');
-          const webhookResult = await getSignatureStatusFromWebhooks(requestId);
-          
-          // If we have webhook data, use that
-          if (webhookResult.success) {
-            return webhookResult;
-          }
-          
-          // If even the webhook data isn't available, check if this is a 404 Not Found
-          // which likely means the document has been processed and removed from the Evia system
-          if (apiError.response && apiError.response.status === 404) {
-            console.log('[eviaSignService] Document likely completed and removed from Evia Sign - checking agreements table');
-            
-            // Check our database for the agreement status
-            const { data: agreement, error } = await supabase
-              .from('agreements')
-              .select('status, signature_status, signatories_status')
-              .eq('eviasignreference', requestId)
-              .single();
-            
-            if (agreement && !error) {
-              const status = agreement.signature_status || 'unknown';
-              console.log(`[eviaSignService] Found agreement with status: ${status}`);
-              
-              // Return what we know from our database
-              return {
-                success: true, 
-                status: status,
-                signatories: agreement.signatories_status || [],
-                completed: status === 'completed',
-                fromDatabase: true
-              };
-            }
-          }
-          
-          // If we can't determine the status from any source, return unknown
-          return {
-            success: true,
-            status: 'unknown',
-            signatories: [],
-            completed: false,
-            noDataAvailable: true
+            status: status,
+            fromWebhook: true,
+            completed: status === 'completed',
+            event: latestEvent
           };
         }
+      } catch (queryError) {
+        console.error('[eviaSignService] Error querying webhook events:', queryError);
       }
       
-      // For any other error, fall back to webhook data
-      return await getSignatureStatusFromWebhooks(requestId);
+      // If we can't find webhook events, return unknown status
+      return {
+        success: true,
+        status: 'unknown',
+        completed: false,
+        noDataAvailable: true
+      };
     }
   } catch (error) {
     console.error('[eviaSignService] Error checking signature status:', error);
@@ -1146,11 +1125,36 @@ export async function checkSignatureStatus(requestId) {
       console.error('[eviaSignService] Response data:', error.response.data);
     }
     
-    // Always try to get webhook status as last resort
+    // Always try to get webhook status directly from database as last resort
     try {
-      return await getSignatureStatusFromWebhooks(requestId);
+      const { data: webhookEvents, error: webhookError } = await supabase
+        .from('webhook_events')
+        .select('*')
+        .eq('request_id', requestId)
+        .order('event_id', { ascending: false })
+        .order('event_time', { ascending: false })
+        .limit(1);
+      
+      if (!webhookError && webhookEvents && webhookEvents.length > 0) {
+        const latestEvent = webhookEvents[0];
+        
+        // Map event ID to status
+        let status;
+        switch (latestEvent.event_id) {
+          case 3: status = 'completed'; break;
+          case 2: status = 'in_progress'; break;
+          default: status = 'pending';
+        }
+        
+        return {
+          success: true,
+          status: status,
+          fromWebhook: true,
+          completed: status === 'completed'
+        };
+      }
     } catch (webhookError) {
-      console.error('[eviaSignService] Final fallback to webhook also failed:', webhookError);
+      console.error('[eviaSignService] Final fallback to database also failed:', webhookError);
     }
     
     // Return a generic error if all else fails

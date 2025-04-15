@@ -17,9 +17,12 @@ const DashboardLayout = () => {
   const [invoicesOpen, setInvoicesOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [invoiceHover, setInvoiceHover] = useState(false);
+  const [agreementsOpen, setAgreementsOpen] = useState(false);
+  const [agreementHover, setAgreementHover] = useState(false);
   
   // Check if the current route is in a specific section
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
+  const isAgreementRoute = location.pathname.includes('/dashboard/agreements');
   
   // Force invoicesOpen state to true when on invoice routes
   useEffect(() => {
@@ -27,6 +30,13 @@ const DashboardLayout = () => {
       setInvoicesOpen(true);
     }
   }, [isInvoiceRoute, location.pathname]);
+  
+  // Force agreementsOpen state to true when on agreement routes
+  useEffect(() => {
+    if (isAgreementRoute) {
+      setAgreementsOpen(true);
+    }
+  }, [isAgreementRoute, location.pathname]);
   
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -120,12 +130,46 @@ const DashboardLayout = () => {
           >
             Rentees
           </NavLink>
-          <NavLink
-            to="/dashboard/agreements"
-            className={getNavLinkClass}
-          >
-            Agreements
-          </NavLink>
+          
+          {/* Agreements dropdown */}
+          <div className="relative z-20">
+            <button
+              onClick={() => setAgreementsOpen(!agreementsOpen)}
+              onMouseEnter={() => setAgreementHover(true)}
+              onMouseLeave={() => setAgreementHover(false)}
+              className="flex items-center justify-between w-full px-3 py-2.5 rounded-md transition-colors text-sm font-medium text-white"
+              style={{ 
+                backgroundColor: (location.pathname.includes('/dashboard/agreements') || agreementsOpen) 
+                  ? '#1d4ed8' 
+                  : (agreementHover ? 'rgba(29, 78, 216, 0.5)' : 'transparent')
+              }}
+            >
+              <span className="font-medium">Agreements</span>
+              {agreementsOpen ? (
+                <ChevronUpIcon className="w-4 h-4" />
+              ) : (
+                <ChevronDownIcon className="w-4 h-4" />
+              )}
+            </button>
+            
+            {agreementsOpen && (
+              <div className="mt-1 ml-3 space-y-1 border-l-2 border-blue-600 pl-2 z-40 py-2 bg-blue-800">
+                <NavLink
+                  to="/dashboard/agreements"
+                  end
+                  className={getDropdownItemClass}
+                >
+                  All Agreements
+                </NavLink>
+                <NavLink
+                  to="/dashboard/agreements/templates"
+                  className={getDropdownItemClass}
+                >
+                  Templates
+                </NavLink>
+              </div>
+            )}
+          </div>
           
           {/* Invoices dropdown */}
           <div className="relative z-20">

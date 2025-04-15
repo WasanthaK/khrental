@@ -158,6 +158,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
             propertyid: agreement.propertyid,
             unitid: agreement.unitid || '',
             renteeid: agreement.renteeid,
+            propertyType: agreement.property?.propertytype || '',
             startdate: agreement.startdate,
             enddate: agreement.enddate,
             status: agreement.status,
@@ -404,6 +405,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
         // For apartments, always set property rental values as defaults
         setFormData(prev => ({
           ...prev,
+          propertyType: property.propertytype,
           terms: {
             ...prev.terms,
             // Always set these values from the property data
@@ -424,6 +426,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
           ...prev,
           // Clear unitid for non-apartment properties
           unitid: '',
+          propertyType: property.propertytype,
           terms: {
             ...prev.terms,
             // Always set these values for non-apartments too

@@ -1,231 +1,841 @@
-import { Document, Paragraph, TextRun, Packer, AlignmentType } from 'docx';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { supabase } from './supabaseClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, BorderStyle, AlignmentType } from 'docx';
 
 /**
- * Converts HTML content to a DOCX blob
- * @param {string} htmlContent - HTML content to convert
- * @returns {Promise<Blob>} - DOCX as blob
+ * Simple HTML to structured content parser
+ * @param {string} html - HTML content
+ * @returns {Array} - Array of structured content objects
  */
-export const convertToDocx = async (htmlContent) => {
+const parseHtmlContent = (html) => {
+  // Clean up the HTML
+  const cleanHtml = html
+    .replace(/<style[^>]*>.*?<\/style>/gs, '')
+    .replace(/<script[^>]*>.*?<\/script>/gs, '');
+  
+  // Create an array to store content pieces in the order they appear
+  const contentPieces = [];
+  
   try {
-    // Strip HTML tags to get plain text
-    // This is a simplistic approach for browser context
-    const textContent = htmlContent
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<p.*?>/gi, '')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/<(?:.|\n)*?>/gm, '') // Remove remaining HTML tags
-      .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with just two
-      .trim();
+    // Attempt DOM-based parsing first
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = cleanHtml;
     
-    // Create a DOCX document
-    const doc = new Document({
-      sections: [
-        {
-          properties: {},
-          children: [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: textContent,
-                  size: 24 // 12pt = 24 half-points
-                })
-              ]
-            })
-          ]
+    // Helper function to recursively process nodes
+    const processNode = (node, listLevel = 0, listType = null, listCounter = 0) => {
+      if (!node) return { listCounter };
+      
+      // Skip empty text nodes and comments
+      if ((node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) || 
+          node.nodeType === Node.COMMENT_NODE) {
+        return { listCounter };
+      }
+      
+      if (node.nodeType === Node.TEXT_NODE) {
+        // Process text nodes that have content
+        const text = node.textContent.trim();
+        if (text && listLevel === 0) {
+          contentPieces.push({
+            type: 'paragraph',
+            text: text
+          });
         }
-      ]
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const tagName = node.tagName.toLowerCase();
+        
+        // Handle headings
+        if (tagName.match(/^h[1-6]$/)) {
+          const level = parseInt(tagName.replace('h', ''));
+          contentPieces.push({
+            type: 'heading',
+            text: node.textContent.trim(),
+            level: level
+          });
+        }
+        // Handle paragraphs
+        else if (tagName === 'p') {
+          contentPieces.push({
+            type: 'paragraph',
+            text: node.textContent.trim()
+          });
+        }
+        // Handle unordered lists
+        else if (tagName === 'ul') {
+          const newListLevel = listLevel + 1;
+          for (let child of node.childNodes) {
+            processNode(child, newListLevel, 'ul', 0);
+          }
+        }
+        // Handle ordered lists
+        else if (tagName === 'ol') {
+          const newListLevel = listLevel + 1;
+          let newCounter = 1;
+          for (let child of node.childNodes) {
+            const result = processNode(child, newListLevel, 'ol', newCounter);
+            newCounter = result.listCounter;
+          }
+        }
+        // Handle list items
+        else if (tagName === 'li') {
+          let prefix = '';
+          if (listType === 'ul') {
+            prefix = '• ';
+          } else if (listType === 'ol') {
+            prefix = `${listCounter}. `;
+            listCounter++;
+          }
+          
+          contentPieces.push({
+            type: 'list-item',
+            text: node.textContent.trim(),
+            level: listLevel,
+            prefix: prefix
+          });
+          
+          return { listCounter };
+        }
+        // Handle tables
+        else if (tagName === 'table') {
+          const rows = [];
+          const trElements = node.querySelectorAll('tr');
+          
+          trElements.forEach(tr => {
+            const cells = [];
+            const cellElements = tr.querySelectorAll('th, td');
+            
+            cellElements.forEach(cell => {
+              // Extract formatting information
+              const isBold = cell.querySelector('strong, b') !== null;
+              const isItalic = cell.querySelector('i, em') !== null;
+              
+              cells.push({
+                text: cell.textContent.trim(),
+                isHeader: cell.tagName.toLowerCase() === 'th',
+                isBold: isBold || cell.tagName.toLowerCase() === 'th',
+                isItalic: isItalic
+              });
+            });
+            
+            if (cells.length > 0) {
+              rows.push(cells);
+            }
+          });
+          
+          if (rows.length > 0) {
+            contentPieces.push({
+              type: 'table',
+              rows: rows
+            });
+          }
+        }
+        // Process other elements recursively
+        else {
+          for (let child of node.childNodes) {
+            processNode(child, listLevel, listType, listCounter);
+          }
+        }
+      }
+      
+      return { listCounter };
+    };
+    
+    // Process DOM tree
+    processNode(tempDiv);
+    
+  } catch (error) {
+    // If DOM processing fails (e.g., server-side), fall back to regex
+    console.warn('DOM processing failed, falling back to regex parsing:', error);
+    
+    // Extract headings
+    const headingMatches = cleanHtml.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [];
+    headingMatches.forEach(match => {
+      const headingText = match.replace(/<\/?[^>]+(>|$)/g, '').trim();
+      const level = parseInt(match.match(/<h([1-6])/i)[1]);
+      
+      contentPieces.push({
+        type: 'heading',
+        text: headingText,
+        level: level
+      });
     });
     
-    // Generate the DOCX as a blob
-    const buffer = await Packer.toBlob(doc);
-    return buffer;
-  } catch (error) {
-    console.error('Error converting to DOCX:', error);
-    throw error;
+    // Extract unordered lists
+    const ulRegex = /<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+    let ulMatch;
+    while ((ulMatch = ulRegex.exec(cleanHtml)) !== null) {
+      const listHtml = ulMatch[1];
+      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let liMatch;
+      
+      while ((liMatch = liRegex.exec(listHtml)) !== null) {
+        const itemText = liMatch[1]
+          .replace(/<\/?[^>]+(>|$)/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        contentPieces.push({
+          type: 'list-item',
+          text: itemText,
+          level: 1,
+          prefix: '• '
+        });
+      }
+    }
+    
+    // Extract ordered lists
+    const olRegex = /<ol[^>]*>([\s\S]*?)<\/ol>/gi;
+    let olMatch;
+    while ((olMatch = olRegex.exec(cleanHtml)) !== null) {
+      const listHtml = olMatch[1];
+      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let liMatch;
+      let counter = 1;
+      
+      while ((liMatch = liRegex.exec(listHtml)) !== null) {
+        const itemText = liMatch[1]
+          .replace(/<\/?[^>]+(>|$)/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        contentPieces.push({
+          type: 'list-item',
+          text: itemText,
+          level: 1,
+          prefix: `${counter}. `
+        });
+        
+        counter++;
+      }
+    }
+    
+    // Extract tables
+    const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+    let tableMatch;
+    while ((tableMatch = tableRegex.exec(cleanHtml)) !== null) {
+      const tableHtml = tableMatch[0];
+      const rows = [];
+      
+      // Extract rows
+      const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      let rowMatch;
+      while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+        const cells = [];
+        
+        // Extract cells (both th and td)
+        const cellRegex = /<(th|td)[^>]*>([\s\S]*?)<\/(th|td)>/gi;
+        let cellMatch;
+        while ((cellMatch = cellRegex.exec(rowMatch[0])) !== null) {
+          const isHeader = cellMatch[1].toLowerCase() === 'th';
+          const cellHtml = cellMatch[2];
+          
+          // Check for formatting
+          const isBold = /<(strong|b)[^>]*>/.test(cellHtml);
+          const isItalic = /<(em|i)[^>]*>/.test(cellHtml);
+          
+          const cellText = cellHtml
+            .replace(/<\/?[^>]+(>|$)/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          cells.push({
+            text: cellText,
+            isHeader,
+            isBold: isBold || isHeader,
+            isItalic
+          });
+        }
+        
+        if (cells.length > 0) {
+          rows.push(cells);
+        }
+      }
+      
+      if (rows.length > 0) {
+        contentPieces.push({
+          type: 'table',
+          rows
+        });
+      }
+    }
+    
+    // Extract paragraphs
+    const paragraphMatches = cleanHtml.match(/<p[^>]*>(.*?)<\/p>/gi) || [];
+    paragraphMatches.forEach(match => {
+      const paragraphHtml = match.substring(match.indexOf('>') + 1, match.lastIndexOf('<'));
+      
+      // Check for formatting
+      const isBold = /<(strong|b)[^>]*>/.test(paragraphHtml);
+      const isItalic = /<(em|i)[^>]*>/.test(paragraphHtml);
+      
+      const paragraphText = paragraphHtml
+        .replace(/<\/?[^>]+(>|$)/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      if (paragraphText.length > 0) {
+        contentPieces.push({
+          type: 'paragraph',
+          text: paragraphText,
+          isBold,
+          isItalic
+        });
+      }
+    });
   }
+  
+  // If we have no content, extract plain text as a fallback
+  if (contentPieces.length === 0) {
+    const allText = cleanHtml
+      .replace(/<\/?[^>]+(>|$)/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (allText.length > 0) {
+      contentPieces.push({
+        type: 'paragraph',
+        text: allText
+      });
+    }
+  }
+  
+  return contentPieces;
 };
 
 /**
- * Saves merged document content as a DOCX file
- * @param {string} content - HTML content to save
- * @param {string|object} agreement - ID of the agreement or the agreement object
- * @returns {Promise<string>} - Public URL of the saved document
+ * Saves a merged document by converting HTML directly to PDF
+ * @param {string} content - HTML content of the document
+ * @param {string} agreementId - ID of the agreement
+ * @returns {Promise<string|null>} - URL of the saved document or null if save failed
  */
-export const saveMergedDocument = async (content, agreement) => {
+export const saveMergedDocument = async (content, agreementId) => {
   try {
-    // Extract the ID properly whether it's a string or an object
-    const agreementId = typeof agreement === 'string' ? agreement : agreement.id;
-    
     console.log('Saving merged document for agreement:', agreementId);
-    console.log('Content length:', content.length);
     
-    // Debug mode - log content for troubleshooting
-    const DEBUG_MODE = true;
-    if (DEBUG_MODE) {
-      console.log('Content analysis:', {
-        hasSpans: content.includes('<span'),
-        hasColorStyles: content.includes('style="color'),
-        hasParagraphs: content.includes('<p'),
-        hasBold: content.includes('<strong') || content.includes('<b'),
-        hasItalic: content.includes('<em') || content.includes('<i'),
-        hasLists: content.includes('<ul') || content.includes('<ol') || content.includes('<li')
+    if (!content) {
+      throw new Error('Document content is empty');
+    }
+    
+    console.log('Converting content to PDF format...');
+    
+    // Get agreement data to ensure we have all required merge fields
+    const { data: agreement, error: agreementError } = await supabase
+      .from('agreements')
+      .select(`
+        *,
+        property:propertyid(name, address),
+        unit:unitid(unitnumber, description, floor, bedrooms, bathrooms, rentalvalues),
+        rentee:renteeid(fullname, email, idnumber)
+      `)
+      .eq('id', agreementId)
+      .single();
+      
+    if (agreementError) {
+      console.warn('Could not fetch agreement data for merge fields:', agreementError);
+    } else {
+      console.log('Fetched agreement data for document generation:', {
+        hasProperty: !!agreement.property,
+        hasUnit: !!agreement.unit,
+        unitNumber: agreement.unit?.unitnumber || 'None',
+        hasRentee: !!agreement.rentee,
+        hasRentalValues: agreement.unit?.rentalvalues ? 'Yes' : 'No'
+      });
+    }
+    
+    // Parse HTML content
+    const parsedContent = parseHtmlContent(content);
+    
+    // Create a new PDF document
+    const pdfDoc = await PDFDocument.create();
+    
+    // Embed standard fonts
+    const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+    const helveticaBoldOblique = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+    
+    // Add a page
+    let page = pdfDoc.addPage([612, 792]); // US Letter size
+    const { width, height } = page.getSize();
+    const margin = 50;
+    
+    // Starting position for content
+    let y = height - margin;
+    const lineHeight = 14;
+    const paragraphSpacing = 10;
+    const headingSpacing = 20;
+    
+    // Add title
+    page.drawText('Rental Agreement', {
+      x: width / 2 - 80, // Center approximation
+      y: y,
+      size: 24,
+      font: helveticaBold
+    });
+    y -= 30;
+    
+    // Add agreement ID
+    page.drawText(`Agreement ID: ${agreementId}`, {
+      x: margin,
+      y: y,
+      size: 12,
+      font: helveticaBold
+    });
+    y -= lineHeight + 5;
+    
+    // Add timestamp
+    page.drawText(`Generated: ${new Date().toLocaleString()}`, {
+      x: margin,
+      y: y,
+      size: 10,
+      font: helveticaFont
+    });
+    y -= lineHeight + 10;
+    
+    // Extract important agreement details if available
+    if (agreement) {
+      // Add essential agreement info box
+      const infoBoxY = y;
+      const infoBoxHeight = 100;
+      
+      // Draw info box border
+      page.drawRectangle({
+        x: margin,
+        y: infoBoxY,
+        width: width - (margin * 2),
+        height: -infoBoxHeight,
+        borderColor: rgb(0.8, 0.8, 0.8),
+        borderWidth: 1
       });
       
-      // Check for HTML structure
-      console.log('HTML structure check:', {
-        openParagraphs: (content.match(/<p[^>]*>/g) || []).length,
-        closeParagraphs: (content.match(/<\/p>/g) || []).length,
-        openBold: (content.match(/<(b|strong)[^>]*>/g) || []).length,
-        closeBold: (content.match(/<\/(b|strong)>/g) || []).length
+      // Property & Unit info
+      page.drawText('Property:', {
+        x: margin + 10,
+        y: infoBoxY - 20,
+        size: 10,
+        font: helveticaBold
       });
+      
+      const propertyName = agreement.property?.name || 'N/A';
+      const unitName = agreement.unit?.unitnumber || agreement.unit?.name || '';
+      
+      const propertyText = unitName ? `${propertyName}, Unit ${unitName}` : propertyName;
+      
+      page.drawText(propertyText, {
+        x: margin + 120,
+        y: infoBoxY - 20,
+        size: 10,
+        font: helveticaFont
+      });
+      
+      // Tenant info
+      page.drawText('Tenant:', {
+        x: margin + 10,
+        y: infoBoxY - 40,
+        size: 10,
+        font: helveticaBold
+      });
+      
+      page.drawText(agreement.rentee?.fullname || 'N/A', {
+        x: margin + 120,
+        y: infoBoxY - 40,
+        size: 10,
+        font: helveticaFont
+      });
+      
+      // Date range
+      page.drawText('Period:', {
+        x: margin + 10,
+        y: infoBoxY - 60,
+        size: 10,
+        font: helveticaBold
+      });
+      
+      const startDate = agreement.startdate ? new Date(agreement.startdate).toLocaleDateString() : 'N/A';
+      const endDate = agreement.enddate ? new Date(agreement.enddate).toLocaleDateString() : 'N/A';
+      
+      page.drawText(`${startDate} to ${endDate}`, {
+        x: margin + 120,
+        y: infoBoxY - 60,
+        size: 10,
+        font: helveticaFont
+      });
+      
+      // Monthly Rent and Security Deposit - highlight these as they were missing
+      page.drawText('Monthly Rent:', {
+        x: margin + 10,
+        y: infoBoxY - 80,
+        size: 10,
+        font: helveticaBold
+      });
+      
+      const monthlyRent = agreement.terms?.monthlyRent || 'Not specified';
+      
+      page.drawText(monthlyRent, {
+        x: margin + 120,
+        y: infoBoxY - 80,
+        size: 10,
+        font: helveticaBold,
+        color: rgb(0.2, 0.2, 0.8) // Blue for emphasis
+      });
+      
+      // Security deposit on same line, but right side
+      page.drawText('Security Deposit:', {
+        x: width - margin - 200,
+        y: infoBoxY - 80,
+        size: 10,
+        font: helveticaBold
+      });
+      
+      const securityDeposit = agreement.terms?.depositAmount || 'Not specified';
+      
+      page.drawText(securityDeposit, {
+        x: width - margin - 90,
+        y: infoBoxY - 80,
+        size: 10,
+        font: helveticaBold,
+        color: rgb(0.2, 0.2, 0.8) // Blue for emphasis
+      });
+      
+      // Update y position after info box
+      y = infoBoxY - infoBoxHeight - 20;
+    } else {
+      y -= headingSpacing;
     }
     
-    // Ensure content has proper paragraph wrapping before processing
-    let processedContent = content;
-    if (!processedContent.includes('<p')) {
-      console.log('No paragraph tags found, wrapping content in paragraphs');
-      processedContent = `<p>${processedContent.replace(/\n/g, '</p><p>')}</p>`;
-      // Clean up empty paragraphs
-      processedContent = processedContent.replace(/<p>\s*<\/p>/g, '');
-    }
-    
-    // Create a DOCX document with proper structure
-    const doc = new Document({
-      title: `Agreement ${agreementId}`,
-      description: 'Rental Agreement Document',
-      styles: {
-        paragraphStyles: [
-          {
-            id: 'Normal',
-            name: 'Normal',
-            run: {
-              size: 24, // 12pt
-              font: 'Calibri'
-            },
-            paragraph: {
-              spacing: {
-                line: 276, // 1.15 line spacing
-                before: 0,
-                after: 200  // 10pt space after
-              }
-            }
-          },
-          {
-            id: 'Heading1',
-            name: 'Heading 1',
-            run: {
-              size: 32, // 16pt
-              bold: true,
-              font: 'Calibri'
-            },
-            paragraph: {
-              spacing: {
-                before: 240, // 12pt
-                after: 120   // 6pt
-              }
-            }
-          },
-          {
-            id: 'Heading2',
-            name: 'Heading 2',
-            run: {
-              size: 28, // 14pt
-              bold: true,
-              font: 'Calibri'
-            },
-            paragraph: {
-              spacing: {
-                before: 240, // 12pt
-                after: 120   // 6pt
-              }
-            }
-          },
-          {
-            id: 'ListParagraph',
-            name: 'List Paragraph',
-            run: {
-              size: 24, // 12pt
-              font: 'Calibri'
-            },
-            paragraph: {
-              spacing: {
-                line: 276, // 1.15 line spacing
-                before: 60,  // 3pt
-                after: 60    // 3pt
-              },
-              indent: {
-                left: 720    // 0.5 inch
-              }
-            }
+    // Helper function to add text with wrapping
+    const addWrappedText = (text, fontSize, isHeading = false) => {
+      const font = isHeading ? helveticaBold : helveticaFont;
+      const maxWidth = width - (margin * 2);
+      const words = text.split(' ');
+      
+      let currentLine = '';
+      
+      words.forEach(word => {
+        const potentialLine = currentLine ? `${currentLine} ${word}` : word;
+        const potentialWidth = font.widthOfTextAtSize(potentialLine, fontSize);
+        
+        if (potentialWidth <= maxWidth) {
+          currentLine = potentialLine;
+        } else {
+          // Draw current line and start a new one
+          page.drawText(currentLine, {
+            x: margin,
+            y: y,
+            size: fontSize,
+            font: font
+          });
+          
+          y -= lineHeight;
+          currentLine = word;
+          
+          // Add a new page if we're near the bottom
+          if (y < margin) {
+            page = pdfDoc.addPage([612, 792]);
+            y = height - margin;
           }
-        ]
-      },
-      numbering: {
-        config: [
-          {
-            reference: 'default-numbering',
-            levels: [
-              {
-                level: 0,
-                format: 'decimal',
-                text: '%1.',
-                alignment: AlignmentType.START,
-                style: {
-                  paragraph: {
-                    indent: { left: 720, hanging: 260 }
-                  }
-                }
-              },
-              {
-                level: 1,
-                format: 'lowerLetter',
-                text: '%2)',
-                alignment: AlignmentType.START,
-                style: {
-                  paragraph: {
-                    indent: { left: 1080, hanging: 260 }
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      },
-      sections: [
-        {
-          children: processHtmlContent(processedContent)
         }
-      ]
+      });
+      
+      // Draw remaining text
+      if (currentLine) {
+        page.drawText(currentLine, {
+          x: margin,
+          y: y,
+          size: fontSize,
+          font: font
+        });
+        
+        y -= isHeading ? (lineHeight + headingSpacing) : (lineHeight + paragraphSpacing);
+      }
+    };
+    
+    // Process parsed content - keep the existing implementation
+    parsedContent.forEach(item => {
+      // Rest of the existing code for processing content items
+      // ...
+      // Add a new page if we're near the bottom
+      if (y < margin + 100) {
+        page = pdfDoc.addPage([612, 792]);
+        y = height - margin;
+      }
+      
+      if (item.type === 'heading') {
+        const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
+        addWrappedText(item.text, fontSize, true);
+      } else if (item.type === 'paragraph') {
+        // Use appropriate font based on formatting
+        const font = item.isBold ? helveticaBold : helveticaFont;
+        const fontSize = 12;
+        
+        // Add the paragraph text with proper wrapping
+        const maxWidth = width - (margin * 2);
+        const words = item.text.split(' ');
+        let currentLine = '';
+        
+        words.forEach(word => {
+          const potentialLine = currentLine ? `${currentLine} ${word}` : word;
+          const potentialWidth = font.widthOfTextAtSize(potentialLine, fontSize);
+          
+          if (potentialWidth <= maxWidth) {
+            currentLine = potentialLine;
+          } else {
+            // Draw current line and start a new one
+            page.drawText(currentLine, {
+              x: margin,
+              y: y,
+              size: fontSize,
+              font: font
+            });
+            
+            y -= lineHeight;
+            currentLine = word;
+            
+            // Add a new page if we're near the bottom
+            if (y < margin) {
+              page = pdfDoc.addPage([612, 792]);
+              y = height - margin;
+            }
+          }
+        });
+        
+        // Draw remaining text
+        if (currentLine) {
+          page.drawText(currentLine, {
+            x: margin,
+            y: y,
+            size: fontSize,
+            font: font
+          });
+          
+          y -= lineHeight + paragraphSpacing;
+        }
+      } else if (item.type === 'list-item') {
+        // Calculate indentation based on list level
+        const indentation = margin + (item.level * 20);
+        const fontSize = 12;
+        
+        // Draw the bullet or number prefix
+        page.drawText(item.prefix, {
+          x: indentation - 15,
+          y: y,
+          size: fontSize,
+          font: helveticaBold
+        });
+        
+        // Add the list item text with proper wrapping
+        const maxWidth = width - (indentation + 20) - margin;
+        const words = item.text.split(' ');
+        let currentLine = '';
+        let firstLine = true;
+        
+        words.forEach(word => {
+          const potentialLine = currentLine ? `${currentLine} ${word}` : word;
+          const potentialWidth = helveticaFont.widthOfTextAtSize(potentialLine, fontSize);
+          
+          if (potentialWidth <= maxWidth) {
+            currentLine = potentialLine;
+          } else {
+            // Draw current line and start a new one
+            page.drawText(currentLine, {
+              x: firstLine ? indentation : indentation + 10,
+              y: y,
+              size: fontSize,
+              font: helveticaFont
+            });
+            
+            y -= lineHeight;
+            currentLine = word;
+            firstLine = false;
+            
+            // Add a new page if we're near the bottom
+            if (y < margin) {
+              page = pdfDoc.addPage([612, 792]);
+              y = height - margin;
+            }
+          }
+        });
+        
+        // Draw remaining text
+        if (currentLine) {
+          page.drawText(currentLine, {
+            x: firstLine ? indentation : indentation + 10,
+            y: y,
+            size: fontSize,
+            font: helveticaFont
+          });
+          
+          y -= lineHeight + (paragraphSpacing / 2); // less spacing for list items
+        }
+      } else if (item.type === 'table') {
+        // Render table
+        const tableRows = item.rows;
+        if (tableRows.length > 0) {
+          // Calculate column widths based on the number of columns
+          const numCols = Math.max(...tableRows.map(row => row.length));
+          const colWidth = (width - margin * 2) / numCols;
+          
+          // Calculate table height and check if it fits
+          const rowHeight = lineHeight * 2;
+          const tableHeight = tableRows.length * rowHeight;
+          
+          if (y - tableHeight < margin) {
+            // Table won't fit, create a new page
+            page = pdfDoc.addPage([612, 792]);
+            y = height - margin;
+          }
+          
+          // Starting position for the table
+          const tableX = margin;
+          let tableY = y;
+          
+          // Draw table borders - outer rectangle
+          page.drawRectangle({
+            x: tableX,
+            y: tableY,
+            width: width - (margin * 2),
+            height: -tableHeight,  // Negative height to draw down from y
+            borderColor: rgb(0, 0, 0),
+            borderWidth: 1,
+            opacity: 0.8
+          });
+          
+          // Draw each row
+          for (let i = 0; i < tableRows.length; i++) {
+            const row = tableRows[i];
+            const isHeader = i === 0 && row.some(cell => cell.isHeader);
+            
+            // Draw row background for headers
+            if (isHeader) {
+              page.drawRectangle({
+                x: tableX,
+                y: tableY,
+                width: width - (margin * 2),
+                height: -rowHeight,
+                color: rgb(0.9, 0.9, 0.9)
+              });
+            }
+            
+            // Draw row separator
+            if (i > 0) {
+              page.drawLine({
+                start: { x: tableX, y: tableY },
+                end: { x: tableX + width - (margin * 2), y: tableY },
+                thickness: 0.5,
+                color: rgb(0, 0, 0),
+                opacity: 0.5
+              });
+            }
+            
+            // Process cells
+            let cellX = tableX;
+            for (let j = 0; j < row.length; j++) {
+              const cell = row[j];
+              const font = cell.isBold ? helveticaBold : helveticaFont;
+              const fontSize = 10;
+              
+              // Draw cell separator (except for first column)
+              if (j > 0) {
+                page.drawLine({
+                  start: { x: cellX, y: tableY },
+                  end: { x: cellX, y: tableY - rowHeight },
+                  thickness: 0.5,
+                  color: rgb(0, 0, 0),
+                  opacity: 0.5
+                });
+              }
+              
+              // Calculate text that fits in cell
+              const cellText = cell.text || '';
+              const maxChars = Math.floor(colWidth / (fontSize * 0.6));
+              const displayText = cellText.length > maxChars 
+                ? cellText.substring(0, maxChars - 3) + '...' 
+                : cellText;
+              
+              // Draw cell text
+              page.drawText(displayText, {
+                x: cellX + 5,
+                y: tableY - rowHeight/2 + fontSize/2,
+                size: fontSize,
+                font: font
+              });
+              
+              cellX += colWidth;
+            }
+            
+            // Move to next row
+            tableY -= rowHeight;
+          }
+          
+          // Update y position to after the table
+          y = tableY - 15;
+        }
+      }
     });
     
-    console.log('DOCX document created successfully, generating blob...');
+    // Footer with page number
+    page.drawText('Page 1', {
+      x: width / 2 - 20,
+      y: 30,
+      size: 10,
+      font: helveticaFont
+    });
     
-    // Generate the DOCX as a blob
-    const blob = await Packer.toBlob(doc);
-    console.log('DOCX blob created, size:', blob.size, 'type:', blob.type);
-    
-    // Validate the blob
-    if (!blob || blob.size === 0) {
-      throw new Error('Generated DOCX is empty or invalid');
+    // For multiple pages, add page numbers to all pages
+    const pageCount = pdfDoc.getPageCount();
+    if (pageCount > 1) {
+      for (let i = 1; i < pageCount; i++) {
+        const currentPage = pdfDoc.getPage(i);
+        const { width } = currentPage.getSize();
+        
+        currentPage.drawText(`Page ${i + 1}`, {
+          x: width / 2 - 20,
+          y: 30,
+          size: 10,
+          font: helveticaFont
+        });
+      }
     }
     
+    // Save the PDF to bytes
+    const pdfBytes = await pdfDoc.save();
+    
+    // Convert to a blob for upload
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    
     // Define the file path in storage
-    const fileName = `final_agreement_${Date.now()}.docx`;
-    // Make sure agreementId is used properly in the path (avoid undefined)
+    const fileName = `final_agreement_${Date.now()}.pdf`;
     const agreementFolder = `agreements/${agreementId}`;
     const filePath = `${agreementFolder}/${fileName}`;
     
-    console.log('Uploading DOCX to storage path:', filePath);
+    console.log('Uploading PDF to storage path:', filePath);
     
-    // Upload to Supabase Storage with explicit content type
+    // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.FILES)
-      .upload(filePath, blob, {
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      .upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
         upsert: true
       });
     
@@ -234,7 +844,7 @@ export const saveMergedDocument = async (content, agreement) => {
       throw error;
     }
     
-    console.log('DOCX uploaded successfully:', data);
+    console.log('PDF uploaded successfully:', data);
     
     // Get the public URL
     const { data: urlData } = supabase.storage
@@ -244,24 +854,6 @@ export const saveMergedDocument = async (content, agreement) => {
     const publicUrl = urlData.publicUrl;
     console.log('Document public URL generated:', publicUrl);
     
-    // Verify that the URL seems correct and properly formatted
-    if (!publicUrl || typeof publicUrl !== 'string') {
-      throw new Error('Failed to generate a valid public URL for the document');
-    }
-    
-    // Verify the URL includes both the agreement ID and filename
-    if (!publicUrl.includes(agreementId) || !publicUrl.includes(fileName)) {
-      console.warn('Generated URL might be incorrect:', publicUrl);
-      console.warn('Expected URL to contain:', agreementId, 'and', fileName);
-    }
-    
-    // Validate the URL
-    if (!publicUrl.startsWith('http')) {
-      console.error('Invalid URL format, does not start with http:', publicUrl);
-      throw new Error('Generated URL is invalid');
-    }
-    
-    console.log('Document saved successfully with URL:', publicUrl);
     return publicUrl;
   } catch (error) {
     console.error('Error saving merged document:', error);
@@ -269,211 +861,6 @@ export const saveMergedDocument = async (content, agreement) => {
     throw error;
   }
 };
-
-/**
- * Helper function to process HTML content into DOCX paragraphs
- * @param {string} html - HTML content
- * @returns {Array} - Array of paragraphs for DOCX
- */
-function processHtmlContent(html) {
-  console.log("Processing HTML content with length:", html.length);
-  const paragraphs = [];
-  
-  // Split the content into paragraphs based on HTML paragraph tags
-  const paragraphRegex = /<p[^>]*>(.*?)<\/p>/gs;
-  const matches = [...html.matchAll(paragraphRegex)];
-  
-  // If no paragraphs found, process the entire content as a single paragraph
-  if (matches.length === 0) {
-    console.log("No paragraph tags found, processing entire content");
-    paragraphs.push(createSimpleParagraph(html));
-    return paragraphs;
-  }
-  
-  console.log(`Found ${matches.length} paragraphs in HTML content`);
-  
-  // Process each paragraph
-  for (const match of matches) {
-    const paragraphContent = match[1].trim();
-    if (!paragraphContent) continue;
-    
-    // Check if this is a list item
-    if (paragraphContent.includes('<ul>') || paragraphContent.includes('<ol>')) {
-      // Process lists
-      processListItems(paragraphContent, paragraphs);
-    } else if (paragraphContent.includes('<li>')) {
-      // Handle orphaned list items
-      const listItemContent = paragraphContent.replace(/<li>(.*?)<\/li>/g, '$1').trim();
-      const para = new Paragraph({
-        text: listItemContent,
-        bullet: { level: 0 },
-        style: 'ListParagraph'
-      });
-      paragraphs.push(para);
-    } else {
-      // Create a paragraph with proper formatting and handle bold/italic/etc.
-      const para = createFormattedParagraph(paragraphContent);
-      paragraphs.push(para);
-    }
-  }
-  
-  return paragraphs;
-}
-
-// Helper function to create a simple paragraph from text
-function createSimpleParagraph(text) {
-  // Remove HTML tags but preserve line breaks
-  const cleanedText = text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .trim();
-    
-  return new Paragraph({
-    text: cleanedText,
-    style: 'Normal'
-  });
-}
-
-// Helper function to process list items
-function processListItems(html, paragraphs) {
-  // Handle unordered lists
-  if (html.includes('<ul>')) {
-    const listItems = html.match(/<li>(.*?)<\/li>/g) || [];
-    listItems.forEach(item => {
-      const content = item.replace(/<li>(.*?)<\/li>/, '$1').trim();
-      const para = new Paragraph({
-        text: content,
-        bullet: { level: 0 },
-        style: 'ListParagraph'
-      });
-      paragraphs.push(para);
-    });
-  }
-  
-  // Handle ordered lists
-  if (html.includes('<ol>')) {
-    const listItems = html.match(/<li>(.*?)<\/li>/g) || [];
-    listItems.forEach((item, index) => {
-      const content = item.replace(/<li>(.*?)<\/li>/, '$1').trim();
-      const para = new Paragraph({
-        text: content,
-        numbering: {
-          reference: 'default-numbering',
-          level: 0,
-          instance: index + 1
-        },
-        style: 'ListParagraph'
-      });
-      paragraphs.push(para);
-    });
-  }
-}
-
-// Helper function to create a paragraph with proper text formatting
-function createFormattedParagraph(html) {
-  // Process the HTML to extract formatting
-  const textRuns = [];
-  
-  // Process the text and build text runs while preserving formatting
-  let currentText = html;
-  
-  // Bold text
-  currentText = processFormatting(currentText, /<(b|strong)>(.*?)<\/\1>/g, textRuns, 
-    (content) => ({ text: content, bold: true }));
-  
-  // Italic text
-  currentText = processFormatting(currentText, /<(i|em)>(.*?)<\/\1>/g, textRuns, 
-    (content) => ({ text: content, italic: true }));
-  
-  // Colored text
-  currentText = processFormatting(currentText, /<span style="color:\s*([^;"]+)[^"]*">(.*?)<\/span>/g, textRuns, 
-    (content, matches) => ({ text: content, color: parseColor(matches[1]) }));
-  
-  // Any remaining HTML - convert to plain text
-  if (currentText.trim()) {
-    const cleanText = currentText.replace(/<[^>]+>/g, '').trim();
-    if (cleanText) {
-      textRuns.push(new TextRun({ text: cleanText }));
-    }
-  }
-  
-  // If no text runs were created, create a simple text run
-  if (textRuns.length === 0) {
-    // Just use the HTML with tags removed
-    const plainText = html.replace(/<[^>]+>/g, '').trim();
-    textRuns.push(new TextRun({ text: plainText }));
-  }
-  
-  return new Paragraph({
-    children: textRuns,
-    style: html.startsWith('<h1') ? 'Heading1' : 
-           html.startsWith('<h2') || html.startsWith('<h3') ? 'Heading2' : 'Normal'
-  });
-}
-
-// Helper to process different kinds of formatting
-function processFormatting(text, regex, textRuns, createTextRun) {
-  let result = text;
-  let lastIndex = 0;
-  const matches = [...text.matchAll(regex)];
-  
-  for (const match of matches) {
-    // Add any text before this match
-    if (match.index > lastIndex) {
-      const beforeText = text.substring(lastIndex, match.index).replace(/<[^>]+>/g, '');
-      if (beforeText.trim()) {
-        textRuns.push(new TextRun({ text: beforeText }));
-      }
-    }
-    
-    // Add the formatted content
-    const content = match[2].replace(/<[^>]+>/g, '').trim();
-    if (content) {
-      textRuns.push(new TextRun(createTextRun(content, match)));
-    }
-    
-    lastIndex = match.index + match[0].length;
-  }
-  
-  // Return any remaining text that hasn't been processed
-  return lastIndex < text.length ? text.substring(lastIndex) : '';
-}
-
-// Helper to parse color values
-function parseColor(colorValue) {
-  // Handle named colors
-  const colorMap = {
-    'red': '#FF0000',
-    'blue': '#0000FF',
-    'green': '#008000',
-    'black': '#000000',
-    'white': '#FFFFFF',
-    'gray': '#808080',
-    'grey': '#808080',
-    'orange': '#FFA500',
-    'purple': '#800080',
-    'brown': '#A52A2A'
-    // Add more colors as needed
-  };
-  
-  if (colorMap[colorValue.toLowerCase()]) {
-    return colorMap[colorValue.toLowerCase()];
-  }
-  
-  // Handle RGB format
-  if (colorValue.startsWith('rgb')) {
-    const rgbMatch = colorValue.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/i);
-    if (rgbMatch) {
-      const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
-      const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
-      const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
-      return `#${r}${g}${b}`;
-    }
-  }
-  
-  // Return the color as is if it's a hex code or fallback to black
-  return colorValue.startsWith('#') ? colorValue : '#000000';
-}
 
 /**
  * Converts a DOCX file to PDF

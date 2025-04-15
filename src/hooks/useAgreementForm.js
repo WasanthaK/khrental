@@ -340,8 +340,27 @@ export const useAgreementForm = (initialData = null) => {
       const remainingPlaceholders = processed.match(/\{\{([^}]+)\}\}/g);
       if (remainingPlaceholders?.length > 0) {
         console.warn('Remaining unprocessed placeholders:', remainingPlaceholders);
+        
+        // Special handling for unitNumber that's still showing up in logs as unprocessed
+        // IMPORTANT: Using &nbsp; (non-breaking space) instead of empty string or regular space
+        // This special case is needed because in some templates the unitNumber placeholder 
+        // might not be processed by earlier replacements, causing text to render incorrectly
+        // e.g., "Malabe {{unitNumber}} located at" would render as "Malabelocated at" without this fix
+        if (remainingPlaceholders.includes('{{unitNumber}}')) {
+          console.log('Explicitly replacing remaining {{unitNumber}} with non-breaking space');
+          processed = processed.replace(/\{\{unitNumber\}\}/g, '&nbsp;');
+        }
       }
 
+      // CRITICAL: Do not modify the HTML structure of the processed content
+      // The HTML formatting from the template editor must be preserved exactly as is
+      // Adding line breaks, formatting, or other transformations will break the layout
+      
+      // Add basic styling for tables to ensure they show up properly in the preview
+      processed = processed.replace(/<table/g, '<table style="width:100%; border-collapse:collapse; margin-bottom:1rem; border:1px solid #ddd;"');
+      processed = processed.replace(/<td/g, '<td style="border:1px solid #ddd; padding:8px; vertical-align:top;"');
+      processed = processed.replace(/<th/g, '<th style="border:1px solid #ddd; padding:8px; background-color:#f8f9fa; font-weight:bold; text-align:left;"');
+      
       setProcessedContent(processed);
     } catch (error) {
       console.error('Error processing template:', error);
@@ -507,6 +526,7 @@ export const useAgreementForm = (initialData = null) => {
       // Update form data with property values
       setFormData(prev => {
         console.log('Updating form data with property details:', {
+          propertyType: property.propertytype,
           monthlyRent,
           depositAmount,
           paymentDueDay,
@@ -515,6 +535,7 @@ export const useAgreementForm = (initialData = null) => {
         
         return {
           ...prev,
+          propertyType: property.propertytype,
           terms: {
             ...prev.terms,
             monthlyRent,

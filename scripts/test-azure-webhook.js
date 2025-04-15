@@ -1,10 +1,10 @@
-// Test sending a webhook to the Azure deployment
+// Test sending a webhook to the dedicated webhook server
 import fetch from 'node-fetch';
 import { randomUUID } from 'crypto';
 
 // Get event ID from command line arguments or default to 1
 const eventId = parseInt(process.argv[2] || 1, 10);
-const azureUrl = 'https://khrental.azurewebsites.net/api/webhooks/evia';
+const webhookUrl = 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-sign';
 
 // Map event IDs to event descriptions
 const EVENT_TYPES = {
@@ -13,10 +13,10 @@ const EVENT_TYPES = {
   3: 'RequestCompleted'
 };
 
-async function sendAzureWebhook() {
+async function sendWebhook() {
   try {
     console.log('========================================');
-    console.log(`Sending webhook to: ${azureUrl}`);
+    console.log(`Sending webhook to: ${webhookUrl}`);
     console.log(`Event: ${EVENT_TYPES[eventId]} (EventId: ${eventId})`);
     console.log('========================================');
     
@@ -24,9 +24,9 @@ async function sendAzureWebhook() {
     const requestId = randomUUID();
     const payload = {
       RequestId: requestId,
-      UserName: 'Azure Test User',
-      Email: 'azuretest@example.com',
-      Subject: 'Azure Webhook Test',
+      UserName: 'Test User',
+      Email: 'test@example.com',
+      Subject: 'Webhook Test',
       EventId: eventId,
       EventDescription: EVENT_TYPES[eventId],
       EventTime: new Date().toISOString()
@@ -35,7 +35,7 @@ async function sendAzureWebhook() {
     if (eventId === 3) {
       // Add sample document for RequestCompleted events
       payload.Documents = [{
-        DocumentName: 'azure-test-document.pdf',
+        DocumentName: 'test-document.pdf',
         DocumentContent: 'VGhpcyBpcyBhIHRlc3QgZG9jdW1lbnQ=' // Base64 encoded "This is a test document"
       }];
     }
@@ -43,7 +43,7 @@ async function sendAzureWebhook() {
     console.log('Sending payload:', JSON.stringify(payload, null, 2));
     
     // Send webhook
-    const response = await fetch(azureUrl, {
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -66,4 +66,4 @@ async function sendAzureWebhook() {
   }
 }
 
-sendAzureWebhook(); 
+sendWebhook();

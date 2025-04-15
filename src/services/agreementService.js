@@ -243,7 +243,7 @@ async function getMergeDataForAgreement(agreement) {
     },
     terms: {
       ...agreement.terms,
-      // Initialize with agreement terms
+      // Initialize with agreement terms, ensuring values are properly formatted even if zero
       monthlyRent: '',
       depositAmount: '',
       paymentDueDay: agreement.terms?.paymentDueDay || '5',
@@ -253,6 +253,14 @@ async function getMergeDataForAgreement(agreement) {
   };
 
   try {
+    console.log('getMergeDataForAgreement - input agreement:', { 
+      id: agreement.id, 
+      propertyid: agreement.propertyid,
+      unitid: agreement.unitid,
+      hasRenteeid: !!agreement.renteeid,
+      hasTerms: !!agreement.terms
+    });
+    
     // Fetch property details with units
     if (agreement.propertyid) {
       const { data: propertyData, error: propertyError } = await supabase
@@ -266,6 +274,25 @@ async function getMergeDataForAgreement(agreement) {
         
       if (!propertyError) {
         mergeData.property = propertyData;
+        console.log('Property data fetched successfully:', { 
+          name: propertyData.name, 
+          propertytype: propertyData.propertytype,
+          hasUnits: !!propertyData.property_units && propertyData.property_units.length > 0 
+        });
+        
+        // For non-apartment properties, set unit to empty object with empty strings instead of null
+        if (propertyData.propertytype !== 'apartment') {
+          console.log('Non-apartment property detected, setting unit data to empty object');
+          mergeData.unit = { 
+            id: '',
+            name: '',
+            description: '',
+            floor: '',
+            rentalvalues: { rent: '', deposit: '' }
+          };
+        }
+      } else {
+        console.error('Error fetching property data:', propertyError);
       }
     }
     
@@ -278,19 +305,37 @@ async function getMergeDataForAgreement(agreement) {
         .single();
         
       if (!unitError && unitData) {
+        console.log('Unit data fetched successfully:', {
+          id: unitData.id,
+          unitnumber: unitData.unitnumber,
+          hasRentalValues: !!unitData.rentalvalues,
+          rentalvalues: unitData.rentalvalues
+        });
+        
         mergeData.unit = unitData;
         // Update terms with unit rental values if available
         if (unitData.rentalvalues) {
-          const monthlyRent = unitData.rentalvalues.rent || unitData.rentalvalues.monthlyRent || '';
-          const depositAmount = unitData.rentalvalues.deposit || unitData.rentalvalues.depositAmount || monthlyRent || '';
+          const monthlyRent = unitData.rentalvalues.rent || unitData.rentalvalues.monthlyRent || 0;
+          const depositAmount = unitData.rentalvalues.deposit || unitData.rentalvalues.depositAmount || monthlyRent || 0;
           
           mergeData.terms = {
             ...mergeData.terms,
-            monthlyRent: monthlyRent ? `Rs. ${parseFloat(monthlyRent).toLocaleString('si-LK')}` : '',
-            depositAmount: depositAmount ? `Rs. ${parseFloat(depositAmount).toLocaleString('si-LK')}` : ''
+            monthlyRent: `Rs. ${parseFloat(monthlyRent).toLocaleString('si-LK')}`,
+            depositAmount: `Rs. ${parseFloat(depositAmount).toLocaleString('si-LK')}`
           };
+          
+          console.log('Updated terms with unit rental values:', {
+            monthlyRent: mergeData.terms.monthlyRent,
+            depositAmount: mergeData.terms.depositAmount
+          });
+        } else {
+          console.warn('Unit has no rental values defined');
         }
+      } else {
+        console.error('Error fetching unit data:', unitError);
       }
+    } else {
+      console.log('No unit ID provided in agreement');
     }
     
     // Fetch rentee details
@@ -307,18 +352,31 @@ async function getMergeDataForAgreement(agreement) {
     }
     
     // If we still don't have rental values, try to get them from the agreement terms
-    if (!mergeData.terms.monthlyRent && agreement.terms?.monthlyRent) {
-      mergeData.terms.monthlyRent = `Rs. ${parseFloat(agreement.terms.monthlyRent).toLocaleString('si-LK')}`;
-    }
-    if (!mergeData.terms.depositAmount && agreement.terms?.depositAmount) {
-      mergeData.terms.depositAmount = `Rs. ${parseFloat(agreement.terms.depositAmount).toLocaleString('si-LK')}`;
+    // Always format the values, even if they're zero
+    if (!mergeData.terms.monthlyRent || mergeData.terms.monthlyRent === 'Rs. 0') {
+      const monthlyRentValue = agreement.terms?.monthlyRent !== undefined && agreement.terms?.monthlyRent !== null
+        ? agreement.terms.monthlyRent
+        : 0;
+      mergeData.terms.monthlyRent = `Rs. ${parseFloat(monthlyRentValue).toLocaleString('si-LK')}`;
     }
     
-    console.log('Prepared merge data for agreement:', {
+    if (!mergeData.terms.depositAmount || mergeData.terms.depositAmount === 'Rs. 0') {
+      const depositValue = agreement.terms?.depositAmount !== undefined && agreement.terms?.depositAmount !== null
+        ? agreement.terms.depositAmount
+        : 0;
+      mergeData.terms.depositAmount = `Rs. ${parseFloat(depositValue).toLocaleString('si-LK')}`;
+    }
+    
+    console.log('Final merge data prepared:', {
       hasProperty: !!mergeData.property,
+      propertyType: mergeData.property?.propertytype,
       hasUnit: !!mergeData.unit,
+      unitNumber: mergeData.unit?.unitnumber || 'none',
       hasRentee: !!mergeData.rentee,
-      terms: mergeData.terms
+      terms: {
+        monthlyRent: mergeData.terms.monthlyRent,
+        depositAmount: mergeData.terms.depositAmount
+      }
     });
     
     return mergeData;

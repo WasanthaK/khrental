@@ -1,6 +1,22 @@
 import { supabase } from '../services/supabaseClient';
 
 /**
+ * Helper function to safely display template variables in JSX
+ * Prevents "Uncaught ReferenceError: variable is not defined" 
+ * 
+ * @param {string} field - The field name to display inside curly braces
+ * @returns {string} - The field wrapped in double curly braces as a string
+ * 
+ * @example
+ * // Usage in JSX:
+ * <div>Use the template field {templateField('unitNumber')}</div>
+ * // Renders as: Use the template field {{unitNumber}}
+ */
+export const templateField = (field) => {
+  return `{{${field}}}`;
+};
+
+/**
  * Format a currency value for display
  * @param {number|string} value - Currency value to format
  * @returns {string} - Formatted currency string
@@ -241,12 +257,7 @@ export const populateMergeFields = async (templateContent, data) => {
         hasRentee: !!data.rentee,
         hasUnit: !!data.unit,
         hasTerms: !!data.terms
-      },
-      agreementInfo: data.agreement ? {
-        id: data.agreement.agreementId,
-        hasStartDate: !!data.agreement.startDate,
-        hasEndDate: !!data.agreement.endDate
-      } : 'No agreement data provided'
+      }
     });
     
     // Normalize address fields to prevent formatting issues
@@ -258,118 +269,97 @@ export const populateMergeFields = async (templateContent, data) => {
       data.property.address = normalizeAddress(data.property.address);
     }
     
-    // Replace merge fields with actual values
-    let mergedContent = templateContent
-      // Agreement fields
-      .replace(/{{startDate}}/g, formatDate(data.agreement?.startDate))
-      .replace(/{{endDate}}/g, formatDate(data.agreement?.endDate))
-      .replace(/{{currentDate}}/g, formatDate(data.agreement?.currentDate || new Date()))
-      .replace(/{{agreementId}}/g, data.agreement?.agreementId || 'New Agreement')
-      
-      // Property fields
-      .replace(/{{propertyName}}/g, data.property?.name || '')
-      .replace(/{{propertyAddress}}/g, formatAddress(data.property?.address || ''))
-      .replace(/{{propertyType}}/g, data.property?.propertytype || '')
-      .replace(/{{propertySquareFeet}}/g, data.property?.squarefeet?.toString() || '')
-      .replace(/{{propertyYearBuilt}}/g, data.property?.yearbuilt?.toString() || '')
-      .replace(/{{propertyAmenities}}/g, formatAmenities(data.property?.amenities))
-      .replace(/{{propertyBankName}}/g, data.property?.bank_name || '')
-      .replace(/{{propertyBankBranch}}/g, data.property?.bank_branch || '')
-      .replace(/{{propertyBankAccount}}/g, data.property?.bank_account_number || '')
-      
-      // Rentee fields
-      .replace(/{{renteeName}}/g, data.rentee?.name || '')
-      .replace(/{{renteeEmail}}/g, data.rentee?.email || '')
-      .replace(/{{renteePhone}}/g, formatPhone(data.rentee?.contact_details?.phone || ''))
-      .replace(/{{renteeAddress}}/g, formatAddress(data.rentee?.permanent_address || ''))
-      .replace(/{{renteePermanentAddress}}/g, formatAddress(data.rentee?.permanent_address || ''))
-      .replace(/{{renteeNationalId}}/g, data.rentee?.national_id || '')
-      .replace(/{{renteeId}}/g, data.rentee?.id || '')
-      
-      // Terms fields
-      .replace(/{{monthlyRent}}/g, formatCurrency(data.terms?.monthlyRent || ''))
-      .replace(/{{depositAmount}}/g, formatCurrency(data.terms?.depositAmount || ''))
-      .replace(/{{paymentDueDay}}/g, data.terms?.paymentDueDay || '')
-      .replace(/{{noticePeriod}}/g, data.terms?.noticePeriod || '')
-      .replace(/{{specialConditions}}/g, data.terms?.specialConditions || '')
-      .replace(/{{utilities}}/g, Array.isArray(data.terms?.utilities) ? data.terms.utilities.join(', ') : (data.terms?.utilities || ''))
-      .replace(/{{parkingSpaces}}/g, data.terms?.parkingSpaces || '')
-      .replace(/{{petPolicy}}/g, data.terms?.petPolicy || '')
-      .replace(/{{maintenanceContact}}/g, data.terms?.maintenanceContact || '')
-      .replace(/{{emergencyContact}}/g, data.terms?.emergencyContact || '')
-      .replace(/{{leaseType}}/g, data.terms?.leaseType || '')
-      .replace(/{{paymentMethods}}/g, data.terms?.paymentMethods || '')
-      .replace(/{{lateFees}}/g, data.terms?.lateFees || '')
-      .replace(/{{insuranceRequirements}}/g, data.terms?.insuranceRequirements || '');
-      
-    // Add unit-specific replacements if unit data is provided
-    if (data.unit) {
-      console.log('Adding unit data to template:', {
-        unitNumber: data.unit.unitnumber,
-        bedrooms: data.unit.bedrooms,
-        bathrooms: data.unit.bathrooms
-      });
-      
-      mergedContent = mergedContent
-        .replace(/{{unitNumber}}/g, data.unit.unitnumber || '')
-        .replace(/{{unitFloor}}/g, data.unit.floor || '')
-        .replace(/{{unitBedrooms}}/g, data.unit.bedrooms?.toString() || '')
-        .replace(/{{unitBathrooms}}/g, data.unit.bathrooms?.toString() || '')
-        .replace(/{{unitSquareFeet}}/g, data.unit.squarefeet?.toString() || '')
-        .replace(/{{unitDescription}}/g, data.unit.description || '')
-        .replace(/{{unitBankName}}/g, data.unit.bank_name || '')
-        .replace(/{{unitBankBranch}}/g, data.unit.bank_branch || '')
-        .replace(/{{unitBankAccount}}/g, data.unit.bank_account_number || '');
-    } else {
-      console.log('No unit data provided, replacing unit fields with empty strings');
-      // If no unit data, replace unit fields with empty strings
-      mergedContent = mergedContent
-        .replace(/{{unitNumber}}/g, '')
-        .replace(/{{unitFloor}}/g, '')
-        .replace(/{{unitBedrooms}}/g, '')
-        .replace(/{{unitBathrooms}}/g, '')
-        .replace(/{{unitSquareFeet}}/g, '')
-        .replace(/{{unitDescription}}/g, '')
-        .replace(/{{unitBankName}}/g, '')
-        .replace(/{{unitBankBranch}}/g, '')
-        .replace(/{{unitBankAccount}}/g, '');
-    }
+    // Create a working copy of the template to avoid modifying the original
+    let mergedContent = templateContent;
     
-    // Add basic HTML formatting
-    mergedContent = mergedContent
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\_(.*?)\_/g, '<em>$1</em>');
+    // Define a function to safely replace merge fields with actual values
+    // This ensures we don't accidentally break HTML tags or attributes
+    const safeReplace = (template, placeholder, value) => {
+      // If value is null, undefined, or empty string, use a non-breaking space to preserve layout
+      const safeValue = (value === null || value === undefined || value === '') ? '&nbsp;' : value;
+      
+      // Use a regex that ensures we're only replacing the exact placeholder
+      const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      return template.replace(regex, safeValue);
+    };
     
-    // Note: Text colors applied via TipTap are already in the HTML as span elements
-    // with inline style, so they are preserved automatically
+    // Agreement fields
+    mergedContent = safeReplace(mergedContent, '{{startDate}}', formatDate(data.agreement?.startDate));
+    mergedContent = safeReplace(mergedContent, '{{endDate}}', formatDate(data.agreement?.endDate));
+    mergedContent = safeReplace(mergedContent, '{{currentDate}}', formatDate(data.agreement?.currentDate || new Date()));
+    mergedContent = safeReplace(mergedContent, '{{agreementId}}', data.agreement?.agreementId || 'New Agreement');
     
-    // Ensure we don't have any broken span tags by doing a quick validation
-    const openSpans = (mergedContent.match(/<span/g) || []).length;
-    const closeSpans = (mergedContent.match(/<\/span>/g) || []).length;
-    if (openSpans !== closeSpans) {
-      console.warn(`Warning: Unbalanced span tags detected in content. Open spans: ${openSpans}, Close spans: ${closeSpans}`);
-    }
+    // Property fields
+    mergedContent = safeReplace(mergedContent, '{{propertyName}}', data.property?.name);
+    mergedContent = safeReplace(mergedContent, '{{propertyAddress}}', formatAddress(data.property?.address || ''));
+    mergedContent = safeReplace(mergedContent, '{{propertyType}}', data.property?.propertytype);
+    mergedContent = safeReplace(mergedContent, '{{propertySquareFeet}}', data.property?.squarefeet?.toString());
+    mergedContent = safeReplace(mergedContent, '{{propertyYearBuilt}}', data.property?.yearbuilt?.toString());
+    mergedContent = safeReplace(mergedContent, '{{propertyAmenities}}', formatAmenities(data.property?.amenities));
+    mergedContent = safeReplace(mergedContent, '{{propertyBankName}}', data.property?.bank_name);
+    mergedContent = safeReplace(mergedContent, '{{propertyBankBranch}}', data.property?.bank_branch);
+    mergedContent = safeReplace(mergedContent, '{{propertyBankAccount}}', data.property?.bank_account_number);
+    
+    // Rentee fields
+    mergedContent = safeReplace(mergedContent, '{{renteeName}}', data.rentee?.name);
+    mergedContent = safeReplace(mergedContent, '{{renteeEmail}}', data.rentee?.email);
+    mergedContent = safeReplace(mergedContent, '{{renteePhone}}', formatPhone(data.rentee?.contact_details?.phone || ''));
+    mergedContent = safeReplace(mergedContent, '{{renteeAddress}}', formatAddress(data.rentee?.permanent_address || ''));
+    mergedContent = safeReplace(mergedContent, '{{renteePermanentAddress}}', formatAddress(data.rentee?.permanent_address || ''));
+    mergedContent = safeReplace(mergedContent, '{{renteeNationalId}}', data.rentee?.national_id);
+    mergedContent = safeReplace(mergedContent, '{{renteeId}}', data.rentee?.id);
+    
+    // Terms fields
+    mergedContent = safeReplace(mergedContent, '{{monthlyRent}}', formatCurrency(data.terms?.monthlyRent || ''));
+    mergedContent = safeReplace(mergedContent, '{{depositAmount}}', formatCurrency(data.terms?.depositAmount || ''));
+    mergedContent = safeReplace(mergedContent, '{{paymentDueDay}}', data.terms?.paymentDueDay);
+    mergedContent = safeReplace(mergedContent, '{{noticePeriod}}', data.terms?.noticePeriod);
+    mergedContent = safeReplace(mergedContent, '{{specialConditions}}', data.terms?.specialConditions);
+    mergedContent = safeReplace(mergedContent, '{{utilities}}', Array.isArray(data.terms?.utilities) ? data.terms.utilities.join(', ') : (data.terms?.utilities || ''));
+    mergedContent = safeReplace(mergedContent, '{{parkingSpaces}}', data.terms?.parkingSpaces);
+    mergedContent = safeReplace(mergedContent, '{{petPolicy}}', data.terms?.petPolicy);
+    mergedContent = safeReplace(mergedContent, '{{maintenanceContact}}', data.terms?.maintenanceContact);
+    mergedContent = safeReplace(mergedContent, '{{emergencyContact}}', data.terms?.emergencyContact);
+    mergedContent = safeReplace(mergedContent, '{{leaseType}}', data.terms?.leaseType);
+    mergedContent = safeReplace(mergedContent, '{{paymentMethods}}', data.terms?.paymentMethods);
+    mergedContent = safeReplace(mergedContent, '{{lateFees}}', data.terms?.lateFees);
+    mergedContent = safeReplace(mergedContent, '{{insuranceRequirements}}', data.terms?.insuranceRequirements);
+    
+    // Unit fields
+    mergedContent = safeReplace(mergedContent, '{{unitNumber}}', data.unit?.unitnumber);
+    mergedContent = safeReplace(mergedContent, '{{unitFloor}}', data.unit?.floor);
+    mergedContent = safeReplace(mergedContent, '{{unitBedrooms}}', data.unit?.bedrooms?.toString());
+    mergedContent = safeReplace(mergedContent, '{{unitBathrooms}}', data.unit?.bathrooms?.toString());
+    mergedContent = safeReplace(mergedContent, '{{unitSquareFeet}}', data.unit?.squarefeet?.toString());
+    mergedContent = safeReplace(mergedContent, '{{unitDescription}}', data.unit?.description);
+    mergedContent = safeReplace(mergedContent, '{{unitBankName}}', data.unit?.bank_name);
+    mergedContent = safeReplace(mergedContent, '{{unitBankBranch}}', data.unit?.bank_branch);
+    mergedContent = safeReplace(mergedContent, '{{unitBankAccount}}', data.unit?.bank_account_number);
+    
+    // Log which unit fields were available
+    console.log('Unit fields for merge:', {
+      unitNumber: data.unit?.unitnumber || 'Not available',
+      unitFloor: data.unit?.floor || 'Not available',
+      unitBedrooms: data.unit?.bedrooms?.toString() || 'Not available', 
+      unitBathrooms: data.unit?.bathrooms?.toString() || 'Not available',
+      unitDescription: data.unit?.description ? 'Available' : 'Not available',
+      hasUnitRentalValues: data.unit?.rentalvalues ? 'Available' : 'Not available'
+    });
     
     // Check if any merge fields remain unprocessed
     const remainingMergeFields = mergedContent.match(/{{[^{}]+}}/g);
     if (remainingMergeFields && remainingMergeFields.length > 0) {
       console.warn('Some merge fields could not be replaced:', remainingMergeFields);
+      
+      // Replace any remaining unknown placeholders with non-breaking spaces
+      // to prevent layout issues while still preserving the document structure
+      remainingMergeFields.forEach(field => {
+        mergedContent = safeReplace(mergedContent, field, '&nbsp;');
+      });
     }
     
-    // Validate and fix HTML tags
-    const validatedContent = validateHtmlTags(mergedContent);
-    
-    // Log validation results
-    console.log('HTML validation complete:', {
-      originalLength: mergedContent.length,
-      validatedLength: validatedContent.length,
-      paragraphs: (validatedContent.match(/<p>/g) || []).length,
-      boldTags: (validatedContent.match(/<(b|strong)>/g) || []).length
-    });
-    
     console.log('Successfully populated merge fields in template');
-    return validatedContent;
+    return mergedContent;
   } catch (error) {
     console.error('Error populating merge fields:', error, {
       errorName: error.name,

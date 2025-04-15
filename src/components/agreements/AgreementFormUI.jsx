@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Form, Button, Row, Col, Card, Spinner } from 'react-bootstrap';
 import { useAgreementForm } from '../../hooks/useAgreementForm';
 import { AGREEMENT_STATUS } from '../../constants/agreementStatus';
+import { templateField } from '../../utils/documentUtils';
 
 const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) => {
   const {
@@ -119,7 +120,15 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 </Form.Control.Feedback>
                 {formData.propertyType !== 'apartment' && (
                   <Form.Text className="text-muted">
-                    Unit selection not applicable for this property type
+                    Unit selection not applicable for this property type. Any unit-related merge fields in the template 
+                    {/* 
+                      IMPORTANT: Curly braces in JSX are evaluated as JavaScript expressions.
+                      When we need to display literal curly braces like template markers {{field}},
+                      we must wrap them in quotes and put them inside a JavaScript expression: {"{{field}}"}
+                      or use the templateField utility: {templateField('field')}
+                      This prevents React from trying to evaluate "field" as a variable.
+                    */}
+                    (like {templateField('unitNumber')}) will be replaced with empty values.
                   </Form.Text>
                 )}
               </Form.Group>
@@ -281,17 +290,49 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
       </Card>
 
       {processedContent && (
-        <Card className="mb-4">
-          <Card.Header>
+        <div className="card mt-4">
+          <div className="card-body">
             <h4>Preview</h4>
-          </Card.Header>
-          <Card.Body>
-            <div className="border p-3 bg-light">
-              <div dangerouslySetInnerHTML={{ __html: processedContent }} />
-            </div>
-          </Card.Body>
-        </Card>
+            <hr />
+            <div 
+              className="agreement-preview" 
+              dangerouslySetInnerHTML={{ __html: processedContent }} 
+            />
+          </div>
+        </div>
       )}
+
+      {/* Add styles for the agreement preview */}
+      <style>{`
+        .agreement-preview {
+          font-family: Arial, sans-serif;
+          line-height: 1.5;
+          color: #333;
+        }
+        .agreement-preview table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 1rem;
+          border: 2px solid #ddd;
+        }
+        .agreement-preview table th,
+        .agreement-preview table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+        }
+        .agreement-preview table th {
+          background-color: #f8f9fa;
+          font-weight: bold;
+          text-align: left;
+        }
+        .agreement-preview ol, .agreement-preview ul {
+          padding-left: 2rem;
+          margin-bottom: 1rem;
+        }
+        .agreement-preview p {
+          margin-bottom: 1rem;
+        }
+      `}</style>
 
       <div className="d-flex justify-content-end gap-2">
         {onCancel && (

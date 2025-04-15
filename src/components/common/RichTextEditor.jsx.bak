@@ -147,7 +147,7 @@ const MenuBar = ({ editor, agreementId }) => {
   // Merge fields dropdown state
   const [showMergeFields, setShowMergeFields] = useState(false);
   const [currentCategory, setCurrentCategory] = useState('agreement');
-  const [mergeData, setMergeData] = useState(defaultMergeFields);
+  const [mergeData, setMergeData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const mergeFieldsRef = useRef(null);
 
@@ -246,21 +246,11 @@ const MenuBar = ({ editor, agreementId }) => {
     e.preventDefault();
     e.stopPropagation();
     if (editor) {
-      // Get the merge field value
-      const fieldValue = mergeData[currentCategory][fieldName];
-      
-      // Focus the editor to ensure we have the correct selection
-      editor.view.focus();
-      
-      // Get cursor position - make sure we have a valid position
-      const { from, to } = editor.view.state.selection;
-      
-      // Insert the content at current position
-      // Using a transaction to ensure the cursor position is maintained
-      const transaction = editor.view.state.tr.insertText(fieldValue, from, to);
-      editor.view.dispatch(transaction);
-      
-      // Close dropdown after inserting
+      // Get the actual template value
+      const displayData = mergeData || defaultMergeFields;
+      const mergeFieldText = displayData[currentCategory][fieldName];
+      editor.commands.insertContent(mergeFieldText);
+      editor.commands.focus();
       setShowMergeFields(false);
     }
   };
@@ -269,8 +259,6 @@ const MenuBar = ({ editor, agreementId }) => {
   const handleButtonClick = (e, action) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // Execute the formatting action
     action();
   };
 
@@ -295,31 +283,21 @@ const MenuBar = ({ editor, agreementId }) => {
       onClick={handleMenuBarClick}
     >
       <button
-        onClick={(e) => handleButtonClick(e, () => {
-          // Ensure editor is focused first
-          editor.view.focus();
-          editor.chain().toggleBold().run();
-        })}
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().toggleBold().run())}
         className={`p-2 rounded ${editor.isActive('bold') ? 'bg-gray-200' : ''}`}
         title="Bold"
       >
         <i className="fas fa-bold"></i>
       </button>
       <button
-        onClick={(e) => handleButtonClick(e, () => {
-          editor.view.focus();
-          editor.chain().toggleItalic().run();
-        })}
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().toggleItalic().run())}
         className={`p-2 rounded ${editor.isActive('italic') ? 'bg-gray-200' : ''}`}
         title="Italic"
       >
         <i className="fas fa-italic"></i>
       </button>
       <button
-        onClick={(e) => handleButtonClick(e, () => {
-          editor.view.focus();
-          editor.chain().toggleUnderline().run();
-        })}
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().toggleUnderline().run())}
         className={`p-2 rounded ${editor.isActive('underline') ? 'bg-gray-200' : ''}`}
         title="Underline"
       >
@@ -327,7 +305,7 @@ const MenuBar = ({ editor, agreementId }) => {
       </button>
       <div className="w-px h-6 bg-gray-300 mx-1"></div>
       
-      {/* Color Picker */}
+      {/* Color Picker - Changed from hover to click behavior */}
       <div className="relative">
         <button
           onClick={toggleColorPicker}
@@ -398,21 +376,7 @@ const MenuBar = ({ editor, agreementId }) => {
       </button>
       <div className="w-px h-6 bg-gray-300 mx-1"></div>
       <button
-        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().insertTable({
-          rows: 3,
-          cols: 3,
-          withHeaderRow: true,
-          HTMLAttributes: {
-            class: 'custom-table',
-            style: 'width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 2px solid #ced4da;'
-          },
-          cellAttributes: {
-            style: 'border: 1px solid #ced4da; padding: 8px; vertical-align: top;'
-          },
-          headerCellAttributes: {
-            style: 'border: 1px solid #ced4da; padding: 8px; background-color: #f8f9fa; font-weight: bold;'
-          }
-        }).run())}
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
         className="p-2 rounded"
         title="Insert Table"
       >
@@ -448,69 +412,67 @@ const MenuBar = ({ editor, agreementId }) => {
       <div className="relative">
         <button
           onClick={toggleMergeFields}
-          className="p-2 rounded hover:bg-gray-100"
-          title="Insert Merge Field"
+          className={`p-2 rounded flex items-center ${showMergeFields ? 'bg-gray-200' : ''}`}
+          title="Merge Fields"
         >
-          <i className="fas fa-tags text-gray-700"></i>
+          <i className="fas fa-tags"></i>
         </button>
-        
-        {showMergeFields && (
-          <div 
-            className="absolute z-50 mt-2 left-0 origin-top-left"
-            ref={mergeFieldsRef}
-            style={{ minWidth: '300px', maxWidth: '320px' }}
-          >
-            {isLoading ? (
-              <div className="bg-white rounded-lg shadow-lg p-4">
-                <div className="flex items-center justify-center py-2">
-                  <i className="fas fa-spinner fa-spin mr-2 text-blue-500"></i>
-                  <span>Loading merge fields...</span>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4">
-                {/* Category Tabs */}
-                <div className="mb-3 flex flex-wrap border-b border-gray-200">
-                  {Object.keys(mergeData).map((category) => (
-                    <button
-                      key={category}
-                      className={`py-2 px-2 text-xs font-medium capitalize transition-colors 
-                        ${currentCategory === category 
-                          ? 'text-blue-600 border-b-2 border-blue-600' 
-                          : 'text-gray-600 hover:text-gray-900'}`}
-                      onClick={(e) => selectCategory(e, category)}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-                
-                {/* Fields List for Current Category */}
-                <div className="max-h-60 overflow-y-auto">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">
-                    {currentCategory.charAt(0).toUpperCase() + currentCategory.slice(1)} Fields
-                  </h3>
+        {showMergeFields && mergeData && (
+          <div className="absolute z-10 left-0 mt-1 bg-white border border-gray-300 rounded shadow-lg p-2 w-64" ref={mergeFieldsRef}>
+            <div className="text-center font-medium py-1 border-b mb-2">
+              Available Merge Fields
+            </div>
+            
+            {/* Categories as Accordions */}
+            {Object.keys(mergeData).map((category) => {
+              const fieldsCount = Object.keys(mergeData[category]).length;
+              const isActive = currentCategory === category;
+              
+              return (
+                <div key={category} className="mb-2">
+                  <button 
+                    onClick={(e) => selectCategory(e, category)}
+                    className={`w-full px-3 py-2 flex justify-between items-center text-left
+                                rounded border ${isActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}
+                  >
+                    <span className="capitalize font-medium">
+                      {category} <span className="text-gray-500 text-sm">({fieldsCount} Fields)</span>
+                    </span>
+                    <i className={`fas fa-chevron-${isActive ? 'up' : 'down'} text-gray-500`}></i>
+                  </button>
                   
-                  <div className="grid gap-1">
-                    {Object.entries(mergeData[currentCategory]).map(([fieldName, fieldValue]) => (
-                      <button
-                        key={fieldName}
-                        className="flex items-center justify-between text-left p-2 rounded-md hover:bg-blue-50 group"
-                        onClick={(e) => insertMergeField(e, fieldName)}
-                      >
-                        <div>
-                          <div className="text-sm font-medium text-gray-700">{fieldName}</div>
-                          <code className="text-xs text-gray-400 group-hover:text-blue-500">{fieldValue}</code>
+                  {isActive && (
+                    <div className="mt-1 rounded border border-gray-200">
+                      {isLoading ? (
+                        <div className="text-center py-2 text-sm text-gray-500">Loading fields...</div>
+                      ) : (
+                        <div className="overflow-y-auto max-h-40">
+                          {Object.entries(mergeData[category]).map(([fieldName, fieldValue]) => (
+                            <div 
+                              key={fieldName}
+                              className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50
+                                         ${fieldName !== Object.keys(mergeData[category]).pop() ? 'border-b border-gray-200' : ''}`}
+                            >
+                              <div>
+                                <div className="font-medium text-sm">{fieldName}</div>
+                                <div className="text-gray-500 text-xs">{fieldValue}</div>
+                              </div>
+                              <button 
+                                onClick={(e) => insertMergeField(e, fieldName)}
+                                className="p-1 rounded-full hover:bg-gray-200 text-gray-500"
+                                title={`Insert ${fieldName}`}
+                              >
+                                <i className="fas fa-plus"></i>
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                        <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <i className="fas fa-plus-circle"></i>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         )}
       </div>
@@ -526,11 +488,7 @@ const RichTextEditor = ({
   height = 'auto',
   label,
   agreementId,
-  onEditorReady,
 }) => {
-  // Track if we're doing a programmatic update to avoid cursor jumps
-  const isUpdatingContent = useRef(false);
-  
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -556,72 +514,35 @@ const RichTextEditor = ({
     content: initialContent,
     editable: !readonly,
     onUpdate: ({ editor }) => {
-      if (onChange && !isUpdatingContent.current) {
+      if (onChange) {
         onChange(editor.getHTML());
       }
     },
   });
 
-  // Pass editor reference to parent component if needed
-  useEffect(() => {
-    if (editor && onEditorReady) {
-      onEditorReady(editor);
-    }
-  }, [editor, onEditorReady]);
-
-  // Update editor content when initialContent changes
-  useEffect(() => {
-    if (editor && initialContent !== editor.getHTML()) {
-      // Track that we're doing a programmatic update
-      isUpdatingContent.current = true;
-      
-      // Store current selection
-      const selection = editor.state.selection;
-      
-      // Update content
-      editor.commands.setContent(initialContent);
-      
-      // If we had a valid selection, try to restore cursor position
-      if (selection && !selection.empty) {
-        // Delay to ensure content is fully updated
-        setTimeout(() => {
-          try {
-            // Place cursor at same relative position if possible
-            editor.commands.focus();
-          } catch (err) {
-            console.error('Error restoring cursor position:', err);
-          }
-          isUpdatingContent.current = false;
-        }, 10);
-      } else {
-        isUpdatingContent.current = false;
-      }
-    }
-  }, [editor, initialContent]);
-
   return (
     <div className="rich-text-editor w-full">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      )}
-      <div className="border rounded-md overflow-hidden bg-white w-full">
+      {label && <div className="mb-1 font-medium text-gray-700">{label}</div>}
+      
+      <div className="border border-gray-300 rounded-md overflow-hidden w-full">
         {!readonly && <MenuBar editor={editor} agreementId={agreementId} />}
-        <EditorContent 
-          editor={editor} 
-          className="prose max-w-none p-4"
-          style={{ 
+        <EditorContent
+          editor={editor}
+          className="prose max-w-none w-full"
+          style={{
             height: height,
-            minHeight: '400px',
-            overflow: 'auto'
+            maxHeight: height === 'auto' ? 'none' : height,
+            minHeight: '150px',
+            padding: '1rem',
+            overflowY: 'auto',
+            width: '100%',
           }}
         />
       </div>
-      <style>{`
+      <style jsx global>{`
         .ProseMirror {
           outline: none;
           width: 100%;
-          min-height: 400px;
-          padding: 8px;
         }
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
@@ -636,14 +557,12 @@ const RichTextEditor = ({
           width: 100%;
           margin: 0;
           overflow: hidden;
-          margin-bottom: 16px;
-          border: 2px solid #ced4da;
         }
         .ProseMirror table td,
         .ProseMirror table th {
           min-width: 1em;
           border: 2px solid #ced4da;
-          padding: 6px 8px;
+          padding: 3px 5px;
           vertical-align: top;
           box-sizing: border-box;
           position: relative;
@@ -651,7 +570,6 @@ const RichTextEditor = ({
         .ProseMirror table th {
           font-weight: bold;
           background-color: #f8f9fa;
-          text-align: left;
         }
         .ProseMirror table .selectedCell:after {
           z-index: 2;
@@ -671,13 +589,16 @@ const RichTextEditor = ({
           pointer-events: none;
         }
         .tableWrapper {
-          padding: 1em 0;
           overflow-x: auto;
         }
         .resize-cursor {
           cursor: col-resize;
         }
         .rich-text-editor {
+          width: 100%;
+        }
+        .merge-fields-panel {
+          margin-bottom: 1rem;
           width: 100%;
         }
       `}</style>
