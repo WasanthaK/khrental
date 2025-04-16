@@ -119,11 +119,17 @@ const AuthProvider = ({ children }) => {
         .from('app_users')
         .select('*')
         .eq('auth_id', authUser.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid errors if user doesn't exist
       
       if (appUserError) {
         console.error('[Auth DEBUG] Error fetching app user:', appUserError.message);
-        return authUser;
+        // Continue with auth user rather than completely failing
+        console.log('[Auth DEBUG] Falling back to basic auth user');
+        return {
+          ...authUser,
+          role: authUser.role || 'authenticated',
+          name: authUser.email?.split('@')[0] || 'User'
+        };
       }
 
       if (appUser) {
@@ -131,8 +137,8 @@ const AuthProvider = ({ children }) => {
         // Merge auth user with app user profile
         return {
           ...authUser,
-          role: appUser.role || authUser.role,
-          name: appUser.name,
+          role: appUser.role || authUser.role || 'authenticated',
+          name: appUser.name || authUser.email?.split('@')[0] || 'User',
           profileId: appUser.id,
           profileType: appUser.user_type,
           contactDetails: appUser.contact_details || {},
@@ -140,12 +146,21 @@ const AuthProvider = ({ children }) => {
         };
       }
       
-      // If no profile found, return the auth user as is
+      // If no profile found, return the auth user with some defaults
       logDebug('No profile found for user, using default auth user');
-      return authUser;
+      return {
+        ...authUser,
+        role: authUser.role || 'authenticated',
+        name: authUser.email?.split('@')[0] || 'User'
+      };
     } catch (err) {
       console.error('[Auth DEBUG] Error fetching user profile:', err.message);
-      return authUser;
+      // Don't fail completely, return the auth user with minimal info
+      return {
+        ...authUser,
+        role: authUser.role || 'authenticated',
+        name: authUser.email?.split('@')[0] || 'User'
+      };
     }
   };
 
