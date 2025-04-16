@@ -48,6 +48,11 @@ const getEnvVar = (key) => {
   // If we get here and value is null, the variable is missing
   if (value === null) {
     console.error(`Environment variable ${key} is missing. Check your environment configuration.`);
+    
+    // Return fallback values for critical variables
+    if (key === 'VITE_SUPABASE_URL') {
+      return 'https://vcorwfilylgtvzktszvi.supabase.co';
+    }
   }
   
   return value;
@@ -60,8 +65,21 @@ console.log("[Supabase] Environment source check:", {
   process_env: typeof process !== 'undefined' && process.env ? "Available" : "Not available"
 });
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+// Get Supabase URL and key with fallbacks
+let supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+let supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+// Make absolutely sure we have a valid URL
+if (!supabaseUrl) {
+  supabaseUrl = 'https://vcorwfilylgtvzktszvi.supabase.co';
+  console.warn("[Supabase] Using hardcoded URL as fallback");
+}
+
+// Last attempt to get the anon key from window._env_
+if (!supabaseAnonKey && window?._env_?.VITE_SUPABASE_ANON_KEY) {
+  supabaseAnonKey = window._env_.VITE_SUPABASE_ANON_KEY;
+  console.warn("[Supabase] Retrieved anon key from window._env_ as final fallback");
+}
 
 console.log("[Supabase] Configuration:", {
   url: supabaseUrl || "NOT SET",
@@ -78,15 +96,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
       process: process.env?.VITE_SUPABASE_URL ? 'present' : 'missing'
     }
   });
-  
-  // Use hardcoded values as fallback to prevent crashes
-  if (!supabaseUrl) {
-    supabaseUrl = 'https://vcorwfilylgtvzktszvi.supabase.co';
-    console.warn("[Supabase] Using hardcoded URL as fallback");
-  }
-  if (!supabaseAnonKey) {
-    supabaseAnonKey = window._env_.VITE_SUPABASE_ANON_KEY; // Try one more time from window._env_
-  }
 }
 
 // Create a single Supabase client instance

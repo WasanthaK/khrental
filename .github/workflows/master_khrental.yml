@@ -191,54 +191,12 @@ jobs:
           echo '})();' >> env-config.js
           echo '' >> env-config.js
           
-          # Monkey patch URL constructor for safety
-          echo '// Monkey patch URL constructor to debug and fix invalid URLs' >> env-config.js
-          echo 'const OriginalURL = URL;' >> env-config.js
-          echo 'class SafeURL extends OriginalURL {' >> env-config.js
-          echo '  constructor(url, base) {' >> env-config.js
-          echo '    try {' >> env-config.js
-          echo '      if (typeof url === "string") {' >> env-config.js
-          echo '        if (!url) {' >> env-config.js
-          echo '          console.error("Empty URL string passed to URL constructor");' >> env-config.js
-          echo '          url = "https://example.com";' >> env-config.js
-          echo '        } else if (url.startsWith("/")) {' >> env-config.js
-          echo '          // Special case for React Router paths' >> env-config.js
-          echo '          const origin = window.location.origin;' >> env-config.js
-          echo '          // Check for HTML content in URLs and encode it' >> env-config.js
-          echo '          if (url.length > 500 || url.includes("<") || url.includes(">")) {' >> env-config.js
-          echo '            // URL likely contains HTML content - encode path parts only' >> env-config.js
-          echo '            const pathParts = url.split("/");' >> env-config.js
-          echo '            const safeParts = pathParts.map((part, index) => {' >> env-config.js
-          echo '              // Only encode parts after the first slash' >> env-config.js
-          echo '              return index === 0 ? part : encodeURIComponent(part);' >> env-config.js
-          echo '            });' >> env-config.js
-          echo '            url = origin + safeParts.join("/");' >> env-config.js 
-          echo '            console.log(`Encoded long/HTML URL for safety: ${url.substring(0, 100)}...`);' >> env-config.js
-          echo '          } else {' >> env-config.js
-          echo '            url = origin + url;' >> env-config.js
-          echo '          }' >> env-config.js
-          echo '        } else if (url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
-          echo '          // Replace VITE_SUPABASE_URL with actual URL' >> env-config.js
-          echo '          url = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
-          echo '          console.log(`Fixed Supabase URL in URL constructor: ${url}`);' >> env-config.js
-          echo '        } else if (!url.includes("://")) {' >> env-config.js
-          echo '          console.error(`Invalid URL without protocol: "${url}"`);' >> env-config.js
-          echo '          url = "https://" + url;' >> env-config.js
-          echo '        }' >> env-config.js
-          echo '      }' >> env-config.js
-          echo '      super(url, base);' >> env-config.js
-          echo '    } catch (e) {' >> env-config.js
-          echo '      console.error(`URL constructor error for "${url}": ${e.message}`);' >> env-config.js
-          echo '      // Create a stack trace with detailed information' >> env-config.js
-          echo '      const error = new Error(`URL constructor failed for: ${url}`);' >> env-config.js
-          echo '      console.error(error.stack);' >> env-config.js
-          echo '      // Fall back to a valid URL to prevent app crash' >> env-config.js
-          echo '      super("https://example.com");' >> env-config.js
-          echo '    }' >> env-config.js
-          echo '  }' >> env-config.js
-          echo '}' >> env-config.js
-          echo 'URL = SafeURL;' >> env-config.js
-          echo '' >> env-config.js
+          # Log URL environment variables for debugging
+          echo '// Log fixed URL configuration for debugging' >> env-config.js
+          echo 'console.log("Fixed URL environment variables:", {' >> env-config.js
+          echo '  VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,' >> env-config.js
+          echo '  VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT' >> env-config.js
+          echo '});' >> env-config.js
           
           echo 'console.log("Environment variables loaded:", {' >> env-config.js
           echo '  ...window._env_,' >> env-config.js

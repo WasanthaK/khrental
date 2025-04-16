@@ -217,6 +217,13 @@ const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
+      // Validate inputs
+      if (!email || !password) {
+        setError('Email and password are required');
+        setLoading(false);
+        return { error: { message: 'Email and password are required' } };
+      }
+      
       // Log environment information for debugging
       console.log('[Auth] Environment check:', {
         window_env: window?._env_ ? "Available" : "Not available",
@@ -237,14 +244,14 @@ const AuthProvider = ({ children }) => {
       
       if (error) {
         // Check if the error is about unconfirmed email
-        if (error.message.includes('Email not confirmed')) {
+        if (error.message && error.message.includes('Email not confirmed')) {
           // For development purposes, we'll show a more helpful error
           console.log('[Auth] Email not confirmed error');
           setError('Email not confirmed. In a production environment, you would need to confirm your email. For development, you can disable email confirmation in Supabase dashboard.');
           console.log('Development tip: To disable email confirmation, go to Supabase dashboard → Authentication → Settings → Email Auth and set "Confirm emails" to "No"');
         } 
         // Check if it's an invalid credentials error
-        else if (error.message.includes('Invalid login credentials')) {
+        else if (error.message && error.message.includes('Invalid login credentials')) {
           console.log('[Auth] Invalid credentials error - debug info:');
           console.log('1. Verify the email exists in Supabase Authentication');
           console.log('2. Check if the password is correct');
@@ -257,17 +264,19 @@ const AuthProvider = ({ children }) => {
           return { error: { message: 'Invalid email or password. Please try again.' } };
         }
         // Network errors
-        else if (error.message?.toLowerCase().includes('network') || 
-                error.message?.toLowerCase().includes('fetch')) {
+        else if (error.message && (error.message.toLowerCase().includes('network') || 
+                error.message.toLowerCase().includes('fetch'))) {
           console.log('[Auth] Network error during login');
           setError('Network error. Please check your internet connection and try again.');
           
           return { error: { message: 'Network error. Please check your internet connection and try again.' } };
         }
         else {
-          throw error;
+          setError(error.message || 'An error occurred during login');
+          return { error };
         }
         
+        setLoading(false);
         return { error };
       }
       

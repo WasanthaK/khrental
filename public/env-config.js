@@ -14,4 +14,10 @@ window._env_ = {
     VITE_EVIA_SIGN_CLIENT_ID: window._env_.VITE_EVIA_SIGN_CLIENT_ID ? "Present" : "Missing",
     VITE_EVIA_SIGN_CLIENT_SECRET: window._env_.VITE_EVIA_SIGN_CLIENT_SECRET ? "Present" : "Missing"
   });
+  
+  // Log the fixed URL configuration for debugging
+  console.log("Fixed URL environment variables:", {
+    VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,
+    VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT
+  });
 })(); 
