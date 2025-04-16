@@ -15,7 +15,7 @@ import { MaintenanceStatus, MaintenanceImageType } from '../../utils/constants';
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import ImageUpload from '../common/ImageUpload';
-import CommentSection from '../common/CommentSection';
+import CommentSection from '../maintenance/CommentSection';
 
 const MaintenanceRequestDetails = () => {
   const { id } = useParams();

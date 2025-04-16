@@ -27,13 +27,10 @@ let windowHasFocus = true;
 // Ensure environment variables that need to be URLs have proper protocol
 function ensureEnvironmentURLs() {
   try {
-    // Fix webhook URL if it exists
-    if (window._env_ && window._env_.VITE_WEBHOOK_URL && !window._env_.VITE_WEBHOOK_URL.startsWith('https://')) {
-      window._env_.VITE_WEBHOOK_URL = `https://${window._env_.VITE_WEBHOOK_URL.replace(/^https?:\/\//, '')}`;
-      console.log('Fixed VITE_WEBHOOK_URL protocol');
-    }
+    // No URL checks needed after webhook removal
+    console.log('Environment checks completed');
   } catch (error) {
-    console.error('Error fixing environment URLs:', error);
+    console.error('Error checking environment URLs:', error);
   }
 }
 

@@ -32,7 +32,6 @@ const EVIA_SIGN_API = {
     AUTHORIZE: '/falcon/auth/oauth2/authorize',
     TOKEN: '/falcon/auth/api/v1/Token',
     DOCUMENT_UPLOAD: '/sign/thumbs/api/Requests/document',
-    WEB_HOOK: 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-sign',
     SEND_REQUEST: '/sign/api/Requests',
     CHECK_STATUS: '/sign/api/Requests',
     DOWNLOAD_DOCUMENT: '/sign/api/Requests'
@@ -48,10 +47,6 @@ const ensureHttpsProtocol = (url) => {
   if (url.startsWith('http://')) return `https://${url.substring(7)}`;
   return `https://${url}`;
 };
-
-// Get the webhook URL from environment or use a fallback
-const rawWebhookUrl = '';
-const DEFAULT_WEBHOOK_URL = '';
 
 // Status mappings for better compatibility
 const STATUS_MAPPINGS = {
@@ -393,7 +388,6 @@ async function uploadDocument(documentUrl, accessToken) {
  * @param {string} params.title - Title of the signature request
  * @param {string} params.message - Message to the signatories
  * @param {Array} params.signatories - Array of signatories (name, email, identifier)
- * @param {string} params.webhookUrl - URL for receiving webhook notifications
  * @param {string} params.agreementId - ID of the agreement in our system
  * @returns {Promise<Object>} - The result of the operation
  */
@@ -402,9 +396,7 @@ export async function sendDocumentForSignature(params) {
     console.log('[eviaSignService] Starting document signature process with params:', {
       title: params.title,
       documentUrl: params.documentUrl ? (typeof params.documentUrl === 'string' ? `${params.documentUrl.substring(0, 30)}...` : 'Not a string') : 'Missing',
-      signatories: params.signatories ? params.signatories.length : 0,
-      webhookUrl: params.webhookUrl ? 'Provided' : 'Not provided',
-      completedDocumentsAttached: params.completedDocumentsAttached
+      signatories: params.signatories ? params.signatories.length : 0
     });
     
     // Get access token
@@ -423,27 +415,10 @@ export async function sendDocumentForSignature(params) {
     
     console.log('[eviaSignService] Preparing signature request with document token:', documentToken);
 
-    // Always use the dedicated webhook server URL - simplifies the integration
-    const webhookUrl = 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-sign';
-
-    console.log('[eviaSignService] 📣 WEBHOOK URL: ' + webhookUrl);
-    console.log('[eviaSignService] Using dedicated webhook server');
-
-    // Determine whether to attach documents in webhook
-    const completedDocumentsAttached = params.completedDocumentsAttached === undefined ? true : !!params.completedDocumentsAttached;
-
-    // Add debugs for the webhook parameters
-    console.log('[eviaSignService] Setting up webhook parameters:');
-    console.log('  - CallbackUrl:', webhookUrl);
-    console.log('  - CompletedDocumentsAttached:', completedDocumentsAttached);
-
     // According to the Evia docs minimum requirement for type 3 request, using the exact format
     const requestJson = {
       "Message": params.message || "Please sign this document",
       "Title": params.title || "Rental Agreement",
-      // CRITICAL: Include the webhook URL and completedDocumentsAttached parameters here
-      "CallbackUrl": webhookUrl,
-      "CompletedDocumentsAttached": completedDocumentsAttached,
       "Documents": [
         documentToken
       ],
@@ -515,38 +490,32 @@ export async function sendDocumentForSignature(params) {
       "Connections": []
     };
 
-    // Add webhook parameters if URL is provided
-    if (webhookUrl) {
-      requestJson.CallbackUrl = webhookUrl;
-      requestJson.CompletedDocumentsAttached = completedDocumentsAttached;
-    }
-
     console.log('[eviaSignService] Request JSON prepared (Auto-stamping mode):', JSON.stringify(requestJson).substring(0, 200) + '...');
 
     // Add the request as a JSON string with the key 'RequestJson'
-        const formData = new FormData();
+    const formData = new FormData();
     formData.append('RequestJson', JSON.stringify(requestJson));
     
     console.log('[eviaSignService] Making API request to send for signature (Auto-stamping)...');
     console.log('[eviaSignService] Endpoint:', `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.SEND_REQUEST}?type=3`);
 
     // IMPORTANT: Use type=3 for Auto-Stamping as per minimum requirement in documentation
-        const response = await axios.post(
+    const response = await axios.post(
       `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.SEND_REQUEST}?type=3`, 
-          formData,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'multipart/form-data'
-            }
-          }
-        );
+      formData,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    );
         
     console.log('[eviaSignService] Signature request successful, response:', response.data);
         
     return { 
       success: true, 
-            requestId: response.data.requestId,
+      requestId: response.data.requestId,
       status: 'pending'
     };
   } catch (error) {

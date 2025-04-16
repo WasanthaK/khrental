@@ -1,310 +1,157 @@
-import React, { useState } from 'react';
-import { supabase } from '../../services/supabaseClient';
-import { STORAGE_BUCKETS, BUCKET_FOLDERS, saveFile } from '../../services/fileService';
+import React, { useState, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 
 /**
- * Generic image upload component that handles different types of uploads
- * 
- * This component is used throughout the application for multiple purposes:
- * - Property images (properties folder)
- * - Maintenance request images (maintenance folder)
- * - Utility meter readings (utility-readings folder)
- * - ID document uploads (id-copies folder)
- * - Payment proofs (payment-proofs folder)
- * 
- * The component automatically determines the appropriate storage folder
- * based on the current page URL, or you can explicitly specify a folder.
+ * Image upload component
+ * @param {Function} onImagesChange - Function to call when images change
+ * @param {number} maxImages - Maximum number of images allowed
+ * @param {Array} initialImages - Initial images to display
  */
-const ImageUpload = ({ 
-  onImagesChange, 
-  maxImages = 5, 
-  initialImages = [],
-  bucket = STORAGE_BUCKETS.IMAGES,
-  folder = null // Set to null to automatically determine the folder based on URL
+const ImageUpload = ({
+  onImagesChange,
+  maxImages,
+  initialImages = []
 }) => {
   const [images, setImages] = useState(initialImages);
-  const [error, setError] = useState(null);
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // Determine the appropriate folder based on the bucket if none is provided
-  const determineFolder = () => {
-    if (folder) return folder;
-    
-    // If we're using the images bucket
-    if (bucket === STORAGE_BUCKETS.IMAGES) {
-      // Check the current URL path to guess the context
-      const pathname = window.location.pathname.toLowerCase();
-      
-      if (pathname.includes('maintenance')) {
-        return 'maintenance';
-      } else if (pathname.includes('utility') || pathname.includes('reading')) {
-        return 'utility-readings';
-      } else if (pathname.includes('id') || pathname.includes('document')) {
-        return 'id-copies';
-      } else {
-        return 'properties'; // default for images bucket
-      }
-    } 
-    // If we're using the files bucket
-    else if (bucket === STORAGE_BUCKETS.FILES) {
-      // Check the current URL path to guess the context
-      const pathname = window.location.pathname.toLowerCase();
-      
-      if (pathname.includes('agreement')) {
-        return 'agreements';
-      } else if (pathname.includes('payment')) {
-        return 'payment-proofs';
-      } else if (pathname.includes('id') || pathname.includes('document')) {
-        return 'id-copies';
-      } else {
-        return 'documents'; // default for files bucket
-      }
-    }
-    
-    // Default fallback
-    return 'maintenance';
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
   };
 
-  // Compress image function
-  const compressImage = async (file) => {
-    try {
-      // Create a canvas element
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      // Create an image element
-      const img = new Image();
-      
-      // Create a promise to handle image loading
-      const loadImage = new Promise((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = URL.createObjectURL(file);
-      });
-      
-      // Wait for image to load
-      await loadImage;
-      
-      // Calculate new dimensions (max 1920px)
-      let width = img.width;
-      let height = img.height;
-      const maxDimension = 1920;
-      
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
-        }
-      }
-      
-      // Set canvas dimensions
-      canvas.width = width;
-      canvas.height = height;
-      
-      // Draw image on canvas with new dimensions
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      // Convert to Blob with quality 0.7 (70%)
-      const blob = await new Promise(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.7);
-      });
-      
-      // Clean up
-      URL.revokeObjectURL(img.src);
-      
-      // Create a new File object
-      return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
-        type: 'image/jpeg',
-        lastModified: Date.now()
-      });
-    } catch (error) {
-      console.error('Error compressing image:', error);
-      return file; // Return original file if compression fails
-    }
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
   };
 
-  // Handle file selection and upload
-  const handleFileChange = async (event) => {
-    try {
-      const files = Array.from(event.target.files);
-      
-      if (images.length + files.length > maxImages) {
-        setError(`You can only upload up to ${maxImages} images`);
-        return;
-      }
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
 
-      setIsUploading(true);
-      setError(null);
-
-      // Determine the correct folder to use
-      const targetFolder = determineFolder();
-      const targetBucket = bucket || STORAGE_BUCKETS.IMAGES;
-      
-      // Log the bucket we're trying to use - helps with debugging
-      console.log(`Using storage bucket: ${targetBucket}, folder: ${targetFolder}`);
-
-      const uploadPromises = files.map(async (file) => {
-        // First compress the image
-        setIsCompressing(true);
-        const compressedFile = await compressImage(file);
-        setIsCompressing(false);
-
-        try {
-          // Then upload it using the provided bucket and folder
-          const result = await saveFile(compressedFile, {
-            bucket: targetBucket,
-            folder: targetFolder 
-          });
-
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to upload image');
-          }
-
-          return result.url;
-        } catch (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          // Try direct upload as fallback
-          console.log('Attempting direct upload as fallback...');
-          
-          const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.jpg`;
-          const filePath = `${targetFolder}/${fileName}`;
-          
-          const { data, error } = await supabase.storage
-            .from(targetBucket)
-            .upload(filePath, compressedFile, {
-              upsert: true
-            });
-            
-          if (error) throw error;
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from(targetBucket)
-            .getPublicUrl(filePath);
-            
-          return publicUrl;
-        }
-      });
-
-      const uploadedUrls = await Promise.all(uploadPromises);
-
-      const updatedImages = [...images, ...uploadedUrls.map(url => ({ url }))];
-      setImages(updatedImages);
-      console.log('Updating parent with image URLs:', updatedImages.map(img => img.url));
-      onImagesChange(updatedImages.map(img => img.url));
-    } catch (error) {
-      console.error('Error processing images:', error);
-      setError(`Error processing images: ${error.message}`);
-    } finally {
-      setIsUploading(false);
-    }
+    const files = Array.from(e.dataTransfer.files);
+    handleFiles(files);
   };
-  
-  // Remove an image
-  const handleRemoveImage = async (index) => {
-    const updatedImages = [...images];
-    const imageToRemove = updatedImages[index];
+
+  const handleFileInput = (e) => {
+    const files = Array.from(e.target.files || []);
+    handleFiles(files);
+  };
+
+  const handleFiles = (files) => {
+    const validFiles = files.filter(file => file.type.startsWith('image/'));
     
-    // If it's a new image that was uploaded, delete it from storage
-    if (imageToRemove.isNew && imageToRemove.path) {
-      try {
-        const { error: deleteError } = await supabase.storage
-          .from(STORAGE_BUCKETS.IMAGES.bucket)
-          .remove([imageToRemove.path]);
-          
-        if (deleteError) {
-          throw deleteError;
-        }
-      } catch (error) {
-        console.error('Error deleting image:', error);
-        toast.error('Failed to delete image');
-        return;
-      }
+    if (validFiles.length === 0) {
+      toast.error('Please upload valid image files');
+      return;
     }
-    
-    // Release object URL to prevent memory leaks
-    if (imageToRemove.preview && imageToRemove.isNew) {
-      URL.revokeObjectURL(imageToRemove.preview);
+
+    if (validFiles.length + images.length > maxImages) {
+      toast.error(`You can only upload up to ${maxImages} images`);
+      return;
     }
-    
-    updatedImages.splice(index, 1);
-    setImages(updatedImages);
-    
-    // Notify parent component
-    if (onImagesChange) {
-      onImagesChange(updatedImages.map(img => img.url));
-    }
+
+    // Convert files to data URLs for preview
+    validFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImages(prev => [...prev, e.target?.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    onImagesChange(validFiles);
+  };
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-4">
-        {images.map((image, index) => (
-          <div key={index} className="relative">
-            <img 
-              src={image.preview || image.url} 
-              alt={`Preview ${index}`} 
-              className="w-24 h-24 object-cover rounded border"
-            />
-            <button
-              type="button"
-              onClick={() => handleRemoveImage(index)}
-              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-              aria-label="Remove image"
-            >
-              ×
-            </button>
-            {image.originalSize && image.compressedSize && (
-              <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 text-center">
-                {((image.compressedSize / 1024 / 1024).toFixed(1))}MB
-              </div>
-            )}
-          </div>
-        ))}
-        
-        {images.length < maxImages && (
-          <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 relative">
-            {isCompressing || isUploading ? (
-              <div className="flex flex-col items-center">
-                <svg className="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      {/* Image Grid */}
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {images.map((image, index) => (
+            <div key={index} className="relative group">
+              <img
+                src={image}
+                alt={`Uploaded image ${index + 1}`}
+                className="w-full h-48 object-cover rounded-lg"
+              />
+              <button
+                onClick={() => removeImage(index)}
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span className="text-xs text-gray-500 mt-1">
-                  {isCompressing ? 'Compressing...' : 'Uploading...'}
-                </span>
-              </div>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span className="text-xs text-gray-500 mt-1">Add Image</span>
-              </>
-            )}
-            <input
-              type="file"
-              accept="image/jpeg, image/png"
-              onChange={handleFileChange}
-              className="hidden"
-              multiple
-              disabled={isCompressing || isUploading}
-            />
-          </label>
-        )}
-      </div>
-      
-      {error && (
-        <p className="text-red-500 text-sm">{error}</p>
+              </button>
+            </div>
+          ))}
+        </div>
       )}
-      
-      <p className="text-sm text-gray-500">
-        Upload up to {maxImages} images (JPG or PNG, max 10MB each). Images will be automatically compressed.
-      </p>
+
+      {/* Upload Area */}
+      {images.length < maxImages && (
+        <div
+          className={`border-2 border-dashed rounded-lg p-6 text-center ${
+            isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileInput}
+            accept="image/*"
+            multiple
+            className="hidden"
+          />
+          
+          <div className="space-y-2">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              stroke="currentColor"
+              fill="none"
+              viewBox="0 0 48 48"
+            >
+              <path
+                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            
+            <div className="text-gray-600">
+              <label
+                htmlFor="file-upload"
+                className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2"
+              >
+                <span>Upload images</span>
+                <input
+                  id="file-upload"
+                  name="file-upload"
+                  type="file"
+                  className="sr-only"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileInput}
+                />
+              </label>
+              <p className="pl-1">or drag and drop</p>
+            </div>
+            
+            <p className="text-xs text-gray-500">
+              PNG, JPG, GIF up to {maxImages} images
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

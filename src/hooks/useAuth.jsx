@@ -216,7 +216,17 @@ const AuthProvider = ({ children }) => {
       logDebug('Login attempt for email', email);
       setLoading(true);
       setError(null);
+      
+      // Log environment information for debugging
+      console.log('[Auth] Environment check:', {
+        window_env: window?._env_ ? "Available" : "Not available",
+        import_meta: typeof import.meta !== 'undefined' ? "Available" : "Not available",
+        supabaseUrl: window?._env_?.VITE_SUPABASE_URL || import.meta.env?.VITE_SUPABASE_URL || 'not set',
+        hasAnonKey: !!(window?._env_?.VITE_SUPABASE_ANON_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY)
+      });
+      
       const { data, error } = await signIn(email, password);
+      
       logDebug('Login result', {
         success: !error,
         hasSession: !!data?.session,
@@ -232,9 +242,32 @@ const AuthProvider = ({ children }) => {
           console.log('[Auth] Email not confirmed error');
           setError('Email not confirmed. In a production environment, you would need to confirm your email. For development, you can disable email confirmation in Supabase dashboard.');
           console.log('Development tip: To disable email confirmation, go to Supabase dashboard → Authentication → Settings → Email Auth and set "Confirm emails" to "No"');
-        } else {
+        } 
+        // Check if it's an invalid credentials error
+        else if (error.message.includes('Invalid login credentials')) {
+          console.log('[Auth] Invalid credentials error - debug info:');
+          console.log('1. Verify the email exists in Supabase Authentication');
+          console.log('2. Check if the password is correct');
+          console.log('3. Ensure Supabase project URL and anon key are correct');
+          console.log('4. Check browser console for network errors');
+          
+          setError('Invalid email or password. Please try again.');
+          
+          // This is a common error, return early with a clean error message
+          return { error: { message: 'Invalid email or password. Please try again.' } };
+        }
+        // Network errors
+        else if (error.message?.toLowerCase().includes('network') || 
+                error.message?.toLowerCase().includes('fetch')) {
+          console.log('[Auth] Network error during login');
+          setError('Network error. Please check your internet connection and try again.');
+          
+          return { error: { message: 'Network error. Please check your internet connection and try again.' } };
+        }
+        else {
           throw error;
         }
+        
         return { error };
       }
       
@@ -248,8 +281,22 @@ const AuthProvider = ({ children }) => {
       return { data };
     } catch (error) {
       console.error('[Auth] Error logging in:', error.message);
-      setError(error.message);
-      return { error };
+      
+      // Create a more user-friendly error message
+      let userMessage = 'Failed to log in. Please try again.';
+      
+      if (error.message?.toLowerCase().includes('network') || 
+          error.message?.toLowerCase().includes('fetch')) {
+        userMessage = 'Network error. Please check your internet connection.';
+      } else if (error.message?.toLowerCase().includes('credentials') || 
+                error.message?.toLowerCase().includes('password')) {
+        userMessage = 'Email or password is incorrect. Please try again.';
+      } else if (error.message?.toLowerCase().includes('too many requests')) {
+        userMessage = 'Too many login attempts. Please try again later.';
+      }
+      
+      setError(userMessage);
+      return { error: { message: userMessage } };
     } finally {
       setLoading(false);
     }

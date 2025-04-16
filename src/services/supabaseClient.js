@@ -3,43 +3,90 @@ import { isValidUUID } from '../utils/validators.js';
 
 // Initialize the Supabase client
 const getEnvVar = (key) => {
-  // First try Vite's import.meta.env
-  const viteValue = import.meta.env[key];
-  if (viteValue) {
-    return viteValue;
-  }
-
-  // Then try window._env_ (for production)
+  let value = null;
+  
+  // First try window._env_ (for production)
   const windowValue = window?._env_?.[key];
   if (windowValue) {
-    return windowValue;
+    value = windowValue;
+    console.log(`[Supabase] Using window._env_ for ${key}`);
+  }
+  
+  // Then try Vite's import.meta.env
+  if (!value) {
+    const viteValue = import.meta.env[key];
+    if (viteValue) {
+      value = viteValue;
+      console.log(`[Supabase] Using import.meta.env for ${key}`);
+    }
   }
 
   // Finally try process.env (for Node.js environment)
-  const processValue = process.env?.[key];
-  if (processValue) {
-    return processValue;
+  if (!value) {
+    const processValue = process.env?.[key];
+    if (processValue) {
+      value = processValue;
+      console.log(`[Supabase] Using process.env for ${key}`);
+    }
+  }
+  
+  // Special handling for URL vars
+  if (key === 'VITE_SUPABASE_URL' && value) {
+    // Check if value is a template string or malformed URL
+    if (value === 'VITE_SUPABASE_UR' || value.includes('VITE_SUPABASE_UR/')) {
+      console.error(`ENV error: ${key} is using template string instead of actual URL: ${value}`);
+      // Hardcode the correct URL as fallback
+      return 'https://vcorwfilylgtvzktszvi.supabase.co';
+    }
+    
+    // Ensure URL has http/https protocol
+    if (!value.startsWith('http')) {
+      return `https://${value}`;
+    }
   }
 
-  // If we get here, the variable is missing
-  console.error(`Environment variable ${key} is missing. Check your environment configuration.`);
-  return null;
+  // If we get here and value is null, the variable is missing
+  if (value === null) {
+    console.error(`Environment variable ${key} is missing. Check your environment configuration.`);
+  }
+  
+  return value;
 };
+
+// Log the environment source we're using
+console.log("[Supabase] Environment source check:", {
+  window_env: window?._env_ ? "Available" : "Not available",
+  import_meta: typeof import.meta !== 'undefined' ? "Available" : "Not available",
+  process_env: typeof process !== 'undefined' && process.env ? "Available" : "Not available"
+});
 
 const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+console.log("[Supabase] Configuration:", {
+  url: supabaseUrl || "NOT SET",
+  key_available: !!supabaseAnonKey
+});
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase configuration error:', {
     url: supabaseUrl ? 'present' : 'missing',
     key: supabaseAnonKey ? 'present' : 'missing',
     env: {
-      vite: import.meta.env.VITE_SUPABASE_URL ? 'present' : 'missing',
+      vite: import.meta.env?.VITE_SUPABASE_URL ? 'present' : 'missing',
       window: window?._env_?.VITE_SUPABASE_URL ? 'present' : 'missing',
       process: process.env?.VITE_SUPABASE_URL ? 'present' : 'missing'
     }
   });
-  throw new Error('Supabase URL and Anon Key are required. Please check your environment variables.');
+  
+  // Use hardcoded values as fallback to prevent crashes
+  if (!supabaseUrl) {
+    supabaseUrl = 'https://vcorwfilylgtvzktszvi.supabase.co';
+    console.warn("[Supabase] Using hardcoded URL as fallback");
+  }
+  if (!supabaseAnonKey) {
+    supabaseAnonKey = window._env_.VITE_SUPABASE_ANON_KEY; // Try one more time from window._env_
+  }
 }
 
 // Create a single Supabase client instance
@@ -72,12 +119,11 @@ export const getSupabaseClient = () => {
       config.auth.flowType = 'pkce';
     }
 
+    console.log("[Supabase] Creating client with URL:", supabaseUrl);
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, config);
   }
   return supabaseInstance;
 };
-
-// Initialize environment variables immediately
 
 // Export the singleton instance getter
 export const supabase = getSupabaseClient();
@@ -116,7 +162,17 @@ export const signUp = async (email, password) => {
 export const signIn = async (email, password) => {
   const client = getSupabaseClient();
   console.log('[Supabase] Attempting sign in for:', email);
+  
+  // Add additional logging to verify authentication payload
+  console.log('[Supabase] Auth payload:', { 
+    email,
+    password_length: password ? password.length : 0
+  });
+  
   try {
+    // Log before the API call
+    console.log('[Supabase] Making auth API call to:', `${supabaseUrl}/auth/v1/token?grant_type=password`);
+    
     const { data, error } = await client.auth.signInWithPassword({
       email,
       password,
@@ -134,7 +190,8 @@ export const signIn = async (email, password) => {
 
     console.log('[Supabase] Sign in successful:', {
       userId: data.user?.id,
-      sessionExpiry: data.session?.expires_at
+      sessionExpiry: data.session?.expires_at,
+      email: data.user?.email
     });
 
     return { data };

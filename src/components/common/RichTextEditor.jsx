@@ -242,27 +242,24 @@ const MenuBar = ({ editor, agreementId }) => {
   };
   
   // Insert merge field into editor
-  const insertMergeField = (e, fieldName) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (editor) {
-      // Get the merge field value
-      const fieldValue = mergeData[currentCategory][fieldName];
+  const insertMergeField = (category, fieldName) => {
+    if (!editor) return;
+    
+    // Get the field value from mergeData
+    const fieldValue = mergeData[category][fieldName];
+    
+    // Save the current selection before inserting content
+    const { from, to } = editor.state.selection;
+    
+    // Insert the content at the current cursor position
+    editor.chain()
+      .focus()
+      .insertContent(fieldValue)
+      .setTextSelection(from + fieldValue.length)
+      .run();
       
-      // Focus the editor to ensure we have the correct selection
-      editor.view.focus();
-      
-      // Get cursor position - make sure we have a valid position
-      const { from, to } = editor.view.state.selection;
-      
-      // Insert the content at current position
-      // Using a transaction to ensure the cursor position is maintained
-      const transaction = editor.view.state.tr.insertText(fieldValue, from, to);
-      editor.view.dispatch(transaction);
-      
-      // Close dropdown after inserting
-      setShowMergeFields(false);
-    }
+    // Close the dropdown after insertion
+    setShowMergeFields(false);
   };
 
   // Generic button click handler to prevent navigation issues
@@ -496,7 +493,7 @@ const MenuBar = ({ editor, agreementId }) => {
                       <button
                         key={fieldName}
                         className="flex items-center justify-between text-left p-2 rounded-md hover:bg-blue-50 group"
-                        onClick={(e) => insertMergeField(e, fieldName)}
+                        onClick={(e) => insertMergeField(currentCategory, fieldName)}
                       >
                         <div>
                           <div className="text-sm font-medium text-gray-700">{fieldName}</div>

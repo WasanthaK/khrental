@@ -2,7 +2,6 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { supabase } from './supabaseClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, BorderStyle, AlignmentType } from 'docx';
 
 /**
  * Simple HTML to structured content parser
@@ -1042,4 +1041,534 @@ export const generatePdf = async (formData) => {
     toast.error(`PDF generation failed: ${error.message}`);
     return null;
   }
+};
+
+function processHtmlContent(content) {
+  if (!content) return [];
+  
+  console.log('Processing HTML content for document generation');
+  
+  const contentPieces = [];
+  let remainingContent = content;
+  
+  // Process tables first to avoid interference with other elements
+  const tableParts = remainingContent.match(/\<table[^>]*>([\s\S]*?)<\/table>/gi);
+  if (tableParts && tableParts.length > 0) {
+    for (let i = 0; i < tableParts.length; i++) {
+      const tablePart = tableParts[i];
+      // Remove the table from the content to process other elements
+      remainingContent = remainingContent.replace(tablePart, '{{TABLE_PLACEHOLDER_' + i + '}}');
+      
+      // Extract rows
+      const rows = [];
+      const rowMatch = tablePart.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
+      if (rowMatch) {
+        for (const row of rowMatch) {
+          const cells = [];
+          // Extract cells
+          const cellMatch = row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi);
+          if (cellMatch) {
+            for (const cell of cellMatch) {
+              // Clean cell content of HTML tags but preserve formatting
+              let cellContent = cell.replace(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/i, '$1');
+              
+              // Convert basic HTML formatting to DOCX formatting
+              const isBold = /<strong>|<b>/i.test(cellContent);
+              const isItalic = /<em>|<i>/i.test(cellContent);
+              
+              // Clean all HTML tags
+              cellContent = cellContent.replace(/<[^>]*>/g, '');
+              // Decode HTML entities
+              cellContent = cellContent.replace(/&nbsp;/g, ' ')
+                                      .replace(/&amp;/g, '&')
+                                      .replace(/&lt;/g, '<')
+                                      .replace(/&gt;/g, '>')
+                                      .replace(/&quot;/g, '"')
+                                      .replace(/&#39;/g, "'");
+              
+              cells.push({
+                text: cellContent.trim(),
+                bold: isBold,
+                italic: isItalic
+              });
+            }
+          }
+          rows.push({ cells });
+        }
+      }
+      contentPieces.push({
+        type: 'table',
+        rows
+      });
+    }
+  }
+  
+  // Process headings
+  const headingMatches = remainingContent.match(/\<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi);
+  if (headingMatches) {
+    for (const match of headingMatches) {
+      const level = parseInt(match.match(/\<h([1-6])/i)[1], 10);
+      let text = match.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/i, '$1');
+      
+      // Clean HTML tags
+      text = text.replace(/<[^>]*>/g, '');
+      // Decode HTML entities
+      text = text.replace(/&nbsp;/g, ' ')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'");
+      
+      contentPieces.push({
+        type: 'heading',
+        text: text.trim(),
+        level
+      });
+      remainingContent = remainingContent.replace(match, '');
+    }
+  }
+  
+  // Process paragraphs
+  const paragraphMatches = remainingContent.match(/\<p[^>]*>(.*?)<\/p>/gi);
+  if (paragraphMatches) {
+    for (const match of paragraphMatches) {
+      let text = match.replace(/<p[^>]*>(.*?)<\/p>/i, '$1');
+      
+      // Extract formatting
+      const isBold = /<strong>|<b>/i.test(text);
+      const isItalic = /<em>|<i>/i.test(text);
+      
+      // Clean HTML tags
+      text = text.replace(/<[^>]*>/g, '');
+      // Decode HTML entities
+      text = text.replace(/&nbsp;/g, ' ')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'");
+      
+      // Check if this is a table placeholder
+      const tablePlaceholder = text.match(/{{TABLE_PLACEHOLDER_(\d+)}}/);
+      if (tablePlaceholder) {
+        // Table already processed, skip
+        continue;
+      }
+      
+      contentPieces.push({
+        type: 'paragraph',
+        text: text.trim(),
+        bold: isBold,
+        italic: isItalic
+      });
+      remainingContent = remainingContent.replace(match, '');
+    }
+  }
+  
+  // Process lists
+  const listTypes = [
+    { type: 'unordered', regex: /\<ul[^>]*>([\s\S]*?)<\/ul>/gi },
+    { type: 'ordered', regex: /\<ol[^>]*>([\s\S]*?)<\/ol>/gi }
+  ];
+  
+  for (const listType of listTypes) {
+    const listMatches = remainingContent.match(listType.regex);
+    if (listMatches) {
+      for (const match of listMatches) {
+        const itemMatches = match.match(/<li[^>]*>([\s\S]*?)<\/li>/gi);
+        if (itemMatches) {
+          const items = [];
+          for (const itemMatch of itemMatches) {
+            let text = itemMatch.replace(/<li[^>]*>([\s\S]*?)<\/li>/i, '$1');
+            
+            // Extract formatting
+            const isBold = /<strong>|<b>/i.test(text);
+            const isItalic = /<em>|<i>/i.test(text);
+            
+            // Clean HTML tags
+            text = text.replace(/<[^>]*>/g, '');
+            // Decode HTML entities
+            text = text.replace(/&nbsp;/g, ' ')
+                      .replace(/&amp;/g, '&')
+                      .replace(/&lt;/g, '<')
+                      .replace(/&gt;/g, '>')
+                      .replace(/&quot;/g, '"')
+                      .replace(/&#39;/g, "'");
+            
+            items.push({
+              text: text.trim(),
+              bold: isBold,
+              italic: isItalic
+            });
+          }
+          
+          contentPieces.push({
+            type: listType.type + 'List',
+            items
+          });
+        }
+        remainingContent = remainingContent.replace(match, '');
+      }
+    }
+  }
+  
+  // If there's still remaining content after processing all known elements,
+  // add it as a simple paragraph (after cleaning)
+  if (remainingContent.trim() !== '') {
+    const cleanedText = remainingContent
+      .replace(/<[^>]*>/g, '') // Remove any HTML tags
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+    
+    if (cleanedText !== '') {
+      contentPieces.push({
+        type: 'paragraph',
+        text: cleanedText
+      });
+    }
+  }
+  
+  console.log(`Processed ${contentPieces.length} content pieces for document`);
+  return contentPieces;
+}
+
+/**
+ * Creates a document from HTML content (direct PDF generation)
+ * @param {string} html - The HTML content to convert
+ * @param {string} fileName - The name of the document file
+ * @param {string} agreementId - The ID of the agreement
+ * @returns {Promise<{success: boolean, url: string, error: any}>} - Result object with success status and file URL
+ */
+async function createDocument(html, fileName, agreementId) {
+  try {
+    console.log(`Creating document for agreement ${agreementId}`);
+    
+    // Process the HTML content into structured format
+    const processedContent = processHtmlContent(html);
+    
+    // Create a new PDF document
+    const pdfDoc = await PDFDocument.create();
+    
+    // Embed standard fonts
+    const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+    
+    // Add a page
+    let page = pdfDoc.addPage([612, 792]); // US Letter size
+    const { width, height } = page.getSize();
+    const margin = 50;
+    
+    // Starting position for content
+    let y = height - margin;
+    const lineHeight = 14;
+    const paragraphSpacing = 10;
+    const headingSpacing = 20;
+    
+    // Add title
+    page.drawText(fileName || 'Agreement Document', {
+      x: width / 2 - 100,
+      y: y,
+      size: 20,
+      font: helveticaBold
+    });
+    y -= 40;
+    
+    // Add timestamp
+    page.drawText(`Generated: ${new Date().toLocaleString()}`, {
+      x: margin,
+      y: y,
+      size: 10,
+      font: helveticaFont
+    });
+    y -= lineHeight + 20;
+    
+    // Process content
+    for (const piece of processedContent) {
+      // Add a new page if we're near the bottom
+      if (y < margin + 50) {
+        page = pdfDoc.addPage([612, 792]);
+        y = height - margin;
+      }
+      
+      switch (piece.type) {
+        case 'heading':
+          const headingText = piece.text || '';
+          const headingSize = piece.level === 1 ? 18 : (piece.level === 2 ? 16 : 14);
+          
+          page.drawText(headingText, {
+            x: margin,
+            y: y,
+            size: headingSize,
+            font: helveticaBold
+          });
+          
+          y -= headingSize + headingSpacing;
+          break;
+          
+        case 'paragraph':
+          const paragraphText = piece.text || '';
+          const font = piece.bold ? helveticaBold : (piece.italic ? helveticaOblique : helveticaFont);
+          const fontSize = 12;
+          
+          // Simple word wrapping
+          const words = paragraphText.split(' ');
+          let line = '';
+          const maxWidth = width - (margin * 2);
+          
+          for (const word of words) {
+            const testLine = line ? line + ' ' + word : word;
+            const lineWidth = font.widthOfTextAtSize(testLine, fontSize);
+            
+            if (lineWidth > maxWidth) {
+              page.drawText(line, {
+                x: margin,
+                y: y,
+                size: fontSize,
+                font: font
+              });
+              
+              line = word;
+              y -= lineHeight;
+              
+              // Add a new page if needed
+              if (y < margin) {
+                page = pdfDoc.addPage([612, 792]);
+                y = height - margin;
+              }
+            } else {
+              line = testLine;
+            }
+          }
+          
+          // Draw remaining text
+          if (line) {
+            page.drawText(line, {
+              x: margin,
+              y: y,
+              size: fontSize,
+              font: font
+            });
+            y -= lineHeight + paragraphSpacing;
+          }
+          break;
+          
+        case 'unorderedList':
+        case 'orderedList':
+          const items = piece.items || [];
+          const isOrdered = piece.type === 'orderedList';
+          
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const itemText = item.text || '';
+            const itemFont = item.bold ? helveticaBold : (item.italic ? helveticaOblique : helveticaFont);
+            const bulletOrNumber = isOrdered ? `${i + 1}. ` : '• ';
+            
+            // Draw bullet or number
+            page.drawText(bulletOrNumber, {
+              x: margin,
+              y: y,
+              size: 12,
+              font: helveticaBold
+            });
+            
+            // Calculate width of the bullet/number for text indentation
+            const bulletWidth = helveticaBold.widthOfTextAtSize(bulletOrNumber, 12);
+            
+            // Simple word wrapping for list item text
+            const words = itemText.split(' ');
+            let line = '';
+            const maxWidth = width - (margin * 2 + bulletWidth + 5);
+            let firstLine = true;
+            
+            for (const word of words) {
+              const testLine = line ? line + ' ' + word : word;
+              const lineWidth = itemFont.widthOfTextAtSize(testLine, 12);
+              
+              if (lineWidth > maxWidth) {
+                page.drawText(line, {
+                  x: firstLine ? margin + bulletWidth + 5 : margin + bulletWidth + 15,
+                  y: y,
+                  size: 12,
+                  font: itemFont
+                });
+                
+                line = word;
+                y -= lineHeight;
+                firstLine = false;
+                
+                // Add a new page if needed
+                if (y < margin) {
+                  page = pdfDoc.addPage([612, 792]);
+                  y = height - margin;
+                }
+              } else {
+                line = testLine;
+              }
+            }
+            
+            // Draw remaining text
+            if (line) {
+              page.drawText(line, {
+                x: firstLine ? margin + bulletWidth + 5 : margin + bulletWidth + 15,
+                y: y,
+                size: 12,
+                font: itemFont
+              });
+              y -= lineHeight + 5;
+            }
+          }
+          break;
+          
+        case 'table':
+          const rows = piece.rows || [];
+          if (rows.length === 0) break;
+          
+          // Calculate table dimensions
+          const numCols = Math.max(...rows.map(row => (row.cells || []).length));
+          if (numCols === 0) break;
+          
+          const colWidth = (width - margin * 2) / numCols;
+          const rowHeight = 20;
+          const tableHeight = rows.length * rowHeight;
+          
+          // Check if table fits on current page
+          if (y - tableHeight < margin) {
+            page = pdfDoc.addPage([612, 792]);
+            y = height - margin;
+          }
+          
+          // Draw table
+          const tableX = margin;
+          let tableY = y;
+          
+          // Draw table border
+          page.drawRectangle({
+            x: tableX,
+            y: tableY,
+            width: width - margin * 2,
+            height: -tableHeight,
+            borderColor: rgb(0, 0, 0),
+            borderWidth: 1
+          });
+          
+          // Draw rows
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const cells = row.cells || [];
+            
+            // Draw row divider if not first row
+            if (i > 0) {
+              page.drawLine({
+                start: { x: tableX, y: tableY - i * rowHeight },
+                end: { x: tableX + width - margin * 2, y: tableY - i * rowHeight },
+                thickness: 1,
+                color: rgb(0, 0, 0)
+              });
+            }
+            
+            // Draw cells
+            for (let j = 0; j < numCols && j < cells.length; j++) {
+              const cell = cells[j];
+              const cellText = cell.text || '';
+              const cellFont = cell.bold ? helveticaBold : (cell.italic ? helveticaOblique : helveticaFont);
+              
+              // Draw column divider if not first column
+              if (j > 0) {
+                page.drawLine({
+                  start: { x: tableX + j * colWidth, y: tableY },
+                  end: { x: tableX + j * colWidth, y: tableY - tableHeight },
+                  thickness: 1,
+                  color: rgb(0, 0, 0)
+                });
+              }
+              
+              // Draw cell text (truncate if needed)
+              const fontSize = 10;
+              const maxWidth = colWidth - 6;
+              const textWidth = cellFont.widthOfTextAtSize(cellText, fontSize);
+              const displayText = textWidth > maxWidth
+                ? cellText.substring(0, Math.floor(cellText.length * (maxWidth / textWidth) - 3)) + '...'
+                : cellText;
+              
+              page.drawText(displayText, {
+                x: tableX + j * colWidth + 3,
+                y: tableY - i * rowHeight - rowHeight/2 + fontSize/2,
+                size: fontSize,
+                font: cellFont
+              });
+            }
+          }
+          
+          y = tableY - tableHeight - 10;
+          break;
+      }
+    }
+    
+    // Add page numbers
+    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
+      const page = pdfDoc.getPage(i);
+      const { width } = page.getSize();
+      
+      page.drawText(`Page ${i + 1} of ${pdfDoc.getPageCount()}`, {
+        x: width / 2 - 40,
+        y: 30,
+        size: 10,
+        font: helveticaFont
+      });
+    }
+    
+    // Save the PDF to bytes
+    const pdfBytes = await pdfDoc.save();
+    
+    // Convert to a blob for upload
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    
+    // Generate a unique file name with timestamp
+    const timestamp = new Date().getTime();
+    const filePath = `agreements/${agreementId}/${fileName.replace(/\s+/g, '_')}_${timestamp}.pdf`;
+    
+    // Upload the file to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+    
+    if (error) {
+      console.error('Error uploading document to storage:', error);
+      return { success: false, error };
+    }
+    
+    // Get the public URL for the file
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath);
+    
+    console.log(`Document created successfully: ${urlData.publicUrl}`);
+    
+    return {
+      success: true,
+      url: urlData.publicUrl,
+      path: filePath
+    };
+  } catch (error) {
+    console.error('Error creating document:', error);
+    return {
+      success: false,
+      error: error.message || error
+    };
+  }
+}
+
+export {
+  processHtmlContent,
+  createDocument
 }; 

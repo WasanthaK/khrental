@@ -40,6 +40,11 @@ export default defineConfig(({ command, mode }) => {
       'import.meta.env.VITE_EVIA_SIGN_CLIENT_ID': JSON.stringify(env.VITE_EVIA_SIGN_CLIENT_ID),
       'import.meta.env.VITE_EVIA_SIGN_CLIENT_SECRET': JSON.stringify(env.VITE_EVIA_SIGN_CLIENT_SECRET),
       'import.meta.env.VITE_EVIA_ACCESS_TOKEN': JSON.stringify(env.VITE_EVIA_ACCESS_TOKEN),
+      // Add Supabase environment variables
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
     },
     optimizeDeps: {
       include: ['react', 'react-dom', 'react-router-dom', 'prop-types'],
