@@ -84,9 +84,9 @@ const ProtectedRoute = ({
       return children;
     }
     
-    // Otherwise, redirect to admin tools to complete account linking
-    logRoute('Authenticated user redirected to admin tools for account linking');
-    return <Navigate to="/dashboard/admin-tools" replace />;
+    // Otherwise, redirect to the dashboard instead of admin tools
+    logRoute('Authenticated user redirected to dashboard');
+    return <Navigate to="/dashboard" replace />;
   }
   
   // Always allow admin users

@@ -128,9 +128,9 @@ const PublicRoute = ({ children }) => {
       
       // Redirect based on role
       if (user.role === 'authenticated') {
-        // Redirect to admin tools to complete setup
-        logRouter('Redirecting authenticated user to admin tools');
-        navigate('/dashboard/admin-tools', { replace: true });
+        // Redirect new authenticated users to dashboard instead of admin-tools
+        logRouter('Redirecting authenticated user to dashboard');
+        navigate('/dashboard', { replace: true });
       } else if (user.role === 'admin' || user.role === 'staff' || 
                 user.role === 'maintenance_staff' || user.role === 'finance_staff' ||
                 user.role === 'manager' || user.role === 'maintenance' || 

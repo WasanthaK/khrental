@@ -562,26 +562,62 @@ const cleanDataForDatabase = (data) => {
 // Function to invite a user via email
 export const inviteUser = async (email, role = 'rentee') => {
   try {
-    // Use magic link authentication instead of RPC
+    console.log('[Supabase] Sending invitation to user:', email, 'with role:', role);
+    
+    // Use magic link authentication instead of the invite API since invite requires admin privileges
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         data: {
           role: role
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`,
       }
     });
 
     if (error) {
-      console.error('Error inviting user:', error);
+      console.error('[Supabase] Error sending invitation:', error);
       return { success: false, data: null, error: error.message };
     }
 
-    console.log('Invitation sent successfully to:', email);
+    console.log('[Supabase] OTP/Magic link sent successfully to:', email);
+    
+    // Since we successfully sent an email, let's also create an app_user record if one doesn't exist
+    try {
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('app_users')
+        .select('id, email')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (!existingUser) {
+        // Create a placeholder user record that will be updated when they sign in
+        const { data: newUser, error: userError } = await supabase
+          .from('app_users')
+          .insert({
+            email: email,
+            role: role,
+            status: 'invited',
+            createdat: new Date().toISOString(),
+            updatedat: new Date().toISOString()
+          })
+          .select();
+        
+        if (userError) {
+          console.error('[Supabase] Error creating placeholder user record:', userError);
+        } else {
+          console.log('[Supabase] Created placeholder user record:', newUser);
+        }
+      }
+    } catch (userError) {
+      console.error('[Supabase] Error checking/creating user record:', userError);
+      // Continue with the invitation process even if this fails
+    }
+
     return { success: true, data, error: null };
   } catch (error) {
-    console.error('Error inviting user:', error.message);
+    console.error('[Supabase] Exception during user invitation:', error.message);
     return { success: false, data: null, error: error.message };
   }
 };
@@ -617,5 +653,97 @@ export const checkUserExists = async (userId, isAuthId = false) => {
   } catch (error) {
     console.error('Exception checking if user exists:', error);
     return { exists: false, data: null, error };
+  }
+};
+
+/**
+ * Specialized function to invite team members
+ * @param {string} email - Email address to invite
+ * @param {string} role - Role to assign (staff, manager, maintenance_staff, etc.)
+ * @param {object} userDetails - Additional user details to store
+ * @returns {Promise<{success: boolean, message: string, error: string|null}>}
+ */
+export const inviteTeamMember = async (email, role, userDetails = {}) => {
+  try {
+    console.log('[Team] Inviting team member:', email, 'with role:', role);
+    
+    // First check if email exists in the system
+    const { data: existingUsers } = await supabase
+      .from('app_users')
+      .select('id, email, role, status')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+    
+    if (existingUsers) {
+      console.log('[Team] User already exists:', existingUsers);
+      return { 
+        success: false, 
+        message: `User with email ${email} already exists in the system with role: ${existingUsers.role}`,
+        error: 'USER_EXISTS'
+      };
+    }
+    
+    // Create the user record first
+    const { data: newUser, error: insertError } = await supabase
+      .from('app_users')
+      .insert({
+        email: email.toLowerCase(),
+        role: role,
+        status: 'invited',
+        name: userDetails.name || '',
+        contact_details: userDetails.contactDetails || {},
+        user_type: 'staff',
+        createdat: new Date().toISOString(),
+        updatedat: new Date().toISOString()
+      })
+      .select();
+    
+    if (insertError) {
+      console.error('[Team] Error creating user record:', insertError);
+      return { 
+        success: false, 
+        message: `Failed to create user record: ${insertError.message}`,
+        error: insertError.message
+      };
+    }
+    
+    // Now send the magic link
+    const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        data: { role },
+        emailRedirectTo: `${window.location.origin}/auth/callback?type=invite&role=${role}`,
+      }
+    });
+    
+    if (magicLinkError) {
+      console.error('[Team] Error sending invitation email:', magicLinkError);
+      
+      // Delete the user record since the email failed
+      await supabase
+        .from('app_users')
+        .delete()
+        .eq('id', newUser[0].id);
+        
+      return { 
+        success: false, 
+        message: `Failed to send invitation email: ${magicLinkError.message}`,
+        error: magicLinkError.message
+      };
+    }
+    
+    return { 
+      success: true, 
+      message: `Invitation sent to ${email}`, 
+      error: null,
+      userId: newUser[0].id
+    };
+  } catch (error) {
+    console.error('[Team] Exception inviting team member:', error);
+    return { 
+      success: false, 
+      message: `An unexpected error occurred: ${error.message}`,
+      error: error.message
+    };
   }
 }; 
