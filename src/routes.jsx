@@ -262,7 +262,7 @@ const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: (
-          <ProtectedRoute requiredRoles={['admin', 'staff', 'manager', 'maintenance_staff', 'finance_staff', 'maintenance', 'supervisor']}>
+          <ProtectedRoute requiredRoles={['admin', 'staff', 'manager', 'maintenance_staff', 'finance_staff', 'maintenance', 'supervisor', 'authenticated']}>
             <DashboardLayout />
           </ProtectedRoute>
         ),
@@ -533,6 +533,14 @@ const router = createBrowserRouter([
                 ),
               },
             ],
+          },
+          {
+            path: 'admin-tools',
+            element: (
+              <ProtectedRoute allowAuthenticated={true}>
+                <AdminTools />
+              </ProtectedRoute>
+            ),
           },
           {
             path: 'signature-progress-demo',

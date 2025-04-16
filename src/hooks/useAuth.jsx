@@ -247,7 +247,14 @@ const AuthProvider = ({ children }) => {
         hasAnonKey: !!(window?._env_?.VITE_SUPABASE_ANON_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY)
       });
       
+      console.log('[Auth] Calling signIn function...');
       const { data, error } = await signIn(email, password);
+      console.log('[Auth] SignIn complete, checking results:', { 
+        success: !error, 
+        hasData: !!data,
+        hasUser: !!data?.user,
+        hasSession: !!data?.session 
+      });
       
       logDebug('Login result', {
         success: !error,
@@ -298,10 +305,19 @@ const AuthProvider = ({ children }) => {
       // Fetch user profile after successful login
       if (data?.user) {
         logDebug('Login successful, fetching user profile');
+        console.log('[Auth] Login successful, fetching user profile for:', data.user.id);
         const userWithProfile = await fetchUserProfile(data.user);
+        console.log('[Auth] User profile fetched:', { 
+          hasProfile: !!userWithProfile, 
+          role: userWithProfile?.role,
+          id: userWithProfile?.id
+        });
         setUserData(userWithProfile);
+      } else {
+        console.warn('[Auth] Login successful but no user data returned');
       }
       
+      setLoading(false);
       return { data };
     } catch (error) {
       console.error('[Auth] Error logging in:', error.message);
