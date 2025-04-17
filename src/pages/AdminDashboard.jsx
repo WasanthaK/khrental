@@ -18,6 +18,13 @@ const AdminDashboard = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState('rentee');
   
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [filterStatus, setFilterStatus] = useState('all'); // all, active, inactive
+  const [searchTerm, setSearchTerm] = useState('');
+  
   // Storage States
   const [selectedBucket, setSelectedBucket] = useState(STORAGE_BUCKETS.IMAGES);
   const [selectedFolder, setSelectedFolder] = useState('');
@@ -29,7 +36,7 @@ const AdminDashboard = () => {
       loadUsers();
       loadTemplates();
     }
-  }, [user]);
+  }, [user, currentPage, pageSize, filterStatus, searchTerm]);
 
   useEffect(() => {
     if (selectedBucket) {
@@ -75,13 +82,48 @@ const AdminDashboard = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await fetchData('app_users');
+      
+      let query = supabase
+        .from('app_users')
+        .select('*', { count: 'exact' });
+      
+      // Apply filters
+      if (filterStatus === 'active') {
+        query = query.is('is_active', true);
+      } else if (filterStatus === 'inactive') {
+        query = query.is('is_active', false);
+      }
+      
+      // Apply search
+      if (searchTerm) {
+        query = query.or(`email.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%`);
+      }
+      
+      // Get total count first
+      const { count, error: countError } = await query;
+      
+      if (countError) {
+        throw countError;
+      }
+      
+      setTotalUsers(count || 0);
+      
+      // Then get paginated results
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data, error } = await query
+        .range(from, to)
+        .order('createdat', { ascending: false });
+      
       if (error) {
         throw error;
       }
+      
       console.log('[AdminDashboard] Loaded users:', data);
       setUsers(data || []);
     } catch (err) {
+      console.error('Error loading users:', err);
       setError(err.message);
       toast.error('Failed to load users');
     } finally {
@@ -117,37 +159,13 @@ const AdminDashboard = () => {
         return;
       }
       
-      // Generate a secure temporary password (at least 8 chars with lowercase, uppercase, number)
-      const tempPassword = `${Math.random().toString(36).slice(2, 6)}${Math.random().toString(36).toUpperCase().slice(2, 4)}${Math.floor(Math.random() * 10000)}`;
-      
-      console.log(`Creating new user ${newUserEmail} with role ${newUserRole}`);
-      
-      // Create user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUserEmail,
-        password: tempPassword,
-        options: {
-          data: { 
-            role: newUserRole 
-          }
-        }
-      });
-      
-      if (authError) {
-        console.error('Auth signup error:', authError);
-        toast.error(`Authentication error: ${authError.message}`);
-        return;
-      }
-      
-      if (!authData || !authData.user || !authData.user.id) {
-        console.error('No auth user data returned:', authData);
-        toast.error('Failed to create authentication record');
-        return;
-      }
-      
-      // Create user in app_users table
+      // Step 1: Create the app_users record FIRST (before auth)
+      const newUserId = crypto?.randomUUID?.() || 
+        ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
       const userData = {
-        auth_id: authData.user.id,
+        id: newUserId,
         email: newUserEmail,
         role: newUserRole,
         user_type: newUserRole === 'rentee' ? 'rentee' : 'staff',
@@ -171,22 +189,32 @@ const AdminDashboard = () => {
         return;
       }
       
-      // Send a password reset link
-      console.log('Sending password reset email');
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(newUserEmail, {
-        redirectTo: `${window.location.origin}/auth/callback?type=invite`
+      console.log('Created app_user:', appUser);
+      
+      // Step 2: Send magic link with app_user_id in metadata
+      console.log('Sending magic link with app_user_id:', newUserId);
+      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        email: newUserEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`,
+          data: {
+            app_user_id: newUserId,
+            role: newUserRole,
+            user_type: newUserRole === 'rentee' ? 'rentee' : 'staff'
+          }
+        }
       });
       
-      if (resetError) {
-        console.error('Error sending password reset:', resetError);
-        toast.error(`Error sending password reset: ${resetError.message}`);
-        // Continue anyway, we can send it again later
+      if (magicLinkError) {
+        console.error('Error sending magic link:', magicLinkError);
+        toast.error(`Error sending magic link: ${magicLinkError.message}`);
+        // Continue anyway as the user record is created and they can be invited again
       }
 
       setNewUserEmail('');
       setNewUserRole('rentee');
       loadUsers();
-      toast.success(`User ${newUserEmail} invited successfully. Password reset email sent.`);
+      toast.success(`User ${newUserEmail} invited successfully. Magic link email sent.`);
     } catch (err) {
       console.error('Error in inviteUser:', err);
       setError(err.message);
@@ -360,7 +388,7 @@ const AdminDashboard = () => {
 
   // Render user card for mobile view
   const renderUserCard = (user) => (
-    <div key={user.id} className="bg-white rounded-lg shadow p-4 mb-3">
+    <div key={user.id} className={`bg-white rounded-lg shadow p-4 mb-3 ${user.is_active === false ? 'bg-red-50' : ''}`}>
       <div className="mb-2">
         <h3 className="font-medium text-gray-900">{user.name}</h3>
         <p className="text-sm text-gray-600">{user.email}</p>
@@ -371,15 +399,37 @@ const AdminDashboard = () => {
         </span>
         <div className="flex items-center">
           {renderUserStatus(user)}
-          {!user.invited && !user.auth_id && (
-            <button 
-              onClick={() => sendInvite(user)}
-              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+          <div className="flex ml-2 space-x-2">
+            {!user.invited && !user.auth_id && (
+              <button 
+                onClick={() => sendInvite(user)}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                disabled={loading}
+              >
+                Send
+              </button>
+            )}
+            {user.invited && !user.auth_id && (
+              <button 
+                onClick={() => sendInvite(user)}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                disabled={loading}
+              >
+                Resend
+              </button>
+            )}
+            <button
+              onClick={() => toggleUserStatus(user.id, user.is_active !== false)}
+              className={`text-xs ${
+                user.is_active === false
+                  ? 'text-green-600 hover:text-green-800'
+                  : 'text-red-600 hover:text-red-800'
+              }`}
               disabled={loading}
             >
-              Send
+              {user.is_active === false ? 'Activate' : 'Deactivate'}
             </button>
-          )}
+          </div>
         </div>
       </div>
     </div>
@@ -413,7 +463,7 @@ const AdminDashboard = () => {
 
   // Render user status badge
   const renderUserStatus = (user) => {
-    // Determine status based on available fields
+    // First determine invitation status
     let status = 'not_invited';
     let badgeColor = 'bg-yellow-100 text-yellow-800';
     let statusText = 'Not Invited';
@@ -428,6 +478,12 @@ const AdminDashboard = () => {
       statusText = 'Invited';
     }
     
+    // Then check active status
+    if (user.is_active === false) {
+      badgeColor = 'bg-red-100 text-red-800';
+      statusText = `${statusText} (Inactive)`;
+    }
+    
     return (
       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColor}`}>
         {statusText}
@@ -439,6 +495,13 @@ const AdminDashboard = () => {
   const sendInvite = async (user) => {
     try {
       setLoading(true);
+      
+      if (!user || !user.id || !user.email) {
+        toast.error('Invalid user data');
+        return;
+      }
+      
+      console.log('Sending invitation to user:', user);
       
       // Update the user record to mark as invited
       const { data, error } = await supabase
@@ -452,23 +515,247 @@ const AdminDashboard = () => {
         .single();
       
       if (error) {
+        console.error('Error updating user as invited:', error);
         toast.error(`Failed to update user: ${error.message}`);
         return;
       }
       
-      // Send password reset email for registration
-      await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/auth/callback?type=invite`
+      console.log('User marked as invited:', data);
+      
+      // Send magic link for registration
+      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        email: user.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`,
+          data: { 
+            app_user_id: user.id,
+            role: user.role,
+            user_type: user.user_type || (user.role === 'rentee' ? 'rentee' : 'staff')
+          }
+        }
       });
+      
+      if (magicLinkError) {
+        console.error('Error sending magic link:', magicLinkError);
+        toast.error(`Failed to send invitation email: ${magicLinkError.message}`);
+        return;
+      }
       
       toast.success(`Invitation sent to ${user.email}`);
       loadUsers(); // Refresh the list
     } catch (err) {
+      console.error('Error sending invitation:', err);
       toast.error(`Error sending invitation: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
+
+  // Debug function to show invited users
+  const debugShowInvited = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .order('createdat', { ascending: false });
+        
+      if (error) {
+        console.error('Error fetching users:', error);
+        toast.error('Error fetching users');
+        return;
+      }
+      
+      console.log('All users in database:', data);
+      console.log('Invited users:', data.filter(user => user.invited === true));
+      console.log('Users with auth_id:', data.filter(user => user.auth_id));
+      
+      // Display to user
+      toast.success(`Found ${data.length} users. Check browser console for details.`);
+    } catch (err) {
+      console.error('Debug error:', err);
+      toast.error('Failed to fetch user data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add deactivate user function
+  const toggleUserStatus = async (userId, currentStatus) => {
+    try {
+      setLoading(true);
+      
+      const newStatus = !currentStatus;
+      const { data, error } = await supabase
+        .from('app_users')
+        .update({ 
+          is_active: newStatus,
+          updatedat: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select();
+      
+      if (error) {
+        console.error('Error updating user status:', error);
+        toast.error(`Failed to update user status: ${error.message}`);
+        return;
+      }
+      
+      toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      
+      // Update local state
+      setUsers(prevUsers => prevUsers.map(user => 
+        user.id === userId ? { ...user, is_active: newStatus } : user
+      ));
+    } catch (err) {
+      console.error('Error toggling user status:', err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add pagination controls component
+  const PaginationControls = () => {
+    const totalPages = Math.ceil(totalUsers / pageSize);
+    
+    return (
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <span className="text-sm text-gray-700">
+            Showing {users.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, totalUsers)} of {totalUsers} users
+          </span>
+          <div className="ml-4">
+            <select 
+              value={pageSize}
+              onChange={e => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1); // Reset to first page when changing page size
+              }}
+              className="text-sm border rounded px-2 py-1"
+            >
+              <option value={5}>5 per page</option>
+              <option value={10}>10 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className={`px-3 py-1 text-sm rounded ${
+              currentPage === 1 
+                ? 'bg-gray-100 text-gray-400' 
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
+          >
+            Previous
+          </button>
+          
+          {totalPages > 0 && (
+            <div className="flex space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                // Show 5 pages at most, centered around current page
+                const totalPageButtons = Math.min(5, totalPages);
+                const startPage = Math.max(
+                  1, 
+                  currentPage - Math.floor(totalPageButtons / 2)
+                );
+                const pageNum = startPage + i;
+                
+                if (pageNum > totalPages) return null;
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-8 h-8 text-sm rounded ${
+                      currentPage === pageNum 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              {totalPages > 5 && currentPage < totalPages - 2 && (
+                <>
+                  <span className="self-center">...</span>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="w-8 h-8 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className={`px-3 py-1 text-sm rounded ${
+              currentPage === totalPages || totalPages === 0
+                ? 'bg-gray-100 text-gray-400' 
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Add filter and search UI
+  const UserFilters = () => (
+    <div className="mb-4 flex flex-col sm:flex-row gap-3">
+      <div className="flex-1">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={e => {
+            setSearchTerm(e.target.value);
+            setCurrentPage(1); // Reset to first page when searching
+          }}
+          placeholder="Search by name or email"
+          className="w-full px-3 py-2 border rounded text-sm"
+        />
+      </div>
+      
+      <div className="flex space-x-2">
+        <select
+          value={filterStatus}
+          onChange={e => {
+            setFilterStatus(e.target.value);
+            setCurrentPage(1); // Reset to first page when filtering
+          }}
+          className="px-3 py-2 border rounded text-sm"
+        >
+          <option value="all">All Users</option>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
+        </select>
+        
+        <button
+          onClick={() => {
+            setSearchTerm('');
+            setFilterStatus('all');
+            setCurrentPage(1);
+          }}
+          className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200"
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-3 sm:p-6">
@@ -505,6 +792,15 @@ const AdminDashboard = () => {
       {/* Users Tab */}
       {activeTab === 'users' && (
         <div>
+          <div className="mb-4">
+            <button 
+              onClick={debugShowInvited}
+              className="mb-3 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded"
+            >
+              Debug: Show All Users in Console
+            </button>
+          </div>
+          
           <div className="mb-4 sm:mb-6">
             <h2 className="text-lg font-semibold mb-3">Invite New User</h2>
             <form onSubmit={inviteUser} className="space-y-3">
@@ -539,8 +835,39 @@ const AdminDashboard = () => {
             </form>
           </div>
 
+          {/* Debug display of invitation status */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg text-xs">
+            <h3 className="font-bold mb-2">Debug: User Status</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border border-gray-300 text-left">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-2 border">Email</th>
+                    <th className="p-2 border">Role</th>
+                    <th className="p-2 border">Auth ID</th>
+                    <th className="p-2 border">Invited</th>
+                    <th className="p-2 border">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id} className="border-b">
+                      <td className="p-2 border">{user.email}</td>
+                      <td className="p-2 border">{user.role}</td>
+                      <td className="p-2 border">{user.auth_id ? '✅' : '❌'}</td>
+                      <td className="p-2 border">{user.invited ? '✅' : '❌'}</td>
+                      <td className="p-2 border">{new Date(user.createdat || user.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div>
             <h2 className="text-lg font-semibold mb-3">User List</h2>
+            
+            <UserFilters />
             
             {/* Mobile view */}
             <div className="block sm:hidden">
@@ -561,11 +888,12 @@ const AdminDashboard = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {users.map(user => (
-                      <tr key={user.id}>
+                      <tr key={user.id} className={user.is_active === false ? 'bg-red-50' : ''}>
                         <td className="px-4 py-3 text-sm">{user.name}</td>
                         <td className="px-4 py-3 text-sm">{user.email}</td>
                         <td className="px-4 py-3 text-sm">
@@ -575,15 +903,37 @@ const AdminDashboard = () => {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           {renderUserStatus(user)}
+                        </td>
+                        <td className="px-4 py-3 text-sm flex space-x-2">
                           {!user.invited && !user.auth_id && (
                             <button 
                               onClick={() => sendInvite(user)}
-                              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                              className="text-xs text-blue-600 hover:text-blue-800"
                               disabled={loading}
                             >
                               Send
                             </button>
                           )}
+                          {user.invited && !user.auth_id && (
+                            <button 
+                              onClick={() => sendInvite(user)}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                              disabled={loading}
+                            >
+                              Resend
+                            </button>
+                          )}
+                          <button
+                            onClick={() => toggleUserStatus(user.id, user.is_active !== false)}
+                            className={`text-xs ${
+                              user.is_active === false
+                                ? 'text-green-600 hover:text-green-800'
+                                : 'text-red-600 hover:text-red-800'
+                            }`}
+                            disabled={loading}
+                          >
+                            {user.is_active === false ? 'Activate' : 'Deactivate'}
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -591,6 +941,8 @@ const AdminDashboard = () => {
                 </table>
               </div>
             </div>
+            
+            <PaginationControls />
           </div>
         </div>
       )}
@@ -603,160 +955,87 @@ const AdminDashboard = () => {
               <button
                 key={bucket}
                 onClick={() => setSelectedBucket(bucket)}
-                className={`px-3 py-1.5 rounded text-sm ${
-                  selectedBucket === bucket
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 hover:bg-gray-300'
-                }`}
+                className={`
+                  py-2 px-3 bg-gray-200 text-gray-700 rounded-md text-sm
+                  ${selectedBucket === bucket ? 'bg-gray-300' : 'hover:bg-gray-300'}
+                `}
               >
                 {bucket}
               </button>
             ))}
           </div>
 
-          {bucketPermissions && (
-            <div className="mb-4 p-3 sm:p-4 bg-gray-50 rounded text-sm">
-              <h3 className="font-semibold mb-2">Bucket Information</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-gray-600">Access</p>
-                  <p className="font-medium">{bucketPermissions.public ? 'Public' : 'Private'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">File Size Limit</p>
-                  <p className="font-medium">{formatBytes(bucketPermissions.fileSizeLimit)}</p>
-                </div>
-                {bucketPermissions.allowedMimeTypes && (
-                  <div className="col-span-1 sm:col-span-2">
-                    <p className="text-xs text-gray-600">Allowed File Types</p>
-                    <p className="font-medium break-words">{bucketPermissions.allowedMimeTypes.join(', ')}</p>
-                  </div>
-                )}
-              </div>
+          <div className="mt-4">
+            <h2 className="text-lg font-semibold mb-3">Files</h2>
+            <div className="mb-4">
+              <input
+                type="text"
+                value={selectedFolder}
+                onChange={(e) => setSelectedFolder(e.target.value)}
+                placeholder="Folder path"
+                className="w-full px-3 py-2 border rounded text-sm"
+              />
             </div>
-          )}
-
-          <div className="mb-4">
-            <h3 className="font-semibold mb-2 text-sm">Folders</h3>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedFolder('')}
-                className={`px-2 py-1 rounded text-xs ${
-                  selectedFolder === ''
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 hover:bg-gray-300'
-                }`}
-              >
-                Root
-              </button>
-              
-              {/* Use the array-based folder structure */}
-              {Array.isArray(BUCKET_FOLDERS[selectedBucket]) && BUCKET_FOLDERS[selectedBucket].map((folder) => (
-                <button
-                  key={folder}
-                  onClick={() => setSelectedFolder(folder)}
-                  className={`px-2 py-1 rounded text-xs ${
-                    selectedFolder === folder
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300'
-                  }`}
-                >
-                  {folder}
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => loadFiles(selectedBucket, selectedFolder)}
+              className="bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 text-sm"
+            >
+              Load Files
+            </button>
           </div>
 
-          {loading ? (
-            <div className="text-center py-4">Loading...</div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
+          <div className="mt-4">
+            <h2 className="text-lg font-semibold mb-3">Bucket Permissions</h2>
+            {bucketPermissions && (
+              <div className="mb-4">
+                <p>Name: {bucketPermissions.name}</p>
+                <p>Public: {bucketPermissions.public ? 'Yes' : 'No'}</p>
+                <p>File Size Limit: {formatBytes(bucketPermissions.fileSizeLimit)}</p>
+                <p>Allowed MIME Types: {bucketPermissions.allowedMimeTypes.join(', ')}</p>
+                <p>Owner: {bucketPermissions.owner}</p>
+                <p>Created At: {bucketPermissions.created_at ? new Date(bucketPermissions.created_at).toLocaleString() : 'N/A'}</p>
+                <p>Updated At: {bucketPermissions.updated_at ? new Date(bucketPermissions.updated_at).toLocaleString() : 'N/A'}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <h2 className="text-lg font-semibold mb-3">Files</h2>
+            <div className="overflow-x-auto">
               {files.length > 0 ? (
                 files.map((file) => (
-                  <div
-                    key={file.name}
-                    className="flex items-center justify-between p-3 bg-white rounded shadow"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{file.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatBytes(file.metadata?.size)} • {new Date(file.updated_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => window.open(file.signedUrl, '_blank')}
-                      className="ml-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs whitespace-nowrap"
-                    >
-                      View
-                    </button>
+                  <div key={file.id} className="mb-2">
+                    <span>{file.name}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-center text-gray-500 py-4">No files found</p>
+                <p className="text-gray-500 text-center py-4">No files found</p>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
       {/* Templates Tab */}
       {activeTab === 'templates' && (
         <div>
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 sm:mb-6 gap-3">
-            <h2 className="text-lg font-semibold">Agreement Templates</h2>
-            <a
-              href="/dashboard/agreements/templates/new"
-              className="bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 text-sm text-center"
+          <div className="mb-4">
+            <button 
+              onClick={debugShowInvited}
+              className="mb-3 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded"
             >
-              Create New Template
-            </a>
+              Debug: Show All Users in Console
+            </button>
           </div>
-
-          {/* Mobile view */}
-          <div className="block sm:hidden">
-            {templates.length > 0 ? (
-              templates.map(template => renderTemplateCard(template))
-            ) : (
-              <p className="text-gray-500 text-center py-4">No templates found</p>
-            )}
-          </div>
-
-          {/* Desktop view */}
-          <div className="hidden sm:block bg-white shadow overflow-hidden rounded-lg">
+          
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-lg font-semibold mb-3">Templates</h2>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {templates.map(template => (
-                    <tr key={template.id}>
-                      <td className="px-4 py-3 text-sm">{template.name}</td>
-                      <td className="px-4 py-3 text-sm">{template.language}</td>
-                      <td className="px-4 py-3 text-sm">{template.version}</td>
-                      <td className="px-4 py-3 text-sm space-x-2">
-                        <a
-                          href={`/dashboard/agreements/templates/${template.id}`}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          View
-                        </a>
-                        <a
-                          href={`/dashboard/agreements/templates/${template.id}/edit`}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Edit
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {templates.length > 0 ? (
+                templates.map(renderTemplateCard)
+              ) : (
+                <p className="text-gray-500 text-center py-4">No templates found</p>
+              )}
             </div>
           </div>
         </div>
@@ -765,4 +1044,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard; 
+export default AdminDashboard;
