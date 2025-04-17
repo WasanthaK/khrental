@@ -12,7 +12,6 @@ import AdminLayout from './components/layouts/AdminLayout';
 
 // Auth pages
 import Login from './pages/Login';
-import Register from './pages/Register';
 import AuthCallback from './pages/AuthCallback';
 import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
@@ -195,7 +194,7 @@ const UuidGuard = ({ children }) => {
     setIsValid(true);
   }, [id, navigate]);
   
-  if (!isValid) return <div>Validating...</div>;
+  if (!isValid) { return <div>Validating...</div>; }
   return children;
 };
 
@@ -216,14 +215,6 @@ const router = createBrowserRouter([
         element: (
           <PublicRoute>
             <Login />
-          </PublicRoute>
-        ),
-      },
-      {
-        path: 'register',
-        element: (
-          <PublicRoute>
-            <Register />
           </PublicRoute>
         ),
       },

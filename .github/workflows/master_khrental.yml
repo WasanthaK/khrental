@@ -18,8 +18,8 @@ jobs:
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       VITE_EVIA_SIGN_CLIENT_ID: ${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}
       VITE_EVIA_SIGN_CLIENT_SECRET: ${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}
-      VITE_API_ENDPOINT: ${{ secrets.VITE_API_ENDPOINT }}
-      VITE_WEBHOOK_URL: ${{ secrets.VITE_WEBHOOK_URL }}
+      VITE_API_ENDPOINT: '${{ secrets.VITE_API_ENDPOINT }}'
+      VITE_WEBHOOK_URL: '${{ secrets.VITE_WEBHOOK_URL }}'
 
     steps:
       - name: Checkout repository

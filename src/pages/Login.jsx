@@ -151,12 +151,6 @@ const Login = () => {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
-          
-          <div className="text-sm text-center">
-            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              Don't have an account? Register
-            </Link>
-          </div>
         </form>
 
         {/* Development-only bypass section */}

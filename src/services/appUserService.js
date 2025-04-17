@@ -1,4 +1,4 @@
-import { supabase, inviteUser } from './supabaseClient';
+import { supabase } from './supabaseClient';
 import { sendEmailNotification } from './notificationService';
 import { USER_ROLES } from '../utils/constants';
 
@@ -8,7 +8,7 @@ import { USER_ROLES } from '../utils/constants';
  * @returns {Object} - Record with valid timestamp fields
  */
 export const ensureValidTimestamps = (record) => {
-  if (!record) return record;
+  if (!record) { return record; }
   
   const now = new Date().toISOString();
   return {
@@ -82,30 +82,100 @@ export const createAppUser = async (userData, userType) => {
  * @returns {Promise<Object>} - Result of the invitation
  */
 export const inviteAppUser = async (email, name, userType, userId) => {
+  console.log(`[inviteAppUser] Inviting ${userType} ${name} (${email}) with ID ${userId}`);
+  
   try {
     if (!email || !name || !userType || !userId) {
-      return { success: false, error: 'Missing required parameters for invitation' };
+      console.error('[inviteAppUser] Missing required parameters:', { email, name, userType, userId });
+      return { 
+        success: false, 
+        error: 'Missing required parameters for invitation',
+        debug: { email, name, userType, userId }
+      };
     }
     
     // Determine auth role based on user type
     let authRole = userType === 'staff' ? 'staff' : 'rentee';
     
-    // Send invitation through Supabase
-    const { success, data, error } = await inviteUser(email, authRole);
-    
-    if (!success) {
-      return { success: false, error: error || 'Failed to invite user' };
+    // First check if the app_user exists
+    console.log(`[inviteAppUser] Checking if app_user ${userId} exists`);
+    const { data: appUser, error: userCheckError } = await supabase
+      .from('app_users')
+      .select('id, email, auth_id, invited')
+      .eq('id', userId)
+      .single();
+      
+    if (userCheckError) {
+      console.error(`[inviteAppUser] Error checking app_user ${userId}:`, userCheckError);
+      return { 
+        success: false, 
+        error: `Error checking app_user: ${userCheckError.message}`,
+        debug: { userCheckError }
+      };
     }
     
-    // Update the user record to mark as invited
+    if (!appUser) {
+      console.error(`[inviteAppUser] App user ${userId} not found`);
+      return { 
+        success: false, 
+        error: 'App user not found',
+        debug: { userId }
+      };
+    }
+    
+    // If user already has auth_id, check if it's a valid Supabase user
+    if (appUser.auth_id) {
+      console.log(`[inviteAppUser] User ${userId} already has auth_id ${appUser.auth_id}, checking if valid`);
+      
+      // For security reasons, we'll just send a new magic link rather than checking if the user exists
+      console.log(`[inviteAppUser] User has existing auth_id, sending magic link anyway`);
+    }
+    
+    // Send magic link email - this will create a new user if one doesn't exist
+    // or send a magic link to an existing user
+    console.log(`[inviteAppUser] Sending magic link to ${email}`);
+    const { data: otpData, error: magicLinkError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        data: { 
+          role: authRole,
+          user_type: userType,
+          name: name,
+          app_user_id: userId
+        },
+        redirectTo: `${window.location.origin}/auth/callback`
+      }
+    });
+    
+    if (magicLinkError) {
+      console.error(`[inviteAppUser] Error sending magic link to ${email}:`, magicLinkError);
+      return { 
+        success: false, 
+        error: magicLinkError.message,
+        debug: { magicLinkError }
+      };
+    }
+    
+    console.log(`[inviteAppUser] Magic link sent successfully to ${email}`, otpData);
+    
+    // Update the app_users table to mark as invited
+    // We'll set the auth_id when the user actually signs in via AuthCallback component
+    console.log(`[inviteAppUser] Updating app_user ${userId} as invited`);
     const { error: updateError } = await supabase
       .from('app_users')
-      .update({ invited: true })
+      .update({ 
+        invited: true,
+        updatedat: new Date().toISOString()
+      })
       .eq('id', userId);
     
     if (updateError) {
-      console.error('Error updating user as invited:', updateError);
-      // Continue with the invitation process even if update fails
+      console.error(`[inviteAppUser] Error updating app_user ${userId} as invited:`, updateError);
+      return { 
+        success: false, 
+        error: `Error updating user as invited: ${updateError.message}`,
+        debug: { updateError, otpSent: true }
+      };
     }
     
     // Send a custom email notification with more information
@@ -117,9 +187,11 @@ export const inviteAppUser = async (email, name, userType, userId) => {
       ? `
 Hello ${name},
 
-You have been invited to join KH Rentals as a ${authRole}. To complete your registration and access the staff portal, please click the link sent in a separate email to create your account.
+You have been invited to join KH Rentals as a ${authRole}. We've sent a magic link to this email address that will allow you to sign in without a password.
 
-Once your account is set up, you will be able to access all the features and tools necessary for your role.
+Simply click the "Sign In" button in the email you receive, and you'll be logged in automatically to access the staff portal.
+
+Once you're logged in, you will be able to access all the features and tools necessary for your role.
 
 If you have any questions, please contact the admin team.
 
@@ -129,9 +201,11 @@ KH Rentals Team
       : `
 Hello ${name},
 
-You have been registered as a rentee with KH Rentals. To complete your registration and access your rentee portal, please click the link sent in a separate email to create your account.
+You have been registered as a rentee with KH Rentals. We've sent a magic link to this email address that will allow you to sign in without a password.
 
-Once your account is set up, you will be able to:
+Simply click the "Sign In" button in the email you receive, and you'll be logged in automatically to access your rentee portal.
+
+Once you're logged in, you will be able to:
 - View your rental agreements
 - Submit maintenance requests
 - Pay invoices
@@ -144,16 +218,30 @@ KH Rentals Team
       `;
     
     try {
+      console.log(`[inviteAppUser] Sending custom email notification to ${email}`);
       await sendEmailNotification(email, subject, message);
+      console.log(`[inviteAppUser] Custom email notification sent successfully to ${email}`);
     } catch (emailError) {
-      console.error('Error sending custom email notification:', emailError);
+      console.error(`[inviteAppUser] Error sending custom email notification to ${email}:`, emailError);
       // Continue with the invitation process even if email fails
     }
     
-    return { success: true, data };
+    console.log(`[inviteAppUser] Invitation process completed successfully for ${email}`);
+    return { 
+      success: true, 
+      data: {
+        email,
+        user_type: userType,
+        invited: true
+      }
+    };
   } catch (error) {
-    console.error('Error inviting user:', error.message);
-    return { success: false, error: error.message };
+    console.error(`[inviteAppUser] Unexpected error inviting user ${email}:`, error);
+    return { 
+      success: false, 
+      error: error.message,
+      debug: { error: error.toString(), stack: error.stack }
+    };
   }
 };
 
@@ -164,22 +252,83 @@ KH Rentals Team
  * @returns {Promise<Object>} - Result of the linking operation
  */
 export const linkAppUser = async (authId, appUserId) => {
+  console.log(`[linkAppUser] Linking auth user ${authId} to app_user ${appUserId}`);
+  
+  if (!authId || !appUserId) {
+    console.error('[linkAppUser] Missing required parameters:', { authId, appUserId });
+    return { 
+      success: false, 
+      error: 'Auth ID and app_user ID are both required',
+      debug: { authId, appUserId }
+    };
+  }
+
   try {
+    // First check if the app_user record exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from('app_users')
+      .select('id, auth_id')
+      .eq('id', appUserId)
+      .single();
+    
+    if (checkError) {
+      console.error(`[linkAppUser] Error checking app_user ${appUserId}:`, checkError);
+      return { 
+        success: false, 
+        error: `Error checking app_user: ${checkError.message}`,
+        debug: { checkError }
+      };
+    }
+    
+    if (!existingUser) {
+      console.error(`[linkAppUser] App user ${appUserId} not found`);
+      return { 
+        success: false, 
+        error: 'App user not found',
+        debug: { appUserId }
+      };
+    }
+    
+    console.log(`[linkAppUser] Found app_user ${appUserId}, current auth_id:`, existingUser.auth_id);
+    
     // Update the app_user record with the auth user ID
     const { data, error } = await supabase
       .from('app_users')
-      .update({ auth_id: authId, invited: true })
+      .update({ 
+        auth_id: authId, 
+        invited: true,
+        updatedat: new Date().toISOString()
+      })
       .eq('id', appUserId)
       .select();
     
     if (error) {
-      throw error;
+      console.error(`[linkAppUser] Error updating app_user ${appUserId}:`, error);
+      return { 
+        success: false, 
+        error: `Error updating app_user: ${error.message}`,
+        debug: { error }
+      };
     }
     
+    if (!data || data.length === 0) {
+      console.error(`[linkAppUser] No data returned after update for app_user ${appUserId}`);
+      return { 
+        success: false, 
+        error: 'No data returned after update',
+        debug: { data }
+      };
+    }
+    
+    console.log(`[linkAppUser] Successfully linked auth user ${authId} to app_user ${appUserId}`);
     return { success: true, data: data[0] };
   } catch (error) {
-    console.error('Error linking user record:', error.message);
-    return { success: false, error: error.message };
+    console.error(`[linkAppUser] Exception linking user record:`, error);
+    return { 
+      success: false, 
+      error: `Exception: ${error.message}`,
+      debug: { error: error.toString(), stack: error.stack }
+    };
   }
 };
 

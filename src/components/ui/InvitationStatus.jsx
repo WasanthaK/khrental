@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { inviteAppUser, checkAppUserInvitationStatus } from '../../services/appUserService';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
+import { supabase } from '../../services/supabaseClient';
 
 /**
  * Component to display and manage the invitation status of users
@@ -16,26 +17,35 @@ const InvitationStatus = ({ userId, onStatusChange, compact = false }) => {
 
   // Fetch the current invitation status
   const fetchStatus = async () => {
-    if (!userId) return;
+    if (!userId) {
+      console.error('[InvitationStatus] No userId provided:', userId);
+      setError('No user ID provided');
+      setStatus('error');
+      return;
+    }
+    
+    console.log(`[InvitationStatus] Fetching status for user ID: ${userId}`);
     
     try {
       const result = await checkAppUserInvitationStatus(userId);
+      console.log(`[InvitationStatus] Status result for user ${userId}:`, result);
       
       if (result.success) {
         setStatus(result.data.status);
         if (onStatusChange) onStatusChange(result.data.status);
       } else {
         setError(result.error);
-        console.error('Error checking invitation status:', result.error);
+        console.error(`[InvitationStatus] Error checking invitation status for ${userId}:`, result.error);
       }
     } catch (err) {
       setError(err.message);
-      console.error('Error in fetchStatus:', err);
+      console.error(`[InvitationStatus] Exception in fetchStatus for ${userId}:`, err);
     }
   };
   
   // Load status on component mount
   useEffect(() => {
+    console.log(`[InvitationStatus] Component mounted for user ${userId}`);
     fetchStatus();
   }, [userId]);
   
@@ -45,7 +55,31 @@ const InvitationStatus = ({ userId, onStatusChange, compact = false }) => {
       setLoading(true);
       setError(null);
       
-      const result = await inviteAppUser(userId);
+      console.log(`[InvitationStatus] Sending invite to user ${userId}`);
+      // Need to get user details first since inviteAppUser requires email, name, and userType
+      const { data: userData, error: userError } = await supabase
+        .from('app_users')
+        .select('email, name, user_type') 
+        .eq('id', userId)
+        .single();
+        
+      if (userError || !userData) {
+        const errorMsg = userError ? userError.message : 'User not found';
+        console.error(`[InvitationStatus] Error getting user data for ${userId}:`, errorMsg);
+        setError(errorMsg);
+        toast.error(`Failed to get user data: ${errorMsg}`);
+        setLoading(false);
+        return;
+      }
+      
+      const result = await inviteAppUser(
+        userData.email, 
+        userData.name, 
+        userData.user_type, 
+        userId
+      );
+      
+      console.log(`[InvitationStatus] Invite result for user ${userId}:`, result);
       
       if (result.success) {
         toast.success('Invitation sent successfully');
@@ -57,6 +91,7 @@ const InvitationStatus = ({ userId, onStatusChange, compact = false }) => {
       }
     } catch (error) {
       setError(error.message);
+      console.error(`[InvitationStatus] Exception in handleSendInvite for ${userId}:`, error);
       toast.error(`Error sending invitation: ${error.message}`);
     } finally {
       setLoading(false);
@@ -83,6 +118,8 @@ const InvitationStatus = ({ userId, onStatusChange, compact = false }) => {
   
   // Render the status badge
   const renderStatusBadge = () => {
+    console.log(`[InvitationStatus] Rendering badge for status: ${status}`);
+    
     switch (status) {
       case 'loading':
         return (
@@ -112,6 +149,12 @@ const InvitationStatus = ({ userId, onStatusChange, compact = false }) => {
         return (
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 ${compact ? 'mr-1' : ''}`}>
             Access Removed
+          </span>
+        );
+      case 'error':
+        return (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 ${compact ? 'mr-1' : ''}`}>
+            Error
           </span>
         );
       default:

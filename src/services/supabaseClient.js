@@ -263,7 +263,7 @@ export const getCurrentUser = async () => {
 export const resetPassword = async (email) => {
   console.log('[Supabase] Sending password reset email to:', email);
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/reset-password`,
+    redirectTo: `${window.location.origin}/auth/callback`,
   });
   console.log('[Supabase] Password reset email result:', { success: !error, error });
   return { data, error };
@@ -746,4 +746,4 @@ export const inviteTeamMember = async (email, role, userDetails = {}) => {
       error: error.message
     };
   }
-}; 
+};

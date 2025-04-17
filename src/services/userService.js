@@ -1,4 +1,4 @@
-import { supabase, inviteUser } from './supabaseClient';
+import { supabase } from './supabaseClient';
 import { sendEmailNotification } from './notificationService';
 import { USER_ROLES } from '../utils/constants';
 
@@ -11,17 +11,32 @@ import { USER_ROLES } from '../utils/constants';
  */
 export const inviteRentee = async (email, name, renteeId) => {
   try {
-    // First, send invitation through Supabase
-    const { success, data, error } = await inviteUser(email, USER_ROLES.RENTEE);
+    // Generate a secure temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
     
-    if (!success) {
-      throw new Error(error || 'Failed to invite rentee');
+    // Create user with Supabase Auth
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password: tempPassword,
+      options: {
+        data: { 
+          role: USER_ROLES.RENTEE
+        }
+      }
+    });
+    
+    if (authError) {
+      console.error('Error creating rentee account:', authError);
+      return { success: false, error: authError.message };
     }
     
-    // Update the rentee record to mark as invited
+    // Update the rentee record to mark as invited and add auth_id
     const { error: updateError } = await supabase
       .from('rentees')
-      .update({ invited: true })
+      .update({ 
+        invited: true,
+        auth_id: data.user.id
+      })
       .eq('id', renteeId);
     
     if (updateError) {
@@ -29,12 +44,22 @@ export const inviteRentee = async (email, name, renteeId) => {
       // Continue with the invitation process even if update fails
     }
     
+    // Send password reset email to let the user set their own password
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`
+    });
+    
+    if (resetError) {
+      console.error('Error sending password reset email:', resetError);
+      // Continue anyway since the user was created
+    }
+    
     // Send a custom email notification with more information
     const subject = 'Welcome to KH Rentals - Complete Your Registration';
     const message = `
 Hello ${name},
 
-You have been registered as a rentee with KH Rentals. To complete your registration and access your rentee portal, please click the link sent in a separate email to create your account.
+You have been registered as a rentee with KH Rentals. To complete your registration and access your rentee portal, please check your email for a password reset link to create your account.
 
 Once your account is set up, you will be able to:
 - View your rental agreements
@@ -80,17 +105,32 @@ export const inviteTeamMember = async (email, name, role, teamMemberId) => {
       authRole = USER_ROLES.MAINTENANCE_STAFF;
     }
     
-    // First, send invitation through Supabase
-    const { success, data, error } = await inviteUser(email, authRole);
+    // Generate a secure temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
     
-    if (!success) {
-      throw new Error(error || 'Failed to invite team member');
+    // Create user with Supabase Auth
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password: tempPassword,
+      options: {
+        data: { 
+          role: authRole
+        }
+      }
+    });
+    
+    if (authError) {
+      console.error('Error creating team member account:', authError);
+      return { success: false, error: authError.message };
     }
     
-    // Update the team member record to mark as invited
+    // Update the team member record to mark as invited and add auth_id
     const { error: updateError } = await supabase
       .from('app_users')
-      .update({ invited: true })
+      .update({ 
+        invited: true,
+        auth_id: data.user.id
+      })
       .eq('id', teamMemberId);
     
     if (updateError) {
@@ -98,12 +138,22 @@ export const inviteTeamMember = async (email, name, role, teamMemberId) => {
       // Continue with the invitation process even if update fails
     }
     
+    // Send password reset email to let the user set their own password
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`
+    });
+    
+    if (resetError) {
+      console.error('Error sending password reset email:', resetError);
+      // Continue anyway since the user was created
+    }
+    
     // Send a custom email notification with more information
     const subject = 'Welcome to KH Rentals Staff Portal';
     const message = `
 Hello ${name},
 
-You have been invited to join KH Rentals as a ${role}. To complete your registration and access the staff portal, please click the link sent in a separate email to create your account.
+You have been invited to join KH Rentals as a ${role}. To complete your registration and access the staff portal, please check your email for a password reset link to create your account.
 
 Once your account is set up, you will be able to access all the features and tools necessary for your role.
 

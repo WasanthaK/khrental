@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { fetchData, insertData, deleteData } from '../services/databaseService';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, listFiles } from '../services/fileService';
 import { toast } from 'react-hot-toast';
+// import InvitationStatus from '../components/ui/InvitationStatus';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -75,7 +76,10 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       const { data, error } = await fetchData('app_users');
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+      console.log('[AdminDashboard] Loaded users:', data);
       setUsers(data || []);
     } catch (err) {
       setError(err.message);
@@ -90,25 +94,103 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       
-      // First create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.inviteUserByEmail(newUserEmail);
-      if (authError) throw authError;
-
-      // Then create app user profile
-      await insertData('app_users', {
+      if (!newUserEmail) {
+        toast.error('Please enter an email address');
+        return;
+      }
+      
+      // First check if user already exists
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('app_users')
+        .select('id, email, auth_id')
+        .eq('email', newUserEmail)
+        .limit(1);
+        
+      if (checkError) {
+        console.error('Error checking existing user:', checkError);
+        toast.error(`Error checking if user exists: ${checkError.message}`);
+        return;
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        toast.error(`A user with email ${newUserEmail} already exists`);
+        return;
+      }
+      
+      // Generate a secure temporary password (at least 8 chars with lowercase, uppercase, number)
+      const tempPassword = `${Math.random().toString(36).slice(2, 6)}${Math.random().toString(36).toUpperCase().slice(2, 4)}${Math.floor(Math.random() * 10000)}`;
+      
+      console.log(`Creating new user ${newUserEmail} with role ${newUserRole}`);
+      
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUserEmail,
+        password: tempPassword,
+        options: {
+          data: { 
+            role: newUserRole 
+          }
+        }
+      });
+      
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        toast.error(`Authentication error: ${authError.message}`);
+        return;
+      }
+      
+      if (!authData || !authData.user || !authData.user.id) {
+        console.error('No auth user data returned:', authData);
+        toast.error('Failed to create authentication record');
+        return;
+      }
+      
+      // Create user in app_users table
+      const userData = {
         auth_id: authData.user.id,
         email: newUserEmail,
         role: newUserRole,
-        name: newUserEmail.split('@')[0]
+        user_type: newUserRole === 'rentee' ? 'rentee' : 'staff',
+        name: newUserEmail.split('@')[0],
+        invited: true,
+        createdat: new Date().toISOString(),
+        updatedat: new Date().toISOString()
+      };
+      
+      console.log('Creating app_user record:', userData);
+      
+      const { data: appUser, error: insertError } = await supabase
+        .from('app_users')
+        .insert([userData])
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('Error inserting app_user:', insertError);
+        toast.error(`Database error: ${insertError.message}`);
+        return;
+      }
+      
+      // Send a password reset link
+      console.log('Sending password reset email');
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(newUserEmail, {
+        redirectTo: `${window.location.origin}/auth/callback?type=invite`
       });
+      
+      if (resetError) {
+        console.error('Error sending password reset:', resetError);
+        toast.error(`Error sending password reset: ${resetError.message}`);
+        // Continue anyway, we can send it again later
+      }
 
       setNewUserEmail('');
       setNewUserRole('rentee');
       loadUsers();
-      toast.success('User invited successfully');
+      toast.success(`User ${newUserEmail} invited successfully. Password reset email sent.`);
     } catch (err) {
+      console.error('Error in inviteUser:', err);
       setError(err.message);
-      toast.error('Failed to invite user');
+      toast.error(`Failed to create user: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -256,7 +338,9 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       const { data, error } = await fetchData('agreement_templates');
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       setTemplates(data || []);
     } catch (err) {
       setError(err.message);
@@ -281,10 +365,22 @@ const AdminDashboard = () => {
         <h3 className="font-medium text-gray-900">{user.name}</h3>
         <p className="text-sm text-gray-600">{user.email}</p>
       </div>
-      <div>
+      <div className="flex items-center justify-between">
         <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
           {user.role}
         </span>
+        <div className="flex items-center">
+          {renderUserStatus(user)}
+          {!user.invited && !user.auth_id && (
+            <button 
+              onClick={() => sendInvite(user)}
+              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+              disabled={loading}
+            >
+              Send
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -314,6 +410,65 @@ const AdminDashboard = () => {
       </div>
     </div>
   );
+
+  // Render user status badge
+  const renderUserStatus = (user) => {
+    // Determine status based on available fields
+    let status = 'not_invited';
+    let badgeColor = 'bg-yellow-100 text-yellow-800';
+    let statusText = 'Not Invited';
+    
+    if (user.auth_id) {
+      status = 'registered';
+      badgeColor = 'bg-green-100 text-green-800';
+      statusText = 'Registered';
+    } else if (user.invited) {
+      status = 'invited';
+      badgeColor = 'bg-blue-100 text-blue-800';
+      statusText = 'Invited';
+    }
+    
+    return (
+      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColor}`}>
+        {statusText}
+      </span>
+    );
+  };
+
+  // Simple method to send an invitation
+  const sendInvite = async (user) => {
+    try {
+      setLoading(true);
+      
+      // Update the user record to mark as invited
+      const { data, error } = await supabase
+        .from('app_users')
+        .update({ 
+          invited: true,
+          updatedat: new Date().toISOString()
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+      
+      if (error) {
+        toast.error(`Failed to update user: ${error.message}`);
+        return;
+      }
+      
+      // Send password reset email for registration
+      await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/auth/callback?type=invite`
+      });
+      
+      toast.success(`Invitation sent to ${user.email}`);
+      loadUsers(); // Refresh the list
+    } catch (err) {
+      toast.error(`Error sending invitation: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="p-3 sm:p-6">
@@ -405,6 +560,7 @@ const AdminDashboard = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -416,6 +572,18 @@ const AdminDashboard = () => {
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                             {user.role}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {renderUserStatus(user)}
+                          {!user.invited && !user.auth_id && (
+                            <button 
+                              onClick={() => sendInvite(user)}
+                              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                              disabled={loading}
+                            >
+                              Send
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
