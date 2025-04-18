@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { getAppBaseUrl } from '../utils/env';
 
 /**
  * Direct email service that uses SendGrid API for emails
@@ -458,10 +459,7 @@ export const sendMagicLink = async (emailOrOptions, options = {}) => {
     console.warn(`[DirectEmailService] Supabase magic link failed: ${error.message}. Trying direct email...`);
     
     // Create a custom magic link email as fallback using SendGrid
-    const baseUrl = typeof window !== 'undefined' && window.location && window.location.origin 
-      ? window.location.origin 
-      : 'https://khrentals.azurewebsites.net';
-      
+    const baseUrl = getAppBaseUrl();
     const magicLinkUrl = `${baseUrl}/auth/callback?email=${encodeURIComponent(email)}&type=magiclink&redirect=${encodeURIComponent(redirectTo || '/')}`;
     
     const htmlContent = `

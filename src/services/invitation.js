@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { toDatabaseFormat } from '../utils/databaseUtils';
 import { sendMagicLink } from './directEmailService';
+import { getAppBaseUrl } from '../utils/env';
 
 /**
  * Invite a user using Supabase's auth system
@@ -47,9 +48,7 @@ export const sendInvitation = async (email, name, userType, userId) => {
     }
     
     // Get the base URL for the application
-    const baseUrl = typeof window !== 'undefined' && window.location && window.location.origin 
-      ? window.location.origin 
-      : 'https://khrental.azurewebsites.net'; 
+    const baseUrl = getAppBaseUrl();
     
     // User metadata to include in the magic link
     const userData = { 

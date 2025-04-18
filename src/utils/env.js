@@ -12,6 +12,13 @@ const getEnvVar = (key) => {
   return import.meta.env[key] || '';
 };
 
+// Get the application base URL consistently
+export const getAppBaseUrl = () => {
+  return typeof window !== 'undefined' && window.location && window.location.origin
+    ? window.location.origin
+    : 'https://khrentals.kubeira.com';
+};
+
 // Export environment variables directly
 export const ENV = {
   SUPABASE_URL: getEnvVar('VITE_SUPABASE_URL'),

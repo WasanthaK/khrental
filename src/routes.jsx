@@ -16,6 +16,7 @@ import AuthCallback from './pages/AuthCallback';
 import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
 import EviaAuthCallback from './pages/EviaAuthCallback';
+import AuthDebug from './pages/AuthDebug';
 
 // KH Staff pages
 import Dashboard from './pages/Dashboard';
@@ -244,6 +245,10 @@ const router = createBrowserRouter([
       {
         path: 'auth/evia-callback',
         element: <EviaAuthCallback />,
+      },
+      {
+        path: 'auth-debug',
+        element: <AuthDebug />,
       },
       {
         path: 'unauthorized',
