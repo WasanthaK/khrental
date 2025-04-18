@@ -172,13 +172,10 @@ const AdminDashboard = () => {
           if (searchTerm) {
             dataQuery = dataQuery.or(searchConditions);
           }
-        } else {
-          // Just apply the status filter directly
-          if (filterStatus === 'active') {
-            dataQuery = dataQuery.filter('is_active.eq.true');
-          } else if (filterStatus === 'inactive') {
-            dataQuery = dataQuery.filter('is_active.eq.false');
-          }
+        } else if (filterStatus === 'active') {
+          dataQuery = dataQuery.filter('is_active.eq.true');
+        } else if (filterStatus === 'inactive') {
+          dataQuery = dataQuery.filter('is_active.eq.false');
         }
       }
       
@@ -455,7 +452,9 @@ const AdminDashboard = () => {
 
   // Helper function to format bytes
   const formatBytes = (bytes) => {
-    if (!bytes) return '0 B';
+    if (!bytes) {
+      return '0 B';
+    }
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
@@ -751,7 +750,9 @@ const AdminDashboard = () => {
                 );
                 const pageNum = startPage + i;
                 
-                if (pageNum > totalPages) return null;
+                if (pageNum > totalPages) {
+                  return null;
+                }
                 
                 return (
                   <button

@@ -49,7 +49,7 @@ export const sendInvitation = async (email, name, userType, userId) => {
     // Get the base URL for the application
     const baseUrl = typeof window !== 'undefined' && window.location && window.location.origin 
       ? window.location.origin 
-      : 'https://khrentals.azurewebsites.net'; 
+      : 'https://khrental.azurewebsites.net'; 
     
     // User metadata to include in the magic link
     const userData = { 
@@ -65,7 +65,7 @@ export const sendInvitation = async (email, name, userType, userId) => {
     
     // Try method 1: Supabase's built-in signInWithOtp function
     let magicLinkSuccess = false;
-    let error = null;
+    let originalError = null;
     
     try {
       console.log(`[Invitation] Trying magic link via signInWithOtp for ${email}`);
@@ -82,34 +82,39 @@ export const sendInvitation = async (email, name, userType, userId) => {
         magicLinkSuccess = true;
       } else {
         console.warn(`[Invitation] Failed to send magic link via signInWithOtp:`, magicLinkError);
-        error = magicLinkError;
+        originalError = magicLinkError;
       }
     } catch (e) {
       console.error(`[Invitation] Error with signInWithOtp method:`, e);
-      error = e;
+      originalError = e;
     }
     
     // If method 1 fails, try method 2: Direct API call
     if (!magicLinkSuccess) {
       try {
         console.log(`[Invitation] Trying direct API call for magic link to ${email}`);
-        const result = await sendMagicLink({
-          email,
-          metadata: userData,
-          redirectTo: redirectUrl
+        const result = await sendMagicLink(email, {
+          redirectTo: redirectUrl,
+          userData: userData
         });
         
         if (result.success) {
           console.log(`[Invitation] Successfully sent magic link via direct API`);
           magicLinkSuccess = true;
-          error = null;
+          originalError = null;
         } else {
           console.warn(`[Invitation] Failed to send magic link via direct API:`, result.error);
-          error = error || result.error;
+          // Don't overwrite error if it already exists
+          if (originalError === null) {
+            originalError = new Error(result.error);
+          }
         }
       } catch (directApiError) {
         console.error(`[Invitation] Error with direct API method:`, directApiError);
-        error = error || directApiError;
+        // Don't overwrite error if it already exists
+        if (originalError === null) {
+          originalError = directApiError;
+        }
       }
     }
     
@@ -118,7 +123,7 @@ export const sendInvitation = async (email, name, userType, userId) => {
       console.error(`[Invitation] All magic link methods failed for ${email}`);
       return {
         success: false,
-        error: error?.message || 'Failed to send magic link'
+        error: originalError?.message || 'Failed to send magic link'
       };
     }
     
@@ -199,15 +204,13 @@ export const inviteTeamMember = async (email, name, role) => {
       };
     }
     
-    // Send the invitation
-    const invitationResult = await sendInvitation(
+    // Send the invitation and return the result directly
+    return await sendInvitation(
       email, 
       name, 
       'staff', 
       newUser[0].id
     );
-    
-    return invitationResult;
   } catch (error) {
     console.error(`[Invitation] Unexpected error:`, error);
     return {

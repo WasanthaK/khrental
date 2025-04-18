@@ -194,17 +194,17 @@ KH Rentals Team
  * Send a direct email using SendGrid API
  * 
  * @param {string|Object} toOrOptions - Recipient email or options object
- * @param {string} [subject] - Email subject (when using individual parameters)
+ * @param {string} [subjectParam] - Email subject (when using individual parameters)
  * @param {string} [htmlContent] - HTML content (when using individual parameters)
  * @param {string} [textContent] - Plain text content (when using individual parameters)
  * @param {string} [fromEmail] - Sender email (when using individual parameters)
  * @param {string} [fromName] - Sender name (when using individual parameters)
  * @returns {Promise<Object>} - Result of the operation
  */
-export const sendDirectEmail = async (toOrOptions, subject, htmlContent, textContent = '', fromEmail = null, fromName = null) => {
+export const sendDirectEmail = async (toOrOptions, subjectParam, htmlContent, textContent = '', fromEmail = null, fromName = null) => {
   try {
     // Handle both parameter styles
-    let to, html, text, from, name;
+    let to, html, text, from, name, subject;
     
     // Check if first parameter is an object (options style)
     if (typeof toOrOptions === 'object' && toOrOptions !== null) {
@@ -217,6 +217,7 @@ export const sendDirectEmail = async (toOrOptions, subject, htmlContent, textCon
     } else {
       // Individual parameters style
       to = toOrOptions;
+      subject = subjectParam;
       html = htmlContent;
       text = textContent;
       from = fromEmail || getFromEmail();
@@ -338,14 +339,14 @@ const sendWithEmailJS = async (to, subject, htmlContent) => {
  * This is a dedicated function for using EmailJS directly, without trying SendGrid first
  * 
  * @param {string|Object} toOrOptions - Recipient email or options object
- * @param {string} [subject] - Email subject (when using individual parameters)
+ * @param {string} [subjectParam] - Email subject (when using individual parameters)
  * @param {string} [htmlContent] - HTML content (when using individual parameters)
  * @returns {Promise<Object>} - Result of the operation
  */
-export const sendEmailViaEmailJS = async (toOrOptions, subject, htmlContent) => {
+export const sendEmailViaEmailJS = async (toOrOptions, subjectParam, htmlContent) => {
   try {
     // Handle both parameter styles
-    let to, html;
+    let to, html, subject;
     
     // Check if first parameter is an object (options style)
     if (typeof toOrOptions === 'object' && toOrOptions !== null) {
@@ -355,6 +356,7 @@ export const sendEmailViaEmailJS = async (toOrOptions, subject, htmlContent) => 
     } else {
       // Individual parameters style
       to = toOrOptions;
+      subject = subjectParam;
       html = htmlContent;
     }
     
@@ -419,20 +421,23 @@ export const sendEmailViaEmailJS = async (toOrOptions, subject, htmlContent) => 
  * @param {Object|string} emailOrOptions - Email to send the magic link to or options object
  * @param {Object} [options] - Options for sending magic link
  * @param {string} [options.redirectTo] - URL to redirect after authentication
+ * @param {Object} [options.userData] - User metadata to include in the OTP
  * @returns {Promise<Object>} - Result of the operation
  */
 export const sendMagicLink = async (emailOrOptions, options = {}) => {
   try {
     // Handle both function signatures
-    let email, redirectTo;
-    
-    if (typeof emailOrOptions === 'object' && emailOrOptions !== null) {
-      email = emailOrOptions.email;
-      redirectTo = emailOrOptions.redirectTo;
-    } else {
-      email = emailOrOptions;
-      redirectTo = options.redirectTo;
-    }
+    const email = typeof emailOrOptions === 'object' && emailOrOptions !== null 
+      ? emailOrOptions.email 
+      : emailOrOptions;
+      
+    const redirectTo = typeof emailOrOptions === 'object' && emailOrOptions !== null
+      ? emailOrOptions.redirectTo
+      : options.redirectTo;
+      
+    const userData = typeof emailOrOptions === 'object' && emailOrOptions !== null
+      ? emailOrOptions.userData
+      : options.userData;
     
     console.log(`[DirectEmailService] Sending magic link to ${email}`);
     
@@ -440,6 +445,7 @@ export const sendMagicLink = async (emailOrOptions, options = {}) => {
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        data: userData,
         emailRedirectTo: redirectTo
       }
     });
@@ -452,7 +458,11 @@ export const sendMagicLink = async (emailOrOptions, options = {}) => {
     console.warn(`[DirectEmailService] Supabase magic link failed: ${error.message}. Trying direct email...`);
     
     // Create a custom magic link email as fallback using SendGrid
-    const magicLinkUrl = `${window.location.origin}/auth/callback?email=${encodeURIComponent(email)}&type=magiclink&redirect=${encodeURIComponent(redirectTo || '/')}`;
+    const baseUrl = typeof window !== 'undefined' && window.location && window.location.origin 
+      ? window.location.origin 
+      : 'https://khrentals.azurewebsites.net';
+      
+    const magicLinkUrl = `${baseUrl}/auth/callback?email=${encodeURIComponent(email)}&type=magiclink&redirect=${encodeURIComponent(redirectTo || '/')}`;
     
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

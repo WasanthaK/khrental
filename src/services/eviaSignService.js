@@ -42,9 +42,15 @@ const EVIA_API_URL = 'https://evia.enadocapp.com/_apis/sign/api';
 
 // Helper function to ensure URL has a protocol
 const ensureHttpsProtocol = (url) => {
-  if (!url) return '';
-  if (url.startsWith('https://')) return url;
-  if (url.startsWith('http://')) return `https://${url.substring(7)}`;
+  if (!url) {
+    return '';
+  }
+  if (url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('http://')) {
+    return `https://${url.substring(7)}`;
+  }
   return `https://${url}`;
 };
 
@@ -690,7 +696,7 @@ export async function downloadSignedDocument(requestId) {
       );
     } catch (error1) {
       console.log('[eviaSignService] Endpoint 1 failed:', error1.message);
-      error = error1;
+      const originalError = error1;
       
       try {
         // Try second format with /Document (capital D)
@@ -728,7 +734,7 @@ export async function downloadSignedDocument(requestId) {
         } catch (error3) {
           console.log('[eviaSignService] All endpoints failed. Last error:', error3.message);
           // Rethrow the original error
-          throw error;
+          throw originalError;
         }
       }
     }
