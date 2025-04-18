@@ -564,7 +564,61 @@ export const inviteUser = async (email, role = 'rentee') => {
   try {
     console.log('[Supabase] Sending invitation to user:', email, 'with role:', role);
     
-    // Use magic link authentication instead of the invite API since invite requires admin privileges
+    // First try the admin inviteUserByEmail method
+    try {
+      console.log('[Supabase] Attempting to use auth.admin.inviteUserByEmail');
+      const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
+        data: { role },
+        redirectTo: `${window.location.origin}/auth/callback?type=invite&role=${role}`,
+      });
+      
+      if (!error) {
+        console.log('[Supabase] Successfully sent invitation via admin API:', data);
+        
+        // Try to create an app_user record if one doesn't exist
+        try {
+          // Check if user already exists
+          const { data: existingUser } = await supabase
+            .from('app_users')
+            .select('id, email')
+            .eq('email', email)
+            .maybeSingle();
+          
+          if (!existingUser) {
+            // Create a placeholder user record that will be updated when they sign in
+            const { data: newUser, error: userError } = await supabase
+              .from('app_users')
+              .insert({
+                email: email,
+                role: role,
+                status: 'invited',
+                createdat: new Date().toISOString(),
+                updatedat: new Date().toISOString()
+              })
+              .select();
+            
+            if (userError) {
+              console.error('[Supabase] Error creating placeholder user record:', userError);
+            } else {
+              console.log('[Supabase] Created placeholder user record:', newUser);
+            }
+          }
+        } catch (userError) {
+          console.error('[Supabase] Error checking/creating user record:', userError);
+          // Continue with the invitation process even if this fails
+        }
+        
+        return { success: true, data, error: null };
+      } else {
+        console.warn('[Supabase] Could not use admin invitation API, falling back to OTP:', error);
+        // Fall through to OTP method below
+      }
+    } catch (adminError) {
+      console.warn('[Supabase] Admin invitation API not available, falling back to OTP:', adminError);
+      // Fall through to OTP method below
+    }
+    
+    // Use magic link authentication as fallback
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -707,11 +761,56 @@ export const inviteTeamMember = async (email, role, userDetails = {}) => {
       };
     }
     
-    // Now send the magic link
+    // First try to use the admin invitation API
+    try {
+      console.log('[Team] Attempting to use auth.admin.inviteUserByEmail');
+      const { data, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
+        data: { 
+          role,
+          app_user_id: newUser[0].id,
+          force_password_change: true
+        },
+        redirectTo: `${window.location.origin}/auth/callback?type=invite&role=${role}`,
+      });
+      
+      if (!inviteError) {
+        console.log('[Team] Successfully sent invitation via admin API:', data);
+        
+        // Update the app_users table to mark as invited and link auth_id if available
+        if (data?.user?.id) {
+          await supabase
+            .from('app_users')
+            .update({ 
+              invited: true,
+              auth_id: data.user.id
+            })
+            .eq('id', newUser[0].id);
+        }
+        
+        return { 
+          success: true, 
+          message: `Invitation sent to ${email} via admin API`, 
+          error: null,
+          userId: newUser[0].id
+        };
+      } else {
+        console.warn('[Team] Could not use admin invitation API, falling back to OTP:', inviteError);
+        // Fall through to OTP method below
+      }
+    } catch (adminError) {
+      console.warn('[Team] Admin invitation API not available, falling back to OTP:', adminError);
+      // Fall through to OTP method below
+    }
+    
+    // Fall back to magic link if admin API fails
     const { error: magicLinkError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        data: { role },
+        data: { 
+          role,
+          app_user_id: newUser[0].id,
+          force_password_change: true
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback?type=invite&role=${role}`,
       }
     });

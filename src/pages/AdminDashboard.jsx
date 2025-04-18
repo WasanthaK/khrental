@@ -31,28 +31,40 @@ const AdminDashboard = () => {
   const [files, setFiles] = useState([]);
   const [bucketPermissions, setBucketPermissions] = useState(null);
 
+  // Load initial data on mount
   useEffect(() => {
     if (user) {
       loadUsers();
       loadTemplates();
     }
-  }, [user, currentPage, pageSize, filterStatus, searchTerm]);
+    // We deliberately exclude loadUsers and loadTemplates from dependencies
+    // to prevent infinite loops - they are only needed on initial mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
+  // Separate effect for pagination/filtering changes
+  useEffect(() => {
+    if (user) {
+      loadUsers();
+    }
+    // We're including loadUsers as a dependency to distinguish from the above effect
+    // but wrapping the function in useCallback would be better
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, filterStatus, searchTerm]);
+
+  // Handle bucket/folder changes
   useEffect(() => {
     if (selectedBucket) {
-      // First try to check if the bucket exists using the direct method
-      const checkBucket = async () => {
+      const checkAndLoadBucket = async () => {
         try {
-          const { data, error } = await supabase.storage
+          const { error } = await supabase.storage
             .from(selectedBucket)
             .list('', { limit: 1 });
           
           if (error) {
-            console.error(`Error checking if bucket ${selectedBucket} exists:`, error);
+            console.error(`Error checking bucket ${selectedBucket}:`, error);
             
-            // If we can't find the bucket, try the alternative bucket
             if (error.status === 404 || error.message?.includes('not found')) {
-              // If IMAGES fails, try FILES and vice versa
               const alternateBucket = selectedBucket === STORAGE_BUCKETS.IMAGES 
                 ? STORAGE_BUCKETS.FILES 
                 : STORAGE_BUCKETS.IMAGES;
@@ -63,19 +75,19 @@ const AdminDashboard = () => {
             }
           }
           
-          // Continue with loading files and permissions
           loadFiles(selectedBucket, selectedFolder);
           loadBucketPermissions(selectedBucket);
         } catch (err) {
-          console.error('Error in bucket check:', err);
-          // Fall back to just trying the regular functions
+          console.error('Error checking bucket:', err);
           loadFiles(selectedBucket, selectedFolder);
           loadBucketPermissions(selectedBucket);
         }
       };
       
-      checkBucket();
+      checkAndLoadBucket();
     }
+    // loadFiles and loadBucketPermissions are deliberately excluded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBucket, selectedFolder]);
 
   // User Management Functions
@@ -83,40 +95,103 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       
-      let query = supabase
-        .from('app_users')
-        .select('*', { count: 'exact' });
+      let query = supabase.from('app_users');
       
-      // Apply filters
+      // Create filter conditions
+      let filterConditions = [];
+      
+      // Apply status filter
       if (filterStatus === 'active') {
-        query = query.is('is_active', true);
+        filterConditions.push("is_active.eq.true");
       } else if (filterStatus === 'inactive') {
-        query = query.is('is_active', false);
+        filterConditions.push("is_active.eq.false");
       }
       
-      // Apply search
+      // Apply search filter
       if (searchTerm) {
-        query = query.or(`email.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%`);
+        filterConditions.push(`email.ilike.%${searchTerm}%`);
+        filterConditions.push(`name.ilike.%${searchTerm}%`);
       }
       
-      // Get total count first
-      const { count, error: countError } = await query;
+      // Get total count first with a separate query
+      let countQuery = query.select('*', { count: 'exact', head: true });
+      
+      // Only add OR filters if we have any
+      if (filterConditions.length > 0) {
+        // For search terms, we want OR between email and name
+        if (searchTerm) {
+          // The last two conditions are for email and name search
+          const searchConditions = filterConditions.slice(-2).join(',');
+          filterConditions = filterConditions.slice(0, -2);
+          
+          // Add status filter if it exists
+          if (filterConditions.length > 0) {
+            countQuery = countQuery.filter(filterConditions[0]);
+          }
+          
+          // Add search as OR
+          countQuery = countQuery.or(searchConditions);
+        } else {
+          // Just apply the status filter directly
+          countQuery = countQuery.filter(filterConditions[0]);
+        }
+      }
+      
+      // Execute count query
+      const { count, error: countError } = await countQuery;
       
       if (countError) {
+        console.error('Error getting count:', countError);
         throw countError;
       }
       
       setTotalUsers(count || 0);
       
-      // Then get paginated results
+      // Then get paginated results with a clean query
       const from = (currentPage - 1) * pageSize;
       const to = from + pageSize - 1;
       
-      const { data, error } = await query
+      // Start with base data query
+      let dataQuery = query.select('*');
+      
+      // Apply the same filters as the count query
+      if (filterConditions.length > 0) {
+        // For search terms, we want OR between email and name
+        if (searchTerm) {
+          // The last two conditions are for email and name search
+          const searchConditions = `email.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%`;
+          
+          // Add status filter if it exists
+          if (filterStatus === 'active') {
+            dataQuery = dataQuery.filter('is_active.eq.true');
+          } else if (filterStatus === 'inactive') {
+            dataQuery = dataQuery.filter('is_active.eq.false');
+          }
+          
+          // Add search as OR
+          if (searchTerm) {
+            dataQuery = dataQuery.or(searchConditions);
+          }
+        } else {
+          // Just apply the status filter directly
+          if (filterStatus === 'active') {
+            dataQuery = dataQuery.filter('is_active.eq.true');
+          } else if (filterStatus === 'inactive') {
+            dataQuery = dataQuery.filter('is_active.eq.false');
+          }
+        }
+      }
+      
+      // Add pagination and ordering
+      dataQuery = dataQuery
         .range(from, to)
         .order('createdat', { ascending: false });
       
+      // Execute data query
+      const { data, error } = await dataQuery;
+      
       if (error) {
+        console.error('Error fetching users:', error);
         throw error;
       }
       
@@ -580,20 +655,27 @@ const AdminDashboard = () => {
     }
   };
 
-  // Add deactivate user function
+  // Function to toggle user active status
   const toggleUserStatus = async (userId, currentStatus) => {
+    if (!userId) {
+      toast.error("Cannot update user: Missing user ID");
+      return;
+    }
+    
     try {
       setLoading(true);
       
       const newStatus = !currentStatus;
-      const { data, error } = await supabase
+      console.log(`Updating user ${userId} active status to ${newStatus}`);
+      
+      // First step: update the user without selecting the result
+      const { error } = await supabase
         .from('app_users')
         .update({ 
           is_active: newStatus,
           updatedat: new Date().toISOString()
         })
-        .eq('id', userId)
-        .select();
+        .eq('id', userId);
       
       if (error) {
         console.error('Error updating user status:', error);
@@ -601,12 +683,15 @@ const AdminDashboard = () => {
         return;
       }
       
-      toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
-      
-      // Update local state
+      // Update local state first for immediate UI feedback
       setUsers(prevUsers => prevUsers.map(user => 
         user.id === userId ? { ...user, is_active: newStatus } : user
       ));
+      
+      toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      
+      // Optionally refresh the user list
+      loadUsers();
     } catch (err) {
       console.error('Error toggling user status:', err);
       toast.error(`Error: ${err.message}`);

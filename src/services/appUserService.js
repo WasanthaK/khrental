@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { sendEmailNotification } from './notificationService';
 import { USER_ROLES } from '../utils/constants';
+import { sendInvitation } from './invitation';
 
 /**
  * Utility function to ensure a record has valid timestamp fields
@@ -82,11 +83,11 @@ export const createAppUser = async (userData, userType) => {
  * @returns {Promise<Object>} - Result of the invitation
  */
 export const inviteAppUser = async (email, name, userType, userId) => {
-  console.log(`[inviteAppUser] Inviting ${userType} ${name} (${email}) with ID ${userId}`);
+  console.log(`[appUserService] Inviting ${userType} ${name} (${email}) with ID ${userId}`);
   
   try {
     if (!email || !name || !userType || !userId) {
-      console.error('[inviteAppUser] Missing required parameters:', { email, name, userType, userId });
+      console.error('[appUserService] Missing required parameters for invitation');
       return { 
         success: false, 
         error: 'Missing required parameters for invitation',
@@ -94,149 +95,30 @@ export const inviteAppUser = async (email, name, userType, userId) => {
       };
     }
     
-    // Determine auth role based on user type
-    let authRole = userType === 'staff' ? 'staff' : 'rentee';
+    // Use the new dedicated invitation service
+    const result = await sendInvitation(email, name, userType, userId);
     
-    // First check if the app_user exists
-    console.log(`[inviteAppUser] Checking if app_user ${userId} exists`);
-    const { data: appUser, error: userCheckError } = await supabase
-      .from('app_users')
-      .select('id, email, auth_id, invited')
-      .eq('id', userId)
-      .single();
-      
-    if (userCheckError) {
-      console.error(`[inviteAppUser] Error checking app_user ${userId}:`, userCheckError);
-      return { 
-        success: false, 
-        error: `Error checking app_user: ${userCheckError.message}`,
-        debug: { userCheckError }
+    if (!result.success) {
+      console.error(`[appUserService] Invitation failed:`, result.error);
+      return {
+        success: false,
+        error: result.error,
+        debug: result
       };
     }
     
-    if (!appUser) {
-      console.error(`[inviteAppUser] App user ${userId} not found`);
-      return { 
-        success: false, 
-        error: 'App user not found',
-        debug: { userId }
-      };
-    }
-    
-    // If user already has auth_id, check if it's a valid Supabase user
-    if (appUser.auth_id) {
-      console.log(`[inviteAppUser] User ${userId} already has auth_id ${appUser.auth_id}, checking if valid`);
-      
-      // For security reasons, we'll just send a new magic link rather than checking if the user exists
-      console.log(`[inviteAppUser] User has existing auth_id, sending magic link anyway`);
-    }
-    
-    // Send magic link email - this will create a new user if one doesn't exist
-    // or send a magic link to an existing user
-    console.log(`[inviteAppUser] Sending magic link to ${email}`);
-    const { data: otpData, error: magicLinkError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        data: { 
-          role: authRole,
-          user_type: userType,
-          name: name,
-          app_user_id: userId
-        },
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    });
-    
-    if (magicLinkError) {
-      console.error(`[inviteAppUser] Error sending magic link to ${email}:`, magicLinkError);
-      return { 
-        success: false, 
-        error: magicLinkError.message,
-        debug: { magicLinkError }
-      };
-    }
-    
-    console.log(`[inviteAppUser] Magic link sent successfully to ${email}`, otpData);
-    
-    // Update the app_users table to mark as invited
-    // We'll set the auth_id when the user actually signs in via AuthCallback component
-    console.log(`[inviteAppUser] Updating app_user ${userId} as invited`);
-    const { error: updateError } = await supabase
-      .from('app_users')
-      .update({ 
-        invited: true,
-        updatedat: new Date().toISOString()
-      })
-      .eq('id', userId);
-    
-    if (updateError) {
-      console.error(`[inviteAppUser] Error updating app_user ${userId} as invited:`, updateError);
-      return { 
-        success: false, 
-        error: `Error updating user as invited: ${updateError.message}`,
-        debug: { updateError, otpSent: true }
-      };
-    }
-    
-    // Send a custom email notification with more information
-    const subject = userType === 'staff' 
-      ? 'Welcome to KH Rentals Staff Portal' 
-      : 'Welcome to KH Rentals - Complete Your Registration';
-    
-    const message = userType === 'staff'
-      ? `
-Hello ${name},
-
-You have been invited to join KH Rentals as a ${authRole}. We've sent a magic link to this email address that will allow you to sign in without a password.
-
-Simply click the "Sign In" button in the email you receive, and you'll be logged in automatically to access the staff portal.
-
-Once you're logged in, you will be able to access all the features and tools necessary for your role.
-
-If you have any questions, please contact the admin team.
-
-Regards,
-KH Rentals Team
-      `
-      : `
-Hello ${name},
-
-You have been registered as a rentee with KH Rentals. We've sent a magic link to this email address that will allow you to sign in without a password.
-
-Simply click the "Sign In" button in the email you receive, and you'll be logged in automatically to access your rentee portal.
-
-Once you're logged in, you will be able to:
-- View your rental agreements
-- Submit maintenance requests
-- Pay invoices
-- Communicate with your property manager
-
-If you have any questions, please contact your property manager.
-
-Regards,
-KH Rentals Team
-      `;
-    
-    try {
-      console.log(`[inviteAppUser] Sending custom email notification to ${email}`);
-      await sendEmailNotification(email, subject, message);
-      console.log(`[inviteAppUser] Custom email notification sent successfully to ${email}`);
-    } catch (emailError) {
-      console.error(`[inviteAppUser] Error sending custom email notification to ${email}:`, emailError);
-      // Continue with the invitation process even if email fails
-    }
-    
-    console.log(`[inviteAppUser] Invitation process completed successfully for ${email}`);
-    return { 
-      success: true, 
+    console.log(`[appUserService] Invitation sent successfully to ${email}`);
+    return {
+      success: true,
       data: {
         email,
         user_type: userType,
-        invited: true
+        invited: true,
+        message: `User invitation sent successfully to ${email}`
       }
     };
   } catch (error) {
-    console.error(`[inviteAppUser] Unexpected error inviting user ${email}:`, error);
+    console.error(`[appUserService] Unexpected error inviting user ${email}:`, error);
     return { 
       success: false, 
       error: error.message,

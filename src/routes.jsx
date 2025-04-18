@@ -198,6 +198,9 @@ const UuidGuard = ({ children }) => {
   return children;
 };
 
+// Add InvitationTest component
+import InvitationTest from './components/debug/InvitationTest';
+
 // Create the router directly instead of through a function
 // This helps with HMR (Hot Module Replacement)
 const router = createBrowserRouter([
@@ -541,6 +544,10 @@ const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
+          {
+            path: 'debug/invitations',
+            element: <InvitationTest />,
+          },
         ],
       },
       {
@@ -694,6 +701,10 @@ const router = createBrowserRouter([
                 element: <InvoiceDetails />,
               },
             ],
+          },
+          {
+            path: 'debug/invitations',
+            element: <InvitationTest />,
           },
         ],
       },

@@ -164,7 +164,7 @@ const AuthProvider = ({ children }) => {
     }
   };
 
-  // Effect for normal authentication
+  // Effect for normal authentication - run only once on mount
   useEffect(() => {
     // Skip if we're using development bypass or already initialized
     if (initialized.current) {
@@ -223,7 +223,7 @@ const AuthProvider = ({ children }) => {
         authSubscription.unsubscribe();
       }
     };
-  }, []);
+  }, []); // Empty dependency array - run only once
 
   // Login function
   const login = async (email, password) => {
@@ -263,39 +263,20 @@ const AuthProvider = ({ children }) => {
         userRole: data?.user?.role,
         error: error ? { message: error.message, status: error.status } : null
       });
-      
+
+      // Handle login errors
       if (error) {
-        // Check if the error is about unconfirmed email
-        if (error.message && error.message.includes('Email not confirmed')) {
-          // For development purposes, we'll show a more helpful error
-          console.log('[Auth] Email not confirmed error');
-          setError('Email not confirmed. In a production environment, you would need to confirm your email. For development, you can disable email confirmation in Supabase dashboard.');
-          console.log('Development tip: To disable email confirmation, go to Supabase dashboard → Authentication → Settings → Email Auth and set "Confirm emails" to "No"');
+        console.error('[Auth] Login error:', error.message);
+        
+        // Handle specific error cases
+        if (error.message.includes('Invalid login credentials')) {
+          setError('Email or password is incorrect');
         } 
-        // Check if it's an invalid credentials error
-        else if (error.message && error.message.includes('Invalid login credentials')) {
-          console.log('[Auth] Invalid credentials error - debug info:');
-          console.log('1. Verify the email exists in Supabase Authentication');
-          console.log('2. Check if the password is correct');
-          console.log('3. Ensure Supabase project URL and anon key are correct');
-          console.log('4. Check browser console for network errors');
-          
-          setError('Invalid email or password. Please try again.');
-          
-          // This is a common error, return early with a clean error message
-          return { error: { message: 'Invalid email or password. Please try again.' } };
-        }
-        // Network errors
-        else if (error.message && (error.message.toLowerCase().includes('network') || 
-                error.message.toLowerCase().includes('fetch'))) {
-          console.log('[Auth] Network error during login');
-          setError('Network error. Please check your internet connection and try again.');
-          
-          return { error: { message: 'Network error. Please check your internet connection and try again.' } };
+        else if (error.message.includes('Email not confirmed')) {
+          setError('Please confirm your email before logging in');
         }
         else {
           setError(error.message || 'An error occurred during login');
-          return { error };
         }
         
         setLoading(false);
@@ -313,6 +294,16 @@ const AuthProvider = ({ children }) => {
           id: userWithProfile?.id
         });
         setUserData(userWithProfile);
+        
+        // Check if user needs to change password
+        if (data.user.user_metadata?.force_password_change) {
+          console.log('[Auth] User needs to change password');
+          // Return a special flag for the login component to handle
+          return { 
+            data, 
+            requirePasswordChange: true 
+          };
+        }
       } else {
         console.warn('[Auth] Login successful but no user data returned');
       }

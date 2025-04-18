@@ -24,18 +24,35 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      setError('Email and password are required');
+      return;
+    }
+    
     setError('');
     setLoading(true);
     
     try {
-      const { error } = await login(email, password);
+      const result = await login(email, password);
       
-      if (error) {
-        throw error;
+      // First check for errors
+      if (result.error) {
+        throw result.error;
       }
       
-      // Redirect based on user role (handled by AuthProvider)
+      // Then check if password change is required
+      if (result.requirePasswordChange) {
+        console.log('User needs to change password, redirecting');
+        navigate('/reset-password?forceChange=true');
+        return;
+      }
+      
+      // If we get here, login was successful
+      console.log('Login successful, redirecting based on role');
+      // Redirect handled by AuthProvider
     } catch (error) {
+      console.error('Login error:', error);
       setError(error.message || 'Failed to log in');
     } finally {
       setLoading(false);

@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
+import { sendDirectEmail } from './directEmailService';
 
 /**
  * Send a notification to a user
@@ -81,35 +82,66 @@ export const notifyUser = async (userId, notification) => {
   }
 };
 
-// Function to send email notification
-export const sendEmailNotification = async (recipient, subject, content, templateId = null) => {
+/**
+ * Notification Service
+ * 
+ * This service provides functions for sending various types of notifications to users.
+ * The primary method of notification is email, implemented through SendGrid API.
+ * 
+ * Usage example:
+ * ```
+ * import { sendEmailNotification } from './services/notificationService';
+ * 
+ * // Send a notification email
+ * const result = await sendEmailNotification(
+ *   'user@example.com',
+ *   'Your Account Update',
+ *   '<h1>Account Updated</h1><p>Your account has been successfully updated.</p>'
+ * );
+ * 
+ * if (result.success) {
+ *   console.log('Email sent successfully');
+ * } else {
+ *   console.error('Failed to send email:', result.message);
+ * }
+ * ```
+ * 
+ * Note: This service requires proper configuration of email credentials in environment variables:
+ * - VITE_SENDGRID_API_KEY: Your SendGrid API key
+ * - VITE_EMAIL_FROM: The sender email address
+ * - VITE_EMAIL_FROM_NAME: The sender name
+ * 
+ * Alternatively, EmailJS is used as a fallback method if SendGrid is not configured.
+ */
+
+/**
+ * Sends an email notification to a user
+ * @param {string} email - The recipient's email address
+ * @param {string} subject - The email subject
+ * @param {string} message - The email body content (HTML)
+ * @param {string} plainText - Optional plain text version of the email
+ * @returns {Promise<Object>} - Result of the email sending operation
+ */
+export const sendEmailNotification = async (email, subject, message, plainText = '') => {
+  console.log(`Sending email notification to ${email}: ${subject}`);
+  
   try {
-    // In a real app, this would integrate with an email service
-    console.log('Email notification would be sent:', {
-      recipient,
+    // Call the direct email service with proper parameters
+    const result = await sendDirectEmail(
+      email,
       subject,
-      content,
-      templateId
-    });
+      message,
+      plainText
+    );
     
-    return { 
-      success: true, 
-      data: {
-        recipient,
-        subject,
-        content,
-        templateId,
-        sentAt: new Date().toISOString()
-      },
-      error: null
-    };
+    if (!result.success) {
+      console.error('Failed to send email notification:', result.message);
+    }
+    
+    return result;
   } catch (error) {
-    console.error('Error sending email notification:', error.message);
-    return { 
-      success: false, 
-      data: null,
-      error: error.message 
-    };
+    console.error('Error in sendEmailNotification:', error);
+    return { success: false, message: error.message || 'Unknown error sending notification' };
   }
 };
 
