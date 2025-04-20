@@ -5,18 +5,25 @@
  * using browser-compatible Web Crypto API for JWT operations
  */
 
-// Default secret key - in production, this should be in environment variables
+// Get token secret from environment variables
 const getTokenSecret = () => {
+  // Check window._env_ (runtime environment variables)
   if (typeof window !== 'undefined' && window._env_ && window._env_.TOKEN_SECRET) {
     return window._env_.TOKEN_SECRET;
   }
   
+  // Check Vite environment variables
   if (import.meta && import.meta.env && import.meta.env.VITE_TOKEN_SECRET) {
     return import.meta.env.VITE_TOKEN_SECRET;
   }
   
-  // Fallback for development - NOT SECURE for production!
-  return 'kh-rentals-dev-secret-key-change-in-production';
+  // Log warning instead of using hardcoded fallback
+  console.warn('[TokenUtils] No token secret found in environment variables. Token security is compromised!');
+  
+  // Generate a random temporary secret if none exists
+  // This is still not secure for production but better than a static hardcoded value
+  // as it changes on each application reload
+  return `temp-${Math.random().toString(36).substring(2)}-${Date.now().toString(36)}`;
 };
 
 /**
