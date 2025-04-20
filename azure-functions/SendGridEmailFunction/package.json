@@ -1,0 +1,12 @@
+{
+  "name": "sendgrid-email-function",
+  "version": "1.0.0",
+  "description": "Azure Function for sending emails via SendGrid",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^7.7.0"
+  }
+} 
