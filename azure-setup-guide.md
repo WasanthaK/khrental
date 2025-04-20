@@ -10,7 +10,7 @@ This guide provides step-by-step instructions for setting up and configuring you
 4. Fill in the following details:
    - **Subscription**: Your Azure subscription
    - **Resource Group**: Create new or select existing
-   - **Name**: `khrental` (this will be your website URL: khrental.azurewebsites.net)
+   - **Name**: `khrental` (this will be your website URL: khrentals.kubeira.com)
    - **Runtime stack**: Node 22 LTS
    - **Operating System**: Linux
    - **Region**: Select the region closest to your users
@@ -27,7 +27,7 @@ This guide provides step-by-step instructions for setting up and configuring you
 2. Add the following secrets:
    - `VITE_SUPABASE_URL`: Your Supabase project URL
    - `VITE_SUPABASE_ANON_KEY`: Your Supabase anon key
-   - `VITE_EVIA_WEBHOOK_URL`: https://khrental.azurewebsites.net/webhook/evia-sign
+   - `VITE_EVIA_WEBHOOK_URL`: https://khrentals.kubeira.com/webhook/evia-sign
    - `AZURE_WEBAPP_PUBLISH_PROFILE`: The publish profile from Azure (see next section)
 
 ### Getting the Publish Profile from Azure
@@ -46,7 +46,7 @@ This guide provides step-by-step instructions for setting up and configuring you
 2. Under **Application settings**, add the following:
    - `VITE_SUPABASE_URL`: Your Supabase project URL
    - `VITE_SUPABASE_ANON_KEY`: Your Supabase anon key
-   - `VITE_EVIA_WEBHOOK_URL`: https://khrental.azurewebsites.net/webhook/evia-sign
+   - `VITE_EVIA_WEBHOOK_URL`: https://khrentals.kubeira.com/webhook/evia-sign
    - `WEBSITE_NODE_DEFAULT_VERSION`: 22.0.0
 
 3. Click **Save** to apply these settings
@@ -68,7 +68,7 @@ This guide provides step-by-step instructions for setting up and configuring you
 
 1. Push a change to your GitHub repository
 2. Go to your GitHub repository's **Actions** tab to see the workflow run
-3. Once the workflow completes, visit khrental.azurewebsites.net to verify your app is working
+3. Once the workflow completes, visit khrentals.kubeira.com to verify your app is working
 4. Test the key features of your application, including:
    - Login functionality
    - Routing (navigate to different pages)

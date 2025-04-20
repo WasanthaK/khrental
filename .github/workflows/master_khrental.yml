@@ -311,7 +311,7 @@ jobs:
           sleep 30
           
           # Get the app URL
-          APP_URL="https://khrental.azurewebsites.net"
+          APP_URL="https://khrentals.kubeira.com"
           echo "Testing application at: $APP_URL"
           
           # Test the main application
@@ -351,5 +351,5 @@ jobs:
       - name: Verify deployment
         run: |
           echo "Deployment verification complete."
-          echo "Please check the application at: https://khrental.azurewebsites.net"
+          echo "Please check the application at: https://khrentals.kubeira.com"
           echo "If you encounter any issues, check the Azure portal for detailed logs."
