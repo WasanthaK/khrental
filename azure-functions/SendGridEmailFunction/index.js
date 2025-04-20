@@ -91,8 +91,8 @@ module.exports = async function (context, req) {
                 } : null,
                 environment: {
                     hasApiKey: !!process.env.SENDGRID_API_KEY,
-                    fromEmail: process.env.EMAIL_FROM || 'not set',
-                    fromName: process.env.EMAIL_FROM_NAME || 'not set',
+                    fromEmail: process.env.EMAIL_FROM || 'madhumathi@kubeira.com',
+                    fromName: process.env.EMAIL_FROM_NAME || 'KH Rentals',
                     nodeEnv: process.env.NODE_ENV || 'not set'
                 },
                 recentActivity: sanitizedLogs
@@ -235,7 +235,7 @@ module.exports = async function (context, req) {
             subject, 
             html, 
             text,
-            from = process.env.EMAIL_FROM || 'noreply@khrentals.com',
+            from = process.env.EMAIL_FROM || 'madhumathi@kubeira.com',
             fromName = process.env.EMAIL_FROM_NAME || 'KH Rentals',
             attachments = [] 
         } = req.body;
