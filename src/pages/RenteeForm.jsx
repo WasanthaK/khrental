@@ -7,9 +7,8 @@ import { formatDate } from '../utils/helpers';
 import { USER_ROLES } from '../utils/constants';
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-import { inviteUser, resendInvitation } from '../services/invitationService';
+import { sendInvitation } from '../services/invitation';
 import { createAppUser as createRenteeUser } from '../services/createAppUser';
-import { sendRenteeInvitation } from '../services/renteeInvitation';
 
 // UI Components
 import FormInput from '../components/ui/FormInput';
@@ -49,6 +48,7 @@ const RenteeForm = () => {
   const [selectedProperty, setSelectedProperty] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
   const [propertyUnits, setPropertyUnits] = useState([]);
+  const [sendRealEmail, setSendRealEmail] = useState(false);
   
   // Fetch rentee data if in edit mode and available properties
   useEffect(() => {
@@ -439,16 +439,20 @@ const RenteeForm = () => {
       // Using the new dedicated renteeInvitation service that directly uses supabase.auth.admin
       console.log(`Sending direct invitation to ${formData.name} (${formData.contactDetails.email}) with ID ${userIdToUse}`);
       
-      const inviteResult = await sendRenteeInvitation(
-        formData.contactDetails.email,
-        formData.name,
-        userIdToUse
+      const inviteResult = await sendInvitation(
+        {
+          id: userIdToUse,
+          email: formData.contactDetails.email,
+          name: formData.name,
+          role: 'rentee'
+        },
+        !sendRealEmail // Only force simulation if sendRealEmail is false
       );
 
       console.log('Direct invitation result:', inviteResult);
 
       if (inviteResult.success) {
-        toast.success('Invitation sent successfully!');
+        toast.success(`${sendRealEmail ? 'Real' : 'Simulated'} invitation sent successfully!`);
         // Force refresh the user status 
         setTimeout(() => window.location.reload(), 1500);
       } else {
@@ -518,12 +522,26 @@ const RenteeForm = () => {
           <div className="mt-4 pt-4 border-t border-green-300">
             <strong className="font-bold">Next step:</strong>
             <span className="block sm:inline ml-2">Send an invitation to allow this rentee to set up their account.</span>
+            
+            <div className="flex items-center mt-2 mb-3">
+              <input
+                id="send-real-email"
+                type="checkbox"
+                checked={sendRealEmail}
+                onChange={(e) => setSendRealEmail(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="send-real-email" className="ml-2 text-sm text-gray-700">
+                Send Real Email
+              </label>
+            </div>
+            
             <button
               type="button"
               onClick={handleSendInvitation}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             >
-              Send Invitation
+              {sendRealEmail ? 'Send Real Invitation' : 'Send Invitation (Simulated)'}
             </button>
           </div>
         </div>

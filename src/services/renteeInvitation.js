@@ -7,9 +7,10 @@
 
 import { supabase } from './supabaseClient';
 import { toast } from 'react-hot-toast';
+import { generateToken } from '../utils/tokenUtils';
 
 /**
- * Send an invitation to a rentee using magic link instead of admin API
+ * Send an invitation to a rentee using a direct invitation link
  * @param {string} email - Rentee's email
  * @param {string} name - Rentee's name
  * @param {string} userId - ID of the rentee in app_users table
@@ -40,50 +41,40 @@ export const sendRenteeInvitation = async (email, name, userId) => {
       return { success: false, error: `Failed to update user status: ${updateError.message}` };
     }
     
-    // Then send the magic link (non-admin approach)
-    console.log(`[renteeInvitation] Sending magic link to ${email}`);
-
-    // Build a proper redirect URL with HTTPS
-    let redirectUrl;
+    // Create a secure token with all user information
+    const token = generateToken({
+      userId: userId,
+      email: email,
+      name: name,
+      role: 'rentee'
+    }, '7d'); // Token valid for 7 days
+    
+    // Build the direct invitation URL
+    let inviteUrl;
     const origin = window.location.origin;
-
+    
     // Force HTTPS if not already using it
     if (origin.startsWith('http://') && !origin.includes('localhost')) {
-      redirectUrl = origin.replace('http://', 'https://') + '/accept-invite';
+      inviteUrl = origin.replace('http://', 'https://') + '/setup-account';
     } else {
-      redirectUrl = origin + '/accept-invite';
-    }
-
-    // Add query parameters for user identification
-    redirectUrl += `?user_id=${userId}&name=${encodeURIComponent(name || 'User')}&email=${encodeURIComponent(email)}`;
-
-    console.log(`[renteeInvitation] Using redirect URL: ${redirectUrl}`);
-    
-    // Use the standard auth.signInWithOtp instead of admin.inviteUserByEmail
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: email,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          name: name || 'Rentee',
-          role: 'rentee',
-          user_type: 'rentee',
-          app_user_id: userId
-        }
-      }
-    });
-    
-    if (error) {
-      console.error(`[renteeInvitation] Failed to send magic link:`, error);
-      // Don't revert the invited status since we still want to track that we tried
-      return { success: false, error: `Failed to send invitation: ${error.message}` };
+      inviteUrl = origin + '/setup-account';
     }
     
-    console.log(`[renteeInvitation] Successfully sent magic link to ${email}`, data);
+    // Add token as query parameter
+    inviteUrl += `?token=${encodeURIComponent(token)}`;
+    
+    console.log(`[renteeInvitation] Generated direct invitation URL: ${inviteUrl}`);
+    
+    // For development/demo, return the invitation URL so it can be displayed to the user
+    // In production, this would send an email with the URL
     return {
       success: true,
-      message: `Invitation magic link sent to ${email}`,
-      data
+      message: `Invitation prepared for ${email}`,
+      invitationUrl: inviteUrl,
+      token,
+      // In production, you would integrate with your email service here
+      // For now, we'll just return the URL so you can test it
+      note: "In production, this would send an email. For now, please copy and share this URL manually."
     };
   } catch (error) {
     console.error(`[renteeInvitation] Unexpected error:`, error);

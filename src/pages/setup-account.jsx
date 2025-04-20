@@ -1,113 +1,179 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { verifyInvitationToken, completeUserSetup } from '../services/invitation';
-import { decodeToken } from '../utils/tokenUtils';
+import { supabase } from '../services/supabaseClient';
+import { verifyToken } from '../utils/tokenUtils';
+import { toast } from 'react-hot-toast';
 
+/**
+ * Setup Account Page
+ * 
+ * This page handles the direct invitation links without requiring Supabase auth first.
+ * It allows users to set up their account and create credentials.
+ */
 const SetupAccount = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [token, setToken] = useState('');
-  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [tokenData, setTokenData] = useState(null);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    // Extract token from URL query parameters
-    const params = new URLSearchParams(location.search);
-    const tokenFromUrl = params.get('token');
-    
-    if (!tokenFromUrl) {
-      setError('No invitation token provided');
-      setIsLoading(false);
-      return;
-    }
-    
-    setToken(tokenFromUrl);
-    
-    // For debugging - decode token without verification
-    try {
-      const decoded = decodeToken(tokenFromUrl);
-      console.log('Token payload (not verified):', decoded);
-    } catch (err) {
-      console.error('Error decoding token:', err);
-    }
-    
-    // Verify the token
-    const verifyToken = async () => {
+    const validateInvitation = async () => {
       try {
-        setIsLoading(true);
-        const result = await verifyInvitationToken(tokenFromUrl);
+        setLoading(true);
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token');
         
-        if (result.success) {
-          setTokenData(result.data);
-          setName(result.data.name || '');
-          setEmail(result.data.email || '');
-          setError(null);
-        } else {
-          setError(result.error || 'Invalid invitation token');
+        if (!token) {
+          setError('Invalid invitation link. No token provided.');
+          setLoading(false);
+          return;
+        }
+        
+        // Verify the token
+        try {
+          const decodedToken = verifyToken(token);
+          console.log('Token verified successfully:', decodedToken);
+          
+          if (!decodedToken.userId || !decodedToken.email) {
+            setError('Invalid invitation token format.');
+            setLoading(false);
+            return;
+          }
+          
+          // Check if user exists in the database
+          const { data: userData, error: userError } = await supabase
+            .from('app_users')
+            .select('*')
+            .eq('id', decodedToken.userId)
+            .single();
+            
+          if (userError || !userData) {
+            console.error('User not found:', userError);
+            setError('User not found or invitation expired.');
+            setLoading(false);
+            return;
+          }
+          
+          // Set the user data and email
+          setUserData({
+            ...userData,
+            token: token
+          });
+          setEmail(decodedToken.email);
+          setLoading(false);
+        } catch (tokenError) {
+          console.error('Token verification failed:', tokenError);
+          setError('Invalid or expired invitation. Please request a new invitation.');
+          setLoading(false);
         }
       } catch (err) {
-        setError('Error verifying invitation: ' + err.message);
-        console.error('Error verifying token:', err);
-      } finally {
-        setIsLoading(false);
+        console.error('Error validating invitation:', err);
+        setError('Failed to validate invitation: ' + err.message);
+        setLoading(false);
       }
     };
     
-    verifyToken();
+    validateInvitation();
   }, [location.search]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate input
+    if (!email || !userData || !userData.id) {
+      setError('Invalid user data. Please request a new invitation.');
+      return;
+    }
+    
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
+      setError('Password must be at least 8 characters long.');
       return;
     }
     
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       return;
     }
     
     try {
-      setIsLoading(true);
-      setError(null);
+      setLoading(true);
       
-      const result = await completeUserSetup(token, password);
+      // Create a new auth user with the provided email and password
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: userData.name || 'User',
+            role: userData.role || 'rentee',
+            user_type: userData.user_type || 'rentee',
+            app_user_id: userData.id
+          }
+        }
+      });
       
-      if (result.success) {
-        setSuccess(true);
-        // Redirect to login page after a short delay
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
-      } else {
-        setError(result.error || 'Failed to complete setup');
+      if (error) {
+        throw error;
       }
+      
+      // Update the app_user record with the auth_id
+      const { error: updateError } = await supabase
+        .from('app_users')
+        .update({
+          auth_id: data.user.id,
+          registered: true,
+          updatedat: new Date().toISOString()
+        })
+        .eq('id', userData.id);
+        
+      if (updateError) {
+        console.error('Error updating app_user record:', updateError);
+        // Continue anyway as this is not critical
+      }
+      
+      setSuccess(true);
+      toast.success('Account created successfully!');
+      
+      // Attempt to sign in right away
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (signInError) {
+        console.error('Error signing in after account creation:', signInError);
+        // Not critical, user can still sign in manually
+      }
+      
+      // Redirect to dashboard
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 2000);
     } catch (err) {
-      setError('Error setting up account: ' + err.message);
-      console.error('Setup error:', err);
+      console.error('Error creating account:', err);
+      
+      // Check for common errors
+      if (err.message.includes('User already registered')) {
+        setError('An account with this email already exists. Please try logging in instead.');
+      } else {
+        setError(err.message);
+      }
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="container mt-5 d-flex justify-content-center">
-        <div className="card p-4 shadow" style={{ maxWidth: '500px' }}>
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
           <div className="text-center">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="mt-3">Verifying invitation...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Verifying your invitation...</p>
           </div>
         </div>
       </div>
@@ -116,34 +182,15 @@ const SetupAccount = () => {
 
   if (error) {
     return (
-      <div className="container mt-5 d-flex justify-content-center">
-        <div className="card p-4 shadow" style={{ maxWidth: '500px' }}>
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
           <div className="text-center">
-            <div className="alert alert-danger" role="alert">
-              {error}
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <strong className="font-bold">Error: </strong>
+              <span className="block sm:inline">{error}</span>
             </div>
             <button 
-              className="btn btn-primary"
-              onClick={() => navigate('/login')}
-            >
-              Return to Login
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (success) {
-    return (
-      <div className="container mt-5 d-flex justify-content-center">
-        <div className="card p-4 shadow" style={{ maxWidth: '500px' }}>
-          <div className="text-center">
-            <div className="alert alert-success" role="alert">
-              Account setup successful! You will be redirected to login shortly.
-            </div>
-            <button 
-              className="btn btn-primary"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               onClick={() => navigate('/login')}
             >
               Go to Login
@@ -154,68 +201,101 @@ const SetupAccount = () => {
     );
   }
 
-  return (
-    <div className="container mt-5 d-flex justify-content-center">
-      <div className="card p-4 shadow" style={{ maxWidth: '500px' }}>
-        <h2 className="text-center mb-4">Complete Your Account Setup</h2>
-        
-        {tokenData && (
-          <div className="alert alert-info mb-4">
-            <p className="mb-1"><strong>Welcome, {tokenData.name}!</strong></p>
-            <p className="mb-0">Please set your password to complete your account setup.</p>
+  if (success) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+          <div className="text-center">
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <strong className="font-bold">Success! </strong>
+              <span className="block sm:inline">Your account has been set up successfully.</span>
+            </div>
+            <p className="mb-4 text-gray-600">You will be redirected to the dashboard shortly...</p>
+            <button 
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              onClick={() => navigate('/dashboard')}
+            >
+              Go to Dashboard
+            </button>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Complete Your Account Setup</h2>
+        
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+          <p className="font-medium">Welcome{userData?.name ? `, ${userData.name}` : ''}!</p>
+          <p className="text-sm text-gray-600">Please create a password to complete your account setup.</p>
+        </div>
         
         <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <label htmlFor="email" className="form-label">Email</label>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+              Email
+            </label>
             <input
-              type="email"
-              className="form-control"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100"
               id="email"
+              type="email"
+              placeholder="Email"
               value={email}
+              readOnly
               disabled
             />
-            <div className="form-text">Your email address cannot be changed.</div>
+            <p className="text-sm text-gray-500 mt-1">Your email address cannot be changed.</p>
           </div>
           
-          <div className="mb-3">
-            <label htmlFor="password" className="form-label">Password</label>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+              Password
+            </label>
             <input
-              type="password"
-              className="form-control"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               id="password"
+              type="password"
+              placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength="8"
             />
-            <div className="form-text">Password must be at least 8 characters long.</div>
+            <p className="text-sm text-gray-500 mt-1">Must be at least 8 characters.</p>
           </div>
           
-          <div className="mb-3">
-            <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmPassword">
+              Confirm Password
+            </label>
             <input
-              type="password"
-              className="form-control"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               id="confirmPassword"
+              type="password"
+              placeholder="********"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
           </div>
           
-          <div className="d-grid gap-2">
+          <div className="flex items-center justify-between">
             <button
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
               type="submit"
-              className="btn btn-primary"
-              disabled={isLoading}
+              disabled={loading}
             >
-              {isLoading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
                   Setting up account...
-                </>
+                </span>
               ) : 'Complete Setup'}
             </button>
           </div>

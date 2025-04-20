@@ -14,10 +14,11 @@ import { toast } from 'react-hot-toast';
  * @param {string} name - User's name
  * @param {string} userType - 'staff' or 'rentee'
  * @param {string} userId - ID of the user in app_users table
+ * @param {boolean} sendReal - Whether to send a real email or simulate
  * @returns {Promise<Object>} - Result of the invitation
  */
-export const inviteUser = async (email, name, userType, userId) => {
-  console.log(`[invitationService] Inviting ${userType} ${name} (${email}) with ID ${userId}`);
+export const inviteUser = async (email, name, userType, userId, sendReal = false) => {
+  console.log(`[invitationService] Inviting ${userType} ${name} (${email}) with ID ${userId}${sendReal ? ' - SENDING REAL EMAIL' : ''}`);
   
   try {
     if (!email || !name || !userType || !userId) {
@@ -47,6 +48,28 @@ export const inviteUser = async (email, name, userType, userId) => {
     const origin = window.location.origin;
     const redirectUrl = `${origin}/accept-invite`;
     
+    // If sendReal is false, check if we should simulate
+    // Use the REACT_APP_SIMULATE_EMAILS environment variable if it exists (only if sendReal is false)
+    const shouldSimulate = !sendReal && (process.env.REACT_APP_SIMULATE_EMAILS === 'true');
+    
+    if (shouldSimulate) {
+      console.log(`[invitationService] SIMULATING invitation email to ${email}`);
+      // Just log that we would have sent an invitation
+      console.log(`[invitationService] Would have sent invitation to ${email} with redirect to ${redirectUrl}`);
+      toast.success(`SIMULATED: Invitation would be sent to ${email}`);
+      
+      return {
+        success: true,
+        data: {
+          email,
+          user_type: userType,
+          invited: true,
+          simulated: true,
+          message: `SIMULATED: User invitation to ${email}`
+        }
+      };
+    }
+    
     // Use Supabase's built-in invitation system
     // This will automatically use your SendGrid SMTP configuration
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
@@ -75,6 +98,7 @@ export const inviteUser = async (email, name, userType, userId) => {
         email,
         user_type: userType,
         invited: true,
+        simulated: false,
         message: `User invitation sent successfully to ${email}`
       }
     };

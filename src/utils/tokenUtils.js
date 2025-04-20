@@ -27,68 +27,51 @@ const getTokenSecret = () => {
 };
 
 /**
- * Generate a simple token with payload
+ * Token Utilities
  * 
- * @param {Object} payload - Data to encode in the token
- * @param {string} expiresIn - Expiration time (e.g. '1h', '7d')
- * @returns {string} - Generated token
+ * Simple token generation and verification for secure links
  */
-export const generateToken = (payload, expiresIn = '24h') => {
+
+// Generate a simple token by encoding data as base64 with expiration
+export const generateToken = (data, expiryDays = 1) => {
   try {
-    // Parse the expiration time
-    const expirySeconds = parseExpirationTime(expiresIn);
-    const now = Math.floor(Date.now() / 1000);
+    // Add expiration timestamp
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiryDays);
     
-    // Add standard JWT claims
-    const tokenPayload = {
-      ...payload,
-      iat: now,
-      exp: now + expirySeconds
+    const payload = {
+      ...data,
+      exp: expiresAt.getTime()
     };
     
-    // Encode payload as base64
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const encodedPayload = btoa(JSON.stringify(tokenPayload));
+    // Convert to JSON and encode as base64
+    const tokenData = JSON.stringify(payload);
+    const encodedToken = btoa(tokenData);
     
-    // For simplicity, we're creating a token without actual HS256 signing
-    // In production, use a proper JWT library
-    const token = `${header}.${encodedPayload}.nosignature`;
-    
-    return token;
+    return encodedToken;
   } catch (error) {
-    console.error('[TokenUtils] Error generating token:', error);
-    throw new Error('Failed to generate secure token');
+    console.error('Error generating token:', error);
+    return null;
   }
 };
 
-/**
- * Verify a token and return its payload
- * 
- * @param {string} token - The token to verify
- * @returns {Object} - Decoded token payload if valid
- * @throws {Error} - If token is invalid or expired
- */
+// Verify a token and return the decoded data
 export const verifyToken = (token) => {
   try {
-    // Split token into parts
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      throw new Error('Invalid token format');
-    }
-    
-    // Decode payload
-    const payload = JSON.parse(atob(parts[1]));
+    // Decode from base64
+    const decodedData = atob(token);
+    const payload = JSON.parse(decodedData);
     
     // Check if token is expired
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      throw new Error('Token expired');
+    const now = new Date().getTime();
+    if (payload.exp < now) {
+      throw new Error('Token has expired');
     }
     
     return payload;
   } catch (error) {
-    console.error('[TokenUtils] Token verification failed:', error);
-    throw new Error('Invalid or expired token');
+    console.error('Error verifying token:', error);
+    throw new Error('Invalid token');
   }
 };
 
