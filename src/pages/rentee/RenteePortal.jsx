@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/helpers';
+import { getStructuredAssociations } from '../../services/appUserService';
 
 const RenteePortal = () => {
   const { user } = useAuth();
@@ -97,21 +98,16 @@ const RenteePortal = () => {
         if (renteeData && renteeData.user_type === 'rentee') {
           const renteeId = renteeData.id;
           
-          // Prepare for property fetching
+          // Get structured associations from storage
+          let structuredAssociations = getStructuredAssociations(renteeData.id);
           let propertyIds = [];
-          let structuredAssociations = [];
           
-          // Check if we have structured associations
-          if (renteeData.associated_properties && Array.isArray(renteeData.associated_properties) && renteeData.associated_properties.length > 0) {
-            structuredAssociations = renteeData.associated_properties;
-            // Extract unique property IDs from structured associations
-            propertyIds = [...new Set(structuredAssociations.map(assoc => assoc.propertyId))];
-          } 
-          // Fall back to legacy format if needed
-          else if (renteeData.associated_property_ids && renteeData.associated_property_ids.length > 0) {
+          // If no structured associations, construct from associated_property_ids
+          if (structuredAssociations.length === 0 && renteeData.associated_property_ids) {
             propertyIds = renteeData.associated_property_ids;
-            // Convert legacy format to structured for internal use
             structuredAssociations = propertyIds.map(id => ({ propertyId: id, unitId: null }));
+          } else {
+            propertyIds = [...new Set(structuredAssociations.map(assoc => assoc.propertyId))];
           }
           
           // Fetch associated properties with their units

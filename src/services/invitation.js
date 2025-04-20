@@ -189,9 +189,10 @@ export const completeUserSetup = async (token, password) => {
  * @param {string} userDetails.email - User email address
  * @param {string} userDetails.name - User name
  * @param {string} userDetails.role - User role
+ * @param {boolean} [forceSimulation=false] - Force simulation mode even in production
  * @returns {Promise<Object>} Result object with success status
  */
-export const sendInvitation = async (userDetails) => {
+export const sendInvitation = async (userDetails, forceSimulation = false) => {
   const { id, email, name, role } = userDetails;
   
   try {
@@ -234,8 +235,8 @@ export const sendInvitation = async (userDetails) => {
           <p>Best regards,<br>KH Rentals Team</p>
         </div>
       `,
-      // Allow simulation in development mode
-      simulated: isDevelopment
+      // Only simulate if explicitly requested or in development without API key
+      simulated: forceSimulation
     });
     
     if (emailResult.success) {

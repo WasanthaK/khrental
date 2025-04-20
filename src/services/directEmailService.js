@@ -256,80 +256,65 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
   }
 
   try {
-    // If we have SendGrid API key, attempt to send with SendGrid first
+    // If we have SendGrid API key, attempt to send with SendGrid first via our edge function
     if (apiKey) {
       const payload = {
-        personalizations: [
-          {
-            to: [{ email: to }],
-            subject: subject,
-          },
-        ],
-        from: {
-          email: fromEmail,
-          name: fromDisplayName,
-        },
-        content: [
-          {
-            type: 'text/html',
-            value: html || `<p>${text || ''}</p>`,
-          },
-        ],
+        to,
+        subject,
+        html,
+        text,
+        from: fromEmail,
+        fromName: fromDisplayName,
+        attachments
       };
       
-      // Add plain text if provided
-      if (text) {
-        payload.content.push({
-          type: 'text/plain',
-          value: text,
-        });
-      }
+      // Get the Supabase URL from environment
+      const supabaseUrl = window._env_?.VITE_SUPABASE_URL || 
+                         import.meta.env?.VITE_SUPABASE_URL || 
+                         'https://your-project-id.supabase.co';
+                         
+      // This is the edge function URL - ensure it's the correct format
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/sendgrid-email`;
       
-      // Add attachments if any
-      if (attachments && attachments.length > 0) {
-        payload.attachments = attachments.map(attachment => ({
-          content: typeof attachment.content === 'string' 
-            ? attachment.content 
-            : btoa(String.fromCharCode.apply(null, new Uint8Array(attachment.content))),
-          filename: attachment.filename,
-          type: attachment.type || 'application/octet-stream',
-          disposition: 'attachment',
-        }));
-      }
-
+      console.log(`[directEmailService] Sending via edge function: ${edgeFunctionUrl}`);
+      
       try {
-        const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        const response = await fetch(edgeFunctionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
+            // If you need authorization, add it here
+            // 'Authorization': `Bearer ${supabaseAnonKey}`
           },
           body: JSON.stringify(payload),
         });
         
+        // Parse response
+        let result;
+        try {
+          result = await response.json();
+        } catch (e) {
+          result = { message: await response.text() };
+        }
+        
         if (response.ok) {
-          console.log(`[directEmailService] Email sent successfully to ${to} using SendGrid`);
+          console.log(`[directEmailService] Email sent successfully to ${to} using SendGrid edge function`);
           return {
             success: true,
             message: 'Email sent successfully',
             to,
             subject,
-            service: 'sendgrid',
+            service: 'sendgrid-edge',
             timestamp: new Date().toISOString()
           };
         } else {
-          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-          console.error(`[directEmailService] SendGrid API error:`, errorData);
-          throw new Error(`SendGrid API error: ${errorData.message || response.statusText}`);
+          console.error(`[directEmailService] Edge function error:`, result);
+          throw new Error(`Edge function error: ${result.error || response.statusText}`);
         }
       } catch (error) {
-        // Check if it's a CORS error 
-        if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
-          console.warn(`[directEmailService] CORS error sending via SendGrid API - falling back to EmailJS:`, error);
-          // Fall back to EmailJS
-          return await sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName);
-        }
-        throw error;
+        console.warn(`[directEmailService] Error sending via edge function - falling back to EmailJS:`, error);
+        // Fall back to EmailJS
+        return await sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName);
       }
     } else {
       console.warn(`[directEmailService] No SendGrid API key found, falling back to EmailJS`);

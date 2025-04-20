@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { checkAppUserInvitationStatus } from '../services/appUserService';
+import { checkRenteeInvitationStatus } from '../services/renteeInvitation';
 
 /**
  * Hook to fetch and manage invitation status for a user
@@ -28,7 +28,8 @@ const useInvitationStatus = (userId, skipCheck = false) => {
       setLoading(true);
       setError(null);
       
-      const result = await checkAppUserInvitationStatus(userId);
+      // Use the dedicated status check function
+      const result = await checkRenteeInvitationStatus(userId);
       console.log(`Status check result for ${userId}:`, result);
       
       if (!result.success) {

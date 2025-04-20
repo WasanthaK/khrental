@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
-import { inviteAppUser } from '../../services/appUserService';
 import { supabase } from '../../services/supabaseClient';
+import { sendRenteeInvitation } from '../../services/renteeInvitation';
 
 /**
  * Button component for inviting users
@@ -67,11 +67,11 @@ const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false })
         throw new Error('User has no email address');
       }
       
-      // Now we have all the required information
-      const result = await inviteAppUser(
+      // Use the new sendRenteeInvitation function
+      console.log(`Sending direct invitation to ${userData.name || 'User'} (${email})`);
+      const result = await sendRenteeInvitation(
         email,
-        userData.name,
-        userData.user_type || 'rentee',
+        userData.name || 'User',
         userId
       );
       

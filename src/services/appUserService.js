@@ -80,9 +80,10 @@ export const createAppUser = async (userData, userType) => {
  * @param {string} name - User's name
  * @param {string} userType - 'staff' or 'rentee'
  * @param {string} userId - ID of the user in app_users table
+ * @param {boolean} [sendReal=false] - Send real emails instead of simulating
  * @returns {Promise<Object>} - Result of the invitation
  */
-export const inviteAppUser = async (email, name, userType, userId) => {
+export const inviteAppUser = async (email, name, userType, userId, sendReal = false) => {
   console.log(`[appUserService] Inviting ${userType} ${name} (${email}) with ID ${userId} - CONSOLIDATED VERSION`);
   
   try {
@@ -97,7 +98,17 @@ export const inviteAppUser = async (email, name, userType, userId) => {
     
     // Use the token-based invitation system to create a secure setup link
     console.log(`[appUserService] Calling sendInvitation to generate token for user ${userId}`);
-    const result = await sendInvitation(email, name, userType, userId);
+    
+    // Create userDetails object to match the expected format in sendInvitation
+    const userDetails = {
+      id: userId,
+      email: email,
+      name: name,
+      role: userType
+    };
+    
+    // Pass forceSimulation=false if sendReal is true
+    const result = await sendInvitation(userDetails, !sendReal);
     
     if (!result.success) {
       console.error(`[appUserService] Invitation failed:`, result.error);
@@ -437,5 +448,49 @@ export const fetchAppUsers = async (userType, filters = {}) => {
   } catch (error) {
     console.error('Error in fetchAppUsers:', error);
     throw error;
+  }
+};
+
+// Helper functions for handling structured property associations
+const STORAGE_KEY = 'kh_rentals_structured_associations';
+
+/**
+ * Store structured property associations in session storage
+ * @param {string} userId - ID of the user
+ * @param {Array} associations - Structured property associations
+ */
+export const storeStructuredAssociations = (userId, associations) => {
+  try {
+    // Get existing data
+    const existingData = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
+    
+    // Update with new data
+    existingData[userId] = associations;
+    
+    // Save back to storage
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
+    console.log(`[appUserService] Stored ${associations.length} structured associations for user ${userId}`);
+    return true;
+  } catch (error) {
+    console.error('[appUserService] Error storing structured associations:', error);
+    return false;
+  }
+};
+
+/**
+ * Get structured property associations from session storage
+ * @param {string} userId - ID of the user
+ * @returns {Array} - Structured property associations
+ */
+export const getStructuredAssociations = (userId) => {
+  try {
+    // Get existing data
+    const existingData = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
+    
+    // Return data for the user
+    return existingData[userId] || [];
+  } catch (error) {
+    console.error('[appUserService] Error getting structured associations:', error);
+    return [];
   }
 }; 

@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { fetchData, insertData, deleteData } from '../services/databaseService';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, listFiles } from '../services/fileService';
 import { toast } from 'react-hot-toast';
-import { inviteAppUser } from '../services/appUserService';
+import { inviteUser } from '../services/invitationService';
 // import InvitationStatus from '../components/ui/InvitationStatus';
 
 const AdminDashboard = () => {
@@ -31,6 +31,9 @@ const AdminDashboard = () => {
   const [selectedFolder, setSelectedFolder] = useState('');
   const [files, setFiles] = useState([]);
   const [bucketPermissions, setBucketPermissions] = useState(null);
+
+  // Add state for real email flag
+  const [sendRealEmail, setSendRealEmail] = useState(false);
 
   // Load initial data on mount
   useEffect(() => {
@@ -244,10 +247,10 @@ const AdminDashboard = () => {
       
       console.log('Created app_user:', appUser);
       
-      // Step 2: Send invitation using token-based system
-      console.log('Sending invitation to user:', appUser.id);
+      // Step 2: Send invitation using our new invitation service
+      console.log(`Sending invitation to user:`, appUser.id);
       
-      const result = await inviteAppUser(
+      const result = await inviteUser(
         appUser.email,
         appUser.name || 'User', // Fallback name if not set
         appUser.user_type || (appUser.role === 'rentee' ? 'rentee' : 'staff'),
@@ -264,6 +267,7 @@ const AdminDashboard = () => {
 
       setNewUserEmail('');
       setNewUserRole('rentee');
+      setSendRealEmail(false); // Reset the checkbox
       loadUsers();
       toast.success(`User ${appUser.email} created and invitation sent.`);
     } catch (err) {
@@ -455,7 +459,7 @@ const AdminDashboard = () => {
           <div className="flex ml-2 space-x-2">
             {!user.invited && !user.auth_id && (
               <button 
-                onClick={() => sendInvite(user)}
+                onClick={() => sendInvite(user, false)}
                 className="text-xs text-blue-600 hover:text-blue-800"
                 disabled={loading}
               >
@@ -464,7 +468,7 @@ const AdminDashboard = () => {
             )}
             {user.invited && !user.auth_id && (
               <button 
-                onClick={() => sendInvite(user)}
+                onClick={() => sendInvite(user, false)}
                 className="text-xs text-blue-600 hover:text-blue-800"
                 disabled={loading}
               >
@@ -544,8 +548,8 @@ const AdminDashboard = () => {
     );
   };
 
-  // Simple method to send an invitation
-  const sendInvite = async (user) => {
+  // Update the sendInvite function
+  const sendInvite = async (user, sendSimulated = false) => {
     try {
       setLoading(true);
       
@@ -554,14 +558,17 @@ const AdminDashboard = () => {
         return;
       }
       
-      console.log('Sending invitation to user:', user);
+      console.log(`Sending invitation to user:`, user);
       
-      const result = await inviteAppUser(
+      // Use the inviteUser function from invitationService
+      const result = await inviteUser(
         user.email,
         user.name || 'User', // Fallback name if not set
         user.user_type || (user.role === 'rentee' ? 'rentee' : 'staff'),
         user.id
       );
+      
+      console.log('Invitation result:', result);
       
       if (!result.success) {
         console.error('Error sending invitation:', result.error);
@@ -569,9 +576,10 @@ const AdminDashboard = () => {
         return;
       }
       
-      console.log('Invitation result:', result);
       toast.success(`Invitation sent to ${user.email}`);
-      loadUsers(); // Refresh the list
+      
+      // Refresh the user list to show updated status
+      setTimeout(() => loadUsers(), 1000);
     } catch (err) {
       console.error('Error sending invitation:', err);
       toast.error(`Error sending invitation: ${err.message}`);
@@ -844,35 +852,52 @@ const AdminDashboard = () => {
           
           <div className="mb-4 sm:mb-6">
             <h2 className="text-lg font-semibold mb-3">Invite New User</h2>
-            <form onSubmit={inviteUser} className="space-y-3">
-              <div>
-                <input
-                  type="email"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  placeholder="Email address"
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  required
-                />
+            <form onSubmit={inviteUser} className="mt-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <input
+                    type="email"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    placeholder="Email address"
+                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                    className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="rentee">Rentee</option>
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    disabled={loading}
+                  >
+                    {loading ? 'Adding...' : 'Add User'}
+                  </button>
+                  <div className="flex items-center ml-4">
+                    <input
+                      id="send-real-email"
+                      type="checkbox"
+                      checked={sendRealEmail}
+                      onChange={(e) => setSendRealEmail(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="send-real-email" className="ml-2 text-sm text-gray-700">
+                      Simulate Email (Testing Only)
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div>
-                <select
-                  value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value)}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                >
-                  <option value="rentee">Rentee</option>
-                  <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                </select>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 text-sm"
-              >
-                {loading ? 'Inviting...' : 'Invite User'}
-              </button>
             </form>
           </div>
 
@@ -948,7 +973,7 @@ const AdminDashboard = () => {
                         <td className="px-4 py-3 text-sm flex space-x-2">
                           {!user.invited && !user.auth_id && (
                             <button 
-                              onClick={() => sendInvite(user)}
+                              onClick={() => sendInvite(user, false)}
                               className="text-xs text-blue-600 hover:text-blue-800"
                               disabled={loading}
                             >
@@ -957,7 +982,7 @@ const AdminDashboard = () => {
                           )}
                           {user.invited && !user.auth_id && (
                             <button 
-                              onClick={() => sendInvite(user)}
+                              onClick={() => sendInvite(user, false)}
                               className="text-xs text-blue-600 hover:text-blue-800"
                               disabled={loading}
                             >

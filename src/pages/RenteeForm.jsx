@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { saveFile, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
-import { createAppUser, updateAppUser, inviteAppUser } from '../services/appUserService';
+import { createAppUser, updateAppUser, inviteAppUser, fetchAppUser, storeStructuredAssociations, getStructuredAssociations } from '../services/appUserService';
 import { formatDate } from '../utils/helpers';
 import { USER_ROLES } from '../utils/constants';
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { inviteUser, resendInvitation } from '../services/invitationService';
+import { createAppUser as createRenteeUser } from '../services/createAppUser';
+import { sendRenteeInvitation } from '../services/renteeInvitation';
 
 // UI Components
 import FormInput from '../components/ui/FormInput';
@@ -73,35 +76,28 @@ const RenteeForm = () => {
         
         // If in edit mode, fetch rentee data from app_users table
         if (isEditMode) {
-          const { data: renteeData, error: renteeError } = await supabase
-            .from('app_users')
-            .select('*')
-            .eq('id', id)
-            .eq('user_type', 'rentee')
-            .single();
+          const renteeData = await fetchAppUser(id);
           
-          if (renteeError) {
-            throw renteeError;
-          }
+          // Get structured associations from storage
+          const structuredAssociations = getStructuredAssociations(id);
           
-          if (renteeData) {
-            setFormData({
-              name: renteeData.name || '',
-              contactDetails: renteeData.contact_details || {
-                email: '',
-                phone: '',
-                alternatePhone: '',
-                emergencyContact: ''
-              },
-              associatedPropertyIds: renteeData.associated_property_ids || [],
-              national_id: renteeData.national_id || '',
-              permanent_address: renteeData.permanent_address || '',
-              structuredAssociations: renteeData.associated_properties || []
-            });
-            
-            if (renteeData.id_copy_url) {
-              setExistingIdCopy(renteeData.id_copy_url);
-            }
+          setFormData({
+            name: renteeData.name || '',
+            contactDetails: {
+              email: renteeData.email || '',
+              phone: renteeData.contact_details?.phone || '',
+              address: renteeData.contact_details?.address || ''
+            },
+            associatedPropertyIds: renteeData.associated_property_ids || [],
+            idCopy: renteeData.id_copy_url || null,
+            idCopyFile: null,
+            structuredAssociations: structuredAssociations.length > 0 ? structuredAssociations : [],
+            national_id: renteeData.national_id || '',
+            permanent_address: renteeData.permanent_address || '',
+          });
+          
+          if (renteeData.id_copy_url) {
+            setExistingIdCopy(renteeData.id_copy_url);
           }
         }
       } catch (error) {
@@ -362,7 +358,6 @@ const RenteeForm = () => {
         contact_details: processedFormData.contactDetails,
         id_copy_url: idCopyUrl || null,
         associated_property_ids: Array.isArray(processedFormData.associatedPropertyIds) ? processedFormData.associatedPropertyIds : [],
-        associated_properties: Array.isArray(processedFormData.structuredAssociations) ? processedFormData.structuredAssociations : [],
         invited: false,
         national_id: processedFormData.national_id,
         permanent_address: processedFormData.permanent_address,
@@ -373,7 +368,7 @@ const RenteeForm = () => {
       if (isEditMode) {
         result = await updateAppUser(id, appUserData);
       } else {
-        result = await createAppUser(appUserData, 'rentee');
+        result = await createRenteeUser(appUserData, 'rentee');
       }
       
       if (!result.success) {
@@ -382,6 +377,15 @@ const RenteeForm = () => {
       
       // Get the user ID from the result data
       const userId = isEditMode ? id : (result.data ? result.data.id : null);
+      
+      // Store structured associations separately
+      if (userId) {
+        const structuredAssociations = Array.isArray(processedFormData.structuredAssociations) 
+          ? processedFormData.structuredAssociations 
+          : [];
+        
+        storeStructuredAssociations(userId, structuredAssociations);
+      }
       
       // Don't automatically send invitation - just show success message
       setSuccess(`Rentee ${isEditMode ? 'updated' : 'created'} successfully!`);
@@ -399,7 +403,7 @@ const RenteeForm = () => {
     }
   };
   
-  // Add a new function to handle manual invitation
+  // Replace the handleSendInvitation function with a new implementation
   const handleSendInvitation = async () => {
     try {
       if (!formData.contactDetails.email) {
@@ -407,17 +411,49 @@ const RenteeForm = () => {
         return;
       }
 
-      const inviteResult = await inviteAppUser(
+      // For newly created users, we need to look up the user ID by email
+      let userIdToUse = id; // For edit mode, use the existing ID
+      
+      if (!userIdToUse) {
+        // If we're in create mode and just created a user, we need to find their ID
+        const { data: foundUser, error } = await supabase
+          .from('app_users')
+          .select('id')
+          .eq('email', formData.contactDetails.email.toLowerCase())
+          .single();
+          
+        if (error || !foundUser) {
+          toast.error('Could not find user record. Please try again.');
+          console.error('Error finding user by email:', error);
+          return;
+        }
+        
+        userIdToUse = foundUser.id;
+      }
+      
+      if (!userIdToUse) {
+        toast.error('User ID not available. Please try again.');
+        return;
+      }
+
+      // Using the new dedicated renteeInvitation service that directly uses supabase.auth.admin
+      console.log(`Sending direct invitation to ${formData.name} (${formData.contactDetails.email}) with ID ${userIdToUse}`);
+      
+      const inviteResult = await sendRenteeInvitation(
         formData.contactDetails.email,
         formData.name,
-        'rentee',
-        id
+        userIdToUse
       );
+
+      console.log('Direct invitation result:', inviteResult);
 
       if (inviteResult.success) {
         toast.success('Invitation sent successfully!');
+        // Force refresh the user status 
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         toast.error(`Failed to send invitation: ${inviteResult.error}`);
+        console.error('Invitation error details:', inviteResult);
       }
     } catch (error) {
       console.error('Error sending invitation:', error);
@@ -477,6 +513,19 @@ const RenteeForm = () => {
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">Success!</strong>
           <span className="block sm:inline ml-2">{success}</span>
+          
+          {/* Show invitation option after success */}
+          <div className="mt-4 pt-4 border-t border-green-300">
+            <strong className="font-bold">Next step:</strong>
+            <span className="block sm:inline ml-2">Send an invitation to allow this rentee to set up their account.</span>
+            <button
+              type="button"
+              onClick={handleSendInvitation}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
+            >
+              Send Invitation
+            </button>
+          </div>
         </div>
       )}
       
@@ -694,19 +743,6 @@ const RenteeForm = () => {
             </div>
           </div>
         </div>
-        
-        {/* Add invitation button for edit mode */}
-        {isEditMode && (
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={handleSendInvitation}
-              className="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Send Login Invitation
-            </button>
-          </div>
-        )}
         
         {/* Form Actions */}
         <div className="flex justify-end space-x-3">

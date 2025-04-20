@@ -9,6 +9,7 @@ import InviteUserButton from '../components/common/InviteUserButton';
 import PropertyCard from '../components/properties/PropertyCard';
 import AgreementCard from '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
+import { getStructuredAssociations } from '../services/appUserService';
 
 // Custom component for displaying agreements in RenteeDetails page
 const AgreementSummaryCard = ({ agreement, property, rentee }) => {
@@ -180,15 +181,17 @@ const RenteeDetails = () => {
         }
         
         if (renteeData) {
-          // Format rentee data
+          // Map the rentee data to the state
           const renteeInfo = {
             id: renteeData.id,
             name: renteeData.name,
+            email: renteeData.email,
             contactDetails: renteeData.contact_details || {},
+            associatedPropertyIds: renteeData.associated_property_ids || [],
+            // Get structured associations from storage instead of database
+            structuredAssociations: getStructuredAssociations(renteeData.id),
             idCopyUrl: renteeData.id_copy_url,
             registrationDate: renteeData.created_at,
-            associatedPropertyIds: renteeData.associated_property_ids || [],
-            structuredAssociations: renteeData.associated_properties || [],
             invited: renteeData.invited,
             authId: renteeData.auth_id,
             createdAt: renteeData.created_at || new Date().toISOString(),

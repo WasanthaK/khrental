@@ -20,7 +20,13 @@ A comprehensive property management application for KH Rentals with digital sign
    ```bash
    npm install
    ```
-3. Create a `.env` file based on `.env.example`:
+3. Set up your environment variables by running:
+   ```bash
+   npm run setup-env
+   ```
+   This will guide you through setting up your Supabase URL and key.
+
+   Alternatively, manually create a `.env` file based on this template:
    ```
    VITE_SUPABASE_URL=your_supabase_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
@@ -29,6 +35,21 @@ A comprehensive property management application for KH Rentals with digital sign
    VITE_API_ENDPOINT=your_api_endpoint
    VITE_WEBHOOK_URL=your_webhook_url
    ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+## Environment Variables
+
+The application uses the following strategy to load environment variables:
+
+1. First attempts to read from `window._env_` (for production)
+2. Falls back to Vite's `import.meta.env` 
+3. Finally checks `process.env` (for Node.js environment)
+
+The `npm run generate-env-config` script automatically generates the `public/env-config.js` file from your `.env` file. This script is run automatically when you start the development server or build the application.
 
 ## Development
 

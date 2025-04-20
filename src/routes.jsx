@@ -18,6 +18,7 @@ import UpdatePassword from './pages/UpdatePassword';
 import EviaAuthCallback from './pages/EviaAuthCallback';
 import AuthDebug from './pages/AuthDebug';
 import AccountSetup from './pages/AccountSetup';
+import AcceptInvite from './pages/AcceptInvite';
 
 // KH Staff pages
 import Dashboard from './pages/Dashboard';
@@ -239,6 +240,14 @@ const router = createBrowserRouter([
         element: (
           <PublicRoute>
             <SetupAccount />
+          </PublicRoute>
+        ),
+      },
+      {
+        path: 'accept-invite',
+        element: (
+          <PublicRoute>
+            <AcceptInvite />
           </PublicRoute>
         ),
       },
