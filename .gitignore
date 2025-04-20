@@ -55,3 +55,7 @@ WEBHOOK_README.md
 # /src/db/migrations     # Database migration scripts
 # README.md              # Documentation files
 # *.md                   # All markdown files
+# API keys
+public/env-config.js
+.env*
+public/env-config.js

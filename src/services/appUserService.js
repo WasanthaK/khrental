@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { sendEmailNotification } from './notificationService';
 import { USER_ROLES } from '../utils/constants';
-import { sendInvitation } from './invitation';
+import { inviteUser } from './invitationService';
 
 /**
  * Utility function to ensure a record has valid timestamp fields
@@ -108,7 +108,7 @@ export const inviteAppUser = async (email, name, userType, userId, sendReal = fa
     };
     
     // Pass forceSimulation=false if sendReal is true
-    const result = await sendInvitation(userDetails, !sendReal);
+    const result = await inviteUser(userDetails, !sendReal);
     
     if (!result.success) {
       console.error(`[appUserService] Invitation failed:`, result.error);

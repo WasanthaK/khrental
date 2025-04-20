@@ -232,140 +232,82 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
   const fromEmail = getFromEmail(from);
   const fromDisplayName = getFromName(fromName);
   
-  // Check if we're in development mode
-  const isDevelopment = 
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1';
-  
-  // If simulation is explicitly requested or we're in development mode without API key
-  if (simulated || (isDevelopment && !apiKey)) {
-    console.log(`[directEmailService] SIMULATING email to ${to}:`, {
-      subject,
-      from: `${fromDisplayName} <${fromEmail}>`,
-      content: html || text || '(No content provided)'
-    });
-    
-    return {
-      success: true,
-      simulated: true,
-      message: 'Email simulated - not actually sent',
-      to,
-      subject,
-      timestamp: new Date().toISOString()
-    };
-  }
-
   try {
-    // If we have SendGrid API key, attempt to send with SendGrid directly
-    if (apiKey) {
-      // Get the Supabase URL from environment
-      const supabaseUrl = window._env_?.VITE_SUPABASE_URL || 
-                         import.meta.env?.VITE_SUPABASE_URL || 
-                         'https://your-project-id.supabase.co';
-                         
-      // Prepare the payload
-      const payload = {
-        to,
+    // If simulated or no API key, simulate the email
+    if (simulated || !apiKey) {
+      console.log(`[directEmailService] SIMULATING email to ${to}:`, {
         subject,
-        html,
-        text,
-        from: fromEmail,
-        fromName: fromDisplayName,
-        attachments
-      };
+        from: `${fromDisplayName} <${fromEmail}>`,
+        content: html || text || '(No content provided)'
+      });
       
-      // This is for logging purposes
-      console.log(`[directEmailService] Would send to: ${to} using SendGrid`);
-      
-      // IMPORTANT: Since there are CORS issues with the edge function,
-      // we will simulate sending in development mode
-      if (isDevelopment) {
-        console.log(`[directEmailService] Development mode detected with CORS issues - simulating send instead`);
-        console.log(`[directEmailService] Email content:`, {
-          to,
-          subject,
-          from: `${fromDisplayName} <${fromEmail}>`,
-        });
-        
-        return {
-          success: true,
-          simulated: true,
-          message: 'Email simulated due to CORS in development - not actually sent',
-          to,
-          subject,
-          timestamp: new Date().toISOString()
-        };
-      }
-      
-      // In production, try to send via the edge function
-      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/sendgrid-email`;
-      
-      console.log(`[directEmailService] Sending via edge function: ${edgeFunctionUrl}`);
-      
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Include the origin in the request
-            'Origin': window.location.origin,
-          },
-          body: JSON.stringify(payload),
-        });
-        
-        // Parse response
-        let result;
-        try {
-          result = await response.json();
-        } catch (e) {
-          result = { message: await response.text() };
-        }
-        
-        if (response.ok) {
-          console.log(`[directEmailService] Email sent successfully to ${to} using SendGrid edge function`);
-          return {
-            success: true,
-            message: 'Email sent successfully',
-            to,
-            subject,
-            service: 'sendgrid-edge',
-            timestamp: new Date().toISOString()
-          };
-        } else {
-          console.error(`[directEmailService] Edge function error:`, result);
-          throw new Error(`Edge function error: ${result.error || response.statusText}`);
-        }
-      } catch (error) {
-        console.warn(`[directEmailService] Error sending via edge function - falling back to simulation mode:`, error);
-        // Fall back to simulation
-        return {
-          success: true,
-          simulated: true,
-          message: `Simulated email due to error: ${error.message}`,
-          to,
-          subject,
-          timestamp: new Date().toISOString()
-        };
-      }
-    } else {
-      console.warn(`[directEmailService] No SendGrid API key found, falling back to simulation mode`);
       return {
         success: true,
         simulated: true,
-        message: 'Email simulated due to missing API key - not actually sent',
+        message: 'Email simulated - not actually sent',
         to,
         subject,
         timestamp: new Date().toISOString()
       };
     }
-  } catch (error) {
-    console.error(`[directEmailService] Error sending email:`, error);
     
-    // Always fall back to simulation as the last resort
+    // Real email implementation using SendGrid Web API directly (not recommended for production)
+    // This is a temporary solution - in production you should use a server-side API
+    const sendGridUrl = 'https://api.sendgrid.com/v3/mail/send';
+    
+    const payload = {
+      personalizations: [
+        {
+          to: [{ email: to }],
+          subject: subject
+        }
+      ],
+      content: [
+        {
+          type: 'text/html',
+          value: html || text || ''
+        }
+      ],
+      from: {
+        email: fromEmail || 'noreply@khrentals.com',
+        name: fromDisplayName || 'KH Rentals'
+      }
+    };
+    
+    console.log(`[directEmailService] Sending REAL email to ${to}`);
+    
+    // Use the local CORS proxy for SendGrid API calls
+    const proxiedSendGridUrl = 'http://localhost:8080/https://api.sendgrid.com/v3/mail/send';
+    
+    const response = await fetch(proxiedSendGridUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[directEmailService] Error from SendGrid API:`, response.status, errorText);
+      throw new Error(`SendGrid Error: ${response.status} ${response.statusText}`);
+    }
+    
+    console.log(`[directEmailService] Email sent successfully to ${to}`);
     return {
       success: true,
-      simulated: true,
-      message: `Simulated email due to error: ${error.message}`,
+      simulated: false,
+      message: 'Email sent successfully',
+      to,
+      subject,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error(`[directEmailService] Error sending email:`, error);
+    return {
+      success: false,
+      error: error.message,
       to,
       subject,
       timestamp: new Date().toISOString()

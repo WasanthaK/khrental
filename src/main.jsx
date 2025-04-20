@@ -4,6 +4,25 @@ import App from './App';
 import './index.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
+// Add global error handler to catch module loading errors
+window.addEventListener('error', (event) => {
+  // Check if this is a script loading error (like a module import)
+  if (event.filename && (
+    event.filename.includes('/src/') || 
+    event.message.includes('Failed to load module script') ||
+    event.message.includes('Import'))
+  ) {
+    console.error('Module loading error detected:', {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      error: event.error
+    });
+    event.preventDefault(); // Prevent default error handling
+  }
+});
+
 // Simple error boundary for the root component
 // This prevents the entire app from crashing if a component fails
 class ErrorBoundary extends React.Component {

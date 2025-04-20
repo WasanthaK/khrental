@@ -48,6 +48,10 @@ export default defineConfig(({ command, mode }) => {
     },
     optimizeDeps: {
       include: ['react', 'react-dom', 'react-router-dom', 'prop-types'],
+      // Force include problem modules
+      force: true,
+      // Exclude problematic dynamic imports
+      exclude: []
     },
     resolve: {
       alias: {
@@ -88,6 +92,38 @@ export default defineConfig(({ command, mode }) => {
         clientPort: 5173
       },
       open: false,
+      // Add middleware to handle direct source file requests
+      middlewares: [
+        (req, res, next) => {
+          // Redirect direct requests to source files back to root
+          if (req.url.startsWith('/src/')) {
+            console.warn(`Blocked direct access to source file: ${req.url}`);
+            console.warn(`Request details: method=${req.method}, headers=${JSON.stringify(req.headers)}`);
+            console.warn(`Referrer: ${req.headers.referer || 'unknown'}`);
+            
+            // Send detailed error response instead of redirect
+            res.writeHead(404, { 'Content-Type': 'text/html' });
+            res.end(`
+              <html>
+                <head><title>Source Access Blocked</title></head>
+                <body>
+                  <h1>Source File Access Blocked</h1>
+                  <p>Direct access to source files is not allowed.</p>
+                  <p>Requested: ${req.url}</p>
+                  <p>Please use the application routes instead.</p>
+                  <p><a href="/">Go to Application</a></p>
+                  <script>
+                    console.error('Source file access blocked: ${req.url}');
+                    console.trace('Source file access stack trace');
+                  </script>
+                </body>
+              </html>
+            `);
+            return;
+          }
+          next();
+        }
+      ]
     },
   };
 }); 

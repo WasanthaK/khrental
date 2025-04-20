@@ -3,6 +3,9 @@ import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PERMISSIONS, ROLES } from './utils/permissions.jsx';
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { toast } from 'react-hot-toast';
+import { supabase } from './services/supabaseClient';
+import NotFound from './pages/NotFound';
 
 // Layout components
 import RootLayout from './components/layouts/RootLayout';
@@ -67,9 +70,6 @@ import RenteeUtilities from './pages/rentee/RenteeUtilities';
 import RenteeMaintenanceDetails from './pages/rentee/RenteeMaintenanceDetails';
 import UtilityReadingForm from './pages/rentee/UtilityReadingForm';
 import UtilityHistory from './pages/rentee/UtilityHistory';
-
-// Error pages
-import NotFound from './pages/NotFound';
 
 // Add Unauthorized page
 import Unauthorized from './pages/Unauthorized';
@@ -203,9 +203,6 @@ const UuidGuard = ({ children }) => {
   if (!isValid) { return <div>Validating...</div>; }
   return children;
 };
-
-// Add InvitationTest component
-import InvitationTest from './components/debug/InvitationTest';
 
 // Create the router directly instead of through a function
 // This helps with HMR (Hot Module Replacement)
@@ -578,10 +575,6 @@ const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
-          {
-            path: 'debug/invitations',
-            element: <InvitationTest />,
-          },
         ],
       },
       {
@@ -736,14 +729,14 @@ const router = createBrowserRouter([
               },
             ],
           },
-          {
-            path: 'debug/invitations',
-            element: <InvitationTest />,
-          },
         ],
       },
     ],
   },
+  {
+    path: '*',
+    element: <NotFound />
+  }
 ]);
 
 // Export the router instance directly

@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { fetchData, insertData, deleteData } from '../services/databaseService';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, listFiles } from '../services/fileService';
 import { toast } from 'react-hot-toast';
-import { sendInvitation } from '../services/invitation';
+import { inviteUser, resendInvitation, checkInvitationStatus } from '../services/invitationService';
 // import InvitationStatus from '../components/ui/InvitationStatus';
 
 const AdminDashboard = () => {
@@ -34,6 +34,9 @@ const AdminDashboard = () => {
 
   // Add state for real email flag
   const [sendRealEmail, setSendRealEmail] = useState(false);
+  // Add state for invitation testing
+  const [testingMode, setTestingMode] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
 
   // Load initial data on mount
   useEffect(() => {
@@ -207,7 +210,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const inviteUser = async (e) => {
+  const handleUserInvite = async (e) => {
     e.preventDefault();
     
     if (!newUserEmail) {
@@ -218,79 +221,56 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       
-      // Step 1: Create an app_user record
-      const newUserId = crypto.randomUUID(); // Generate a UUID client-side for user ID
-      
+      // First, create the user in the app_users table
       const userData = {
-        id: newUserId,
         email: newUserEmail.toLowerCase(),
-        name: newUserEmail.split('@')[0], // Default name from email
+        name: testingMode && newUserName ? newUserName : newUserEmail.split('@')[0], // Use specified name or default from email
         role: newUserRole,
-        user_type: newUserRole === 'rentee' ? 'rentee' : 'staff',
-        createdat: new Date().toISOString(),
-        updatedat: new Date().toISOString()
+        user_type: newUserRole === 'rentee' ? 'rentee' : 'staff'
       };
       
-      console.log('Creating app_user record:', userData);
-      
-      const { data: appUser, error: insertError } = await supabase
+      // Insert user into app_users table
+      const { data: newUser, error: createError } = await supabase
         .from('app_users')
-        .insert([userData])
+        .insert(userData)
         .select()
         .single();
       
-      if (insertError) {
-        console.error('Error inserting app_user:', insertError);
-        toast.error(`Database error: ${insertError.message}`);
+      if (createError) {
+        console.error('Error creating user:', createError);
+        toast.error(`Failed to create user: ${createError.message}`);
         return;
       }
       
-      console.log('Created app_user:', appUser);
-      
-      // Step 2: Send invitation using our new invitation service
-      console.log(`Sending ${sendRealEmail ? 'REAL' : 'simulated'} invitation to user:`, appUser.id);
-      
-      const result = await sendInvitation(
-        {
-          id: appUser.id,
-          email: appUser.email,
-          name: appUser.name || 'User', // Fallback name if not set
-          role: appUser.role || 'rentee'
-        },
-        !sendRealEmail // forceSimulation is the opposite of sendRealEmail
-      );
+      // Now invite the user using our new invitation service
+      const result = await inviteUser({
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role || newUser.user_type
+      }, !sendRealEmail); // Pass simulated=false if sendRealEmail is true
       
       if (!result.success) {
         console.error('Error sending invitation:', result.error);
-        toast.error(`Failed to send invitation: ${result.error}`);
-        // Continue anyway as the user record is created and they can be invited again
-      } else {
-        console.log('Invitation result:', result);
-        
-        // Mark the user as invited in the database
-        const { error: updateError } = await supabase
-          .from('app_users')
-          .update({ 
-            invited: true,
-            updatedat: new Date().toISOString()
-          })
-          .eq('id', appUser.id);
-        
-        if (updateError) {
-          console.error('Error updating user invitation status:', updateError);
-          // This is not critical, so we'll continue
-        }
+        toast.error(`User created but invitation failed: ${result.error}`);
+        return;
       }
-
+      
+      // Show appropriate message based on email status
+      if (!result.simulated) {
+        toast.success(`User created and real invitation email sent to ${newUserEmail}`);
+      } else {
+        toast.success(`User created and simulated invitation email sent to ${newUserEmail}`);
+      }
+      
+      // Reset the form
       setNewUserEmail('');
-      setNewUserRole('rentee');
-      setSendRealEmail(false); // Reset the checkbox
-      loadUsers();
-      toast.success(`User ${appUser.email} created and ${sendRealEmail ? 'REAL' : 'simulated'} invitation sent.`);
+      
+      // Refresh the user list
+      setTimeout(() => loadUsers(), 1000);
     } catch (err) {
-      console.error('Error in inviteUser:', err);
-      setError(err.message);
-      toast.error(`Failed to create user: ${err.message}`);
+      console.error('Error creating user:', err);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -462,64 +442,59 @@ const AdminDashboard = () => {
 
   // Render user card for mobile view
   const renderUserCard = (user) => (
-    <div key={user.id} className={`bg-white rounded-lg shadow p-4 mb-3 ${user.active === false ? 'bg-red-50' : ''}`}>
-      <div className="mb-2">
-        <h3 className="font-medium text-gray-900">{user.name}</h3>
-        <p className="text-sm text-gray-600">{user.email}</p>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-          {user.role}
-        </span>
-        <div className="flex items-center">
-          {renderUserStatus(user)}
-          <div className="flex ml-2 space-x-2">
-            {!user.invited && !user.auth_id && (
-              <>
-                <button 
-                  onClick={() => sendInvite(user, false)}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                  disabled={loading}
-                >
-                  Send
-                </button>
-                <button 
-                  onClick={() => sendInvite(user, true)}
-                  className="text-xs text-green-600 hover:text-green-800"
-                  disabled={loading}
-                >
-                  Send Real Email
-                </button>
-              </>
-            )}
-            {user.invited && !user.auth_id && (
-              <>
-                <button 
-                  onClick={() => sendInvite(user, false)}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                  disabled={loading}
-                >
-                  Resend
-                </button>
-                <button 
-                  onClick={() => sendInvite(user, true)}
-                  className="text-xs text-green-600 hover:text-green-800"
-                  disabled={loading}
-                >
-                  Send Real Email
-                </button>
-              </>
-            )}
+    <div
+      key={user.id}
+      className="bg-white shadow rounded-md overflow-hidden hover:shadow-md transition-shadow"
+    >
+      <div className="p-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 truncate">
+              {user.name || 'Unnamed User'}
+            </h3>
+            <p className="text-sm text-gray-600 truncate">{user.email}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {user.role} ({user.user_type})
+            </p>
+          </div>
+          
+          <div className="flex flex-col space-y-2">
+            {renderUserStatus(user)}
+          </div>
+        </div>
+        
+        <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+          <div className="text-xs text-gray-500">
+            Created: {new Date(user.createdat).toLocaleString()}
+          </div>
+          
+          <div className="flex space-x-2">
             <button
-              onClick={() => toggleUserStatus(user.id, user.active !== false)}
-              className={`text-xs ${
-                user.active === false
-                  ? 'text-green-600 hover:text-green-800'
-                  : 'text-red-600 hover:text-red-800'
+              onClick={() => toggleUserStatus(user.id, user.active)}
+              className={`px-2 py-1 text-xs rounded-md ${
+                user.active
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                  : 'bg-green-100 text-green-700 hover:bg-green-200'
               }`}
-              disabled={loading}
             >
-              {user.active === false ? 'Activate' : 'Deactivate'}
+              {user.active ? 'Deactivate' : 'Activate'}
+            </button>
+            
+            {!user.auth_id && (
+              <button
+                onClick={() => sendInvite(user, sendRealEmail)}
+                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md"
+              >
+                Re-invite
+              </button>
+            )}
+            
+            <button
+              onClick={() => checkStatus(user.id)}
+              className="px-2 py-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-md"
+              title="Check invitation status"
+            >
+              Status
             </button>
           </div>
         </div>
@@ -593,18 +568,11 @@ const AdminDashboard = () => {
         return;
       }
       
-      console.log(`Sending ${sendReal ? 'REAL' : 'simulated'} invitation to user:`, user);
+      console.log(`Sending invitation to user:`, user, `sending real email: ${sendReal}`);
       
-      // Use the sendInvitation function from invitation.js
-      const result = await sendInvitation(
-        {
-          id: user.id,
-          email: user.email,
-          name: user.name || 'User', // Fallback name if not set
-          role: user.role || (user.user_type === 'rentee' ? 'rentee' : 'staff')
-        },
-        !sendReal // forceSimulation is the opposite of sendReal
-      );
+      // Use the resendInvitation function from our new service
+      // Pass simulated=false when sendReal=true
+      const result = await resendInvitation(user.id, !sendReal);
       
       console.log('Invitation result:', result);
       
@@ -614,21 +582,12 @@ const AdminDashboard = () => {
         return;
       }
       
-      // Mark the user as invited in the database
-      const { error: updateError } = await supabase
-        .from('app_users')
-        .update({ 
-          invited: true,
-          updatedat: new Date().toISOString()
-        })
-        .eq('id', user.id);
-      
-      if (updateError) {
-        console.error('Error updating user invitation status:', updateError);
-        // This is not critical, so we'll continue
+      // Show appropriate message based on simulation status
+      if (!result.simulated) {
+        toast.success(`Real invitation email sent to ${user.email}`);
+      } else {
+        toast.success(`Simulated invitation email sent to ${user.email}`);
       }
-      
-      toast.success(`${sendReal ? 'REAL' : 'Simulated'} invitation sent to ${user.email}`);
       
       // Refresh the user list to show updated status
       setTimeout(() => loadUsers(), 1000);
@@ -637,6 +596,24 @@ const AdminDashboard = () => {
       toast.error(`Error sending invitation: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Check invitation status
+  const checkStatus = async (userId) => {
+    try {
+      const result = await checkInvitationStatus(userId);
+      
+      if (!result.success) {
+        toast.error(`Status check failed: ${result.error}`);
+        return;
+      }
+      
+      toast.success(`Status: ${result.status}`);
+      return result;
+    } catch (error) {
+      console.error('Error checking invitation status:', error);
+      toast.error(`Error: ${error.message}`);
     }
   };
 
@@ -904,7 +881,7 @@ const AdminDashboard = () => {
           
           <div className="mb-4 sm:mb-6">
             <h2 className="text-lg font-semibold mb-3">Invite New User</h2>
-            <form onSubmit={inviteUser} className="mt-4 mb-8">
+            <form onSubmit={handleUserInvite} className="mt-4 mb-8">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <input
@@ -938,18 +915,47 @@ const AdminDashboard = () => {
                   </button>
                   <div className="flex items-center ml-4">
                     <input
-                      id="send-real-email"
+                      id="sendRealEmail"
                       type="checkbox"
                       checked={sendRealEmail}
                       onChange={(e) => setSendRealEmail(e.target.checked)}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
-                    <label htmlFor="send-real-email" className="ml-2 text-sm text-gray-700">
-                      Send Real Email
+                    <label htmlFor="sendRealEmail" className="ml-2 text-sm text-gray-700">
+                      Send real email (not simulated)
                     </label>
                   </div>
                 </div>
               </div>
+
+              <div className="flex items-center mb-3">
+                <input
+                  id="testingMode"
+                  type="checkbox"
+                  checked={testingMode}
+                  onChange={(e) => setTestingMode(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="testingMode" className="ml-2 text-sm text-gray-700">
+                  Invitation Testing Mode
+                </label>
+              </div>
+
+              {testingMode && (
+                <div className="mb-4">
+                  <label htmlFor="newUserName" className="block text-sm font-medium text-gray-700 mb-1">
+                    User Name
+                  </label>
+                  <input
+                    type="text"
+                    id="newUserName"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="p-2 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Enter name for testing"
+                  />
+                </div>
+              )}
             </form>
           </div>
 

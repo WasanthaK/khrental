@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { checkRenteeInvitationStatus } from '../services/renteeInvitation';
+import { supabase } from '../services/supabaseClient';
+import { checkUserAuthStatus } from '../services/userManagement';
 
 /**
- * Hook to fetch and manage invitation status for a user
+ * Hook to check a user's invitation/registration status
  * @param {string} userId - ID of the user to check
  * @param {boolean} skipCheck - Whether to skip the automatic status check
  * @returns {Object} - Status information and refresh function
@@ -28,30 +29,36 @@ const useInvitationStatus = (userId, skipCheck = false) => {
       setLoading(true);
       setError(null);
       
-      // Use the dedicated status check function
-      const result = await checkRenteeInvitationStatus(userId);
+      // Use the userManagement service to check status
+      const result = await checkUserAuthStatus(userId);
       console.log(`Status check result for ${userId}:`, result);
       
       if (!result.success) {
-        throw new Error(result.error || 'Failed to check invitation status');
+        throw new Error(result.error || 'Failed to check auth status');
       }
       
-      setStatus(result.data.status);
-      console.log(`Set status for ${userId} to:`, result.data.status);
+      // Map the result to the expected status values
+      if (result.registered) {
+        setStatus('registered');
+      } else {
+        // Check if the user is invited but not registered
+        const { data: userData } = await supabase
+          .from('app_users')
+          .select('invited')
+          .eq('id', userId)
+          .single();
+          
+        if (userData?.invited) {
+          setStatus('invited');
+        } else {
+          setStatus('not_invited');
+        }
+      }
+      
+      console.log(`Set status for ${userId} to:`, status);
     } catch (err) {
       console.error(`Error checking invitation status for ${userId}:`, err);
-      
-      // Check if the error is related to the app_users table not existing
-      if (err.message && (
-        err.message.includes('app_users') || 
-        err.message.includes('relation') || 
-        err.message.includes('does not exist')
-      )) {
-        setError(`The app_users table does not exist. Please run the migration first: ${err.message}`);
-      } else {
-        setError(err.message);
-      }
-      
+      setError(err.message);
       setStatus('error');
     } finally {
       setLoading(false);

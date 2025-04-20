@@ -1,0 +1,34 @@
+# Block direct access to source files
+RewriteEngine On
+RewriteRule ^src/.*$ / [R=301,L]
+
+# Handle SPA routing
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_FILENAME} !-l
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# Set security headers
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-XSS-Protection "1; mode=block"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' blob: data:; font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.sendgrid.com;"
+</IfModule>
+
+# Disable directory browsing
+Options -Indexes
+
+# Serve certain files with the correct MIME type
+<IfModule mod_mime.c>
+  AddType application/javascript .js
+  AddType text/css .css
+  AddType image/svg+xml .svg
+  AddType application/font-woff .woff
+  AddType application/font-woff2 .woff2
+</IfModule> 

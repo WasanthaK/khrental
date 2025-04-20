@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
-import { createAppUser, updateAppUser, inviteAppUser } from '../services/appUserService';
+import { inviteUser } from '../services/invitationService';
 import { toast } from 'react-toastify';
 
 const TeamMemberForm = () => {
@@ -168,12 +168,12 @@ const TeamMemberForm = () => {
       }
       
       if (userId && processedFormData.contact_details.email) {
-        await inviteAppUser(
-          processedFormData.contact_details.email,
-          processedFormData.name,
-          processedFormData.user_type || 'staff',
-          userId
-        );
+        await inviteUser({
+          id: userId,
+          email: processedFormData.contact_details.email,
+          name: processedFormData.name,
+          role: processedFormData.user_type || 'staff'
+        });
       }
       
       toast.success(`Team member ${id ? 'updated' : 'created'} successfully`);

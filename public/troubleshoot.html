@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KH Rentals - Troubleshoot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1, h2 {
+      color: #2563eb;
+    }
+    pre {
+      background-color: #f8f8f8;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>KH Rentals Troubleshooting Tool</h1>
+
+  <h2>Browser Environment</h2>
+  <div id="browser-info"></div>
+
+  <h2>Route Troubleshooting</h2>
+  <div>
+    <button id="test-dynamic-import">Test Dynamic Import</button>
+    <button id="test-static-import">Test Static Import</button>
+    <button id="test-router">Test Router</button>
+    <div id="test-result" class="result"></div>
+  </div>
+
+  <h2>Network Requests</h2>
+  <button id="check-resources">Check Loaded Resources</button>
+  <div id="network-info" class="result"></div>
+
+  <h2>Console Messages</h2>
+  <pre id="console-log"></pre>
+
+  <script>
+    // Display browser info
+    const browserInfo = document.getElementById('browser-info');
+    browserInfo.innerHTML = `
+      <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+      <p><strong>Platform:</strong> ${navigator.platform}</p>
+      <p><strong>Language:</strong> ${navigator.language}</p>
+      <p><strong>Vendor:</strong> ${navigator.vendor}</p>
+      <p><strong>Connection:</strong> ${navigator.connection ? navigator.connection.effectiveType : 'unknown'}</p>
+    `;
+
+    // Override console methods to capture logs
+    const consoleLog = document.getElementById('console-log');
+    const originalConsole = {
+      log: console.log,
+      error: console.error,
+      warn: console.warn
+    };
+
+    function addToConsoleLog(type, ...args) {
+      const message = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      
+      consoleLog.innerHTML += `<span style="color: ${
+        type === 'error' ? 'red' : type === 'warn' ? 'orange' : 'black'
+      }">[${type}] ${message}</span>\n`;
+      
+      return originalConsole[type](...args);
+    }
+
+    console.log = (...args) => addToConsoleLog('log', ...args);
+    console.error = (...args) => addToConsoleLog('error', ...args);
+    console.warn = (...args) => addToConsoleLog('warn', ...args);
+
+    // Test functions
+    document.getElementById('test-dynamic-import').addEventListener('click', async () => {
+      const result = document.getElementById('test-result');
+      result.textContent = 'Testing dynamic import...';
+      
+      try {
+        // Test a safe dynamic import
+        const module = await import('/src/main.jsx');
+        result.textContent = 'Dynamic import test succeeded! This should NOT happen for source files.';
+      } catch (error) {
+        result.textContent = `Dynamic import properly failed: ${error.message}`;
+        console.log('Dynamic import error (expected):', error);
+      }
+    });
+
+    document.getElementById('test-static-import').addEventListener('click', () => {
+      const result = document.getElementById('test-result');
+      result.textContent = 'Simulating static import...';
+      
+      // Create a script tag to simulate a static import
+      const script = document.createElement('script');
+      script.src = '/src/pages/RenteeForm.jsx';
+      script.type = 'module';
+      script.onerror = (error) => {
+        result.textContent = `Static import properly failed: ${error.type}`;
+        console.log('Static import error (expected):', error);
+      };
+      document.head.appendChild(script);
+      
+      // Remove it after a short delay
+      setTimeout(() => {
+        document.head.removeChild(script);
+      }, 1000);
+    });
+
+    document.getElementById('test-router').addEventListener('click', () => {
+      const result = document.getElementById('test-result');
+      result.textContent = 'Testing router navigation...';
+      
+      // Navigate to the rentee form route to test if it works
+      window.location.href = '/dashboard/rentees/new';
+    });
+
+    document.getElementById('check-resources').addEventListener('click', () => {
+      const networkInfo = document.getElementById('network-info');
+      const resources = performance.getEntriesByType('resource');
+      
+      const suspiciousResources = resources.filter(res => 
+        res.name.includes('/src/') || 
+        res.name.includes('RenteeForm')
+      );
+      
+      if (suspiciousResources.length > 0) {
+        networkInfo.innerHTML = '<h3>Suspicious resources detected:</h3>' + 
+          suspiciousResources.map(res => 
+            `<p><strong>${res.name}</strong><br>
+            Type: ${res.initiatorType}<br>
+            Start time: ${res.startTime.toFixed(2)}ms<br>
+            Duration: ${res.duration.toFixed(2)}ms</p>`
+          ).join('');
+      } else {
+        networkInfo.innerHTML = '<p>No suspicious resources found.</p>';
+      }
+      
+      console.log('All resources:', resources);
+    });
+
+    // Log startup
+    console.log('Troubleshooting tool loaded at', new Date().toLocaleString());
+  </script>
+</body>
+</html> 

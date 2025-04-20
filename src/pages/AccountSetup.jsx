@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
-import { verifyInvitationToken, completeUserSetup } from '../services/invitation';
 
 const AccountSetup = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [token, setToken] = useState('');
-  const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(true);
   const [error, setError] = useState(null);
@@ -19,50 +16,86 @@ const AccountSetup = () => {
   
   // Extract token and validate on mount
   useEffect(() => {
-    const validateInvitation = async () => {
+    const validateAndGetSession = async () => {
       try {
-        // Get token from URL
-        const queryParams = new URLSearchParams(location.search);
-        const urlToken = queryParams.get('token');
+        // Check if we have a hash in the URL (Supabase Auth redirect)
+        if (location.hash || location.search.includes('access_token')) {
+          // This will be handled by the Supabase client automatically
+          console.log('Auth redirect detected, letting Supabase handle it');
+          
+          // Check for active session
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            throw error;
+          }
+          
+          if (data?.session) {
+            // We have a valid session
+            setEmail(data.session.user.email || '');
+            setValidating(false);
+            setLoading(false);
+            setSuccess(true);
+            
+            // Redirect to dashboard after a short delay
+            setTimeout(() => {
+              navigate('/dashboard');
+            }, 3000);
+            return;
+          }
+        }
         
-        if (!urlToken) {
-          setError('Invalid invitation link. No token provided.');
+        // Check if this is a password reset request
+        const searchParams = new URLSearchParams(location.search);
+        const urlType = searchParams.get('type');
+        const urlEmail = searchParams.get('email');
+        
+        if (urlType === 'recovery' || urlType === 'passwordRecovery') {
+          // This is a password reset flow
+          if (urlEmail) {
+            setEmail(urlEmail);
+          }
+          
           setValidating(false);
+          setLoading(false);
           return;
         }
         
-        setToken(urlToken);
+        // If no special parameters, check for an active session
+        const { data: sessionData } = await supabase.auth.getSession();
         
-        // Verify the token
-        const { success, data, error } = await verifyInvitationToken(urlToken);
-        
-        if (!success) {
-          setError(error || 'Invalid or expired invitation link.');
-          setValidating(false);
+        if (sessionData?.session) {
+          // Already logged in, redirect to dashboard
+          navigate('/dashboard');
           return;
         }
         
-        // Token is valid, set email and userId
-        setEmail(data.email);
-        setUserId(data.userId);
+        // No session, but also no special parameters - show the login button
         setValidating(false);
         setLoading(false);
+        setError('No valid setup parameters found. Please use the invitation link sent to your email.');
       } catch (err) {
-        console.error('Error validating invitation:', err);
-        setError('An unexpected error occurred while validating your invitation.');
+        console.error('Error validating session:', err);
+        setError('An unexpected error occurred: ' + err.message);
         setValidating(false);
+        setLoading(false);
       }
     };
     
-    validateInvitation();
-  }, [location.search]);
+    validateAndGetSession();
+  }, [location.search, location.hash, navigate]);
   
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Basic validation
-    if (!email || !password) {
-      setError('Email and password are required.');
+    if (!email) {
+      setError('Email is required.');
+      return;
+    }
+    
+    if (!password) {
+      setError('Password is required.');
       return;
     }
     
@@ -80,23 +113,53 @@ const AccountSetup = () => {
     setError(null);
     
     try {
-      // Complete user setup with password
-      const result = await completeUserSetup(token, userId, email, password);
+      // Use Supabase Auth to update the password
+      const { error } = await supabase.auth.updateUser({
+        password: password
+      });
       
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create account.');
+      if (error) {
+        throw error;
       }
       
       // Show success message then redirect to login
       setSuccess(true);
       
       // Redirect after 3 seconds
-      setTimeout(() => {
-        navigate('/login?email=' + encodeURIComponent(email));
+      setTimeout(async () => {
+        // If we have a session, go to dashboard, otherwise to login
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          navigate('/dashboard');
+        } else {
+          navigate('/login?email=' + encodeURIComponent(email));
+        }
       }, 3000);
     } catch (err) {
-      console.error('Error creating account:', err);
+      console.error('Error updating password:', err);
       setError(err.message || 'An unexpected error occurred.');
+      
+      // If the error indicates no session, use the signUp flow as fallback
+      if (err.message.includes('not logged in') || err.message.includes('No session')) {
+        try {
+          // Try signup as fallback
+          const { error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+          });
+          
+          if (signUpError) {
+            throw signUpError;
+          }
+          
+          setSuccess(true);
+          setTimeout(() => {
+            navigate('/login?email=' + encodeURIComponent(email));
+          }, 3000);
+        } catch (signUpErr) {
+          setError(signUpErr.message || 'Failed to create account.');
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -108,8 +171,8 @@ const AccountSetup = () => {
       <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
         <div className="flex flex-col items-center justify-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <h4 className="text-xl font-semibold mb-2">Validating invitation...</h4>
-          <p className="text-gray-600">Please wait while we verify your invitation.</p>
+          <h4 className="text-xl font-semibold mb-2">Validating session...</h4>
+          <p className="text-gray-600">Please wait while we verify your session.</p>
         </div>
       </div>
     );
@@ -120,7 +183,7 @@ const AccountSetup = () => {
     return (
       <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
         <div className="p-4 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700">
-          <h4 className="text-lg font-semibold mb-2">Invalid Invitation</h4>
+          <h4 className="text-lg font-semibold mb-2">Invalid Session</h4>
           <p>{error}</p>
         </div>
         <div className="text-center mt-6">
@@ -144,8 +207,8 @@ const AccountSetup = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h4 className="text-xl font-semibold mb-2">Account Created Successfully!</h4>
-        <p className="text-gray-600">Redirecting you to the login page...</p>
+        <h4 className="text-xl font-semibold mb-2">Account Updated Successfully!</h4>
+        <p className="text-gray-600">Redirecting you to the dashboard...</p>
       </div>
     );
   }
@@ -167,11 +230,17 @@ const AccountSetup = () => {
           <input
             type="email"
             value={email}
-            readOnly
-            disabled
-            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
+            onChange={(e) => setEmail(e.target.value)}
+            readOnly={!!email}
+            disabled={!!email}
+            className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
+              email ? 'bg-gray-100 text-gray-500' : 'focus:outline-none focus:ring-blue-500 focus:border-blue-500'
+            }`}
+            placeholder="Enter your email"
           />
-          <p className="mt-1 text-sm text-gray-500">This is the email your invitation was sent to.</p>
+          {email && (
+            <p className="mt-1 text-sm text-gray-500">This is the email your invitation was sent to.</p>
+          )}
         </div>
         
         <div className="mb-4">
@@ -213,10 +282,10 @@ const AccountSetup = () => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Creating Account...
+              Updating Account...
             </span>
           ) : (
-            'Create Account'
+            'Update Account'
           )}
         </button>
       </form>

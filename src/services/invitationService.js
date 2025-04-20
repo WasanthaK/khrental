@@ -1,145 +1,159 @@
 /**
- * INVITATION SERVICE - SUPABASE AUTH INTEGRATION
+ * Unified Invitation Service
  * 
- * This service provides invitation functionality using Supabase's built-in auth systems
- * with the SendGrid SMTP configuration you've already set up.
+ * Handles invitations for all user types:
+ * - Staff members
+ * - Rentees
+ * - Admin users
+ * 
+ * Provides a consistent interface for sending invitations regardless of source.
  */
 
 import { supabase } from './supabaseClient';
-import { toast } from 'react-hot-toast';
+import { sendDirectEmail } from './directEmailService';
 
 /**
- * Invite a user to create an account
- * @param {string} email - User's email
- * @param {string} name - User's name
- * @param {string} userType - 'staff' or 'rentee'
- * @param {string} userId - ID of the user in app_users table
- * @param {boolean} sendReal - Whether to send a real email or simulate
- * @returns {Promise<Object>} - Result of the invitation
+ * Send an invitation to a user
+ * 
+ * @param {Object} userDetails User details object
+ * @param {string} userDetails.email User's email
+ * @param {string} userDetails.name User's name
+ * @param {string} userDetails.role User's role (staff, rentee, admin)
+ * @param {string} userDetails.id User's ID in the app_users table
+ * @param {boolean} simulated Whether to simulate email sending (for testing)
+ * @returns {Promise<Object>} Result object
  */
-export const inviteUser = async (email, name, userType, userId, sendReal = false) => {
-  console.log(`[invitationService] Inviting ${userType} ${name} (${email}) with ID ${userId}${sendReal ? ' - SENDING REAL EMAIL' : ''}`);
-  
+export const inviteUser = async (userDetails, simulated = false) => {
   try {
-    if (!email || !name || !userType || !userId) {
-      console.error('[invitationService] Missing required parameters for invitation');
-      return { 
-        success: false, 
-        error: 'Missing required parameters for invitation',
-        debug: { email, name, userType, userId }
+    // Check for required parameters
+    if (!userDetails.email || !userDetails.id) {
+      console.error('[InvitationService] Missing required parameters:', userDetails);
+      return {
+        success: false,
+        error: 'Missing required fields: email and id are required',
+        debug: { userDetails }
       };
     }
     
-    // Mark the user as invited in app_users table
+    console.log(`[InvitationService] Inviting user ${userDetails.name} (${userDetails.email}) with ID ${userDetails.id}`);
+    
+    // Update the app_users table to mark as invited
     const { error: updateError } = await supabase
       .from('app_users')
-      .update({ 
+      .update({
         invited: true,
         updatedat: new Date().toISOString()
       })
-      .eq('id', userId);
+      .eq('id', userDetails.id);
     
     if (updateError) {
-      console.error(`[invitationService] Error updating user invitation status:`, updateError);
-      // We'll continue anyway as this is not critical
+      console.error('[InvitationService] Error updating invitation status:', updateError);
+      // Continue with invitation despite the error
     }
     
-    // Get the full origin
-    const origin = window.location.origin;
-    const redirectUrl = `${origin}/accept-invite`;
+    // Generate a redirect URL for the invitation
+    const redirectUrl = `${window.location.origin}/accept-invite`;
+    console.log('[InvitationService] Using redirect URL:', redirectUrl);
     
-    // If sendReal is false, check if we should simulate
-    // Use the REACT_APP_SIMULATE_EMAILS environment variable if it exists (only if sendReal is false)
-    const shouldSimulate = !sendReal && (process.env.REACT_APP_SIMULATE_EMAILS === 'true');
+    // Try to use Supabase Auth to send the invitation
+    console.log('[InvitationService] Attempting to send invitation via Supabase Auth to:', userDetails.email);
     
-    if (shouldSimulate) {
-      console.log(`[invitationService] SIMULATING invitation email to ${email}`);
-      // Just log that we would have sent an invitation
-      console.log(`[invitationService] Would have sent invitation to ${email} with redirect to ${redirectUrl}`);
-      toast.success(`SIMULATED: Invitation would be sent to ${email}`);
-      
-      return {
-        success: true,
-        data: {
-          email,
-          user_type: userType,
-          invited: true,
-          simulated: true,
-          message: `SIMULATED: User invitation to ${email}`
-        }
-      };
-    }
-    
-    // Use Supabase's built-in invitation system
-    // This will automatically use your SendGrid SMTP configuration
-    const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
+    const resetOptions = {
       redirectTo: redirectUrl,
       data: {
-        name: name,
-        role: userType,
-        user_type: userType,
-        app_user_id: userId
+        app_user_id: userDetails.id,
+        name: userDetails.name,
+        role: userDetails.role
       }
+    };
+    console.log('[InvitationService] Reset options:', resetOptions);
+    
+    const { data: resetData, error: resetError } = await supabase.auth.resetPasswordForEmail(
+      userDetails.email,
+      resetOptions
+    );
+    
+    console.log('[InvitationService] Supabase auth reset result:', { data: resetData, error: resetError });
+    
+    // If Supabase invitation fails or is simulated, use direct email
+    // Generate a magic link to the accept-invite page with parameters
+    const inviteLink = `${window.location.origin}/accept-invite?email=${encodeURIComponent(userDetails.email)}&user_id=${userDetails.id}&name=${encodeURIComponent(userDetails.name || '')}&type=invite`;
+    
+    // Send a direct email with the invitation link
+    console.log('[InvitationService] Sending direct email invitation to:', userDetails.email);
+    
+    const emailResult = await sendDirectEmail({
+      to: userDetails.email,
+      subject: 'Your Invitation to KH Rentals',
+      html: getInvitationEmailTemplate(userDetails.name, inviteLink, userDetails.role),
+      simulated: simulated
     });
     
-    if (error) {
-      console.error(`[invitationService] Error sending invitation:`, error);
+    if (!emailResult.success) {
+      console.error('[InvitationService] Failed to send direct invitation email:', emailResult);
       return {
         success: false,
-        error: error.message,
-        debug: { error }
+        error: 'Failed to send invitation email',
+        debug: { emailError: emailResult }
       };
     }
     
-    console.log(`[invitationService] Invitation sent successfully to ${email}`, data);
+    // Return success with simulated flag
     return {
       success: true,
-      data: {
-        email,
-        user_type: userType,
-        invited: true,
-        simulated: false,
-        message: `User invitation sent successfully to ${email}`
-      }
+      simulated: emailResult.simulated || simulated,
+      message: emailResult.simulated ? 'Invitation email was simulated' : 'Invitation sent successfully via direct email',
+      method: 'direct_email'
     };
   } catch (error) {
-    console.error(`[invitationService] Unexpected error inviting user ${email}:`, error);
-    return { 
-      success: false, 
+    console.error('[InvitationService] Unexpected error:', error);
+    return {
+      success: false,
       error: error.message,
-      debug: { error: error.toString(), stack: error.stack }
+      debug: { stack: error.stack }
     };
   }
 };
 
 /**
- * Resend invitation to an existing user
- * @param {string} userId - ID of the user in app_users table
- * @returns {Promise<Object>} - Result of the invitation
+ * Resend an invitation to an existing user
+ * 
+ * @param {string} userId User ID in the app_users table
+ * @param {boolean} simulated Whether to simulate email sending
+ * @returns {Promise<Object>} Result object
  */
-export const resendInvitation = async (userId) => {
-  console.log(`[invitationService] Resending invitation to user ID ${userId}`);
-  
+export const resendInvitation = async (userId, simulated = false) => {
   try {
-    // Get user details
-    const { data: user, error: fetchError } = await supabase
+    console.log(`[InvitationService] Resending invitation for user ${userId}`);
+    
+    // Get user details from app_users table
+    const { data: userData, error: userError } = await supabase
       .from('app_users')
-      .select('id, email, name, user_type')
+      .select('id, email, name, role, user_type')
       .eq('id', userId)
       .single();
-      
-    if (fetchError || !user) {
-      console.error(`[invitationService] Failed to fetch user:`, fetchError);
+    
+    if (userError || !userData) {
+      console.error('[InvitationService] Error fetching user data:', userError);
       return {
         success: false,
-        error: fetchError?.message || 'User not found'
+        error: userError ? userError.message : 'User not found',
+        debug: { userId }
       };
     }
     
-    // Send the invitation
-    return await inviteUser(user.email, user.name, user.user_type, user.id);
+    // Map user data to the format expected by inviteUser
+    const userDetails = {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role || userData.user_type
+    };
+    
+    // Use the standard invitation flow
+    return inviteUser(userDetails, simulated);
   } catch (error) {
-    console.error(`[invitationService] Unexpected error:`, error);
+    console.error('[InvitationService] Error resending invitation:', error);
     return {
       success: false,
       error: error.message
@@ -149,47 +163,100 @@ export const resendInvitation = async (userId) => {
 
 /**
  * Check if a user has accepted their invitation
- * @param {string} userId - ID of the user in app_users table
- * @returns {Promise<Object>} - Result with invitation status
+ * 
+ * @param {string} userId User ID in the app_users table
+ * @returns {Promise<Object>} Result object with invitation status
  */
 export const checkInvitationStatus = async (userId) => {
-  console.log(`[invitationService] Checking invitation status for user ${userId}`);
-  
   try {
-    const { data, error } = await supabase
+    if (!userId) {
+      return {
+        success: false,
+        error: 'User ID is required'
+      };
+    }
+    
+    // Query the app_users table to get auth_id and invited status
+    const { data: userData, error: userError } = await supabase
       .from('app_users')
-      .select('id, email, invited, auth_id')
+      .select('id, auth_id, invited')
       .eq('id', userId)
       .single();
     
-    if (error) {
-      console.error(`[invitationService] Error fetching user ${userId}:`, error);
-      throw error;
+    if (userError) {
+      console.error(`[InvitationService] Error fetching invitation status for ${userId}:`, userError);
+      return {
+        success: false,
+        error: userError.message
+      };
     }
     
-    // Determine status
+    if (!userData) {
+      return {
+        success: false,
+        error: 'User not found'
+      };
+    }
+    
+    // Determine the invitation status
     let status = 'not_invited';
-    if (data.auth_id) {
-      status = 'registered';
-    } else if (data.invited) {
-      status = 'invited';
+    
+    if (userData.auth_id) {
+      status = 'registered'; // User has linked their auth account
+    } else if (userData.invited) {
+      status = 'invited'; // User has been invited but not registered
     }
     
-    return { 
-      success: true, 
-      data: {
-        ...data,
-        status
-      }
+    return {
+      success: true,
+      status,
+      hasAuthId: !!userData.auth_id
     };
   } catch (error) {
-    console.error(`[invitationService] Error checking invitation status:`, error);
-    return { success: false, error: error.message };
+    console.error('[InvitationService] Error checking invitation status:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 };
 
-export default {
-  inviteUser,
-  resendInvitation,
-  checkInvitationStatus
-}; 
+/**
+ * Generate HTML email template for invitations
+ * 
+ * @param {string} name Recipient's name
+ * @param {string} inviteLink Invitation link
+ * @param {string} role User's role (staff, rentee, admin)
+ * @returns {string} HTML email template
+ */
+function getInvitationEmailTemplate(name, inviteLink, role) {
+  const userTypeLabel = role === 'staff' || role === 'admin' ? 'Team Member' : 'Rentee';
+  
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #4a90e2;">Welcome to KH Rentals</h1>
+      </div>
+      
+      <p>Hello ${name || 'there'},</p>
+      
+      <p>You have been invited to join KH Rentals as a ${userTypeLabel}. Please click the button below to set up your account and get started.</p>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${inviteLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
+          Set Up Your Account
+        </a>
+      </div>
+      
+      <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #4a90e2;">${inviteLink}</p>
+      
+      <p>This invitation link will expire in 24 hours for security reasons.</p>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #777; font-size: 12px;">
+        <p>If you did not expect this invitation, you can safely ignore this email.</p>
+        <p>© ${new Date().getFullYear()} KH Rentals. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+} 

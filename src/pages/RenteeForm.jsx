@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { saveFile, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import { createAppUser, updateAppUser, inviteAppUser, fetchAppUser, storeStructuredAssociations, getStructuredAssociations } from '../services/appUserService';
-import { formatDate } from '../utils/helpers';
-import { USER_ROLES } from '../utils/constants';
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-import { sendInvitation } from '../services/invitation';
+import { inviteUser, resendInvitation } from '../services/invitationService';
 import { createAppUser as createRenteeUser } from '../services/createAppUser';
+import { resendInvitation as newResendInvitation } from '../services/invitationService';
 
 // UI Components
 import FormInput from '../components/ui/FormInput';
@@ -16,6 +15,7 @@ import Button from '../components/ui/Button';
 import Alert from '../components/ui/Alert';
 import PropertySelector from '../components/properties/PropertySelector';
 import ImageUpload from '../components/common/ImageUpload';
+import FormSelect from '../components/ui/FormSelect';
 
 const RenteeForm = () => {
   const { id } = useParams();
@@ -48,7 +48,6 @@ const RenteeForm = () => {
   const [selectedProperty, setSelectedProperty] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
   const [propertyUnits, setPropertyUnits] = useState([]);
-  const [sendRealEmail, setSendRealEmail] = useState(false);
   
   // Fetch rentee data if in edit mode and available properties
   useEffect(() => {
@@ -436,29 +435,48 @@ const RenteeForm = () => {
         return;
       }
 
-      // Using the new dedicated renteeInvitation service that directly uses supabase.auth.admin
-      console.log(`Sending direct invitation to ${formData.name} (${formData.contactDetails.email}) with ID ${userIdToUse}`);
+      console.log(`Sending invitation to ${formData.name} (${formData.contactDetails.email})`);
       
-      const inviteResult = await sendInvitation(
-        {
-          id: userIdToUse,
+      // For existing users, use resendInvitation
+      if (isEditMode) {
+        const result = await newResendInvitation(userIdToUse);
+        
+        if (!result.success) {
+          toast.error(`Failed to send invitation: ${result.error}`);
+          console.error('Invitation error details:', result);
+          return;
+        }
+        
+        if (result.emailSent) {
+          toast.success('Invitation email sent successfully!');
+        } else {
+          toast.success('Invitation processed but there was an issue with the email service');
+        }
+      } 
+      // For new users, create and invite in one step
+      else {
+        const result = await inviteUser({
           email: formData.contactDetails.email,
           name: formData.name,
-          role: 'rentee'
-        },
-        !sendRealEmail // Only force simulation if sendRealEmail is false
-      );
-
-      console.log('Direct invitation result:', inviteResult);
-
-      if (inviteResult.success) {
-        toast.success(`${sendRealEmail ? 'Real' : 'Simulated'} invitation sent successfully!`);
-        // Force refresh the user status 
-        setTimeout(() => window.location.reload(), 1500);
-      } else {
-        toast.error(`Failed to send invitation: ${inviteResult.error}`);
-        console.error('Invitation error details:', inviteResult);
+          role: 'rentee',
+          userType: 'rentee'
+        });
+        
+        if (!result.success) {
+          toast.error(`Failed to create user: ${result.error}`);
+          console.error('User creation error:', result);
+          return;
+        }
+        
+        if (result.emailSent) {
+          toast.success('User created and invitation email sent successfully!');
+        } else {
+          toast.success('User created but there was an issue with the email service');
+        }
       }
+      
+      // Force refresh after a short delay
+      setTimeout(() => window.location.reload(), 1500);
     } catch (error) {
       console.error('Error sending invitation:', error);
       toast.error(`Failed to send invitation: ${error.message}`);
@@ -523,25 +541,12 @@ const RenteeForm = () => {
             <strong className="font-bold">Next step:</strong>
             <span className="block sm:inline ml-2">Send an invitation to allow this rentee to set up their account.</span>
             
-            <div className="flex items-center mt-2 mb-3">
-              <input
-                id="send-real-email"
-                type="checkbox"
-                checked={sendRealEmail}
-                onChange={(e) => setSendRealEmail(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="send-real-email" className="ml-2 text-sm text-gray-700">
-                Send Real Email
-              </label>
-            </div>
-            
             <button
               type="button"
               onClick={handleSendInvitation}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
             >
-              {sendRealEmail ? 'Send Real Invitation' : 'Send Invitation (Simulated)'}
+              Send Invitation
             </button>
           </div>
         </div>
