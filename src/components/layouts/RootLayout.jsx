@@ -9,6 +9,7 @@ import { Toaster } from 'react-hot-toast';
 import { ConfirmContextProvider } from '../../contexts/ConfirmContext';
 import PropertyProvider from '../../contexts/PropertyContext';
 import NavigationRegistrar from './NavigationRegistrar';
+import WelcomeGuide from '../WelcomeGuide';
 
 const RootLayout = () => {
   const { user, loading } = useAuth();
@@ -67,6 +68,7 @@ const RootLayout = () => {
       <RouteChangeHandler />
       <ForceRefresh />
       <NavigationRegistrar />
+      <WelcomeGuide />
       
       <ConfirmContextProvider>
         <PropertyProvider>

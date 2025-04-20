@@ -189,7 +189,9 @@ const AuthCallback = () => {
         if (type === 'recovery') {
           redirectPath = '/update-password';
         } else if (type === 'invite') {
-          redirectPath = '/register';
+          // Send to dashboard instead of register to let WelcomeGuide show
+          // This ensures the force_password_change flag will be detected
+          redirectPath = '/dashboard';
         } else if (user.user_metadata?.role === 'rentee') {
           redirectPath = '/rentee';
         }

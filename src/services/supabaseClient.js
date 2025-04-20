@@ -75,6 +75,15 @@ if (!supabaseUrl) {
   console.warn("[Supabase] Using hardcoded URL as fallback");
 }
 
+// Use CORS proxy in development
+if (import.meta.env.DEV && supabaseUrl) {
+  // Store the original URL for logging
+  const originalUrl = supabaseUrl;
+  // Apply the proxy to the URL
+  supabaseUrl = `http://localhost:8080/${supabaseUrl}`;
+  console.log(`[Supabase] Using CORS proxy for development: ${originalUrl} -> ${supabaseUrl}`);
+}
+
 // Last attempt to get the anon key from window._env_
 if (!supabaseAnonKey && window?._env_?.VITE_SUPABASE_ANON_KEY) {
   supabaseAnonKey = window._env_.VITE_SUPABASE_ANON_KEY;

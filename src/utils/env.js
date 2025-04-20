@@ -14,9 +14,18 @@ const getEnvVar = (key) => {
 
 // Get the application base URL consistently
 export const getAppBaseUrl = () => {
-  return typeof window !== 'undefined' && window.location && window.location.origin
-    ? window.location.origin
-    : 'https://khrentals.kubeira.com';
+  // In a browser context, use the actual origin
+  if (typeof window !== 'undefined' && window.location) {
+    return window.location.origin;
+  }
+  
+  // For development or test environments
+  if (import.meta.env.DEV) {
+    return 'http://localhost:5174'; // Use our dev server port
+  }
+  
+  // For production, use the deployed URL
+  return 'https://khrentals.kubeira.com';
 };
 
 // Export environment variables directly

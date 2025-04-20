@@ -75,4 +75,45 @@ CREATE TRIGGER update_rentees_updated_at
 CREATE TRIGGER update_app_users_updated_at
   BEFORE UPDATE ON app_users
   FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column(); 
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Create invitation_tokens table
+CREATE TABLE IF NOT EXISTS invitation_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token TEXT UNIQUE NOT NULL,
+  user_id UUID NOT NULL REFERENCES app_users(id),
+  email TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  used_at TIMESTAMP WITH TIME ZONE,
+  
+  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+);
+
+-- Create index on token for quick lookups
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_token ON invitation_tokens(token);
+
+-- Create index on user_id for quick lookups
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_user_id ON invitation_tokens(user_id);
+
+-- Secure the table with RLS
+ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Allow admins to do anything
+CREATE POLICY admin_all ON invitation_tokens
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() IN (SELECT au.auth_id FROM app_users au WHERE au.role = 'admin'));
+
+-- Allow users to read their own tokens
+CREATE POLICY user_read ON invitation_tokens
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() IN (SELECT au.auth_id FROM app_users au WHERE au.id = user_id));
+
+-- Allow the service role and anon to create and read tokens (for invitation process)
+CREATE POLICY service_create_read ON invitation_tokens
+  FOR ALL
+  TO anon, service_role
+  USING (true); 

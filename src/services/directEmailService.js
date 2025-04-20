@@ -11,10 +11,13 @@ const getSendGridKey = () => {
   const key = window._env_?.VITE_SENDGRID_API_KEY || 
               import.meta.env?.VITE_SENDGRID_API_KEY || 
               process.env?.VITE_SENDGRID_API_KEY || 
-              process.env?.SENDGRID_API_KEY;
+              process.env?.SENDGRID_API_KEY ||
+              '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'; // Directly use provided key as fallback
+  
+  console.log('[DirectEmail] Using SendGrid API key:', key ? 'Found key (hidden)' : 'No key found');
   
   if (!key) {
-    console.error('SendGrid API key not found in environment variables');
+    console.error('[DirectEmail] SendGrid API key not found in environment variables');
     return null;
   }
   
@@ -54,15 +57,15 @@ const getSupabaseUrl = () => {
 };
 
 // Get the from email with fallbacks
-const getFromEmail = () => {
-  return window._env_?.VITE_EMAIL_FROM || 
+const getFromEmail = (from) => {
+  return from || window._env_?.VITE_EMAIL_FROM || 
          import.meta.env?.VITE_EMAIL_FROM || 
-         'noreply@khrentals.com';
+         'noreply@kubeira.com';
 };
 
 // Get the from name with fallbacks
-const getFromName = () => {
-  return window._env_?.VITE_EMAIL_FROM_NAME || 
+const getFromName = (fromName) => {
+  return fromName || window._env_?.VITE_EMAIL_FROM_NAME || 
          import.meta.env?.VITE_EMAIL_FROM_NAME || 
          'KH Rentals';
 };
@@ -192,148 +195,223 @@ KH Rentals Team
 };
 
 /**
- * Send a direct email using SendGrid API
- * 
- * @param {string|Object} toOrOptions - Recipient email or options object
- * @param {string} [subjectParam] - Email subject (when using individual parameters)
- * @param {string} [htmlContent] - HTML content (when using individual parameters)
- * @param {string} [textContent] - Plain text content (when using individual parameters)
- * @param {string} [fromEmail] - Sender email (when using individual parameters)
- * @param {string} [fromName] - Sender name (when using individual parameters)
- * @returns {Promise<Object>} - Result of the operation
+ * Sends an email using SendGrid API with fallback to EmailJS
+ * @param {Object|string} toParam - Either email address string or object with email properties
+ * @param {string} [subjectParam] - Email subject (if toParam is a string)
+ * @param {string} [htmlParam] - HTML content (if toParam is a string) 
+ * @param {Object} [optionsParam] - Additional options (if toParam is a string)
+ * @returns {Promise<Object>} - Result of the send operation
  */
-export const sendDirectEmail = async (toOrOptions, subjectParam, htmlContent, textContent = '', fromEmail = null, fromName = null) => {
-  try {
-    // Handle both parameter styles
-    let to, html, text, from, name, subject;
-    
-    // Check if first parameter is an object (options style)
-    if (typeof toOrOptions === 'object' && toOrOptions !== null) {
-      to = toOrOptions.to;
-      subject = toOrOptions.subject;
-      html = toOrOptions.html;
-      text = toOrOptions.text;
-      from = toOrOptions.from || fromEmail || getFromEmail();
-      name = toOrOptions.fromName || fromName || getFromName();
-    } else {
-      // Individual parameters style
-      to = toOrOptions;
-      subject = subjectParam;
-      html = htmlContent;
-      text = textContent;
-      from = fromEmail || getFromEmail();
-      name = fromName || getFromName();
-    }
-    
-    console.log(`Sending email to ${to} with subject: ${subject}`);
-    
-    const sendGridKey = getSendGridKey();
-    if (!sendGridKey) {
-      console.error('Cannot send email: SendGrid API key is missing');
-      throw new Error('SendGrid API key not configured');
-    }
-    
-    // Prepare the email payload for SendGrid
-    const emailPayload = {
-      personalizations: [
-        {
-          to: [{ email: to }],
-          subject: subject,
-        },
-      ],
-      from: {
-        email: from,
-        name: name,
-      },
-      content: [
-        {
-          type: 'text/plain',
-          value: text || html.replace(/<[^>]*>/g, ''), // Fallback to stripped HTML if text not provided
-        },
-        {
-          type: 'text/html',
-          value: html,
-        },
-      ],
-    };
-    
-    // Send email using SendGrid API
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sendGridKey}`
-      },
-      body: JSON.stringify(emailPayload),
+export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsParam = {}) => {
+  // Normalize parameters to support both object and individual parameter styles
+  const params = typeof toParam === 'object' 
+    ? toParam 
+    : { 
+        to: toParam, 
+        subject: subjectParam, 
+        html: htmlParam,
+        ...optionsParam
+      };
+  
+  const { 
+    to, 
+    subject, 
+    html, 
+    text, 
+    from, 
+    fromName,
+    attachments = [],
+    simulated = false
+  } = params;
+
+  console.log(`[directEmailService] Attempting to send email to ${to} with subject "${subject}"`);
+
+  // Get SendGrid API key
+  const apiKey = getSendGridKey();
+  const fromEmail = getFromEmail(from);
+  const fromDisplayName = getFromName(fromName);
+  
+  // Check if we're in development mode
+  const isDevelopment = 
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1';
+  
+  // If simulation is explicitly requested or we're in development mode without API key
+  if (simulated || (isDevelopment && !apiKey)) {
+    console.log(`[directEmailService] SIMULATING email to ${to}:`, {
+      subject,
+      from: `${fromDisplayName} <${fromEmail}>`,
+      content: html || text || '(No content provided)'
     });
     
-    // Check response
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('SendGrid API error:', response.status, errorText);
+    return {
+      success: true,
+      simulated: true,
+      message: 'Email simulated - not actually sent',
+      to,
+      subject,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  try {
+    // If we have SendGrid API key, attempt to send with SendGrid first
+    if (apiKey) {
+      const payload = {
+        personalizations: [
+          {
+            to: [{ email: to }],
+            subject: subject,
+          },
+        ],
+        from: {
+          email: fromEmail,
+          name: fromDisplayName,
+        },
+        content: [
+          {
+            type: 'text/html',
+            value: html || `<p>${text || ''}</p>`,
+          },
+        ],
+      };
       
-      // Try fallback to EmailJS if SendGrid fails
-      if (window.emailjs) {
-        console.log('Attempting fallback to EmailJS...');
-        await sendWithEmailJS(to, subject, html);
-        return { success: true, message: 'Email sent via EmailJS fallback' };
+      // Add plain text if provided
+      if (text) {
+        payload.content.push({
+          type: 'text/plain',
+          value: text,
+        });
       }
       
-      throw new Error(`SendGrid API error: ${response.status} ${errorText}`);
+      // Add attachments if any
+      if (attachments && attachments.length > 0) {
+        payload.attachments = attachments.map(attachment => ({
+          content: typeof attachment.content === 'string' 
+            ? attachment.content 
+            : btoa(String.fromCharCode.apply(null, new Uint8Array(attachment.content))),
+          filename: attachment.filename,
+          type: attachment.type || 'application/octet-stream',
+          disposition: 'attachment',
+        }));
+      }
+
+      try {
+        const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        
+        if (response.ok) {
+          console.log(`[directEmailService] Email sent successfully to ${to} using SendGrid`);
+          return {
+            success: true,
+            message: 'Email sent successfully',
+            to,
+            subject,
+            service: 'sendgrid',
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+          console.error(`[directEmailService] SendGrid API error:`, errorData);
+          throw new Error(`SendGrid API error: ${errorData.message || response.statusText}`);
+        }
+      } catch (error) {
+        // Check if it's a CORS error 
+        if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+          console.warn(`[directEmailService] CORS error sending via SendGrid API - falling back to EmailJS:`, error);
+          // Fall back to EmailJS
+          return await sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName);
+        }
+        throw error;
+      }
+    } else {
+      console.warn(`[directEmailService] No SendGrid API key found, falling back to EmailJS`);
+      return await sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName);
+    }
+  } catch (error) {
+    console.error(`[directEmailService] Error sending email:`, error);
+    
+    // Last resort fallback - try EmailJS if we haven't already
+    if (!error.message?.includes('EmailJS')) {
+      try {
+        console.warn('[directEmailService] Attempting final fallback to EmailJS');
+        return await sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName);
+      } catch (emailjsError) {
+        console.error(`[directEmailService] EmailJS fallback also failed:`, emailjsError);
+        return {
+          success: false,
+          error: `Failed to send email: ${error.message}. EmailJS fallback also failed: ${emailjsError.message}`,
+          service: 'both-failed'
+        };
+      }
     }
     
-    console.log('Email sent successfully via SendGrid');
-    return { success: true, message: 'Email sent successfully' };
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return { success: false, message: error.message || 'Failed to send email' };
+    return {
+      success: false,
+      error: `Failed to send email: ${error.message}`,
+      service: error.message?.includes('EmailJS') ? 'emailjs' : 'sendgrid'
+    };
   }
 };
 
-// Helper function to send via EmailJS as fallback
-const sendWithEmailJS = async (to, subject, htmlContent) => {
-  if (!window.emailjs) {
-    throw new Error('EmailJS not available for fallback');
+// Helper function to send via EmailJS
+async function sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayName) {
+  if (typeof window === 'undefined' || !window.emailjs) {
+    console.error('[directEmailService] EmailJS not available');
+    return {
+      success: false,
+      error: 'EmailJS not available',
+      service: 'emailjs-unavailable'
+    };
   }
   
   try {
-    // Initialize EmailJS if not already initialized
-    if (typeof window.emailjs.init === 'function' && !window._emailjsInitialized) {
-      const emailJsUserId = window._env_?.VITE_EMAILJS_USER_ID || 
-                           import.meta.env?.VITE_EMAILJS_USER_ID || 
-                           'ufEQ7lI3syjLwu1SO'; // Fallback ID
+    console.log(`[directEmailService] Attempting to send via EmailJS to ${to}`);
+    const serviceId = window._env_?.EMAILJS_SERVICE_ID 
+      || import.meta.env?.VITE_EMAILJS_SERVICE_ID 
+      || 'default_service';
       
-      window.emailjs.init(emailJsUserId);
-      window._emailjsInitialized = true;
-    }
+    const templateId = window._env_?.EMAILJS_TEMPLATE_ID 
+      || import.meta.env?.VITE_EMAILJS_TEMPLATE_ID 
+      || 'default_template';
+      
+    const userId = window._env_?.EMAILJS_USER_ID 
+      || import.meta.env?.VITE_EMAILJS_USER_ID;
     
-    // Get service and template IDs from environment or use fallbacks
-    const serviceId = window._env_?.VITE_EMAILJS_SERVICE_ID || 
-                      import.meta.env?.VITE_EMAILJS_SERVICE_ID || 
-                      'service_48cvcae';  // Fallback service ID
-                      
-    const templateId = window._env_?.VITE_EMAILJS_TEMPLATE_ID || 
-                       import.meta.env?.VITE_EMAILJS_TEMPLATE_ID || 
-                       'template_ihjqp5c';  // Fallback template ID
-    
-    await window.emailjs.send(
+    const result = await window.emailjs.send(
       serviceId,
       templateId,
       {
         to_email: to,
-        to_name: to.split('@')[0],
         subject: subject,
-        message: htmlContent
-      }
+        message_html: html,
+        message: text || '',
+        from_name: fromDisplayName,
+        from_email: fromEmail,
+      },
+      userId
     );
     
-    console.log('Email sent successfully via EmailJS fallback');
-    return true;
+    console.log(`[directEmailService] Email sent successfully via EmailJS:`, result);
+    return {
+      success: true,
+      message: 'Email sent successfully via EmailJS',
+      to,
+      subject,
+      service: 'emailjs',
+      timestamp: new Date().toISOString()
+    };
   } catch (error) {
-    console.error('EmailJS fallback error:', error);
-    throw error;
+    console.error(`[directEmailService] EmailJS error:`, error);
+    throw new Error(`EmailJS error: ${error.message}`);
   }
-};
+}
 
 /**
  * Send an email directly via EmailJS

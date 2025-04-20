@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { fetchData, insertData, deleteData } from '../services/databaseService';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, listFiles } from '../services/fileService';
 import { toast } from 'react-hot-toast';
+import { inviteAppUser } from '../services/appUserService';
 // import InvitationStatus from '../components/ui/InvitationStatus';
 
 const AdminDashboard = () => {
@@ -102,9 +103,9 @@ const AdminDashboard = () => {
       
       // Apply status filter
       if (filterStatus === 'active') {
-        filterConditions.push("is_active.eq.true");
+        filterConditions.push("active.eq.true");
       } else if (filterStatus === 'inactive') {
-        filterConditions.push("is_active.eq.false");
+        filterConditions.push("active.eq.false");
       }
       
       // Apply search filter
@@ -163,9 +164,9 @@ const AdminDashboard = () => {
           
           // Add status filter if it exists
           if (filterStatus === 'active') {
-            dataQuery = dataQuery.filter('is_active.eq.true');
+            dataQuery = dataQuery.filter('active.eq.true');
           } else if (filterStatus === 'inactive') {
-            dataQuery = dataQuery.filter('is_active.eq.false');
+            dataQuery = dataQuery.filter('active.eq.false');
           }
           
           // Add search as OR
@@ -173,9 +174,9 @@ const AdminDashboard = () => {
             dataQuery = dataQuery.or(searchConditions);
           }
         } else if (filterStatus === 'active') {
-          dataQuery = dataQuery.filter('is_active.eq.true');
+          dataQuery = dataQuery.filter('active.eq.true');
         } else if (filterStatus === 'inactive') {
-          dataQuery = dataQuery.filter('is_active.eq.false');
+          dataQuery = dataQuery.filter('active.eq.false');
         }
       }
       
@@ -205,44 +206,24 @@ const AdminDashboard = () => {
 
   const inviteUser = async (e) => {
     e.preventDefault();
+    
+    if (!newUserEmail) {
+      toast.error('Email is required');
+      return;
+    }
+    
     try {
       setLoading(true);
       
-      if (!newUserEmail) {
-        toast.error('Please enter an email address');
-        return;
-      }
+      // Step 1: Create an app_user record
+      const newUserId = crypto.randomUUID(); // Generate a UUID client-side for user ID
       
-      // First check if user already exists
-      const { data: existingUsers, error: checkError } = await supabase
-        .from('app_users')
-        .select('id, email, auth_id')
-        .eq('email', newUserEmail)
-        .limit(1);
-        
-      if (checkError) {
-        console.error('Error checking existing user:', checkError);
-        toast.error(`Error checking if user exists: ${checkError.message}`);
-        return;
-      }
-      
-      if (existingUsers && existingUsers.length > 0) {
-        toast.error(`A user with email ${newUserEmail} already exists`);
-        return;
-      }
-      
-      // Step 1: Create the app_users record FIRST (before auth)
-      const newUserId = crypto?.randomUUID?.() || 
-        ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-        );
       const userData = {
         id: newUserId,
-        email: newUserEmail,
+        email: newUserEmail.toLowerCase(),
+        name: newUserEmail.split('@')[0], // Default name from email
         role: newUserRole,
         user_type: newUserRole === 'rentee' ? 'rentee' : 'staff',
-        name: newUserEmail.split('@')[0],
-        invited: true,
         createdat: new Date().toISOString(),
         updatedat: new Date().toISOString()
       };
@@ -263,30 +244,28 @@ const AdminDashboard = () => {
       
       console.log('Created app_user:', appUser);
       
-      // Step 2: Send magic link with app_user_id in metadata
-      console.log('Sending magic link with app_user_id:', newUserId);
-      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
-        email: newUserEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`,
-          data: {
-            app_user_id: newUserId,
-            role: newUserRole,
-            user_type: newUserRole === 'rentee' ? 'rentee' : 'staff'
-          }
-        }
-      });
+      // Step 2: Send invitation using token-based system
+      console.log('Sending invitation to user:', appUser.id);
       
-      if (magicLinkError) {
-        console.error('Error sending magic link:', magicLinkError);
-        toast.error(`Error sending magic link: ${magicLinkError.message}`);
+      const result = await inviteAppUser(
+        appUser.email,
+        appUser.name || 'User', // Fallback name if not set
+        appUser.user_type || (appUser.role === 'rentee' ? 'rentee' : 'staff'),
+        appUser.id
+      );
+      
+      if (!result.success) {
+        console.error('Error sending invitation:', result.error);
+        toast.error(`Failed to send invitation: ${result.error}`);
         // Continue anyway as the user record is created and they can be invited again
+      } else {
+        console.log('Invitation result:', result);
       }
 
       setNewUserEmail('');
       setNewUserRole('rentee');
       loadUsers();
-      toast.success(`User ${newUserEmail} invited successfully. Magic link email sent.`);
+      toast.success(`User ${appUser.email} created and invitation sent.`);
     } catch (err) {
       console.error('Error in inviteUser:', err);
       setError(err.message);
@@ -462,7 +441,7 @@ const AdminDashboard = () => {
 
   // Render user card for mobile view
   const renderUserCard = (user) => (
-    <div key={user.id} className={`bg-white rounded-lg shadow p-4 mb-3 ${user.is_active === false ? 'bg-red-50' : ''}`}>
+    <div key={user.id} className={`bg-white rounded-lg shadow p-4 mb-3 ${user.active === false ? 'bg-red-50' : ''}`}>
       <div className="mb-2">
         <h3 className="font-medium text-gray-900">{user.name}</h3>
         <p className="text-sm text-gray-600">{user.email}</p>
@@ -493,15 +472,15 @@ const AdminDashboard = () => {
               </button>
             )}
             <button
-              onClick={() => toggleUserStatus(user.id, user.is_active !== false)}
+              onClick={() => toggleUserStatus(user.id, user.active !== false)}
               className={`text-xs ${
-                user.is_active === false
+                user.active === false
                   ? 'text-green-600 hover:text-green-800'
                   : 'text-red-600 hover:text-red-800'
               }`}
               disabled={loading}
             >
-              {user.is_active === false ? 'Activate' : 'Deactivate'}
+              {user.active === false ? 'Activate' : 'Deactivate'}
             </button>
           </div>
         </div>
@@ -553,7 +532,7 @@ const AdminDashboard = () => {
     }
     
     // Then check active status
-    if (user.is_active === false) {
+    if (user.active === false) {
       badgeColor = 'bg-red-100 text-red-800';
       statusText = `${statusText} (Inactive)`;
     }
@@ -577,44 +556,20 @@ const AdminDashboard = () => {
       
       console.log('Sending invitation to user:', user);
       
-      // Update the user record to mark as invited
-      const { data, error } = await supabase
-        .from('app_users')
-        .update({ 
-          invited: true,
-          updatedat: new Date().toISOString()
-        })
-        .eq('id', user.id)
-        .select()
-        .single();
+      const result = await inviteAppUser(
+        user.email,
+        user.name || 'User', // Fallback name if not set
+        user.user_type || (user.role === 'rentee' ? 'rentee' : 'staff'),
+        user.id
+      );
       
-      if (error) {
-        console.error('Error updating user as invited:', error);
-        toast.error(`Failed to update user: ${error.message}`);
+      if (!result.success) {
+        console.error('Error sending invitation:', result.error);
+        toast.error(`Failed to send invitation: ${result.error}`);
         return;
       }
       
-      console.log('User marked as invited:', data);
-      
-      // Send magic link for registration
-      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
-        email: user.email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`,
-          data: { 
-            app_user_id: user.id,
-            role: user.role,
-            user_type: user.user_type || (user.role === 'rentee' ? 'rentee' : 'staff')
-          }
-        }
-      });
-      
-      if (magicLinkError) {
-        console.error('Error sending magic link:', magicLinkError);
-        toast.error(`Failed to send invitation email: ${magicLinkError.message}`);
-        return;
-      }
-      
+      console.log('Invitation result:', result);
       toast.success(`Invitation sent to ${user.email}`);
       loadUsers(); // Refresh the list
     } catch (err) {
@@ -671,7 +626,7 @@ const AdminDashboard = () => {
       const { error } = await supabase
         .from('app_users')
         .update({ 
-          is_active: newStatus,
+          active: newStatus,
           updatedat: new Date().toISOString()
         })
         .eq('id', userId);
@@ -684,7 +639,7 @@ const AdminDashboard = () => {
       
       // Update local state first for immediate UI feedback
       setUsers(prevUsers => prevUsers.map(user => 
-        user.id === userId ? { ...user, is_active: newStatus } : user
+        user.id === userId ? { ...user, active: newStatus } : user
       ));
       
       toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
@@ -979,7 +934,7 @@ const AdminDashboard = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {users.map(user => (
-                      <tr key={user.id} className={user.is_active === false ? 'bg-red-50' : ''}>
+                      <tr key={user.id} className={user.active === false ? 'bg-red-50' : ''}>
                         <td className="px-4 py-3 text-sm">{user.name}</td>
                         <td className="px-4 py-3 text-sm">{user.email}</td>
                         <td className="px-4 py-3 text-sm">
@@ -1010,15 +965,15 @@ const AdminDashboard = () => {
                             </button>
                           )}
                           <button
-                            onClick={() => toggleUserStatus(user.id, user.is_active !== false)}
+                            onClick={() => toggleUserStatus(user.id, user.active !== false)}
                             className={`text-xs ${
-                              user.is_active === false
+                              user.active === false
                                 ? 'text-green-600 hover:text-green-800'
                                 : 'text-red-600 hover:text-red-800'
                             }`}
                             disabled={loading}
                           >
-                            {user.is_active === false ? 'Activate' : 'Deactivate'}
+                            {user.active === false ? 'Activate' : 'Deactivate'}
                           </button>
                         </td>
                       </tr>

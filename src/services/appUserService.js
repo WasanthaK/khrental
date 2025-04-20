@@ -83,7 +83,7 @@ export const createAppUser = async (userData, userType) => {
  * @returns {Promise<Object>} - Result of the invitation
  */
 export const inviteAppUser = async (email, name, userType, userId) => {
-  console.log(`[appUserService] Inviting ${userType} ${name} (${email}) with ID ${userId}`);
+  console.log(`[appUserService] Inviting ${userType} ${name} (${email}) with ID ${userId} - CONSOLIDATED VERSION`);
   
   try {
     if (!email || !name || !userType || !userId) {
@@ -95,7 +95,8 @@ export const inviteAppUser = async (email, name, userType, userId) => {
       };
     }
     
-    // Use the new dedicated invitation service
+    // Use the token-based invitation system to create a secure setup link
+    console.log(`[appUserService] Calling sendInvitation to generate token for user ${userId}`);
     const result = await sendInvitation(email, name, userType, userId);
     
     if (!result.success) {
@@ -107,7 +108,7 @@ export const inviteAppUser = async (email, name, userType, userId) => {
       };
     }
     
-    console.log(`[appUserService] Invitation sent successfully to ${email}`);
+    console.log(`[appUserService] Invitation sent successfully to ${email}`, result);
     return {
       success: true,
       data: {

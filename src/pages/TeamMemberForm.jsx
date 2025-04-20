@@ -168,7 +168,12 @@ const TeamMemberForm = () => {
       }
       
       if (userId && processedFormData.contact_details.email) {
-        await inviteAppUser(userId);
+        await inviteAppUser(
+          processedFormData.contact_details.email,
+          processedFormData.name,
+          processedFormData.user_type || 'staff',
+          userId
+        );
       }
       
       toast.success(`Team member ${id ? 'updated' : 'created'} successfully`);

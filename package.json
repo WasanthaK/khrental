@@ -23,7 +23,9 @@
     "create-exec-sql": "node src/scripts/create_exec_sql_function.js",
     "setup-signature": "node src/scripts/setupAgreementSignature.js",
     "test-webhook": "node --experimental-modules scripts/test-local-webhook.js",
-    "verify-azure": "node scripts/verify-azure-configuration.js"
+    "verify-azure": "node scripts/verify-azure-configuration.js",
+    "proxy": "node cors-proxy.js",
+    "dev:with-proxy": "concurrently \"npm run proxy\" \"npm run dev\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -75,6 +77,8 @@
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
+    "concurrently": "^9.1.2",
+    "cors-anywhere": "^0.4.4",
     "dotenv": "^16.5.0",
     "eslint": "^8.53.0",
     "eslint-plugin-react-hooks": "^4.6.0",

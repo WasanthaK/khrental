@@ -1,3 +1,12 @@
+/**
+ * DEPRECATED - DO NOT USE
+ * 
+ * This service is deprecated and will be removed in a future version.
+ * Please use the consolidated invitation service in src/services/invitation.js instead.
+ * 
+ * @deprecated Use src/services/invitation.js instead
+ */
+
 import { supabase } from './supabaseClient';
 import { toast } from 'react-hot-toast';
 

@@ -115,33 +115,39 @@ export const notifyUser = async (userId, notification) => {
  */
 
 /**
- * Sends an email notification to a user
- * @param {string} email - The recipient's email address
- * @param {string} subject - The email subject
- * @param {string} message - The email body content (HTML)
- * @param {string} plainText - Optional plain text version of the email
- * @returns {Promise<Object>} - Result of the email sending operation
+ * Send an email notification
+ * @param {string} to - Recipient email address
+ * @param {string} subject - Email subject
+ * @param {string} body - Email body (HTML)
+ * @param {Object} options - Additional options
+ * @returns {Object} Result of the operation
  */
-export const sendEmailNotification = async (email, subject, message, plainText = '') => {
-  console.log(`Sending email notification to ${email}: ${subject}`);
+export const sendEmailNotification = async (to, subject, body, options = {}) => {
+  console.log(`[notificationService] Sending email notification to ${to}`);
   
   try {
-    // Call the direct email service with proper parameters
-    const result = await sendDirectEmail(
-      email,
+    // Call the direct email service
+    const result = await sendDirectEmail({
+      to,
       subject,
-      message,
-      plainText
-    );
+      html: body,
+      ...options
+    });
     
-    if (!result.success) {
-      console.error('Failed to send email notification:', result.message);
+    // Check if successful
+    if (result.success) {
+      if (result.simulated || result.development || result.simulatedDespiteError) {
+        console.log(`[notificationService] Email to ${to} simulated successfully in development mode`);
+      } else {
+        console.log(`[notificationService] Email sent successfully to ${to}`);
+      }
+      return { success: true, ...result };
+    } else {
+      throw new Error(result.message || 'Unknown error sending email');
     }
-    
-    return result;
   } catch (error) {
-    console.error('Error in sendEmailNotification:', error);
-    return { success: false, message: error.message || 'Unknown error sending notification' };
+    console.error(`[notificationService] Failed to send email to ${to}:`, error);
+    throw new Error(`Failed to send email: ${error.message}`);
   }
 };
 

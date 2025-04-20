@@ -17,6 +17,7 @@ import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
 import EviaAuthCallback from './pages/EviaAuthCallback';
 import AuthDebug from './pages/AuthDebug';
+import AccountSetup from './pages/AccountSetup';
 
 // KH Staff pages
 import Dashboard from './pages/Dashboard';
@@ -74,6 +75,9 @@ import Unauthorized from './pages/Unauthorized';
 
 // Lazy loaded components
 const BatchInvoiceGeneration = lazy(() => import('./pages/BatchInvoiceGeneration'));
+
+// Import our new SetupAccount component
+import SetupAccount from './pages/setup-account';
 
 // Add a debug flag at the top of the file
 const ROUTER_DEBUG = false;
@@ -231,10 +235,26 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: 'setup-account',
+        element: (
+          <PublicRoute>
+            <SetupAccount />
+          </PublicRoute>
+        ),
+      },
+      {
         path: 'update-password',
         element: (
           <PublicRoute>
             <UpdatePassword />
+          </PublicRoute>
+        ),
+      },
+      {
+        path: 'account-setup',
+        element: (
+          <PublicRoute>
+            <AccountSetup />
           </PublicRoute>
         ),
       },
