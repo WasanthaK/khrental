@@ -7,20 +7,20 @@ import { getAppBaseUrl } from '../utils/env';
 
 // Get the API key with fallbacks
 const getSendGridKey = () => {
-  // Try to get the SendGrid key from different possible environment variables
-  const key = window._env_?.VITE_SENDGRID_API_KEY || 
-              import.meta.env?.VITE_SENDGRID_API_KEY || 
-              process.env?.VITE_SENDGRID_API_KEY || 
-              process.env?.SENDGRID_API_KEY;
-  
-  console.log('[DirectEmail] Using SendGrid API key:', key ? 'Found key (hidden)' : 'No key found');
-  
-  if (!key) {
-    console.error('[DirectEmail] SendGrid API key not found in environment variables');
+  try {
+    // Try to get the SendGrid key from different possible environment variables
+    const key = window._env_?.VITE_SENDGRID_API_KEY || 
+                import.meta.env?.VITE_SENDGRID_API_KEY || 
+                process.env?.VITE_SENDGRID_API_KEY;
+    
+    // Log without revealing whether key was found for security
+    console.log('[DirectEmail] Attempting to use SendGrid API');
+    
+    return key || null;
+  } catch (error) {
+    console.error('[DirectEmail] Error accessing environment variables:', error.message);
     return null;
   }
-  
-  return key;
 };
 
 // Get the Supabase key with fallbacks
