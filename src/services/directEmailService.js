@@ -11,8 +11,7 @@ const getSendGridKey = () => {
   const key = window._env_?.VITE_SENDGRID_API_KEY || 
               import.meta.env?.VITE_SENDGRID_API_KEY || 
               process.env?.VITE_SENDGRID_API_KEY || 
-              process.env?.SENDGRID_API_KEY ||
-              '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'; // Directly use provided key as fallback
+              process.env?.SENDGRID_API_KEY;
   
   console.log('[DirectEmail] Using SendGrid API key:', key ? 'Found key (hidden)' : 'No key found');
   
@@ -36,8 +35,8 @@ const getSupabaseKey = () => {
     return import.meta.env.VITE_SUPABASE_ANON_KEY;
   }
   
-  // Hardcoded fallback as absolute last resort
-  return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjb3J3ZmlseWxndHZ6a3RzenZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE1NzIyODUsImV4cCI6MjA1NzE0ODI4NX0.SS7Z6iXHn4QoZsGK37xkQTWq_aqpGA3kT8VXpxgdblc";
+  console.error('[DirectEmail] Supabase anon key not found in environment variables');
+  return null;
 };
 
 // Get the URL with fallbacks
@@ -52,8 +51,8 @@ const getSupabaseUrl = () => {
     return import.meta.env.VITE_SUPABASE_URL;
   }
   
-  // Hardcoded fallback
-  return "https://vcorwfilylgtvzktszvi.supabase.co";
+  console.error('[DirectEmail] Supabase URL not found in environment variables');
+  return null;
 };
 
 // Get the from email with fallbacks
@@ -373,39 +372,56 @@ async function sendWithEmailJS(to, subject, html, text, fromEmail, fromDisplayNa
   
   try {
     console.log(`[directEmailService] Attempting to send via EmailJS to ${to}`);
-    const serviceId = window._env_?.EMAILJS_SERVICE_ID 
-      || import.meta.env?.VITE_EMAILJS_SERVICE_ID 
-      || 'default_service';
+    
+    // Initialize EmailJS if not already initialized
+    if (typeof window.emailjs.init === 'function' && !window._emailjsInitialized) {
+      const emailJsUserId = window._env_?.VITE_EMAILJS_USER_ID || 
+                           import.meta.env?.VITE_EMAILJS_USER_ID;
       
-    const templateId = window._env_?.EMAILJS_TEMPLATE_ID 
-      || import.meta.env?.VITE_EMAILJS_TEMPLATE_ID 
-      || 'default_template';
+      if (!emailJsUserId) {
+        console.error('[DirectEmail] EmailJS User ID not found');
+        return {
+          success: false,
+          message: 'EmailJS User ID not configured'
+        };
+      }
       
-    const userId = window._env_?.EMAILJS_USER_ID 
-      || import.meta.env?.VITE_EMAILJS_USER_ID;
+      window.emailjs.init(emailJsUserId);
+      window._emailjsInitialized = true;
+    }
+    
+    // Get service and template IDs from environment
+    const serviceId = window._env_?.VITE_EMAILJS_SERVICE_ID || 
+                      import.meta.env?.VITE_EMAILJS_SERVICE_ID;
+                      
+    const templateId = window._env_?.VITE_EMAILJS_TEMPLATE_ID || 
+                       import.meta.env?.VITE_EMAILJS_TEMPLATE_ID;
+    
+    if (!serviceId || !templateId) {
+      console.error('[DirectEmail] EmailJS config missing (service ID or template ID)');
+      return {
+        success: false,
+        message: 'EmailJS configuration is incomplete. Please check your environment variables.'
+      };
+    }
+    
+    const emailParams = {
+      to_email: to,
+      to_name: to.split('@')[0],
+      subject,
+      message: html
+    };
     
     const result = await window.emailjs.send(
       serviceId,
       templateId,
-      {
-        to_email: to,
-        subject: subject,
-        message_html: html,
-        message: text || '',
-        from_name: fromDisplayName,
-        from_email: fromEmail,
-      },
-      userId
+      emailParams
     );
     
-    console.log(`[directEmailService] Email sent successfully via EmailJS:`, result);
+    console.log('[DirectEmail] EmailJS result:', result);
     return {
       success: true,
-      message: 'Email sent successfully via EmailJS',
-      to,
-      subject,
-      service: 'emailjs',
-      timestamp: new Date().toISOString()
+      data: { to, subject, sentAt: new Date().toISOString() }
     };
   } catch (error) {
     console.error(`[directEmailService] EmailJS error:`, error);
@@ -451,21 +467,34 @@ export const sendEmailViaEmailJS = async (toOrOptions, subjectParam, htmlContent
     // Initialize EmailJS if not already initialized
     if (typeof window.emailjs.init === 'function' && !window._emailjsInitialized) {
       const emailJsUserId = window._env_?.VITE_EMAILJS_USER_ID || 
-                           import.meta.env?.VITE_EMAILJS_USER_ID || 
-                           'ufEQ7lI3syjLwu1SO'; // Fallback ID
+                           import.meta.env?.VITE_EMAILJS_USER_ID;
+      
+      if (!emailJsUserId) {
+        console.error('[DirectEmail] EmailJS User ID not found');
+        return {
+          success: false,
+          message: 'EmailJS User ID not configured'
+        };
+      }
       
       window.emailjs.init(emailJsUserId);
       window._emailjsInitialized = true;
     }
     
-    // Get service and template IDs from environment or use fallbacks
+    // Get service and template IDs from environment
     const serviceId = window._env_?.VITE_EMAILJS_SERVICE_ID || 
-                      import.meta.env?.VITE_EMAILJS_SERVICE_ID || 
-                      'service_48cvcae';  // Fallback service ID
+                      import.meta.env?.VITE_EMAILJS_SERVICE_ID;
                       
     const templateId = window._env_?.VITE_EMAILJS_TEMPLATE_ID || 
-                       import.meta.env?.VITE_EMAILJS_TEMPLATE_ID || 
-                       'template_ihjqp5c';  // Fallback template ID
+                       import.meta.env?.VITE_EMAILJS_TEMPLATE_ID;
+    
+    if (!serviceId || !templateId) {
+      console.error('[DirectEmail] EmailJS config missing (service ID or template ID)');
+      return {
+        success: false,
+        message: 'EmailJS configuration is incomplete. Please check your environment variables.'
+      };
+    }
     
     const emailParams = {
       to_email: to,
