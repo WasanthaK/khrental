@@ -45,9 +45,27 @@ const AuthCallback = () => {
           navigate('/reset-password' + location.search, { replace: true });
           return;
         } else if (type === 'magiclink' || !type) {
-          // For magic link or if no type specified, just confirm the session
+          // Check if this is a rentee invitation magic link
+          // Look for special query parameters that we add to our rentee invitations
+          const userId = params.get('user_id');
+          const renteeEmail = params.get('email');
+          const renteeName = params.get('name');
           
+          if (userId && renteeEmail) {
+            console.log('Detected rentee invitation magic link with user ID:', userId);
+            // This is a rentee invitation, redirect to accept-invite
+            setMessage('Invitation detected! Redirecting to account setup...');
+            
+            // Pass along all the parameters
+            navigate(`/accept-invite?user_id=${userId}&email=${encodeURIComponent(renteeEmail)}&name=${encodeURIComponent(renteeName || 'User')}`, 
+              { replace: true }
+            );
+            return;
+          }
+          
+          // For regular magic link or if no type specified, just confirm the session
           if (!session) {
+            // Regular magic link handling code...
             // If no session, attempt to get one from the URL
             // This happens automatically in getSession above in most cases
             const { error: signInError } = await supabase.auth.signInWithOtp({
@@ -73,7 +91,7 @@ const AuthCallback = () => {
             }
           }
           
-          // Successfully logged in
+          // Successfully logged in for regular users
           setMessage('Authentication successful! Redirecting...');
           toast.success('Logged in successfully!');
           

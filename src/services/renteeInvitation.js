@@ -42,8 +42,22 @@ export const sendRenteeInvitation = async (email, name, userId) => {
     
     // Then send the magic link (non-admin approach)
     console.log(`[renteeInvitation] Sending magic link to ${email}`);
+
+    // Build a proper redirect URL with HTTPS
+    let redirectUrl;
     const origin = window.location.origin;
-    const redirectUrl = `${origin}/accept-invite?user_id=${userId}&name=${encodeURIComponent(name)}`;
+
+    // Force HTTPS if not already using it
+    if (origin.startsWith('http://') && !origin.includes('localhost')) {
+      redirectUrl = origin.replace('http://', 'https://') + '/accept-invite';
+    } else {
+      redirectUrl = origin + '/accept-invite';
+    }
+
+    // Add query parameters for user identification
+    redirectUrl += `?user_id=${userId}&name=${encodeURIComponent(name || 'User')}&email=${encodeURIComponent(email)}`;
+
+    console.log(`[renteeInvitation] Using redirect URL: ${redirectUrl}`);
     
     // Use the standard auth.signInWithOtp instead of admin.inviteUserByEmail
     const { data, error } = await supabase.auth.signInWithOtp({
