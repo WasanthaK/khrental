@@ -57,16 +57,18 @@ const getSupabaseUrl = () => {
 
 // Get the from email with fallbacks
 const getFromEmail = (from) => {
-  return from || window._env_?.VITE_EMAIL_FROM || 
-         import.meta.env?.VITE_EMAIL_FROM || 
-         'noreply@kubeira.com';
+  const envEmail = window._env_?.VITE_EMAIL_FROM || 
+                  import.meta.env?.VITE_EMAIL_FROM;
+  
+  return from || envEmail || null;
 };
 
 // Get the from name with fallbacks
 const getFromName = (fromName) => {
-  return fromName || window._env_?.VITE_EMAIL_FROM_NAME || 
-         import.meta.env?.VITE_EMAIL_FROM_NAME || 
-         'KH Rentals';
+  const envName = window._env_?.VITE_EMAIL_FROM_NAME || 
+                 import.meta.env?.VITE_EMAIL_FROM_NAME;
+  
+  return fromName || envName || null;
 };
 
 /**
