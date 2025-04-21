@@ -9,8 +9,6 @@ window._env_ = {
   VITE_SENDGRID_API_KEY: '', // Add your SendGrid API key (local development only)
   VITE_EMAIL_FROM: '', // Add sender email address
   VITE_EMAIL_FROM_NAME: '', // Add sender name
-  VITE_EMAIL_FUNCTION_KEY: '', // Add function key for Azure Functions (if using)
-  VITE_EMAIL_FUNCTION_URL: '', // Add Azure function URL (if using)
   VITE_APP_BASE_URL: '', // Base URL for the application
 };
 

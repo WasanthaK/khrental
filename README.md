@@ -65,8 +65,8 @@ The `npm run generate-env-config` script automatically generates the `public/env
 1. Copy `public/env-config.example.js` to `public/env-config.js`
 2. Add your local development values
 3. For development with the email system:
-   - Set up the Azure Function locally or use the test environment
-   - Use the diagnostic tool at `/diagnostics/email` to verify your setup
+   - Use the test environment
+   - Configure environment variables in your `.env` file
 
 ### API Keys in Version Control
 

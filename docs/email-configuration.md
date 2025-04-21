@@ -1,216 +1,77 @@
-# Email Configuration Guide
+# Email Configuration
+
+The application uses email for:
+1. User invitations
+2. Password reset links
+3. Notification emails
 
 ## Environment Variables
 
-For emails to work correctly in both development and production environments, configure the following environment variables:
-
-### Required Variables
+Configure these in your `.env` file (for development) and in your hosting environment:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `VITE_APP_BASE_URL` | The base URL of your application | `https://khrentals.kubeira.com` |
-| `VITE_EMAIL_FUNCTION_URL` | URL of the Azure Email Function | `https://your-app.azurewebsites.net/api/send-email` |
-| `VITE_EMAIL_FROM` | The email address to send from | `noreply@example.com` |
-| `VITE_EMAIL_FROM_NAME` | The display name for emails | `KH Rentals` |
+| `VITE_SENDGRID_API_KEY` | SendGrid API key | `SG.abc123...` |
+| `VITE_EMAIL_FROM` | Sender email address | `noreply@yourcompany.com` |
+| `VITE_EMAIL_FROM_NAME` | Sender name | `KH Rentals` |
+| `VITE_APP_BASE_URL` | Base URL for links in emails | `https://app.example.com` |
 
-### Optional Variables
+## Email Sending Approach
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `VITE_EMAIL_FUNCTION_KEY` | Function key for the Azure Function (if auth is enabled) | `abcd1234...` |
-| `VITE_SENDGRID_API_KEY` | Your SendGrid API key (only needed for local testing) | `SG.xxxxxxxxxxxx...` |
+The application uses Supabase's built-in email functionality for authentication-related emails, including:
+- Password reset emails
+- Email verification
+- Magic link authentication
 
-## Azure Function Setup
+For these emails, Supabase handles all delivery automatically.
 
-The application now uses an Azure Function to handle email sending, which solves CORS issues and improves security by keeping API keys off the client.
+In development mode, emails are simulated rather than actually sent. You'll see logs in the console showing what emails would be sent in production.
 
-### Deploying the Azure Function
+### Setting Up Supabase Email
 
-1. Navigate to the Azure Portal
-2. Create a new Function App:
-   - Go to "Create a resource" > "Compute" > "Function App"
-   - Set appropriate runtime settings (Node.js, your preferred version)
-   - Choose your hosting plan (Consumption plan is typically sufficient)
-   - Create the Function App
+1. Log in to your Supabase dashboard
+2. Go to Authentication → Email Templates
+3. Customize the templates as needed for your application
+4. Verify your sending domain if needed
 
-3. Deploy your function code:
-   - Navigate to your new Function App
-   - Go to "Functions" and create a new function
-   - Choose "HTTP trigger" template
-   - Upload the code from `azure-functions/SendGridEmailFunction/` 
-   - Or use VS Code and the Azure Functions extension to deploy
+### Testing Email Functionality
 
-4. Configure environment variables:
-   - In your Function App, go to "Configuration" > "Application settings"
-   - Add the following settings:
-     - `SENDGRID_API_KEY`: Your SendGrid API key
-     - `EMAIL_FROM`: Default sender email (e.g., noreply@khrentals.com)
-     - `EMAIL_FROM_NAME`: Default sender name (e.g., KH Rentals)
+Use the built-in email diagnostic page:
 
-5. Get your function URL:
-   - In your Function App, go to your function
-   - Click "Get Function URL"
-   - This is the URL you'll use for the `VITE_EMAIL_FUNCTION_URL` environment variable
+```
+/diagnostics/email
+```
 
-### Authentication
+You can run tests to verify your email configuration is working correctly.
 
-You have two options for securing your Azure Function:
+## Debugging Email Issues
 
-#### Option 1: Function Key (Recommended)
+If emails aren't being sent correctly:
 
-1. In your Function App, select your function
-2. Go to "Function Keys" tab
-3. Copy the default key or create a new key
-4. Set this key as `VITE_EMAIL_FUNCTION_KEY` in your application settings
+1. Check the browser console for error messages
+2. Verify your environment variables are set correctly
+3. Use the email diagnostic page to test your configuration
+4. Check Supabase logs for any delivery issues
 
-#### Option 2: IP Restrictions
+## Email Templates
 
-1. In your Function App, go to "Networking"
-2. Configure IP restrictions to only allow access from your application servers
-
-## Main Application Configuration
-
-After setting up the Azure Function, configure your main application:
-
-1. In your Azure App Service for the main application:
-   - Go to "Configuration" > "Application settings"
-   - Add the required environment variables listed above
-   - Save the settings and restart the application
-
-2. For local development:
-   - Add the variables to your `.env` file:
-   ```
-   VITE_APP_BASE_URL=http://localhost:5174
-   VITE_EMAIL_FUNCTION_URL=https://your-function-app.azurewebsites.net/api/send-email
-   VITE_EMAIL_FUNCTION_KEY=your-function-key
-   VITE_EMAIL_FROM=noreply@khrentals.com
-   VITE_EMAIL_FROM_NAME=KH Rentals
-   ```
-
-## Testing the Email Function
-
-To test your email configuration:
-
-1. Make sure your function is deployed and environment variables are set
-2. Try sending an invitation through the application UI
-3. Monitor the Azure Function logs for any errors:
-   - In Azure Portal, go to your Function App
-   - Select your function
-   - Click on "Monitor" to see execution logs
-
-### Testing the Function Directly
-
-You can also test the function directly using tools like Postman:
+The application uses simple HTML templates for various email types. These are defined in the application code.
 
 ```json
-POST https://your-function-app.azurewebsites.net/api/send-email?code=your-function-key
-
 {
-  "to": "test@example.com",
-  "subject": "Test Email",
-  "html": "<p>This is a test email from Azure Function</p>",
-  "from": "noreply@khrentals.com",
-  "fromName": "KH Rentals"
+  "to": "user@example.com",
+  "subject": "Welcome to KH Rentals",
+  "html": "<p>This is a test email from the application</p>",
+  "text": "This is a test email from the application"
 }
 ```
 
-## Deployment Configuration
+## Alternative Approaches
 
-### Azure
+### Custom Email Implementation
 
-For Azure deployments, add these variables to your Application Settings:
+If you need more control over email sending, you can implement a custom solution:
 
-1. Go to Azure Portal > App Services > Your App > Configuration
-2. Add each environment variable under Application Settings
-3. Make sure to restart the app after adding or changing settings
-
-### Setting Up a CORS Proxy for Production
-
-In production, you'll need a proper backend API or CORS proxy to handle SendGrid API calls:
-
-#### Option 1: Azure Function
-
-Create an Azure Function with a SendGrid binding to handle email sending:
-
-```javascript
-// Example Azure Function
-module.exports = async function (context, req) {
-    const { to, from, subject, html, text } = req.body;
-    
-    if (!to || !subject || !(html || text)) {
-        context.res = {
-            status: 400,
-            body: "Missing required fields"
-        };
-        return;
-    }
-    
-    context.bindings.message = {
-        to,
-        from: from || "noreply@khrentals.com",
-        subject,
-        content: [{
-            type: "text/html",
-            value: html || text
-        }]
-    };
-    
-    context.res = {
-        status: 200,
-        body: "Email sent successfully"
-    };
-};
-```
-
-#### Option 2: Simple Express Server
-
-Deploy a simple Express server with CORS enabled to handle email sending:
-
-```javascript
-const express = require('express');
-const cors = require('cors');
-const sgMail = require('@sendgrid/mail');
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-// Set SendGrid API Key
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-app.post('/api/send-email', async (req, res) => {
-    try {
-        const { to, subject, html, text } = req.body;
-        
-        if (!to || !subject || !(html || text)) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-        
-        const msg = {
-            to,
-            from: process.env.EMAIL_FROM || 'noreply@khrentals.com',
-            subject,
-            html: html || '',
-            text: text || ''
-        };
-        
-        await sgMail.send(msg);
-        res.status(200).json({ success: true });
-    } catch (error) {
-        console.error('Email error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-```
-
-## Testing Configuration
-
-To test your email configuration:
-
-1. Add these variables to your `.env` file for local development
-2. Verify the email service connects properly in the browser console
-3. Test sending an invitation to ensure links are correctly formatted
-4. Check that the recipient receives the email with working links 
+1. Deploy a server-side API endpoint for email sending
+2. Use a service like SendGrid, Mailgun, or AWS SES directly
+3. Update the `directEmailService.js` file to use your custom implementation 

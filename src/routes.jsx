@@ -578,6 +578,27 @@ const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
+          {
+            path: 'invoices',
+            children: [
+              {
+                index: true,
+                element: <InvoiceList />,
+              },
+              {
+                path: 'dashboard',
+                element: <InvoiceList />,
+              },
+              {
+                path: 'generate',
+                element: <InvoiceForm />,
+              },
+              {
+                path: ':id',
+                element: <InvoiceDetails />,
+              },
+            ],
+          },
         ],
       },
       {
@@ -710,7 +731,6 @@ const router = createBrowserRouter([
             path: 'agreements',
             element: <AgreementList />,
           },
-          // Add invoice routes for admin
           {
             path: 'invoices',
             children: [
@@ -737,7 +757,7 @@ const router = createBrowserRouter([
       {
         path: 'diagnostics/email',
         element: (
-          <ProtectedRoute requiredPermission={PERMISSIONS.ADMIN}>
+          <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
             <EmailDiagnostic />
           </ProtectedRoute>
         ),

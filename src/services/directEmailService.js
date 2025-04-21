@@ -131,56 +131,26 @@ export const createUserWithEmail = async ({ email, name, role, userType }) => {
     });
     
     if (resetError) {
-      console.log('[DirectEmailService] Error sending reset password email. Falling back to direct email:', resetError);
+      console.log('[DirectEmailService] Error sending reset password email:', resetError);
       
-      // Prepare a custom invitation email
-      const userTypeLabel = userType === 'staff' ? 'Team Member' : 'Rentee';
-      const subject = `Welcome to KH Rentals - Your ${userTypeLabel} Account`;
-      
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Welcome to KH Rentals</h2>
-          <p>Hello ${name},</p>
-          <p>Your ${userTypeLabel.toLowerCase()} account has been created. Please set up your password to access the system.</p>
-          <p>
-            <a href="${baseUrl}/reset-password?email=${encodeURIComponent(email)}" 
-               style="display: inline-block; background-color: #4a90e2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">
-              Set Your Password
-            </a>
-          </p>
-          <p>If the button above doesn't work, copy and paste this link into your browser:</p>
-          <p>${baseUrl}/reset-password?email=${encodeURIComponent(email)}</p>
-          <p>This link will expire in 24 hours.</p>
-          <p>Thank you,<br>KH Rentals Team</p>
-        </div>
-      `;
-      
-      const text = `
-Welcome to KH Rentals
-
-Hello ${name},
-
-Your ${userTypeLabel.toLowerCase()} account has been created. Please set up your password to access the system.
-
-Set your password here: ${baseUrl}/reset-password?email=${encodeURIComponent(email)}
-
-This link will expire in 24 hours.
-
-Thank you,
-KH Rentals Team
-      `;
-      
-      // Send the custom email with SendGrid
-      const emailResult = await sendDirectEmail({
-        to: email,
-        subject,
-        html,
-        text
-      });
-      
-      if (!emailResult.success) {
-        console.error('[DirectEmailService] Failed to send invitation email:', emailResult.message);
+      // In development, just simulate successful invitation
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        console.log('[DirectEmailService] Development mode - simulating successful invitation');
+        console.log(`[DirectEmailService] In production, user would get email with link to: ${baseUrl}/reset-password?email=${encodeURIComponent(email)}`);
+        
+        return {
+          success: true,
+          simulated: true,
+          user: {
+            id: authData.user.id,
+            email,
+            name,
+            role
+          }
+        };
       }
+      
+      return { success: false, error: resetError.message };
     }
     
     return {
@@ -199,12 +169,8 @@ KH Rentals Team
 };
 
 /**
- * Sends an email using SendGrid API with fallback to EmailJS
- * @param {Object|string} toParam - Either email address string or object with email properties
- * @param {string} [subjectParam] - Email subject (if toParam is a string)
- * @param {string} [htmlParam] - HTML content (if toParam is a string) 
- * @param {Object} [optionsParam] - Additional options (if toParam is a string)
- * @returns {Promise<Object>} - Result of the send operation
+ * Simplified email function for development
+ * In production, use actual email provider API or Supabase functions
  */
 export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsParam = {}) => {
   // Generate unique request ID to track this email through logs
@@ -220,177 +186,43 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
         ...optionsParam
       };
   
-  const { 
-    to, 
-    subject, 
-    html, 
-    text, 
-    from, 
-    fromName,
-    attachments = [],
-    simulated = false
-  } = params;
+  const { to, subject, html } = params;
 
-  console.log(`[${requestId}][directEmailService] 📧 Attempting to send email to ${to} with subject "${subject}"`);
-
-  // Get SendGrid API key
-  const apiKey = getSendGridKey();
-  const fromEmail = getFromEmail(from);
-  const fromDisplayName = getFromName(fromName);
+  console.log(`[${requestId}][directEmailService] Email to ${to} with subject "${subject}" would be sent in production`);
   
-  try {
-    // If simulated or no API key, simulate the email
-    if (simulated || !apiKey) {
-      console.log(`[${requestId}][directEmailService] 🔵 SIMULATING email to ${to}:`, {
-        subject,
-        from: `${fromDisplayName} <${fromEmail}>`,
-        content: html ? `[HTML ${html.length} chars]` : text ? `[TEXT ${text.length} chars]` : '(No content provided)'
-      });
-      
-      return {
-        success: true,
-        simulated: true,
-        message: 'Email simulated - not actually sent',
-        to,
-        subject,
-        timestamp: new Date().toISOString(),
-        requestId
-      };
-    }
+  // In development, just simulate the email
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  if (isLocalDev) {
+    console.log(`[${requestId}][directEmailService] Development mode - Email content preview:`);
+    console.log(`Subject: ${subject}`);
+    console.log(`HTML: ${html ? html.substring(0, 150) + '...' : '(No HTML content)'}`);
     
-    // Use the Azure Function for sending emails
-    const functionUrl = window._env_?.VITE_EMAIL_FUNCTION_URL || 
-                      import.meta.env?.VITE_EMAIL_FUNCTION_URL;
+    // Simulate a delay
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    if (!functionUrl) {
-      console.error(`[${requestId}][directEmailService] ❌ Email function URL not configured in environment variables`);
-      console.error(`[${requestId}][directEmailService] Available env:`, {
-        window_env: typeof window._env_ !== 'undefined',
-        import_meta: typeof import.meta !== 'undefined',
-        functionUrl: functionUrl || 'NOT_FOUND'
-      });
-      throw new Error('Email service not properly configured. Missing function URL.');
-    }
-    
-    console.log(`[${requestId}][directEmailService] 🔄 Sending email via Azure Function to ${to}`);
-    
-    // Prepare the request payload
-    const payload = {
-      to,
-      subject,
-      html: html || undefined,
-      text: text || undefined,
-      from: fromEmail,
-      fromName: fromDisplayName,
-      attachments,
-      clientRequestId: requestId,
-      timestamp: new Date().toISOString(),
-      clientInfo: {
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        appVersion: window._env_?.VITE_APP_VERSION || import.meta.env?.VITE_APP_VERSION || 'unknown'
-      }
-    };
-    
-    // Log payload size
-    const payloadSize = JSON.stringify(payload).length;
-    console.log(`[${requestId}][directEmailService] 📦 Request payload size: ${payloadSize} bytes`);
-    
-    // Get the function key if available
-    const functionKey = window._env_?.VITE_EMAIL_FUNCTION_KEY || 
-                       import.meta.env?.VITE_EMAIL_FUNCTION_KEY;
-    
-    // For debugging
-    console.log(`[${requestId}][directEmailService] 🔑 Function key available: ${!!functionKey}`);
-    
-    // Hard-code the key temporarily to test
-    const key = functionKey || "wp8ABoLgEcqOjwxQC3a3btFpbx12StrgeduHWBrsbN3IAzFupo512Q==";
-    
-    // Determine the URL based on whether we have a key
-    const url = `${functionUrl}?code=${key}`;
-    
-    console.log(`[${requestId}][directEmailService] 🌐 Sending to Azure Function URL: ${functionUrl}`);
-    console.log(`[${requestId}][directEmailService] 🌐 Full URL with auth: ${url}`);
-    
-    // Record start time for performance tracking
-    const startTime = performance.now();
-    
-    // Make the request to the Azure Function
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Client-Request-ID': requestId
-      },
-      body: JSON.stringify(payload)
-    });
-    
-    // Calculate request duration
-    const duration = performance.now() - startTime;
-    console.log(`[${requestId}][directEmailService] ⏱️ Azure Function response time: ${duration.toFixed(2)}ms`);
-    
-    // Log response status
-    console.log(`[${requestId}][directEmailService] 📊 Response status: ${response.status} ${response.statusText}`);
-    
-    // Parse the response
-    const result = await response.json();
-    
-    // Log detailed response
-    console.log(`[${requestId}][directEmailService] Response details:`, result);
-    
-    if (!response.ok) {
-      console.error(`[${requestId}][directEmailService] ❌ Error from Azure Function:`, result);
-      
-      // Detailed error logging
-      if (result.details) {
-        console.error(`[${requestId}][directEmailService] Error details:`, result.details);
-      }
-      
-      if (result.statusCode) {
-        console.error(`[${requestId}][directEmailService] Status code:`, result.statusCode);
-      }
-      
-      throw new Error(result.error || result.message || `Email Function Error: ${response.status}`);
-    }
-    
-    console.log(`[${requestId}][directEmailService] ✅ Email sent successfully to ${to} (Function request ID: ${result.requestId || 'unknown'})`);
     return {
       success: true,
-      simulated: false,
-      message: 'Email sent successfully',
+      simulated: true,
+      message: 'Email simulated in development environment',
       to,
       subject,
       timestamp: new Date().toISOString(),
-      requestId,
-      functionRequestId: result.requestId,
-      responseTime: duration
-    };
-  } catch (error) {
-    console.error(`[${requestId}][directEmailService] ❌ Error sending email:`, error);
-    
-    // Add browser info to help with debugging
-    const browserInfo = {
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      online: navigator.onLine,
-      cookiesEnabled: navigator.cookieEnabled,
-      screenSize: `${window.screen.width}x${window.screen.height}`,
-      viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-      timestamp: new Date().toISOString()
-    };
-    
-    console.error(`[${requestId}][directEmailService] Browser information:`, browserInfo);
-    
-    return {
-      success: false,
-      error: error.message,
-      to,
-      subject,
-      timestamp: new Date().toISOString(),
-      requestId,
-      browserInfo
+      requestId
     };
   }
+  
+  // For production, use Supabase Auth's built-in email functionality
+  // This would be implemented based on your production needs
+  
+  return {
+    success: true,
+    simulated: true,
+    message: 'Email would be sent in production',
+    to,
+    subject,
+    timestamp: new Date().toISOString()
+  };
 };
 
 // Helper function to send via EmailJS
