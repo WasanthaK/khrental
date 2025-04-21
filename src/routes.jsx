@@ -80,6 +80,9 @@ const BatchInvoiceGeneration = lazy(() => import('./pages/BatchInvoiceGeneration
 // Import our new SetupAccount component
 import SetupAccount from './pages/setup-account';
 
+// Add the EmailDiagnostic import
+import EmailDiagnostic from './components/diagnostics/EmailDiagnostic';
+
 // Add a debug flag at the top of the file
 const ROUTER_DEBUG = false;
 
@@ -730,6 +733,14 @@ const router = createBrowserRouter([
             ],
           },
         ],
+      },
+      {
+        path: 'diagnostics/email',
+        element: (
+          <ProtectedRoute requiredPermission={PERMISSIONS.ADMIN}>
+            <EmailDiagnostic />
+          </ProtectedRoute>
+        ),
       },
     ],
   },

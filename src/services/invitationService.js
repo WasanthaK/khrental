@@ -11,6 +11,20 @@
 
 import { supabase } from './supabaseClient';
 import { sendDirectEmail } from './directEmailService';
+import { getAppBaseUrl } from '../utils/env';
+
+// Add a debug helper to log even in production
+const logInvitationDebug = (requestId, message, data = {}) => {
+  const timestamp = new Date().toISOString();
+  const logMsg = `[${timestamp}][${requestId}][InvitationService] ${message}`;
+  
+  console.log(logMsg, data);
+  
+  // Log to application insights or other production logging
+  if (window.appInsights && window.appInsights.trackTrace) {
+    window.appInsights.trackTrace({ message: logMsg, properties: data });
+  }
+};
 
 /**
  * Send an invitation to a user
@@ -24,10 +38,13 @@ import { sendDirectEmail } from './directEmailService';
  * @returns {Promise<Object>} Result object
  */
 export const inviteUser = async (userDetails, simulated = false) => {
+  // Generate unique ID for this invitation request
+  const requestId = `invite_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+  
   try {
     // Check for required parameters
     if (!userDetails.email || !userDetails.id) {
-      console.error('[InvitationService] Missing required parameters:', userDetails);
+      logInvitationDebug(requestId, 'Missing required parameters:', userDetails);
       return {
         success: false,
         error: 'Missing required fields: email and id are required',
@@ -35,7 +52,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
       };
     }
     
-    console.log(`[InvitationService] Inviting user ${userDetails.name} (${userDetails.email}) with ID ${userDetails.id}`);
+    logInvitationDebug(requestId, `Inviting user ${userDetails.name} (${userDetails.email}) with ID ${userDetails.id}`);
     
     // Update the app_users table to mark as invited
     const { error: updateError } = await supabase
@@ -47,16 +64,19 @@ export const inviteUser = async (userDetails, simulated = false) => {
       .eq('id', userDetails.id);
     
     if (updateError) {
-      console.error('[InvitationService] Error updating invitation status:', updateError);
+      logInvitationDebug(requestId, 'Error updating invitation status:', updateError);
       // Continue with invitation despite the error
     }
     
-    // Generate a redirect URL for the invitation
-    const redirectUrl = `${window.location.origin}/accept-invite`;
-    console.log('[InvitationService] Using redirect URL:', redirectUrl);
+    // Generate a redirect URL for the invitation using the app base URL
+    const baseUrl = getAppBaseUrl();
+    logInvitationDebug(requestId, 'Base URL for invitation:', { baseUrl });
+    
+    const redirectUrl = `${baseUrl}/accept-invite`;
+    logInvitationDebug(requestId, 'Using redirect URL:', { redirectUrl });
     
     // Try to use Supabase Auth to send the invitation
-    console.log('[InvitationService] Attempting to send invitation via Supabase Auth to:', userDetails.email);
+    logInvitationDebug(requestId, 'Attempting to send invitation via Supabase Auth to:', { email: userDetails.email });
     
     const resetOptions = {
       redirectTo: redirectUrl,
@@ -66,21 +86,22 @@ export const inviteUser = async (userDetails, simulated = false) => {
         role: userDetails.role
       }
     };
-    console.log('[InvitationService] Reset options:', resetOptions);
+    logInvitationDebug(requestId, 'Reset options:', resetOptions);
     
     const { data: resetData, error: resetError } = await supabase.auth.resetPasswordForEmail(
       userDetails.email,
       resetOptions
     );
     
-    console.log('[InvitationService] Supabase auth reset result:', { data: resetData, error: resetError });
+    logInvitationDebug(requestId, 'Supabase auth reset result:', { data: resetData, error: resetError });
     
     // If Supabase invitation fails or is simulated, use direct email
     // Generate a magic link to the accept-invite page with parameters
-    const inviteLink = `${window.location.origin}/accept-invite?email=${encodeURIComponent(userDetails.email)}&user_id=${userDetails.id}&name=${encodeURIComponent(userDetails.name || '')}&type=invite`;
+    const inviteLink = `${baseUrl}/accept-invite?email=${encodeURIComponent(userDetails.email)}&user_id=${userDetails.id}&name=${encodeURIComponent(userDetails.name || '')}&type=invite`;
+    logInvitationDebug(requestId, 'Created invite link:', { inviteLink });
     
     // Send a direct email with the invitation link
-    console.log('[InvitationService] Sending direct email invitation to:', userDetails.email);
+    logInvitationDebug(requestId, 'Sending direct email invitation to:', { email: userDetails.email });
     
     const emailResult = await sendDirectEmail({
       to: userDetails.email,
@@ -89,8 +110,10 @@ export const inviteUser = async (userDetails, simulated = false) => {
       simulated: simulated
     });
     
+    logInvitationDebug(requestId, 'Direct email result:', emailResult);
+    
     if (!emailResult.success) {
-      console.error('[InvitationService] Failed to send direct invitation email:', emailResult);
+      logInvitationDebug(requestId, 'Failed to send direct invitation email:', emailResult);
       return {
         success: false,
         error: 'Failed to send invitation email',
@@ -106,7 +129,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
       method: 'direct_email'
     };
   } catch (error) {
-    console.error('[InvitationService] Unexpected error:', error);
+    logInvitationDebug(requestId, 'Unexpected error:', { error: error.message, stack: error.stack });
     return {
       success: false,
       error: error.message,

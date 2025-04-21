@@ -14,17 +14,28 @@ const getEnvVar = (key) => {
 
 // Get the application base URL consistently
 export const getAppBaseUrl = () => {
-  // In a browser context, use the actual origin
-  if (typeof window !== 'undefined' && window.location) {
+  // Check for a configured base URL from environment variables first
+  const configuredBaseUrl = window._env_?.VITE_APP_BASE_URL || 
+                           import.meta.env?.VITE_APP_BASE_URL;
+  
+  if (configuredBaseUrl) {
+    // Log where we got the URL from for debugging
+    console.log(`[getAppBaseUrl] Using configured base URL from environment: ${configuredBaseUrl}`);
+    
+    // Ensure the URL doesn't have a trailing slash
+    return configuredBaseUrl.endsWith('/') 
+      ? configuredBaseUrl.slice(0, -1) 
+      : configuredBaseUrl;
+  }
+  
+  // In a browser context, use the actual origin, but only in production
+  if (!import.meta.env.DEV && typeof window !== 'undefined' && window.location) {
+    console.log(`[getAppBaseUrl] Using window.location.origin: ${window.location.origin}`);
     return window.location.origin;
   }
   
-  // For development or test environments
-  if (import.meta.env.DEV) {
-    return 'http://localhost:5174'; // Use our dev server port
-  }
-  
-  // For production, use the deployed URL
+  // For development or test environments, always use the production URL to avoid localhost links
+  console.log('[getAppBaseUrl] Using fallback production URL');
   return 'https://khrentals.kubeira.com';
 };
 

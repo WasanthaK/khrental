@@ -51,6 +51,30 @@ The application uses the following strategy to load environment variables:
 
 The `npm run generate-env-config` script automatically generates the `public/env-config.js` file from your `.env` file. This script is run automatically when you start the development server or build the application.
 
+## Security and Environment Configuration
+
+### Important Security Notes
+
+1. **Never commit real API keys or sensitive tokens to the repository.**
+2. The `public/env-config.js` file is listed in `.gitignore` and should never be committed.
+3. Use `public/env-config.example.js` as a template to create your own `public/env-config.js` file.
+4. In production, environment variables should be set in your hosting environment (e.g., Azure App Settings).
+
+### Setting Up Local Environment
+
+1. Copy `public/env-config.example.js` to `public/env-config.js`
+2. Add your local development values
+3. For development with the email system:
+   - Set up the Azure Function locally or use the test environment
+   - Use the diagnostic tool at `/diagnostics/email` to verify your setup
+
+### API Keys in Version Control
+
+If you receive a "SendGrid API key found in commit" error when trying to commit, check for:
+1. API keys in `public/env-config.js` (this file should not be committed)
+2. Hard-coded keys in any JavaScript files
+3. Keys in sample or example files
+
 ## Development
 
 Start the development server:

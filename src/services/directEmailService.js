@@ -122,9 +122,12 @@ export const createUserWithEmail = async ({ email, name, role, userType }) => {
       return { success: false, error: dbError.message };
     }
     
+    // Get the app base URL
+    const baseUrl = getAppBaseUrl();
+    
     // Send password reset email to let user set their own password
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${baseUrl}/reset-password`,
     });
     
     if (resetError) {
@@ -140,13 +143,13 @@ export const createUserWithEmail = async ({ email, name, role, userType }) => {
           <p>Hello ${name},</p>
           <p>Your ${userTypeLabel.toLowerCase()} account has been created. Please set up your password to access the system.</p>
           <p>
-            <a href="${window.location.origin}/reset-password?email=${encodeURIComponent(email)}" 
+            <a href="${baseUrl}/reset-password?email=${encodeURIComponent(email)}" 
                style="display: inline-block; background-color: #4a90e2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">
               Set Your Password
             </a>
           </p>
           <p>If the button above doesn't work, copy and paste this link into your browser:</p>
-          <p>${window.location.origin}/reset-password?email=${encodeURIComponent(email)}</p>
+          <p>${baseUrl}/reset-password?email=${encodeURIComponent(email)}</p>
           <p>This link will expire in 24 hours.</p>
           <p>Thank you,<br>KH Rentals Team</p>
         </div>
@@ -159,7 +162,7 @@ Hello ${name},
 
 Your ${userTypeLabel.toLowerCase()} account has been created. Please set up your password to access the system.
 
-Set your password here: ${window.location.origin}/reset-password?email=${encodeURIComponent(email)}
+Set your password here: ${baseUrl}/reset-password?email=${encodeURIComponent(email)}
 
 This link will expire in 24 hours.
 
@@ -204,6 +207,9 @@ KH Rentals Team
  * @returns {Promise<Object>} - Result of the send operation
  */
 export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsParam = {}) => {
+  // Generate unique request ID to track this email through logs
+  const requestId = `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   // Normalize parameters to support both object and individual parameter styles
   const params = typeof toParam === 'object' 
     ? toParam 
@@ -225,7 +231,7 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
     simulated = false
   } = params;
 
-  console.log(`[directEmailService] Attempting to send email to ${to} with subject "${subject}"`);
+  console.log(`[${requestId}][directEmailService] 📧 Attempting to send email to ${to} with subject "${subject}"`);
 
   // Get SendGrid API key
   const apiKey = getSendGridKey();
@@ -235,10 +241,10 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
   try {
     // If simulated or no API key, simulate the email
     if (simulated || !apiKey) {
-      console.log(`[directEmailService] SIMULATING email to ${to}:`, {
+      console.log(`[${requestId}][directEmailService] 🔵 SIMULATING email to ${to}:`, {
         subject,
         from: `${fromDisplayName} <${fromEmail}>`,
-        content: html || text || '(No content provided)'
+        content: html ? `[HTML ${html.length} chars]` : text ? `[TEXT ${text.length} chars]` : '(No content provided)'
       });
       
       return {
@@ -247,70 +253,142 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
         message: 'Email simulated - not actually sent',
         to,
         subject,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        requestId
       };
     }
     
-    // Real email implementation using SendGrid Web API directly (not recommended for production)
-    // This is a temporary solution - in production you should use a server-side API
-    const sendGridUrl = 'https://api.sendgrid.com/v3/mail/send';
+    // Use the Azure Function for sending emails
+    const functionUrl = window._env_?.VITE_EMAIL_FUNCTION_URL || 
+                      import.meta.env?.VITE_EMAIL_FUNCTION_URL;
     
+    if (!functionUrl) {
+      console.error(`[${requestId}][directEmailService] ❌ Email function URL not configured in environment variables`);
+      console.error(`[${requestId}][directEmailService] Available env:`, {
+        window_env: typeof window._env_ !== 'undefined',
+        import_meta: typeof import.meta !== 'undefined',
+        functionUrl: functionUrl || 'NOT_FOUND'
+      });
+      throw new Error('Email service not properly configured. Missing function URL.');
+    }
+    
+    console.log(`[${requestId}][directEmailService] 🔄 Sending email via Azure Function to ${to}`);
+    
+    // Prepare the request payload
     const payload = {
-      personalizations: [
-        {
-          to: [{ email: to }],
-          subject: subject
-        }
-      ],
-      content: [
-        {
-          type: 'text/html',
-          value: html || text || ''
-        }
-      ],
-      from: {
-        email: fromEmail || 'noreply@khrentals.com',
-        name: fromDisplayName || 'KH Rentals'
+      to,
+      subject,
+      html: html || undefined,
+      text: text || undefined,
+      from: fromEmail,
+      fromName: fromDisplayName,
+      attachments,
+      clientRequestId: requestId,
+      timestamp: new Date().toISOString(),
+      clientInfo: {
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        appVersion: window._env_?.VITE_APP_VERSION || import.meta.env?.VITE_APP_VERSION || 'unknown'
       }
     };
     
-    console.log(`[directEmailService] Sending REAL email to ${to}`);
+    // Log payload size
+    const payloadSize = JSON.stringify(payload).length;
+    console.log(`[${requestId}][directEmailService] 📦 Request payload size: ${payloadSize} bytes`);
     
-    // Use the local CORS proxy for SendGrid API calls
-    const proxiedSendGridUrl = 'http://localhost:8080/https://api.sendgrid.com/v3/mail/send';
+    // Get the function key if available
+    const functionKey = window._env_?.VITE_EMAIL_FUNCTION_KEY || 
+                       import.meta.env?.VITE_EMAIL_FUNCTION_KEY;
     
-    const response = await fetch(proxiedSendGridUrl, {
+    // For debugging
+    console.log(`[${requestId}][directEmailService] 🔑 Function key available: ${!!functionKey}`);
+    
+    // Hard-code the key temporarily to test
+    const key = functionKey || "wp8ABoLgEcqOjwxQC3a3btFpbx12StrgeduHWBrsbN3IAzFupo512Q==";
+    
+    // Determine the URL based on whether we have a key
+    const url = `${functionUrl}?code=${key}`;
+    
+    console.log(`[${requestId}][directEmailService] 🌐 Sending to Azure Function URL: ${functionUrl}`);
+    console.log(`[${requestId}][directEmailService] 🌐 Full URL with auth: ${url}`);
+    
+    // Record start time for performance tracking
+    const startTime = performance.now();
+    
+    // Make the request to the Azure Function
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'X-Client-Request-ID': requestId
       },
       body: JSON.stringify(payload)
     });
     
+    // Calculate request duration
+    const duration = performance.now() - startTime;
+    console.log(`[${requestId}][directEmailService] ⏱️ Azure Function response time: ${duration.toFixed(2)}ms`);
+    
+    // Log response status
+    console.log(`[${requestId}][directEmailService] 📊 Response status: ${response.status} ${response.statusText}`);
+    
+    // Parse the response
+    const result = await response.json();
+    
+    // Log detailed response
+    console.log(`[${requestId}][directEmailService] Response details:`, result);
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[directEmailService] Error from SendGrid API:`, response.status, errorText);
-      throw new Error(`SendGrid Error: ${response.status} ${response.statusText}`);
+      console.error(`[${requestId}][directEmailService] ❌ Error from Azure Function:`, result);
+      
+      // Detailed error logging
+      if (result.details) {
+        console.error(`[${requestId}][directEmailService] Error details:`, result.details);
+      }
+      
+      if (result.statusCode) {
+        console.error(`[${requestId}][directEmailService] Status code:`, result.statusCode);
+      }
+      
+      throw new Error(result.error || result.message || `Email Function Error: ${response.status}`);
     }
     
-    console.log(`[directEmailService] Email sent successfully to ${to}`);
+    console.log(`[${requestId}][directEmailService] ✅ Email sent successfully to ${to} (Function request ID: ${result.requestId || 'unknown'})`);
     return {
       success: true,
       simulated: false,
       message: 'Email sent successfully',
       to,
       subject,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      requestId,
+      functionRequestId: result.requestId,
+      responseTime: duration
     };
   } catch (error) {
-    console.error(`[directEmailService] Error sending email:`, error);
+    console.error(`[${requestId}][directEmailService] ❌ Error sending email:`, error);
+    
+    // Add browser info to help with debugging
+    const browserInfo = {
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      online: navigator.onLine,
+      cookiesEnabled: navigator.cookieEnabled,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.error(`[${requestId}][directEmailService] Browser information:`, browserInfo);
+    
     return {
       success: false,
       error: error.message,
       to,
       subject,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      requestId,
+      browserInfo
     };
   }
 };
@@ -563,5 +641,93 @@ KH Rentals Team
   } catch (error) {
     console.error(`[DirectEmailService] Error sending magic link:`, error);
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Tests the email configuration and logs detailed debug information
+ * @returns {Object} Configuration status and details
+ */
+export const testEmailConfiguration = async () => {
+  // Generate a request ID for tracking
+  const requestId = `email_test_${Date.now()}`;
+  
+  try {
+    // Get configuration values
+    const sendgridKey = getSendGridKey();
+    const fromEmail = getFromEmail();
+    const fromName = getFromName();
+    const baseUrl = getAppBaseUrl();
+    const supabaseUrl = getSupabaseUrl();
+    const supabaseKey = getSupabaseKey();
+    
+    const config = {
+      sendgridKey: sendgridKey ? "Present" : "Missing",
+      fromEmail,
+      fromName,
+      baseUrl,
+      supabaseUrl: supabaseUrl ? "Present" : "Missing",
+      supabaseKey: supabaseKey ? "Present" : "Missing",
+      timestamp: new Date().toISOString(),
+      environment: import.meta.env.MODE || 'unknown',
+      browserInfo: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language
+      }
+    };
+    
+    console.log(`[${requestId}][EmailTest] Configuration:`, config);
+    
+    // Attempt to send a test email to verify configuration
+    if (sendgridKey && fromEmail) {
+      console.log(`[${requestId}][EmailTest] Attempting to send a test email...`);
+      
+      const testResult = await sendDirectEmail({
+        to: fromEmail, // Send to the from email for testing
+        subject: `[TEST] Email Configuration Test - ${new Date().toISOString()}`,
+        html: `
+          <div style="padding: 20px; font-family: Arial, sans-serif;">
+            <h2>Email Configuration Test</h2>
+            <p>This is a test email to verify your email configuration is working correctly.</p>
+            <p>Configuration details:</p>
+            <ul>
+              <li>Base URL: ${baseUrl}</li>
+              <li>From Email: ${fromEmail}</li>
+              <li>From Name: ${fromName}</li>
+              <li>SendGrid API: ${sendgridKey ? "Configured" : "Missing"}</li>
+              <li>Test Time: ${new Date().toISOString()}</li>
+            </ul>
+            <p>If you received this email, your configuration is working!</p>
+          </div>
+        `,
+        text: `Email Configuration Test\n\nThis is a test email to verify your email configuration is working correctly.\n\nConfiguration details:\n- Base URL: ${baseUrl}\n- From Email: ${fromEmail}\n- From Name: ${fromName}\n- SendGrid API: ${sendgridKey ? "Configured" : "Missing"}\n- Test Time: ${new Date().toISOString()}\n\nIf you received this email, your configuration is working!`,
+        simulated: false
+      });
+      
+      console.log(`[${requestId}][EmailTest] Test email result:`, testResult);
+      
+      return {
+        success: true,
+        configuration: config,
+        testResult
+      };
+    } else {
+      console.log(`[${requestId}][EmailTest] Email configuration incomplete, not sending test`);
+      
+      return {
+        success: false,
+        configuration: config,
+        error: "Email configuration incomplete. Missing SendGrid API key or sender email."
+      };
+    }
+  } catch (error) {
+    console.error(`[EmailTest] Test failed:`, error);
+    
+    return {
+      success: false,
+      error: error.message,
+      stack: error.stack
+    };
   }
 }; 
