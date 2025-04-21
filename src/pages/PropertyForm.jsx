@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchData, insertData, updateData } from '../services/supabaseClient';
 import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
@@ -6,6 +6,9 @@ import { generateTempId } from '../utils/helpers';
 import { PROPERTY_TYPES } from '../utils/constants';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
 import { toast } from 'react-hot-toast';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // UI Components
 import FormInput from '../components/ui/FormInput';
@@ -22,6 +25,12 @@ const PropertyForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  
+  // DND sensors setup - moved outside of render loop
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
   
   // Initial form data
   const initialFormData = {
@@ -210,13 +219,14 @@ const PropertyForm = () => {
     }
     
     // Clone the images array and ensure each image has all required properties
-    const sortedImages = [...images].map(img => {
+    const sortedImages = [...images].map((img, index) => {
       // Handle both string URLs and object format
       if (typeof img === 'string') {
         return {
           image_url: img,
           image_type: 'exterior', // Default category for backward compatibility
-          uploaded_at: new Date().toISOString()
+          uploaded_at: new Date().toISOString(),
+          order: index // Add order value
         };
       }
       
@@ -224,7 +234,8 @@ const PropertyForm = () => {
         ...img,
         image_url: img.image_url || img, // Handle both formats
         image_type: img.image_type || 'exterior',
-        uploaded_at: img.uploaded_at || new Date().toISOString()
+        uploaded_at: img.uploaded_at || new Date().toISOString(),
+        order: img.order !== undefined ? img.order : index // Preserve or add order value
       };
     });
     
@@ -296,7 +307,8 @@ const PropertyForm = () => {
           return {
             image_url: file,
             image_type: imageType,
-            uploaded_at: new Date().toISOString()
+            uploaded_at: new Date().toISOString(),
+            order: 9999 // Will be updated after all images are processed
           };
         }
         
@@ -317,7 +329,8 @@ const PropertyForm = () => {
           return {
             image_url: result.url,
             image_type: imageType,
-            uploaded_at: new Date().toISOString()
+            uploaded_at: new Date().toISOString(),
+            order: 9999 // Will be updated after all images are processed
           };
         }
         
@@ -331,15 +344,29 @@ const PropertyForm = () => {
       // Update form data with new image objects
       setFormData(prev => {
         // Convert existing images to object format if they're just strings
-        const convertedExistingImages = (prev.images || []).map(img => 
+        const convertedExistingImages = (prev.images || []).map((img, index) => 
           typeof img === 'string' 
-            ? { image_url: img, image_type: 'exterior', uploaded_at: new Date().toISOString() }
-            : img
+            ? { image_url: img, image_type: 'exterior', uploaded_at: new Date().toISOString(), order: index }
+            : { ...img, order: img.order !== undefined ? img.order : index }
         );
+        
+        // Assign order values to new images, continuing from the highest existing order
+        const highestOrder = convertedExistingImages.length > 0 
+          ? Math.max(...convertedExistingImages.map(img => img.order || 0))
+          : -1;
+        
+        const newImagesWithOrder = uploadedImages.map((img, idx) => ({
+          ...img,
+          order: highestOrder + idx + 1
+        }));
+        
+        // Combine and sort all images by order
+        const allImages = [...convertedExistingImages, ...newImagesWithOrder]
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
         
         return {
           ...prev,
-          images: [...convertedExistingImages, ...uploadedImages]
+          images: allImages
         };
       });
 
@@ -393,6 +420,199 @@ const PropertyForm = () => {
       console.error('Error removing property image:', error);
       toast.error(error.message || 'Failed to remove image');
     }
+  };
+  
+  // Handle image reorganization
+  const handleReorderImages = (event) => {
+    const { active, over } = event;
+    
+    if (active.id !== over.id) {
+      setFormData(prev => {
+        const oldIndex = parseInt(active.id);
+        const newIndex = parseInt(over.id);
+        
+        // Create a deep copy of the previous images array
+        const newImages = [...prev.images].map(img => 
+          typeof img === 'string' ? img : {...img}
+        );
+        
+        // Perform the array move operation
+        const reorderedImages = arrayMove(newImages, oldIndex, newIndex);
+        
+        // Update order values after reordering
+        reorderedImages.forEach((img, idx) => {
+          if (typeof img !== 'string') {
+            img.order = idx;
+          }
+        });
+        
+        // Return updated form data
+        return {
+          ...prev,
+          images: reorderedImages
+        };
+      });
+      
+      toast.success('Image order updated');
+    }
+  };
+  
+  // Move an image to a different category
+  const handleChangeImageCategory = (imageIndex, newCategory) => {
+    setFormData(prev => {
+      const updatedImages = [...prev.images];
+      
+      // If the image is a string, convert it to an object
+      if (typeof updatedImages[imageIndex] === 'string') {
+        updatedImages[imageIndex] = {
+          image_url: updatedImages[imageIndex],
+          image_type: newCategory,
+          uploaded_at: new Date().toISOString(),
+          order: imageIndex // Add order value
+        };
+      } else {
+        // Otherwise just update the image_type, preserving order
+        updatedImages[imageIndex] = {
+          ...updatedImages[imageIndex],
+          image_type: newCategory,
+          // Preserve existing order or set it to the index
+          order: updatedImages[imageIndex].order !== undefined ? updatedImages[imageIndex].order : imageIndex
+        };
+      }
+      
+      // Re-sort images by their order value
+      const sortedImages = [...updatedImages].sort((a, b) => {
+        const orderA = typeof a === 'string' ? 9999 : (a.order || 9999);
+        const orderB = typeof b === 'string' ? 9999 : (b.order || 9999);
+        return orderA - orderB;
+      });
+      
+      return {
+        ...prev,
+        images: sortedImages
+      };
+    });
+    
+    toast.success(`Image moved to ${newCategory} category`);
+  };
+  
+  // Sortable Image Component
+  const SortableImage = ({ image, index, onRemove, isEditMode }) => {
+    const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+    const menuRef = useRef(null);
+    const imageUrl = typeof image === 'string' ? image : image.image_url;
+    const imageType = typeof image === 'string' ? 'exterior' : (image.image_type || 'exterior');
+    
+    // Extract useSortable hook - ensure it's called unconditionally
+    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ 
+      id: index.toString() 
+    });
+    
+    // Close menu when clicking outside
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (menuRef.current && !menuRef.current.contains(event.target)) {
+          setShowCategoryMenu(false);
+        }
+      };
+      
+      if (showCategoryMenu) {
+        document.addEventListener('mousedown', handleClickOutside);
+      }
+      
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [showCategoryMenu]);
+    
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+    };
+    
+    const categoryOptions = [
+      { value: 'exterior', label: 'Exterior' },
+      { value: 'interior', label: 'Interior' },
+      { value: 'floorplan', label: 'Floor Plan' },
+      { value: 'other', label: 'Other' }
+    ];
+    
+    return (
+      <div 
+        ref={setNodeRef} 
+        style={style} 
+        className="relative group aspect-square overflow-hidden rounded-lg border border-gray-200"
+      >
+        <img
+          src={imageUrl}
+          alt={`Property image ${index + 1}`}
+          className="w-full h-full object-cover"
+        />
+        {isEditMode && (
+          <>
+            <div 
+              {...attributes} 
+              {...listeners}
+              className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 cursor-move flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <div className="text-white p-2 bg-black bg-opacity-50 rounded-full">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              </div>
+            </div>
+            
+            {/* Delete button */}
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            {/* Category button */}
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setShowCategoryMenu(!showCategoryMenu)}
+                className="bg-blue-500 text-white rounded-full p-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+              </button>
+              
+              {showCategoryMenu && (
+                <div className="absolute bottom-8 right-0 bg-white rounded-md shadow-lg p-2 z-10 w-40">
+                  <p className="text-xs font-medium text-gray-500 mb-1 px-2">Move to category:</p>
+                  {categoryOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={imageType === option.value}
+                      onClick={() => {
+                        handleChangeImageCategory(index, option.value);
+                        setShowCategoryMenu(false);
+                      }}
+                      className={`w-full text-left px-2 py-1 text-sm rounded ${
+                        imageType === option.value 
+                          ? 'bg-gray-100 text-gray-400 cursor-default'
+                          : 'hover:bg-blue-50 text-gray-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
   
   // Handle form submission
@@ -735,41 +955,50 @@ const PropertyForm = () => {
         {/* Images */}
         <div className="mb-6">
           <h3 className="text-lg font-medium mb-2">Property Images</h3>
+          {isEditMode && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+              <h4 className="text-blue-700 font-medium mb-1">Image Management Options:</h4>
+              <ul className="text-sm text-blue-700 list-disc ml-5 space-y-1">
+                <li>Drag and drop images to reorder them</li>
+                <li>Click the trash icon to delete an image</li>
+                <li>Use the menu icon (bottom right of image) to move an image to a different category</li>
+              </ul>
+            </div>
+          )}
           <div className="mb-4">
             {organizeImagesByCategory(formData.images || []).map((category) => (
               <div key={category.category} className="mb-6">
                 <h4 className="text-md font-medium mb-2">{category.label} ({category.images.length})</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {category.images.map((image, index) => {
-                    const imageUrl = typeof image === 'string' ? image : image.image_url;
-                    const imageIndex = formData.images.findIndex(img => {
-                      if (typeof img === 'string') return img === imageUrl;
-                      return img.image_url === imageUrl;
-                    });
-                    
-                    return (
-                      <div key={index} className="relative group">
-                        <div className="aspect-square overflow-hidden rounded-lg border border-gray-200">
-                          <img
-                            src={imageUrl}
-                            alt={`${category.label} ${index + 1}`}
-                            className="w-full h-full object-cover"
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleReorderImages}
+                >
+                  <SortableContext 
+                    items={category.images.map((_, index) => index.toString())} 
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {category.images.map((image, index) => {
+                        const imageUrl = typeof image === 'string' ? image : image.image_url;
+                        const imageIndex = formData.images.findIndex(img => {
+                          if (typeof img === 'string') return img === imageUrl;
+                          return img.image_url === imageUrl;
+                        });
+                        
+                        return (
+                          <SortableImage
+                            key={imageIndex}
+                            image={image}
+                            index={imageIndex}
+                            onRemove={handleRemoveImage}
+                            isEditMode={isEditMode}
                           />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(imageIndex)}
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            disabled={submitting}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               </div>
             ))}
           </div>

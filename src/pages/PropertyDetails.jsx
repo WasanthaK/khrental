@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchData, deleteData } from '../services/supabaseClient';
+import { fetchData, deleteData, updateData } from '../services/supabaseClient';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { DEFAULT_IMAGE } from '../utils/constants';
 import { supabase } from '../services/supabaseClient';
 import { getRenteesByProperty } from '../services/renteeService';
+import { toast } from 'react-hot-toast';
+import { deleteFile } from '../services/fileService';
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
@@ -84,6 +86,81 @@ const PropertyDetails = () => {
       }));
     
     return organizedImages;
+  };
+  
+  // Add this function after the organizeImagesByCategory function
+  const handleDeleteImage = async (imageToDelete) => {
+    if (!confirm('Are you sure you want to delete this image? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Get the image URL (handle both string and object formats)
+      const imageUrl = typeof imageToDelete === 'string' 
+        ? imageToDelete 
+        : imageToDelete.image_url;
+      
+      if (!imageUrl) {
+        throw new Error('Invalid image URL');
+      }
+      
+      // Extract the path from the URL
+      const urlParts = imageUrl.split('/storage/v1/object/public/');
+      if (urlParts.length !== 2) {
+        throw new Error('Invalid image URL format');
+      }
+      
+      const [bucket, path] = urlParts[1].split('/', 1);
+      const filePath = urlParts[1].substring(bucket.length + 1);
+      
+      console.log('Deleting image file:', { bucket, path: filePath });
+      
+      // Delete the file from storage
+      const { success, error: deleteError } = await deleteFile(bucket, filePath);
+      if (!success) {
+        throw new Error(deleteError?.message || 'Failed to delete image file');
+      }
+      
+      // Update the property in the database by removing the image from the images array
+      const updatedImages = property.images.filter(img => {
+        if (typeof img === 'string') {
+          return img !== imageUrl;
+        }
+        return img.image_url !== imageUrl;
+      });
+      
+      const { error: updateError } = await updateData('properties', id, {
+        images: updatedImages
+      });
+      
+      if (updateError) {
+        throw updateError;
+      }
+      
+      // Update local state
+      setProperty(prev => ({
+        ...prev,
+        images: updatedImages
+      }));
+      
+      // Re-organize images
+      const organized = organizeImagesByCategory(updatedImages);
+      setOrganizedImages(organized);
+      
+      // Reset active image index if needed
+      if (activeImageIndex >= organized.find(cat => cat.category === activeCategory)?.images?.length) {
+        setActiveImageIndex(0);
+      }
+      
+      toast.success('Image deleted successfully');
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      toast.error(error.message || 'Failed to delete image');
+    } finally {
+      setLoading(false);
+    }
   };
   
   useEffect(() => {
@@ -429,23 +506,39 @@ const PropertyDetails = () => {
                             const imageUrl = typeof image === 'string' ? image : image.image_url;
                             
                             return (
-                              <button
+                              <div 
                                 key={index}
-                                onClick={() => setActiveImageIndex(index)}
-                                className={`h-16 w-16 flex-shrink-0 rounded overflow-hidden border-2 ${
-                                  index === activeImageIndex ? 'border-blue-500' : 'border-transparent'
-                                }`}
+                                className="relative group h-16 w-16 flex-shrink-0 rounded overflow-hidden"
                               >
-                                <img 
-                                  src={imageUrl} 
-                                  alt={`Thumbnail ${index + 1}`} 
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => { 
-                                    e.target.onerror = null; 
-                                    e.target.src = DEFAULT_IMAGE; 
-                                  }}
-                                />
-                              </button>
+                                <button
+                                  onClick={() => setActiveImageIndex(index)}
+                                  className={`h-full w-full border-2 ${
+                                    index === activeImageIndex ? 'border-blue-500' : 'border-transparent'
+                                  }`}
+                                >
+                                  <img 
+                                    src={imageUrl} 
+                                    alt={`Thumbnail ${index + 1}`} 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { 
+                                      e.target.onerror = null; 
+                                      e.target.src = DEFAULT_IMAGE; 
+                                    }}
+                                  />
+                                </button>
+                                
+                                {/* Delete button that appears on hover */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteImage(image)}
+                                  className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Delete this image"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
                             );
                           })}
                         </div>

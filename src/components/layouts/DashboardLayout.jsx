@@ -109,7 +109,38 @@ const DashboardLayout = () => {
       <div className="p-5 border-b border-blue-700">
         <h1 className="text-2xl font-bold text-white">KH Rentals</h1>
       </div>
-      <div className="py-4 px-3 flex-1 overflow-y-auto" style={{ paddingBottom: 200 }}>
+      
+      {/* User information moved from bottom to top */}
+      <div className="p-4 border-b border-blue-700 bg-blue-900/50">
+        <div className="flex flex-col space-y-2">
+          <div className="flex items-start">
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0 mr-3">
+              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
+            </div>
+            <div className="flex-1 min-w-0 overflow-hidden text-left">
+              <p className="text-xs text-blue-200 capitalize font-medium">{user?.role || 'User'}</p>
+              <p className="font-medium text-white truncate text-sm leading-tight">{user?.email}</p>
+            </div>
+          </div>
+          
+          {/* Language Selector */}
+          <div className="mt-1">
+            <UserLanguageSelector 
+              value={user?.preferred_language || 'en'} 
+              onChange={handleLanguageChange} 
+            />
+          </div>
+          
+          <button
+            onClick={handleSignOut}
+            className="w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md transition-colors text-sm font-medium flex items-center justify-center"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+      
+      <div className="py-4 px-3 flex-1 overflow-y-auto">
         <nav className="space-y-1.5">
           <NavLink
             to="/dashboard"
@@ -269,34 +300,6 @@ const DashboardLayout = () => {
             </NavLink>
           )}
         </nav>
-      </div>
-      <div className="absolute bottom-0 left-0 right-0 border-t border-blue-700 p-4 bg-blue-900/50 z-30">
-        <div className="flex flex-col space-y-2">
-          <div className="flex items-start">
-            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0 mr-3">
-              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
-            </div>
-            <div className="flex-1 min-w-0 overflow-hidden text-left">
-              <p className="text-xs text-blue-200 capitalize font-medium">{user?.role || 'User'}</p>
-              <p className="font-medium text-white truncate text-sm leading-tight">{user?.email}</p>
-            </div>
-          </div>
-          
-          {/* Language Selector */}
-          <div className="mt-1">
-            <UserLanguageSelector 
-              value={user?.preferred_language || 'en'} 
-              onChange={handleLanguageChange} 
-            />
-          </div>
-          
-          <button
-            onClick={handleSignOut}
-            className="w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md transition-colors text-sm font-medium flex items-center justify-center"
-          >
-            Sign Out
-          </button>
-        </div>
       </div>
     </div>
   );
