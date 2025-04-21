@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useNavigate, useParams, RouterProvider } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PERMISSIONS, ROLES } from './utils/permissions.jsx';
@@ -207,9 +207,8 @@ const UuidGuard = ({ children }) => {
   return children;
 };
 
-// Create the router directly instead of through a function
-// This helps with HMR (Hot Module Replacement)
-const router = createBrowserRouter([
+// Define routes - these will be used to create the router
+const routes = [
   {
     path: '/',
     element: <RootLayout />,
@@ -560,6 +559,10 @@ const router = createBrowserRouter([
                   </ProtectedRoute>
                 ),
               },
+              {
+                path: 'email-diagnostics',
+                element: <EmailDiagnostic />,
+              },
             ],
           },
           {
@@ -577,6 +580,10 @@ const router = createBrowserRouter([
                 <SignatureProgressDemo />
               </ProtectedRoute>
             ),
+          },
+          {
+            path: 'direct-email-test',
+            element: <EmailDiagnostic />,
           },
         ],
       },
@@ -737,7 +744,7 @@ const router = createBrowserRouter([
       {
         path: 'diagnostics/email',
         element: (
-          <ProtectedRoute requiredPermission={PERMISSIONS.ADMIN}>
+          <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
             <EmailDiagnostic />
           </ProtectedRoute>
         ),
@@ -748,9 +755,13 @@ const router = createBrowserRouter([
     path: '*',
     element: <NotFound />
   }
-]);
+];
 
-// Export the router instance directly
-export default router;
+// Export the RouterProvider component
+export default function AppRouter() {
+  // Create the router instance inside the component
+  const router = createBrowserRouter(routes);
+  return <RouterProvider router={router} />;
+}
 
 // No named exports to prevent HMR issues

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchData, insertData, updateData } from '../services/supabaseClient';
-import { saveFile, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
+import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import { generateTempId } from '../utils/helpers';
 import { PROPERTY_TYPES } from '../utils/constants';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
@@ -199,50 +199,153 @@ const PropertyForm = () => {
     }));
   };
   
+  // Organize images by category
+  const organizeImagesByCategory = (images) => {
+    // Debug output to check what we're receiving
+    console.log('Property images received for organization:', images);
+    
+    if (!images || images.length === 0) {
+      console.log('No property images found to organize');
+      return [];
+    }
+    
+    // Clone the images array and ensure each image has all required properties
+    const sortedImages = [...images].map(img => {
+      // Handle both string URLs and object format
+      if (typeof img === 'string') {
+        return {
+          image_url: img,
+          image_type: 'exterior', // Default category for backward compatibility
+          uploaded_at: new Date().toISOString()
+        };
+      }
+      
+      return {
+        ...img,
+        image_url: img.image_url || img, // Handle both formats
+        image_type: img.image_type || 'exterior',
+        uploaded_at: img.uploaded_at || new Date().toISOString()
+      };
+    });
+    
+    // Filter out any images with empty URLs
+    const validImages = sortedImages.filter(img => {
+      const url = typeof img === 'string' ? img : img.image_url;
+      return !!url;
+    });
+    
+    if (validImages.length < sortedImages.length) {
+      console.log(`Filtered out ${sortedImages.length - validImages.length} images with empty URLs`);
+    }
+    
+    // Sort images by uploaded_at date
+    validImages.sort((a, b) => {
+      const dateA = new Date(a.uploaded_at || 0);
+      const dateB = new Date(b.uploaded_at || 0);
+      return dateA - dateB;
+    });
+    
+    // Debug output for sorted images
+    console.log('Property images after sorting:', validImages);
+    
+    // Group images by type
+    const groupedImages = validImages.reduce((acc, image) => {
+      // Make sure we have a valid type
+      const type = image.image_type || 'exterior';
+      if (!acc[type]) acc[type] = [];
+      acc[type].push(image);
+      return acc;
+    }, {});
+    
+    // Debug output for grouped images
+    console.log('Property images after grouping by type:', groupedImages);
+    
+    // Define category order and labels
+    const categoryOrder = ['exterior', 'interior', 'floorplan', 'other'];
+    const categoryLabels = {
+      'exterior': 'Exterior Images',
+      'interior': 'Interior Images',
+      'floorplan': 'Floor Plans',
+      'other': 'Other Images'
+    };
+    
+    // Create the final structure
+    const organizedImages = categoryOrder
+      .filter(category => groupedImages[category] && groupedImages[category].length > 0)
+      .map(category => ({
+        category,
+        label: categoryLabels[category],
+        images: groupedImages[category]
+      }));
+    
+    // Debug output for final organized structure
+    console.log('Final organized property images by category:', organizedImages);
+    
+    return organizedImages;
+  };
+
   // Handle image upload
-  const handleImagesChange = async (newImages) => {
+  const handleImagesChange = async (newImages, imageType = 'exterior') => {
     try {
-      console.log('Processing new images:', newImages.length);
+      console.log(`Processing ${newImages.length} new property images of type: ${imageType}`);
       
       const uploadPromises = newImages.map(async (file) => {
-        // If it's already a URL string, return it as is
+        // If it's already a URL string, return it as is with type
         if (typeof file === 'string') {
           console.log('Existing image URL:', file);
-          return file;
+          return {
+            image_url: file,
+            image_type: imageType,
+            uploaded_at: new Date().toISOString()
+          };
         }
         
         // If it's a File object or has a name property, upload it
         if (file instanceof File || file.name) {
-          console.log('Uploading new image:', file.name);
-          const result = await saveFile(file, {
+          console.log(`Uploading new ${imageType} image:`, file.name);
+          const result = await saveImage(file, {
             bucket: STORAGE_BUCKETS.IMAGES,
             folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].PROPERTIES
           });
 
           if (!result.success) {
-            console.error('Failed to upload image:', result.error);
+            console.error('Failed to upload property image:', result.error);
             throw new Error(result.error || 'Failed to upload image');
           }
 
-          console.log('Image uploaded successfully:', result.url);
-          return result.url;
+          console.log('Property image uploaded successfully:', result.url);
+          return {
+            image_url: result.url,
+            image_type: imageType,
+            uploaded_at: new Date().toISOString()
+          };
         }
         
         console.error('Invalid file object:', file);
         throw new Error('Invalid file object: must be a File or URL string');
       });
 
-      const uploadedUrls = await Promise.all(uploadPromises);
-      console.log('All images processed successfully:', uploadedUrls);
+      const uploadedImages = await Promise.all(uploadPromises);
+      console.log('All property images processed successfully:', uploadedImages);
       
-      setFormData(prev => ({
-        ...prev,
-        images: [...(prev.images || []), ...uploadedUrls]
-      }));
+      // Update form data with new image objects
+      setFormData(prev => {
+        // Convert existing images to object format if they're just strings
+        const convertedExistingImages = (prev.images || []).map(img => 
+          typeof img === 'string' 
+            ? { image_url: img, image_type: 'exterior', uploaded_at: new Date().toISOString() }
+            : img
+        );
+        
+        return {
+          ...prev,
+          images: [...convertedExistingImages, ...uploadedImages]
+        };
+      });
 
-      toast.success('Images uploaded successfully');
+      toast.success(`${uploadedImages.length} ${imageType} images uploaded successfully`);
     } catch (error) {
-      console.error('Error uploading images:', error);
+      console.error('Error uploading property images:', error);
       toast.error(error.message || 'Failed to upload images');
     }
   };
@@ -251,20 +354,25 @@ const PropertyForm = () => {
   const handleRemoveImage = async (index) => {
     try {
       const imageToRemove = formData.images[index];
-      console.log('Removing image:', imageToRemove);
+      console.log('Removing property image:', imageToRemove);
       
-      if (imageToRemove) {
+      // Get the image URL (handle both string and object formats)
+      const imageUrl = typeof imageToRemove === 'string' 
+        ? imageToRemove 
+        : imageToRemove.image_url;
+      
+      if (imageUrl) {
         // Extract the path from the URL
-        const urlParts = imageToRemove.split('/storage/v1/object/public/');
+        const urlParts = imageUrl.split('/storage/v1/object/public/');
         if (urlParts.length === 2) {
           const [bucket, path] = urlParts[1].split('/', 1);
           const filePath = urlParts[1].substring(bucket.length + 1);
           
-          console.log('Deleting file:', { bucket, path: filePath });
+          console.log('Deleting property image file:', { bucket, path: filePath });
           
           const { success, error } = await deleteFile(bucket, filePath);
           if (!success) {
-            console.error('Failed to delete file:', error);
+            console.error('Failed to delete property image file:', error);
             throw new Error(error?.message || 'Failed to delete image');
           }
 
@@ -275,14 +383,14 @@ const PropertyForm = () => {
             images: updatedImages
           }));
 
-          toast.success('Image removed successfully');
+          toast.success('Property image removed successfully');
         } else {
-          console.error('Invalid image URL format:', imageToRemove);
+          console.error('Invalid property image URL format:', imageUrl);
           throw new Error('Invalid image URL format');
         }
       }
     } catch (error) {
-      console.error('Error removing image:', error);
+      console.error('Error removing property image:', error);
       toast.error(error.message || 'Failed to remove image');
     }
   };
@@ -625,23 +733,56 @@ const PropertyForm = () => {
         </div>
         
         {/* Images */}
-        <div className="mt-6">
-          <h2 className="text-lg font-medium mb-4">Property Images</h2>
-          
-          <div className="mb-6">
-            <h3 className="text-md font-medium text-gray-700 mb-2">Profile Picture</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              The first image will be used as the property's profile picture.
-            </p>
+        <div className="mb-6">
+          <h3 className="text-lg font-medium mb-2">Property Images</h3>
+          <div className="mb-4">
+            {organizeImagesByCategory(formData.images || []).map((category) => (
+              <div key={category.category} className="mb-6">
+                <h4 className="text-md font-medium mb-2">{category.label} ({category.images.length})</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {category.images.map((image, index) => {
+                    const imageUrl = typeof image === 'string' ? image : image.image_url;
+                    const imageIndex = formData.images.findIndex(img => {
+                      if (typeof img === 'string') return img === imageUrl;
+                      return img.image_url === imageUrl;
+                    });
+                    
+                    return (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square overflow-hidden rounded-lg border border-gray-200">
+                          <img
+                            src={imageUrl}
+                            alt={`${category.label} ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(imageIndex)}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            disabled={submitting}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
-
-          <ImageUpload
-            onImagesChange={handleImagesChange}
-            maxImages={10}
-            initialImages={existingImages.map(url => ({ url, isNew: false }))}
-            bucket={STORAGE_BUCKETS.IMAGES}
-            folder={BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].PROPERTIES}
-          />
+          
+          <div className="mb-4">
+            <h4 className="text-md font-medium mb-2">Upload Images</h4>
+            <ImageUpload 
+              onImagesChange={handleImagesChange}
+              maxImages={20}
+              initialImages={[]}
+              showTypeSelector={true}
+            />
+          </div>
         </div>
         
         {/* Location */}

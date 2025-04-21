@@ -19,8 +19,72 @@ const PropertyDetails = () => {
   const [error, setError] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeCategory, setActiveCategory] = useState('exterior');
+  const [organizedImages, setOrganizedImages] = useState([]);
   const [agreements, setAgreements] = useState([]);
   const [maintenanceRequests, setMaintenanceRequests] = useState([]);
+  
+  // Function to organize images by category
+  const organizeImagesByCategory = (images) => {
+    if (!images || images.length === 0) {
+      console.log('No property images found to organize');
+      return [];
+    }
+    
+    // Clone the images array and ensure each image has all required properties
+    const sortedImages = [...images].map(img => {
+      // Handle both string URLs and object format
+      if (typeof img === 'string') {
+        return {
+          image_url: img,
+          image_type: 'exterior', // Default category for backward compatibility
+          uploaded_at: new Date().toISOString()
+        };
+      }
+      
+      return {
+        ...img,
+        image_url: img.image_url || img, // Handle both formats
+        image_type: img.image_type || 'exterior',
+        uploaded_at: img.uploaded_at || new Date().toISOString()
+      };
+    });
+    
+    // Filter out any images with empty URLs
+    const validImages = sortedImages.filter(img => {
+      const url = typeof img === 'string' ? img : img.image_url;
+      return !!url;
+    });
+    
+    // Group images by type
+    const groupedImages = validImages.reduce((acc, image) => {
+      // Make sure we have a valid type
+      const type = image.image_type || 'exterior';
+      if (!acc[type]) acc[type] = [];
+      acc[type].push(image);
+      return acc;
+    }, {});
+    
+    // Define category order and labels
+    const categoryOrder = ['exterior', 'interior', 'floorplan', 'other'];
+    const categoryLabels = {
+      'exterior': 'Exterior Images',
+      'interior': 'Interior Images',
+      'floorplan': 'Floor Plans',
+      'other': 'Other Images'
+    };
+    
+    // Create the final structure
+    const organizedImages = categoryOrder
+      .filter(category => groupedImages[category] && groupedImages[category].length > 0)
+      .map(category => ({
+        category,
+        label: categoryLabels[category],
+        images: groupedImages[category]
+      }));
+    
+    return organizedImages;
+  };
   
   useEffect(() => {
     const fetchPropertyData = async () => {
@@ -79,6 +143,16 @@ const PropertyDetails = () => {
           console.log('Final property data:', processedProperty);
           
           setProperty(processedProperty);
+          
+          // Organize property images
+          const images = processedProperty.images || [];
+          const organized = organizeImagesByCategory(images);
+          setOrganizedImages(organized);
+          
+          // Set default active category if it exists
+          if (organized.length > 0) {
+            setActiveCategory(organized[0].category);
+          }
           
           // Fetch all rentees associated with this property using the dedicated service
           console.log('Fetching rentees for property ID:', id);
@@ -300,41 +374,83 @@ const PropertyDetails = () => {
         {/* Left column - Images */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            {property.images && property.images.length > 0 ? (
+            {organizedImages.length > 0 ? (
               <div>
-                <div className="h-96 overflow-hidden">
-                  <img 
-                    src={property.images[activeImageIndex]} 
-                    alt={property.name} 
-                    className="w-full h-full object-contain"
-                    onError={(e) => { 
-                      console.log("Image failed to load, using fallback");
-                      e.target.onerror = null; 
-                      e.target.src = DEFAULT_IMAGE; 
-                    }}
-                  />
-                </div>
-                {property.images.length > 1 && (
-                  <div className="p-2 flex space-x-2 overflow-x-auto">
-                    {property.images.map((image, index) => (
+                {/* Category tabs */}
+                <div className="bg-gray-100 border-b">
+                  <div className="flex overflow-x-auto">
+                    {organizedImages.map((category) => (
                       <button
-                        key={index}
-                        onClick={() => setActiveImageIndex(index)}
-                        className={`h-16 w-16 flex-shrink-0 rounded overflow-hidden border-2 ${
-                          index === activeImageIndex ? 'border-blue-500' : 'border-transparent'
+                        key={category.category}
+                        onClick={() => setActiveCategory(category.category)}
+                        className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                          activeCategory === category.category
+                            ? 'border-b-2 border-blue-500 bg-white text-blue-600'
+                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
                         }`}
                       >
-                        <img 
-                          src={image} 
-                          alt={`Thumbnail ${index + 1}`} 
-                          className="w-full h-full object-cover"
-                          onError={(e) => { 
-                            e.target.onerror = null; 
-                            e.target.src = DEFAULT_IMAGE; 
-                          }}
-                        />
+                        {category.label} ({category.images.length})
                       </button>
                     ))}
+                  </div>
+                </div>
+                
+                {/* Active category images */}
+                {organizedImages.find(cat => cat.category === activeCategory) && (
+                  <div>
+                    <div className="h-96 overflow-hidden">
+                      {(() => {
+                        const categoryImages = organizedImages.find(cat => cat.category === activeCategory).images;
+                        const currentImage = categoryImages[activeImageIndex >= categoryImages.length ? 0 : activeImageIndex];
+                        const imageUrl = typeof currentImage === 'string' ? currentImage : currentImage.image_url;
+                        
+                        return (
+                          <img 
+                            src={imageUrl} 
+                            alt={property.name} 
+                            className="w-full h-full object-contain"
+                            onError={(e) => { 
+                              console.log("Image failed to load, using fallback");
+                              e.target.onerror = null; 
+                              e.target.src = DEFAULT_IMAGE; 
+                            }}
+                          />
+                        );
+                      })()}
+                    </div>
+                    
+                    {/* Thumbnails */}
+                    {(() => {
+                      const categoryImages = organizedImages.find(cat => cat.category === activeCategory).images;
+                      
+                      return categoryImages.length > 1 ? (
+                        <div className="p-2 flex space-x-2 overflow-x-auto">
+                          {categoryImages.map((image, index) => {
+                            const imageUrl = typeof image === 'string' ? image : image.image_url;
+                            
+                            return (
+                              <button
+                                key={index}
+                                onClick={() => setActiveImageIndex(index)}
+                                className={`h-16 w-16 flex-shrink-0 rounded overflow-hidden border-2 ${
+                                  index === activeImageIndex ? 'border-blue-500' : 'border-transparent'
+                                }`}
+                              >
+                                <img 
+                                  src={imageUrl} 
+                                  alt={`Thumbnail ${index + 1}`} 
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { 
+                                    e.target.onerror = null; 
+                                    e.target.src = DEFAULT_IMAGE; 
+                                  }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 )}
               </div>

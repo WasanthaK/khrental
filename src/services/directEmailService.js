@@ -43,12 +43,32 @@ const getSupabaseKey = () => {
 const getSupabaseUrl = () => {
   // Try window._env_ first
   if (window._env_ && window._env_.VITE_SUPABASE_URL) {
-    return window._env_.VITE_SUPABASE_URL;
+    let url = window._env_.VITE_SUPABASE_URL;
+    
+    // Use CORS proxy in development environment
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (!url.includes('localhost:9090')) {
+        console.log('[DirectEmail] Using CORS proxy for development:', url, '->', `http://localhost:9090/${url}`);
+        url = `http://localhost:9090/${url}`;
+      }
+    }
+    
+    return url;
   }
   
   // Try import.meta.env next
   if (import.meta.env && import.meta.env.VITE_SUPABASE_URL) {
-    return import.meta.env.VITE_SUPABASE_URL;
+    let url = import.meta.env.VITE_SUPABASE_URL;
+    
+    // Use CORS proxy in development environment
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (!url.includes('localhost:9090')) {
+        console.log('[DirectEmail] Using CORS proxy for development:', url, '->', `http://localhost:9090/${url}`);
+        url = `http://localhost:9090/${url}`;
+      }
+    }
+    
+    return url;
   }
   
   console.error('[DirectEmail] Supabase URL not found in environment variables');
@@ -288,12 +308,18 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
       attachments
     };
     
-    // Add content (HTML preferred, fallback to text)
+    // Add content - IMPORTANT: text/plain MUST come before text/html for SendGrid
+    // If only HTML is provided, create a basic text version
+    if (!text && html) {
+      // Create a simple text version from HTML by removing tags
+      payload.text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    } else if (text) {
+      payload.text = text;
+    }
+    
+    // Add HTML content AFTER text content
     if (html) {
       payload.html = html;
-    }
-    if (text) {
-      payload.text = text;
     }
     
     // Calculate payload size for logging (useful for debugging large emails)
@@ -301,7 +327,13 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
     console.log(`[${requestId}][directEmailService] 📦 Request payload size: ${payloadSize} bytes`);
     
     // Construct the URL for the Supabase Edge Function
-    const functionUrl = `${supabaseUrl}/functions/v1/sendgrid-email`;
+    // Make sure the URL follows the correct format for Supabase Edge Functions
+    let functionUrl = `${supabaseUrl}/functions/v1/sendgrid-email`;
+    
+    // Ensure the URL doesn't have double slashes between functions/v1 and the function name
+    functionUrl = functionUrl.replace('functions/v1//sendgrid-email', 'functions/v1/sendgrid-email');
+    
+    console.log(`[${requestId}][directEmailService] 🌐 Function URL: ${functionUrl}`);
     
     // Start timing the request
     const startTime = Date.now();
@@ -332,7 +364,7 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
       // Extract error details if available
       let errorMessage = 'Unknown error sending email';
       if (result.error) {
-        errorMessage = result.error;
+        errorMessage = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
       }
       
       return {

@@ -6,14 +6,19 @@ import { toast } from 'react-hot-toast';
  * @param {Function} onImagesChange - Function to call when images change
  * @param {number} maxImages - Maximum number of images allowed
  * @param {Array} initialImages - Initial images to display
+ * @param {string} imageType - Type/category of images to upload (e.g., 'exterior', 'interior')
+ * @param {boolean} showTypeSelector - Whether to display the image type selector
  */
 const ImageUpload = ({
   onImagesChange,
-  maxImages,
-  initialImages = []
+  maxImages = 10,
+  initialImages = [],
+  imageType = 'exterior',
+  showTypeSelector = false
 }) => {
   const [images, setImages] = useState(initialImages);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedType, setSelectedType] = useState(imageType);
   const fileInputRef = useRef(null);
 
   const handleDragOver = (e) => {
@@ -61,15 +66,41 @@ const ImageUpload = ({
       reader.readAsDataURL(file);
     });
 
-    onImagesChange(validFiles);
+    // Pass the selected type along with the files
+    onImagesChange(validFiles, selectedType);
   };
 
   const removeImage = (index) => {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleTypeChange = (e) => {
+    setSelectedType(e.target.value);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Image Type Selector */}
+      {showTypeSelector && (
+        <div className="mb-4">
+          <label htmlFor="image-type" className="block text-sm font-medium text-gray-700 mb-1">
+            Image Type
+          </label>
+          <select
+            id="image-type"
+            name="image-type"
+            value={selectedType}
+            onChange={handleTypeChange}
+            className="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="exterior">Exterior</option>
+            <option value="interior">Interior</option>
+            <option value="floorplan">Floor Plan</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      )}
+
       {/* Image Grid */}
       {images.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -77,7 +108,7 @@ const ImageUpload = ({
             <div key={index} className="relative group">
               <img
                 src={image}
-                alt={`Uploaded image ${index + 1}`}
+                alt={`Uploaded ${selectedType} image ${index + 1}`}
                 className="w-full h-48 object-cover rounded-lg"
               />
               <button
@@ -132,7 +163,7 @@ const ImageUpload = ({
                 htmlFor="file-upload"
                 className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2"
               >
-                <span>Upload images</span>
+                <span>Upload {selectedType} images</span>
                 <input
                   id="file-upload"
                   name="file-upload"

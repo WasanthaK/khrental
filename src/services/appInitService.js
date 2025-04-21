@@ -323,8 +323,12 @@ export async function initializeStorage() {
         
         // Try to create folder structure in existing buckets only
         if (data !== null) {
-          const folders = BUCKET_FOLDERS[bucketName] || [];
-          for (const folder of folders) {
+          // Get folders for this bucket - now an object with properties
+          const folderPaths = BUCKET_FOLDERS[bucketName] 
+            ? Object.values(BUCKET_FOLDERS[bucketName]) 
+            : [];
+            
+          for (const folder of folderPaths) {
             try {
               // Check if folder already exists first
               const { data: folderData, error: folderListError } = await supabase.storage
@@ -339,9 +343,11 @@ export async function initializeStorage() {
                   .upload(folderPath, new Blob([''], { type: 'text/plain' }), {
                     upsert: true
                   });
+                  
+                console.log(`Created folder ${folder} in bucket ${bucketName}`);
               }
             } catch (folderError) {
-              // Silently handle folder errors
+              console.warn(`Error creating folder ${folder} in bucket ${bucketName}:`, folderError);
             }
           }
         }

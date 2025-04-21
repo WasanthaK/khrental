@@ -57,19 +57,19 @@ Deno.serve(async (req) => {
       content: [],
     };
     
-    // Add HTML content if provided
-    if (html) {
-      payload.content.push({
-        type: 'text/html',
-        value: html,
-      });
-    }
-    
-    // Add plain text if provided
+    // Add plain text if provided (MUST be first for SendGrid)
     if (text) {
       payload.content.push({
         type: 'text/plain',
         value: text,
+      });
+    }
+    
+    // Add HTML content after plain text
+    if (html) {
+      payload.content.push({
+        type: 'text/html',
+        value: html,
       });
     }
     
