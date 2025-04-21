@@ -27,7 +27,28 @@ function addToLog(entry) {
     }
 }
 
+// CORS headers to allow requests from the production domain
+const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://khrentals.kubeira.com",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Client-Request-ID",
+    "Access-Control-Max-Age": "86400" // 24 hours
+};
+
 module.exports = async function (context, req) {
+    // Add CORS headers to all responses
+    context.res = {
+        headers: corsHeaders
+    };
+    
+    // Handle OPTIONS method for CORS preflight
+    if (req.method === "OPTIONS") {
+        context.log("Handling CORS preflight request");
+        context.res.status = 200;
+        context.res.body = "";
+        return;
+    }
+    
     // Handle GET requests for monitoring
     if (req.method === "GET") {
         context.log("Handling monitoring request");
@@ -68,35 +89,30 @@ module.exports = async function (context, req) {
         });
         
         // Return status information
-        context.res = {
-            status: 200,
-            headers: {
-                'Content-Type': 'application/json'
+        context.res.status = 200;
+        context.res.body = {
+            status: "running",
+            version: "1.0",
+            startTime: startTime.toISOString(),
+            uptime: `${uptimeDays}d ${uptimeHours}h ${uptimeMinutes}m`,
+            stats: {
+                totalRequests,
+                successfulEmails,
+                failedEmails,
+                successRate: totalRequests > 0 ? (successfulEmails / totalRequests * 100).toFixed(2) + '%' : 'N/A'
             },
-            body: {
-                status: "running",
-                version: "1.0",
-                startTime: startTime.toISOString(),
-                uptime: `${uptimeDays}d ${uptimeHours}h ${uptimeMinutes}m`,
-                stats: {
-                    totalRequests,
-                    successfulEmails,
-                    failedEmails,
-                    successRate: totalRequests > 0 ? (successfulEmails / totalRequests * 100).toFixed(2) + '%' : 'N/A'
-                },
-                lastError: lastError ? {
-                    message: lastError.message,
-                    timestamp: lastError.timestamp,
-                    code: lastError.code
-                } : null,
-                environment: {
-                    hasApiKey: !!process.env.SENDGRID_API_KEY,
-                    fromEmail: process.env.EMAIL_FROM || 'madhumathi@kubeira.com',
-                    fromName: process.env.EMAIL_FROM_NAME || 'KH Rentals',
-                    nodeEnv: process.env.NODE_ENV || 'not set'
-                },
-                recentActivity: sanitizedLogs
-            }
+            lastError: lastError ? {
+                message: lastError.message,
+                timestamp: lastError.timestamp,
+                code: lastError.code
+            } : null,
+            environment: {
+                hasApiKey: !!process.env.SENDGRID_API_KEY,
+                fromEmail: process.env.EMAIL_FROM || 'madhumathi@kubeira.com',
+                fromName: process.env.EMAIL_FROM_NAME || 'KH Rentals',
+                nodeEnv: process.env.NODE_ENV || 'not set'
+            },
+            recentActivity: sanitizedLogs
         };
         return;
     }
@@ -161,14 +177,12 @@ module.exports = async function (context, req) {
             
             failedEmails++;
             
-            context.res = {
-                status: 400,
-                body: {
-                    success: false,
-                    error: errorMsg,
-                    timestamp: new Date().toISOString(),
-                    requestId: context.invocationId
-                }
+            context.res.status = 400;
+            context.res.body = {
+                success: false,
+                error: errorMsg,
+                timestamp: new Date().toISOString(),
+                requestId: context.invocationId
             };
             context.log('=============== END EMAIL REQUEST (VALIDATION ERROR) ===============');
             return;
@@ -209,15 +223,13 @@ module.exports = async function (context, req) {
             
             failedEmails++;
             
-            context.res = {
-                status: 500,
-                body: {
-                    success: false,
-                    error: "Email service is not configured properly",
-                    details: "API key is missing",
-                    timestamp: new Date().toISOString(),
-                    requestId: context.invocationId
-                }
+            context.res.status = 500;
+            context.res.body = {
+                success: false,
+                error: "Email service is not configured properly",
+                details: "API key is missing",
+                timestamp: new Date().toISOString(),
+                requestId: context.invocationId
             };
             context.log('=============== END EMAIL REQUEST (CONFIG ERROR) ===============');
             return;
@@ -288,20 +300,18 @@ module.exports = async function (context, req) {
             successfulEmails++;
             
             // Return success response
-            context.res = {
-                status: 200,
-                body: {
-                    success: true,
-                    message: "Email sent successfully",
-                    to,
-                    subject,
-                    sendGridResponse: {
-                        statusCode: sendResult[0]?.statusCode,
-                        headers: sendResult[0]?.headers,
-                    },
-                    timestamp: new Date().toISOString(),
-                    requestId: context.invocationId
-                }
+            context.res.status = 200;
+            context.res.body = {
+                success: true,
+                message: "Email sent successfully",
+                to,
+                subject,
+                sendGridResponse: {
+                    statusCode: sendResult[0]?.statusCode,
+                    headers: sendResult[0]?.headers,
+                },
+                timestamp: new Date().toISOString(),
+                requestId: context.invocationId
             };
             
             context.log('=============== END EMAIL REQUEST (SUCCESS) ===============');
@@ -332,17 +342,15 @@ module.exports = async function (context, req) {
             
             failedEmails++;
             
-            context.res = {
-                status: 502, // Bad Gateway - upstream service failed
-                body: {
-                    success: false,
-                    error: "Email provider error",
-                    message: sendError.message,
-                    details: sendError.response ? sendError.response.body : null,
-                    statusCode: sendError.code || sendError.response?.statusCode,
-                    timestamp: new Date().toISOString(),
-                    requestId: context.invocationId
-                }
+            context.res.status = 502; // Bad Gateway - upstream service failed
+            context.res.body = {
+                success: false,
+                error: "Email provider error",
+                message: sendError.message,
+                details: sendError.response ? sendError.response.body : null,
+                statusCode: sendError.code || sendError.response?.statusCode,
+                timestamp: new Date().toISOString(),
+                requestId: context.invocationId
             };
             
             context.log('=============== END EMAIL REQUEST (SENDGRID ERROR) ===============');
@@ -368,16 +376,14 @@ module.exports = async function (context, req) {
         failedEmails++;
         
         // Return error response
-        context.res = {
-            status: 500,
-            body: {
-                success: false,
-                error: "Internal server error",
-                message: error.message,
-                stack: process.env.NODE_ENV === 'production' ? undefined : error.stack,
-                timestamp: new Date().toISOString(),
-                requestId: context.invocationId
-            }
+        context.res.status = 500;
+        context.res.body = {
+            success: false,
+            error: "Internal server error",
+            message: error.message,
+            stack: process.env.NODE_ENV === 'production' ? undefined : error.stack,
+            timestamp: new Date().toISOString(),
+            requestId: context.invocationId
         };
         
         context.log('=============== END EMAIL REQUEST (GENERAL ERROR) ===============');
