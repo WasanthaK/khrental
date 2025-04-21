@@ -3,7 +3,7 @@ import corsAnywhere from 'cors-anywhere';
 
 // Configure the proxy server
 const host = 'localhost';
-const port = 8080;
+const port = 9090;
 
 // Create and start the proxy server
 corsAnywhere.createServer({
@@ -12,5 +12,5 @@ corsAnywhere.createServer({
   removeHeaders: ['cookie', 'cookie2']
 }).listen(port, host, function() {
   console.log('CORS Anywhere proxy server running on ' + host + ':' + port);
-  console.log('To use: prefix your Supabase URL with http://localhost:8080/');
+  console.log('To use: prefix your Supabase URL with http://localhost:9090/');
 }); 

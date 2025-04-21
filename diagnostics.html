@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KH Rentals - Email Diagnostics</title>
+    <!-- Load the environment config -->
+    <script src="/env-config.js"></script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      h1 {
+        text-align: center;
+        color: #1976d2;
+        margin-top: 0;
+      }
+      .message {
+        text-align: center;
+        margin: 30px 0;
+      }
+      .links {
+        margin-top: 30px;
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+      }
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        background-color: #1976d2;
+        color: white;
+        text-decoration: none;
+        display: inline-block;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background-color: #1565c0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Email Diagnostics</h1>
+      <div class="message">
+        <p>Use one of the following options to access the email diagnostics:</p>
+      </div>
+      <div class="links">
+        <a href="/diagnostic.html" class="btn">Simple Diagnostic Page</a>
+        <a href="/diagnostics/email" class="btn">Full Diagnostic Page (Login Required)</a>
+      </div>
+    </div>
+  </body>
+</html> 

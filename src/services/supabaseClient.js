@@ -80,7 +80,7 @@ if (import.meta.env.DEV && supabaseUrl) {
   // Store the original URL for logging
   const originalUrl = supabaseUrl;
   // Apply the proxy to the URL
-  supabaseUrl = `http://localhost:8080/${supabaseUrl}`;
+  supabaseUrl = `http://localhost:9090/${supabaseUrl}`;
   console.log(`[Supabase] Using CORS proxy for development: ${originalUrl} -> ${supabaseUrl}`);
 }
 

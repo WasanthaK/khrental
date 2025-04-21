@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Email Diagnostics</title>
+  <script src="/env-config.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    h1 {
+      color: #1565c0;
+      text-align: center;
+      margin-top: 0;
+    }
+    .description {
+      text-align: center;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-control {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    .btn {
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .btn:hover {
+      background-color: #1565c0;
+    }
+    .btn:disabled {
+      background-color: #b0bec5;
+      cursor: not-allowed;
+    }
+    .results {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+    }
+    .success {
+      color: #2e7d32;
+      background-color: #e8f5e9;
+      border: 1px solid #c8e6c9;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    .error {
+      color: #c62828;
+      background-color: #ffebee;
+      border: 1px solid #ffcdd2;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
+    .radio-group {
+      display: flex;
+      gap: 15px;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+    }
+    .radio-option input {
+      margin-right: 5px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simple Email Diagnostics</h1>
+    <p class="description">Use this tool to test the email configuration and invitation system.</p>
+    
+    <div class="form-group">
+      <label>Test Type:</label>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="testType" value="config" checked> Configuration Test
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="testType" value="invite"> Invitation Test
+        </label>
+      </div>
+    </div>
+    
+    <div id="inviteFields" class="hidden">
+      <div class="form-group">
+        <label for="email">Email:</label>
+        <input type="email" id="email" class="form-control" placeholder="Enter email for test invitation">
+      </div>
+      <div class="form-group">
+        <label for="name">Name:</label>
+        <input type="text" id="name" class="form-control" placeholder="Enter name for test invitation">
+      </div>
+    </div>
+    
+    <button id="runTest" class="btn">Run Test</button>
+    
+    <div id="results" class="results hidden">
+      <h2>Test Results:</h2>
+      <div id="resultsContent"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { testEmailConfiguration } from '/src/services/directEmailService.js';
+    import { inviteUser } from '/src/services/invitationService.js';
+    import { getAppBaseUrl } from '/src/utils/env.js';
+
+    // Elements
+    const testTypeRadios = document.querySelectorAll('input[name="testType"]');
+    const inviteFields = document.getElementById('inviteFields');
+    const emailInput = document.getElementById('email');
+    const nameInput = document.getElementById('name');
+    const runTestBtn = document.getElementById('runTest');
+    const results = document.getElementById('results');
+    const resultsContent = document.getElementById('resultsContent');
+    
+    // Event Listeners
+    testTypeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'invite') {
+          inviteFields.classList.remove('hidden');
+        } else {
+          inviteFields.classList.add('hidden');
+        }
+      });
+    });
+    
+    runTestBtn.addEventListener('click', async () => {
+      const testType = document.querySelector('input[name="testType"]:checked').value;
+      
+      // Clear previous results
+      results.classList.add('hidden');
+      resultsContent.innerHTML = '';
+      runTestBtn.disabled = true;
+      runTestBtn.textContent = 'Running Test...';
+      
+      try {
+        if (testType === 'config') {
+          await runConfigTest();
+        } else {
+          await runInviteTest();
+        }
+      } catch (error) {
+        showError(error.message, error.stack);
+      } finally {
+        runTestBtn.disabled = false;
+        runTestBtn.textContent = 'Run Test';
+      }
+    });
+    
+    async function runConfigTest() {
+      try {
+        const configResults = await testEmailConfiguration();
+        console.log('Config test results:', configResults);
+        
+        showSuccess();
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(configResults, null, 2);
+        resultsContent.appendChild(pre);
+      } catch (error) {
+        showError(error.message, error.stack);
+      }
+    }
+    
+    async function runInviteTest() {
+      const email = emailInput.value.trim();
+      const name = nameInput.value.trim();
+      
+      if (!email) {
+        showError('Email is required');
+        return;
+      }
+      
+      try {
+        // Create a test user just for diagnostic purposes
+        const testUser = {
+          id: `test_${Date.now()}`,
+          email: email,
+          name: name || 'Test User',
+          role: 'staff'
+        };
+        
+        const baseUrl = getAppBaseUrl();
+        console.log('Base URL for invitation test:', baseUrl);
+
+        const inviteResult = await inviteUser(testUser, false);
+        console.log('Invite test results:', inviteResult);
+        
+        showSuccess();
+        
+        // Show the email information
+        const emailInfo = document.createElement('p');
+        emailInfo.innerHTML = `Invitation sent to: <strong>${testUser.email}</strong>`;
+        resultsContent.appendChild(emailInfo);
+        
+        const emailNote = document.createElement('p');
+        emailNote.textContent = 'Check your email for the invitation. It may take a few minutes to arrive.';
+        emailNote.style.fontSize = '14px';
+        emailNote.style.color = '#666';
+        resultsContent.appendChild(emailNote);
+        
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(inviteResult, null, 2);
+        resultsContent.appendChild(pre);
+      } catch (error) {
+        showError(error.message, error.stack);
+      }
+    }
+    
+    function showSuccess() {
+      results.classList.remove('hidden');
+      
+      const successDiv = document.createElement('div');
+      successDiv.className = 'success';
+      successDiv.textContent = 'Test completed successfully!';
+      resultsContent.appendChild(successDiv);
+    }
+    
+    function showError(message, stack) {
+      results.classList.remove('hidden');
+      
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error';
+      errorDiv.textContent = `Error: ${message}`;
+      resultsContent.appendChild(errorDiv);
+      
+      if (stack) {
+        const stackTrace = document.createElement('pre');
+        stackTrace.style.fontSize = '12px';
+        stackTrace.textContent = stack;
+        resultsContent.appendChild(stackTrace);
+      }
+    }
+  </script>
+</body>
+</html> 
