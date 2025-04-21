@@ -77,11 +77,14 @@ if (!supabaseUrl) {
 
 // Use CORS proxy in development
 if (import.meta.env.DEV && supabaseUrl) {
-  // Store the original URL for logging
+  // Store the original URL for logging and storage
   const originalUrl = supabaseUrl;
   // Apply the proxy to the URL
-  supabaseUrl = `http://localhost:8080/${supabaseUrl}`;
+  supabaseUrl = `http://localhost:9090/${supabaseUrl}`;
   console.log(`[Supabase] Using CORS proxy for development: ${originalUrl} -> ${supabaseUrl}`);
+  
+  // Create a separate client configuration for storage
+  window._SUPABASE_STORAGE_URL = originalUrl;
 }
 
 // Last attempt to get the anon key from window._env_

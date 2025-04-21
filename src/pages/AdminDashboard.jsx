@@ -5,10 +5,13 @@ import { fetchData, insertData, deleteData } from '../services/databaseService';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS, listFiles } from '../services/fileService';
 import { toast } from 'react-hot-toast';
 import { inviteUser, resendInvitation, checkInvitationStatus } from '../services/invitationService';
+import { Outlet, useLocation } from 'react-router-dom';
 // import InvitationStatus from '../components/ui/InvitationStatus';
+import EmailDiagnostic from '../components/diagnostics/EmailDiagnostic';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -37,6 +40,14 @@ const AdminDashboard = () => {
   // Add state for invitation testing
   const [testingMode, setTestingMode] = useState(false);
   const [newUserName, setNewUserName] = useState('');
+
+  // Check if we're at the exact /admin-dashboard route
+  const isExactPath = location.pathname === '/dashboard/admin-dashboard' || location.pathname === '/admin-dashboard';
+  
+  // If we're in a nested route, render the Outlet component
+  if (!isExactPath) {
+    return <Outlet />;
+  }
 
   // Load initial data on mount
   useEffect(() => {
@@ -848,7 +859,7 @@ const AdminDashboard = () => {
       <div className="mb-4 sm:mb-6">
         <div className="border-b border-gray-200 overflow-x-auto">
           <nav className="-mb-px flex space-x-4 sm:space-x-8">
-            {['users', 'storage', 'templates'].map((tab) => (
+            {['users', 'storage', 'templates', 'email-diagnostics'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -860,7 +871,7 @@ const AdminDashboard = () => {
                   }
                 `}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'email-diagnostics' ? 'Email Diagnostics' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </nav>
@@ -1180,6 +1191,17 @@ const AdminDashboard = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Email Diagnostics Tab */}
+      {activeTab === 'email-diagnostics' && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Email System Diagnostics</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Test and troubleshoot your email configuration and invitation process.
+          </p>
+          <EmailDiagnostic />
         </div>
       )}
     </div>

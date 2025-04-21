@@ -1305,6 +1305,25 @@ CREATE INDEX IF NOT EXISTS idx_rentees_authid ON rentees(authid);
               </div>
             </div>
           </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-4">Email Diagnostics</h2>
+            <p className="mb-4">Test and troubleshoot email configurations and invitation process.</p>
+            <div className="flex space-x-4">
+              <Link 
+                to="/admin-dashboard/email-diagnostics"
+                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md"
+              >
+                Open Email Diagnostics
+              </Link>
+              <Link
+                to="/dashboard/direct-email-test"
+                className="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-md"
+              >
+                Alternative Email Test
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </div>

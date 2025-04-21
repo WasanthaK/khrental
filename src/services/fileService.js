@@ -1,26 +1,46 @@
 import { supabase } from './supabaseClient.js';
 import { isDefinedValue } from '../utils/validators.js';
 
+// Get Supabase anon key from environment
+const getSupabaseAnonKey = () => {
+  let anonKey = null;
+  
+  // Try window._env_ (for production)
+  if (window?._env_?.VITE_SUPABASE_ANON_KEY) {
+    anonKey = window._env_.VITE_SUPABASE_ANON_KEY;
+  }
+  
+  // Then try Vite's import.meta.env
+  if (!anonKey && import.meta.env?.VITE_SUPABASE_ANON_KEY) {
+    anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  }
+  
+  return anonKey;
+};
+
+const supabaseAnonKey = getSupabaseAnonKey();
+
 // Storage buckets
 const STORAGE_BUCKETS = {
   IMAGES: 'images',
-  FILES: 'files'
+  FILES: 'files',
+  DOCUMENTS: 'documents'
 };
 
 // Folder structure for each bucket - matches exactly what exists in Supabase storage
 const BUCKET_FOLDERS = {
-  [STORAGE_BUCKETS.IMAGES]: [
-    'id-copies',
-    'maintenance',
-    'properties',
-    'utility-readings'
-  ],
-  [STORAGE_BUCKETS.FILES]: [
-    'agreements',
-    'documents',
-    'id-copies',
-    'payment-proofs'
-  ]
+  [STORAGE_BUCKETS.IMAGES]: {
+    ID_COPIES: 'id-copies',
+    MAINTENANCE: 'maintenance',
+    PROPERTIES: 'properties',
+    UTILITY_READINGS: 'utility-readings'
+  },
+  [STORAGE_BUCKETS.FILES]: {
+    AGREEMENTS: 'agreements',
+    DOCUMENTS: 'documents',
+    ID_COPIES: 'id-copies',
+    PAYMENT_PROOFS: 'payment-proofs'
+  }
 };
 
 // Backward compatibility for STORAGE_CATEGORIES
@@ -28,47 +48,47 @@ const STORAGE_CATEGORIES = {
   // Images bucket categories
   ID_COPIES: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'id-copies'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].ID_COPIES
   },
   MAINTENANCE: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'maintenance'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].MAINTENANCE
   },
   PROPERTIES: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'properties'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].PROPERTIES
   },
   UTILITY_READINGS: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'utility-readings'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].UTILITY_READINGS
   },
   
   // Files bucket categories
   AGREEMENTS: {
     bucket: STORAGE_BUCKETS.FILES,
-    folder: 'agreements'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS
   },
   DOCUMENTS: {
     bucket: STORAGE_BUCKETS.FILES,
-    folder: 'documents'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].DOCUMENTS
   },
   FILE_ID_COPIES: {
     bucket: STORAGE_BUCKETS.FILES,
-    folder: 'id-copies'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].ID_COPIES
   },
   PAYMENT_PROOFS: {
     bucket: STORAGE_BUCKETS.FILES,
-    folder: 'payment-proofs'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].PAYMENT_PROOFS
   },
 
   // Legacy mappings (if any were using different names)
   PROPERTY_IMAGES: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'properties'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].PROPERTIES
   },
   MAINTENANCE_IMAGES: {
     bucket: STORAGE_BUCKETS.IMAGES,
-    folder: 'maintenance'
+    folder: BUCKET_FOLDERS[STORAGE_BUCKETS.IMAGES].MAINTENANCE
   }
 };
 
@@ -206,7 +226,7 @@ const ensureAuthSession = async () => {
 };
 
 /**
- * Validates file upload parameters
+ * Validate a file upload request
  * @param {File} file - The file to validate
  * @param {string} bucket - The bucket name
  * @param {string} folder - The folder path
@@ -222,7 +242,20 @@ const validateFileUpload = (file, bucket, folder) => {
   }
 
   if (!isDefinedValue(folder)) {
-    return { isValid: false, error: 'Invalid folder path' };
+    return { isValid: false, error: 'Missing folder path' };
+  }
+  
+  // Check if folder is a direct value from BUCKET_FOLDERS or a valid folder path string
+  const validFolders = Object.values(BUCKET_FOLDERS[bucket] || {});
+  const isValidFolder = validFolders.includes(folder) || 
+                        // Allow subfolder paths that start with valid folders
+                        validFolders.some(validFolder => 
+                          folder === validFolder || 
+                          folder.startsWith(`${validFolder}/`));
+  
+  if (!isValidFolder) {
+    console.error(`Invalid folder path: "${folder}" not found in valid folders for bucket "${bucket}":`, validFolders);
+    return { isValid: false, error: `Invalid folder path: ${folder}` };
   }
 
   return { isValid: true, error: null };
@@ -241,6 +274,7 @@ const saveFile = async (file, { bucket, folder }) => {
     // Validate parameters
     const validation = validateFileUpload(file, bucket, folder);
     if (!validation.isValid) {
+      console.error('File validation failed:', validation.error);
       return { success: false, error: validation.error };
     }
 
@@ -256,13 +290,28 @@ const saveFile = async (file, { bucket, folder }) => {
     // Ensure we have a valid session
     await ensureAuthSession();
 
+    // Generate a safe unique filename
     const fileExt = file.name.split('.').pop().toLowerCase();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `${folder}/${fileName}`;
+    const safeFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+    
+    // Create a safe folder path
+    const folderPath = folder.trim().replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
+    const filePath = `${folderPath}/${safeFileName}`;
+
+    console.log(`Uploading file to ${bucket}/${filePath}`);
+
+    // Try to ensure the folder exists first
+    try {
+      await ensureFolderExists(bucket, folderPath);
+    } catch (folderError) {
+      console.warn(`Couldn't ensure folder exists, but will try upload anyway:`, folderError);
+      // Continue with upload even if folder creation fails - it might still work
+    }
 
     // Set appropriate content type
     const contentType = file.type || 'application/octet-stream';
 
+    // Attempt the upload
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(filePath, file, {
@@ -273,9 +322,46 @@ const saveFile = async (file, { bucket, folder }) => {
 
     if (uploadError) {
       console.error(`Error uploading to ${bucket}/${filePath}:`, uploadError);
-      throw uploadError;
+      
+      // If we're in development, try direct upload without the proxy
+      if (import.meta.env.DEV && window._SUPABASE_STORAGE_URL) {
+        console.log('Trying direct upload without CORS proxy...');
+        // Create a temporary client without the proxy
+        const { createClient } = await import('@supabase/supabase-js');
+        const directClient = createClient(
+          window._SUPABASE_STORAGE_URL,
+          supabaseAnonKey
+        );
+        
+        const { error: directError } = await directClient.storage
+          .from(bucket)
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType
+          });
+          
+        if (directError) {
+          console.error(`Direct upload also failed:`, directError);
+          throw directError;
+        } else {
+          console.log('Direct upload succeeded!');
+          // Get the public URL
+          const { data: { publicUrl } } = directClient.storage
+            .from(bucket)
+            .getPublicUrl(filePath);
+          
+          return {
+            success: true,
+            url: publicUrl
+          };
+        }
+      } else {
+        throw uploadError;
+      }
     }
 
+    // Get the public URL for the uploaded file
     const { data: { publicUrl } } = supabase.storage
       .from(bucket)
       .getPublicUrl(filePath);
@@ -290,6 +376,43 @@ const saveFile = async (file, { bucket, folder }) => {
       success: false,
       error: error.message || 'Failed to save file'
     };
+  }
+};
+
+/**
+ * Create a folder if it doesn't exist 
+ * @param {string} bucket - The bucket name
+ * @param {string} folderPath - The folder path to create
+ * @returns {Promise<{success: boolean, error: Error|null}>}
+ */
+const ensureFolderExists = async (bucket, folderPath) => {
+  try {
+    if (!folderPath) return { success: true }; // Root folder always exists
+    
+    // Try to list the folder to see if it exists
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .list(folderPath);
+      
+    // If we can list it, it exists
+    if (!error) return { success: true };
+    
+    // Create a dummy file to create the folder
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(`${folderPath}/.folder`, new Blob([''], { type: 'text/plain' }), {
+        upsert: true
+      });
+      
+    if (uploadError) {
+      console.error(`Failed to create folder ${folderPath} in ${bucket}:`, uploadError);
+      return { success: false, error: uploadError };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error(`Error ensuring folder ${folderPath} exists:`, error);
+    return { success: false, error };
   }
 };
 
@@ -394,19 +517,23 @@ const listFiles = async (bucket, path = '') => {
       // Continue even if we can't check buckets
     }
 
+    // Normalize the path
+    const safePath = path?.trim().replace(/^\/+|\/+$/g, '') || '';
+
     // Attempt to list files
     const { data, error } = await supabase.storage
       .from(bucket)
-      .list(path);
+      .list(safePath);
 
     if (error) { 
       // Add extra debugging information to the error
       error.originalMessage = error.message;
-      error.message = `Error listing files in ${bucket}${path ? '/' + path : ''}: ${error.message}`;
+      error.message = `Error listing files in ${bucket}${safePath ? '/' + safePath : ''}: ${error.message}`;
       error.bucket = bucket;
-      error.path = path;
+      error.path = safePath;
       throw error; 
     }
+    
     return { data, error: null };
   } catch (error) {
     console.error('Error listing files:', error);
@@ -652,18 +779,26 @@ const saveImage = async (file, options) => {
 
 // Export all functions and constants as named exports only
 export {
+  // Buckets and folders
+  STORAGE_BUCKETS,
+  BUCKET_FOLDERS,
+  
+  // Core functions
   saveFile,
   uploadFile,
   getFileUrl,
   deleteFile,
   listFiles,
   cleanupUnusedFiles,
-  determineBucket,
+  ensureFolderExists,
+  
+  // Storage status
   isStorageAvailable,
   resetStorageStatusCache,
-  STORAGE_BUCKETS,
-  BUCKET_FOLDERS,
-  STORAGE_CATEGORIES,
-  DEFAULT_BUCKET,
-  saveImage
+  
+  // Higher-level functions
+  saveImage,
+  
+  // Legacy exports (for backward compatibility)
+  STORAGE_CATEGORIES
 };

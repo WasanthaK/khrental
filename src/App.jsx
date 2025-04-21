@@ -4,8 +4,7 @@ import { AuthProvider } from './hooks/useAuth';
 import { Toaster, toast } from 'react-hot-toast';
 import './App.css';
 import SafePropertyProvider from './components/contexts/SafePropertyProvider';
-import { RouterProvider } from 'react-router-dom';
-import router from './routes';
+import AppRouter from './routes';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -74,7 +73,7 @@ function App() {
               </div>
             </div>
           }>
-            <RouterProvider router={router} />
+            <AppRouter />
           </Suspense>
         </SafePropertyProvider>
         <Toaster position="top-right" />

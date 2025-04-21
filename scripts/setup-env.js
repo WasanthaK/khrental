@@ -74,11 +74,20 @@ async function setupEnv() {
     envContent = envContent.replace(/VITE_SUPABASE_ANON_KEY=.+/, `VITE_SUPABASE_ANON_KEY=${supabaseAnonKey}`);
   }
   
+  // Get SendGrid API Key
+  const sendgridApiKey = await question('Enter your SendGrid API Key: ');
+  if (sendgridApiKey) {
+    envContent = envContent.replace(/VITE_SENDGRID_API_KEY=.+/, `VITE_SENDGRID_API_KEY=${sendgridApiKey}`);
+  }
+  
   // Write the .env file
   fs.writeFileSync(envPath, envContent);
   console.log('.env file has been created successfully!');
+  console.log('\nNOTE: The SendGrid API key must also be configured in your Supabase Edge Functions.');
+  console.log('To deploy the sendgrid-email function to Supabase, run:');
+  console.log('npm run deploy:functions');
   console.log('\nTo start the development server with these settings, run:');
-  console.log('npm run dev');
+  console.log('npm run dev:with-proxy');
   
   rl.close();
 }

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Basic Email Diagnostics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    h1 {
+      color: #1565c0;
+      text-align: center;
+      margin-top: 0;
+    }
+    .description {
+      text-align: center;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-control {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    .btn {
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .btn:hover {
+      background-color: #1565c0;
+    }
+    .btn:disabled {
+      background-color: #b0bec5;
+      cursor: not-allowed;
+    }
+    .results {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+    }
+    .success {
+      color: #2e7d32;
+      background-color: #e8f5e9;
+      border: 1px solid #c8e6c9;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    .error {
+      color: #c62828;
+      background-color: #ffebee;
+      border: 1px solid #ffcdd2;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
+    .radio-group {
+      display: flex;
+      gap: 15px;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+    }
+    .radio-option input {
+      margin-right: 5px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simple Email Diagnostics</h1>
+    <p class="description">This is a direct, standalone email diagnostic page.</p>
+    
+    <div class="form-group">
+      <label>Test Type:</label>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="testType" value="config" checked> Configuration Test
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="testType" value="invite"> Invitation Test
+        </label>
+      </div>
+    </div>
+    
+    <div id="inviteFields" class="hidden">
+      <div class="form-group">
+        <label for="email">Email:</label>
+        <input type="email" id="email" class="form-control" placeholder="Enter email for test invitation">
+      </div>
+      <div class="form-group">
+        <label for="name">Name:</label>
+        <input type="text" id="name" class="form-control" placeholder="Enter name for test invitation">
+      </div>
+    </div>
+    
+    <button id="runTest" class="btn">Run Test</button>
+    
+    <div id="results" class="results hidden">
+      <h2>Test Results:</h2>
+      <div id="resultsContent"></div>
+    </div>
+
+    <div class="description" style="margin-top: 30px;">
+      <hr>
+      <p>
+        <strong>Note:</strong> This is a simplified diagnostic page. To actually test 
+        the email functionality, you should use the main email diagnostics page at:
+        <br>
+        <a href="/diagnostics/email">/diagnostics/email</a> (when logged in as admin)
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // DOM Elements
+    const testTypeRadios = document.querySelectorAll('input[name="testType"]');
+    const inviteFields = document.getElementById('inviteFields');
+    const emailInput = document.getElementById('email');
+    const nameInput = document.getElementById('name');
+    const runTestBtn = document.getElementById('runTest');
+    const results = document.getElementById('results');
+    const resultsContent = document.getElementById('resultsContent');
+    
+    // Event Listeners
+    testTypeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'invite') {
+          inviteFields.classList.remove('hidden');
+        } else {
+          inviteFields.classList.add('hidden');
+        }
+      });
+    });
+    
+    runTestBtn.addEventListener('click', async () => {
+      const testType = document.querySelector('input[name="testType"]:checked').value;
+      
+      // Clear previous results
+      results.classList.remove('hidden');
+      resultsContent.innerHTML = '';
+      runTestBtn.disabled = true;
+      runTestBtn.textContent = 'Running Test...';
+      
+      // Simulate a test - we're not actually making API calls from this simple HTML page
+      setTimeout(() => {
+        if (testType === 'config') {
+          showSimulatedConfigResults();
+        } else {
+          showSimulatedInviteResults();
+        }
+        runTestBtn.disabled = false;
+        runTestBtn.textContent = 'Run Test';
+      }, 1500);
+    });
+    
+    function showSimulatedConfigResults() {
+      const successDiv = document.createElement('div');
+      successDiv.className = 'success';
+      successDiv.textContent = 'Simulated Test: This is just a demo page. Use the real diagnostics page for actual testing.';
+      resultsContent.appendChild(successDiv);
+      
+      const pre = document.createElement('pre');
+      const sampleConfig = {
+        "success": true,
+        "sendgrid": {
+          "status": "configured",
+          "apiKeyPresent": true
+        },
+        "supabase": {
+          "status": "configured",
+          "url": "https://example.supabase.co"
+        },
+        "message": "This is a simulated response. Use the actual diagnostics page for real testing."
+      };
+      pre.textContent = JSON.stringify(sampleConfig, null, 2);
+      resultsContent.appendChild(pre);
+    }
+    
+    function showSimulatedInviteResults() {
+      const email = emailInput.value.trim();
+      const name = nameInput.value.trim();
+      
+      if (!email) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = 'Error: Email is required';
+        resultsContent.appendChild(errorDiv);
+        return;
+      }
+      
+      const successDiv = document.createElement('div');
+      successDiv.className = 'success';
+      successDiv.textContent = 'Simulated Test: This is just a demo page. Use the real diagnostics page for actual testing.';
+      resultsContent.appendChild(successDiv);
+      
+      // Show the email information
+      const emailInfo = document.createElement('p');
+      emailInfo.innerHTML = `Simulated invitation to: <strong>${email}</strong>`;
+      resultsContent.appendChild(emailInfo);
+      
+      const emailNote = document.createElement('p');
+      emailNote.textContent = 'No actual email was sent. This is just a demo.';
+      emailNote.style.fontSize = '14px';
+      emailNote.style.color = '#666';
+      resultsContent.appendChild(emailNote);
+      
+      const pre = document.createElement('pre');
+      const sampleResult = {
+        "success": true,
+        "method": "simulated",
+        "recipient": email,
+        "name": name || "Test User",
+        "message": "This is a simulated response. Use the actual diagnostics page for real testing."
+      };
+      pre.textContent = JSON.stringify(sampleResult, null, 2);
+      resultsContent.appendChild(pre);
+    }
+  </script>
+</body>
+</html> 

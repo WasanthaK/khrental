@@ -82,9 +82,64 @@ const EmailDiagnostic = () => {
     }
   };
 
+  const testSupabaseFunction = async () => {
+    // Get the Supabase URL and anon key
+    const supabaseUrl = window._env_?.VITE_SUPABASE_URL || 
+                       import.meta.env?.VITE_SUPABASE_URL;
+    const supabaseAnonKey = window._env_?.VITE_SUPABASE_ANON_KEY || 
+                             import.meta.env?.VITE_SUPABASE_ANON_KEY;
+    
+    console.log('Testing Supabase Edge Function');
+    console.log('URL:', supabaseUrl);
+    
+    try {
+      const functionUrl = `${supabaseUrl}/functions/v1/sendgrid-email`;
+      
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({
+          to: 'test@example.com', // Replace with your test email
+          subject: 'Test from Supabase Edge Function',
+          html: '<p>This is a test email from the Supabase Edge Function.</p>',
+          text: 'This is a test email from the Supabase Edge Function.'
+        })
+      });
+      
+      const result = await response.json();
+      console.log('Edge Function Response:', result);
+      return result;
+    } catch (error) {
+      console.error('Error testing edge function:', error);
+      return { error: error.message };
+    }
+  };
+
+  // Make the function accessible from the window object for testing from the console
+  if (typeof window !== 'undefined') {
+    window.testSupabaseFunction = testSupabaseFunction;
+  }
+
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Email System Diagnostics</h1>
+      
+      <div className="mb-4">
+        <button 
+          type="button"
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={testSupabaseFunction}
+        >
+          Test Supabase Edge Function
+        </button>
+        <small className="block mt-1 text-gray-500">
+          This will test the connection to your Supabase Edge Function directly.
+          Check the console for results.
+        </small>
+      </div>
       
       <div className="bg-gray-100 p-4 rounded mb-4">
         <p className="mb-2"><strong>Note:</strong> This page is for diagnosing email configuration issues.</p>
