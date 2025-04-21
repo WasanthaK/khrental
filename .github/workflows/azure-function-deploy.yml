@@ -28,7 +28,7 @@ jobs:
     - name: Install dependencies
       run: |
         cd ${{ env.AZURE_FUNCTION_PATH }}
-        npm ci
+        npm install
 
     - name: 'Deploy to Azure Function App'
       uses: Azure/functions-action@v1
