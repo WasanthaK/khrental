@@ -98,166 +98,128 @@ jobs:
           env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
           # Create env-config.js with environment variables
-          echo 'window._env_ = {' > env-config.js
-          echo "  VITE_SUPABASE_URL: \"$VITE_SUPABASE_URL\"," >> env-config.js
-          echo "  VITE_SUPABASE_ANON_KEY: \"$VITE_SUPABASE_ANON_KEY\"," >> env-config.js
-          echo "  VITE_EVIA_SIGN_CLIENT_ID: \"$VITE_EVIA_SIGN_CLIENT_ID\"," >> env-config.js
-          echo "  VITE_EVIA_SIGN_CLIENT_SECRET: \"$VITE_EVIA_SIGN_CLIENT_SECRET\"," >> env-config.js
-          echo "  VITE_API_ENDPOINT: \"$VITE_API_ENDPOINT\"," >> env-config.js
-          echo "  VITE_WEBHOOK_URL: \"$VITE_WEBHOOK_URL\"," >> env-config.js
-          echo "  VITE_SENDGRID_API_KEY: \"$VITE_SENDGRID_API_KEY\"," >> env-config.js
-          echo "  VITE_EMAIL_FROM: \"$VITE_EMAIL_FROM\"," >> env-config.js
-          echo "  VITE_EMAIL_FROM_NAME: \"$(echo "$VITE_EMAIL_FROM_NAME" | sed 's/^"//;s/"$//')\"," >> env-config.js
-          echo "  VITE_APP_BASE_URL: \"$VITE_APP_BASE_URL\"" >> env-config.js
-          echo '};' >> env-config.js
-          echo '' >> env-config.js
+          cat << 'EOF' > env-config.js
+          window._env_ = {
+            VITE_SUPABASE_URL: "$VITE_SUPABASE_URL",
+            VITE_SUPABASE_ANON_KEY: "$VITE_SUPABASE_ANON_KEY",
+            VITE_EVIA_SIGN_CLIENT_ID: "$VITE_EVIA_SIGN_CLIENT_ID",
+            VITE_EVIA_SIGN_CLIENT_SECRET: "$VITE_EVIA_SIGN_CLIENT_SECRET",
+            VITE_API_ENDPOINT: "$VITE_API_ENDPOINT",
+            VITE_WEBHOOK_URL: "$VITE_WEBHOOK_URL",
+            VITE_SENDGRID_API_KEY: "$VITE_SENDGRID_API_KEY",
+            VITE_EMAIL_FROM: "$VITE_EMAIL_FROM",
+            VITE_EMAIL_FROM_NAME: "$(echo "$VITE_EMAIL_FROM_NAME" | sed 's/^"//;s/"$//')",
+            VITE_APP_BASE_URL: "$VITE_APP_BASE_URL"
+          };
 
-          # Add email configuration debug logging
-          echo '// Email configuration debug logging' >> env-config.js
-          echo '(function() {' >> env-config.js
-          echo '  console.log("Email Configuration:", {' >> env-config.js
-          echo '    "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY ? "Present" : "Missing",' >> env-config.js
-          echo '    "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,' >> env-config.js
-          echo '    "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,' >> env-config.js
-          echo '    "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL' >> env-config.js
-          echo '  });' >> env-config.js
-          echo '})();' >> env-config.js
-          echo '' >> env-config.js
-          
-          # Add email configuration validation
-          echo '// Email configuration validation' >> env-config.js
-          echo '(function validateEmailConfig() {' >> env-config.js
-          echo '  if (!window._env_.VITE_SENDGRID_API_KEY) {' >> env-config.js
-          echo '    console.error("SendGrid API Key is missing");' >> env-config.js
-          echo '  }' >> env-config.js
-          echo '  if (!window._env_.VITE_EMAIL_FROM) {' >> env-config.js
-          echo '    console.error("From Email is missing");' >> env-config.js
-          echo '  }' >> env-config.js
-          echo '  if (!window._env_.VITE_EMAIL_FROM_NAME) {' >> env-config.js
-          echo '    console.error("From Name is missing");' >> env-config.js
-          echo '  }' >> env-config.js
-          echo '  if (!window._env_.VITE_APP_BASE_URL) {' >> env-config.js
-          echo '    console.error("App Base URL is missing");' >> env-config.js
-          echo '  }' >> env-config.js
-          echo '})();' >> env-config.js
-          echo '' >> env-config.js
+          // Email configuration debug logging
+          (function() {
+            console.log("Email Configuration:", {
+              "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY ? "Present" : "Missing",
+              "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,
+              "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,
+              "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL
+            });
+          })();
 
-          # Add direct variable references
-          echo '// Expose direct references to key URLs for easier debugging' >> env-config.js
-          echo "window.SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
-          echo "window.API_ENDPOINT = \"$VITE_API_ENDPOINT\";" >> env-config.js
-          echo "window.WEBHOOK_URL = \"$FORMATTED_WEBHOOK_URL\";" >> env-config.js
-          echo '' >> env-config.js
-          
-          # Ensure webhook URL always has https:// protocol
-          FORMATTED_WEBHOOK_URL="$VITE_WEBHOOK_URL"
-          # Remove any existing protocol
-          FORMATTED_WEBHOOK_URL="${FORMATTED_WEBHOOK_URL#http://}"
-          FORMATTED_WEBHOOK_URL="${FORMATTED_WEBHOOK_URL#https://}"
-          # Add https:// protocol
-          FORMATTED_WEBHOOK_URL="https://$FORMATTED_WEBHOOK_URL"
-          echo "  VITE_WEBHOOK_URL: \"$FORMATTED_WEBHOOK_URL\"" >> env-config.js
-          
-          echo '};' >> env-config.js
-          echo '' >> env-config.js
+          // Email configuration validation
+          (function validateEmailConfig() {
+            if (!window._env_.VITE_SENDGRID_API_KEY) {
+              console.error("SendGrid API Key is missing");
+            }
+            if (!window._env_.VITE_EMAIL_FROM) {
+              console.error("From Email is missing");
+            }
+            if (!window._env_.VITE_EMAIL_FROM_NAME) {
+              console.error("From Name is missing");
+            }
+            if (!window._env_.VITE_APP_BASE_URL) {
+              console.error("App Base URL is missing");
+            }
+          })();
 
-          # Add Supabase URL patch to fix API requests
-          echo '// Fix Supabase URL issues' >> env-config.js
-          echo '(function fixSupabaseURL() {' >> env-config.js
-          echo '  // Check for correct Supabase URL' >> env-config.js
-          echo '  if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {' >> env-config.js
-          echo "    console.error('Supabase URL is invalid, setting to real value');" >> env-config.js
-          echo "    window._env_.VITE_SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
-          echo '  }' >> env-config.js
-          echo '' >> env-config.js
-          echo '  // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL' >> env-config.js
-          echo '  const originalFetch = window.fetch;' >> env-config.js
-          echo '  window.fetch = function(url, options) {' >> env-config.js
-          echo '    let modifiedUrl = url;' >> env-config.js
-          echo '    if (typeof url === "string") {' >> env-config.js
-          echo '      if (url.includes("VITE_SUPABASE_URL")) {' >> env-config.js
-          echo '        modifiedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);' >> env-config.js
-          echo '        console.log(`Fixed Supabase URL: ${url} -> ${modifiedUrl}`);' >> env-config.js
-          echo '      }' >> env-config.js
-          echo '    }' >> env-config.js
-          echo '    return originalFetch(modifiedUrl, options).then(response => {' >> env-config.js
-          echo '      const originalJson = response.json;' >> env-config.js
-          echo '      response.json = function() {' >> env-config.js
-          echo '        return originalJson.call(this).catch(err => {' >> env-config.js
-          echo '          if (err.message && err.message.includes("Unexpected token")) {' >> env-config.js
-          echo '            console.error(`JSON parsing error for URL: ${modifiedUrl}`);' >> env-config.js
-          echo '            // Return empty JSON instead of crashing' >> env-config.js
-          echo '            return {};' >> env-config.js
-          echo '          }' >> env-config.js
-          echo '          throw err; // Re-throw other errors' >> env-config.js
-          echo '        });' >> env-config.js
-          echo '      };' >> env-config.js
-          echo '      return response;' >> env-config.js
-          echo '    }).catch(error => {' >> env-config.js
-          echo '      console.error(`Fetch error for ${modifiedUrl}:`, error);' >> env-config.js
-          echo '      // Create a mock response to prevent app crash' >> env-config.js
-          echo '      const mockResponse = new Response(JSON.stringify({ error: "Failed to fetch" }), {' >> env-config.js
-          echo '        status: 500,' >> env-config.js
-          echo '        headers: { "Content-Type": "application/json" }' >> env-config.js
-          echo '      });' >> env-config.js
-          echo '      return mockResponse;' >> env-config.js
-          echo '    });' >> env-config.js
-          echo '  };' >> env-config.js
-          echo '})();' >> env-config.js
-          echo '' >> env-config.js
-          
-          # Fix all URL environment variables
-          echo '// Fix all URL environment variables to ensure they have proper protocols' >> env-config.js
-          echo '(function fixAllEnvURLs() {' >> env-config.js
-          echo '  if (!window._env_) return;' >> env-config.js
-          echo '' >> env-config.js
-          echo '  // List of keys that should be URLs' >> env-config.js
-          echo '  const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL"];' >> env-config.js
-          echo '' >> env-config.js
-          echo '  // Fix all URL keys' >> env-config.js
-          echo '  urlKeys.forEach(key => {' >> env-config.js
-          echo '    const value = window._env_[key];' >> env-config.js
-          echo '    if (value && typeof value === "string") {' >> env-config.js
-          echo '      if (!value.match(/^https?:\/\//)) {' >> env-config.js
-          echo '        console.log(`Fixing URL environment variable ${key}: ${value}`);' >> env-config.js
-          echo '        window._env_[key] = "https://" + value.replace(/^https?:\/\//, "");' >> env-config.js
-          echo '      }' >> env-config.js
-          echo '    } else if (!value) {' >> env-config.js
-          echo '      console.warn(`Environment variable ${key} is empty or missing`);' >> env-config.js
-          echo '      window._env_[key] = "https://example.com";  // Provide a fallback' >> env-config.js
-          echo '    }' >> env-config.js
-          echo '  });' >> env-config.js
-          echo '' >> env-config.js
-          echo '  console.log("Fixed URL environment variables:", {' >> env-config.js
-          echo '    VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,' >> env-config.js
-          echo '    VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,' >> env-config.js
-          echo '    VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL' >> env-config.js
-          echo '  });' >> env-config.js
-          echo '})();' >> env-config.js
-          echo '' >> env-config.js
-          
-          # Log URL environment variables for debugging
-          echo '// Log fixed URL configuration for debugging' >> env-config.js
-          echo 'console.log("Fixed URL environment variables:", {' >> env-config.js
-          echo '  VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,' >> env-config.js
-          echo '  VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT' >> env-config.js
-          echo '});' >> env-config.js
-          
-          echo 'console.log("Environment variables loaded:", {' >> env-config.js
-          echo '  ...window._env_,' >> env-config.js
-          echo '  VITE_SUPABASE_ANON_KEY: "***",' >> env-config.js
-          echo '  VITE_EVIA_SIGN_CLIENT_SECRET: "***"' >> env-config.js
-          echo '});' >> env-config.js
-          
-          # Install serve if not already installed
-          if ! command -v serve &> /dev/null; then
-            echo "Installing serve..."
-            npm install -g serve
-          fi
-          
-          # Start the server from the webroot directory
-          echo "Starting server..."
-          exec serve -s . -l 8080
+          // Expose direct references to key URLs for easier debugging
+          window.SUPABASE_URL = "$VITE_SUPABASE_URL";
+          window.API_ENDPOINT = "$VITE_API_ENDPOINT";
+          window.WEBHOOK_URL = "$FORMATTED_WEBHOOK_URL";
+
+          // Fix Supabase URL issues
+          (function fixSupabaseURL() {
+            // Check for correct Supabase URL
+            if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {
+              console.error('Supabase URL is invalid, setting to real value');
+              window._env_.VITE_SUPABASE_URL = "$VITE_SUPABASE_URL";
+            }
+
+            // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+              let modifiedUrl = url;
+              if (typeof url === "string") {
+                if (url.includes("VITE_SUPABASE_URL")) {
+                  modifiedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);
+                  console.log(`Fixed Supabase URL: ${url} -> ${modifiedUrl}`);
+                }
+              }
+              return originalFetch(modifiedUrl, options).then(response => {
+                const originalJson = response.json;
+                response.json = function() {
+                  return originalJson.call(this).catch(err => {
+                    if (err.message && err.message.includes("Unexpected token")) {
+                      console.error(`JSON parsing error for URL: ${modifiedUrl}`);
+                      // Return empty JSON instead of crashing
+                      return {};
+                    }
+                    throw err; // Re-throw other errors
+                  });
+                };
+                return response;
+              }).catch(error => {
+                console.error(`Fetch error for ${modifiedUrl}:`, error);
+                // Create a mock response to prevent app crash
+                const mockResponse = new Response(JSON.stringify({ error: "Failed to fetch" }), {
+                  status: 500,
+                  headers: { "Content-Type": "application/json" }
+                });
+                return mockResponse;
+              });
+            };
+          })();
+
+          // Fix all URL environment variables to ensure they have proper protocols
+          (function fixAllEnvURLs() {
+            if (!window._env_) return;
+
+            // List of keys that should be URLs
+            const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL"];
+
+            // Fix all URL keys
+            urlKeys.forEach(key => {
+              const value = window._env_[key];
+              if (value && typeof value === "string") {
+                if (!value.match(/^https?:\/\//)) {
+                  console.log(`Fixing URL environment variable ${key}: ${value}`);
+                  window._env_[key] = "https://" + value.replace(/^https?:\/\//, "");
+                }
+              } else if (!value) {
+                console.warn(`Environment variable ${key} is empty or missing`);
+                window._env_[key] = "https://example.com";  // Provide a fallback
+              }
+            });
+
+            console.log("Fixed URL environment variables:", {
+              VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,
+              VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,
+              VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL
+            });
+          })();
+
+          // Log environment variables for debugging
+          console.log("Environment variables loaded:", {
+            ...window._env_,
+            VITE_SUPABASE_ANON_KEY: "***",
+            VITE_EVIA_SIGN_CLIENT_SECRET: "***"
+          });
           EOF
           
           chmod +x startup.sh
