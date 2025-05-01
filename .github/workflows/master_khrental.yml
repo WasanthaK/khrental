@@ -109,6 +109,30 @@ jobs:
           echo "  VITE_EMAIL_FROM_NAME: \"$(echo "$VITE_EMAIL_FROM_NAME" | sed 's/^"//;s/"$//')\"," >> env-config.js
           echo "  VITE_APP_BASE_URL: \"$VITE_APP_BASE_URL\"," >> env-config.js
           
+          # Add email configuration debug logging
+          echo 'console.log("Email Configuration:", {' >> env-config.js
+          echo '  VITE_SENDGRID_API_KEY: VITE_SENDGRID_API_KEY ? "Present" : "Missing",' >> env-config.js
+          echo '  VITE_EMAIL_FROM: VITE_EMAIL_FROM,' >> env-config.js
+          echo '  VITE_EMAIL_FROM_NAME: VITE_EMAIL_FROM_NAME,' >> env-config.js
+          echo '  VITE_APP_BASE_URL: VITE_APP_BASE_URL' >> env-config.js
+          echo '});' >> env-config.js
+          
+          # Add email configuration validation
+          echo '(function validateEmailConfig() {' >> env-config.js
+          echo '  if (!window._env_.VITE_SENDGRID_API_KEY) {' >> env-config.js
+          echo '    console.error("SendGrid API Key is missing");' >> env-config.js
+          echo '  }' >> env-config.js
+          echo '  if (!window._env_.VITE_EMAIL_FROM) {' >> env-config.js
+          echo '    console.error("From Email is missing");' >> env-config.js
+          echo '  }' >> env-config.js
+          echo '  if (!window._env_.VITE_EMAIL_FROM_NAME) {' >> env-config.js
+          echo '    console.error("From Name is missing");' >> env-config.js
+          echo '  }' >> env-config.js
+          echo '  if (!window._env_.VITE_APP_BASE_URL) {' >> env-config.js
+          echo '    console.error("App Base URL is missing");' >> env-config.js
+          echo '  }' >> env-config.js
+          echo '})();' >> env-config.js
+          
           # Ensure webhook URL always has https:// protocol
           FORMATTED_WEBHOOK_URL="$VITE_WEBHOOK_URL"
           # Remove any existing protocol
