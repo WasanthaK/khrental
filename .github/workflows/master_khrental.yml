@@ -16,14 +16,18 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VITE_SUPABASE_SERVICE_ROLE_KEY }}
       VITE_EVIA_SIGN_CLIENT_ID: ${{ secrets.VITE_EVIA_SIGN_CLIENT_ID }}
       VITE_EVIA_SIGN_CLIENT_SECRET: ${{ secrets.VITE_EVIA_SIGN_CLIENT_SECRET }}
-      VITE_API_ENDPOINT: '${{ secrets.VITE_API_ENDPOINT }}'
-      VITE_WEBHOOK_URL: '${{ secrets.VITE_WEBHOOK_URL }}'
+      VITE_EVIA_ACCESS_TOKEN: ${{ secrets.VITE_EVIA_ACCESS_TOKEN }}
+      VITE_API_ENDPOINT: ${{ secrets.VITE_API_ENDPOINT }}
+      VITE_WEBHOOK_URL: ${{ secrets.VITE_WEBHOOK_URL }}
       VITE_SENDGRID_API_KEY: ${{ secrets.VITE_SENDGRID_API_KEY }}
       VITE_EMAIL_FROM: ${{ secrets.VITE_EMAIL_FROM }}
       VITE_EMAIL_FROM_NAME: ${{ secrets.VITE_EMAIL_FROM_NAME }}
       VITE_APP_BASE_URL: ${{ secrets.VITE_APP_BASE_URL }}
+      VITE_EMAIL_FUNCTION_URL: ${{ secrets.VITE_EMAIL_FUNCTION_URL }}
+      VITE_EMAIL_FUNCTION_KEY: ${{ secrets.VITE_EMAIL_FUNCTION_KEY }}
 
     steps:
       - name: Checkout repository
@@ -50,14 +54,18 @@ jobs:
           # Create .env file
           echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env
           echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
+          echo "VITE_SUPABASE_SERVICE_ROLE_KEY=$VITE_SUPABASE_SERVICE_ROLE_KEY" >> .env
           echo "VITE_EVIA_SIGN_CLIENT_ID=$VITE_EVIA_SIGN_CLIENT_ID" >> .env
           echo "VITE_EVIA_SIGN_CLIENT_SECRET=$VITE_EVIA_SIGN_CLIENT_SECRET" >> .env
+          echo "VITE_EVIA_ACCESS_TOKEN=$VITE_EVIA_ACCESS_TOKEN" >> .env
           echo "VITE_API_ENDPOINT=$VITE_API_ENDPOINT" >> .env
           echo "VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL" >> .env
           echo "VITE_SENDGRID_API_KEY=$VITE_SENDGRID_API_KEY" >> .env
           echo "VITE_EMAIL_FROM=$VITE_EMAIL_FROM" >> .env
           echo "VITE_EMAIL_FROM_NAME=$VITE_EMAIL_FROM_NAME" >> .env
           echo "VITE_APP_BASE_URL=$VITE_APP_BASE_URL" >> .env
+          echo "VITE_EMAIL_FUNCTION_URL=$VITE_EMAIL_FUNCTION_URL" >> .env
+          echo "VITE_EMAIL_FUNCTION_KEY=$VITE_EMAIL_FUNCTION_KEY" >> .env
           npm run build
           
       - name: Verify build output
@@ -95,21 +103,35 @@ jobs:
           
           # Debug: Print environment variables (masking sensitive values)
           echo "Environment variables:"
-          env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
+          env | grep -E 'VITE_|APPSETTING_' | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
           # Create env-config.js with environment variables
-          cat > env-config.js << 'ENVEOF'
+          cat > env-config.js << EOF
+          // Debug: Log Azure environment variables
+          console.log("Azure Environment Variables:", {
+            "APPSETTING_VITE_SUPABASE_URL": "${APPSETTING_VITE_SUPABASE_URL:-not set}",
+            "APPSETTING_VITE_API_ENDPOINT": "${APPSETTING_VITE_API_ENDPOINT:-not set}",
+            "APPSETTING_VITE_WEBHOOK_URL": "${APPSETTING_VITE_WEBHOOK_URL:-not set}",
+            "APPSETTING_VITE_APP_BASE_URL": "${APPSETTING_VITE_APP_BASE_URL:-not set}"
+          });
+
           window._env_ = {
+            // Azure Web App environment variables (prefixed with APPSETTING_)
+            // Fallback to GitHub Actions environment variables if not set in Azure
             VITE_SUPABASE_URL: "${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}",
             VITE_SUPABASE_ANON_KEY: "${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}",
+            VITE_SUPABASE_SERVICE_ROLE_KEY: "${APPSETTING_VITE_SUPABASE_SERVICE_ROLE_KEY:-$VITE_SUPABASE_SERVICE_ROLE_KEY}",
             VITE_EVIA_SIGN_CLIENT_ID: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}",
             VITE_EVIA_SIGN_CLIENT_SECRET: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}",
+            VITE_EVIA_ACCESS_TOKEN: "${APPSETTING_VITE_EVIA_ACCESS_TOKEN:-$VITE_EVIA_ACCESS_TOKEN}",
             VITE_API_ENDPOINT: "${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}",
             VITE_WEBHOOK_URL: "${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}",
             VITE_SENDGRID_API_KEY: "${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}",
             VITE_EMAIL_FROM: "${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}",
             VITE_EMAIL_FROM_NAME: "${APPSETTING_VITE_EMAIL_FROM_NAME:-$VITE_EMAIL_FROM_NAME}",
-            VITE_APP_BASE_URL: "${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}"
+            VITE_APP_BASE_URL: "${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}",
+            VITE_EMAIL_FUNCTION_URL: "${APPSETTING_VITE_EMAIL_FUNCTION_URL:-$VITE_EMAIL_FUNCTION_URL}",
+            VITE_EMAIL_FUNCTION_KEY: "${APPSETTING_VITE_EMAIL_FUNCTION_KEY:-$VITE_EMAIL_FUNCTION_KEY}"
           };
 
           // URL validation and formatting
@@ -140,8 +162,7 @@ jobs:
                 console.log(`Validated URL for ${key}: ${value}`);
               } catch (e) {
                 console.error(`Invalid URL for ${key}: ${value}`);
-                // Set a fallback URL for invalid values
-                window._env_[key] = "https://example.com";
+                // Don't set a fallback URL, let the application handle the error
               }
             });
           })();
@@ -181,8 +202,8 @@ jobs:
           (function fixSupabaseURL() {
             // Check for correct Supabase URL
             if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {
-              console.error('Supabase URL is invalid, setting to real value');
-              window._env_.VITE_SUPABASE_URL = "${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}";
+              console.error('Supabase URL is invalid');
+              return;
             }
 
             // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL
@@ -226,7 +247,7 @@ jobs:
             VITE_SUPABASE_ANON_KEY: "***",
             VITE_EVIA_SIGN_CLIENT_SECRET: "***"
           });
-          ENVEOF
+          EOF
           
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
