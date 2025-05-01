@@ -98,7 +98,7 @@ jobs:
           env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
           # Create env-config.js with environment variables
-          cat << 'EOF' > env-config.js
+          cat > env-config.js << 'ENVEOF'
           window._env_ = {
             VITE_SUPABASE_URL: "$VITE_SUPABASE_URL",
             VITE_SUPABASE_ANON_KEY: "$VITE_SUPABASE_ANON_KEY",
@@ -141,7 +141,7 @@ jobs:
           // Expose direct references to key URLs for easier debugging
           window.SUPABASE_URL = "$VITE_SUPABASE_URL";
           window.API_ENDPOINT = "$VITE_API_ENDPOINT";
-          window.WEBHOOK_URL = "$FORMATTED_WEBHOOK_URL";
+          window.WEBHOOK_URL = "$VITE_WEBHOOK_URL";
 
           // Fix Supabase URL issues
           (function fixSupabaseURL() {
@@ -220,6 +220,17 @@ jobs:
             VITE_SUPABASE_ANON_KEY: "***",
             VITE_EVIA_SIGN_CLIENT_SECRET: "***"
           });
+          ENVEOF
+          
+          # Install serve if not already installed
+          if ! command -v serve &> /dev/null; then
+            echo "Installing serve..."
+            npm install -g serve
+          fi
+          
+          # Start the server from the webroot directory
+          echo "Starting server..."
+          exec serve -s . -l 8080
           EOF
           
           chmod +x startup.sh
