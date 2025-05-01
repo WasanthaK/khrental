@@ -106,7 +106,7 @@ jobs:
           echo "  VITE_API_ENDPOINT: \"$VITE_API_ENDPOINT\"," >> env-config.js
           echo "  VITE_SENDGRID_API_KEY: \"$VITE_SENDGRID_API_KEY\"," >> env-config.js
           echo "  VITE_EMAIL_FROM: \"$VITE_EMAIL_FROM\"," >> env-config.js
-          echo "  VITE_EMAIL_FROM_NAME: \"$VITE_EMAIL_FROM_NAME\"," >> env-config.js
+          echo "  VITE_EMAIL_FROM_NAME: \"$(echo "$VITE_EMAIL_FROM_NAME" | sed 's/^"//;s/"$//')\"," >> env-config.js
           echo "  VITE_APP_BASE_URL: \"$VITE_APP_BASE_URL\"," >> env-config.js
           
           # Ensure webhook URL always has https:// protocol
