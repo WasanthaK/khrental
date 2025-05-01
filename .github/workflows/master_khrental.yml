@@ -105,126 +105,100 @@ jobs:
           echo "Environment variables:"
           env | grep -E 'VITE_|APPSETTING_' | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
-          # Create env-config.js with environment variables
-          cat > env-config.js << 'EOF'
-window._env_ = {
-  VITE_SUPABASE_URL: "SUPABASE_URL_PLACEHOLDER",
-  VITE_SUPABASE_ANON_KEY: "SUPABASE_ANON_KEY_PLACEHOLDER",
-  VITE_SUPABASE_SERVICE_ROLE_KEY: "SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER",
-  VITE_EVIA_SIGN_CLIENT_ID: "EVIA_SIGN_CLIENT_ID_PLACEHOLDER",
-  VITE_EVIA_SIGN_CLIENT_SECRET: "EVIA_SIGN_CLIENT_SECRET_PLACEHOLDER",
-  VITE_EVIA_ACCESS_TOKEN: "EVIA_ACCESS_TOKEN_PLACEHOLDER",
-  VITE_API_ENDPOINT: "API_ENDPOINT_PLACEHOLDER",
-  VITE_WEBHOOK_URL: "WEBHOOK_URL_PLACEHOLDER",
-  VITE_SENDGRID_API_KEY: "SENDGRID_API_KEY_PLACEHOLDER",
-  VITE_EMAIL_FROM: "EMAIL_FROM_PLACEHOLDER",
-  VITE_EMAIL_FROM_NAME: "EMAIL_FROM_NAME_PLACEHOLDER",
-  VITE_APP_BASE_URL: "APP_BASE_URL_PLACEHOLDER",
-  VITE_EMAIL_FUNCTION_URL: "EMAIL_FUNCTION_URL_PLACEHOLDER",
-  VITE_EMAIL_FUNCTION_KEY: "EMAIL_FUNCTION_KEY_PLACEHOLDER"
-};
-
-// URL validation and formatting
-(function validateAndFormatURLs() {
-  const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL", "VITE_APP_BASE_URL"];
-  
-  urlKeys.forEach(key => {
-    let value = window._env_[key];
-    
-    // Skip if value is empty or undefined
-    if (!value || value.includes("_PLACEHOLDER")) {
-      console.warn(`Environment variable ${key} is empty or missing`);
-      return;
-    }
-
-    // Remove any surrounding quotes
-    value = value.replace(/^["']|["']$/g, '');
-    
-    // Ensure URL has protocol
-    if (!value.match(/^https?:\/\//)) {
-      value = "https://" + value;
-    }
-
-    // Validate URL
-    try {
-      new URL(value);
-      window._env_[key] = value;
-      console.log(`Validated URL for ${key}: ${value}`);
-    } catch (e) {
-      console.error(`Invalid URL for ${key}: ${value}`);
-      // Don't set a fallback URL, let the application handle the error
-    }
-  });
-})();
-
-// Email configuration debug logging
-(function() {
-  console.log("Email Configuration:", {
-    "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY && !window._env_.VITE_SENDGRID_API_KEY.includes("_PLACEHOLDER") ? "Present" : "Missing",
-    "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,
-    "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,
-    "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL
-  });
-})();
-
-// Email configuration validation
-(function validateEmailConfig() {
-  if (!window._env_.VITE_SENDGRID_API_KEY || window._env_.VITE_SENDGRID_API_KEY.includes("_PLACEHOLDER")) {
-    console.error("SendGrid API Key is missing");
-  }
-  if (!window._env_.VITE_EMAIL_FROM || window._env_.VITE_EMAIL_FROM.includes("_PLACEHOLDER")) {
-    console.error("From Email is missing");
-  }
-  if (!window._env_.VITE_EMAIL_FROM_NAME || window._env_.VITE_EMAIL_FROM_NAME.includes("_PLACEHOLDER")) {
-    console.error("From Name is missing");
-  }
-  if (!window._env_.VITE_APP_BASE_URL || window._env_.VITE_APP_BASE_URL.includes("_PLACEHOLDER")) {
-    console.error("App Base URL is missing");
-  }
-})();
-
-// Log environment variables for debugging
-console.log("Environment variables loaded:", {
-  VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,
-  VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,
-  VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL,
-  VITE_APP_BASE_URL: window._env_.VITE_APP_BASE_URL,
-  VITE_EMAIL_FROM: window._env_.VITE_EMAIL_FROM,
-  VITE_EMAIL_FROM_NAME: window._env_.VITE_EMAIL_FROM_NAME,
-  VITE_SUPABASE_ANON_KEY: "***",
-  VITE_SENDGRID_API_KEY: "***",
-  VITE_EVIA_SIGN_CLIENT_SECRET: "***"
-});
-EOF
-
-          # Replace placeholders with actual environment variable values
-          # This approach avoids issues with variable expansion in heredocs
-          sed -i "s|SUPABASE_URL_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}|g" env-config.js
-          sed -i "s|SUPABASE_ANON_KEY_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}|g" env-config.js
-          sed -i "s|SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_SERVICE_ROLE_KEY:-$VITE_SUPABASE_SERVICE_ROLE_KEY}|g" env-config.js
-          sed -i "s|EVIA_SIGN_CLIENT_ID_PLACEHOLDER|${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}|g" env-config.js
-          sed -i "s|EVIA_SIGN_CLIENT_SECRET_PLACEHOLDER|${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}|g" env-config.js
-          sed -i "s|EVIA_ACCESS_TOKEN_PLACEHOLDER|${APPSETTING_VITE_EVIA_ACCESS_TOKEN:-$VITE_EVIA_ACCESS_TOKEN}|g" env-config.js
-          sed -i "s|API_ENDPOINT_PLACEHOLDER|${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}|g" env-config.js
-          sed -i "s|WEBHOOK_URL_PLACEHOLDER|${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}|g" env-config.js
-          sed -i "s|SENDGRID_API_KEY_PLACEHOLDER|${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}|g" env-config.js
-          sed -i "s|EMAIL_FROM_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}|g" env-config.js
+          # Create env-config.js with environment variables - using a much simpler approach
+          echo "window._env_ = {" > env-config.js
+          echo "  VITE_SUPABASE_URL: \"${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}\"," >> env-config.js
+          echo "  VITE_SUPABASE_ANON_KEY: \"${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}\"," >> env-config.js
+          echo "  VITE_SUPABASE_SERVICE_ROLE_KEY: \"${APPSETTING_VITE_SUPABASE_SERVICE_ROLE_KEY:-$VITE_SUPABASE_SERVICE_ROLE_KEY}\"," >> env-config.js
+          echo "  VITE_EVIA_SIGN_CLIENT_ID: \"${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}\"," >> env-config.js
+          echo "  VITE_EVIA_SIGN_CLIENT_SECRET: \"${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}\"," >> env-config.js
+          echo "  VITE_EVIA_ACCESS_TOKEN: \"${APPSETTING_VITE_EVIA_ACCESS_TOKEN:-$VITE_EVIA_ACCESS_TOKEN}\"," >> env-config.js
+          echo "  VITE_API_ENDPOINT: \"${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}\"," >> env-config.js
+          echo "  VITE_WEBHOOK_URL: \"${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}\"," >> env-config.js
+          echo "  VITE_SENDGRID_API_KEY: \"${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}\"," >> env-config.js
+          echo "  VITE_EMAIL_FROM: \"${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}\"," >> env-config.js
           
           # Special handling for EMAIL_FROM_NAME to handle quotes properly
           EMAIL_FROM_NAME_VALUE="${APPSETTING_VITE_EMAIL_FROM_NAME:-$VITE_EMAIL_FROM_NAME}"
           # Remove any existing quotes for consistent handling
           EMAIL_FROM_NAME_VALUE=$(echo "$EMAIL_FROM_NAME_VALUE" | sed 's/^["'"'"']//g' | sed 's/["'"'"']$//g')
-          # Escape any special characters in the name
-          EMAIL_FROM_NAME_VALUE=$(echo "$EMAIL_FROM_NAME_VALUE" | sed 's/[\/&]/\\&/g')
-          sed -i "s/EMAIL_FROM_NAME_PLACEHOLDER/$EMAIL_FROM_NAME_VALUE/g" env-config.js
+          echo "  VITE_EMAIL_FROM_NAME: \"$EMAIL_FROM_NAME_VALUE\"," >> env-config.js
           
-          sed -i "s|APP_BASE_URL_PLACEHOLDER|${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}|g" env-config.js
-          sed -i "s|EMAIL_FUNCTION_URL_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FUNCTION_URL:-$VITE_EMAIL_FUNCTION_URL}|g" env-config.js
-          sed -i "s|EMAIL_FUNCTION_KEY_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FUNCTION_KEY:-$VITE_EMAIL_FUNCTION_KEY}|g" env-config.js
+          echo "  VITE_APP_BASE_URL: \"${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}\"," >> env-config.js
+          echo "  VITE_EMAIL_FUNCTION_URL: \"${APPSETTING_VITE_EMAIL_FUNCTION_URL:-$VITE_EMAIL_FUNCTION_URL}\"," >> env-config.js
+          echo "  VITE_EMAIL_FUNCTION_KEY: \"${APPSETTING_VITE_EMAIL_FUNCTION_KEY:-$VITE_EMAIL_FUNCTION_KEY}\"" >> env-config.js
+          echo "};" >> env-config.js
+          
+          # Add URL validation function - line by line to avoid heredoc syntax issues
+          echo "" >> env-config.js
+          echo "// URL validation and formatting" >> env-config.js
+          echo "(function validateAndFormatURLs() {" >> env-config.js
+          echo "  const urlKeys = [\"VITE_SUPABASE_URL\", \"VITE_API_ENDPOINT\", \"VITE_WEBHOOK_URL\", \"VITE_APP_BASE_URL\"];" >> env-config.js
+          echo "  " >> env-config.js
+          echo "  urlKeys.forEach(key => {" >> env-config.js
+          echo "    let value = window._env_[key];" >> env-config.js
+          echo "    " >> env-config.js
+          echo "    // Skip if value is empty or undefined" >> env-config.js
+          echo "    if (!value) {" >> env-config.js
+          echo "      console.warn(\"Environment variable \" + key + \" is empty or missing\");" >> env-config.js
+          echo "      return;" >> env-config.js
+          echo "    }" >> env-config.js
+          echo "" >> env-config.js
+          echo "    // Remove any surrounding quotes" >> env-config.js
+          echo "    value = value.replace(/^[\"']|[\"']$/g, '');" >> env-config.js
+          echo "    " >> env-config.js
+          echo "    // Ensure URL has protocol" >> env-config.js
+          echo "    if (!value.match(/^https?:\\/\\//)) {" >> env-config.js
+          echo "      value = \"https://\" + value;" >> env-config.js
+          echo "    }" >> env-config.js
+          echo "" >> env-config.js
+          echo "    // Validate URL" >> env-config.js
+          echo "    try {" >> env-config.js
+          echo "      new URL(value);" >> env-config.js
+          echo "      window._env_[key] = value;" >> env-config.js
+          echo "      console.log(\"Validated URL for \" + key + \": \" + value);" >> env-config.js
+          echo "    } catch (e) {" >> env-config.js
+          echo "      console.error(\"Invalid URL for \" + key + \": \" + value);" >> env-config.js
+          echo "      // Don't set a fallback URL, let the application handle the error" >> env-config.js
+          echo "    }" >> env-config.js
+          echo "  });" >> env-config.js
+          echo "})();" >> env-config.js
+          
+          # Add email config validation
+          echo "" >> env-config.js
+          echo "// Email configuration debug logging" >> env-config.js
+          echo "(function() {" >> env-config.js
+          echo "  console.log(\"Email Configuration:\", {" >> env-config.js
+          echo "    \"VITE_SENDGRID_API_KEY\": window._env_.VITE_SENDGRID_API_KEY ? \"Present\" : \"Missing\"," >> env-config.js
+          echo "    \"VITE_EMAIL_FROM\": window._env_.VITE_EMAIL_FROM," >> env-config.js
+          echo "    \"VITE_EMAIL_FROM_NAME\": window._env_.VITE_EMAIL_FROM_NAME," >> env-config.js
+          echo "    \"VITE_APP_BASE_URL\": window._env_.VITE_APP_BASE_URL" >> env-config.js
+          echo "  });" >> env-config.js
+          echo "})();" >> env-config.js
+          
+          echo "" >> env-config.js
+          echo "// Email configuration validation" >> env-config.js
+          echo "(function validateEmailConfig() {" >> env-config.js
+          echo "  if (!window._env_.VITE_SENDGRID_API_KEY) {" >> env-config.js
+          echo "    console.error(\"SendGrid API Key is missing\");" >> env-config.js
+          echo "  }" >> env-config.js
+          echo "  if (!window._env_.VITE_EMAIL_FROM) {" >> env-config.js
+          echo "    console.error(\"From Email is missing\");" >> env-config.js
+          echo "  }" >> env-config.js
+          echo "  if (!window._env_.VITE_EMAIL_FROM_NAME) {" >> env-config.js
+          echo "    console.error(\"From Name is missing\");" >> env-config.js
+          echo "  }" >> env-config.js
+          echo "  if (!window._env_.VITE_APP_BASE_URL) {" >> env-config.js
+          echo "    console.error(\"App Base URL is missing\");" >> env-config.js
+          echo "  }" >> env-config.js
+          echo "})();" >> env-config.js
+          
+          echo "" >> env-config.js
+          echo "// Log environment variables for debugging" >> env-config.js
+          echo "console.log(\"Environment variables loaded\");" >> env-config.js
           
           # Debug the generated file
-          echo "Generated env-config.js:"
-          cat env-config.js
+          echo "Generated env-config.js successfully"
           
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
