@@ -111,16 +111,21 @@ jobs:
           echo "  VITE_APP_BASE_URL: \"$VITE_APP_BASE_URL\"" >> env-config.js
           echo '};' >> env-config.js
           echo '' >> env-config.js
-          
+
           # Add email configuration debug logging
-          echo 'console.log("Email Configuration:", {' >> env-config.js
-          echo '  "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY ? "Present" : "Missing",' >> env-config.js
-          echo '  "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,' >> env-config.js
-          echo '  "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,' >> env-config.js
-          echo '  "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL' >> env-config.js
-          echo '});' >> env-config.js
+          echo '// Email configuration debug logging' >> env-config.js
+          echo '(function() {' >> env-config.js
+          echo '  console.log("Email Configuration:", {' >> env-config.js
+          echo '    "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY ? "Present" : "Missing",' >> env-config.js
+          echo '    "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,' >> env-config.js
+          echo '    "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,' >> env-config.js
+          echo '    "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL' >> env-config.js
+          echo '  });' >> env-config.js
+          echo '})();' >> env-config.js
+          echo '' >> env-config.js
           
           # Add email configuration validation
+          echo '// Email configuration validation' >> env-config.js
           echo '(function validateEmailConfig() {' >> env-config.js
           echo '  if (!window._env_.VITE_SENDGRID_API_KEY) {' >> env-config.js
           echo '    console.error("SendGrid API Key is missing");' >> env-config.js
@@ -135,6 +140,14 @@ jobs:
           echo '    console.error("App Base URL is missing");' >> env-config.js
           echo '  }' >> env-config.js
           echo '})();' >> env-config.js
+          echo '' >> env-config.js
+
+          # Add direct variable references
+          echo '// Expose direct references to key URLs for easier debugging' >> env-config.js
+          echo "window.SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
+          echo "window.API_ENDPOINT = \"$VITE_API_ENDPOINT\";" >> env-config.js
+          echo "window.WEBHOOK_URL = \"$FORMATTED_WEBHOOK_URL\";" >> env-config.js
+          echo '' >> env-config.js
           
           # Ensure webhook URL always has https:// protocol
           FORMATTED_WEBHOOK_URL="$VITE_WEBHOOK_URL"
@@ -148,13 +161,6 @@ jobs:
           echo '};' >> env-config.js
           echo '' >> env-config.js
 
-          # Add direct variable references to avoid substitution issues
-          echo '// Expose direct references to key URLs for easier debugging' >> env-config.js
-          echo "window.SUPABASE_URL = \"$VITE_SUPABASE_URL\";" >> env-config.js
-          echo "window.API_ENDPOINT = \"$VITE_API_ENDPOINT\";" >> env-config.js
-          echo "window.WEBHOOK_URL = \"$FORMATTED_WEBHOOK_URL\";" >> env-config.js
-          echo '' >> env-config.js
-          
           # Add Supabase URL patch to fix API requests
           echo '// Fix Supabase URL issues' >> env-config.js
           echo '(function fixSupabaseURL() {' >> env-config.js
