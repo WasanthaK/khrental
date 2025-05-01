@@ -112,6 +112,40 @@ jobs:
             VITE_APP_BASE_URL: "${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}"
           };
 
+          // URL validation and formatting
+          (function validateAndFormatURLs() {
+            const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL", "VITE_APP_BASE_URL"];
+            
+            urlKeys.forEach(key => {
+              let value = window._env_[key];
+              
+              // Skip if value is empty or undefined
+              if (!value) {
+                console.warn(`Environment variable ${key} is empty or missing`);
+                return;
+              }
+
+              // Remove any surrounding quotes
+              value = value.replace(/^["']|["']$/g, '');
+              
+              // Ensure URL has protocol
+              if (!value.match(/^https?:\/\//)) {
+                value = "https://" + value;
+              }
+
+              // Validate URL
+              try {
+                new URL(value);
+                window._env_[key] = value;
+                console.log(`Validated URL for ${key}: ${value}`);
+              } catch (e) {
+                console.error(`Invalid URL for ${key}: ${value}`);
+                // Set a fallback URL for invalid values
+                window._env_[key] = "https://example.com";
+              }
+            });
+          })();
+
           // Email configuration debug logging
           (function() {
             console.log("Email Configuration:", {
@@ -184,34 +218,6 @@ jobs:
                 return mockResponse;
               });
             };
-          })();
-
-          // Fix all URL environment variables to ensure they have proper protocols
-          (function fixAllEnvURLs() {
-            if (!window._env_) return;
-
-            // List of keys that should be URLs
-            const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL"];
-
-            // Fix all URL keys
-            urlKeys.forEach(key => {
-              const value = window._env_[key];
-              if (value && typeof value === "string") {
-                if (!value.match(/^https?:\/\//)) {
-                  console.log(`Fixing URL environment variable ${key}: ${value}`);
-                  window._env_[key] = "https://" + value.replace(/^https?:\/\//, "");
-                }
-              } else if (!value) {
-                console.warn(`Environment variable ${key} is empty or missing`);
-                window._env_[key] = "https://example.com";  // Provide a fallback
-              }
-            });
-
-            console.log("Fixed URL environment variables:", {
-              VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,
-              VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,
-              VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL
-            });
           })();
 
           // Log environment variables for debugging
