@@ -98,18 +98,18 @@ jobs:
           env | grep VITE_ | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
           # Create env-config.js with environment variables
-          cat > env-config.js << ENVEOF
+          cat > env-config.js << 'ENVEOF'
           window._env_ = {
-            VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
-            VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
-            VITE_EVIA_SIGN_CLIENT_ID: "${VITE_EVIA_SIGN_CLIENT_ID}",
-            VITE_EVIA_SIGN_CLIENT_SECRET: "${VITE_EVIA_SIGN_CLIENT_SECRET}",
-            VITE_API_ENDPOINT: "${VITE_API_ENDPOINT}",
-            VITE_WEBHOOK_URL: "${VITE_WEBHOOK_URL}",
-            VITE_SENDGRID_API_KEY: "${VITE_SENDGRID_API_KEY}",
-            VITE_EMAIL_FROM: "${VITE_EMAIL_FROM}",
-            VITE_EMAIL_FROM_NAME: "$(echo "${VITE_EMAIL_FROM_NAME}" | sed 's/^"//;s/"$//')",
-            VITE_APP_BASE_URL: "${VITE_APP_BASE_URL}"
+            VITE_SUPABASE_URL: "${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}",
+            VITE_SUPABASE_ANON_KEY: "${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}",
+            VITE_EVIA_SIGN_CLIENT_ID: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}",
+            VITE_EVIA_SIGN_CLIENT_SECRET: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}",
+            VITE_API_ENDPOINT: "${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}",
+            VITE_WEBHOOK_URL: "${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}",
+            VITE_SENDGRID_API_KEY: "${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}",
+            VITE_EMAIL_FROM: "${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}",
+            VITE_EMAIL_FROM_NAME: "${APPSETTING_VITE_EMAIL_FROM_NAME:-$VITE_EMAIL_FROM_NAME}",
+            VITE_APP_BASE_URL: "${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}"
           };
 
           // Email configuration debug logging
@@ -139,16 +139,16 @@ jobs:
           })();
 
           // Expose direct references to key URLs for easier debugging
-          window.SUPABASE_URL = "${VITE_SUPABASE_URL}";
-          window.API_ENDPOINT = "${VITE_API_ENDPOINT}";
-          window.WEBHOOK_URL = "${VITE_WEBHOOK_URL}";
+          window.SUPABASE_URL = window._env_.VITE_SUPABASE_URL;
+          window.API_ENDPOINT = window._env_.VITE_API_ENDPOINT;
+          window.WEBHOOK_URL = window._env_.VITE_WEBHOOK_URL;
 
           // Fix Supabase URL issues
           (function fixSupabaseURL() {
             // Check for correct Supabase URL
             if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {
               console.error('Supabase URL is invalid, setting to real value');
-              window._env_.VITE_SUPABASE_URL = "${VITE_SUPABASE_URL}";
+              window._env_.VITE_SUPABASE_URL = "${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}";
             }
 
             // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL
