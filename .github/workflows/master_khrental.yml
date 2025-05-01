@@ -106,148 +106,125 @@ jobs:
           env | grep -E 'VITE_|APPSETTING_' | sed 's/\(.*KEY=\).*/\1***/' | sed 's/\(.*SECRET=\).*/\1***/'
           
           # Create env-config.js with environment variables
-          cat > env-config.js << EOF
-          // Debug: Log Azure environment variables
-          console.log("Azure Environment Variables:", {
-            "APPSETTING_VITE_SUPABASE_URL": "${APPSETTING_VITE_SUPABASE_URL:-not set}",
-            "APPSETTING_VITE_API_ENDPOINT": "${APPSETTING_VITE_API_ENDPOINT:-not set}",
-            "APPSETTING_VITE_WEBHOOK_URL": "${APPSETTING_VITE_WEBHOOK_URL:-not set}",
-            "APPSETTING_VITE_APP_BASE_URL": "${APPSETTING_VITE_APP_BASE_URL:-not set}"
-          });
+          cat > env-config.js << 'EOF'
+window._env_ = {
+  VITE_SUPABASE_URL: "SUPABASE_URL_PLACEHOLDER",
+  VITE_SUPABASE_ANON_KEY: "SUPABASE_ANON_KEY_PLACEHOLDER",
+  VITE_SUPABASE_SERVICE_ROLE_KEY: "SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER",
+  VITE_EVIA_SIGN_CLIENT_ID: "EVIA_SIGN_CLIENT_ID_PLACEHOLDER",
+  VITE_EVIA_SIGN_CLIENT_SECRET: "EVIA_SIGN_CLIENT_SECRET_PLACEHOLDER",
+  VITE_EVIA_ACCESS_TOKEN: "EVIA_ACCESS_TOKEN_PLACEHOLDER",
+  VITE_API_ENDPOINT: "API_ENDPOINT_PLACEHOLDER",
+  VITE_WEBHOOK_URL: "WEBHOOK_URL_PLACEHOLDER",
+  VITE_SENDGRID_API_KEY: "SENDGRID_API_KEY_PLACEHOLDER",
+  VITE_EMAIL_FROM: "EMAIL_FROM_PLACEHOLDER",
+  VITE_EMAIL_FROM_NAME: "EMAIL_FROM_NAME_PLACEHOLDER",
+  VITE_APP_BASE_URL: "APP_BASE_URL_PLACEHOLDER",
+  VITE_EMAIL_FUNCTION_URL: "EMAIL_FUNCTION_URL_PLACEHOLDER",
+  VITE_EMAIL_FUNCTION_KEY: "EMAIL_FUNCTION_KEY_PLACEHOLDER"
+};
 
-          window._env_ = {
-            // Azure Web App environment variables (prefixed with APPSETTING_)
-            // Fallback to GitHub Actions environment variables if not set in Azure
-            VITE_SUPABASE_URL: "${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}",
-            VITE_SUPABASE_ANON_KEY: "${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}",
-            VITE_SUPABASE_SERVICE_ROLE_KEY: "${APPSETTING_VITE_SUPABASE_SERVICE_ROLE_KEY:-$VITE_SUPABASE_SERVICE_ROLE_KEY}",
-            VITE_EVIA_SIGN_CLIENT_ID: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}",
-            VITE_EVIA_SIGN_CLIENT_SECRET: "${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}",
-            VITE_EVIA_ACCESS_TOKEN: "${APPSETTING_VITE_EVIA_ACCESS_TOKEN:-$VITE_EVIA_ACCESS_TOKEN}",
-            VITE_API_ENDPOINT: "${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}",
-            VITE_WEBHOOK_URL: "${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}",
-            VITE_SENDGRID_API_KEY: "${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}",
-            VITE_EMAIL_FROM: "${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}",
-            VITE_EMAIL_FROM_NAME: "${APPSETTING_VITE_EMAIL_FROM_NAME:-$VITE_EMAIL_FROM_NAME}",
-            VITE_APP_BASE_URL: "${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}",
-            VITE_EMAIL_FUNCTION_URL: "${APPSETTING_VITE_EMAIL_FUNCTION_URL:-$VITE_EMAIL_FUNCTION_URL}",
-            VITE_EMAIL_FUNCTION_KEY: "${APPSETTING_VITE_EMAIL_FUNCTION_KEY:-$VITE_EMAIL_FUNCTION_KEY}"
-          };
+// URL validation and formatting
+(function validateAndFormatURLs() {
+  const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL", "VITE_APP_BASE_URL"];
+  
+  urlKeys.forEach(key => {
+    let value = window._env_[key];
+    
+    // Skip if value is empty or undefined
+    if (!value || value.includes("_PLACEHOLDER")) {
+      console.warn(`Environment variable ${key} is empty or missing`);
+      return;
+    }
 
-          // URL validation and formatting
-          (function validateAndFormatURLs() {
-            const urlKeys = ["VITE_SUPABASE_URL", "VITE_API_ENDPOINT", "VITE_WEBHOOK_URL", "VITE_APP_BASE_URL"];
-            
-            urlKeys.forEach(key => {
-              let value = window._env_[key];
-              
-              // Skip if value is empty or undefined
-              if (!value) {
-                console.warn(`Environment variable ${key} is empty or missing`);
-                return;
-              }
+    // Remove any surrounding quotes
+    value = value.replace(/^["']|["']$/g, '');
+    
+    // Ensure URL has protocol
+    if (!value.match(/^https?:\/\//)) {
+      value = "https://" + value;
+    }
 
-              // Remove any surrounding quotes
-              value = value.replace(/^["']|["']$/g, '');
-              
-              // Ensure URL has protocol
-              if (!value.match(/^https?:\/\//)) {
-                value = "https://" + value;
-              }
+    // Validate URL
+    try {
+      new URL(value);
+      window._env_[key] = value;
+      console.log(`Validated URL for ${key}: ${value}`);
+    } catch (e) {
+      console.error(`Invalid URL for ${key}: ${value}`);
+      // Don't set a fallback URL, let the application handle the error
+    }
+  });
+})();
 
-              // Validate URL
-              try {
-                new URL(value);
-                window._env_[key] = value;
-                console.log(`Validated URL for ${key}: ${value}`);
-              } catch (e) {
-                console.error(`Invalid URL for ${key}: ${value}`);
-                // Don't set a fallback URL, let the application handle the error
-              }
-            });
-          })();
+// Email configuration debug logging
+(function() {
+  console.log("Email Configuration:", {
+    "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY && !window._env_.VITE_SENDGRID_API_KEY.includes("_PLACEHOLDER") ? "Present" : "Missing",
+    "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,
+    "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,
+    "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL
+  });
+})();
 
-          // Email configuration debug logging
-          (function() {
-            console.log("Email Configuration:", {
-              "VITE_SENDGRID_API_KEY": window._env_.VITE_SENDGRID_API_KEY ? "Present" : "Missing",
-              "VITE_EMAIL_FROM": window._env_.VITE_EMAIL_FROM,
-              "VITE_EMAIL_FROM_NAME": window._env_.VITE_EMAIL_FROM_NAME,
-              "VITE_APP_BASE_URL": window._env_.VITE_APP_BASE_URL
-            });
-          })();
+// Email configuration validation
+(function validateEmailConfig() {
+  if (!window._env_.VITE_SENDGRID_API_KEY || window._env_.VITE_SENDGRID_API_KEY.includes("_PLACEHOLDER")) {
+    console.error("SendGrid API Key is missing");
+  }
+  if (!window._env_.VITE_EMAIL_FROM || window._env_.VITE_EMAIL_FROM.includes("_PLACEHOLDER")) {
+    console.error("From Email is missing");
+  }
+  if (!window._env_.VITE_EMAIL_FROM_NAME || window._env_.VITE_EMAIL_FROM_NAME.includes("_PLACEHOLDER")) {
+    console.error("From Name is missing");
+  }
+  if (!window._env_.VITE_APP_BASE_URL || window._env_.VITE_APP_BASE_URL.includes("_PLACEHOLDER")) {
+    console.error("App Base URL is missing");
+  }
+})();
 
-          // Email configuration validation
-          (function validateEmailConfig() {
-            if (!window._env_.VITE_SENDGRID_API_KEY) {
-              console.error("SendGrid API Key is missing");
-            }
-            if (!window._env_.VITE_EMAIL_FROM) {
-              console.error("From Email is missing");
-            }
-            if (!window._env_.VITE_EMAIL_FROM_NAME) {
-              console.error("From Name is missing");
-            }
-            if (!window._env_.VITE_APP_BASE_URL) {
-              console.error("App Base URL is missing");
-            }
-          })();
+// Log environment variables for debugging
+console.log("Environment variables loaded:", {
+  VITE_SUPABASE_URL: window._env_.VITE_SUPABASE_URL,
+  VITE_API_ENDPOINT: window._env_.VITE_API_ENDPOINT,
+  VITE_WEBHOOK_URL: window._env_.VITE_WEBHOOK_URL,
+  VITE_APP_BASE_URL: window._env_.VITE_APP_BASE_URL,
+  VITE_EMAIL_FROM: window._env_.VITE_EMAIL_FROM,
+  VITE_EMAIL_FROM_NAME: window._env_.VITE_EMAIL_FROM_NAME,
+  VITE_SUPABASE_ANON_KEY: "***",
+  VITE_SENDGRID_API_KEY: "***",
+  VITE_EVIA_SIGN_CLIENT_SECRET: "***"
+});
+EOF
 
-          // Expose direct references to key URLs for easier debugging
-          window.SUPABASE_URL = window._env_.VITE_SUPABASE_URL;
-          window.API_ENDPOINT = window._env_.VITE_API_ENDPOINT;
-          window.WEBHOOK_URL = window._env_.VITE_WEBHOOK_URL;
-
-          // Fix Supabase URL issues
-          (function fixSupabaseURL() {
-            // Check for correct Supabase URL
-            if (!window._env_.VITE_SUPABASE_URL || window._env_.VITE_SUPABASE_URL === "VITE_SUPABASE_URL") {
-              console.error('Supabase URL is invalid');
-              return;
-            }
-
-            // Replace any instances of the literal string "VITE_SUPABASE_URL" with the actual URL
-            const originalFetch = window.fetch;
-            window.fetch = function(url, options) {
-              let modifiedUrl = url;
-              if (typeof url === "string") {
-                if (url.includes("VITE_SUPABASE_URL")) {
-                  modifiedUrl = url.replace("VITE_SUPABASE_URL", window._env_.VITE_SUPABASE_URL);
-                  console.log(`Fixed Supabase URL: ${url} -> ${modifiedUrl}`);
-                }
-              }
-              return originalFetch(modifiedUrl, options).then(response => {
-                const originalJson = response.json;
-                response.json = function() {
-                  return originalJson.call(this).catch(err => {
-                    if (err.message && err.message.includes("Unexpected token")) {
-                      console.error(`JSON parsing error for URL: ${modifiedUrl}`);
-                      // Return empty JSON instead of crashing
-                      return {};
-                    }
-                    throw err; // Re-throw other errors
-                  });
-                };
-                return response;
-              }).catch(error => {
-                console.error(`Fetch error for ${modifiedUrl}:`, error);
-                // Create a mock response to prevent app crash
-                const mockResponse = new Response(JSON.stringify({ error: "Failed to fetch" }), {
-                  status: 500,
-                  headers: { "Content-Type": "application/json" }
-                });
-                return mockResponse;
-              });
-            };
-          })();
-
-          // Log environment variables for debugging
-          console.log("Environment variables loaded:", {
-            ...window._env_,
-            VITE_SUPABASE_ANON_KEY: "***",
-            VITE_EVIA_SIGN_CLIENT_SECRET: "***"
-          });
-          EOF
+          # Replace placeholders with actual environment variable values
+          # This approach avoids issues with variable expansion in heredocs
+          sed -i "s|SUPABASE_URL_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_URL:-$VITE_SUPABASE_URL}|g" env-config.js
+          sed -i "s|SUPABASE_ANON_KEY_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}|g" env-config.js
+          sed -i "s|SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER|${APPSETTING_VITE_SUPABASE_SERVICE_ROLE_KEY:-$VITE_SUPABASE_SERVICE_ROLE_KEY}|g" env-config.js
+          sed -i "s|EVIA_SIGN_CLIENT_ID_PLACEHOLDER|${APPSETTING_VITE_EVIA_SIGN_CLIENT_ID:-$VITE_EVIA_SIGN_CLIENT_ID}|g" env-config.js
+          sed -i "s|EVIA_SIGN_CLIENT_SECRET_PLACEHOLDER|${APPSETTING_VITE_EVIA_SIGN_CLIENT_SECRET:-$VITE_EVIA_SIGN_CLIENT_SECRET}|g" env-config.js
+          sed -i "s|EVIA_ACCESS_TOKEN_PLACEHOLDER|${APPSETTING_VITE_EVIA_ACCESS_TOKEN:-$VITE_EVIA_ACCESS_TOKEN}|g" env-config.js
+          sed -i "s|API_ENDPOINT_PLACEHOLDER|${APPSETTING_VITE_API_ENDPOINT:-$VITE_API_ENDPOINT}|g" env-config.js
+          sed -i "s|WEBHOOK_URL_PLACEHOLDER|${APPSETTING_VITE_WEBHOOK_URL:-$VITE_WEBHOOK_URL}|g" env-config.js
+          sed -i "s|SENDGRID_API_KEY_PLACEHOLDER|${APPSETTING_VITE_SENDGRID_API_KEY:-$VITE_SENDGRID_API_KEY}|g" env-config.js
+          sed -i "s|EMAIL_FROM_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FROM:-$VITE_EMAIL_FROM}|g" env-config.js
+          
+          # Special handling for EMAIL_FROM_NAME to handle quotes properly
+          EMAIL_FROM_NAME_VALUE="${APPSETTING_VITE_EMAIL_FROM_NAME:-$VITE_EMAIL_FROM_NAME}"
+          # Remove any existing quotes for consistent handling
+          EMAIL_FROM_NAME_VALUE=$(echo "$EMAIL_FROM_NAME_VALUE" | sed 's/^["'"'"']//g' | sed 's/["'"'"']$//g')
+          # Escape any special characters in the name
+          EMAIL_FROM_NAME_VALUE=$(echo "$EMAIL_FROM_NAME_VALUE" | sed 's/[\/&]/\\&/g')
+          sed -i "s/EMAIL_FROM_NAME_PLACEHOLDER/$EMAIL_FROM_NAME_VALUE/g" env-config.js
+          
+          sed -i "s|APP_BASE_URL_PLACEHOLDER|${APPSETTING_VITE_APP_BASE_URL:-$VITE_APP_BASE_URL}|g" env-config.js
+          sed -i "s|EMAIL_FUNCTION_URL_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FUNCTION_URL:-$VITE_EMAIL_FUNCTION_URL}|g" env-config.js
+          sed -i "s|EMAIL_FUNCTION_KEY_PLACEHOLDER|${APPSETTING_VITE_EMAIL_FUNCTION_KEY:-$VITE_EMAIL_FUNCTION_KEY}|g" env-config.js
+          
+          # Debug the generated file
+          echo "Generated env-config.js:"
+          cat env-config.js
           
           # Install serve if not already installed
           if ! command -v serve &> /dev/null; then
