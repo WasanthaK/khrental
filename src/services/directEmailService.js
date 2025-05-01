@@ -188,14 +188,7 @@ export const createUserWithEmail = async ({ email, name, role, userType }) => {
   }
 };
 
-/**
- * Sends an email using SendGrid API via Supabase Edge function
- * @param {Object|string} toParam - Either email address string or object with email properties
- * @param {string} [subjectParam] - Email subject (if toParam is a string)
- * @param {string} [htmlParam] - HTML content (if toParam is a string) 
- * @param {Object} [optionsParam] - Additional options (if toParam is a string)
- * @returns {Promise<Object>} - Result of the send operation
- */
+// Sends an email using SendGrid API via Supabase Edge function
 export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsParam = {}) => {
   // Generate unique request ID to track this email through logs
   const requestId = `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -210,7 +203,19 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
         ...optionsParam
       };
   
-  const { to, subject, html } = params;
+  const { to, subject, html, text, from, fromName, attachments = [] } = params;
+  
+  // Get API key and check if we're in dev mode
+  const apiKey = getSendGridKey();
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  // TEMPORARY: Force real email sending even in development
+  // const simulated = isDev || !apiKey;
+  const simulated = false; // Force real email sending for testing
+  
+  // Get sender information
+  const fromEmail = getFromEmail(from);
+  const fromDisplayName = getFromName(fromName);
 
   console.log(`[${requestId}][directEmailService] Email to ${to} with subject "${subject}" would be sent in production`);
   

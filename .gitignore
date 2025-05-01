@@ -59,3 +59,7 @@ WEBHOOK_README.md
 public/env-config.js
 .env*
 public/env-config.js
+
+# Test files
+email-test.js
+src/test-email.js
