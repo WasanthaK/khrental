@@ -400,35 +400,74 @@ const AgreementFormContainer = () => {
     setShowSignatureForm(false);
   };
 
+  // Clean up when unmounting - prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Clear any state or handlers here if needed
+      setShowSignatureForm(false);
+      setFormDataToSign(null);
+    };
+  }, []);
+
+  // Check if we need to prevent navigation due to unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (id && initialData) {
+        // Show a standard confirmation dialog
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [id, initialData]);
+
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading agreement data...</p>
+        </div>
+      </div>
+    );
   }
 
-  console.log("Render debug - SignatureForm conditions:", {
-    showSignatureForm,
-    hasAgreement: !!agreement,
-    hasCurrentUser: !!currentUser
-  });
+  if (showSignatureForm) {
+    return (
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md w-full max-w-full overflow-x-auto">
+        <SignatureForm
+          agreement={agreement}
+          formData={formDataToSign}
+          onSuccess={handleSignatureFormSuccess}
+          onCancel={handleSignatureFormCancel}
+        />
+      </div>
+    );
+  }
 
   return (
-    <>
+    <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md w-full max-w-full overflow-hidden">
+      <div className="mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+          {id ? 'Edit Agreement' : 'Create New Agreement'}
+        </h1>
+        <p className="text-sm text-gray-600 mt-1">
+          {id
+            ? 'Update the details of this rental agreement'
+            : 'Fill in the details to create a new rental agreement'}
+        </p>
+      </div>
+
       <AgreementFormUI
         initialData={initialData}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
-        readOnly={initialData?.status === AGREEMENT_STATUS.SIGNED}
       />
-      
-      {/* Use the original SignatureForm component only */}
-      {showSignatureForm && agreement && currentUser && (
-        <SignatureForm
-          agreement={agreement}
-          currentUser={currentUser}
-          onSuccess={handleSignatureFormSuccess}
-          onCancel={handleSignatureFormCancel}
-        />
-      )}
-    </>
+    </div>
   );
 };
 

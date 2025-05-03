@@ -12,6 +12,7 @@ const AgreementTemplateList = () => {
   const [filter, setFilter] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [viewMode, setViewMode] = useState('table');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -24,6 +25,22 @@ const AgreementTemplateList = () => {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
+
+  // Set view mode based on screen width
+  useEffect(() => {
+    const handleResize = () => {
+      setViewMode(window.innerWidth < 768 ? 'card' : 'table');
+    };
+    
+    // Set initial value
+    handleResize();
+    
+    // Add event listener
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -68,7 +85,9 @@ const AgreementTemplateList = () => {
   };
 
   const handleDelete = async () => {
-    if (!templateToDelete) return;
+    if (!templateToDelete) {
+      return;
+    }
     
     try {
       setLoading(true);
@@ -82,9 +101,11 @@ const AgreementTemplateList = () => {
       setTemplates(templates.filter(t => t.id !== templateToDelete.id));
       setShowDeleteConfirm(false);
       setTemplateToDelete(null);
+      toast.success("Template deleted successfully");
     } catch (error) {
       console.error('Error deleting template:', error.message);
       setError(error.message);
+      toast.error(`Failed to delete template: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -108,29 +129,45 @@ const AgreementTemplateList = () => {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="pb-20">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-semibold">Agreement Templates</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={() => {
               console.log('Navigating to template creation form');
               navigate('/dashboard/agreements/templates/new');
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center"
+            className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center text-sm"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
-            Create Template
+            New Template
           </button>
-          <a 
-            href="/dashboard/agreements/templates/new"
-            target="_self"
-            className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded flex items-center"
-          >
-            Direct Link
-          </a>
+          <div className="flex items-center ml-auto sm:ml-0">
+            <button
+              onClick={() => setViewMode('card')}
+              className={`p-2 rounded ${viewMode === 'card' ? 'bg-gray-200' : 'bg-white'}`}
+              title="Card View"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded ${viewMode === 'table' ? 'bg-gray-200' : 'bg-white'}`}
+              title="Table View"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
       
@@ -168,93 +205,137 @@ const AgreementTemplateList = () => {
         </div>
       </div>
       
-      {/* Templates Table */}
+      {/* Templates - Table View for desktop */}
       {filteredTemplates.length > 0 ? (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Language
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Version
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+        <>
+          {viewMode === 'table' && (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Language
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Version
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredTemplates.map((template) => (
+                      <tr key={template.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {template.name || `Template #${template.id.substring(0, 8)}`}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">{template.language}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">v{template.version}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">{formatDate(template.createdat)}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-3">
+                            <Link
+                              to={`/dashboard/agreements/templates/${template.id}`}
+                              className="text-blue-600 hover:text-blue-900"
+                              onClick={(e) => {
+                                const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+                                if (!uuidV4Regex.test(template.id)) {
+                                  e.preventDefault();
+                                  toast.error(`Invalid template ID format: ${template.id}. Expected a valid UUID v4.`);
+                                }
+                              }}
+                            >
+                              View
+                            </Link>
+                            <Link
+                              to={`/dashboard/agreements/templates/${template.id}/edit`}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              onClick={(e) => {
+                                const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+                                if (!uuidV4Regex.test(template.id)) {
+                                  e.preventDefault();
+                                  toast.error(`Invalid template ID format: ${template.id}. Expected a valid UUID v4.`);
+                                }
+                              }}
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              onClick={() => handleDeleteClick(template)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Card View for mobile */}
+          {viewMode === 'card' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTemplates.map((template) => (
-                <tr key={template.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                <div key={template.id} className="bg-white rounded-lg shadow overflow-hidden">
+                  <div className="p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
                       {template.name || `Template #${template.id.substring(0, 8)}`}
+                    </h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                        {template.language}
+                      </span>
+                      <span className="text-xs text-gray-500">v{template.version}</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{template.language}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">v{template.version}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{formatDate(template.createdat)}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-3">
+                    <p className="text-sm text-gray-500 mb-4">
+                      Created: {formatDate(template.createdat)}
+                    </p>
+                    <div className="flex justify-between border-t pt-4">
                       <Link
                         to={`/dashboard/agreements/templates/${template.id}`}
-                        className="text-blue-600 hover:text-blue-900"
-                        onClick={(e) => {
-                          // Specific validation for Version 4 UUIDs generated by PostgreSQL's gen_random_uuid()
-                          // Version 4 UUIDs have the form: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-                          // where x is any hexadecimal digit and y is one of 8, 9, a, or b
-                          const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-                          if (!uuidV4Regex.test(template.id)) {
-                            e.preventDefault();
-                            toast.error(`Invalid template ID format: ${template.id}. Expected a valid UUID v4.`);
-                          }
-                        }}
+                        className="text-blue-600 hover:text-blue-900 text-sm"
                       >
                         View
                       </Link>
                       <Link
                         to={`/dashboard/agreements/templates/${template.id}/edit`}
-                        className="text-indigo-600 hover:text-indigo-900"
-                        onClick={(e) => {
-                          // Specific validation for Version 4 UUIDs generated by PostgreSQL's gen_random_uuid()
-                          // Version 4 UUIDs have the form: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-                          // where x is any hexadecimal digit and y is one of 8, 9, a, or b
-                          const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-                          if (!uuidV4Regex.test(template.id)) {
-                            e.preventDefault();
-                            toast.error(`Invalid template ID format: ${template.id}. Expected a valid UUID v4.`);
-                          }
-                        }}
+                        className="text-indigo-600 hover:text-indigo-900 text-sm"
                       >
                         Edit
                       </Link>
                       <button
                         onClick={() => handleDeleteClick(template)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-600 hover:text-red-900 text-sm"
                       >
                         Delete
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+        </>
       ) : (
         <div className="bg-gray-50 p-6 rounded-lg text-center">
           <p className="text-gray-600">No templates found. {searchTerm && 'Try adjusting your search.'}</p>

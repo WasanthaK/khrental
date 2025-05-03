@@ -63,3 +63,9 @@ public/env-config.js
 # Test files
 email-test.js
 src/test-email.js
+
+# Mobile testing
+testing/
+mobile-test.js
+chrome-mobile-test.js
+mobile-test-results/

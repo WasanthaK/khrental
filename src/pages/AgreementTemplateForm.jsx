@@ -489,22 +489,22 @@ const AgreementTemplateForm = () => {
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Header Section */}
-      <div className="mb-8 border-b pb-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">
+      <div className="mb-6 border-b pb-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             {isEditMode ? 'Edit Agreement Template' : 'Create New Agreement Template'}
           </h1>
           <button
             type="button"
             onClick={() => navigate('/dashboard/agreements/templates')}
-            className="text-gray-600 hover:text-gray-900 flex items-center gap-2"
+            className="text-gray-600 hover:text-gray-900 flex items-center gap-2 text-sm"
           >
             <i className="fas fa-arrow-left"></i>
             Back to Templates
           </button>
         </div>
         <p className="mt-2 text-sm text-gray-600">
-          Create or modify agreement templates with dynamic merge fields for property and tenant information.
+          Create or modify agreement templates with dynamic merge fields.
         </p>
       </div>
 
@@ -520,7 +520,7 @@ const AgreementTemplateForm = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-8">
+      <div className="grid grid-cols-1 gap-6">
         {/* Main Form Section */}
         <div>
           <form 
@@ -528,7 +528,7 @@ const AgreementTemplateForm = () => {
             className="agreement-template-form"
           >
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-6">
                 {/* Template Details */}
                 <div className="space-y-4">
                   <h2 className="text-lg font-medium text-gray-900">Template Details</h2>
@@ -554,26 +554,174 @@ const AgreementTemplateForm = () => {
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
                       >
-                        <option value="en">English</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
+                        <option value="English">English</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
                       </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Merge Fields - Collapsible Sections */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-medium text-gray-900">Available Merge Fields</h2>
+                  <p className="text-sm text-gray-600">Click on any field to insert it into your template at the cursor position.</p>
+                  
+                  <div className="space-y-2">
+                    {/* Agreement Fields */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('agreement')}
+                        className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="font-medium">Agreement Fields</span>
+                        <i className={`fas fa-chevron-${expandedSections.agreement ? 'up' : 'down'}`}></i>
+                      </button>
+                      {expandedSections.agreement && (
+                        <div className="p-3 bg-white">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(mergeFields.agreement).map(([key, field]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(e) => handleMergeFieldClick(e, field, key)}
+                                className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded hover:bg-blue-100"
+                              >
+                                {key}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Property Fields */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('property')}
+                        className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="font-medium">Property Fields</span>
+                        <i className={`fas fa-chevron-${expandedSections.property ? 'up' : 'down'}`}></i>
+                      </button>
+                      {expandedSections.property && (
+                        <div className="p-3 bg-white">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(mergeFields.property).map(([key, field]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(e) => handleMergeFieldClick(e, field, key)}
+                                className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100"
+                              >
+                                {key}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Unit Fields */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('unit')}
+                        className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="font-medium">Unit Fields</span>
+                        <i className={`fas fa-chevron-${expandedSections.unit ? 'up' : 'down'}`}></i>
+                      </button>
+                      {expandedSections.unit && (
+                        <div className="p-3 bg-white">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(mergeFields.unit).map(([key, field]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(e) => handleMergeFieldClick(e, field, key)}
+                                className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100"
+                              >
+                                {key}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Rentee Fields */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('rentee')}
+                        className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="font-medium">Rentee Fields</span>
+                        <i className={`fas fa-chevron-${expandedSections.rentee ? 'up' : 'down'}`}></i>
+                      </button>
+                      {expandedSections.rentee && (
+                        <div className="p-3 bg-white">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(mergeFields.rentee).map(([key, field]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(e) => handleMergeFieldClick(e, field, key)}
+                                className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs rounded hover:bg-yellow-100"
+                              >
+                                {key}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Terms Fields */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('terms')}
+                        className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="font-medium">Terms Fields</span>
+                        <i className={`fas fa-chevron-${expandedSections.terms ? 'up' : 'down'}`}></i>
+                      </button>
+                      {expandedSections.terms && (
+                        <div className="p-3 bg-white">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(mergeFields.terms).map(([key, field]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(e) => handleMergeFieldClick(e, field, key)}
+                                className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded hover:bg-purple-100"
+                              >
+                                {key}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Template Content */}
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <h2 className="text-lg font-medium text-gray-900">Template Content</h2>
                     <Tooltip content="See how your template looks with sample data">
                       <button
                         type="button"
                         onClick={generatePreview}
-                        className="inline-flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
-                        <i className="fas fa-eye mr-2"></i>
-                        Preview with Sample Data
+                        <i className="fas fa-eye mr-1.5"></i>
+                        Preview
                       </button>
                     </Tooltip>
                   </div>
@@ -582,34 +730,34 @@ const AgreementTemplateForm = () => {
                     onChange={handleEditorContentChange}
                     placeholder="Start writing your agreement template..."
                     onEditorReady={setEditorRef}
-                    height="500px"
+                    height="400px"
                   />
                 </div>
               </div>
 
               {/* Form Actions */}
-              <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+              <div className="bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => navigate('/dashboard/agreements/templates')}
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="px-3 py-1.5 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  className="px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                 >
                   {submitting ? (
                     <>
-                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      <i className="fas fa-spinner fa-spin mr-1.5"></i>
                       Saving...
                     </>
                   ) : (
                     <>
-                      <i className="fas fa-save mr-2"></i>
-                      {isEditMode ? 'Update Template' : 'Create Template'}
+                      <i className="fas fa-save mr-1.5"></i>
+                      {isEditMode ? 'Update' : 'Create'}
                     </>
                   )}
                 </button>
@@ -623,8 +771,8 @@ const AgreementTemplateForm = () => {
       {showPreview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex justify-between items-center px-6 py-4 border-b">
-              <h2 className="text-xl font-bold text-gray-900">Template Preview with Sample Data</h2>
+            <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Template Preview</h2>
               <button
                 onClick={() => setShowPreview(false)}
                 className="text-gray-500 hover:text-gray-700 focus:outline-none"
@@ -632,9 +780,9 @@ const AgreementTemplateForm = () => {
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            <div className="p-6 overflow-y-auto bg-white" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+            <div className="p-4 sm:p-6 overflow-y-auto bg-white" style={{ maxHeight: 'calc(90vh - 80px)' }}>
               <div 
-                className="preview-content"
+                className="preview-content text-sm sm:text-base"
                 dangerouslySetInnerHTML={{ __html: previewContent }}
               />
             </div>
@@ -674,6 +822,9 @@ const AgreementTemplateForm = () => {
           width: 100%;
           margin-bottom: 1rem;
           border: 2px solid #ddd;
+          display: block;
+          overflow-x: auto;
+          max-width: 100%;
         }
         .preview-content table th,
         .preview-content table td {
@@ -704,6 +855,15 @@ const AgreementTemplateForm = () => {
         }
         .preview-content strong { font-weight: bold; }
         .preview-content em { font-style: italic; }
+        
+        @media (max-width: 640px) {
+          .preview-content {
+            font-size: 13px;
+          }
+          .preview-content h1 { font-size: 1.25rem; }
+          .preview-content h2 { font-size: 1.125rem; }
+          .preview-content h3 { font-size: 1rem; }
+        }
       `}</style>
     </div>
   );

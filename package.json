@@ -29,7 +29,10 @@
     "verify-azure": "node scripts/verify-azure-configuration.js",
     "proxy": "node cors-proxy.js",
     "dev:with-proxy": "concurrently \"npm run proxy\" \"npm run dev\"",
-    "deploy:functions": "npx supabase functions deploy sendgrid-email"
+    "start": "node start-dev.js",
+    "deploy:functions": "npx supabase functions deploy sendgrid-email",
+    "test:mobile": "node mobile-test.js",
+    "test:mobile:chrome": "node testing/mobile/chrome-test.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -92,9 +95,10 @@
     "eslint-plugin-react-refresh": "^0.4.4",
     "node-fetch": "^2.7.0",
     "postcss": "^8.4.31",
+    "puppeteer": "^24.8.0",
     "supabase": "^2.20.12",
     "tailwindcss": "^3.3.5",
     "terser": "^5.39.0",
-    "vite": "^5.0.0"
+    "vite": "^6.3.4"
   }
 }

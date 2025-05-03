@@ -106,20 +106,20 @@ const DashboardLayout = () => {
   // Sidebar content - extracted to avoid duplication
   const SidebarContent = () => (
     <div className="flex flex-col h-full relative">
-      <div className="p-5 border-b border-blue-700">
-        <h1 className="text-2xl font-bold text-white">KH Rentals</h1>
+      <div className="p-4 sm:p-5 border-b border-blue-700">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">KH Rentals</h1>
       </div>
       
       {/* User information moved from bottom to top */}
-      <div className="p-4 border-b border-blue-700 bg-blue-900/50">
+      <div className="p-3 sm:p-4 border-b border-blue-700 bg-blue-900/50">
         <div className="flex flex-col space-y-2">
           <div className="flex items-start">
-            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0 mr-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0 mr-2 sm:mr-3">
               {user?.email?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0 overflow-hidden text-left">
               <p className="text-xs text-blue-200 capitalize font-medium">{user?.role || 'User'}</p>
-              <p className="font-medium text-white truncate text-sm leading-tight">{user?.email}</p>
+              <p className="font-medium text-white truncate text-xs sm:text-sm leading-tight">{user?.email}</p>
             </div>
           </div>
           
@@ -133,15 +133,15 @@ const DashboardLayout = () => {
           
           <button
             onClick={handleSignOut}
-            className="w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md transition-colors text-sm font-medium flex items-center justify-center"
+            className="w-full px-3 py-1.5 sm:py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md transition-colors text-xs sm:text-sm font-medium flex items-center justify-center"
           >
             Sign Out
           </button>
         </div>
       </div>
       
-      <div className="py-4 px-3 flex-1 overflow-y-auto">
-        <nav className="space-y-1.5">
+      <div className="py-3 sm:py-4 px-2 sm:px-3 flex-1 overflow-y-auto">
+        <nav className="space-y-1">
           <NavLink
             to="/dashboard"
             end
@@ -311,12 +311,12 @@ const DashboardLayout = () => {
       
       <div className="flex h-screen bg-gray-100">
         {/* Mobile menu button */}
-        <div className="lg:hidden fixed top-0 left-0 z-50 m-4">
+        <div className="lg:hidden fixed top-0 left-0 z-50 m-2 sm:m-4">
           <button 
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-md bg-blue-800 text-white focus:outline-none focus:ring-2 focus:ring-white"
           >
-            <Bars3Icon className="h-6 w-6" aria-hidden="true" />
+            <Bars3Icon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
           </button>
         </div>
         
@@ -329,13 +329,13 @@ const DashboardLayout = () => {
         )}
         
         {/* Mobile sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-blue-900 to-blue-800 text-white transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:hidden`}>
-          <div className="absolute top-0 right-0 p-2">
+        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-blue-900 to-blue-800 text-white transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:hidden overflow-hidden`}>
+          <div className="absolute top-0 right-0 p-1 sm:p-2">
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-2 rounded-md text-white hover:bg-blue-700 focus:outline-none"
+              className="p-1.5 sm:p-2 rounded-md text-white hover:bg-blue-700 focus:outline-none"
             >
-              <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+              <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
             </button>
           </div>
           <div className="h-full overflow-hidden">
@@ -350,7 +350,7 @@ const DashboardLayout = () => {
         
         {/* Main Content */}
         <div className="flex-1 overflow-auto w-full lg:w-auto">
-          <div className="p-4 sm:p-6 mt-12 lg:mt-0">
+          <div className="p-3 sm:p-4 md:p-6 mt-10 lg:mt-0">
             <Outlet />
           </div>
         </div>

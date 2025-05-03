@@ -49,52 +49,52 @@ const AgreementCard = ({ agreement, property, rentee }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3 sm:mb-4">
+          <div className="mb-2 sm:mb-0">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1">
               {property?.name || 'Unknown Property'}
             </h3>
-            <p className="text-sm text-gray-600">
+            <p className="text-xs sm:text-sm text-gray-600 break-words">
               {property?.address || 'No address available'}
             </p>
           </div>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(agreement.status)}`}>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium w-fit ${getStatusColor(agreement.status)}`}>
             {formatStatus(agreement.status)}
           </span>
         </div>
 
-        <div className="space-y-2 mb-4">
-          <div className="flex justify-between text-sm">
+        <div className="space-y-1 sm:space-y-2 mb-3 sm:mb-4">
+          <div className="flex justify-between text-xs sm:text-sm">
             <span className="text-gray-600">Rentee:</span>
-            <span className="font-medium text-gray-900">{rentee?.name || 'Unknown'}</span>
+            <span className="font-medium text-gray-900 text-right ml-2">{rentee?.name || 'Unknown'}</span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-xs sm:text-sm">
             <span className="text-gray-600">Created:</span>
-            <span className="text-gray-900">{formatDate(agreement.createdat)}</span>
+            <span className="text-gray-900 text-right ml-2">{formatDate(agreement.createdat)}</span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="flex flex-col sm:flex-row sm:justify-between text-xs sm:text-sm">
             <span className="text-gray-600">Period:</span>
-            <span className="text-gray-900">
+            <span className="text-gray-900 text-right">
               {formatDate(agreement.startdate)} - {formatDate(agreement.enddate)}
             </span>
           </div>
           {agreement.signeddate && (
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-xs sm:text-sm">
               <span className="text-gray-600">Signed:</span>
-              <span className="text-gray-900">{formatDate(agreement.signeddate)}</span>
+              <span className="text-gray-900 text-right ml-2">{formatDate(agreement.signeddate)}</span>
             </div>
           )}
         </div>
 
-        <div className="border-t pt-4">
-          <div className="flex justify-between items-center">
+        <div className="border-t pt-3 sm:pt-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-3">
             {agreement.pdfurl ? (
               <a
                 href={agreement.pdfurl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium flex items-center"
               >
                 <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -105,7 +105,7 @@ const AgreementCard = ({ agreement, property, rentee }) => {
             ) : (
               <Link
                 to={`/dashboard/agreements/${agreement.id}`}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium"
               >
                 View Agreement
               </Link>

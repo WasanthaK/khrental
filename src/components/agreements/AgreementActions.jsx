@@ -386,74 +386,117 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Status change notification - non-visual component */}
-      <SignatureStatusNotification 
-        status={mapStatusForTracker(signatureStatus)} 
-        prevStatus={mapStatusForTracker(prevSignatureStatus)}
-        requestId={agreement.eviasignreference}
-      />
-      
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
-
-      {/* Show status dashboard if already sent for signature */}
-      {agreement.eviasignreference && (
-        <AgreementStatusDashboard
-          agreement={agreement}
-          signatureStatus={signatureStatus}
-          isRefreshing={isCheckingStatus}
-          lastChecked={lastChecked}
-          error={error}
-          onRefresh={refreshSignatureStatus}
-        />
-      )}
-      
-      {/* Show signature details */}
-      {agreement.eviasignreference && (
-        <SignatureProcessDetails 
-          status={mapStatusForTracker(signatureStatus)}
-          requestId={agreement.eviasignreference}
-        />
-      )}
-
-      {/* Buttons */}
-      <div className="flex space-x-3 mt-6">
-        {/* Send for Signature button - only show in review status with document */}
-        {showSendButton && (
-          <Button
-            onClick={handleSendForSignature}
-            disabled={disableSendButton}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            {loading ? 'Sending...' : 'Send for Signature'}
-          </Button>
-        )}
-
-        {/* View Document button - show if document exists */}
+    <div className="flex flex-col space-y-3">
+      <div className="flex flex-wrap gap-2 items-center justify-end">
+        {/* View Document Button */}
         {agreement.documenturl && (
           <Button
+            size="sm"
+            intent="secondary"
+            className="min-w-[100px] text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1.5 whitespace-nowrap"
             onClick={handleViewDocument}
-            className="bg-gray-600 hover:bg-gray-700 text-white"
           >
             View Document
           </Button>
         )}
 
-        {/* Reset signature status button - show for non-complete statuses */}
-        {hasSentForSignature && signatureStatus && signatureStatus !== 'completed' && (
+        {/* Send for Signature Button - only shown in review status */}
+        {showSendButton && (
           <Button
-            onClick={handleResetSignatureStatus}
-            disabled={loading}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            size="sm"
+            intent="primary"
+            className="min-w-[140px] text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1.5 whitespace-nowrap"
+            onClick={handleSendForSignature}
+            loading={loading}
+            disabled={disableSendButton}
           >
-            Reset Signature Request
+            Send for Signature
+          </Button>
+        )}
+        
+        {/* Check Status Button - only shown when there's a signature in progress */}
+        {agreement.eviasignreference && (
+          <Button
+            size="sm"
+            intent="secondary"
+            className="min-w-[120px] text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1.5 whitespace-nowrap"
+            onClick={refreshSignatureStatus}
+            loading={isCheckingStatus}
+          >
+            Check Status
           </Button>
         )}
       </div>
+
+      {/* Signature Status Section */}
+      {signatureStatus && (
+        <div className="mt-2 p-3 border border-gray-200 rounded-md bg-gray-50">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Status:</span>
+              <SignatureStatusBadge status={signatureStatus} />
+            </div>
+            <div className="text-xs text-gray-500">
+              Last checked: {lastChecked ? new Date(lastChecked).toLocaleString() : 'Never'}
+            </div>
+          </div>
+          
+          <div className="mt-3">
+            <SignatureStatusTracker status={mapStatusForTracker(signatureStatus)} />
+          </div>
+          
+          {signatureStatus !== prevSignatureStatus && (
+            <div className="mt-3">
+              <SignatureStatusNotification 
+                prevStatus={prevSignatureStatus} 
+                currentStatus={signatureStatus} 
+              />
+            </div>
+          )}
+          
+          {signatureData && (
+            <div className="mt-4">
+              <SignatureProcessDetails data={signatureData} />
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Dev Tools - only show in development mode or for admin roles */}
+      {(process.env.NODE_ENV === 'development' || agreement.status === 'pending_signature') && 
+        agreement.eviasignreference && (
+        <div className="mt-4 text-xs">
+          <details className="p-2 border rounded border-gray-200">
+            <summary className="cursor-pointer font-medium mb-2">Advanced Options</summary>
+            <div className="space-y-2 pt-2">
+              <p className="text-gray-500 mb-2">These options are for troubleshooting the signature process.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="xs"
+                  intent="danger"
+                  variant="outline"
+                  onClick={handleResetSignatureStatus}
+                  className="text-xs px-2 py-1"
+                >
+                  Reset Signature
+                </Button>
+                <Button
+                  size="xs"
+                  intent="secondary"
+                  variant="outline"
+                  onClick={refreshSignatureStatus}
+                  className="text-xs px-2 py-1"
+                >
+                  Force Refresh
+                </Button>
+              </div>
+              <div className="text-gray-500 mt-2">
+                <div>Reference: <code className="bg-gray-100 px-1 text-xs">{agreement.eviasignreference}</code></div>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
     </div>
   );
 };

@@ -451,11 +451,11 @@ const AdminDashboard = () => {
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
   };
 
-  // Render user card for mobile view
+  // Render user card for mobile view with improved UX
   const renderUserCard = (user) => (
     <div
       key={user.id}
-      className="bg-white shadow rounded-md overflow-hidden hover:shadow-md transition-shadow"
+      className="bg-white shadow-md rounded-xl overflow-hidden mb-4"
     >
       <div className="p-4">
         <div className="flex justify-between items-start">
@@ -464,9 +464,11 @@ const AdminDashboard = () => {
               {user.name || 'Unnamed User'}
             </h3>
             <p className="text-sm text-gray-600 truncate">{user.email}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {user.role} ({user.user_type})
-            </p>
+            <div className="mt-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {user.role} ({user.user_type})
+              </span>
+            </div>
           </div>
           
           <div className="flex flex-col space-y-2">
@@ -474,18 +476,20 @@ const AdminDashboard = () => {
           </div>
         </div>
         
-        <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
-          <div className="text-xs text-gray-500">
-            Created: {new Date(user.createdat).toLocaleString()}
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs text-gray-500">
+              Created: {new Date(user.createdat).toLocaleString()}
+            </span>
           </div>
           
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => toggleUserStatus(user.id, user.active)}
-              className={`px-2 py-1 text-xs rounded-md ${
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg ${
                 user.active
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'bg-green-500 text-white hover:bg-green-600'
               }`}
             >
               {user.active ? 'Deactivate' : 'Activate'}
@@ -494,19 +498,11 @@ const AdminDashboard = () => {
             {!user.auth_id && (
               <button
                 onClick={() => sendInvite(user, sendRealEmail)}
-                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md"
+                className="flex-1 px-3 py-2 text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 rounded-lg"
               >
-                Re-invite
+                {user.invited ? 'Re-invite' : 'Invite'}
               </button>
             )}
-            
-            <button
-              onClick={() => checkStatus(user.id)}
-              className="px-2 py-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-md"
-              title="Check invitation status"
-            >
-              Status
-            </button>
           </div>
         </div>
       </div>
@@ -702,111 +698,115 @@ const AdminDashboard = () => {
     }
   };
 
-  // Add pagination controls component
+  // Improved pagination control for mobile
   const PaginationControls = () => {
+    // Calculate page range
     const totalPages = Math.ceil(totalUsers / pageSize);
+    const pageRange = [];
+    
+    // Calculate which pages to show
+    let startPage = Math.max(1, currentPage - 1);
+    let endPage = Math.min(totalPages, currentPage + 1);
+    
+    // If we're showing fewer than 3 pages, adjust to show 3 where possible
+    if (endPage - startPage + 1 < 3) {
+      if (startPage === 1) {
+        endPage = Math.min(3, totalPages);
+      } else if (endPage === totalPages) {
+        startPage = Math.max(1, totalPages - 2);
+      }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageRange.push(i);
+    }
     
     return (
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center">
-          <span className="text-sm text-gray-700">
-            Showing {users.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, totalUsers)} of {totalUsers} users
-          </span>
-          <div className="ml-4">
-            <select 
-              value={pageSize}
-              onChange={e => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1); // Reset to first page when changing page size
-              }}
-              className="text-sm border rounded px-2 py-1"
-            >
-              <option value={5}>5 per page</option>
-              <option value={10}>10 per page</option>
-              <option value={25}>25 per page</option>
-              <option value={50}>50 per page</option>
-            </select>
-          </div>
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between">
+        <div className="mb-3 sm:mb-0 text-sm text-gray-700">
+          Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalUsers)} of {totalUsers} results
         </div>
         
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap justify-center gap-1">
           <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            onClick={() => setCurrentPage(1)}
             disabled={currentPage === 1}
-            className={`px-3 py-1 text-sm rounded ${
-              currentPage === 1 
-                ? 'bg-gray-100 text-gray-400' 
-                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            className={`px-3 py-2 sm:px-4 rounded-lg text-sm ${
+              currentPage === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            Previous
+            First
           </button>
           
-          {totalPages > 0 && (
-            <div className="flex space-x-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                // Show 5 pages at most, centered around current page
-                const totalPageButtons = Math.min(5, totalPages);
-                const startPage = Math.max(
-                  1, 
-                  currentPage - Math.floor(totalPageButtons / 2)
-                );
-                const pageNum = startPage + i;
-                
-                if (pageNum > totalPages) {
-                  return null;
-                }
-                
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`w-8 h-8 text-sm rounded ${
-                      currentPage === pageNum 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              
-              {totalPages > 5 && currentPage < totalPages - 2 && (
-                <>
-                  <span className="self-center">...</span>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="w-8 h-8 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+          <button
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className={`px-3 py-2 sm:px-4 rounded-lg text-sm ${
+              currentPage === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Prev
+          </button>
+          
+          {pageRange.map(page => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              className={`px-3 py-2 rounded-lg text-sm ${
+                currentPage === page
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
           
           <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages || totalPages === 0}
-            className={`px-3 py-1 text-sm rounded ${
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className={`px-3 py-2 sm:px-4 rounded-lg text-sm ${
               currentPage === totalPages || totalPages === 0
-                ? 'bg-gray-100 text-gray-400' 
-                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
             Next
           </button>
+          
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            className={`px-3 py-2 sm:px-4 rounded-lg text-sm ${
+              currentPage === totalPages || totalPages === 0
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Last
+          </button>
+        </div>
+        
+        <div className="mt-3 sm:mt-0 text-sm text-gray-700 hidden sm:block">
+          Page {currentPage} of {totalPages}
         </div>
       </div>
     );
   };
 
-  // Add filter and search UI
+  // Improved filter UI for mobile
   const UserFilters = () => (
-    <div className="mb-4 flex flex-col sm:flex-row gap-3">
-      <div className="flex-1">
+    <div className="mb-6 flex flex-col">
+      <div className="mb-3">
+        <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+          Search Users
+        </label>
         <input
+          id="search"
           type="text"
           value={searchTerm}
           onChange={e => {
@@ -814,101 +814,118 @@ const AdminDashboard = () => {
             setCurrentPage(1); // Reset to first page when searching
           }}
           placeholder="Search by name or email"
-          className="w-full px-3 py-2 border rounded text-sm"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
         />
       </div>
       
-      <div className="flex space-x-2">
-        <select
-          value={filterStatus}
-          onChange={e => {
-            setFilterStatus(e.target.value);
-            setCurrentPage(1); // Reset to first page when filtering
-          }}
-          className="px-3 py-2 border rounded text-sm"
-        >
-          <option value="all">All Users</option>
-          <option value="active">Active Only</option>
-          <option value="inactive">Inactive Only</option>
-        </select>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="w-full sm:w-auto">
+          <label htmlFor="filter" className="block text-sm font-medium text-gray-700 mb-1">
+            Status Filter
+          </label>
+          <select
+            id="filter"
+            value={filterStatus}
+            onChange={e => {
+              setFilterStatus(e.target.value);
+              setCurrentPage(1); // Reset to first page when filtering
+            }}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="all">All Users</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+          </select>
+        </div>
         
-        <button
-          onClick={() => {
-            setSearchTerm('');
-            setFilterStatus('all');
-            setCurrentPage(1);
-          }}
-          className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200"
-        >
-          Reset
-        </button>
+        <div className="w-full sm:w-auto sm:self-end">
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              setFilterStatus('all');
+              setCurrentPage(1);
+            }}
+            className="w-full px-4 py-2 bg-gray-500 text-white rounded-lg text-sm font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            Reset Filters
+          </button>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="p-3 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Admin Dashboard</h1>
+    <div className="px-4 pb-20 bg-gray-50 min-h-screen">
+      <h1 className="text-2xl font-bold pt-6 pb-6 text-center">Admin Dashboard</h1>
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 sm:px-4 sm:py-3 rounded mb-4 text-sm">
-          {error}
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow-sm">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">{error}</p>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="mb-4 sm:mb-6">
-        <div className="border-b border-gray-200 overflow-x-auto">
-          <nav className="-mb-px flex space-x-4 sm:space-x-8">
-            {['users', 'storage', 'templates', 'email-diagnostics'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`
-                  py-2 px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap
-                  ${activeTab === tab
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                {tab === 'email-diagnostics' ? 'Email Diagnostics' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-          </nav>
+      {/* Mobile-friendly tabs - Improved */}
+      <div className="mb-6 bg-white rounded-2xl shadow p-1.5 mx-auto max-w-md">
+        <div className="flex">
+          {['users', 'storage', 'templates', 'email-diagnostics'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`
+                py-2.5 px-3 rounded-xl text-sm font-medium flex-1 transition-all
+                ${activeTab === tab
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+                }
+              `}
+            >
+              {tab === 'email-diagnostics' ? 'Email' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Users Tab */}
       {activeTab === 'users' && (
         <div>
-          <div className="mb-4">
-            <button 
-              onClick={debugShowInvited}
-              className="mb-3 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded"
-            >
-              Debug: Show All Users in Console
-            </button>
-          </div>
-          
-          <div className="mb-4 sm:mb-6">
-            <h2 className="text-lg font-semibold mb-3">Invite New User</h2>
-            <form onSubmit={handleUserInvite} className="mt-4 mb-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="mb-6 bg-white rounded-2xl shadow p-5">
+            <h2 className="text-xl font-semibold mb-5">Invite New User</h2>
+            <form onSubmit={handleUserInvite} className="space-y-5">
+              <div className="space-y-4">
                 <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
                   <input
+                    id="email"
                     type="email"
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
-                    placeholder="Email address"
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    placeholder="user@example.com"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
                 </div>
+                
                 <div>
+                  <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
+                    User Role
+                  </label>
                   <select
+                    id="role"
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value)}
-                    className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base bg-white focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                    style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                   >
                     <option value="rentee">Rentee</option>
                     <option value="staff">Staff</option>
@@ -916,183 +933,91 @@ const AdminDashboard = () => {
                     <option value="maintenance">Maintenance</option>
                   </select>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="submit"
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    disabled={loading}
-                  >
-                    {loading ? 'Adding...' : 'Add User'}
-                  </button>
-                  <div className="flex items-center ml-4">
+                
+                <div className="flex items-center py-2">
+                  <div className="bg-gray-100 p-2 rounded-lg">
                     <input
                       id="sendRealEmail"
                       type="checkbox"
                       checked={sendRealEmail}
                       onChange={(e) => setSendRealEmail(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <label htmlFor="sendRealEmail" className="ml-2 text-sm text-gray-700">
                       Send real email (not simulated)
                     </label>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center mb-3">
-                <input
-                  id="testingMode"
-                  type="checkbox"
-                  checked={testingMode}
-                  onChange={(e) => setTestingMode(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="testingMode" className="ml-2 text-sm text-gray-700">
-                  Invitation Testing Mode
-                </label>
-              </div>
-
-              {testingMode && (
-                <div className="mb-4">
-                  <label htmlFor="newUserName" className="block text-sm font-medium text-gray-700 mb-1">
-                    User Name
-                  </label>
-                  <input
-                    type="text"
-                    id="newUserName"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                    className="p-2 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    placeholder="Enter name for testing"
-                  />
+                <div className="flex items-center py-2">
+                  <div className="bg-gray-100 p-2 rounded-lg">
+                    <input
+                      id="testingMode"
+                      type="checkbox"
+                      checked={testingMode}
+                      onChange={(e) => setTestingMode(e.target.checked)}
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="testingMode" className="ml-2 text-sm text-gray-700">
+                      Invitation Testing Mode
+                    </label>
+                  </div>
                 </div>
-              )}
+
+                {testingMode && (
+                  <div>
+                    <label htmlFor="newUserName" className="block text-sm font-medium text-gray-700 mb-2">
+                      User Name
+                    </label>
+                    <input
+                      type="text"
+                      id="newUserName"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter name for testing"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <button
+                  type="submit"
+                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl text-base font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm"
+                  disabled={loading}
+                >
+                  {loading ? 'Adding...' : 'Add User'}
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Debug display of invitation status */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg text-xs">
-            <h3 className="font-bold mb-2">Debug: User Status</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-300 text-left">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="p-2 border">Email</th>
-                    <th className="p-2 border">Role</th>
-                    <th className="p-2 border">Auth ID</th>
-                    <th className="p-2 border">Invited</th>
-                    <th className="p-2 border">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b">
-                      <td className="p-2 border">{user.email}</td>
-                      <td className="p-2 border">{user.role}</td>
-                      <td className="p-2 border">{user.auth_id ? '✅' : '❌'}</td>
-                      <td className="p-2 border">{user.invited ? '✅' : '❌'}</td>
-                      <td className="p-2 border">{new Date(user.createdat || user.created_at).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-4 px-2">
+              <h2 className="text-xl font-semibold">User List</h2>
+              <button 
+                onClick={debugShowInvited}
+                className="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded-lg"
+              >
+                Debug Info
+              </button>
             </div>
-          </div>
-
-          <div>
-            <h2 className="text-lg font-semibold mb-3">User List</h2>
             
             <UserFilters />
             
             {/* Mobile view */}
-            <div className="block sm:hidden">
+            <div className="space-y-4">
               {users.length > 0 ? (
                 users.map(user => renderUserCard(user))
               ) : (
-                <p className="text-gray-500 text-center py-4">No users found</p>
+                <div className="bg-white p-8 rounded-xl text-center shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <p className="text-gray-500">No users found</p>
+                </div>
               )}
-            </div>
-            
-            {/* Desktop view */}
-            <div className="hidden sm:block bg-white shadow overflow-hidden rounded-lg">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {users.map(user => (
-                      <tr key={user.id} className={user.active === false ? 'bg-red-50' : ''}>
-                        <td className="px-4 py-3 text-sm">{user.name}</td>
-                        <td className="px-4 py-3 text-sm">{user.email}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {renderUserStatus(user)}
-                        </td>
-                        <td className="px-4 py-3 text-sm flex space-x-2">
-                          {!user.invited && !user.auth_id && (
-                            <>
-                              <button 
-                                onClick={() => sendInvite(user, false)}
-                                className="text-xs text-blue-600 hover:text-blue-800"
-                                disabled={loading}
-                              >
-                                Send
-                              </button>
-                              <button 
-                                onClick={() => sendInvite(user, true)}
-                                className="text-xs text-green-600 hover:text-green-800"
-                                disabled={loading}
-                              >
-                                Send Real Email
-                              </button>
-                            </>
-                          )}
-                          {user.invited && !user.auth_id && (
-                            <>
-                              <button 
-                                onClick={() => sendInvite(user, false)}
-                                className="text-xs text-blue-600 hover:text-blue-800"
-                                disabled={loading}
-                              >
-                                Resend
-                              </button>
-                              <button 
-                                onClick={() => sendInvite(user, true)}
-                                className="text-xs text-green-600 hover:text-green-800"
-                                disabled={loading}
-                              >
-                                Send Real Email
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => toggleUserStatus(user.id, user.active !== false)}
-                            className={`text-xs ${
-                              user.active === false
-                                ? 'text-green-600 hover:text-green-800'
-                                : 'text-red-600 hover:text-red-800'
-                            }`}
-                            disabled={loading}
-                          >
-                            {user.active === false ? 'Activate' : 'Deactivate'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
             
             <PaginationControls />
@@ -1102,108 +1027,193 @@ const AdminDashboard = () => {
 
       {/* Storage Tab */}
       {activeTab === 'storage' && (
-        <div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {Object.values(STORAGE_BUCKETS).map((bucket) => (
-              <button
-                key={bucket}
-                onClick={() => setSelectedBucket(bucket)}
-                className={`
-                  py-2 px-3 bg-gray-200 text-gray-700 rounded-md text-sm
-                  ${selectedBucket === bucket ? 'bg-gray-300' : 'hover:bg-gray-300'}
-                `}
-              >
-                {bucket}
-              </button>
-            ))}
+        <div className="bg-white rounded-2xl shadow p-5 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Storage Management</h2>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Bucket</label>
+            <div className="flex flex-wrap gap-2">
+              {Object.values(STORAGE_BUCKETS).map((bucket) => (
+                <button
+                  key={bucket}
+                  onClick={() => setSelectedBucket(bucket)}
+                  className={`
+                    py-2 px-4 rounded-lg text-sm font-medium
+                    ${selectedBucket === bucket 
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}
+                  `}
+                >
+                  {bucket}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold mb-3">Files</h2>
-            <div className="mb-4">
+          <div className="mb-4">
+            <label htmlFor="folderPath" className="block text-sm font-medium text-gray-700 mb-1">
+              Folder Path
+            </label>
+            <div className="flex">
               <input
+                id="folderPath"
                 type="text"
                 value={selectedFolder}
                 onChange={(e) => setSelectedFolder(e.target.value)}
-                placeholder="Folder path"
-                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="e.g. images/"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
               />
+              <button
+                onClick={() => loadFiles(selectedBucket, selectedFolder)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-r-lg text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                disabled={loading}
+              >
+                {loading ? 'Loading...' : 'Load Files'}
+              </button>
             </div>
-            <button
-              onClick={() => loadFiles(selectedBucket, selectedFolder)}
-              className="bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 text-sm"
-            >
-              Load Files
-            </button>
           </div>
 
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold mb-3">Bucket Permissions</h2>
-            {bucketPermissions && (
-              <div className="mb-4">
-                <p>Name: {bucketPermissions.name}</p>
-                <p>Public: {bucketPermissions.public ? 'Yes' : 'No'}</p>
-                <p>File Size Limit: {formatBytes(bucketPermissions.fileSizeLimit)}</p>
-                <p>Allowed MIME Types: {bucketPermissions.allowedMimeTypes.join(', ')}</p>
-                <p>Owner: {bucketPermissions.owner}</p>
-                <p>Created At: {bucketPermissions.created_at ? new Date(bucketPermissions.created_at).toLocaleString() : 'N/A'}</p>
-                <p>Updated At: {bucketPermissions.updated_at ? new Date(bucketPermissions.updated_at).toLocaleString() : 'N/A'}</p>
+          {bucketPermissions && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <h3 className="text-md font-semibold mb-2">Bucket Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div><span className="font-medium">Name:</span> {bucketPermissions.name}</div>
+                <div><span className="font-medium">Public:</span> {bucketPermissions.public ? 'Yes' : 'No'}</div>
+                <div><span className="font-medium">Size Limit:</span> {formatBytes(bucketPermissions.fileSizeLimit)}</div>
+                <div><span className="font-medium">Owner:</span> {bucketPermissions.owner}</div>
               </div>
-            )}
-          </div>
-
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold mb-3">Files</h2>
-            <div className="overflow-x-auto">
-              {files.length > 0 ? (
-                files.map((file) => (
-                  <div key={file.id} className="mb-2">
-                    <span>{file.name}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-4">No files found</p>
-              )}
             </div>
-          </div>
+          )}
+
+          <h3 className="text-lg font-semibold mb-3">Files</h3>
+          {files.length > 0 ? (
+            <div className="space-y-2">
+              {files.map((file) => (
+                <div key={file.id || file.name} className="p-3 border border-gray-200 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium truncate">{file.name}</span>
+                    <span className="text-xs text-gray-500">{formatBytes(file.metadata?.size || file.size)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-gray-50 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-gray-500">No files found</p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Templates Tab */}
       {activeTab === 'templates' && (
-        <div>
-          <div className="mb-4">
-            <button 
-              onClick={debugShowInvited}
-              className="mb-3 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs rounded"
-            >
-              Debug: Show All Users in Console
-            </button>
-          </div>
+        <div className="bg-white rounded-2xl shadow p-5 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Agreement Templates</h2>
           
-          <div className="mb-4 sm:mb-6">
-            <h2 className="text-lg font-semibold mb-3">Templates</h2>
-            <div className="overflow-x-auto">
-              {templates.length > 0 ? (
-                templates.map(renderTemplateCard)
-              ) : (
-                <p className="text-gray-500 text-center py-4">No templates found</p>
-              )}
+          {templates.length > 0 ? (
+            <div className="space-y-4">
+              {templates.map(template => (
+                <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium text-lg">{template.name}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{template.description || 'No description'}</p>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      template.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {template.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                      View
+                    </button>
+                    <button className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
+                      Edit
+                    </button>
+                    <button className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                      template.active 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {template.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="p-8 text-center bg-gray-50 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-gray-500">No templates found</p>
+              <button className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+                Create Template
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Email Diagnostics Tab */}
       {activeTab === 'email-diagnostics' && (
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Email System Diagnostics</h2>
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h2 className="text-xl font-semibold mb-4">Email System Diagnostics</h2>
           <p className="text-sm text-gray-600 mb-4">
             Test and troubleshoot your email configuration and invitation process.
           </p>
           <EmailDiagnostic />
         </div>
       )}
+
+      {/* Bottom Navigation - Mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 px-5 flex justify-around shadow-lg">
+        <button 
+          onClick={() => setActiveTab('users')} 
+          className={`flex flex-col items-center ${activeTab === 'users' ? 'text-blue-600' : 'text-gray-500'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          <span className="text-xs mt-1">Users</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('storage')} 
+          className={`flex flex-col items-center ${activeTab === 'storage' ? 'text-blue-600' : 'text-gray-500'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+          </svg>
+          <span className="text-xs mt-1">Storage</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('templates')} 
+          className={`flex flex-col items-center ${activeTab === 'templates' ? 'text-blue-600' : 'text-gray-500'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className="text-xs mt-1">Templates</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('email-diagnostics')} 
+          className={`flex flex-col items-center ${activeTab === 'email-diagnostics' ? 'text-blue-600' : 'text-gray-500'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs mt-1">Email</span>
+        </button>
+      </div>
     </div>
   );
 };
