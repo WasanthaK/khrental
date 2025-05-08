@@ -32,6 +32,34 @@ export default defineConfig(({ command, mode }) => {
         jsxRuntime: 'automatic',
       }),
     ],
+    // Multi-page app configuration
+    build: {
+      outDir: 'dist',
+      sourcemap: false,
+      // Optimize for production
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+      },
+      cssCodeSplit: true,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          diagnostics: path.resolve(__dirname, 'diagnostics.html'),
+          simple: path.resolve(__dirname, 'simple.html'),
+          simplemain: path.resolve(__dirname, 'index.simple.html'),
+        },
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            router: ['react-router-dom'],
+          },
+        },
+      },
+    },
     define: {
       // Make environment variables available to the app
       'process.env.VITE_EVIA_SIGN_CLIENT_ID': JSON.stringify(env.VITE_EVIA_SIGN_CLIENT_ID),
@@ -60,27 +88,6 @@ export default defineConfig(({ command, mode }) => {
       },
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
     },
-    build: {
-      outDir: 'dist',
-      sourcemap: false,
-      // Optimize for production
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          drop_console: true,
-          drop_debugger: true,
-        },
-      },
-      cssCodeSplit: true,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            react: ['react', 'react-dom'],
-            router: ['react-router-dom'],
-          },
-        },
-      },
-    },
     server: {
       // Improve development server
       port: 5173,
@@ -95,6 +102,25 @@ export default defineConfig(({ command, mode }) => {
       // Add middleware to handle direct source file requests
       middlewares: [
         (req, res, next) => {
+          // Special handler for diagnostics path
+          if (req.url === '/diagnostics') {
+            res.writeHead(302, { 'Location': '/diagnostics.html' });
+            res.end();
+            return;
+          }
+          
+          // Support direct access to diagnostics.html
+          if (req.url === '/diagnostics.html') {
+            console.log('Diagnostics page requested');
+          }
+          
+          // Do not block needed assets
+          if (req.url.startsWith('/src/') && req.url.match(/\.(js|jsx|ts|tsx|css|json)$/)) {
+            console.log(`Serving source file: ${req.url}`);
+            next();
+            return;
+          }
+          
           // Redirect direct requests to source files back to root
           if (req.url.startsWith('/src/')) {
             console.warn(`Blocked direct access to source file: ${req.url}`);

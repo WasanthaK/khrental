@@ -5,6 +5,12 @@ import bodyParser from 'body-parser';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get directory name in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +44,30 @@ async function createServer() {
     server: { middlewareMode: true }
   });
   app.use(vite.middlewares);
+  
+  // Add a catch-all route handler for client-side routing
+  app.get('*', async (req, res, next) => {
+    const url = req.originalUrl;
+    
+    // Skip API routes and static files
+    if (url.startsWith('/api/') || 
+        url.includes('.') || 
+        url.startsWith('/_')) {
+      return next();
+    }
+    
+    try {
+      // For SPA client-side routing - serve the index.html
+      console.log(`[SPA Router] Serving index.html for: ${url}`);
+      
+      // Use Vite to transform and serve index.html
+      let html = await vite.transformIndexHtml(url, '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>');
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+    } catch (e) {
+      console.error(`Error handling: ${url}`, e);
+      next(e);
+    }
+  });
   
   // Start server
   const port = process.env.PORT || 5174;

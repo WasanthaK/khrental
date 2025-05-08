@@ -1,7 +1,8 @@
 import { createBrowserRouter, Navigate, useNavigate, useParams, RouterProvider } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
-import { PERMISSIONS, ROLES } from './utils/permissions.jsx';
+import { PERMISSIONS } from './utils/permissions.jsx';
+import { USER_ROLES } from './utils/constants';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from './services/supabaseClient';
@@ -82,6 +83,10 @@ import SetupAccount from './pages/setup-account';
 
 // Add the EmailDiagnostic import
 import EmailDiagnostic from './components/diagnostics/EmailDiagnostic';
+import SimpleTest from './components/diagnostics/SimpleTest';
+
+// Import the standalone diagnostics page
+import DiagnosticsPage from './pages/DiagnosticsPage';
 
 // Add a debug flag at the top of the file
 const ROUTER_DEBUG = false;
@@ -207,8 +212,8 @@ const UuidGuard = ({ children }) => {
   return children;
 };
 
-// Define routes - these will be used to create the router
-const routes = [
+// Create the router with the routes defined
+const router = createBrowserRouter([
   {
     path: '/',
     element: <RootLayout />,
@@ -286,6 +291,8 @@ const routes = [
         path: 'digital-signature-test',
         element: <DigitalSignatureForm />,
       },
+      
+      // Dashboard routes with consistent layout
       {
         path: 'dashboard',
         element: (
@@ -559,10 +566,6 @@ const routes = [
                   </ProtectedRoute>
                 ),
               },
-              {
-                path: 'email-diagnostics',
-                element: <EmailDiagnostic />,
-              },
             ],
           },
           {
@@ -602,10 +605,6 @@ const routes = [
               },
             ],
           },
-          {
-            path: 'direct-email-test',
-            element: <EmailDiagnostic />,
-          },
         ],
       },
       {
@@ -616,49 +615,11 @@ const routes = [
           </ProtectedRoute>
         ),
         children: [
-          {
-            index: true,
-            element: <RenteePortal />,
-          },
-          {
-            path: 'profile',
-            element: <RenteeProfile />,
-          },
-          {
-            path: 'invoices',
-            element: <RenteeInvoices />,
-          },
-          {
-            path: 'agreements',
-            element: <RenteeAgreements />,
-          },
-          {
-            path: 'maintenance',
-            children: [
-              {
-                index: true,
-                element: <RenteeMaintenance />,
-              },
-              {
-                path: ':id',
-                element: <RenteeMaintenanceDetails />,
-              },
-            ],
-          },
-          {
-            path: 'utilities',
-            element: <RenteeUtilities />,
-          },
-          {
-            path: 'utilities/submit',
-            element: <ProtectedRoute requiredRoles={['rentee']}><UtilityReadingForm /></ProtectedRoute>
-          },
-          {
-            path: 'utilities/history',
-            element: <ProtectedRoute requiredRoles={['rentee']}><UtilityHistory /></ProtectedRoute>
-          },
-        ],
+          { index: true, element: <div>Rentee Portal</div> }
+        ]
       },
+      
+      // Portal routes
       {
         path: 'portal',
         element: (
@@ -667,121 +628,55 @@ const routes = [
           </ProtectedRoute>
         ),
         children: [
-          {
-            index: true,
-            element: <RenteePortal />,
-          },
-          {
-            path: 'profile',
-            element: <RenteeProfile />,
-          },
-          {
-            path: 'invoices',
-            element: <RenteeInvoices />,
-          },
-          {
-            path: 'agreements',
-            element: <RenteeAgreements />,
-          },
-          {
-            path: 'maintenance',
-            children: [
-              {
-                index: true,
-                element: <RenteeMaintenance />,
-              },
-              {
-                path: ':id',
-                element: <RenteeMaintenanceDetails />,
-              },
-            ],
-          },
-          {
-            path: 'utilities',
-            element: <RenteeUtilities />,
-          },
-          {
-            path: 'utilities/submit',
-            element: <ProtectedRoute requiredRoles={['rentee']}><UtilityReadingForm /></ProtectedRoute>
-          },
-          {
-            path: 'utilities/history',
-            element: <ProtectedRoute requiredRoles={['rentee']}><UtilityHistory /></ProtectedRoute>
-          },
-        ],
+          { index: true, element: <div>Portal</div> }
+        ]
       },
+      
+      // Admin routes
       {
         path: 'admin',
         element: (
-          <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
+          <ProtectedRoute requiredRoles={['admin']}>
             <AdminLayout />
+          </ProtectedRoute>
+        ),
+        children: [
+          { index: true, element: <div>Admin</div> }
+        ]
+      },
+      
+      // Diagnostic routes - with proper layout
+      {
+        path: 'diagnostics',
+        element: (
+          <ProtectedRoute requiredRoles={[USER_ROLES.ADMIN]}>
+            <DashboardLayout />
           </ProtectedRoute>
         ),
         children: [
           {
             index: true,
-            element: <AdminPanel />,
+            element: <EmailDiagnostic />,
           },
           {
-            path: 'users',
-            element: <TeamList />,
+            path: 'email',
+            element: <EmailDiagnostic />,
           },
           {
-            path: 'settings',
-            element: <Settings />,
-          },
-          {
-            path: 'rentees',
-            element: <RenteeList />,
-          },
-          {
-            path: 'agreements',
-            element: <AgreementList />,
-          },
-          {
-            path: 'invoices',
-            children: [
-              {
-                index: true,
-                element: <InvoiceList />,
-              },
-              {
-                path: 'dashboard',
-                element: <InvoiceList />,
-              },
-              {
-                path: 'generate',
-                element: <InvoiceForm />,
-              },
-              {
-                path: ':id',
-                element: <InvoiceDetails />,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        path: 'diagnostics/email',
-        element: (
-          <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
-            <EmailDiagnostic />
-          </ProtectedRoute>
-        ),
-      },
-    ],
+            path: 'test',
+            element: <SimpleTest />,
+          }
+        ]
+      }
+    ]
   },
   {
     path: '*',
     element: <NotFound />
   }
-];
+]);
 
-// Export the RouterProvider component
-export default function AppRouter() {
-  // Create the router instance inside the component
-  const router = createBrowserRouter(routes);
-  return <RouterProvider router={router} />;
-}
+// Export the router instance directly
+export default router;
 
 // No named exports to prevent HMR issues

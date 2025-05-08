@@ -45,6 +45,27 @@ export const PERMISSIONS = {
   VIEW_ADMIN_TOOLS: 'view_admin_tools',
 };
 
+/**
+ * ROLE SYSTEM DOCUMENTATION
+ * 
+ * This application uses two parallel role systems:
+ * 
+ * 1. ROLES (defined here):
+ *    - Complex objects containing permission definitions
+ *    - Example: ROLES.ADMIN = { name: 'Administrator', permissions: [...] }
+ *    - Used for: Permission checking, access control
+ * 
+ * 2. USER_ROLES (from constants.js):
+ *    - Simple string constants for role names
+ *    - Example: USER_ROLES.ADMIN = 'admin'
+ *    - Used for: Direct role comparison, UI display
+ * 
+ * When checking permissions, always use hasPermission() which handles the conversion.
+ * When referencing roles in components, use the appropriate format:
+ * - For ProtectedRoute with requiredRoles, use string values (e.g., 'admin')
+ * - For permission checking, use ROLES.ADMIN
+ */
+
 // Define roles with their permissions
 export const ROLES = {
   ADMIN: {
@@ -138,6 +159,31 @@ export const ROLES = {
   },
 };
 
+/**
+ * Helper function to get a standardized role key
+ * Works with role objects or role strings and normalizes them
+ * 
+ * @param {string|Object} role - Role object or string
+ * @returns {string} - Normalized role key
+ */
+export const getRoleKey = (role) => {
+  if (typeof role === 'object' && role !== null) {
+    // Get the key from the ROLES object
+    return Object.keys(ROLES).find(key => ROLES[key] === role);
+  }
+  return role;
+};
+
+/**
+ * Helper function to normalize a role string for consistent comparison
+ * 
+ * @param {string} roleString - Role string (e.g., "admin", "ADMIN")
+ * @returns {string} - Normalized role string in uppercase
+ */
+export const normalizeRoleString = (roleString) => {
+  return (roleString || '').toUpperCase();
+};
+
 // Helper function to check if a user has a specific permission
 export const hasPermission = (user, permission) => {
   if (!user) {
@@ -154,10 +200,22 @@ export const hasPermission = (user, permission) => {
     return false;
   }
   
-  // Get the role configuration
-  const roleConfig = ROLES[user.role.toUpperCase()];
+  // Get the role configuration with case-insensitive lookup
+  // Using normalizeRoleString for consistent case handling
+  const normalizedRole = normalizeRoleString(user.role);
+  const roleConfig = ROLES[normalizedRole] || null;
+  
+  // Fallback to look up by the key name (case-insensitive)
   if (!roleConfig) {
-    return false;
+    const roleKey = Object.keys(ROLES).find(key => 
+      normalizeRoleString(key) === normalizedRole
+    );
+    
+    if (!roleKey) {
+      return false;
+    }
+    
+    return ROLES[roleKey].permissions.includes(permission);
   }
   
   // Check if the role has the permission

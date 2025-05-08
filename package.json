@@ -8,6 +8,8 @@
     "generate-env-config": "node scripts/generate-env-config.js",
     "dev": "npm run generate-env-config && node server.js",
     "dev:vite": "npm run generate-env-config && vite",
+    "dev:simple": "npm run generate-env-config && vite --force",
+    "dev:vite-only": "npm run generate-env-config && vite --host --port 5173",
     "build": "npm run generate-env-config && vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",

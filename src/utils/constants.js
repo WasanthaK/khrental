@@ -1,4 +1,18 @@
-// User roles
+/**
+ * USER_ROLES: String constants for user role names
+ * These are the string values stored in the database.
+ * 
+ * IMPORTANT: These string values must match the keys in ROLES (from permissions.jsx)
+ * but in lowercase. For example, USER_ROLES.ADMIN = 'admin' corresponds to 
+ * ROLES.ADMIN in permissions.jsx.
+ * 
+ * Use these constants:
+ * - When setting a user's role in the database
+ * - For direct string comparisons (user.role === USER_ROLES.ADMIN)
+ * - In UI components for display purposes
+ * 
+ * Do NOT use these for permission checking. Use hasPermission() instead.
+ */
 export const USER_ROLES = {
   ADMIN: 'admin',
   STAFF: 'staff',

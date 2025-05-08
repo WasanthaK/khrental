@@ -1,15 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { ROLES } from '../../utils/permissions.jsx';
 
 // Add a debug flag at the top of the file
-const ROUTE_DEBUG = false;
+const ROUTE_DEBUG = true; // Temporarily enable debugging
 
 // Helper function for conditional logging
 const logRoute = (message, data) => {
   if (ROUTE_DEBUG && import.meta.env.DEV) {
     console.log(`[ProtectedRoute] ${message}`, data || '');
   }
+};
+
+/**
+ * Helper function to normalize role comparison
+ * Handles comparing both string roles and ROLES object references
+ * 
+ * @param {string} userRole - The user's role (e.g., "admin")
+ * @param {string|Object} requiredRole - The required role (string or ROLES object)
+ * @returns {boolean} - Whether the user role matches the required role
+ */
+const roleMatches = (userRole, requiredRole) => {
+  // Skip if no user role
+  if (!userRole) return false;
+  
+  // If the required role is an object (e.g., ROLES.ADMIN), extract its key
+  if (typeof requiredRole === 'object' && requiredRole !== null) {
+    // Find which ROLES key matches this object
+    const roleKey = Object.keys(ROLES).find(key => ROLES[key] === requiredRole);
+    if (roleKey) {
+      return userRole.toLowerCase() === roleKey.toLowerCase();
+    }
+    return false;
+  }
+  
+  // For string comparison, normalize case
+  return userRole.toLowerCase() === requiredRole.toLowerCase();
 };
 
 /**
@@ -90,16 +117,23 @@ const ProtectedRoute = ({
   }
   
   // Always allow admin users
-  if (user?.role === 'admin') {
+  if (user?.role?.toLowerCase() === 'admin') {
     logRoute('Admin user always allowed');
     return children;
   }
   
   // Check roles if specified
   if (requiredRoles.length > 0) {
-    const hasRequiredRole = requiredRoles.includes(user?.role);
+    // FIX: Enhanced role checking that handles both string and object role references
+    const hasRequiredRole = requiredRoles.some(requiredRole => 
+      roleMatches(user?.role, requiredRole)
+    );
+    
     if (!hasRequiredRole) {
-      logRoute('User role not allowed:', user?.role);
+      logRoute('User role not allowed:', {
+        userRole: user?.role, 
+        requiredRoles: requiredRoles.map(r => typeof r === 'object' ? 'Object' : r)
+      });
       return <Navigate to="/unauthorized" replace />;
     }
   }

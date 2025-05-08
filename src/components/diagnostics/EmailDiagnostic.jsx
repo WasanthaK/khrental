@@ -1,14 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { testEmailConfiguration } from '../../services/directEmailService';
 import { inviteUser } from '../../services/invitationService';
 import { getAppBaseUrl } from '../../utils/env';
+import { useAuth } from '../../hooks/useAuth';
 
 const EmailDiagnostic = () => {
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [testType, setTestType] = useState('config');
+  const [debugInfo, setDebugInfo] = useState(null);
+
+  // Add debugging information
+  useEffect(() => {
+    console.log('[EmailDiagnostic] Component loaded');
+    setDebugInfo({
+      isAuthenticated,
+      currentUser: user ? {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      } : null,
+      authLoading
+    });
+    
+    console.log('[EmailDiagnostic] Auth state:', {
+      isAuthenticated,
+      user: user ? { id: user.id, email: user.email, role: user.role } : null,
+      authLoading
+    });
+  }, [user, isAuthenticated, authLoading]);
 
   const runConfigTest = async () => {
     setLoading(true);
@@ -82,6 +105,7 @@ const EmailDiagnostic = () => {
     }
   };
 
+<<<<<<< Updated upstream
   const testSupabaseFunction = async () => {
     // Get the Supabase URL and anon key
     const supabaseUrl = window._env_?.VITE_SUPABASE_URL || 
@@ -121,12 +145,18 @@ const EmailDiagnostic = () => {
   // Make the function accessible from the window object for testing from the console
   if (typeof window !== 'undefined') {
     window.testSupabaseFunction = testSupabaseFunction;
+=======
+  // Handle errors and loading states
+  if (authLoading && !user) {
+    return <div className="p-4">Loading user profile...</div>;
+>>>>>>> Stashed changes
   }
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Email System Diagnostics</h1>
       
+<<<<<<< Updated upstream
       <div className="mb-4">
         <button 
           type="button"
@@ -140,6 +170,24 @@ const EmailDiagnostic = () => {
           Check the console for results.
         </small>
       </div>
+=======
+      {debugInfo && (
+        <div className="bg-yellow-100 p-4 rounded mb-4 border border-yellow-400">
+          <h2 className="text-lg font-bold mb-2">Debug Information</h2>
+          <p>Authenticated: {debugInfo.isAuthenticated ? 'Yes' : 'No'}</p>
+          <p>Loading: {debugInfo.authLoading ? 'Yes' : 'No'}</p>
+          {debugInfo.currentUser ? (
+            <div>
+              <p>User ID: {debugInfo.currentUser.id}</p>
+              <p>User Email: {debugInfo.currentUser.email}</p>
+              <p>User Role: {debugInfo.currentUser.role}</p>
+            </div>
+          ) : (
+            <p>No user data available</p>
+          )}
+        </div>
+      )}
+>>>>>>> Stashed changes
       
       <div className="bg-gray-100 p-4 rounded mb-4">
         <p className="mb-2"><strong>Note:</strong> This page is for diagnosing email configuration issues.</p>
