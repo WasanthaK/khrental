@@ -149,7 +149,10 @@ const AgreementFormContainer = () => {
         terms: termsObject,
         notes: formData.notes,
         documenturl: typeof formData.processedContent === 'string' ? formData.processedContent : null,
-        needs_document_generation: status === AGREEMENT_STATUS.REVIEW || status === AGREEMENT_STATUS.PENDING
+        needs_document_generation: status === AGREEMENT_STATUS.REVIEW || status === AGREEMENT_STATUS.PENDING,
+        // Map start and end dates from terms to database columns
+        startdate: termsObject.startDate,
+        enddate: termsObject.endDate
       };
 
       console.log("Saving agreement with data:", agreementData);

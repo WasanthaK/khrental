@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { supabase } from './supabaseClient';
+import { supabase, enhancedUploadFile, binaryUpload } from './supabaseClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
 
@@ -345,7 +345,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         *,
         property:propertyid(name, address),
         unit:unitid(unitnumber, description, floor, bedrooms, bathrooms, rentalvalues),
-        rentee:renteeid(fullname, email, idnumber)
+        rentee:renteeid(name, email)
       `)
       .eq('id', agreementId)
       .single();
@@ -456,7 +456,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         font: helveticaBold
       });
       
-      page.drawText(agreement.rentee?.fullname || 'N/A', {
+      page.drawText(String(agreement.rentee?.name || 'N/A'), {
         x: margin + 120,
         y: infoBoxY - 40,
         size: 10,
@@ -491,7 +491,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       
       const monthlyRent = agreement.terms?.monthlyRent || 'Not specified';
       
-      page.drawText(monthlyRent, {
+      page.drawText(String(monthlyRent), {
         x: margin + 120,
         y: infoBoxY - 80,
         size: 10,
@@ -509,7 +509,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       
       const securityDeposit = agreement.terms?.depositAmount || 'Not specified';
       
-      page.drawText(securityDeposit, {
+      page.drawText(String(securityDeposit), {
         x: width - margin - 90,
         y: infoBoxY - 80,
         size: 10,
@@ -817,43 +817,43 @@ export const saveMergedDocument = async (content, agreementId) => {
       }
     }
     
-    // Save the PDF to bytes
+    // Save PDF as Uint8Array
     const pdfBytes = await pdfDoc.save();
-    
-    // Convert to a blob for upload
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-    
-    // Define the file path in storage
-    const fileName = `final_agreement_${Date.now()}.pdf`;
-    const agreementFolder = `agreements/${agreementId}`;
-    const filePath = `${agreementFolder}/${fileName}`;
-    
-    console.log('Uploading PDF to storage path:', filePath);
-    
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .upload(filePath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-    
-    if (error) {
-      console.error('Error saving document:', error);
-      throw error;
+
+    console.log('PDF generated successfully:', pdfBlob.size, 'bytes');
+    if (window.location.port === '8080' || window.location.hostname === 'localhost') {
+      console.warn('You are running through a local proxy. If you see upload errors, try running without the proxy as proxies can break binary uploads.');
     }
+
+    // Generate a safe filename without special characters
+    const safeTimestamp = Date.now();
+    const safeFilename = `final_agreement_${safeTimestamp}.pdf`;
+    const safePath = `agreements/${agreementId}/${safeFilename}`;
     
-    console.log('PDF uploaded successfully:', data);
+    console.log('Uploading PDF to safe path:', safePath);
     
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .getPublicUrl(filePath);
-    
-    const publicUrl = urlData.publicUrl;
-    console.log('Document public URL generated:', publicUrl);
-    
-    return publicUrl;
+    try {
+      // Use the specialized binary upload function that will try multiple approaches
+      const { success, url, error } = await binaryUpload(
+        STORAGE_BUCKETS.FILES,
+        safePath,
+        pdfBlob,
+        { contentType: 'application/pdf' }
+      );
+      
+      if (!success || error) {
+        console.error('PDF upload error details:', error);
+        throw error;
+      }
+      
+      console.log('PDF uploaded successfully:', url);
+      return url;
+    } catch (uploadError) {
+      console.error('Error saving merged document:', uploadError);
+      toast.error('Error saving document: ' + uploadError.message);
+      throw uploadError;
+    }
   } catch (error) {
     console.error('Error saving merged document:', error);
     toast.error('Error saving document: ' + error.message);
@@ -1012,30 +1012,32 @@ export const generatePdf = async (formData) => {
     }
     
     // Define the PDF file path in storage
-    const pdfPath = `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}/final_agreement.pdf`;
+    const safeFileName = `final_agreement_${Date.now()}.pdf`;
+    const pdfPath = `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}/${safeFileName}`;
     
-    // Upload PDF to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .upload(pdfPath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
+    console.log('Uploading PDF to storage path:', pdfPath);
     
-    if (error) {
-      console.error('Error uploading PDF:', error);
-      throw error;
+    try {
+      // Use the specialized binary upload function
+      const { success, url, error } = await binaryUpload(
+        STORAGE_BUCKETS.FILES,
+        pdfPath,
+        pdfBlob,
+        { contentType: 'application/pdf' }
+      );
+      
+      if (!success || error) {
+        console.error('Error uploading PDF:', error);
+        throw error;
+      }
+      
+      console.log('PDF uploaded successfully:', url);
+      return url;
+    } catch (uploadError) {
+      console.error('Error saving merged document:', uploadError);
+      toast.error('Error saving document: ' + uploadError.message);
+      throw uploadError;
     }
-    
-    // Get the public URL for the PDF
-    const { data: urlData } = supabase.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .getPublicUrl(pdfPath);
-    
-    const pdfUrl = urlData.publicUrl;
-    console.log('PDF generated and uploaded successfully:', pdfUrl);
-    
-    return pdfUrl;
   } catch (error) {
     console.error('Error generating PDF:', error);
     toast.error(`PDF generation failed: ${error.message}`);
@@ -1568,7 +1570,132 @@ async function createDocument(html, fileName, agreementId) {
   }
 }
 
+/**
+ * Helper function to sanitize URLs that might be causing issues
+ * with path-to-regexp library used by React Router.
+ * 
+ * @param {string} url - The URL to sanitize
+ * @returns {string} - A sanitized URL string
+ */
+const sanitizeUrl = (url) => {
+  if (!url) {
+    return url;
+  }
+  
+  try {
+    // Check if the URL has a protocol (http:// or https://)
+    if (url.includes('://')) {
+      // For URLs with protocols, encode them to avoid colons in paths
+      // which can confuse path-to-regexp
+      return encodeURI(url);
+    }
+    
+    // For relative URLs, just return as is
+    return url;
+  } catch (error) {
+    console.error('Error sanitizing URL:', error);
+    return url; // Return original in case of error
+  }
+};
+
+/**
+ * Fetches and prepares all necessary data for merge fields in an agreement
+ * @param {Object} agreement - The agreement object
+ * @returns {Promise<Object>} - Object containing all merge data
+ */
+async function getMergeDataForAgreement(agreement) {
+  const mergeData = {
+    agreement: {
+      startDate: formatDate(agreement.startdate),
+      endDate: formatDate(agreement.enddate),
+      currentDate: formatDate(new Date()),
+      agreementId: agreement.id || 'New Agreement'
+    },
+    terms: {
+      ...agreement.terms,
+      // Initialize with agreement terms, ensuring values are properly formatted even if zero
+      monthlyRent: agreement.terms?.monthlyRent || '',
+      depositAmount: agreement.terms?.depositAmount || '',
+      paymentDueDay: agreement.terms?.paymentDueDay || '5',
+      noticePeriod: agreement.terms?.noticePeriod || '30',
+      specialConditions: agreement.terms?.specialConditions || '',
+      // Also include formatted dates in terms for backward compatibility
+      startDate: formatDate(agreement.startdate),
+      endDate: formatDate(agreement.enddate)
+    }
+  };
+  
+  // Get property data if available
+  if (agreement.propertyid) {
+    const { data: property } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('id', agreement.propertyid)
+      .single();
+      
+    if (property) {
+      mergeData.property = {
+        name: property.name || '',
+        address: property.address || '',
+        type: property.propertytype || '',
+        squareFeet: property.squarefeet || '',
+        yearBuilt: property.yearbuilt || '',
+        amenities: property.amenities ? property.amenities.join(', ') : '',
+        bankName: property.bank_name || '',
+        bankBranch: property.bank_branch || '',
+        bankAccount: property.bank_account_number || ''
+      };
+    }
+  }
+  
+  // Get unit data if available
+  if (agreement.unitid) {
+    const { data: unit } = await supabase
+      .from('property_units')
+      .select('*')
+      .eq('id', agreement.unitid)
+      .single();
+      
+    if (unit) {
+      mergeData.unit = {
+        number: unit.unitnumber || '',
+        floor: unit.floor || '',
+        bedrooms: unit.bedrooms || '',
+        bathrooms: unit.bathrooms || '',
+        squareFeet: unit.squarefeet || '',
+        description: unit.description || '',
+        bankName: unit.bank_name || '',
+        bankBranch: unit.bank_branch || '',
+        bankAccount: unit.bank_account_number || ''
+      };
+    }
+  }
+  
+  // Get rentee data if available
+  if (agreement.renteeid) {
+    const { data: rentee } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('id', agreement.renteeid)
+      .single();
+      
+    if (rentee) {
+      mergeData.rentee = {
+        name: rentee.name || '',
+        email: rentee.email || '',
+        phone: rentee.phone || '',
+        permanentAddress: rentee.permanent_address || '',
+        nationalId: rentee.national_id || '',
+        id: rentee.id || ''
+      };
+    }
+  }
+  
+  return mergeData;
+}
+
 export {
   processHtmlContent,
-  createDocument
+  createDocument,
+  sanitizeUrl
 }; 
