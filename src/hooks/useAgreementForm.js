@@ -44,16 +44,12 @@ export const useAgreementForm = (initialData = null) => {
         formattedData.terms = {};
       }
       
-      // Map database date fields to terms object fields if not already set
-      if (formattedData.startdate && !formattedData.terms.startDate) {
-        console.log('Mapping database startdate to terms.startDate:', formattedData.startdate);
-        formattedData.terms.startDate = formattedData.startdate;
-      }
-      
-      if (formattedData.enddate && !formattedData.terms.endDate) {
-        console.log('Mapping database enddate to terms.endDate:', formattedData.enddate);
-        formattedData.terms.endDate = formattedData.enddate;
-      }
+      // Map database date fields to terms object fields
+      formattedData.terms = {
+        ...formattedData.terms,
+        startDate: formattedData.startdate || new Date().toISOString().split('T')[0],
+        endDate: formattedData.enddate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      };
       
       // Set the formatted data
       setFormData(formattedData);

@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient.js';
+import { supabaseAdmin } from '../services/supabaseAdmin.js';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService.js';
 
 const setupStorage = async () => {
@@ -8,14 +8,14 @@ const setupStorage = async () => {
     // Create buckets if they don't exist
     for (const bucketName of Object.values(STORAGE_BUCKETS)) {
       console.log(`Checking bucket: ${bucketName}`);
-      const { data: bucket, error: getBucketError } = await supabase.storage.getBucket(bucketName);
+      const { data: bucket, error: getBucketError } = await supabaseAdmin.storage.getBucket(bucketName);
       
       if (getBucketError && getBucketError.message !== 'Bucket not found') {
         throw getBucketError;
       }
 
       if (!bucket) {
-        const { data, error: createError } = await supabase.storage.createBucket(bucketName, {
+        const { data, error: createError } = await supabaseAdmin.storage.createBucket(bucketName, {
           public: true,
           fileSizeLimit: bucketName === STORAGE_BUCKETS.IMAGES ? 5242880 : 10485760 // 5MB for images, 10MB for files
         });
@@ -35,7 +35,7 @@ const setupStorage = async () => {
         console.log(`Checking folder: ${bucketName}/${folderPath}`);
         
         // List the folder to see if it exists
-        const { data: folderContents, error: listError } = await supabase.storage
+        const { data: folderContents, error: listError } = await supabaseAdmin.storage
           .from(bucketName)
           .list(folderPath);
           
@@ -50,7 +50,7 @@ const setupStorage = async () => {
         }
 
         // Create an empty file to ensure the folder exists
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabaseAdmin.storage
           .from(bucketName)
           .upload(`${folderPath}/.keep`, new Uint8Array(0), {
             contentType: 'text/plain'

@@ -71,13 +71,17 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
 
   // Add real-time subscription to agreement updates
   useEffect(() => {
-    if (!agreement?.id) return;
+    if (!agreement?.id) {
+      return;
+    }
     
     const handleAgreementUpdate = (payload) => {
       console.log('Real-time agreement update received:', payload);
       const updatedAgreement = payload.new;
       
-      if (!updatedAgreement) return;
+      if (!updatedAgreement) {
+        return;
+      }
       
       // Update local status
       if (updatedAgreement.signature_status !== signatureStatus) {

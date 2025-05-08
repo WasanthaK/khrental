@@ -76,13 +76,14 @@ if (!supabaseUrl) {
 }
 
 // Use CORS proxy in development
-if (import.meta.env.DEV && supabaseUrl) {
-  // Store the original URL for logging
-  const originalUrl = supabaseUrl;
-  // Apply the proxy to the URL
-  supabaseUrl = `http://localhost:8080/${supabaseUrl}`;
-  console.log(`[Supabase] Using CORS proxy for development: ${originalUrl} -> ${supabaseUrl}`);
-}
+// (DISABLED: always use direct Supabase URL)
+// if (import.meta.env.DEV && supabaseUrl) {
+//   // Store the original URL for logging
+//   const originalUrl = supabaseUrl;
+//   // Apply the proxy to the URL
+//   supabaseUrl = `http://localhost:8080/${supabaseUrl}`;
+//   console.log(`[Supabase] Using CORS proxy for development: ${originalUrl} -> ${supabaseUrl}`);
+// }
 
 // Last attempt to get the anon key from window._env_
 if (!supabaseAnonKey && window?._env_?.VITE_SUPABASE_ANON_KEY) {
@@ -126,10 +127,8 @@ export const getSupabaseClient = () => {
         }
       },
       global: {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+        // Remove default headers to prevent content-type issues with binary uploads
+        headers: {}
       },
       db: {
         schema: 'public'
@@ -545,6 +544,230 @@ export const getFileUrl = (bucket, path) =>
 
 export const deleteFile = async (bucket, path) => 
   supabase.storage.from(bucket).remove([path]);
+
+/**
+ * Enhanced file upload with better error handling and logging
+ * @param {string} bucket - Storage bucket name
+ * @param {string} path - File path within the bucket
+ * @param {File|Blob} file - File or blob to upload
+ * @param {Object} options - Upload options
+ * @returns {Promise<{success: boolean, data: Object|null, error: Error|null}>}
+ */
+export const enhancedUploadFile = async (bucket, path, file, options = {}) => {
+  try {
+    console.log(`[Storage] Uploading file to ${bucket}/${path}, size: ${file.size} bytes`);
+    
+    // Check for problematic characters in path that might cause issues
+    if (path.includes(':') || path.includes('?') || path.includes('#')) {
+      console.warn(`[Storage] Warning: Path contains special characters that may cause issues: ${path}`);
+      
+      // Create a sanitized path
+      const sanitizedPath = path
+        .replace(/:/g, '_')
+        .replace(/\?/g, '_')
+        .replace(/#/g, '_');
+      
+      console.log(`[Storage] Using sanitized path instead: ${sanitizedPath}`);
+      path = sanitizedPath;
+    }
+    
+    // Merge default options with provided options
+    const uploadOptions = {
+      contentType: file.type || 'application/octet-stream',
+      upsert: true,
+      ...options
+    };
+    
+    console.log(`[Storage] Upload options:`, uploadOptions);
+    
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, uploadOptions);
+    
+    if (error) {
+      console.error(`[Storage] Upload error (${bucket}/${path}):`, error);
+      
+      // Check for common error codes and provide more helpful messages
+      if (error.statusCode === '400' || error.status === 400) {
+        console.error(`[Storage] 400 Bad Request error. Common causes include:
+          - Special characters in path
+          - Incorrect content type
+          - Permissions issues
+          - File size exceeds limits`);
+      }
+      
+      if (error.statusCode === '403' || error.status === 403) {
+        console.error(`[Storage] 403 Forbidden error. Check bucket permissions in Supabase dashboard.`);
+      }
+      
+      if (error.message && error.message.includes('No such bucket')) {
+        console.error(`[Storage] Bucket '${bucket}' does not exist. Create it in the Supabase dashboard.`);
+      }
+      
+      return { success: false, data: null, error };
+    }
+    
+    console.log(`[Storage] File uploaded successfully to ${bucket}/${path}`);
+    
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(data.path);
+    
+    return { 
+      success: true, 
+      data, 
+      url: urlData.publicUrl,
+      error: null 
+    };
+  } catch (error) {
+    console.error(`[Storage] Unexpected error during upload:`, error);
+    return { success: false, data: null, error };
+  }
+};
+
+/**
+ * Enhanced binary upload function specifically optimized for PDFs and other binary files
+ * This handles multiple fallback approaches to work around Supabase Storage issues
+ * 
+ * @param {string} bucket - Storage bucket name
+ * @param {string} path - File path within the bucket
+ * @param {Blob|File|ArrayBuffer} fileData - The binary data to upload
+ * @param {Object} options - Upload options
+ * @returns {Promise<{success: boolean, url: string|null, error: Error|null}>}
+ */
+export const binaryUpload = async (bucket, path, fileData, options = {}) => {
+  console.log(`[Storage] Attempting binary upload to ${bucket}/${path}`);
+  
+  try {
+    // Ensure path doesn't contain special characters
+    const safePath = path
+      .replace(/:/g, '_')
+      .replace(/\?/g, '_')
+      .replace(/#/g, '_');
+    
+    if (safePath !== path) {
+      console.log(`[Storage] Sanitized path: ${path} → ${safePath}`);
+      path = safePath;
+    }
+    
+    // Get content type - prefer explicit options, then file/blob type
+    const contentType = options.contentType || 
+                        (fileData instanceof Blob ? fileData.type : null) ||
+                        'application/octet-stream';
+    
+    // Default options without content-type in headers
+    const uploadOptions = {
+      upsert: true,
+      ...options
+    };
+    
+    console.log(`[Storage] Content type determined: ${contentType}`);
+    
+    // Create Supabase storage client with specific headers for this upload
+    const supabase = getSupabaseClient();
+    const storageClient = supabase.storage.from(bucket);
+    
+    // Try different approaches in sequence until one works
+    
+    // Approach 1: Try direct upload if we already have a File object
+    if (fileData instanceof File) {
+      console.log('[Storage] Attempt 1: Direct File upload');
+      
+      const { data, error } = await storageClient.upload(path, fileData, {
+        ...uploadOptions,
+        contentType,
+        headers: {
+          'Content-Type': contentType
+        }
+      });
+        
+      if (!error) {
+        console.log('[Storage] Direct File upload successful');
+        const { data: urlData } = storageClient.getPublicUrl(data.path);
+        return { success: true, url: urlData.publicUrl, error: null };
+      }
+      
+      console.warn('[Storage] Direct File upload failed:', error.message);
+    }
+    
+    // Approach 2: Convert to File object if we have a Blob
+    if (fileData instanceof Blob) {
+      try {
+        console.log('[Storage] Attempt 2: Convert Blob to File and upload');
+        
+        const arrayBuffer = await fileData.arrayBuffer();
+        const fileName = path.split('/').pop();
+        
+        const file = new File([arrayBuffer], fileName, { 
+          type: contentType,
+          lastModified: new Date().getTime()
+        });
+        
+        const { data, error } = await storageClient.upload(path, file, {
+          ...uploadOptions,
+          contentType,
+          headers: {
+            'Content-Type': contentType
+          }
+        });
+          
+        if (!error) {
+          console.log('[Storage] Blob->File upload successful');
+          const { data: urlData } = storageClient.getPublicUrl(data.path);
+          return { success: true, url: urlData.publicUrl, error: null };
+        }
+        
+        console.warn('[Storage] Blob->File upload failed:', error.message);
+      } catch (conversionError) {
+        console.warn('[Storage] Blob conversion error:', conversionError.message);
+      }
+    }
+    
+    // Approach 3: Try direct Uint8Array upload
+    try {
+      console.log('[Storage] Attempt 3: Uint8Array upload');
+      
+      let uint8Array;
+      
+      if (fileData instanceof ArrayBuffer) {
+        uint8Array = new Uint8Array(fileData);
+      } else if (fileData instanceof Blob || fileData instanceof File) {
+        const arrayBuffer = await fileData.arrayBuffer();
+        uint8Array = new Uint8Array(arrayBuffer);
+      } else if (fileData instanceof Uint8Array) {
+        uint8Array = fileData;
+      } else {
+        throw new Error('Unsupported file data type');
+      }
+      
+      console.log('[Storage] Uploading Uint8Array with explicit content type:', contentType);
+      
+      const { data, error } = await storageClient.upload(path, uint8Array, {
+        ...uploadOptions,
+        contentType,
+        headers: {
+          'Content-Type': contentType
+        }
+      });
+        
+      if (!error) {
+        console.log('[Storage] Uint8Array upload successful');
+        const { data: urlData } = storageClient.getPublicUrl(data.path);
+        return { success: true, url: urlData.publicUrl, error: null };
+      }
+      
+      console.warn('[Storage] Uint8Array upload failed:', error.message);
+      return { success: false, url: null, error };
+    } catch (error) {
+      console.error('[Storage] Binary upload error:', error.message);
+      return { success: false, url: null, error };
+    }
+  } catch (error) {
+    console.error('[Storage] Binary upload error:', error.message);
+    return { success: false, url: null, error };
+  }
+};
 
 // Helper function to clean data before sending to the database
 const cleanDataForDatabase = (data) => {
