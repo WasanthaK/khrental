@@ -31,10 +31,12 @@ const AgreementFormContainer = () => {
   const [formDataToSign, setFormDataToSign] = useState(null);
   const [agreement, setAgreement] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [userLoading, setUserLoading] = useState(true);
 
   useEffect(() => {
     const loadUserData = async () => {
       try {
+        setUserLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           throw new Error('User not found');
@@ -55,10 +57,22 @@ const AgreementFormContainer = () => {
           throw new Error('App user profile not found');
         }
         
-        setCurrentUser(appUser);
+        // Merge auth user data with app user data
+        const mergedUser = {
+          ...appUser,
+          email: user.email, // Ensure email from auth is included
+          id: appUser.id,
+          auth_id: user.id
+        };
+        
+        setCurrentUser(mergedUser);
       } catch (error) {
         console.error('Error loading user data:', error);
         toast.error('Failed to load user data');
+        // Redirect to login if user data cannot be loaded
+        navigate('/login');
+      } finally {
+        setUserLoading(false);
       }
     };
     
@@ -69,7 +83,7 @@ const AgreementFormContainer = () => {
     } else {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const loadAgreement = async () => {
     try {
@@ -439,12 +453,12 @@ const AgreementFormContainer = () => {
     );
   }
 
-  if (showSignatureForm) {
+  if (showSignatureForm && !userLoading && currentUser) {
     return (
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md w-full max-w-full overflow-x-auto">
         <SignatureForm
           agreement={agreement}
-          formData={formDataToSign}
+          currentUser={currentUser}
           onSuccess={handleSignatureFormSuccess}
           onCancel={handleSignatureFormCancel}
         />
