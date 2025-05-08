@@ -205,7 +205,7 @@ const UuidGuard = ({ children }) => {
   return children;
 };
 
-// Create the router with the routes defined
+// Create router with updated configuration
 const router = createBrowserRouter([
   {
     path: '/',
@@ -414,10 +414,6 @@ const router = createBrowserRouter([
                 element: <InvoiceForm />,
               },
               {
-                path: 'dashboard',
-                element: <InvoiceList />,
-              },
-              {
                 path: 'batch-generate',
                 element: (
                   <Suspense fallback={<div className="flex justify-center items-center h-full">Loading...</div>}>
@@ -472,7 +468,7 @@ const router = createBrowserRouter([
                 ),
               },
               {
-                path: 'invoicing',
+                path: 'invoice/:id',
                 element: (
                   <ProtectedRoute requiredRoles={['admin', 'staff', 'manager', 'finance_staff']}>
                     <UtilityBillingInvoice />
@@ -480,7 +476,7 @@ const router = createBrowserRouter([
                 ),
               },
               {
-                path: 'review',
+                path: 'readings',
                 element: (
                   <ProtectedRoute requiredRoles={['admin', 'staff', 'manager', 'finance_staff']}>
                     <UtilityReadingsReview />
@@ -532,42 +528,34 @@ const router = createBrowserRouter([
             element: <Settings />,
           },
           {
-            path: 'file-upload-test',
+            path: 'admin',
             element: (
-              <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
-                <FileUploadTest />
-              </ProtectedRoute>
-            ),
-          },
-          {
-            path: 'admin-dashboard',
-            element: (
-              <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
+              <ProtectedRoute requiredRoles={[USER_ROLES.ADMIN]}>
                 <AdminDashboard />
               </ProtectedRoute>
             ),
             children: [
               {
-                path: '',
+                index: true,
                 element: <AdminTools />,
               },
               {
+                path: 'tools',
+                element: <AdminTools />,
+              },
+              {
+                path: 'panel',
+                element: <AdminPanel />,
+              },
+              {
+                path: 'bucket-explorer',
+                element: <BucketExplorer />,
+              },
+              {
                 path: 'file-upload-test',
-                element: (
-                  <ProtectedRoute requiredRoles={[ROLES.ADMIN]}>
-                    <FileUploadTest />
-                  </ProtectedRoute>
-                ),
+                element: <FileUploadTest />,
               },
             ],
-          },
-          {
-            path: 'admin-tools',
-            element: (
-              <ProtectedRoute allowAuthenticated={true}>
-                <AdminTools />
-              </ProtectedRoute>
-            ),
           },
           {
             path: 'signature-progress-demo',
@@ -576,27 +564,6 @@ const router = createBrowserRouter([
                 <SignatureProgressDemo />
               </ProtectedRoute>
             ),
-          },
-          {
-            path: 'invoices',
-            children: [
-              {
-                index: true,
-                element: <InvoiceList />,
-              },
-              {
-                path: 'dashboard',
-                element: <InvoiceList />,
-              },
-              {
-                path: 'generate',
-                element: <InvoiceForm />,
-              },
-              {
-                path: ':id',
-                element: <InvoiceDetails />,
-              },
-            ],
           },
         ],
       },
@@ -608,75 +575,36 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
         children: [
-          { index: true, element: <div>Rentee Portal</div> }
-        ]
+          { index: true, element: <RenteePortal /> },
+          { path: 'profile', element: <RenteeProfile /> },
+          { path: 'invoices', element: <RenteeInvoices /> },
+          { path: 'agreements', element: <RenteeAgreements /> },
+          { path: 'maintenance', element: <RenteeMaintenance /> },
+          { path: 'maintenance/:id', element: <RenteeMaintenanceDetails /> },
+          { path: 'utilities', element: <RenteeUtilities /> },
+          { path: 'utilities/readings/new', element: <UtilityReadingForm /> },
+          { path: 'utilities/history', element: <UtilityHistory /> },
+        ],
       },
-      
-      // Portal routes
-      {
-        path: 'portal',
-        element: (
-          <ProtectedRoute requiredRoles={['rentee']}>
-            <RenteePortalLayout />
-          </ProtectedRoute>
-        ),
-        children: [
-          { index: true, element: <div>Portal</div> }
-        ]
-      },
-      
-      // Admin routes
-      {
-        path: 'admin',
-        element: <AdminLayout />,
-        children: [
-          {
-            path: '',
-            element: <AdminDashboard />
-          },
-          {
-            path: 'tools',
-            element: <AdminTools />
-          },
-          {
-            path: 'panel',
-            element: <AdminPanel />
-          },
-          {
-            path: 'bucket-explorer',
-            element: <BucketExplorer />
-          }
-        ]
-      },
-      
-      // Utility routes
-      {
-        path: 'utilities',
-        element: <DashboardLayout />,
-        children: [
-          {
-            path: 'review',
-            element: <UtilityBillingReview />
-          },
-          {
-            path: 'invoice/:id',
-            element: <UtilityBillingInvoice />
-          },
-          {
-            path: 'readings',
-            element: <UtilityReadingsReview />
-          }
-        ]
-      }
-    ]
+    ],
   },
   {
-    path: '*',
+    path: '*notfound',
     element: <NotFound />
   }
-]);
+], {
+  basename: '/',
+  future: {
+    v7_normalizeFormMethod: true
+  }
+});
 
-// Export the router instance directly
-export default router;
+// Create a router component
+const AppRouter = () => {
+  return <RouterProvider router={router} />;
+};
+
+// Export the router component
+export default AppRouter;
 
 // No named exports to prevent HMR issues
