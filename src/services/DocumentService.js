@@ -793,28 +793,27 @@ export const saveMergedDocument = async (content, agreementId) => {
       }
     });
     
-    // Footer with page number
-    page.drawText('Page 1', {
-      x: width / 2 - 20,
-      y: 30,
-      size: 10,
-      font: helveticaFont
-    });
-    
-    // For multiple pages, add page numbers to all pages
-    const pageCount = pdfDoc.getPageCount();
-    if (pageCount > 1) {
-      for (let i = 1; i < pageCount; i++) {
-        const currentPage = pdfDoc.getPage(i);
-        const { width } = currentPage.getSize();
-        
-        currentPage.drawText(`Page ${i + 1}`, {
-          x: width / 2 - 20,
-          y: 30,
-          size: 10,
-          font: helveticaFont
-        });
-      }
+    // Add page numbers
+    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
+      const page = pdfDoc.getPage(i);
+      const { width, height } = page.getSize();
+      
+      // Draw page number at the bottom center
+      page.drawText(`Page ${i + 1} of ${pdfDoc.getPageCount()}`, {
+        x: width / 2 - 30,
+        y: 30,
+        size: 10,
+        font: helveticaFont,
+        color: rgb(0.4, 0.4, 0.4)  // Gray color for page numbers
+      });
+      
+      // Add a subtle line above page numbers
+      page.drawLine({
+        start: { x: width / 2 - 50, y: 45 },
+        end: { x: width / 2 + 50, y: 45 },
+        thickness: 0.5,
+        color: rgb(0.8, 0.8, 0.8)  // Light gray line
+      });
     }
     
     // Save PDF as Uint8Array
@@ -1516,13 +1515,23 @@ async function createDocument(html, fileName, agreementId) {
     // Add page numbers
     for (let i = 0; i < pdfDoc.getPageCount(); i++) {
       const page = pdfDoc.getPage(i);
-      const { width } = page.getSize();
+      const { width, height } = page.getSize();
       
+      // Draw page number at the bottom center
       page.drawText(`Page ${i + 1} of ${pdfDoc.getPageCount()}`, {
-        x: width / 2 - 40,
+        x: width / 2 - 30,
         y: 30,
         size: 10,
-        font: helveticaFont
+        font: helveticaFont,
+        color: rgb(0.4, 0.4, 0.4)  // Gray color for page numbers
+      });
+      
+      // Add a subtle line above page numbers
+      page.drawLine({
+        start: { x: width / 2 - 50, y: 45 },
+        end: { x: width / 2 + 50, y: 45 },
+        thickness: 0.5,
+        color: rgb(0.8, 0.8, 0.8)  // Light gray line
       });
     }
     
