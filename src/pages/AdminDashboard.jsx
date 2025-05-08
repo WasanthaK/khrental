@@ -7,7 +7,6 @@ import { toast } from 'react-hot-toast';
 import { inviteUser, resendInvitation, checkInvitationStatus } from '../services/invitationService';
 import { Outlet, useLocation } from 'react-router-dom';
 // import InvitationStatus from '../components/ui/InvitationStatus';
-import EmailDiagnostic from '../components/diagnostics/EmailDiagnostic';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -1168,7 +1167,6 @@ const AdminDashboard = () => {
           <p className="text-sm text-gray-600 mb-4">
             Test and troubleshoot your email configuration and invitation process.
           </p>
-          <EmailDiagnostic />
         </div>
       )}
 

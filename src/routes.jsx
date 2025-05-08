@@ -81,13 +81,6 @@ const BatchInvoiceGeneration = lazy(() => import('./pages/BatchInvoiceGeneration
 // Import our new SetupAccount component
 import SetupAccount from './pages/setup-account';
 
-// Add the EmailDiagnostic import
-import EmailDiagnostic from './components/diagnostics/EmailDiagnostic';
-import SimpleTest from './components/diagnostics/SimpleTest';
-
-// Import the standalone diagnostics page
-import DiagnosticsPage from './pages/DiagnosticsPage';
-
 // Add a debug flag at the top of the file
 const ROUTER_DEBUG = false;
 
@@ -635,36 +628,43 @@ const router = createBrowserRouter([
       // Admin routes
       {
         path: 'admin',
-        element: (
-          <ProtectedRoute requiredRoles={['admin']}>
-            <AdminLayout />
-          </ProtectedRoute>
-        ),
+        element: <AdminLayout />,
         children: [
-          { index: true, element: <div>Admin</div> }
+          {
+            path: '',
+            element: <AdminDashboard />
+          },
+          {
+            path: 'tools',
+            element: <AdminTools />
+          },
+          {
+            path: 'panel',
+            element: <AdminPanel />
+          },
+          {
+            path: 'bucket-explorer',
+            element: <BucketExplorer />
+          }
         ]
       },
       
-      // Diagnostic routes - with proper layout
+      // Utility routes
       {
-        path: 'diagnostics',
-        element: (
-          <ProtectedRoute requiredRoles={[USER_ROLES.ADMIN]}>
-            <DashboardLayout />
-          </ProtectedRoute>
-        ),
+        path: 'utilities',
+        element: <DashboardLayout />,
         children: [
           {
-            index: true,
-            element: <EmailDiagnostic />,
+            path: 'review',
+            element: <UtilityBillingReview />
           },
           {
-            path: 'email',
-            element: <EmailDiagnostic />,
+            path: 'invoice/:id',
+            element: <UtilityBillingInvoice />
           },
           {
-            path: 'test',
-            element: <SimpleTest />,
+            path: 'readings',
+            element: <UtilityReadingsReview />
           }
         ]
       }
