@@ -14,6 +14,7 @@ import AdminLayout from './components/layouts/AdminLayout';
 
 // Auth pages
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AuthCallback from './pages/AuthCallback';
 import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
@@ -223,6 +224,14 @@ const routes = [
         element: (
           <PublicRoute>
             <Login />
+          </PublicRoute>
+        ),
+      },
+      {
+        path: 'register',
+        element: (
+          <PublicRoute>
+            <Register />
           </PublicRoute>
         ),
       },
