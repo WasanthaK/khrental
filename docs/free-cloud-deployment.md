@@ -71,9 +71,10 @@ subscription:
 curl -fsSL https://raw.githubusercontent.com/WasanthaK/khrental/codex/free-cloud-production/scripts/bootstrap-azure.sh | bash
 ```
 
-The script prints three GitHub environment secrets and two non-secret environment
-variables for `Production`. It also prints the SQL statements needed to grant
-the new Container App managed identity access to `khrentalsdb`.
+The script prints three GitHub environment secrets. The resource group and app
+name are fixed in the workflow for this deployment. It also prints the SQL
+statements needed to grant the new Container App managed identity access to
+`khrentalsdb`.
 
 The bootstrap initially uses Microsoft's public hello-world image and local
 ephemeral storage. This lets the shell be created before the KH Rentals GHCR
@@ -122,10 +123,8 @@ Create GitHub environment `Production`. Add these environment secrets:
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-Add these environment variables:
-
-- `AZURE_RESOURCE_GROUP`
-- `AZURE_CONTAINER_APP_NAME`
+The workflow is scoped to resource group `khrental-prod-rg` and Container App
+`khrental-app`.
 
 Configure Azure workload identity federation for this repository and the `Production` environment. The Azure identity only needs permission to update the target Container App.
 

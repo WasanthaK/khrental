@@ -18,6 +18,8 @@ concurrency:
 
 env:
   CONTAINER_PORT: '5174'
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
 
 jobs:
   verify:
@@ -77,12 +79,12 @@ jobs:
             set -euo pipefail
             az extension add --name containerapp --upgrade --yes
             az containerapp ingress update \
-              --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
               --target-port "$CONTAINER_PORT"
             az containerapp update \
-              --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
               --image "${{ steps.image.outputs.name }}:${{ github.sha }}"
 
       - name: Verify deployment health
@@ -91,7 +93,7 @@ jobs:
           inlineScript: |
             set -euo pipefail
             fqdn=$(az containerapp show \
-              --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
               --query properties.configuration.ingress.fqdn -o tsv)
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
