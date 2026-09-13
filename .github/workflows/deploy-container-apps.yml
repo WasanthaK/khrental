@@ -77,7 +77,7 @@ jobs:
         uses: azure/cli@v2
         env:
           SENDGRID_API_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM || secrets.VITE_EMAIL_FROM }}
+          EMAIL_FROM: contact@quixo.online
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME || secrets.VITE_EMAIL_FROM_NAME || 'KH Rentals' }}
         with:
           inlineScript: |
