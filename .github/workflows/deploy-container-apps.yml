@@ -73,6 +73,41 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure server-side email delivery
+        uses: azure/cli@v2
+        env:
+          SENDGRID_API_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM || secrets.VITE_EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME || secrets.VITE_EMAIL_FROM_NAME || 'KH Rentals' }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            if [ -z "$SENDGRID_API_KEY" ]; then
+              echo "TWILIO_SENDGRID_API_KEY (or SENDGRID_API_KEY) is not configured in GitHub." >&2
+              exit 1
+            fi
+
+            if [ -z "$EMAIL_FROM" ]; then
+              echo "EMAIL_FROM (or VITE_EMAIL_FROM) is not configured in GitHub." >&2
+              exit 1
+            fi
+
+            az extension add --name containerapp --upgrade --yes
+            az containerapp secret set \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets sendgrid-api-key="$SENDGRID_API_KEY" \
+              --output none
+            az containerapp update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --set-env-vars \
+                TWILIO_SENDGRID_API_KEY=secretref:sendgrid-api-key \
+                EMAIL_FROM="$EMAIL_FROM" \
+                EMAIL_FROM_NAME="$EMAIL_FROM_NAME" \
+              --output none
+
       - name: Deploy immutable image
         uses: azure/cli@v2
         with:
