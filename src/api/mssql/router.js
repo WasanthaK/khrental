@@ -107,8 +107,7 @@ export const createMssqlRouter = () => {
         required: [
           'MSSQL_SERVER',
           'MSSQL_DATABASE',
-          'MSSQL_USER',
-          'MSSQL_PASSWORD'
+          'MSSQL_AUTHENTICATION=managed-identity or MSSQL_USER and MSSQL_PASSWORD'
         ]
       });
       return;

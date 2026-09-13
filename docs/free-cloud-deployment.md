@@ -65,8 +65,7 @@ NODE_ENV=production
 PORT=5174
 MSSQL_SERVER=<server>.database.windows.net
 MSSQL_DATABASE=<database>
-MSSQL_USER=<runtime-user>
-MSSQL_PASSWORD=<secret>
+MSSQL_AUTHENTICATION=managed-identity
 MSSQL_ENCRYPT=true
 MSSQL_TRUST_SERVER_CERTIFICATE=false
 AUTH_SESSION_TTL_DAYS=30
@@ -74,6 +73,19 @@ CORS_ORIGINS=https://khrentals.kubeira.com
 VITE_API_ENDPOINT=
 VITE_ENABLE_DEV_BYPASS=false
 ```
+
+Enable the Container App's system-assigned managed identity. As the Azure SQL
+Microsoft Entra administrator, create a contained database user for that identity
+and grant only the application roles it requires:
+
+```sql
+CREATE USER [<container-app-name>] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [<container-app-name>];
+ALTER ROLE db_datawriter ADD MEMBER [<container-app-name>];
+```
+
+The application uses Tedious `azure-active-directory-default` authentication, so
+no database username or password is stored in Container Apps.
 
 Keep SendGrid and Evia credentials server-side (`TWILIO_SENDGRID_API_KEY`, `EVIA_SIGN_CLIENT_ID`, and `EVIA_SIGN_CLIENT_SECRET`).
 

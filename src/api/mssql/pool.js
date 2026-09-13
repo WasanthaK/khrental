@@ -5,7 +5,7 @@ let poolPromise = null;
 
 export const getMssqlPool = async () => {
   if (!isMssqlConfigured()) {
-    throw new Error('MSSQL is not configured. Set MSSQL_SERVER, MSSQL_DATABASE, MSSQL_USER, and MSSQL_PASSWORD.');
+    throw new Error('MSSQL is not configured. Set MSSQL_SERVER and MSSQL_DATABASE, then configure managed identity or SQL credentials.');
   }
 
   if (!poolPromise) {
