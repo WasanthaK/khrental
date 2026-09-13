@@ -51,12 +51,10 @@ async function createServer() {
     const normalizedAttachments = normalizeEmailAttachments(attachments);
 
     if (!apiKey) {
-      return {
-        success: true,
-        simulated: true,
-        provider: 'twilio-sendgrid',
-        message: 'Email simulated - TWILIO_SENDGRID_API_KEY is not configured.'
-      };
+      const error = new Error('Email delivery is not configured. TWILIO_SENDGRID_API_KEY is missing on the server.');
+      error.status = 503;
+      error.code = 'EMAIL_NOT_CONFIGURED';
+      throw error;
     }
 
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -173,6 +171,10 @@ async function createServer() {
     res.json({
       ok: true,
       server: 'kh-rentals-dev-server',
+      email: {
+        configured: Boolean(getTwilioSendGridApiKey()),
+        senderConfigured: Boolean(process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM)
+      },
       database: {
         configured: databaseStatus.configured,
         encrypt: databaseStatus.encrypt
