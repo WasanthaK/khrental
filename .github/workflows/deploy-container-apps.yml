@@ -76,6 +76,10 @@ jobs:
           inlineScript: |
             set -euo pipefail
             az extension add --name containerapp --upgrade --yes
+            az containerapp ingress update \
+              --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --target-port "$CONTAINER_PORT"
             az containerapp update \
               --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \

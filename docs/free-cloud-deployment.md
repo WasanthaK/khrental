@@ -56,7 +56,30 @@ Do not expose any R2 credential as a `VITE_` variable. Stored objects remain pri
 
 For local development, omit the R2 settings and use `STORAGE_DRIVER=local`.
 
-## 3. Container App
+## 3. Automated Azure bootstrap
+
+The repository includes an idempotent bootstrap script that creates the
+Consumption Container Apps environment and application shell, enables its
+system-assigned identity, and creates a narrowly scoped user-assigned managed
+identity for GitHub OIDC deployment. It does not modify or recreate the existing
+Azure SQL database.
+
+Run it from Azure Cloud Shell while signed in to the `Kubeira Rentals`
+subscription:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WasanthaK/khrental/codex/free-cloud-production/scripts/bootstrap-azure.sh | bash
+```
+
+The script prints three GitHub environment secrets and two non-secret environment
+variables for `Production`. It also prints the SQL statements needed to grant
+the new Container App managed identity access to `khrentalsdb`.
+
+The bootstrap initially uses Microsoft's public hello-world image and local
+ephemeral storage. This lets the shell be created before the KH Rentals GHCR
+package exists. Do not upload production documents until R2 is configured.
+
+## 4. Container App configuration
 
 Create a consumption-plan Container Apps environment and one Container App with external ingress targeting port `5174`. Configure at least:
 
@@ -91,15 +114,15 @@ Keep SendGrid and Evia credentials server-side (`TWILIO_SENDGRID_API_KEY`, `EVIA
 
 Set minimum replicas to `0` for the lowest idle cost. The first request after idle may be slower. Set maximum replicas to `1` until the R2 and auth migrations are validated; it can then safely scale out.
 
-## 4. GitHub configuration
+## 5. GitHub configuration
 
-Create GitHub environment `Production`. Add repository/environment secrets:
+Create GitHub environment `Production`. Add these environment secrets:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-Add repository variables:
+Add these environment variables:
 
 - `AZURE_RESOURCE_GROUP`
 - `AZURE_CONTAINER_APP_NAME`
@@ -108,7 +131,7 @@ Configure Azure workload identity federation for this repository and the `Produc
 
 The workflow publishes `ghcr.io/wasanthak/khrental`. Make that GHCR package public, or separately configure the Container App with a durable read-only GHCR credential. A temporary GitHub Actions token must not be stored as the Container App registry credential.
 
-## 5. Domain and verification
+## 6. Domain and verification
 
 After the first healthy deployment, add `khrentals.kubeira.com` as the Container App custom domain, create the requested DNS records, and bind the managed certificate.
 
