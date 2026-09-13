@@ -1,6 +1,7 @@
 import { platform as platformClient } from './platformClient';
 import { getApiBaseUrl, getAppBaseUrl } from '../utils/env';
 import { createAppUser } from './createAppUser';
+import { buildRequestContextHeaders } from './requestContext';
 
 /**
  * Direct email service that uses SendGrid API for emails
@@ -186,9 +187,9 @@ export const sendDirectEmail = async (toParam, subjectParam, htmlParam, optionsP
     
     const response = await fetch(endpointUrl, {
       method: 'POST',
-      headers: {
+      headers: buildRequestContextHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       body: JSON.stringify(payload)
     });
     
@@ -599,4 +600,4 @@ export const testEmailConfiguration = async () => {
       stack: error.stack
     };
   }
-}; 
+};
