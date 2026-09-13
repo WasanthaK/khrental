@@ -151,15 +151,23 @@ const TeamMemberForm = () => {
       }
       
       if (userId && processedFormData.contact_details.email) {
-        await inviteUser({
+        const invitationResult = await inviteUser({
           id: userId,
           email: processedFormData.contact_details.email,
           name: processedFormData.name,
           role: processedFormData.user_type || 'staff'
         });
+
+        if (!invitationResult.success) {
+          throw new Error(invitationResult.error || 'Team member was saved, but the invitation email could not be sent');
+        }
+
+        if (invitationResult.simulated) {
+          throw new Error('Team member was saved, but email delivery is not configured');
+        }
       }
       
-      toast.success(`Team member ${id ? 'updated' : 'created'} successfully`);
+      toast.success(`Team member ${id ? 'updated' : 'created'} and invitation email sent successfully`);
       navigate('/dashboard/team');
     } catch (error) {
       console.error('Error saving team member:', error);
@@ -389,4 +397,4 @@ const TeamMemberForm = () => {
   );
 };
 
-export default TeamMemberForm; 
+export default TeamMemberForm;
