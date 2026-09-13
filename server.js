@@ -5,26 +5,12 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
+import { createSessionAuthMiddleware } from './src/api/auth/index.js';
+import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
 dotenv.config();
 
-let deprecatedSendGridEnvLogged = false;
-
-const getTwilioSendGridApiKey = () => {
-  const preferredKey = process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
-
-  if (preferredKey) {
-    return preferredKey;
-  }
-
-  const deprecatedClientKey = process.env.VITE_SENDGRID_API_KEY || '';
-  if (deprecatedClientKey && !deprecatedSendGridEnvLogged) {
-    deprecatedSendGridEnvLogged = true;
-    console.warn('[email] Using deprecated VITE_SENDGRID_API_KEY fallback. Move this value to TWILIO_SENDGRID_API_KEY or SENDGRID_API_KEY on the server.');
-  }
-
-  return deprecatedClientKey;
-};
+const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
 
 const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
@@ -51,9 +37,13 @@ const normalizeEmailAttachments = (attachments = []) => {
 async function createServer() {
   const app = express();
   const isProduction = process.env.NODE_ENV === 'production';
+  const allowedOrigins = String(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   const getEviaClientId = () => process.env.EVIA_SIGN_CLIENT_ID || process.env.VITE_EVIA_SIGN_CLIENT_ID || '';
-  const getEviaClientSecret = () => process.env.EVIA_SIGN_CLIENT_SECRET || process.env.VITE_EVIA_SIGN_CLIENT_SECRET || '';
+  const getEviaClientSecret = () => process.env.EVIA_SIGN_CLIENT_SECRET || '';
 
   const sendEmail = async ({ to, subject, html, text, from, fromName, attachments }) => {
     const apiKey = getTwilioSendGridApiKey();
@@ -162,18 +152,35 @@ async function createServer() {
     return formResponse.json();
   };
 
-  app.use(cors());
+  app.use(cors({
+    origin: isProduction
+      ? (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin))
+      : true
+  }));
   app.use(express.json({ limit: '10mb' }));
+  app.use('/api', createSessionAuthMiddleware());
+
+  const requireApiSession = (req, res, next) => {
+    if (!req.authSession) {
+      res.status(401).json({ error: 'Authenticated session required.', code: 'AUTH_SESSION_REQUIRED' });
+      return;
+    }
+    next();
+  };
 
   app.get('/api/health', (_req, res) => {
+    const databaseStatus = getMssqlConfigStatus();
     res.json({
       ok: true,
       server: 'kh-rentals-dev-server',
-      database: getMssqlConfigStatus()
+      database: {
+        configured: databaseStatus.configured,
+        encrypt: databaseStatus.encrypt
+      }
     });
   });
 
-  app.post('/api/send-email', async (req, res, next) => {
+  app.post('/api/send-email', requireApiSession, async (req, res, next) => {
     try {
       const { to, subject, html, text, from, fromName, attachments } = req.body || {};
 
@@ -197,7 +204,7 @@ async function createServer() {
     }
   });
 
-  app.post('/api/evia/token', async (req, res, next) => {
+  app.post('/api/evia/token', requireApiSession, async (req, res, next) => {
     try {
       const { grantType, code, refreshToken, redirectUri } = req.body || {};
 
@@ -234,7 +241,8 @@ async function createServer() {
 
   app.use('/api/mssql', createMssqlRouter());
   app.use('/api/platform', createPlatformRouter());
-  app.use('/storage', express.static(path.resolve(process.cwd(), 'public', 'storage')));
+  app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
+  app.use('/storage/:bucket', createStorageDeliveryHandler());
 
   if (isProduction) {
     const publicPath = path.resolve(process.cwd(), 'public');

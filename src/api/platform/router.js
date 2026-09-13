@@ -1,14 +1,22 @@
 import express from 'express';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createAppUser, findAppUserByEmail, updateAppUser } from '../mssql/repositories.js';
 import { isMssqlConfigured } from '../mssql/config.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
+import {
+  createAuthRecord,
+  clearStorageSessionCookie,
+  findAuthRecordByEmail,
+  issueAuthSession,
+  markSuccessfulLogin,
+  revokeAccessToken,
+  setStorageSessionCookie,
+  updateAuthRecord,
+  verifyPasswordCredential
+} from '../auth/index.js';
+import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 
-const STORAGE_ROOT = path.resolve(process.cwd(), 'public', 'storage');
-const AUTH_STORE_PATH = path.resolve(process.cwd(), '.local-auth-store.json');
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TENANT_SCOPED_TABLES = new Set([
   'app_users',
@@ -243,36 +251,24 @@ const auditPlatformRejection = (req, reason, details = {}) => {
   });
 };
 
-const readAuthStore = async () => {
-  try {
-    const raw = await fs.readFile(AUTH_STORE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (_error) {
-    return { users: [] };
-  }
-};
-
-const writeAuthStore = async (store) => {
-  await fs.writeFile(AUTH_STORE_PATH, JSON.stringify(store, null, 2), 'utf8');
-};
-
-const hashPassword = (password) => crypto.createHash('sha256').update(String(password || '')).digest('hex');
-
 const buildAuthUser = (record) => ({
   id: record.authId,
   email: record.email,
   role: record.role || 'authenticated',
   aud: 'authenticated',
-  app_metadata: { provider: 'local', role: record.role || 'authenticated' },
+  app_metadata: { provider: 'local-mssql', role: record.role || 'authenticated' },
   user_metadata: record.metadata || {}
 });
 
-const buildSession = (record) => ({
-  access_token: crypto.randomUUID(),
-  token_type: 'bearer',
-  expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
-  user: buildAuthUser(record)
-});
+const buildSession = async (record) => {
+  const issued = await issueAuthSession(record);
+  return {
+    access_token: issued.accessToken,
+    token_type: 'bearer',
+    expires_at: Math.floor(new Date(issued.expiresAt).getTime() / 1000),
+    user: buildAuthUser(record)
+  };
+};
 
 const ensureAuthRecord = async ({ email, password, role = 'authenticated', metadata = {} }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -280,14 +276,12 @@ const ensureAuthRecord = async ({ email, password, role = 'authenticated', metad
     throw new Error('Email is required.');
   }
 
-  const store = await readAuthStore();
-  const existing = store.users.find((user) => user.email === normalizedEmail);
-
+  const existing = await findAuthRecordByEmail(normalizedEmail);
   if (existing) {
-    return { store, record: existing, created: false };
+    return { record: existing, created: false };
   }
 
-  const authId = `local-${crypto.randomUUID()}`;
+  const authId = crypto.randomUUID();
   let appUser = await findAppUserByEmail(normalizedEmail);
   if (!appUser) {
     appUser = await createAppUser({
@@ -303,21 +297,16 @@ const ensureAuthRecord = async ({ email, password, role = 'authenticated', metad
     appUser = await updateAppUser(appUser.id, { auth_id: authId, invited: true });
   }
 
-  const record = {
-    id: crypto.randomUUID(),
+  const record = await createAuthRecord({
     authId,
     appUserId: appUser?.id || null,
     email: normalizedEmail,
-    passwordHash: hashPassword(password || crypto.randomUUID()),
+    password: password || crypto.randomUUID(),
     role,
-    metadata,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
+    metadata
+  });
 
-  store.users.push(record);
-  await writeAuthStore(store);
-  return { store, record, created: true };
+  return { record, created: true };
 };
 
 const coerceFilter = (filter = {}, index = 0) => {
@@ -779,16 +768,7 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
   }
 };
 
-const ensureBucketPath = async (bucket) => {
-  const safeBucket = ensureIdentifier(bucket, 'bucket');
-  const bucketPath = path.join(STORAGE_ROOT, safeBucket);
-  await fs.mkdir(bucketPath, { recursive: true });
-  return { safeBucket, bucketPath };
-};
-
 const STORAGE_TENANT_ROOT = 'tenants';
-
-const normalizeStoragePath = (value = '') => String(value || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 
 const getTenantStoragePrefix = (tenantId) => {
   const normalizedTenantId = normalizeStoragePath(tenantId);
@@ -806,17 +786,11 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
       error.code = 'TENANT_REQUIRED';
       throw error;
     }
-
     return normalizedPath;
   }
 
-  if (!normalizedPath) {
-    return tenantPrefix;
-  }
-
-  if (normalizedPath === tenantPrefix || normalizedPath.startsWith(`${tenantPrefix}/`)) {
-    return normalizedPath;
-  }
+  if (!normalizedPath) return tenantPrefix;
+  if (normalizedPath === tenantPrefix || normalizedPath.startsWith(`${tenantPrefix}/`)) return normalizedPath;
 
   if (normalizedPath.startsWith(`${STORAGE_TENANT_ROOT}/`)) {
     const error = new Error('Cross-tenant storage paths are not allowed.');
@@ -828,28 +802,16 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
   return `${tenantPrefix}/${normalizedPath}`;
 };
 
-const listDirectory = async (dirPath) => {
-  const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
-  const items = [];
-
-  for (const entry of entries) {
-    const itemPath = path.join(dirPath, entry.name);
-    const stats = await fs.stat(itemPath).catch(() => null);
-    items.push({
-      id: entry.isDirectory() ? null : crypto.createHash('md5').update(itemPath).digest('hex'),
-      name: entry.name,
-      created_at: stats?.birthtime?.toISOString?.() || null,
-      updated_at: stats?.mtime?.toISOString?.() || null,
-      last_accessed_at: stats?.atime?.toISOString?.() || null,
-      metadata: entry.isDirectory() ? null : { size: stats?.size || 0 }
-    });
-  }
-
-  return items;
-};
-
 export const createPlatformRouter = () => {
   const router = express.Router();
+  const requireAuthenticated = createTenantContextMiddleware({ requireUser: true });
+  const requireAdmin = (req, res, next) => {
+    if (String(req.user?.role || '').trim().toLowerCase() !== 'admin') {
+      res.status(403).json({ error: 'Administrator access is required.', code: 'ADMIN_ACCESS_REQUIRED' });
+      return;
+    }
+    next();
+  };
 
   router.use(createTenantContextMiddleware());
 
@@ -862,7 +824,7 @@ export const createPlatformRouter = () => {
     });
   });
 
-  router.post('/query', async (req, res, next) => {
+  router.post('/query', requireAuthenticated, async (req, res, next) => {
     const { action = 'select', table, select, filters, order, limit, range, payload, head, count } = req.body || {};
 
     try {
@@ -932,7 +894,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/rpc/:name', async (req, res, next) => {
+  router.post('/rpc/:name', requireAuthenticated, async (req, res, next) => {
     try {
       if (!isMssqlConfigured()) {
         if (req.params.name === 'get_table_columns') {
@@ -970,13 +932,21 @@ export const createPlatformRouter = () => {
 
   router.post('/auth/sign-up', async (req, res, next) => {
     try {
-      const { email, password, role = 'authenticated', metadata = {} } = req.body || {};
-      const { record, created } = await ensureAuthRecord({ email, password, role, metadata });
+      const { email, password, metadata = {} } = req.body || {};
+      const safeMetadata = {
+        name: metadata.name,
+        user_type: 'rentee',
+        status: 'active',
+        invited: false
+      };
+      const { record, created } = await ensureAuthRecord({ email, password, role: 'rentee', metadata: safeMetadata });
       if (!created) {
         res.status(409).json({ error: 'User already exists.' });
         return;
       }
-      res.status(201).json({ data: { user: buildAuthUser(record), session: buildSession(record) } });
+      const session = await buildSession(record);
+      setStorageSessionCookie(res, session);
+      res.status(201).json({ data: { user: buildAuthUser(record), session } });
     } catch (error) {
       next(error);
     }
@@ -985,38 +955,46 @@ export const createPlatformRouter = () => {
   router.post('/auth/sign-in', async (req, res, next) => {
     try {
       const { email, password } = req.body || {};
-      const store = await readAuthStore();
-      const record = store.users.find((user) => user.email === String(email || '').trim().toLowerCase());
-      if (!record || record.passwordHash !== hashPassword(password)) {
+      let record = await findAuthRecordByEmail(email);
+      if (!record || !(await verifyPasswordCredential(record, password))) {
         res.status(401).json({ error: 'Invalid login credentials' });
         return;
       }
-      record.updatedAt = new Date().toISOString();
-      await writeAuthStore(store);
-      res.json({ data: { user: buildAuthUser(record), session: buildSession(record) } });
+      if (record.passwordAlgorithm === 'legacy-sha256') {
+        record = await updateAuthRecord(record, { password });
+      }
+      await markSuccessfulLogin(record);
+      const session = await buildSession(record);
+      setStorageSessionCookie(res, session);
+      res.json({ data: { user: buildAuthUser(record), session } });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post('/auth/update-user', async (req, res, next) => {
+  router.post('/auth/update-user', requireAuthenticated, async (req, res, next) => {
     try {
-      const { authId, email, password, metadata } = req.body || {};
-      const store = await readAuthStore();
-      const record = store.users.find((user) => user.authId === authId || user.email === String(email || '').trim().toLowerCase());
+      const { password, metadata } = req.body || {};
+      const currentRecord = req.authSession?.record;
+      const record = currentRecord ? await updateAuthRecord(currentRecord, { password, metadata }) : null;
       if (!record) {
-        res.status(404).json({ error: 'User not found.' });
+        res.status(401).json({ error: 'Authenticated session required.' });
         return;
       }
-      if (password) {
-        record.passwordHash = hashPassword(password);
-      }
-      if (metadata && typeof metadata === 'object') {
-        record.metadata = { ...(record.metadata || {}), ...metadata };
-      }
-      record.updatedAt = new Date().toISOString();
-      await writeAuthStore(store);
-      res.json({ data: { user: buildAuthUser(record), session: buildSession(record) } });
+      await revokeAccessToken(req.authSession.accessToken);
+      const session = await buildSession(record);
+      setStorageSessionCookie(res, session);
+      res.json({ data: { user: buildAuthUser(record), session } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/auth/sign-out', async (req, res, next) => {
+    try {
+      await revokeAccessToken(req.authSession?.accessToken);
+      clearStorageSessionCookie(res);
+      res.json({ data: { signedOut: true } });
     } catch (error) {
       next(error);
     }
@@ -1026,23 +1004,19 @@ export const createPlatformRouter = () => {
     res.json({ data: { sent: true, email: req.body?.email || null } });
   });
 
-  router.post('/auth/otp', async (req, res, next) => {
-    try {
-      const { email, options = {} } = req.body || {};
-      const role = options?.data?.role || 'authenticated';
-      const metadata = options?.data || {};
-      const { record } = await ensureAuthRecord({ email, password: crypto.randomUUID(), role, metadata });
-      res.json({ data: { user: buildAuthUser(record), session: null } });
-    } catch (error) {
-      next(error);
-    }
+  router.post('/auth/otp', (_req, res) => {
+    res.status(501).json({
+      error: 'OTP sign-in is unavailable until a verified one-time-code provider is configured.',
+      code: 'OTP_NOT_CONFIGURED'
+    });
   });
 
-  router.post('/auth/invite', async (req, res, next) => {
+  router.post('/auth/invite', requireAuthenticated, requireAdmin, async (req, res, next) => {
     try {
       const { email, options = {} } = req.body || {};
-      const role = options?.data?.role || 'authenticated';
-      const metadata = options?.data || {};
+      const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
+      const role = requestedRole === 'staff' ? 'staff' : 'rentee';
+      const metadata = { ...(options?.data || {}), role, user_type: role, invited: true };
       const { record } = await ensureAuthRecord({ email, password: crypto.randomUUID(), role, metadata: { ...metadata, invited: true } });
       res.json({ data: { user: buildAuthUser(record) } });
     } catch (error) {
@@ -1050,70 +1024,62 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.get('/storage/buckets', async (_req, res, next) => {
+  router.get('/storage/buckets', requireAuthenticated, async (_req, res, next) => {
     try {
-      await fs.mkdir(STORAGE_ROOT, { recursive: true });
-      const entries = await fs.readdir(STORAGE_ROOT, { withFileTypes: true });
-      const buckets = entries.filter((entry) => entry.isDirectory()).map((entry) => ({ id: entry.name, name: entry.name, public: true }));
-      res.json({ data: buckets });
+      res.json({ data: await getStorageDriver().listBuckets() });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post('/storage/buckets', async (req, res, next) => {
+  router.post('/storage/buckets', requireAuthenticated, async (req, res, next) => {
     try {
       const bucketName = req.body?.bucketName || req.body?.name;
-      const { safeBucket } = await ensureBucketPath(bucketName);
-      res.status(201).json({ data: { id: safeBucket, name: safeBucket, public: true } });
+      res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
     } catch (error) {
       next(error);
     }
   });
 
-  router.delete('/storage/buckets/:bucket', async (req, res, next) => {
+  router.delete('/storage/buckets/:bucket', requireAuthenticated, async (req, res, next) => {
     try {
-      const { bucketPath } = await ensureBucketPath(req.params.bucket);
-      await fs.rm(bucketPath, { recursive: true, force: true });
+      await getStorageDriver().deleteBucket(req.params.bucket);
       res.json({ data: true });
     } catch (error) {
       next(error);
     }
   });
 
-  router.get('/storage/list', async (req, res, next) => {
+  router.get('/storage/list', requireAuthenticated, async (req, res, next) => {
     try {
-      const { bucketPath } = await ensureBucketPath(req.query.bucket);
-      const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId);
-      const targetPath = path.join(bucketPath, relativePath);
-      const items = await listDirectory(targetPath);
+      const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
+      const items = await getStorageDriver().list(req.query.bucket, relativePath);
       res.json({ data: items, meta: { path: relativePath, tenantContext: serializeTenantContext(req.tenantContext) } });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post('/storage/upload', express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
+  router.post('/storage/upload', requireAuthenticated, express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
     try {
-      const bucket = req.query.bucket;
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
-      const { bucketPath, safeBucket } = await ensureBucketPath(bucket);
-      const targetPath = path.join(bucketPath, relativePath);
-      await fs.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.writeFile(targetPath, req.body);
-      res.status(201).json({ data: { path: relativePath, fullPath: `${safeBucket}/${relativePath}` } });
+      const data = await getStorageDriver().upload(
+        req.query.bucket,
+        relativePath,
+        req.body,
+        req.headers['content-type'] || 'application/octet-stream'
+      );
+      res.status(201).json({ data });
     } catch (error) {
       next(error);
     }
   });
 
-  router.delete('/storage/objects', async (req, res, next) => {
+  router.delete('/storage/objects', requireAuthenticated, async (req, res, next) => {
     try {
-      const { bucketPath } = await ensureBucketPath(req.body?.bucket || req.query.bucket);
       const pathsToDelete = Array.isArray(req.body?.paths) ? req.body.paths : [];
       const scopedPaths = pathsToDelete.map((item) => resolveTenantStoragePath(item, req.tenantId, { requireTenant: true }));
-      await Promise.all(scopedPaths.map((item) => fs.rm(path.join(bucketPath, item), { force: true, recursive: true })));
-      res.json({ data: scopedPaths.map((item) => ({ name: item })) });
+      res.json({ data: await getStorageDriver().deleteObjects(req.body?.bucket || req.query.bucket, scopedPaths) });
     } catch (error) {
       next(error);
     }

@@ -1,0 +1,100 @@
+# Free-cloud deployment
+
+KH Rentals can run within the free allowances of Azure Container Apps, Azure SQL Database, GitHub Actions/Packages, and Cloudflare R2. Free allowances are usage-limited; configure Azure cost alerts before production use.
+
+## Runtime architecture
+
+- One Azure Container App running the repository Docker image on port `5174`
+- One Azure SQL Database for application data, auth users, and bearer sessions
+- One private Cloudflare R2 bucket; the app maps logical buckets such as `images` and `documents` to prefixes
+- GitHub Actions builds, verifies, publishes to GHCR, and updates the Container App
+
+The container is stateless when `STORAGE_DRIVER=r2`. Run a single replica until that setting and the MSSQL auth migration are verified.
+
+## 1. Database
+
+Create an Azure SQL free-offer database and select the option that pauses or blocks usage when its free allowance is exhausted. Apply existing migrations, then apply:
+
+```bash
+npm run execute-sql -- ./migrations/20260913_01_create_auth_store.sql
+```
+
+The API also creates these two auth tables on first use if the deployment identity has DDL permission. Applying the migration explicitly is preferred so the runtime login can use normal data permissions afterward.
+
+If `.local-auth-store.json` contains real users, run this once before removing the file:
+
+```bash
+npm run migrate:auth:legacy -- /path/to/.local-auth-store.json
+```
+
+Legacy SHA-256 password hashes are upgraded to salted scrypt after each user's next successful sign-in.
+
+## 2. R2
+
+Create one private R2 bucket and an API token limited to object read/write for that bucket. Configure these Container App secrets/environment variables:
+
+```text
+STORAGE_DRIVER=r2
+R2_ACCOUNT_ID=<cloudflare-account-id>
+R2_BUCKET=<physical-r2-bucket>
+R2_ACCESS_KEY_ID=<r2-access-key-id>
+R2_SECRET_ACCESS_KEY=<r2-secret-access-key>
+STORAGE_BUCKETS=images,files,documents,invoices,media,maintenance
+```
+
+Do not expose any R2 credential as a `VITE_` variable. Stored objects remain private in R2 and are delivered through the application `/storage` route.
+
+For local development, omit the R2 settings and use `STORAGE_DRIVER=local`.
+
+## 3. Container App
+
+Create a consumption-plan Container Apps environment and one Container App with external ingress targeting port `5174`. Configure at least:
+
+```text
+NODE_ENV=production
+PORT=5174
+MSSQL_SERVER=<server>.database.windows.net
+MSSQL_DATABASE=<database>
+MSSQL_USER=<runtime-user>
+MSSQL_PASSWORD=<secret>
+MSSQL_ENCRYPT=true
+MSSQL_TRUST_SERVER_CERTIFICATE=false
+AUTH_SESSION_TTL_DAYS=30
+CORS_ORIGINS=https://khrentals.kubeira.com
+VITE_API_ENDPOINT=
+VITE_ENABLE_DEV_BYPASS=false
+```
+
+Keep SendGrid and Evia credentials server-side (`TWILIO_SENDGRID_API_KEY`, `EVIA_SIGN_CLIENT_ID`, and `EVIA_SIGN_CLIENT_SECRET`).
+
+Set minimum replicas to `0` for the lowest idle cost. The first request after idle may be slower. Set maximum replicas to `1` until the R2 and auth migrations are validated; it can then safely scale out.
+
+## 4. GitHub configuration
+
+Create GitHub environment `Production`. Add repository/environment secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+Add repository variables:
+
+- `AZURE_RESOURCE_GROUP`
+- `AZURE_CONTAINER_APP_NAME`
+
+Configure Azure workload identity federation for this repository and the `Production` environment. The Azure identity only needs permission to update the target Container App.
+
+The workflow publishes `ghcr.io/wasanthak/khrental`. Make that GHCR package public, or separately configure the Container App with a durable read-only GHCR credential. A temporary GitHub Actions token must not be stored as the Container App registry credential.
+
+## 5. Domain and verification
+
+After the first healthy deployment, add `khrentals.kubeira.com` as the Container App custom domain, create the requested DNS records, and bind the managed certificate.
+
+Verify:
+
+1. `/api/health` reports a configured encrypted MSSQL connection.
+2. Sign-up/sign-in creates rows in `auth_users` and `auth_sessions`.
+3. API requests without a bearer session are rejected.
+4. Upload, list, open, and delete work for one file in R2.
+5. A second tenant cannot address the first tenant's storage prefix.
+6. Container restart does not lose the session or uploaded object.

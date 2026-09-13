@@ -119,19 +119,9 @@ export const createMssqlRouter = () => {
 
   router.use(createTenantContextMiddleware());
 
-  router.get('/me', asyncHandler(async (req, res) => {
-    const authId = req.headers['x-auth-id'];
-    const userId = req.headers['x-user-id'];
-    const email = req.headers['x-user-email'];
-
-    if (!authId && !userId && !email) {
-      res.status(401).json({
-        error: 'Missing identity headers. Provide x-auth-id, x-user-id, or x-user-email.'
-      });
-      return;
-    }
-
-    const user = req.user || await getCurrentUserProfile({ authId, userId, email });
+  router.get('/me', createTenantContextMiddleware({ requireUser: true }), asyncHandler(async (req, res) => {
+    const identity = req.tenantContext?.identity || {};
+    const user = req.user || await getCurrentUserProfile(identity);
 
     if (!user) {
       res.status(404).json({ error: 'User not found.' });

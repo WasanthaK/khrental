@@ -58,6 +58,7 @@ WEBHOOK_README.md
 # API keys
 public/env-config.js
 .env*
+!.env.example
 public/env-config.js
 
 # Test files

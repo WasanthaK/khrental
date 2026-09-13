@@ -35,7 +35,8 @@
     "dev:with-proxy": "concurrently \"npm run proxy\" \"npm run dev\"",
     "start": "node start-dev.js",
     "test:mobile": "node mobile-test.js",
-    "test:mobile:chrome": "node testing/mobile/chrome-test.js"
+    "test:mobile:chrome": "node testing/mobile/chrome-test.js",
+    "migrate:auth:legacy": "node scripts/migrate-local-auth-to-mssql.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

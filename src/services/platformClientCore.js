@@ -488,7 +488,13 @@ const authClient = {
   },
 
   async signOut() {
-    persistSession(null, 'SIGNED_OUT');
+    try {
+      if (currentSession?.access_token) {
+        await apiRequest('/api/platform/auth/sign-out', { method: 'POST' });
+      }
+    } finally {
+      persistSession(null, 'SIGNED_OUT');
+    }
     return { error: null };
   },
 

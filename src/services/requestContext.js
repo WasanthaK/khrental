@@ -68,8 +68,7 @@ export const buildRequestContextHeaders = (headers = {}) => {
   const devBypassRole = getDevBypassRole();
 
   return {
-    ...(authId ? { 'x-auth-id': authId } : {}),
-    ...(email ? { 'x-user-email': email } : {}),
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
     ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
     ...(!authId && devBypassRole ? { 'x-dev-bypass-role': devBypassRole } : {}),
     ...headers

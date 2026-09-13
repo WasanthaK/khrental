@@ -148,3 +148,7 @@ Ensure the following environment variables are set in your Azure Web App:
 ## License
 
 MIT
+
+## Free-cloud production deployment
+
+For the stateless Azure Container Apps + Azure SQL + Cloudflare R2 architecture, including GitHub OIDC deployment and migration steps, see [Free-cloud deployment](docs/free-cloud-deployment.md).

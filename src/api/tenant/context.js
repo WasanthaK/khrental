@@ -45,11 +45,28 @@ const tableExists = async (tableName) => {
   return exists;
 };
 
-const readRequestIdentity = (req) => ({
-  authId: normalizeString(readRequestValue(req.headers['x-auth-id'])),
-  userId: normalizeString(readRequestValue(req.headers['x-user-id'])),
-  email: normalizeString(readRequestValue(req.headers['x-user-email']))
-});
+const areLegacyIdentityHeadersAllowed = () => process.env.NODE_ENV !== 'production'
+  && String(process.env.ALLOW_LEGACY_AUTH_HEADERS || 'true').trim().toLowerCase() === 'true';
+
+const readRequestIdentity = (req) => {
+  if (req.authIdentity) {
+    return {
+      authId: normalizeString(req.authIdentity.authId),
+      userId: normalizeString(req.authIdentity.userId),
+      email: normalizeString(req.authIdentity.email)
+    };
+  }
+
+  if (!areLegacyIdentityHeadersAllowed()) {
+    return { authId: null, userId: null, email: null };
+  }
+
+  return {
+    authId: normalizeString(readRequestValue(req.headers['x-auth-id'])),
+    userId: normalizeString(readRequestValue(req.headers['x-user-id'])),
+    email: normalizeString(readRequestValue(req.headers['x-user-email']))
+  };
+};
 
 const readDevBypassRole = (req) => normalizeString(readRequestValue(req.headers['x-dev-bypass-role']));
 
