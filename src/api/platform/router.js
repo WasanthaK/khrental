@@ -1,7 +1,12 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
-import { createAppUser, findAppUserByEmail, updateAppUser } from '../mssql/repositories.js';
+import {
+  createAppUser,
+  createTenantMembership,
+  findAppUserByEmail,
+  updateAppUser
+} from '../mssql/repositories.js';
 import { isMssqlConfigured } from '../mssql/config.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
 import {
@@ -270,6 +275,24 @@ const buildSession = async (record) => {
   };
 };
 
+const resolveSelfRegistrationTenant = async () => {
+  const tenant = await runSingleQuery(`
+    SELECT TOP 1 id
+    FROM dbo.tenants
+    WHERE slug = @slug
+      AND ([status] IS NULL OR [status] = 'active')
+  `, { slug: 'kh-rentals' });
+
+  if (!tenant?.id) {
+    const error = new Error('The KH Rentals tenant is not available for registration.');
+    error.status = 503;
+    error.code = 'REGISTRATION_TENANT_UNAVAILABLE';
+    throw error;
+  }
+
+  return tenant.id;
+};
+
 const ensureAuthRecord = async ({ email, password, role = 'authenticated', metadata = {} }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (!normalizedEmail) {
@@ -284,7 +307,9 @@ const ensureAuthRecord = async ({ email, password, role = 'authenticated', metad
   const authId = crypto.randomUUID();
   let appUser = await findAppUserByEmail(normalizedEmail);
   if (!appUser) {
+    const tenantId = await resolveSelfRegistrationTenant();
     appUser = await createAppUser({
+      tenant_id: tenantId,
       email: normalizedEmail,
       auth_id: authId,
       name: metadata.name || normalizedEmail.split('@')[0],
@@ -292,6 +317,13 @@ const ensureAuthRecord = async ({ email, password, role = 'authenticated', metad
       user_type: metadata.user_type || (role === 'rentee' ? 'rentee' : 'staff'),
       status: metadata.status || 'active',
       invited: Boolean(metadata.invited)
+    });
+
+    await createTenantMembership(tenantId, {
+      app_user_id: appUser.id,
+      role,
+      status: 'active',
+      is_default: true
     });
   } else if (!appUser.auth_id) {
     appUser = await updateAppUser(appUser.id, { auth_id: authId, invited: true });
