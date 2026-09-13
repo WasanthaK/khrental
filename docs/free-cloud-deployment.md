@@ -13,7 +13,17 @@ The container is stateless when `STORAGE_DRIVER=r2`. Run a single replica until 
 
 ## 1. Database
 
-Create an Azure SQL free-offer database and select the option that pauses or blocks usage when its free allowance is exhausted. Apply existing migrations, then apply:
+Create an Azure SQL free-offer database and select the option that pauses or blocks usage when its free allowance is exhausted.
+
+For a new, empty Azure SQL database, apply the fresh-install schema first:
+
+```bash
+npm run execute-sql -- ./migrations/20260913_00_create_fresh_mssql_schema.sql
+```
+
+The fresh-install migration creates the SQL Server versions of the application tables and a default `KH Rentals` tenant. Do not run the older PostgreSQL/Supabase migrations against Azure SQL.
+
+Then apply the authentication schema:
 
 ```bash
 npm run execute-sql -- ./migrations/20260913_01_create_auth_store.sql
