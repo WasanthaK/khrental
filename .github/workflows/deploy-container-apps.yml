@@ -107,6 +107,7 @@ jobs:
                 TWILIO_SENDGRID_API_KEY=secretref:sendgrid-api-key \
                 EMAIL_FROM="$EMAIL_FROM" \
                 EMAIL_FROM_NAME="$EMAIL_FROM_NAME" \
+                VITE_USE_MSSQL_API=true \
               --output none
 
       - name: Deploy immutable image
