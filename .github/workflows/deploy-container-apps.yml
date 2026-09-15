@@ -63,11 +63,19 @@ jobs:
           curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health" >/dev/null
 
           migration_payload=$(base64 -w0 migrations/20260915_01_create_staff_property_assignments.sql)
-          runner_payload=$(base64 -w0 <<'NODE'
+          runner_payload=$(base64 -w0 <<NODE
           import fs from 'node:fs';
-          import { closeMssqlPool, getMssqlPool } from '/app/src/api/mssql/pool.js';
 
-          const migrationSql = fs.readFileSync('/tmp/staff-property-assignments.sql', 'utf8');
+          const rawEnvironment = fs.readFileSync('/proc/1/environ');
+          for (const entry of rawEnvironment.toString('utf8').split('\0')) {
+            const separator = entry.indexOf('=');
+            if (separator > 0) {
+              process.env[entry.slice(0, separator)] = entry.slice(separator + 1);
+            }
+          }
+
+          const { closeMssqlPool, getMssqlPool } = await import('/app/src/api/mssql/pool.js');
+          const migrationSql = Buffer.from('${migration_payload}', 'base64').toString('utf8');
           const pool = await getMssqlPool();
 
           try {
@@ -89,29 +97,23 @@ jobs:
           NODE
           )
 
+          remote_command="command -v base64 >/dev/null 2>&1 && command -v chroot >/dev/null 2>&1 || tdnf install -y coreutils >/dev/null; printf '%s' '$runner_payload' | base64 -d > /proc/1/root/tmp/run-staff-property-migration.mjs && chroot /proc/1/root /usr/local/bin/node /tmp/run-staff-property-migration.mjs"
+
           set +e
-          migration_output=$(
-            {
-              printf "set -e\n"
-              printf "printf '%%s' '%s' | base64 -d > /tmp/staff-property-assignments.sql\n" "$migration_payload"
-              printf "printf '%%s' '%s' | base64 -d > /tmp/run-staff-property-migration.mjs\n" "$runner_payload"
-              printf "node /tmp/run-staff-property-migration.mjs\n"
-              printf "exit\n"
-            } | timeout 180s az containerapp exec \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --command sh 2>&1
-          )
-          exec_status=$?
+          migration_output=$(timeout 180s az containerapp debug \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --command "$remote_command" 2>&1)
+          debug_status=$?
           set -e
 
           echo "$migration_output"
           if grep -q 'KH_MIGRATION_OK' <<<"$migration_output"; then
-            echo "Production migration succeeded (Azure exec status: $exec_status)."
+            echo "Production migration succeeded (Azure debug status: $debug_status)."
             exit 0
           fi
 
-          echo "Production migration failed or was not confirmed (Azure exec status: $exec_status)." >&2
+          echo "Production migration failed or was not confirmed (Azure debug status: $debug_status)." >&2
           exit 1
 
   deploy:
