@@ -10,6 +10,7 @@ import { authorizePermission, authorizePlatformQuery } from './src/api/platform/
 import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
+import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
 dotenv.config();
@@ -315,6 +316,7 @@ async function createServer() {
 
   app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
+  app.use('/api/platform/auth', createInvitationRouter());
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
   app.use('/storage/:bucket', createStorageDeliveryHandler());
