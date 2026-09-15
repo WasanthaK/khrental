@@ -13,6 +13,7 @@ const DashboardLayout = () => {
   const { user, logout, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const effectiveRole = user?.membership?.role || user?.role;
   
   // State for dropdown menus and mobile sidebar
   const [invoicesOpen, setInvoicesOpen] = useState(false);
@@ -50,15 +51,15 @@ const DashboardLayout = () => {
     navigate('/login');
   };
   
-  const showAdminDashboard = user?.role === USER_ROLES.ADMIN;
-  const showTeamAdministration = user?.role === USER_ROLES.ADMIN;
-  const showUtilities = user?.role === USER_ROLES.ADMIN || 
-                         user?.role === USER_ROLES.STAFF || 
-                         user?.role === USER_ROLES.MANAGER || 
-                         user?.role === 'finance_staff';
-  const showFinanceFeatures = user?.role === USER_ROLES.ADMIN || 
-                              user?.role === USER_ROLES.MANAGER || 
-                              user?.role === 'finance_staff';
+  const showAdminDashboard = effectiveRole === USER_ROLES.ADMIN;
+  const showTeamAdministration = effectiveRole === USER_ROLES.ADMIN;
+  const showUtilities = effectiveRole === USER_ROLES.ADMIN || 
+                         effectiveRole === USER_ROLES.STAFF || 
+                         effectiveRole === USER_ROLES.MANAGER || 
+                         effectiveRole === 'finance_staff';
+  const showFinanceFeatures = effectiveRole === USER_ROLES.ADMIN || 
+                              effectiveRole === USER_ROLES.MANAGER || 
+                              effectiveRole === 'finance_staff';
   
   // Custom NavLink styling function
   const getNavLinkClass = ({ isActive }) => {
@@ -120,7 +121,7 @@ const DashboardLayout = () => {
               {user?.email?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0 overflow-hidden text-left">
-              <p className="text-xs font-medium capitalize text-sky-200">{user?.role || 'User'}</p>
+              <p className="text-xs font-medium capitalize text-sky-200">{effectiveRole || 'User'}</p>
               <p className="truncate text-xs font-medium leading-tight text-white sm:text-sm">{user?.email}</p>
             </div>
           </div>
