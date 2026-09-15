@@ -11,6 +11,7 @@ import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
+import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
 dotenv.config();
@@ -45,6 +46,26 @@ async function createServer() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  const getPasswordResetBaseUrl = () => {
+    const configured = process.env.PASSWORD_RESET_BASE_URL
+      || process.env.PUBLIC_APP_URL
+      || process.env.VITE_APP_BASE_URL
+      || '';
+
+    if (configured) {
+      return configured.replace(/\/$/, '');
+    }
+
+    if (!isProduction) {
+      return 'http://localhost:5174';
+    }
+
+    const error = new Error('PASSWORD_RESET_BASE_URL is required in production.');
+    error.status = 503;
+    error.code = 'PASSWORD_RESET_BASE_URL_REQUIRED';
+    throw error;
+  };
 
   const getEviaClientId = () => process.env.EVIA_SIGN_CLIENT_ID || process.env.VITE_EVIA_SIGN_CLIENT_ID || '';
   const getEviaClientSecret = () => process.env.EVIA_SIGN_CLIENT_SECRET || '';
@@ -316,6 +337,7 @@ async function createServer() {
 
   app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
+  app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
   app.use('/api/platform/auth', createInvitationRouter());
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
