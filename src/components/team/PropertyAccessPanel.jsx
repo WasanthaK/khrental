@@ -6,10 +6,12 @@ import {
   listPropertyAssignments,
   updatePropertyAssignment
 } from '../../services/platformClient';
+import { fetchAppUser } from '../../services/appUserService';
 
 const PropertyAccessPanel = ({ teamMemberId, teamMemberName }) => {
   const [properties, setProperties] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [teamMemberRole, setTeamMemberRole] = useState(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,16 @@ const PropertyAccessPanel = ({ teamMemberId, teamMemberName }) => {
     try {
       setLoading(true);
       setError(null);
+
+      const member = await fetchAppUser(teamMemberId);
+      const role = String(member?.role || '').trim().toLowerCase();
+      setTeamMemberRole(role || null);
+
+      if (role === 'admin') {
+        setProperties([]);
+        setAssignments([]);
+        return;
+      }
 
       const [propertyResult, assignmentResult] = await Promise.all([
         fetchData({
@@ -137,6 +149,22 @@ const PropertyAccessPanel = ({ teamMemberId, teamMemberName }) => {
           >
             Try again
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (teamMemberRole === 'admin') {
+    return (
+      <div className="p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-medium text-gray-900">Property Access</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Administrators have tenant-wide access and do not use individual property assignments.
+          </p>
+        </div>
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          {teamMemberName} is an administrator and can access all properties in this tenant. No property assignment is required.
         </div>
       </div>
     );
