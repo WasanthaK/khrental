@@ -151,6 +151,129 @@ test('limits property-capable staff reads to active assigned properties', () => 
   });
 });
 
+test('finance staff can read rentees but cannot mutate them', () => {
+  const financeUser = { id: 'finance-1', role: 'finance_staff' };
+  const membership = activeMembership('finance_staff', ['property-1']);
+  const result = authorizePlatformQuery({
+    user: financeUser,
+    membership,
+    action: 'select',
+    table: 'app_users'
+  });
+
+  assert.deepEqual(result.filters.at(-1), { column: 'user_type', operator: 'eq', value: 'rentee' });
+  expectAuthorizationError(
+    () => authorizePlatformQuery({
+      user: financeUser,
+      membership,
+      action: 'update',
+      table: 'app_users',
+      filters: [{ column: 'id', operator: 'eq', value: 'rentee-1' }],
+      payload: { name: 'Changed' }
+    }),
+    'PERMISSION_REQUIRED'
+  );
+});
+
+test('manager self profile access takes precedence over rentee administration', () => {
+  const manager = { id: 'manager-1', role: 'manager' };
+  const membership = activeMembership('manager', ['property-1']);
+  const read = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'select',
+    table: 'app_users',
+    filters: [{ column: 'id', operator: 'eq', value: 'manager-1' }]
+  });
+  assert.equal(read.filters.some((filter) => filter.column === 'user_type'), false);
+  assert.deepEqual(read.filters.at(-1), { column: 'id', operator: 'eq', value: 'manager-1' });
+
+  const update = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'update',
+    table: 'app_users',
+    filters: [{ column: 'id', operator: 'eq', value: 'manager-1' }],
+    payload: { name: 'Manager Name', role: 'admin' }
+  });
+  assert.deepEqual(update.payload, { name: 'Manager Name' });
+});
+
+test('manager maintenance management is property-scoped rather than assigned-job scoped', () => {
+  const manager = { id: 'manager-1', role: 'manager' };
+  const membership = activeMembership('manager', ['property-1']);
+  const read = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'select',
+    table: 'maintenance_requests'
+  });
+  assert.deepEqual(read.filters.at(-1), {
+    column: 'propertyid',
+    operator: 'in',
+    value: ['property-1']
+  });
+
+  const update = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'update',
+    table: 'maintenance_requests',
+    filters: [{ column: 'id', operator: 'eq', value: 'request-1' }],
+    payload: { status: 'in_progress', propertyid: 'property-2' }
+  });
+  assert.deepEqual(update.payload, { status: 'in_progress' });
+  assert.deepEqual(update.filters.at(-1), {
+    column: 'propertyid',
+    operator: 'in',
+    value: ['property-1']
+  });
+});
+
+test('staff invoice updates cannot move records to another property', () => {
+  const financeUser = { id: 'finance-1', role: 'finance_staff' };
+  const membership = activeMembership('finance_staff', ['property-1']);
+  const result = authorizePlatformQuery({
+    user: financeUser,
+    membership,
+    action: 'update',
+    table: 'invoices',
+    filters: [{ column: 'id', operator: 'eq', value: 'invoice-1' }],
+    payload: { status: 'paid', propertyid: 'property-2' }
+  });
+
+  assert.deepEqual(result.payload, { status: 'paid' });
+  assert.deepEqual(result.filters.at(-1), {
+    column: 'propertyid',
+    operator: 'in',
+    value: ['property-1']
+  });
+});
+
+test('staff inserts are allowed only for assigned properties', () => {
+  const manager = { id: 'manager-1', role: 'manager' };
+  const membership = activeMembership('manager', ['property-1']);
+  const allowed = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'insert',
+    table: 'agreements',
+    payload: { id: 'agreement-1', propertyid: 'property-1', status: 'draft' }
+  });
+  assert.equal(allowed.payload.propertyid, 'property-1');
+
+  expectAuthorizationError(
+    () => authorizePlatformQuery({
+      user: manager,
+      membership,
+      action: 'insert',
+      table: 'agreements',
+      payload: { id: 'agreement-2', propertyid: 'property-2', status: 'draft' }
+    }),
+    'RESOURCE_ACCESS_DENIED'
+  );
+});
+
 test('property-capable staff with no active assignments receives an empty assignment scope', () => {
   const financeUser = { id: 'finance-1', role: 'finance_staff' };
   const result = authorizePlatformQuery({
