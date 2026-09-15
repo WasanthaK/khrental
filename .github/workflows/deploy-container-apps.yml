@@ -62,47 +62,39 @@ jobs:
             --query properties.configuration.ingress.fqdn -o tsv)
           curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health" >/dev/null
 
-          migration_payload=$(base64 -w0 migrations/20260915_01_create_staff_property_assignments.sql)
-          runner_payload=$(base64 -w0 <<NODE
-          import fs from 'node:fs';
+          revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName -o tsv)
 
-          const rawEnvironment = fs.readFileSync('/proc/1/environ');
-          for (const entry of rawEnvironment.toString('utf8').split('\0')) {
-            const separator = entry.indexOf('=');
-            if (separator > 0) {
-              process.env[entry.slice(0, separator)] = entry.slice(separator + 1);
-            }
-          }
+          replica=$(az containerapp replica list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$revision" \
+            --query '[0].name' -o tsv)
 
-          const { closeMssqlPool, getMssqlPool } = await import('/app/src/api/mssql/pool.js');
-          const migrationSql = Buffer.from('${migration_payload}', 'base64').toString('utf8');
-          const pool = await getMssqlPool();
+          container=$(az containerapp replica list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$revision" \
+            --query '[0].properties.containers[0].name' -o tsv)
 
-          try {
-            await pool.request().batch(migrationSql);
-            const verification = await pool.request().query(`
-              SELECT
-                CASE WHEN OBJECT_ID(N'dbo.staff_property_assignments', N'U') IS NULL THEN 0 ELSE 1 END AS table_exists,
-                CASE WHEN OBJECT_ID(N'dbo.staff_property_assignments', N'U') IS NULL THEN 0
-                     ELSE (SELECT COUNT(*) FROM dbo.staff_property_assignments) END AS assignment_count;
-            `);
-            const row = verification.recordset?.[0];
-            if (!row || Number(row.table_exists) !== 1) {
-              throw new Error('staff_property_assignments was not created or could not be verified.');
-            }
-            console.log(`KH_MIGRATION_OK assignments=${Number(row.assignment_count) || 0}`);
-          } finally {
-            await closeMssqlPool();
-          }
-          NODE
-          )
+          if [ -z "$revision" ] || [ -z "$replica" ] || [ -z "$container" ]; then
+            echo 'Unable to resolve the active production revision/replica/container.' >&2
+            exit 1
+          fi
 
-          remote_command="command -v base64 >/dev/null 2>&1 && command -v chroot >/dev/null 2>&1 || tdnf install -y coreutils >/dev/null; printf '%s' '$runner_payload' | base64 -d > /proc/1/root/tmp/run-staff-property-migration.mjs && chroot /proc/1/root /usr/local/bin/node /tmp/run-staff-property-migration.mjs"
+          source_ref="${{ github.event.pull_request.head.sha || github.sha }}"
+          raw_base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${source_ref}"
+          remote_command="command -v chroot >/dev/null 2>&1 || tdnf install -y coreutils >/dev/null; wget -qO /proc/1/root/tmp/run-staff-property-migration.mjs '${raw_base}/scripts/run-staff-property-migration.mjs' && wget -qO /proc/1/root/tmp/staff-property-assignments.sql '${raw_base}/migrations/20260915_01_create_staff_property_assignments.sql' && chroot /proc/1/root /bin/sh -lc 'cd /app && node /tmp/run-staff-property-migration.mjs /tmp/staff-property-assignments.sql'"
 
           set +e
           migration_output=$(timeout 180s az containerapp debug \
             --name "$AZURE_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$revision" \
+            --replica "$replica" \
+            --container "$container" \
             --command "$remote_command" 2>&1)
           debug_status=$?
           set -e
