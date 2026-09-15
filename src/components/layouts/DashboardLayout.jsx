@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { CogIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { USER_ROLES } from '../../utils/constants';
@@ -24,6 +24,7 @@ const DashboardLayout = () => {
   // Check if the current route is in a specific section
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
   const isAgreementRoute = location.pathname.includes('/dashboard/agreements');
+  const isTeamRoute = location.pathname === '/dashboard/team' || location.pathname.startsWith('/dashboard/team/');
   
   // Force invoicesOpen state to true when on invoice routes
   useEffect(() => {
@@ -50,6 +51,7 @@ const DashboardLayout = () => {
   };
   
   const showAdminDashboard = user?.role === USER_ROLES.ADMIN;
+  const showTeamAdministration = user?.role === USER_ROLES.ADMIN;
   const showUtilities = user?.role === USER_ROLES.ADMIN || 
                          user?.role === USER_ROLES.STAFF || 
                          user?.role === USER_ROLES.MANAGER || 
@@ -271,12 +273,14 @@ const DashboardLayout = () => {
           >
             Cameras
           </NavLink>
-          <NavLink
-            to="/dashboard/team"
-            className={getNavLinkClass}
-          >
-            Team
-          </NavLink>
+          {showTeamAdministration && (
+            <NavLink
+              to="/dashboard/team"
+              className={getNavLinkClass}
+            >
+              Team
+            </NavLink>
+          )}
           <NavLink
             to="/dashboard/settings"
             className={getNavLinkClass}
@@ -303,6 +307,10 @@ const DashboardLayout = () => {
       </div>
     </div>
   );
+
+  if (isTeamRoute && !showTeamAdministration) {
+    return <Navigate to="/unauthorized" replace />;
+  }
   
   return (
     <>
