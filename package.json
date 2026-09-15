@@ -9,6 +9,7 @@
     "dev": "npm run generate-env-config && node server.js",
     "dev:vite": "npm run generate-env-config && vite",
     "build": "npm run generate-env-config && vite build",
+    "test:authorization": "node --test tests/platform-authorization.test.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "migrate": "node src/db/runMigration.js",
