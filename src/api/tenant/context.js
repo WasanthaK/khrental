@@ -14,6 +14,23 @@ const normalizeString = (value) => {
   return normalized || null;
 };
 
+const parseLegacyPropertyIds = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).map((entry) => String(entry));
+  }
+
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.filter(Boolean).map((entry) => String(entry)) : [];
+  } catch {
+    return [];
+  }
+};
+
 const isMissingTableError = (error) => {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('invalid object name') || message.includes('invalid column name');
@@ -196,6 +213,33 @@ const listMembershipsForUser = async (appUserId) => {
 
     throw error;
   }
+};
+
+const listAssignedPropertyIdsForUser = async ({ appUserId, tenantId, user }) => {
+  if (!appUserId || !tenantId) {
+    return [];
+  }
+
+  if (await tableExists('staff_property_assignments')) {
+    try {
+      const rows = await runQuery(
+        `SELECT propertyid
+         FROM staff_property_assignments
+         WHERE tenant_id = @tenantId
+           AND staff_user_id = @appUserId
+           AND status = 'active'`,
+        { tenantId, appUserId }
+      );
+
+      return rows.map((row) => row.propertyid).filter(Boolean);
+    } catch (error) {
+      if (!isMissingTableError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  return parseLegacyPropertyIds(user?.associated_property_ids);
 };
 
 const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
@@ -412,6 +456,16 @@ export const resolveTenantContext = async (req) => {
         tenant: null,
         resolution: requestedTenantId ? 'requested-without-user' : 'anonymous'
       };
+  const assignedPropertyIds = resolvedUser?.id && selection.tenantId
+    ? await listAssignedPropertyIdsForUser({
+        appUserId: resolvedUser.id,
+        tenantId: selection.tenantId,
+        user: resolvedUser
+      })
+    : [];
+  const activeMembership = selection.membership
+    ? { ...selection.membership, assignedPropertyIds }
+    : selection.membership;
 
   return {
     identity: {
@@ -422,7 +476,7 @@ export const resolveTenantContext = async (req) => {
     isAuthenticated: Boolean(user),
     user,
     memberships,
-    membership: selection.membership,
+    membership: activeMembership,
     tenantId: selection.tenantId || null,
     tenant: selection.tenant || null,
     resolution: selection.resolution
