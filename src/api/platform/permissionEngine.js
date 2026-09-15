@@ -1,6 +1,7 @@
 export const PERMISSIONS = Object.freeze({
   PROPERTIES_READ: 'properties.read',
   PROPERTIES_MANAGE: 'properties.manage',
+  PROPERTY_ASSIGNMENTS_MANAGE: 'property_assignments.manage',
   INVOICES_READ: 'invoices.read',
   INVOICES_MANAGE: 'invoices.manage',
   PAYMENTS_READ: 'payments.read',
@@ -168,12 +169,18 @@ export const canAccessAssignedJob = ({ user, membership, tenantId, assignedUserI
   return String(user.id) === String(assignedUserId);
 };
 
-export const canAccessAssignedProperty = ({ user, membership, tenantId, propertyId, assignedPropertyIds = [] }) => {
+export const canAccessAssignedProperty = ({ user, membership, tenantId, propertyId, assignedPropertyIds }) => {
   if (!user?.id || !propertyId || !hasActiveTenantMembership({ membership, tenantId })) {
     return false;
   }
 
-  return assignedPropertyIds.some((assignedPropertyId) => String(assignedPropertyId) === String(propertyId));
+  const effectiveAssignments = Array.isArray(assignedPropertyIds)
+    ? assignedPropertyIds
+    : Array.isArray(membership?.assignedPropertyIds)
+      ? membership.assignedPropertyIds
+      : [];
+
+  return effectiveAssignments.some((assignedPropertyId) => String(assignedPropertyId) === String(propertyId));
 };
 
 export const isAdminRole = ({ user, membership }) => normalizeRole(user, membership) === ADMIN_ROLE;
