@@ -227,6 +227,15 @@ const addRenteeFilter = (filters) => [
   { column: 'user_type', operator: 'eq', value: 'rentee' }
 ];
 
+const addAssignedRenteeFilter = (filters, membership) => [
+  ...addRenteeFilter(filters),
+  {
+    column: 'id',
+    operator: 'in',
+    value: Array.isArray(membership?.assignedRenteeIds) ? membership.assignedRenteeIds : []
+  }
+];
+
 const filtersTargetUser = (filters, userId) => Array.isArray(filters) && filters.some((filter) => (
   String(filter?.column || '').trim().toLowerCase() === 'id'
   && String(filter?.operator || 'eq').trim().toLowerCase() === 'eq'
@@ -336,7 +345,7 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
       }
 
       if (hasPermission(subject, PERMISSIONS.RENTEES_READ)) {
-        return { action, table, filters: addRenteeFilter(filters), payload, resourceScope: null };
+        return { action, table, filters: addAssignedRenteeFilter(filters, membership), payload, resourceScope: null };
       }
 
       requirePermission(subject, PERMISSIONS.PROFILE_READ_SELF);
@@ -356,7 +365,10 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
 
       requirePermission(subject, PERMISSIONS.RENTEES_MANAGE);
       const sanitizedPayload = filterPayload(payload, RENTEE_MANAGE_FIELDS, { user_type: 'rentee', role: 'rentee' });
-      return { action, table, filters: addRenteeFilter(filters), payload: sanitizedPayload, resourceScope: null };
+      if (!hasPayloadFields(sanitizedPayload)) {
+        throw createAuthorizationError('No staff-editable rentee fields were supplied.', 'FIELD_ACCESS_DENIED');
+      }
+      return { action, table, filters: addAssignedRenteeFilter(filters, membership), payload: sanitizedPayload, resourceScope: null };
     }
 
     if (action === 'insert') {
