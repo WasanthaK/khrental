@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
+import { isAdminRole } from './src/api/platform/permissionEngine.js';
+import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
@@ -241,7 +243,37 @@ async function createServer() {
     }
   });
 
-  app.use('/api/mssql', createMssqlRouter());
+  const resolveMssqlCompatibilityUser = createTenantContextMiddleware({
+    requireUser: true,
+    auditLabel: 'mssql-compatibility-admin',
+    auditUnsafeOnly: false
+  });
+
+  const guardMssqlCompatibilityRoutes = (req, res, next) => {
+    if (req.path === '/health' || req.path === '/me' || req.path === '/tenant-context') {
+      next();
+      return;
+    }
+
+    resolveMssqlCompatibilityUser(req, res, (error) => {
+      if (error) {
+        next(error);
+        return;
+      }
+
+      if (!isAdminRole({ user: req.user, membership: req.membership })) {
+        res.status(403).json({
+          error: 'This legacy MSSQL business route is restricted to administrators. Use the central platform API for role-scoped access.',
+          code: 'CENTRAL_AUTHORIZATION_REQUIRED'
+        });
+        return;
+      }
+
+      next();
+    });
+  };
+
+  app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
