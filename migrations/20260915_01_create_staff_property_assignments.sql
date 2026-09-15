@@ -1,6 +1,8 @@
 -- KH Rentals Phase 2 explicit staff-to-property assignments.
 -- This migration is idempotent and tenant-scoped.
 -- Role permissions define what a staff member may do; this table defines where.
+-- assigned_by is retained as an audit identifier without a foreign key so deleting
+-- a former administrator does not destroy or block assignment history.
 
 SET XACT_ABORT ON;
 
@@ -25,9 +27,36 @@ BEGIN TRY
             CONSTRAINT CK_staff_property_assignments_status CHECK ([status] IN (N'active', N'inactive')),
             CONSTRAINT FK_staff_property_assignments_tenant FOREIGN KEY (tenant_id) REFERENCES dbo.tenants(id),
             CONSTRAINT FK_staff_property_assignments_property FOREIGN KEY (propertyid) REFERENCES dbo.properties(id),
-            CONSTRAINT FK_staff_property_assignments_staff FOREIGN KEY (staff_user_id) REFERENCES dbo.app_users(id),
-            CONSTRAINT FK_staff_property_assignments_assigned_by FOREIGN KEY (assigned_by) REFERENCES dbo.app_users(id)
+            CONSTRAINT FK_staff_property_assignments_staff FOREIGN KEY (staff_user_id) REFERENCES dbo.app_users(id) ON DELETE CASCADE
         );
+    END;
+
+    -- Repair constraints if an earlier draft of this Phase 2 migration was run.
+    IF EXISTS (
+        SELECT 1
+        FROM sys.foreign_keys
+        WHERE name = N'FK_staff_property_assignments_assigned_by'
+          AND parent_object_id = OBJECT_ID(N'dbo.staff_property_assignments')
+    )
+    BEGIN
+        ALTER TABLE dbo.staff_property_assignments
+            DROP CONSTRAINT FK_staff_property_assignments_assigned_by;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM sys.foreign_keys
+        WHERE name = N'FK_staff_property_assignments_staff'
+          AND parent_object_id = OBJECT_ID(N'dbo.staff_property_assignments')
+          AND delete_referential_action <> 1
+    )
+    BEGIN
+        ALTER TABLE dbo.staff_property_assignments
+            DROP CONSTRAINT FK_staff_property_assignments_staff;
+
+        ALTER TABLE dbo.staff_property_assignments WITH CHECK
+            ADD CONSTRAINT FK_staff_property_assignments_staff
+            FOREIGN KEY (staff_user_id) REFERENCES dbo.app_users(id) ON DELETE CASCADE;
     END;
 
     IF NOT EXISTS (
