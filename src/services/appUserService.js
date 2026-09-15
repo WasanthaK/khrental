@@ -1,5 +1,3 @@
-import { sendEmailNotification } from './notificationService';
-import { USER_ROLES } from '../utils/constants';
 import { inviteUser } from './invitationService';
 import {
   checkAppUserInvitationStatusRecord,
@@ -46,7 +44,12 @@ export const mapAppUserToRentee = (rentee) => ({
 });
 
 /**
- * Create a new app user (staff or rentee)
+ * Create a new app user (staff or rentee).
+ *
+ * Account creation intentionally does not send email. Stage 3A secure invitation
+ * delivery happens only after the server has created a single-use invitation
+ * token, so a partially-created user cannot receive a misleading welcome email.
+ *
  * @param {Object} userData - User data
  * @param {string} userType - 'staff' or 'rentee'
  * @returns {Promise<Object>} - Result of the creation
@@ -61,20 +64,6 @@ export const createAppUser = async (userData, userType) => {
 
     if (!result.success) {
       return result;
-    }
-
-    const email = result.data?.email
-      || userData.email
-      || userData.contact_details?.email
-      || userData.contactDetails?.email;
-
-    if (userType === USER_ROLES.RENTEE && email) {
-      // Send welcome email to new rentee
-      await sendEmailNotification({
-        to: email,
-        subject: 'Welcome to KH Rentals',
-        body: `Welcome to KH Rentals, ${userData.name}! Your account has been created.`
-      });
     }
 
     return { success: true, data: result.data };
@@ -346,4 +335,4 @@ export const getStructuredAssociations = (userId) => {
     console.error('[appUserService] Error getting structured associations:', error);
     return [];
   }
-}; 
+};
