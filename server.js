@@ -5,13 +5,16 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
+import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
+import { authorizePermission, authorizePlatformQuery } from './src/api/platform/authorization.js';
+import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
+import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
 dotenv.config();
 
 const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
-
 const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
   name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'KH Rentals'
@@ -241,7 +244,77 @@ async function createServer() {
     }
   });
 
-  app.use('/api/mssql', createMssqlRouter());
+  const resolveMssqlCompatibilityUser = createTenantContextMiddleware({
+    requireUser: true,
+    auditLabel: 'mssql-compatibility-admin',
+    auditUnsafeOnly: false
+  });
+
+  const guardMssqlCompatibilityRoutes = (req, res, next) => {
+    if (req.path === '/health' || req.path === '/me' || req.path === '/tenant-context') {
+      next();
+      return;
+    }
+
+    resolveMssqlCompatibilityUser(req, res, (error) => {
+      if (error) {
+        next(error);
+        return;
+      }
+
+      if (isAdminRole({ user: req.user, membership: req.membership })) {
+        next();
+        return;
+      }
+
+      const isAgreementTemplateRead = req.method === 'GET'
+        && (req.path === '/agreement-templates' || req.path.startsWith('/agreement-templates/'));
+
+      if (isAgreementTemplateRead) {
+        try {
+          authorizePermission(
+            { user: req.user, membership: req.membership },
+            PERMISSIONS.AGREEMENTS_READ
+          );
+          next();
+          return;
+        } catch (authorizationError) {
+          next(authorizationError);
+          return;
+        }
+      }
+
+      const compatibilityInsertTable = req.method === 'POST'
+        ? ({ '/agreements': 'agreements', '/invoices': 'invoices' }[req.path] || null)
+        : null;
+
+      if (compatibilityInsertTable) {
+        try {
+          const authorized = authorizePlatformQuery({
+            action: 'insert',
+            table: compatibilityInsertTable,
+            payload: req.body,
+            user: req.user,
+            membership: req.membership
+          });
+          req.body = authorized.payload;
+          next();
+          return;
+        } catch (authorizationError) {
+          next(authorizationError);
+          return;
+        }
+      }
+
+      res.status(403).json({
+        error: 'This legacy MSSQL business route is restricted to administrators. Use the central platform API for role-scoped access.',
+        code: 'CENTRAL_AUTHORIZATION_REQUIRED'
+      });
+    });
+  };
+
+  app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
+  app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
   app.use('/storage/:bucket', createStorageDeliveryHandler());

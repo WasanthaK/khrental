@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { CogIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { USER_ROLES } from '../../utils/constants';
@@ -13,6 +13,7 @@ const DashboardLayout = () => {
   const { user, logout, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const effectiveRole = user?.membership?.role || user?.role;
   
   // State for dropdown menus and mobile sidebar
   const [invoicesOpen, setInvoicesOpen] = useState(false);
@@ -24,6 +25,7 @@ const DashboardLayout = () => {
   // Check if the current route is in a specific section
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
   const isAgreementRoute = location.pathname.includes('/dashboard/agreements');
+  const isTeamRoute = location.pathname === '/dashboard/team' || location.pathname.startsWith('/dashboard/team/');
   
   // Force invoicesOpen state to true when on invoice routes
   useEffect(() => {
@@ -49,14 +51,15 @@ const DashboardLayout = () => {
     navigate('/login');
   };
   
-  const showAdminDashboard = user?.role === USER_ROLES.ADMIN;
-  const showUtilities = user?.role === USER_ROLES.ADMIN || 
-                         user?.role === USER_ROLES.STAFF || 
-                         user?.role === USER_ROLES.MANAGER || 
-                         user?.role === 'finance_staff';
-  const showFinanceFeatures = user?.role === USER_ROLES.ADMIN || 
-                              user?.role === USER_ROLES.MANAGER || 
-                              user?.role === 'finance_staff';
+  const showAdminDashboard = effectiveRole === USER_ROLES.ADMIN;
+  const showTeamAdministration = effectiveRole === USER_ROLES.ADMIN;
+  const showUtilities = effectiveRole === USER_ROLES.ADMIN || 
+                         effectiveRole === USER_ROLES.STAFF || 
+                         effectiveRole === USER_ROLES.MANAGER || 
+                         effectiveRole === 'finance_staff';
+  const showFinanceFeatures = effectiveRole === USER_ROLES.ADMIN || 
+                              effectiveRole === USER_ROLES.MANAGER || 
+                              effectiveRole === 'finance_staff';
   
   // Custom NavLink styling function
   const getNavLinkClass = ({ isActive }) => {
@@ -118,7 +121,7 @@ const DashboardLayout = () => {
               {user?.email?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0 overflow-hidden text-left">
-              <p className="text-xs font-medium capitalize text-sky-200">{user?.role || 'User'}</p>
+              <p className="text-xs font-medium capitalize text-sky-200">{effectiveRole || 'User'}</p>
               <p className="truncate text-xs font-medium leading-tight text-white sm:text-sm">{user?.email}</p>
             </div>
           </div>
@@ -271,12 +274,14 @@ const DashboardLayout = () => {
           >
             Cameras
           </NavLink>
-          <NavLink
-            to="/dashboard/team"
-            className={getNavLinkClass}
-          >
-            Team
-          </NavLink>
+          {showTeamAdministration && (
+            <NavLink
+              to="/dashboard/team"
+              className={getNavLinkClass}
+            >
+              Team
+            </NavLink>
+          )}
           <NavLink
             to="/dashboard/settings"
             className={getNavLinkClass}
@@ -303,6 +308,10 @@ const DashboardLayout = () => {
       </div>
     </div>
   );
+
+  if (isTeamRoute && !showTeamAdministration) {
+    return <Navigate to="/unauthorized" replace />;
+  }
   
   return (
     <>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { hasAnyPermission, hasAllPermissions } from '../../utils/permissions';
 
 // Add a debug flag at the top of the file
 const ROUTE_DEBUG = false;
@@ -29,16 +30,18 @@ const ProtectedRoute = ({
   requireAll = false,
   allowAuthenticated = false
 }) => {
-  const { user, loading, isAuthenticated, hasAnyPermission, hasAllPermissions } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const effectiveRole = user?.membership?.role || user?.role;
+  const effectiveUser = user && effectiveRole !== user.role ? { ...user, role: effectiveRole } : user;
   
   // Track when user profile is loaded
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
       // Check if profile data is present or if user has a role other than 'authenticated'
-      if (user.profileId || user.role !== 'authenticated') {
+      if (user.profileId || effectiveRole !== 'authenticated') {
         logRoute('User profile loaded', { 
-          role: user.role, 
+          role: effectiveRole, 
           profileId: user.profileId, 
           profileType: user.profileType 
         });
@@ -50,7 +53,7 @@ const ProtectedRoute = ({
         setProfileLoaded(true);
       }
     }
-  }, [loading, isAuthenticated, user]);
+  }, [loading, isAuthenticated, user, effectiveRole]);
   
   // Show loading indicator while checking auth or loading profile
   if (loading || (isAuthenticated && !profileLoaded)) {
@@ -71,13 +74,13 @@ const ProtectedRoute = ({
   }
   
   logRoute('Checking access for user:', { 
-    role: user?.role, 
+    role: effectiveRole, 
     requiredRoles, 
     requiredPermissions 
   });
   
   // Special case: authenticated role (newly registered user)
-  if (user?.role === 'authenticated') {
+  if (effectiveRole === 'authenticated') {
     // If this route allows authenticated users, let them through
     if (allowAuthenticated) {
       logRoute('Authenticated user allowed for special route');
@@ -90,16 +93,16 @@ const ProtectedRoute = ({
   }
   
   // Always allow admin users
-  if (user?.role === 'admin') {
+  if (effectiveRole === 'admin') {
     logRoute('Admin user always allowed');
     return children;
   }
   
   // Check roles if specified
   if (requiredRoles.length > 0) {
-    const hasRequiredRole = requiredRoles.includes(user?.role);
+    const hasRequiredRole = requiredRoles.includes(effectiveRole);
     if (!hasRequiredRole) {
-      logRoute('User role not allowed:', user?.role);
+      logRoute('User role not allowed:', effectiveRole);
       return <Navigate to="/unauthorized" replace />;
     }
   }
@@ -107,8 +110,8 @@ const ProtectedRoute = ({
   // Check permissions if specified
   if (requiredPermissions.length > 0) {
     const hasRequiredPermissions = requireAll 
-      ? hasAllPermissions(requiredPermissions)
-      : hasAnyPermission(requiredPermissions);
+      ? hasAllPermissions(effectiveUser, requiredPermissions)
+      : hasAnyPermission(effectiveUser, requiredPermissions);
     
     if (!hasRequiredPermissions) {
       logRoute('User lacks required permissions');

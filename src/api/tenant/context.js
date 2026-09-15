@@ -14,6 +14,23 @@ const normalizeString = (value) => {
   return normalized || null;
 };
 
+const parseLegacyPropertyIds = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).map((entry) => String(entry));
+  }
+
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.filter(Boolean).map((entry) => String(entry)) : [];
+  } catch {
+    return [];
+  }
+};
+
 const isMissingTableError = (error) => {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('invalid object name') || message.includes('invalid column name');
@@ -189,6 +206,69 @@ const listMembershipsForUser = async (appUserId) => {
         updatedat: row.tenant_updatedat
       }
     }));
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
+const listAssignedPropertyIdsForUser = async ({ appUserId, tenantId, user }) => {
+  if (!appUserId || !tenantId) {
+    return [];
+  }
+
+  if (await tableExists('staff_property_assignments')) {
+    try {
+      const rows = await runQuery(
+        `SELECT propertyid
+         FROM staff_property_assignments
+         WHERE tenant_id = @tenantId
+           AND staff_user_id = @appUserId
+           AND status = 'active'`,
+        { tenantId, appUserId }
+      );
+
+      return rows.map((row) => row.propertyid).filter(Boolean);
+    } catch (error) {
+      if (!isMissingTableError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  return parseLegacyPropertyIds(user?.associated_property_ids);
+};
+
+const listAssignedRenteeIdsForProperties = async ({ tenantId, propertyIds }) => {
+  const normalizedPropertyIds = [...new Set(
+    (Array.isArray(propertyIds) ? propertyIds : []).filter(Boolean).map((propertyId) => String(propertyId))
+  )];
+
+  if (!tenantId || normalizedPropertyIds.length === 0 || !(await tableExists('agreements'))) {
+    return [];
+  }
+
+  const params = { tenantId };
+  const propertyPlaceholders = normalizedPropertyIds.map((propertyId, index) => {
+    const key = `assignedProperty${index}`;
+    params[key] = propertyId;
+    return `@${key}`;
+  });
+
+  try {
+    const rows = await runQuery(
+      `SELECT DISTINCT renteeid
+       FROM agreements
+       WHERE tenant_id = @tenantId
+         AND renteeid IS NOT NULL
+         AND propertyid IN (${propertyPlaceholders.join(', ')})`,
+      params
+    );
+
+    return rows.map((row) => row.renteeid).filter(Boolean);
   } catch (error) {
     if (isMissingTableError(error)) {
       return [];
@@ -412,6 +492,22 @@ export const resolveTenantContext = async (req) => {
         tenant: null,
         resolution: requestedTenantId ? 'requested-without-user' : 'anonymous'
       };
+  const assignedPropertyIds = resolvedUser?.id && selection.tenantId
+    ? await listAssignedPropertyIdsForUser({
+        appUserId: resolvedUser.id,
+        tenantId: selection.tenantId,
+        user: resolvedUser
+      })
+    : [];
+  const assignedRenteeIds = resolvedUser?.id && selection.tenantId && selection.membership
+    ? await listAssignedRenteeIdsForProperties({
+        tenantId: selection.tenantId,
+        propertyIds: assignedPropertyIds
+      })
+    : [];
+  const activeMembership = selection.membership
+    ? { ...selection.membership, assignedPropertyIds, assignedRenteeIds }
+    : selection.membership;
 
   return {
     identity: {
@@ -422,7 +518,7 @@ export const resolveTenantContext = async (req) => {
     isAuthenticated: Boolean(user),
     user,
     memberships,
-    membership: selection.membership,
+    membership: activeMembership,
     tenantId: selection.tenantId || null,
     tenant: selection.tenant || null,
     resolution: selection.resolution
