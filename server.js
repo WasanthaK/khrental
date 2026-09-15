@@ -6,8 +6,8 @@ import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
-import { authorizePlatformQuery } from './src/api/platform/authorization.js';
-import { isAdminRole } from './src/api/platform/permissionEngine.js';
+import { authorizePermission, authorizePlatformQuery } from './src/api/platform/authorization.js';
+import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
@@ -265,6 +265,23 @@ async function createServer() {
       if (isAdminRole({ user: req.user, membership: req.membership })) {
         next();
         return;
+      }
+
+      const isAgreementTemplateRead = req.method === 'GET'
+        && (req.path === '/agreement-templates' || req.path.startsWith('/agreement-templates/'));
+
+      if (isAgreementTemplateRead) {
+        try {
+          authorizePermission(
+            { user: req.user, membership: req.membership },
+            PERMISSIONS.AGREEMENTS_READ
+          );
+          next();
+          return;
+        } catch (authorizationError) {
+          next(authorizationError);
+          return;
+        }
       }
 
       const compatibilityInsertTable = req.method === 'POST'
