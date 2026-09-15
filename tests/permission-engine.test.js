@@ -12,10 +12,11 @@ import {
 } from '../src/api/platform/permissionEngine.js';
 import { authorizePermission } from '../src/api/platform/authorization.js';
 
-const activeMembership = (role, tenantId = 'tenant-a') => ({
+const activeMembership = (role, tenantId = 'tenant-a', assignedPropertyIds = undefined) => ({
   tenant_id: tenantId,
   role,
-  status: 'active'
+  status: 'active',
+  ...(assignedPropertyIds ? { assignedPropertyIds } : {})
 });
 
 const expectPermissionError = (callback) => {
@@ -32,9 +33,20 @@ test('maps administrator, staff, tenant, and unlinked roles consistently', () =>
 test('administrator receives the complete named permission set', () => {
   const subject = { user: { id: 'admin-1', role: 'admin' } };
   assert.equal(hasPermission(subject, PERMISSIONS.PROPERTIES_READ), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE), true);
   assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), true);
   assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), true);
   assert.equal(getPermissions(subject).size, Object.keys(PERMISSIONS).length);
+});
+
+test('non-admin roles cannot manage staff property assignments', () => {
+  for (const role of ['manager', 'finance_staff', 'maintenance_staff', 'staff', 'rentee']) {
+    const subject = {
+      user: { id: `${role}-1`, role },
+      membership: activeMembership(role)
+    };
+    assert.equal(hasPermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE), false);
+  }
 });
 
 test('finance staff can manage invoices but cannot update assigned maintenance jobs', () => {
@@ -103,13 +115,22 @@ test('job assignment requires the current staff user and active tenant membershi
 test('property assignment rejects unassigned properties and cross-tenant membership', () => {
   const context = {
     user: { id: 'staff-1' },
-    membership: activeMembership('maintenance_staff'),
-    tenantId: 'tenant-a',
-    assignedPropertyIds: ['property-1', 'property-2']
+    membership: activeMembership('maintenance_staff', 'tenant-a', ['property-1', 'property-2']),
+    tenantId: 'tenant-a'
   };
   assert.equal(canAccessAssignedProperty({ ...context, propertyId: 'property-2' }), true);
   assert.equal(canAccessAssignedProperty({ ...context, propertyId: 'property-3' }), false);
   assert.equal(canAccessAssignedProperty({ ...context, tenantId: 'tenant-b', propertyId: 'property-2' }), false);
+});
+
+test('explicit assignment list can override membership assignments for endpoint checks', () => {
+  const context = {
+    user: { id: 'staff-1' },
+    membership: activeMembership('maintenance_staff', 'tenant-a', ['property-1']),
+    tenantId: 'tenant-a'
+  };
+  assert.equal(canAccessAssignedProperty({ ...context, propertyId: 'property-2', assignedPropertyIds: ['property-2'] }), true);
+  assert.equal(canAccessAssignedProperty({ ...context, propertyId: 'property-1', assignedPropertyIds: [] }), false);
 });
 
 test('authorizePermission denies a missing named permission', () => {
@@ -122,4 +143,5 @@ test('authorizePermission denies a missing named permission', () => {
     PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED
   );
   expectPermissionError(() => authorizePermission(subject, PERMISSIONS.INVOICES_MANAGE));
+  expectPermissionError(() => authorizePermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE));
 });
