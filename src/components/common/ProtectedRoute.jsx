@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { hasAnyPermission, hasAllPermissions } from '../../utils/permissions';
 
 // Add a debug flag at the top of the file
 const ROUTE_DEBUG = false;
@@ -29,9 +30,10 @@ const ProtectedRoute = ({
   requireAll = false,
   allowAuthenticated = false
 }) => {
-  const { user, loading, isAuthenticated, hasAnyPermission, hasAllPermissions } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const [profileLoaded, setProfileLoaded] = useState(false);
   const effectiveRole = user?.membership?.role || user?.role;
+  const effectiveUser = user && effectiveRole !== user.role ? { ...user, role: effectiveRole } : user;
   
   // Track when user profile is loaded
   useEffect(() => {
@@ -107,10 +109,9 @@ const ProtectedRoute = ({
   
   // Check permissions if specified
   if (requiredPermissions.length > 0) {
-    const effectiveUser = effectiveRole === user?.role ? user : { ...user, role: effectiveRole };
     const hasRequiredPermissions = requireAll 
-      ? hasAllPermissions(requiredPermissions, effectiveUser)
-      : hasAnyPermission(requiredPermissions, effectiveUser);
+      ? hasAllPermissions(effectiveUser, requiredPermissions)
+      : hasAnyPermission(effectiveUser, requiredPermissions);
     
     if (!hasRequiredPermissions) {
       logRoute('User lacks required permissions');
