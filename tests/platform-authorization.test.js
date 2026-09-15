@@ -11,11 +11,12 @@ const tenant = { id: 'tenant-1', role: 'rentee' };
 const staff = { id: 'staff-1', role: 'maintenance_staff' };
 const unlinked = { id: 'unknown-1', role: 'authenticated' };
 
-const activeMembership = (role, assignedPropertyIds = []) => ({
+const activeMembership = (role, assignedPropertyIds = [], assignedRenteeIds = []) => ({
   tenant_id: 'tenant-a',
   role,
   status: 'active',
-  assignedPropertyIds
+  assignedPropertyIds,
+  assignedRenteeIds
 });
 
 const expectAuthorizationError = (callback, code) => {
@@ -151,9 +152,9 @@ test('limits property-capable staff reads to active assigned properties', () => 
   });
 });
 
-test('finance staff can read rentees but cannot mutate them', () => {
+test('finance staff rentee reads are limited to rentees linked to assigned properties', () => {
   const financeUser = { id: 'finance-1', role: 'finance_staff' };
-  const membership = activeMembership('finance_staff', ['property-1']);
+  const membership = activeMembership('finance_staff', ['property-1'], ['rentee-1', 'rentee-2']);
   const result = authorizePlatformQuery({
     user: financeUser,
     membership,
@@ -161,7 +162,23 @@ test('finance staff can read rentees but cannot mutate them', () => {
     table: 'app_users'
   });
 
-  assert.deepEqual(result.filters.at(-1), { column: 'user_type', operator: 'eq', value: 'rentee' });
+  assert.deepEqual(result.filters.slice(-2), [
+    { column: 'user_type', operator: 'eq', value: 'rentee' },
+    { column: 'id', operator: 'in', value: ['rentee-1', 'rentee-2'] }
+  ]);
+});
+
+test('finance staff can read assigned rentees but cannot mutate them', () => {
+  const financeUser = { id: 'finance-1', role: 'finance_staff' };
+  const membership = activeMembership('finance_staff', ['property-1'], ['rentee-1']);
+  const result = authorizePlatformQuery({
+    user: financeUser,
+    membership,
+    action: 'select',
+    table: 'app_users'
+  });
+
+  assert.deepEqual(result.filters.at(-1), { column: 'id', operator: 'in', value: ['rentee-1'] });
   expectAuthorizationError(
     () => authorizePlatformQuery({
       user: financeUser,
@@ -175,9 +192,28 @@ test('finance staff can read rentees but cannot mutate them', () => {
   );
 });
 
+test('manager rentee administration is limited to assigned-property rentees', () => {
+  const manager = { id: 'manager-1', role: 'manager' };
+  const membership = activeMembership('manager', ['property-1'], ['rentee-1']);
+  const update = authorizePlatformQuery({
+    user: manager,
+    membership,
+    action: 'update',
+    table: 'app_users',
+    filters: [{ column: 'id', operator: 'eq', value: 'rentee-2' }],
+    payload: { name: 'Changed Rentee' }
+  });
+
+  assert.deepEqual(update.filters.slice(-2), [
+    { column: 'user_type', operator: 'eq', value: 'rentee' },
+    { column: 'id', operator: 'in', value: ['rentee-1'] }
+  ]);
+  assert.deepEqual(update.payload, { name: 'Changed Rentee', user_type: 'rentee', role: 'rentee' });
+});
+
 test('manager self profile access takes precedence over rentee administration', () => {
   const manager = { id: 'manager-1', role: 'manager' };
-  const membership = activeMembership('manager', ['property-1']);
+  const membership = activeMembership('manager', ['property-1'], ['rentee-1']);
   const read = authorizePlatformQuery({
     user: manager,
     membership,
@@ -285,6 +321,22 @@ test('property-capable staff with no active assignments receives an empty assign
 
   assert.deepEqual(result.filters.at(-1), {
     column: 'propertyid',
+    operator: 'in',
+    value: []
+  });
+});
+
+test('rentee-capable staff with no active assignments receives an empty rentee scope', () => {
+  const financeUser = { id: 'finance-1', role: 'finance_staff' };
+  const result = authorizePlatformQuery({
+    user: financeUser,
+    membership: activeMembership('finance_staff'),
+    action: 'select',
+    table: 'app_users'
+  });
+
+  assert.deepEqual(result.filters.at(-1), {
+    column: 'id',
     operator: 'in',
     value: []
   });
