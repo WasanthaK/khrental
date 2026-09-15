@@ -89,18 +89,12 @@ jobs:
           NODE
           )
 
-          migration_output=$(
-            {
-              printf "set -e\n"
-              printf "printf '%%s' '%s' | base64 -d > /tmp/staff-property-assignments.sql\n" "$migration_payload"
-              printf "printf '%%s' '%s' | base64 -d > /tmp/run-staff-property-migration.mjs\n" "$runner_payload"
-              printf "node /tmp/run-staff-property-migration.mjs\n"
-              printf "exit\n"
-            } | az containerapp exec \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --command sh 2>&1
-          )
+          remote_command="/bin/sh -c \"printf '%s' '$migration_payload' | base64 -d > /tmp/staff-property-assignments.sql && printf '%s' '$runner_payload' | base64 -d > /tmp/run-staff-property-migration.mjs && node /tmp/run-staff-property-migration.mjs\""
+
+          migration_output=$(timeout 180s az containerapp exec \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --command "$remote_command" 2>&1)
 
           echo "$migration_output"
           if ! grep -q 'KH_MIGRATION_OK' <<<"$migration_output"; then
