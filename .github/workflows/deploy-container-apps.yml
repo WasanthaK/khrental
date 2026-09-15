@@ -89,18 +89,30 @@ jobs:
           NODE
           )
 
-          remote_command="/bin/sh -c \"printf '%s' '$migration_payload' | base64 -d > /tmp/staff-property-assignments.sql && printf '%s' '$runner_payload' | base64 -d > /tmp/run-staff-property-migration.mjs && node /tmp/run-staff-property-migration.mjs\""
-
-          migration_output=$(timeout 180s az containerapp exec \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --command "$remote_command" 2>&1)
+          set +e
+          migration_output=$(
+            {
+              printf "set -e\n"
+              printf "printf '%%s' '%s' | base64 -d > /tmp/staff-property-assignments.sql\n" "$migration_payload"
+              printf "printf '%%s' '%s' | base64 -d > /tmp/run-staff-property-migration.mjs\n" "$runner_payload"
+              printf "node /tmp/run-staff-property-migration.mjs\n"
+              printf "exit\n"
+            } | timeout 180s az containerapp exec \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --command sh 2>&1
+          )
+          exec_status=$?
+          set -e
 
           echo "$migration_output"
-          if ! grep -q 'KH_MIGRATION_OK' <<<"$migration_output"; then
-            echo 'Production migration did not emit the expected success marker.' >&2
-            exit 1
+          if grep -q 'KH_MIGRATION_OK' <<<"$migration_output"; then
+            echo "Production migration succeeded (Azure exec status: $exec_status)."
+            exit 0
           fi
+
+          echo "Production migration failed or was not confirmed (Azure exec status: $exec_status)." >&2
+          exit 1
 
   deploy:
     if: github.event_name != 'pull_request'
