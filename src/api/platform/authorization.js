@@ -105,6 +105,19 @@ const STAFF_UPDATE_FIELDS = Object.freeze({
   }
 });
 
+const AGREEMENT_UPDATE_FIELDS = new Set([
+  'templateid', 'renteeid', 'unitid', 'status', 'signeddate', 'startdate', 'enddate',
+  'eviasignreference', 'documenturl', 'signeddocumenturl', 'signed_document_url', 'pdfurl', 'signatureurl',
+  'signature_pdf_url', 'evia_document_id', 'title', 'content', 'processedcontent', 'rentamount', 'depositamount',
+  'terms', 'notes', 'needs_document_generation', 'signature_status', 'signature_sent_at', 'signature_completed_at',
+  'signatories_status', 'updatedat'
+]);
+
+const INVOICE_UPDATE_FIELDS = new Set([
+  'renteeid', 'agreementid', 'status', 'amount', 'totalamount', 'duedate', 'billingperiod',
+  'description', 'notes', 'paymentproofurl', 'reminderdate', 'updatedat'
+]);
+
 const STAFF_PROPERTY_UPDATE_FIELDS = Object.freeze({
   properties: {
     fields: new Set(['name', 'address', 'propertytype', 'description', 'images', 'status', 'updatedat']),
@@ -112,21 +125,12 @@ const STAFF_PROPERTY_UPDATE_FIELDS = Object.freeze({
     propertyColumn: 'id'
   },
   agreements: {
-    fields: new Set([
-      'templateid', 'renteeid', 'propertyid', 'unitid', 'status', 'signeddate', 'startdate', 'enddate',
-      'eviasignreference', 'documenturl', 'signeddocumenturl', 'signed_document_url', 'pdfurl', 'signatureurl',
-      'signature_pdf_url', 'evia_document_id', 'title', 'content', 'processedcontent', 'rentamount', 'depositamount',
-      'terms', 'notes', 'needs_document_generation', 'signature_status', 'signature_sent_at', 'signature_completed_at',
-      'signatories_status', 'updatedat'
-    ]),
+    fields: AGREEMENT_UPDATE_FIELDS,
     permission: PERMISSIONS.AGREEMENTS_MANAGE,
     propertyColumn: 'propertyid'
   },
   invoices: {
-    fields: new Set([
-      'propertyid', 'renteeid', 'agreementid', 'status', 'amount', 'totalamount', 'duedate', 'billingperiod',
-      'description', 'notes', 'paymentproofurl', 'reminderdate', 'updatedat'
-    ]),
+    fields: INVOICE_UPDATE_FIELDS,
     permission: PERMISSIONS.INVOICES_MANAGE,
     propertyColumn: 'propertyid'
   }
@@ -134,17 +138,18 @@ const STAFF_PROPERTY_UPDATE_FIELDS = Object.freeze({
 
 const STAFF_PROPERTY_INSERT_FIELDS = Object.freeze({
   agreements: {
-    fields: STAFF_PROPERTY_UPDATE_FIELDS.agreements.fields,
+    fields: new Set(['id', 'propertyid', 'createdat', ...AGREEMENT_UPDATE_FIELDS]),
     permission: PERMISSIONS.AGREEMENTS_MANAGE
   },
   invoices: {
-    fields: STAFF_PROPERTY_UPDATE_FIELDS.invoices.fields,
+    fields: new Set(['id', 'propertyid', 'createdat', ...INVOICE_UPDATE_FIELDS]),
     permission: PERMISSIONS.INVOICES_MANAGE
   }
 });
 
 const RENTEE_MANAGE_FIELDS = new Set([
-  'name', 'email', 'contact_details', 'national_id', 'permanent_address', 'id_copy_url', 'status', 'invited', 'updatedat'
+  'id', 'name', 'email', 'contact_details', 'national_id', 'permanent_address', 'id_copy_url', 'status', 'invited',
+  'createdat', 'updatedat'
 ]);
 
 const createAuthorizationError = (message, code = 'PLATFORM_ACCESS_DENIED') => {
@@ -221,6 +226,12 @@ const addRenteeFilter = (filters) => [
   ...(Array.isArray(filters) ? filters : []),
   { column: 'user_type', operator: 'eq', value: 'rentee' }
 ];
+
+const filtersTargetUser = (filters, userId) => Array.isArray(filters) && filters.some((filter) => (
+  String(filter?.column || '').trim().toLowerCase() === 'id'
+  && String(filter?.operator || 'eq').trim().toLowerCase() === 'eq'
+  && String(filter?.value || '') === String(userId)
+));
 
 const authorizeAdminQuery = ({ action, table, filters, payload }) => {
   if (!ADMIN_QUERY_TABLES.has(table)) {
@@ -302,7 +313,14 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
   const subject = { user, membership };
 
   if (table === 'app_users') {
+    const targetsSelf = filtersTargetUser(filters, userId);
+
     if (action === 'select') {
+      if (targetsSelf) {
+        requirePermission(subject, PERMISSIONS.PROFILE_READ_SELF);
+        return { action, table, filters: addOwnerFilter(filters, 'id', userId), payload, resourceScope: null };
+      }
+
       if (hasPermission(subject, PERMISSIONS.RENTEES_READ)) {
         return { action, table, filters: addRenteeFilter(filters), payload, resourceScope: null };
       }
@@ -313,21 +331,35 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
 
     if (action === 'update') {
       requireRecordFilter(filters, action);
-      if (hasPermission(subject, PERMISSIONS.RENTEES_MANAGE)) {
-        const sanitizedPayload = filterPayload(payload, RENTEE_MANAGE_FIELDS, { user_type: 'rentee' });
-        return { action, table, filters: addRenteeFilter(filters), payload: sanitizedPayload, resourceScope: null };
+      if (targetsSelf) {
+        requirePermission(subject, PERMISSIONS.PROFILE_UPDATE_SELF);
+        const sanitizedPayload = filterPayload(payload, TENANT_UPDATE_FIELDS.app_users);
+        if (!hasPayloadFields(sanitizedPayload)) {
+          throw createAuthorizationError('No staff-editable profile fields were supplied.', 'FIELD_ACCESS_DENIED');
+        }
+        return { action, table, filters: addOwnerFilter(filters, 'id', userId), payload: sanitizedPayload, resourceScope: null };
       }
 
-      requirePermission(subject, PERMISSIONS.PROFILE_UPDATE_SELF);
-      const sanitizedPayload = filterPayload(payload, TENANT_UPDATE_FIELDS.app_users);
-      return { action, table, filters: addOwnerFilter(filters, 'id', userId), payload: sanitizedPayload, resourceScope: null };
+      requirePermission(subject, PERMISSIONS.RENTEES_MANAGE);
+      const sanitizedPayload = filterPayload(payload, RENTEE_MANAGE_FIELDS, { user_type: 'rentee', role: 'rentee' });
+      return { action, table, filters: addRenteeFilter(filters), payload: sanitizedPayload, resourceScope: null };
     }
 
     if (action === 'insert') {
       requirePermission(subject, PERMISSIONS.RENTEES_MANAGE);
-      const sanitizedPayload = filterPayload(payload, RENTEE_MANAGE_FIELDS, { user_type: 'rentee' });
+      const sanitizedPayload = filterPayload(payload, RENTEE_MANAGE_FIELDS, { user_type: 'rentee', role: 'rentee' });
       return { action, table, filters, payload: sanitizedPayload, resourceScope: null };
     }
+  }
+
+  if (action === 'select' && table === 'maintenance_requests' && hasPermission(subject, PERMISSIONS.MAINTENANCE_MANAGE)) {
+    return {
+      action,
+      table,
+      filters: addAssignedPropertyFilter(filters, 'propertyid', membership),
+      payload,
+      resourceScope: null
+    };
   }
 
   const selectScope = STAFF_SELECT_SCOPES[table];
@@ -337,16 +369,6 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
       action,
       table,
       filters: addOwnerFilter(filters, selectScope.column, userId),
-      payload,
-      resourceScope: null
-    };
-  }
-
-  if (action === 'select' && table === 'maintenance_requests' && hasPermission(subject, PERMISSIONS.MAINTENANCE_MANAGE)) {
-    return {
-      action,
-      table,
-      filters: addAssignedPropertyFilter(filters, 'propertyid', membership),
       payload,
       resourceScope: null
     };
@@ -364,6 +386,21 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
     };
   }
 
+  if (action === 'update' && table === 'maintenance_requests' && hasPermission(subject, PERMISSIONS.MAINTENANCE_MANAGE)) {
+    requireRecordFilter(filters, action);
+    const sanitizedPayload = filterPayload(payload, new Set(['status', 'priority', 'assignedto', 'notes', 'updatedat']));
+    if (!hasPayloadFields(sanitizedPayload)) {
+      throw createAuthorizationError('No staff-editable fields were supplied.', 'FIELD_ACCESS_DENIED');
+    }
+    return {
+      action,
+      table,
+      filters: addAssignedPropertyFilter(filters, 'propertyid', membership),
+      payload: sanitizedPayload,
+      resourceScope: null
+    };
+  }
+
   const updatePolicy = STAFF_UPDATE_FIELDS[table];
   if (action === 'update' && updatePolicy) {
     requirePermission(subject, updatePolicy.permission);
@@ -377,17 +414,6 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
       table,
       filters: addOwnerFilter(filters, updatePolicy.ownerColumn, userId),
       payload: sanitizedPayload,
-      resourceScope: null
-    };
-  }
-
-  if (action === 'update' && table === 'maintenance_requests' && hasPermission(subject, PERMISSIONS.MAINTENANCE_MANAGE)) {
-    requireRecordFilter(filters, action);
-    return {
-      action,
-      table,
-      filters: addAssignedPropertyFilter(filters, 'propertyid', membership),
-      payload: filterPayload(payload, new Set(['status', 'priority', 'assignedto', 'notes', 'updatedat'])),
       resourceScope: null
     };
   }
