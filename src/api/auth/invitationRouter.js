@@ -3,10 +3,6 @@ import { findAppUserByEmail } from '../mssql/repositories.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { isAdminRole } from '../platform/permissionEngine.js';
 import {
-  issueAuthSession,
-  setStorageSessionCookie
-} from './index.js';
-import {
   createUserInvitation,
   redeemUserInvitation,
   validateUserInvitation
@@ -24,16 +20,6 @@ const buildAuthUser = (record) => ({
   },
   user_metadata: record.metadata || {}
 });
-
-const buildSession = async (record) => {
-  const issued = await issueAuthSession(record);
-  return {
-    access_token: issued.accessToken,
-    token_type: 'bearer',
-    expires_at: Math.floor(new Date(issued.expiresAt).getTime() / 1000),
-    user: buildAuthUser(record)
-  };
-};
 
 const requireAdmin = (req, res, next) => {
   if (!isAdminRole({ user: req.user, membership: req.membership })) {
@@ -180,13 +166,13 @@ export const createInvitationRouter = () => {
         token: req.body?.token,
         password: req.body?.password
       });
-      const session = await buildSession(record);
-      setStorageSessionCookie(res, session);
 
+      // Redemption establishes the credential atomically. The client then uses
+      // the normal sign-in endpoint once so there is only one active browser
+      // session and session persistence follows the standard login path.
       res.status(201).json({
         data: {
           user: buildAuthUser(record),
-          session,
           invitation
         }
       });
