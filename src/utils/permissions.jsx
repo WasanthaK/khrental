@@ -83,9 +83,6 @@ export const ROLES = {
       PERMISSIONS.CREATE_AGREEMENT,
       PERMISSIONS.EDIT_AGREEMENT,
       
-      // Team permissions
-      PERMISSIONS.VIEW_TEAM,
-      
       // Reports permissions
       PERMISSIONS.VIEW_REPORTS,
     ],
