@@ -2,6 +2,8 @@ export const PERMISSIONS = Object.freeze({
   PROPERTIES_READ: 'properties.read',
   PROPERTIES_MANAGE: 'properties.manage',
   PROPERTY_ASSIGNMENTS_MANAGE: 'property_assignments.manage',
+  RENTEES_READ: 'rentees.read',
+  RENTEES_MANAGE: 'rentees.manage',
   INVOICES_READ: 'invoices.read',
   INVOICES_MANAGE: 'invoices.manage',
   PAYMENTS_READ: 'payments.read',
@@ -42,6 +44,8 @@ const ROLE_PERMISSIONS = Object.freeze({
   manager: new Set([
     PERMISSIONS.PROPERTIES_READ,
     PERMISSIONS.PROPERTIES_MANAGE,
+    PERMISSIONS.RENTEES_READ,
+    PERMISSIONS.RENTEES_MANAGE,
     PERMISSIONS.INVOICES_READ,
     PERMISSIONS.INVOICES_MANAGE,
     PERMISSIONS.PAYMENTS_READ,
@@ -58,6 +62,7 @@ const ROLE_PERMISSIONS = Object.freeze({
   ]),
   finance_staff: new Set([
     PERMISSIONS.PROPERTIES_READ,
+    PERMISSIONS.RENTEES_READ,
     PERMISSIONS.INVOICES_READ,
     PERMISSIONS.INVOICES_MANAGE,
     PERMISSIONS.PAYMENTS_READ,
