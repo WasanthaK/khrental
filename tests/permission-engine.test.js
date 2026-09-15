@@ -34,6 +34,7 @@ test('administrator receives the complete named permission set', () => {
   const subject = { user: { id: 'admin-1', role: 'admin' } };
   assert.equal(hasPermission(subject, PERMISSIONS.PROPERTIES_READ), true);
   assert.equal(hasPermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.RENTEES_MANAGE), true);
   assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), true);
   assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), true);
   assert.equal(getPermissions(subject).size, Object.keys(PERMISSIONS).length);
@@ -47,6 +48,22 @@ test('non-admin roles cannot manage staff property assignments', () => {
     };
     assert.equal(hasPermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE), false);
   }
+});
+
+test('manager can read and manage rentees while finance staff can only read them', () => {
+  const manager = {
+    user: { id: 'manager-1', role: 'manager' },
+    membership: activeMembership('manager')
+  };
+  const finance = {
+    user: { id: 'finance-1', role: 'finance_staff' },
+    membership: activeMembership('finance_staff')
+  };
+
+  assert.equal(hasPermission(manager, PERMISSIONS.RENTEES_READ), true);
+  assert.equal(hasPermission(manager, PERMISSIONS.RENTEES_MANAGE), true);
+  assert.equal(hasPermission(finance, PERMISSIONS.RENTEES_READ), true);
+  assert.equal(hasPermission(finance, PERMISSIONS.RENTEES_MANAGE), false);
 });
 
 test('finance staff can manage invoices but cannot update assigned maintenance jobs', () => {
