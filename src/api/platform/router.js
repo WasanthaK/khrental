@@ -21,6 +21,7 @@ import {
   verifyPasswordCredential
 } from '../auth/index.js';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
+import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TENANT_SCOPED_TABLES = new Set([
@@ -49,17 +50,11 @@ const TENANT_SCOPED_TABLES = new Set([
   'tenant_settings'
 ]);
 const ALLOWED_RPCS = new Set([
-  'exec_sql',
   'get_table_columns',
   'reject_utility_reading',
   'update_agreement_status',
   'get_rentees_by_property',
-  'get_rentees_by_unit',
-  'test_status_value',
-  'create_policy',
-  'enable_rls',
-  'create_app_users_table',
-  'create_create_app_users_table_procedure'
+  'get_rentees_by_unit'
 ]);
 
 const RELATION_CONFIG = {
@@ -99,11 +94,11 @@ const splitSelect = (select = '*') => {
   let depth = 0;
 
   for (const char of String(select)) {
-    if (char === '(') depth += 1;
-    if (char === ')') depth = Math.max(depth - 1, 0);
+    if (char === '(') {depth += 1;}
+    if (char === ')') {depth = Math.max(depth - 1, 0);}
 
     if (char === ',' && depth === 0) {
-      if (current.trim()) parts.push(current.trim());
+      if (current.trim()) {parts.push(current.trim());}
       current = '';
       continue;
     }
@@ -111,7 +106,7 @@ const splitSelect = (select = '*') => {
     current += char;
   }
 
-  if (current.trim()) parts.push(current.trim());
+  if (current.trim()) {parts.push(current.trim());}
   return parts;
 };
 
@@ -137,9 +132,9 @@ const parseRelationSpec = (part) => {
 };
 
 const normalizeValue = (value) => {
-  if (value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+  if (value === undefined) {return null;}
+  if (value instanceof Date) {return value.toISOString();}
+  if (typeof value === 'object' && value !== null) {return JSON.stringify(value);}
   return value;
 };
 
@@ -416,7 +411,7 @@ const buildWhereClause = (filters = []) => {
       }
       case 'is':
         clauses.push(value === null ? `${column} IS NULL` : `${column} = @${paramKey}`);
-        if (value !== null) params[paramKey] = normalizeValue(value);
+        if (value !== null) {params[paramKey] = normalizeValue(value);}
         break;
       default:
         postFilters.push({ column, operator, value });
@@ -450,6 +445,99 @@ const applyPostFilters = (rows, filters = []) => rows.filter((row) => {
     }
   });
 });
+
+const appendWhereConstraint = (whereClause, constraint) => {
+  if (!constraint) {return whereClause;}
+  return whereClause ? `${whereClause} AND ${constraint}` : `WHERE ${constraint}`;
+};
+
+const getResourceScopeConstraint = ({ table, resourceScope, params, tenantId }) => {
+  if (!resourceScope?.kind) {return null;}
+
+  params.authorizationUserId = resourceScope.userId;
+  params.authorizationTenantId = tenantId;
+
+  switch (resourceScope.kind) {
+    case 'tenant-property':
+      return `EXISTS (
+        SELECT 1 FROM agreements authorization_agreement
+        WHERE authorization_agreement.tenant_id = @authorizationTenantId
+          AND authorization_agreement.renteeid = @authorizationUserId
+          AND authorization_agreement.propertyid = ${table}.id
+      )`;
+    case 'tenant-unit':
+      return `EXISTS (
+        SELECT 1 FROM agreements authorization_agreement
+        WHERE authorization_agreement.tenant_id = @authorizationTenantId
+          AND authorization_agreement.renteeid = @authorizationUserId
+          AND authorization_agreement.unitid = ${table}.id
+      )`;
+    case 'tenant-payment':
+      return `EXISTS (
+        SELECT 1 FROM invoices authorization_invoice
+        WHERE authorization_invoice.tenant_id = @authorizationTenantId
+          AND authorization_invoice.renteeid = @authorizationUserId
+          AND authorization_invoice.id = ${table}.invoiceid
+      )`;
+    case 'tenant-maintenance-child':
+      return `EXISTS (
+        SELECT 1 FROM maintenance_requests authorization_request
+        WHERE authorization_request.tenant_id = @authorizationTenantId
+          AND authorization_request.renteeid = @authorizationUserId
+          AND authorization_request.id = ${table}.maintenance_request_id
+      )`;
+    default:
+      throw new Error(`Unsupported resource scope: ${resourceScope.kind}`);
+  }
+};
+
+const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId }) => {
+  if (resourceScope?.kind !== 'tenant-insert') {return;}
+
+  const rows = Array.isArray(payload) ? payload : [payload];
+  for (const row of rows) {
+    if (table === 'maintenance_requests' || table === 'utility_readings') {
+      if (!row?.propertyid) {
+        const error = new Error('A property linked to the current tenant account is required.');
+        error.status = 403;
+        error.code = 'RESOURCE_OWNERSHIP_REQUIRED';
+        throw error;
+      }
+
+      const agreement = await runSingleQuery(
+        `SELECT TOP 1 id FROM agreements
+         WHERE tenant_id = @tenantId
+           AND renteeid = @userId
+           AND propertyid = @propertyId`,
+        { tenantId, userId: resourceScope.userId, propertyId: row.propertyid }
+      );
+      if (!agreement) {
+        const error = new Error('The selected property is not linked to the current tenant account.');
+        error.status = 403;
+        error.code = 'RESOURCE_ACCESS_DENIED';
+        throw error;
+      }
+    }
+
+    if (table === 'maintenance_request_images' || table === 'maintenance_request_comments') {
+      const request = row?.maintenance_request_id
+        ? await runSingleQuery(
+            `SELECT TOP 1 id FROM maintenance_requests
+             WHERE tenant_id = @tenantId
+               AND renteeid = @userId
+               AND id = @requestId`,
+            { tenantId, userId: resourceScope.userId, requestId: row.maintenance_request_id }
+          )
+        : null;
+      if (!request) {
+        const error = new Error('The maintenance request is not owned by the current tenant account.');
+        error.status = 403;
+        error.code = 'RESOURCE_ACCESS_DENIED';
+        throw error;
+      }
+    }
+  }
+};
 
 const augmentRows = async (table, select, rows, tenantId = null) => {
   const relationSpecs = splitSelect(select).map(parseRelationSpec).filter(Boolean);
@@ -549,9 +637,12 @@ const augmentRows = async (table, select, rows, tenantId = null) => {
   return augmented;
 };
 
-const executeSelect = async ({ table, select = '*', filters = [], order = [], limit, range, head, count, tenantId = null }) => {
+const executeSelect = async ({ table, select = '*', filters = [], order = [], limit, range, head, count, tenantId = null, resourceScope = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
-  const { whereClause, params, postFilters } = buildWhereClause(getScopedFilters({ table: safeTable, filters, tenantId }));
+  const scopedWhere = buildWhereClause(getScopedFilters({ table: safeTable, filters, tenantId }));
+  const { params, postFilters } = scopedWhere;
+  const resourceConstraint = getResourceScopeConstraint({ table: safeTable, resourceScope, params, tenantId });
+  const whereClause = appendWhereConstraint(scopedWhere.whereClause, resourceConstraint);
   const orderSpecs = Array.isArray(order) ? order : [order].filter(Boolean);
   const orderClause = orderSpecs.length > 0
     ? ' ORDER BY ' + orderSpecs.map((entry) => `${ensureIdentifier(entry.column, 'order column')} ${entry.ascending === false ? 'DESC' : 'ASC'}`).join(', ')
@@ -585,16 +676,17 @@ const executeSelect = async ({ table, select = '*', filters = [], order = [], li
   };
 };
 
-const executeInsert = async ({ table, payload, tenantId = null }) => {
+const executeInsert = async ({ table, payload, tenantId = null, resourceScope = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const rows = Array.isArray(getScopedPayload({ table: safeTable, payload, tenantId }))
     ? getScopedPayload({ table: safeTable, payload, tenantId })
     : [getScopedPayload({ table: safeTable, payload, tenantId })];
+  await verifyTenantInsertScope({ table: safeTable, payload: rows, resourceScope, tenantId });
   const inserted = [];
 
   for (const row of rows) {
     const entries = Object.entries(row || {}).filter(([key, value]) => IDENTIFIER_REGEX.test(key) && value !== undefined);
-    if (entries.length === 0) continue;
+    if (entries.length === 0) {continue;}
 
     const params = {};
     const columns = [];
@@ -719,20 +811,6 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
   }
 
   switch (name) {
-    case 'exec_sql': {
-      if (tenantContext?.user) {
-        const error = new Error('Raw SQL execution is blocked for authenticated runtime requests.');
-        error.status = 403;
-        error.code = 'RPC_BLOCKED';
-        throw error;
-      }
-
-      const sqlText = args.sql || args.sql_query;
-      if (!sqlText) {
-        throw new Error('sql is required');
-      }
-      return { data: await runQuery(sqlText), error: null };
-    }
     case 'get_table_columns': {
       const tableName = ensureIdentifier(args.table_name || args.tableName, 'table');
       const rows = await runQuery(
@@ -744,7 +822,7 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
     case 'reject_utility_reading': {
       requireTenantForTable('utility_readings', tenantContext?.tenantId);
       const readingId = args.reading_id || args.readingId;
-      if (!readingId) throw new Error('reading_id is required');
+      if (!readingId) {throw new Error('reading_id is required');}
       const rows = await runQuery(
         `UPDATE utility_readings SET status = 'rejected', updatedat = @updatedat OUTPUT INSERTED.* WHERE id = @readingId AND tenant_id = @tenantId`,
         { readingId, tenantId: tenantContext.tenantId, updatedat: new Date().toISOString() }
@@ -755,7 +833,7 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
       requireTenantForTable('agreements', tenantContext?.tenantId);
       const agreementId = args.agreement_id || args.agreementId;
       const status = args.new_status || args.status;
-      if (!agreementId || !status) throw new Error('agreement_id and status are required');
+      if (!agreementId || !status) {throw new Error('agreement_id and status are required');}
       const rows = await runQuery(
         `UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.* WHERE id = @agreementId AND tenant_id = @tenantId`,
         { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }
@@ -791,12 +869,6 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
       );
       return { data: rows.map(mapRow), error: null };
     }
-    case 'test_status_value':
-    case 'create_policy':
-    case 'enable_rls':
-    case 'create_app_users_table':
-    case 'create_create_app_users_table_procedure':
-      return { data: true, error: null };
   }
 };
 
@@ -821,8 +893,8 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
     return normalizedPath;
   }
 
-  if (!normalizedPath) return tenantPrefix;
-  if (normalizedPath === tenantPrefix || normalizedPath.startsWith(`${tenantPrefix}/`)) return normalizedPath;
+  if (!normalizedPath) {return tenantPrefix;}
+  if (normalizedPath === tenantPrefix || normalizedPath.startsWith(`${tenantPrefix}/`)) {return normalizedPath;}
 
   if (normalizedPath.startsWith(`${STORAGE_TENANT_ROOT}/`)) {
     const error = new Error('Cross-tenant storage paths are not allowed.');
@@ -865,8 +937,17 @@ export const createPlatformRouter = () => {
         return;
       }
 
+      const authorized = authorizePlatformQuery({
+        action,
+        table,
+        filters,
+        payload,
+        user: req.user,
+        membership: req.membership
+      });
+
       let result;
-      switch (action) {
+      switch (authorized.action) {
         case 'select':
           if (!isMssqlConfigured()) {
             result = {
@@ -878,22 +959,38 @@ export const createPlatformRouter = () => {
             break;
           }
 
-          result = await executeSelect({ table, select, filters, order, limit, range, head, count, tenantId: req.tenantId });
+          result = await executeSelect({
+            table: authorized.table,
+            select,
+            filters: authorized.filters,
+            order,
+            limit,
+            range,
+            head,
+            count,
+            tenantId: req.tenantId,
+            resourceScope: authorized.resourceScope
+          });
           break;
         case 'insert':
-          result = await executeInsert({ table, payload, tenantId: req.tenantId });
+          result = await executeInsert({
+            table: authorized.table,
+            payload: authorized.payload,
+            tenantId: req.tenantId,
+            resourceScope: authorized.resourceScope
+          });
           break;
         case 'update':
-          result = await executeUpdate({ table, payload, filters, tenantId: req.tenantId });
+          result = await executeUpdate({ table: authorized.table, payload: authorized.payload, filters: authorized.filters, tenantId: req.tenantId });
           break;
         case 'delete':
-          result = await executeDelete({ table, filters, tenantId: req.tenantId });
+          result = await executeDelete({ table: authorized.table, filters: authorized.filters, tenantId: req.tenantId });
           break;
         case 'upsert':
-          result = await executeUpsert({ table, payload, tenantId: req.tenantId });
+          result = await executeUpsert({ table: authorized.table, payload: authorized.payload, tenantId: req.tenantId });
           break;
         default:
-          throw new Error(`Unsupported action: ${action}`);
+          throw new Error(`Unsupported action: ${authorized.action}`);
       }
 
       res.json({
@@ -928,19 +1025,20 @@ export const createPlatformRouter = () => {
 
   router.post('/rpc/:name', requireAuthenticated, async (req, res, next) => {
     try {
-      if (!isMssqlConfigured()) {
-        if (req.params.name === 'get_table_columns') {
-          res.json({ data: [], error: null, meta: { databaseConfigured: false } });
-          return;
-        }
+      const authorizedRpc = authorizePlatformRpc({
+        name: req.params.name,
+        user: req.user,
+        membership: req.membership
+      });
 
-        if (['create_policy', 'enable_rls', 'create_app_users_table', 'create_create_app_users_table_procedure', 'test_status_value'].includes(req.params.name)) {
-          res.json({ data: true, error: null, meta: { databaseConfigured: false } });
+      if (!isMssqlConfigured()) {
+        if (authorizedRpc === 'get_table_columns') {
+          res.json({ data: [], error: null, meta: { databaseConfigured: false } });
           return;
         }
       }
 
-      const result = await executeRpc(req.params.name, req.body || {}, req.tenantContext);
+      const result = await executeRpc(authorizedRpc, req.body || {}, req.tenantContext);
       res.json({
         ...result,
         meta: {
