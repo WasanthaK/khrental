@@ -4,8 +4,17 @@ import { fetchData, platform as platformClient } from '../services/platformClien
 import { fetchAppUsers } from '../services/appUserService';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { INVOICE_STATUS } from '../utils/constants';
+import { useAuth } from '../hooks/useAuth';
+import { PERMISSIONS, hasPermission } from '../utils/permissions';
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const canCreateProperty = hasPermission(user, PERMISSIONS.CREATE_PROPERTY);
+  const canCreateInvoice = hasPermission(user, PERMISSIONS.CREATE_INVOICE);
+  const canCreateAgreement = hasPermission(user, PERMISSIONS.CREATE_AGREEMENT);
+  const canCreateMaintenance = hasPermission(user, PERMISSIONS.CREATE_MAINTENANCE);
+  const canViewTeam = hasPermission(user, PERMISSIONS.VIEW_TEAM);
+
   const [stats, setStats] = useState({
     properties: 0,
     rentees: 0,
@@ -36,20 +45,20 @@ const Dashboard = () => {
         if (usersByType) {
           // Group by user_type
           const typeCount = {};
-          usersByType.forEach(user => {
-            const type = user.user_type || 'unknown';
+          usersByType.forEach(userRecord => {
+            const type = userRecord.user_type || 'unknown';
             typeCount[type] = (typeCount[type] || 0) + 1;
           });
           console.log('DEBUG - Users by type:', typeCount);
           console.log('Total users:', usersByType.length);
           
           // Get direct rentee count
-          directRenteeCount = usersByType.filter(user => user.user_type === 'rentee').length;
+          directRenteeCount = usersByType.filter(userRecord => userRecord.user_type === 'rentee').length;
           console.log('Direct rentee count:', directRenteeCount);
         }
         
         // DEBUG: Check invoice counts by status directly
-        const { data: invoicesByStatus, error: invoiceStatusError } = await platformClient
+        const { data: invoicesByStatus } = await platformClient
           .from('invoices')
           .select('status');
           
@@ -97,7 +106,7 @@ const Dashboard = () => {
         // Fetch rentees count - use direct count from earlier as fallback
         let renteesCount = directRenteeCount;
         try {
-          renteesCount = usersByType.filter((user) => user.user_type === 'rentee').length || directRenteeCount;
+          renteesCount = usersByType.filter((userRecord) => userRecord.user_type === 'rentee').length || directRenteeCount;
         } catch (err) {
           console.error('Exception fetching rentees count:', err);
         }
@@ -135,12 +144,14 @@ const Dashboard = () => {
           console.error('Exception fetching maintenance count:', err);
         }
         
-        // Fetch team members count
+        // Fetch team members count only when the current role can see Team.
         let teamCount = 0;
-        try {
-          teamCount = usersByType.filter((user) => user.user_type === 'staff').length || 0;
-        } catch (err) {
-          console.error('Exception fetching team count:', err);
+        if (canViewTeam) {
+          try {
+            teamCount = usersByType.filter((userRecord) => userRecord.user_type === 'staff').length || 0;
+          } catch (err) {
+            console.error('Exception fetching team count:', err);
+          }
         }
         
         // Fetch recent invoices
@@ -181,7 +192,7 @@ const Dashboard = () => {
     };
     
     fetchDashboardData();
-  }, []);
+  }, [canViewTeam]);
 
   // Get status badge color
   const getStatusBadgeColor = (status) => {
@@ -445,9 +456,11 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <p className="text-gray-600">No invoices found</p>
-                <Link to="/dashboard/invoices/new" className="mt-4 inline-block bg-blue-500 text-white py-2 px-4 rounded-lg text-sm font-medium">
-                  Create Invoice
-                </Link>
+                {canCreateInvoice && (
+                  <Link to="/dashboard/invoices/new" className="mt-4 inline-block bg-blue-500 text-white py-2 px-4 rounded-lg text-sm font-medium">
+                    Create Invoice
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -488,7 +501,7 @@ const Dashboard = () => {
           <h2 className="text-xl font-semibold mb-3">Quick Actions</h2>
           
           <div className="grid grid-cols-2 gap-3">
-            {renderQuickAction(
+            {canCreateProperty && renderQuickAction(
               'Add Property',
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -497,7 +510,7 @@ const Dashboard = () => {
               'bg-blue-500 text-white'
             )}
             
-            {renderQuickAction(
+            {canCreateInvoice && renderQuickAction(
               'Create Invoice',
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -506,7 +519,7 @@ const Dashboard = () => {
               'bg-yellow-500 text-white'
             )}
             
-            {renderQuickAction(
+            {canCreateAgreement && renderQuickAction(
               'New Agreement',
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
@@ -515,10 +528,10 @@ const Dashboard = () => {
               'bg-green-500 text-white'
             )}
             
-            {renderQuickAction(
+            {canCreateMaintenance && renderQuickAction(
               'Maintenance',
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543-.94-3.31.826-2.37 2.37a1.724 1.724 0 00-1.065 2.572c-1.756.426-1.756 2.924 0 3.35a1.724 1.724 0 001.066 2.573c-.94 1.543.826 3.31 2.37 2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>,
               '/dashboard/maintenance/new',
@@ -537,11 +550,11 @@ const Dashboard = () => {
               '/dashboard/maintenance'
             )}
             
-            {renderStatCard(
+            {canViewTeam && renderStatCard(
               'Team',
               stats.teamMembers,
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>,
               'team',
               '/dashboard/team'
