@@ -1,13 +1,11 @@
-const ADMIN_ROLE = 'admin';
-const TENANT_ROLE = 'rentee';
-const STAFF_ROLES = new Set([
-  'staff',
-  'manager',
-  'finance_staff',
-  'maintenance_staff',
-  'maintenance',
-  'supervisor'
-]);
+import {
+  PERMISSIONS,
+  getRoleType,
+  hasPermission,
+  isAdminRole,
+  isStaffRole,
+  isTenantRole
+} from './permissionEngine.js';
 
 const ADMIN_QUERY_TABLES = new Set([
   'app_users',
@@ -52,25 +50,25 @@ const ADMIN_RPCS = new Set([
 ]);
 
 const TENANT_SELECT_SCOPES = Object.freeze({
-  app_users: { column: 'id' },
-  agreements: { column: 'renteeid' },
-  invoices: { column: 'renteeid' },
-  utility_readings: { column: 'renteeid' },
+  app_users: { column: 'id', permission: PERMISSIONS.PROFILE_READ_SELF },
+  agreements: { column: 'renteeid', permission: PERMISSIONS.AGREEMENTS_READ },
+  invoices: { column: 'renteeid', permission: PERMISSIONS.INVOICES_READ },
+  utility_readings: { column: 'renteeid', permission: PERMISSIONS.UTILITIES_READ },
   maintenance_requests: { column: 'renteeid' },
   notifications: { column: 'user_id' },
   action_records: { column: 'renteeid' },
   sent_letters: { column: 'renteeid' },
-  properties: { relation: 'tenant-property' },
-  property_units: { relation: 'tenant-unit' },
-  payments: { relation: 'tenant-payment' },
+  properties: { relation: 'tenant-property', permission: PERMISSIONS.PROPERTIES_READ },
+  property_units: { relation: 'tenant-unit', permission: PERMISSIONS.PROPERTIES_READ },
+  payments: { relation: 'tenant-payment', permission: PERMISSIONS.PAYMENTS_READ },
   maintenance_request_images: { relation: 'tenant-maintenance-child' },
   maintenance_request_comments: { relation: 'tenant-maintenance-child' }
 });
 
 const STAFF_SELECT_SCOPES = Object.freeze({
-  app_users: { column: 'id' },
-  maintenance_requests: { column: 'assignedto' },
-  task_assignments: { column: 'teammemberid' }
+  app_users: { column: 'id', permission: PERMISSIONS.PROFILE_READ_SELF },
+  maintenance_requests: { column: 'assignedto', permission: PERMISSIONS.MAINTENANCE_READ_ASSIGNED },
+  task_assignments: { column: 'teammemberid', permission: PERMISSIONS.TASKS_READ_ASSIGNED }
 });
 
 const TENANT_INSERT_FIELDS = Object.freeze({
@@ -87,13 +85,17 @@ const TENANT_UPDATE_FIELDS = Object.freeze({
 });
 
 const STAFF_UPDATE_FIELDS = Object.freeze({
-  maintenance_requests: new Set(['status', 'notes', 'startedat', 'completedat', 'images', 'updatedat']),
-  task_assignments: new Set(['status', 'notes', 'completiondate', 'updatedat'])
+  maintenance_requests: {
+    fields: new Set(['status', 'notes', 'startedat', 'completedat', 'images', 'updatedat']),
+    permission: PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED,
+    ownerColumn: 'assignedto'
+  },
+  task_assignments: {
+    fields: new Set(['status', 'notes', 'completiondate', 'updatedat']),
+    permission: PERMISSIONS.TASKS_UPDATE_ASSIGNED,
+    ownerColumn: 'teammemberid'
+  }
 });
-
-const normalizeRole = (user, membership) => String(membership?.role || user?.role || user?.user_type || '')
-  .trim()
-  .toLowerCase();
 
 const createAuthorizationError = (message, code = 'PLATFORM_ACCESS_DENIED') => {
   const error = new Error(message);
@@ -107,6 +109,15 @@ const requireUserId = (user) => {
     throw createAuthorizationError('A linked application user is required.', 'LINKED_USER_REQUIRED');
   }
   return user.id;
+};
+
+const requirePermission = ({ user, membership }, permission) => {
+  if (permission && !hasPermission({ user, membership }, permission)) {
+    throw createAuthorizationError(
+      `The ${permission} permission is required for this operation.`,
+      'PERMISSION_REQUIRED'
+    );
+  }
 };
 
 const requireRecordFilter = (filters, action) => {
@@ -163,14 +174,16 @@ const authorizeAdminQuery = ({ action, table, filters, payload }) => {
   return { action, table, filters, payload, resourceScope: null };
 };
 
-const authorizeTenantQuery = ({ action, table, filters, payload, user }) => {
+const authorizeTenantQuery = ({ action, table, filters, payload, user, membership }) => {
   const userId = requireUserId(user);
+  const subject = { user, membership };
   const selectScope = TENANT_SELECT_SCOPES[table];
 
   if (action === 'select') {
     if (!selectScope) {
       throw createAuthorizationError('Tenant access to this resource is not allowed.', 'RESOURCE_ACCESS_DENIED');
     }
+    requirePermission(subject, selectScope.permission);
     return {
       action,
       table,
@@ -197,6 +210,9 @@ const authorizeTenantQuery = ({ action, table, filters, payload, user }) => {
 
   if (action === 'update' && TENANT_UPDATE_FIELDS[table]) {
     requireRecordFilter(filters, action);
+    if (table === 'app_users') {
+      requirePermission(subject, PERMISSIONS.PROFILE_UPDATE_SELF);
+    }
     const ownerColumn = table === 'app_users' ? 'id' : table === 'notifications' ? 'user_id' : 'renteeid';
     const sanitizedPayload = filterPayload(payload, TENANT_UPDATE_FIELDS[table]);
     if (!hasPayloadFields(sanitizedPayload)) {
@@ -217,11 +233,13 @@ const authorizeTenantQuery = ({ action, table, filters, payload, user }) => {
   throw createAuthorizationError('Tenant access to this operation is not allowed.', 'ACTION_ACCESS_DENIED');
 };
 
-const authorizeStaffQuery = ({ action, table, filters, payload, user }) => {
+const authorizeStaffQuery = ({ action, table, filters, payload, user, membership }) => {
   const userId = requireUserId(user);
+  const subject = { user, membership };
   const selectScope = STAFF_SELECT_SCOPES[table];
 
   if (action === 'select' && selectScope) {
+    requirePermission(subject, selectScope.permission);
     return {
       action,
       table,
@@ -231,16 +249,18 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user }) => {
     };
   }
 
-  if (action === 'update' && STAFF_UPDATE_FIELDS[table]) {
+  const updatePolicy = STAFF_UPDATE_FIELDS[table];
+  if (action === 'update' && updatePolicy) {
+    requirePermission(subject, updatePolicy.permission);
     requireRecordFilter(filters, action);
-    const sanitizedPayload = filterPayload(payload, STAFF_UPDATE_FIELDS[table]);
+    const sanitizedPayload = filterPayload(payload, updatePolicy.fields);
     if (!hasPayloadFields(sanitizedPayload)) {
       throw createAuthorizationError('No staff-editable fields were supplied.', 'FIELD_ACCESS_DENIED');
     }
     return {
       action,
       table,
-      filters: addOwnerFilter(filters, STAFF_SELECT_SCOPES[table].column, userId),
+      filters: addOwnerFilter(filters, updatePolicy.ownerColumn, userId),
       payload: sanitizedPayload,
       resourceScope: null
     };
@@ -252,19 +272,23 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user }) => {
   );
 };
 
+export const authorizePermission = ({ user, membership }, permission) => {
+  requirePermission({ user, membership }, permission);
+  return permission;
+};
+
 export const authorizePlatformQuery = ({ action = 'select', table, filters = [], payload, user, membership }) => {
   const normalizedAction = String(action || 'select').trim().toLowerCase();
   const normalizedTable = String(table || '').trim().toLowerCase();
-  const role = normalizeRole(user, membership);
-  const request = { action: normalizedAction, table: normalizedTable, filters, payload, user };
+  const request = { action: normalizedAction, table: normalizedTable, filters, payload, user, membership };
 
-  if (role === ADMIN_ROLE) {
+  if (isAdminRole({ user, membership })) {
     return authorizeAdminQuery(request);
   }
-  if (role === TENANT_ROLE) {
+  if (isTenantRole({ user, membership })) {
     return authorizeTenantQuery(request);
   }
-  if (STAFF_ROLES.has(role)) {
+  if (isStaffRole({ user, membership })) {
     return authorizeStaffQuery(request);
   }
 
@@ -273,33 +297,20 @@ export const authorizePlatformQuery = ({ action = 'select', table, filters = [],
 
 export const authorizePlatformRpc = ({ name, user, membership }) => {
   const normalizedName = String(name || '').trim().toLowerCase();
-  const role = normalizeRole(user, membership);
 
   if (BLOCKED_RUNTIME_RPCS.has(normalizedName)) {
     throw createAuthorizationError('This RPC is disabled in the runtime application.', 'RPC_BLOCKED');
   }
 
-  if (role === ADMIN_ROLE && ADMIN_RPCS.has(normalizedName)) {
+  if (isAdminRole({ user, membership }) && ADMIN_RPCS.has(normalizedName)) {
     return normalizedName;
   }
 
-  if (!role || (!STAFF_ROLES.has(role) && role !== TENANT_ROLE && role !== ADMIN_ROLE)) {
+  if (getRoleType({ user, membership }) === 'unlinked') {
     throw createAuthorizationError('This account is not linked to an authorized business role.', 'ROLE_ACCESS_DENIED');
   }
 
   throw createAuthorizationError('This RPC is not allowed for the current role.', 'RPC_ACCESS_DENIED');
 };
 
-export const getPlatformRoleType = ({ user, membership }) => {
-  const role = normalizeRole(user, membership);
-  if (role === ADMIN_ROLE) {
-    return ADMIN_ROLE;
-  }
-  if (role === TENANT_ROLE) {
-    return TENANT_ROLE;
-  }
-  if (STAFF_ROLES.has(role)) {
-    return 'staff';
-  }
-  return 'unlinked';
-};
+export const getPlatformRoleType = ({ user, membership }) => getRoleType({ user, membership });
