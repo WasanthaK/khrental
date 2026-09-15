@@ -242,6 +242,42 @@ const listAssignedPropertyIdsForUser = async ({ appUserId, tenantId, user }) => 
   return parseLegacyPropertyIds(user?.associated_property_ids);
 };
 
+const listAssignedRenteeIdsForProperties = async ({ tenantId, propertyIds }) => {
+  const normalizedPropertyIds = [...new Set(
+    (Array.isArray(propertyIds) ? propertyIds : []).filter(Boolean).map((propertyId) => String(propertyId))
+  )];
+
+  if (!tenantId || normalizedPropertyIds.length === 0 || !(await tableExists('agreements'))) {
+    return [];
+  }
+
+  const params = { tenantId };
+  const propertyPlaceholders = normalizedPropertyIds.map((propertyId, index) => {
+    const key = `assignedProperty${index}`;
+    params[key] = propertyId;
+    return `@${key}`;
+  });
+
+  try {
+    const rows = await runQuery(
+      `SELECT DISTINCT renteeid
+       FROM agreements
+       WHERE tenant_id = @tenantId
+         AND renteeid IS NOT NULL
+         AND propertyid IN (${propertyPlaceholders.join(', ')})`,
+      params
+    );
+
+    return rows.map((row) => row.renteeid).filter(Boolean);
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
 const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
   if (requestedTenantId) {
     const requestedMembership = memberships.find((entry) => entry.tenant_id === requestedTenantId);
@@ -463,8 +499,14 @@ export const resolveTenantContext = async (req) => {
         user: resolvedUser
       })
     : [];
+  const assignedRenteeIds = resolvedUser?.id && selection.tenantId && selection.membership
+    ? await listAssignedRenteeIdsForProperties({
+        tenantId: selection.tenantId,
+        propertyIds: assignedPropertyIds
+      })
+    : [];
   const activeMembership = selection.membership
-    ? { ...selection.membership, assignedPropertyIds }
+    ? { ...selection.membership, assignedPropertyIds, assignedRenteeIds }
     : selection.membership;
 
   return {
