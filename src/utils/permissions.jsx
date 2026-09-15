@@ -140,19 +140,21 @@ export const hasPermission = (user, permission) => {
   if (!user) {
     return false;
   }
+
+  const effectiveRole = user.membership?.role || user.role;
   
   // Special case: if user has the default "authenticated" role
   // Allow access to admin-tools so they can link themselves properly
-  if (user.role === 'authenticated' && permission === 'view_admin_tools') {
+  if (effectiveRole === 'authenticated' && permission === 'view_admin_tools') {
     return true;
   }
   
-  if (!user.role) {
+  if (!effectiveRole) {
     return false;
   }
   
   // Get the role configuration
-  const roleConfig = ROLES[user.role.toUpperCase()];
+  const roleConfig = ROLES[String(effectiveRole).toUpperCase()];
   if (!roleConfig) {
     return false;
   }
