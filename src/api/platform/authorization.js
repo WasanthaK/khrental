@@ -233,6 +233,20 @@ const filtersTargetUser = (filters, userId) => Array.isArray(filters) && filters
   && String(filter?.value || '') === String(userId)
 ));
 
+const requireAssignedPropertyPayload = (payload, membership) => {
+  const assignedPropertyIds = new Set(
+    (Array.isArray(membership?.assignedPropertyIds) ? membership.assignedPropertyIds : []).map(String)
+  );
+  const rows = Array.isArray(payload) ? payload : [payload];
+
+  if (rows.length === 0 || rows.some((row) => !row?.propertyid || !assignedPropertyIds.has(String(row.propertyid)))) {
+    throw createAuthorizationError(
+      'The selected property is not assigned to the current staff account.',
+      'RESOURCE_ACCESS_DENIED'
+    );
+  }
+};
+
 const authorizeAdminQuery = ({ action, table, filters, payload }) => {
   if (!ADMIN_QUERY_TABLES.has(table)) {
     throw createAuthorizationError('This table is not available through the runtime platform API.', 'TABLE_BLOCKED');
@@ -442,15 +456,13 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
     if (!hasPayloadFields(sanitizedPayload)) {
       throw createAuthorizationError('No staff-editable fields were supplied.', 'FIELD_ACCESS_DENIED');
     }
+    requireAssignedPropertyPayload(sanitizedPayload, membership);
     return {
       action,
       table,
       filters,
       payload: sanitizedPayload,
-      resourceScope: {
-        kind: 'staff-property-insert',
-        propertyIds: Array.isArray(membership?.assignedPropertyIds) ? membership.assignedPropertyIds : []
-      }
+      resourceScope: null
     };
   }
 
