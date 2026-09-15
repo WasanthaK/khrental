@@ -148,7 +148,7 @@ const STAFF_PROPERTY_INSERT_FIELDS = Object.freeze({
 });
 
 const RENTEE_MANAGE_FIELDS = new Set([
-  'id', 'name', 'email', 'contact_details', 'national_id', 'permanent_address', 'id_copy_url', 'status', 'invited',
+  'id', 'name', 'email', 'contact_details', 'national_id', 'permanent_address', 'id_copy_url', 'status', 'invited', 'auth_id',
   'createdat', 'updatedat'
 ]);
 
