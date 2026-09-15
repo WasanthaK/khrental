@@ -20,6 +20,12 @@ const createRequestError = (status, message, code) => {
   return error;
 };
 
+const createAdminPropertyAccessError = () => createRequestError(
+  400,
+  'Administrators already have tenant-wide property access and do not use individual property assignments.',
+  'ADMIN_TENANT_WIDE_ACCESS'
+);
+
 const requireAssignmentPermission = (req) => {
   authorizePermission(
     { user: req.user, membership: req.membership },
@@ -74,6 +80,10 @@ const repairMissingStaffMembership = async (tenantId, staffUserId) => {
   const role = String(appUser.role || '').trim().toLowerCase();
   const status = String(appUser.status || 'active').trim().toLowerCase();
 
+  if (role === 'admin') {
+    throw createAdminPropertyAccessError();
+  }
+
   if (userType !== 'staff' || status !== 'active' || !STAFF_ROLES.has(role)) {
     return null;
   }
@@ -127,12 +137,22 @@ const requireStaffMembership = async (tenantId, staffUserId) => {
   }
 
   let membership = await loadActiveStaffMembership(tenantId, staffUserId);
+  let membershipRole = String(membership?.role || '').trim().toLowerCase();
+
+  if (membershipRole === 'admin') {
+    throw createAdminPropertyAccessError();
+  }
 
   if (!membership) {
     membership = await repairMissingStaffMembership(tenantId, staffUserId);
+    membershipRole = String(membership?.role || '').trim().toLowerCase();
   }
 
-  if (!membership || !STAFF_ROLES.has(String(membership.role || '').trim().toLowerCase())) {
+  if (membershipRole === 'admin') {
+    throw createAdminPropertyAccessError();
+  }
+
+  if (!membership || !STAFF_ROLES.has(membershipRole)) {
     throw createRequestError(
       400,
       'The selected user must have an active staff membership in the active tenant.',
