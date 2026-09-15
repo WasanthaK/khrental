@@ -2,38 +2,44 @@
 
 ## Purpose
 
-Phase 2 turns the Phase 1 containment rules into a reusable server-side permission model. The server remains authoritative; frontend route guards and legacy frontend permission strings are usability aids only.
+Phase 2 turns the Phase 1 containment rules into a reusable server-side permission model. The server is authoritative. Frontend route guards and legacy frontend permission strings are usability controls only and do not replace server authorization.
 
-## Compatibility rules
+The active tenant membership role is authoritative whenever a membership exists. A legacy role on `app_users` is only a compatibility fallback when there is no active membership role.
+
+## Compatibility and security rules
 
 - Existing administrator behavior remains tenant-scoped and retains the Phase 1 runtime table allowlist.
-- Existing tenant (`rentee`) ownership filters, agreement relationships, safe insert fields, and restricted update fields remain unchanged.
-- Existing stored roles remain valid and are translated into named server permissions.
+- Existing tenant (`rentee`) ownership filters, relationship checks, safe insert fields, and restricted update fields remain in place.
+- Existing stored staff roles are translated into named server permissions.
 - Unknown or unlinked roles remain default-deny.
-- Staff property access is now explicitly tenant-scoped through `staff_property_assignments`.
-- The legacy `app_users.associated_property_ids` field is used only as a migration/backfill source when the new assignment table is created; it is not the long-term authorization source.
-- Generic staff access still remains denied where the server cannot prove the required resource relationship.
+- Staff property access is tenant-scoped through `staff_property_assignments`.
+- The legacy `app_users.associated_property_ids` field is migration/backfill input only once the new assignment table exists.
+- A role permission answers **what** a user may do; a property assignment answers **where** a staff user may do it.
+- Client-supplied tenant IDs or property IDs are never accepted as proof of authorization.
+- Where the server cannot prove the required ownership or property relationship, access stays denied.
 
 ## Role normalization
 
-| Stored role | Business type | Phase 2 interpretation |
+| Stored membership role | Business type | Phase 2 interpretation |
 |---|---|---|
-| `admin` | Administrator | Full named permission set, still subject to platform API safety rules |
-| `manager` | Staff | Broad operational permissions |
-| `finance_staff` | Staff | Finance-focused named permissions |
-| `maintenance_staff`, `maintenance`, `supervisor`, `staff` | Staff / contractor | Assigned maintenance and task permissions |
-| `rentee` | Tenant | Own-record read permissions and constrained tenant actions |
+| `admin` | Administrator | Full named permission set, still subject to platform safety rules |
+| `manager` | Staff | Broad operations on assigned properties; may manage rentees |
+| `finance_staff` | Staff | Finance operations on assigned properties; rentee read only |
+| `maintenance_staff`, `maintenance`, `supervisor`, `staff` | Staff / contractor | Assigned maintenance/task work and limited property visibility as permitted |
+| `rentee` | Tenant | Own-record access and constrained tenant actions |
 | anything else | Unlinked | No business-data access |
 
-When a tenant membership has a role, the membership role is authoritative over a legacy role stored on the user record.
+The browser permission helper, protected routes, dashboard navigation, tenant context, and server permission engine all resolve the membership role before the legacy user role.
 
 ## Named permissions
 
-The central engine currently defines the following server permission vocabulary:
+The server permission vocabulary includes:
 
 - `properties.read`
 - `properties.manage`
 - `property_assignments.manage`
+- `rentees.read`
+- `rentees.manage`
 - `invoices.read`
 - `invoices.manage`
 - `payments.read`
@@ -55,18 +61,7 @@ The central engine currently defines the following server permission vocabulary:
 - `cameras.read`
 - `cameras.manage`
 
-`property_assignments.manage` is deliberately administrator-only in the current role map. Managers and other staff cannot grant themselves broader property access.
-
-## Authorization dimensions
-
-Permission checks alone are not sufficient. Phase 2 models four additional constraints:
-
-1. **Tenant membership** — the membership must be active and match the selected tenant when a tenant ID is supplied.
-2. **Ownership** — tenant-owned resources must resolve to the current application user.
-3. **Job assignment** — assigned maintenance or task work must resolve to the current staff user.
-4. **Property assignment** — a property-sensitive operation must resolve to an active property assignment for the current staff user in the active tenant.
-
-The central engine exposes these predicates separately so business endpoints can combine a named permission with the appropriate resource constraint.
+`property_assignments.manage` is administrator-only. Managers and other staff cannot grant themselves broader property access.
 
 ## Explicit property-assignment model
 
@@ -80,11 +75,13 @@ Migration `migrations/20260915_01_create_staff_property_assignments.sql` introdu
 - `assignedat`
 - `endedat`
 - `notes`
-- standard created/updated timestamps
+- created/updated timestamps
 
-The unique tenant/property/staff key prevents duplicate logical assignments. Tenant and staff/property indexes support authorization lookups.
+The unique tenant/property/staff key prevents duplicate logical assignments. Tenant/staff and tenant/property indexes support authorization lookups.
 
-The migration is idempotent and performs a compatibility backfill from valid JSON values in `app_users.associated_property_ids`, but only for users with an active staff-role tenant membership and only when the referenced property belongs to the same tenant. Tenant/rentee associations are not imported into this table.
+The migration is idempotent and backfills valid JSON values from `app_users.associated_property_ids` only when the user has an active staff-role membership and the property belongs to the same tenant. Rentee associations are deliberately not imported.
+
+`staff_user_id` uses `ON DELETE CASCADE`, so deleting a staff record does not leave a blocking assignment reference. `assigned_by` is retained as an audit identifier without a foreign key, preventing deletion of a former administrator from blocking or destroying historical assignment information. The migration also repairs these constraints if an earlier Phase 2 draft was run manually.
 
 Run the migration with:
 
@@ -92,41 +89,42 @@ Run the migration with:
 npm run migrate:staff-property-assignments
 ```
 
-## Assignment administration API
+The application deployment workflow does **not** execute this migration automatically. It must be run as an explicit release step before deploying application code that expects the assignment table.
 
-Assignment administration is intentionally separate from the generic platform query endpoint:
+## Assignment administration API and UI
+
+Assignment administration is separate from the generic platform table API:
 
 - `GET /api/property-assignments`
 - `POST /api/property-assignments`
 - `PATCH /api/property-assignments/:assignmentId`
 - `DELETE /api/property-assignments/:assignmentId`
 
-All operations require an authenticated user, an active tenant context, and `property_assignments.manage`. The server validates that the target property belongs to the active tenant and that the target user has an active staff membership in that same tenant.
+All operations require an authenticated user, an active tenant context, and `property_assignments.manage`. The server verifies the property belongs to the active tenant and the target user has an active staff membership in that tenant.
 
-The API never accepts a client-supplied tenant ID as proof of authorization; tenant identity comes from the resolved server tenant context.
+The Team Member Details screen exposes an administrator-only **Property Access** tab for assigning, deactivating, and reactivating property access. Deactivation is preferred over deletion in the UI so assignment history remains visible.
 
 ## Server-resolved assignment context
 
-For an authenticated user with a selected tenant, tenant-context resolution loads active rows from `staff_property_assignments` and attaches only the resulting property IDs to the active membership as `assignedPropertyIds`.
+For an authenticated user with a selected tenant, tenant-context resolution loads active `staff_property_assignments` rows and attaches only the resulting property IDs to the active membership as `assignedPropertyIds`.
 
-When the new assignment table does not yet exist, the context layer can read the legacy `associated_property_ids` value as a temporary compatibility fallback. Once the new table exists, it is authoritative even when no assignments are present; an empty assignment set means no property-scoped access.
+If the table does not yet exist, the context layer can use legacy `associated_property_ids` temporarily. Once the new table exists it is authoritative, including when the assignment set is empty. An empty set therefore means no property-scoped staff access.
 
-## Platform-query integration
+## Central platform-query enforcement
 
-The Phase 1 platform query authorization consumes the central engine for role interpretation and named permission decisions while preserving its existing safety controls:
+The central platform authorization layer preserves the Phase 1 controls:
 
-- administrator table allowlist
-- blocked runtime RPC list
-- tenant ownership filters
-- tenant property/unit/payment relationship scopes
+- administrator runtime table allowlist
+- blocked schema/raw-SQL RPCs
+- tenant ownership and relationship scopes
 - tenant field sanitization
-- assigned maintenance and task filters for staff
+- direct maintenance/task assignment filters
 - unfiltered mutation rejection
 - unknown-role default deny
 
-Property-capable staff reads are now additionally constrained as follows:
+For staff with the relevant permission, direct property resources are filtered with the server-resolved assignment list:
 
-| Resource | Required permission | Server-enforced property filter |
+| Resource | Permission | Server property scope |
 |---|---|---|
 | `properties` | `properties.read` | `id IN assignedPropertyIds` |
 | `property_units` | `properties.read` | `propertyid IN assignedPropertyIds` |
@@ -135,20 +133,46 @@ Property-capable staff reads are now additionally constrained as follows:
 | `utility_readings` | `utilities.read` | `propertyid IN assignedPropertyIds` |
 | `cameras` | `cameras.read` | `propertyid IN assignedPropertyIds` |
 
-If a role has the named permission but has no active assignments, the server adds an empty `IN` scope. The query layer converts that to a false predicate, returning no rows rather than broadening access.
+If the role has the named permission but no active assignments, an empty `IN` scope becomes a false SQL predicate and returns zero rows.
 
-Maintenance requests and task assignments continue to use direct job assignment (`assignedto` / `teammemberid`) because that is more specific than property assignment.
+Manager maintenance reads and updates are property-scoped. Maintenance staff/task workers retain the more specific direct assignment checks (`assignedto` / `teammemberid`).
 
-Payments remain conservative for staff in the generic query API because the current schema proves their property relationship indirectly through invoices. They stay denied until that relationship is enforced with a trusted server-side join scope rather than a client-provided property ID.
+Manager/finance agreement and invoice mutations are also property-scoped. Update payloads cannot change `propertyid`, preventing a user from moving an authorized record to an unassigned property. Agreement/invoice inserts require a `propertyid` that is already present in the server-resolved assignment list.
+
+Managers may read and manage rentee records; finance staff may read rentees but cannot mutate them. Self-profile access takes precedence over rentee-administration scope so a manager can still update only the permitted fields of their own profile.
+
+Property creation remains administrator-only in Phase 2. A newly created property has no approved staff assignment, so allowing staff creation would conflict with the explicit assignment model. Managers operate and update properties after an administrator assigns them.
+
+The legacy staff-side maintenance-create form currently models the creator as `renteeid`; therefore Phase 2 does not broaden manager maintenance creation through that form. Managers continue to read, update, prioritize, and assign existing maintenance work within assigned properties.
+
+## Legacy MSSQL compatibility surface
+
+KH Rentals still contains an older `/api/mssql` business API and many clients try that API before falling back to the platform client. Phase 2 must not allow it to become a second authorization engine or bypass central permissions.
+
+The server therefore treats `/api/mssql` as a compatibility surface:
+
+- `/health`, `/me`, and `/tenant-context` remain available for their existing purposes.
+- Effective administrators may use legacy MSSQL business routes.
+- Other business CRUD requests are rejected with `CENTRAL_AUTHORIZATION_REQUIRED`, causing existing clients to use `/api/platform/query` where the central permission/resource rules apply.
+- Non-admin agreement and invoice creation are narrow compatibility exceptions, but the request is first passed through `authorizePlatformQuery`; payload sanitization and assigned-property validation therefore remain central.
+- Agreement-template GET routes are a narrow read compatibility exception for users with `agreements.read`; the MSSQL router still applies active-tenant scoping.
+
+This preserves existing MSSQL-first clients without maintaining two independent permission systems.
+
+## Payments remain conservative
+
+Staff payment access remains default-deny in the generic platform API because a payment's property relationship is indirect through invoices. A future change should enforce that relationship with a trusted server-side join/resource scope. A client-provided property ID is not sufficient proof.
 
 ## Release gates
 
-Phase 2 must not be deployed until all of the following pass on the branch:
+Phase 2 must not be deployed until all of the following are complete on the final branch head:
 
-- Phase 1 platform authorization tests
-- Phase 2 permission-engine and negative-access tests
-- production build
-- pull-request verification workflow
-- database migration reviewed before merge/deployment
+- Phase 1 platform authorization tests pass
+- Phase 2 permission-engine and negative-access tests pass
+- production build passes
+- pull-request verification workflow passes
+- pull-request deploy job remains skipped
+- database migration is reviewed and explicitly executed against the target database before the application deployment
+- the final PR diff is reviewed after all authorization fixes
 
-The pull-request workflow does not execute the Azure deployment job. Deployment remains merge-controlled after verification and review.
+The PR should remain draft until these gates are satisfied. Production remains on the verified Phase 1 deployment until an explicit merge/release decision is made.
