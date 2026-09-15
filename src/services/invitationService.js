@@ -29,23 +29,26 @@ const logInvitationDebug = (requestId, message, data = {}) => {
 /**
  * Send a secure invitation to an existing app-user record.
  *
- * The authenticated admin endpoint resolves the target by the active tenant,
- * revokes older unaccepted invitations, persists only a token hash, and returns
- * the raw token once so it can be delivered to the recipient.
+ * The authenticated admin endpoint resolves the target by email inside the
+ * active tenant, revokes older unaccepted invitations, persists only a token
+ * hash, and returns the raw token once so it can be delivered to the recipient.
+ *
+ * userDetails.id is optional for backward compatibility with older create-form
+ * flows. The server never trusts that client-supplied ID as invitation authority.
  */
 export const inviteUser = async (userDetails, simulated = false) => {
   const requestId = `invite_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   try {
-    if (!userDetails?.email || !userDetails?.id) {
+    if (!userDetails?.email) {
       return {
         success: false,
-        error: 'Missing required fields: email and id are required'
+        error: 'Missing required field: email is required'
       };
     }
 
     logInvitationDebug(requestId, 'Creating secure invitation', {
-      appUserId: userDetails.id,
+      appUserId: userDetails.id || null,
       email: userDetails.email,
       role: userDetails.role
     });
@@ -53,9 +56,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
     const { data: inviteData, error: inviteError } = await platformClient.auth.admin.inviteUserByEmail(
       userDetails.email,
       {
-        data: {
-          app_user_id: userDetails.id
-        }
+        data: userDetails.id ? { app_user_id: userDetails.id } : {}
       }
     );
 
@@ -92,15 +93,19 @@ export const inviteUser = async (userDetails, simulated = false) => {
     if (!emailResult.success) {
       return {
         success: false,
+        emailSent: false,
         error: 'A secure invitation was created, but the invitation email could not be sent.',
         debug: { emailError: emailResult?.error || null }
       };
     }
 
+    const wasSimulated = Boolean(emailResult.simulated || simulated);
+
     return {
       success: true,
-      simulated: Boolean(emailResult.simulated || simulated),
-      message: emailResult.simulated ? 'Invitation email was simulated' : 'Invitation sent successfully',
+      emailSent: !wasSimulated,
+      simulated: wasSimulated,
+      message: wasSimulated ? 'Invitation email was simulated' : 'Invitation sent successfully',
       method: 'secure_direct_email',
       expiresAt: expiresAt || null
     };
@@ -108,6 +113,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
     logInvitationDebug(requestId, 'Secure invitation failed', { error: error.message });
     return {
       success: false,
+      emailSent: false,
       error: error.message
     };
   }
@@ -131,7 +137,7 @@ export const resendInvitation = async (userId, simulated = false) => {
     }
 
     if (!userData) {
-      return { success: false, error: 'User not found' };
+      return { success: false, emailSent: false, error: 'User not found' };
     }
 
     return inviteUser({
@@ -142,7 +148,7 @@ export const resendInvitation = async (userId, simulated = false) => {
     }, simulated);
   } catch (error) {
     console.error('[InvitationService] Error resending invitation:', error);
-    return { success: false, error: error.message };
+    return { success: false, emailSent: false, error: error.message };
   }
 };
 
