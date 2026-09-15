@@ -168,7 +168,7 @@ export const linkAppUser = async (authId, appUserId) => {
     return { 
       success: false, 
       error: `Exception: ${error.message}`,
-      debug: { authId, appUserId }
+      debug: { error: error.toString(), stack: error.stack }
     };
   }
 };
