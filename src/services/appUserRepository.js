@@ -4,6 +4,31 @@ import { getDevBypassRole, loadStoredSession } from './requestContext';
 
 const hasRequestIdentity = () => Boolean(loadStoredSession()?.user?.id || getDevBypassRole());
 
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+
+const isDuplicateEmailError = (error) => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('uq_app_users_email')
+    || message.includes('duplicate key')
+    || message.includes('unique key constraint')
+    || message.includes('unique constraint');
+};
+
+const shouldFallbackToPlatformQuery = (error) => {
+  if (!error?.status) {
+    return true;
+  }
+
+  return error.code === 'CENTRAL_AUTHORIZATION_REQUIRED' || error.status === 404;
+};
+
+const createEmailConflictResult = (email, existingUser = null) => ({
+  success: false,
+  error: `A KH Rentals user with email ${email} already exists. Use the existing user record or a different email address.`,
+  code: 'APP_USER_EMAIL_CONFLICT',
+  ...(existingUser ? { data: existingUser } : {})
+});
+
 export const ensureValidTimestamps = (record) => {
   if (!record) {
     return record;
@@ -19,15 +44,16 @@ export const ensureValidTimestamps = (record) => {
 
 const normalizeCreatePayload = (userData, userType) => {
   const now = new Date().toISOString();
+  const email = userData.email
+    || userData.contact_details?.email
+    || userData.contactDetails?.email;
 
   return {
     ...userData,
     user_type: userType,
     createdat: userData.createdat || now,
     updatedat: now,
-    email: userData.email
-      || userData.contact_details?.email
-      || userData.contactDetails?.email
+    email: normalizeEmail(email)
   };
 };
 
@@ -43,6 +69,11 @@ export const createAppUserRecord = async (userData, userType) => {
       return { success: false, error: 'Email is required' };
     }
 
+    const existingResult = await findAppUserByEmailRecord(dataToInsert.email);
+    if (existingResult.success && existingResult.data) {
+      return createEmailConflictResult(dataToInsert.email, existingResult.data);
+    }
+
     if (isMssqlApiEnabled()) {
       try {
         const data = await requestMssqlApi('/api/mssql/app-users', {
@@ -52,7 +83,21 @@ export const createAppUserRecord = async (userData, userType) => {
 
         return { success: true, data: ensureValidTimestamps(data) };
       } catch (mssqlError) {
-        console.error('Error creating user via MSSQL, falling back to the local compatibility layer:', mssqlError);
+        if (isDuplicateEmailError(mssqlError)) {
+          return createEmailConflictResult(dataToInsert.email);
+        }
+
+        if (!shouldFallbackToPlatformQuery(mssqlError)) {
+          console.error('Error creating user via MSSQL:', mssqlError);
+          return {
+            success: false,
+            error: mssqlError.message,
+            ...(mssqlError.code ? { code: mssqlError.code } : {}),
+            ...(mssqlError.status ? { status: mssqlError.status } : {})
+          };
+        }
+
+        console.warn('MSSQL app-user create requires the central platform compatibility path; falling back:', mssqlError.message);
       }
     }
 
@@ -64,12 +109,21 @@ export const createAppUserRecord = async (userData, userType) => {
 
     if (error) {
       console.error('Error creating user:', error);
+      if (isDuplicateEmailError(error)) {
+        return createEmailConflictResult(dataToInsert.email);
+      }
       return { success: false, error: error.message };
     }
 
     return { success: true, data: ensureValidTimestamps(data) };
   } catch (error) {
     console.error('Error in createAppUserRecord:', error);
+    if (isDuplicateEmailError(error)) {
+      const email = normalizeEmail(
+        userData?.email || userData?.contact_details?.email || userData?.contactDetails?.email
+      );
+      return createEmailConflictResult(email);
+    }
     return { success: false, error: error.message };
   }
 };
