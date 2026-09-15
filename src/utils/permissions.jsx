@@ -55,11 +55,11 @@ export const ROLES = {
   
   MANAGER: {
     name: 'Property Manager',
-    description: 'Manages properties, rentees, and maintenance',
+    description: 'Manages assigned properties, rentees, agreements, invoices, and maintenance',
     permissions: [
-      // Property permissions
+      // Property permissions. New properties are administrator-created so that
+      // staff assignment is explicit from the start.
       PERMISSIONS.VIEW_PROPERTIES,
-      PERMISSIONS.CREATE_PROPERTY,
       PERMISSIONS.EDIT_PROPERTY,
       
       // Rentee permissions
@@ -72,9 +72,9 @@ export const ROLES = {
       PERMISSIONS.CREATE_INVOICE,
       PERMISSIONS.EDIT_INVOICE,
       
-      // Maintenance permissions
+      // Maintenance permissions. Managers operate existing property-scoped
+      // requests; new tenant requests use the tenant/admin creation workflow.
       PERMISSIONS.VIEW_MAINTENANCE,
-      PERMISSIONS.CREATE_MAINTENANCE,
       PERMISSIONS.EDIT_MAINTENANCE,
       PERMISSIONS.ASSIGN_MAINTENANCE,
       
