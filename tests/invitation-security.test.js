@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { publicSignupRequiresInvitation } from '../src/api/auth/invitations.js';
 import {
   createInvitationExpiry,
   generateInvitationToken,
@@ -67,4 +68,10 @@ test('only an unaccepted, unrevoked, unexpired invitation is usable', () => {
 
   assert.equal(getInvitationState(invitation, now), 'valid');
   assert.equal(isInvitationUsable(invitation, now), true);
+});
+
+test('normal public signup must not claim an existing app-user record', () => {
+  assert.equal(publicSignupRequiresInvitation(null), false);
+  assert.equal(publicSignupRequiresInvitation(undefined), false);
+  assert.equal(publicSignupRequiresInvitation({ id: 'existing-app-user' }), true);
 });
