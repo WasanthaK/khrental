@@ -19,7 +19,7 @@ const buildResetEmail = ({ resetLink, expiresAt }) => {
         <h1 style="color: #4a90e2;">Reset your KH Rentals password</h1>
         <p>A password reset was requested for your KH Rentals account.</p>
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${resetLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
+          <a clicktracking=off href="${resetLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
             Choose a New Password
           </a>
         </div>

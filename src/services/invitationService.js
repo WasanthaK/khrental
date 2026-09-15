@@ -220,7 +220,7 @@ function getInvitationEmailTemplate(name, inviteLink, role, expiresAt = null) {
       <p>Hello ${name || 'there'},</p>
       <p>You have been invited to join KH Rentals as a ${userTypeLabel}. Please use the secure link below to set up your account.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${inviteLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
+        <a clicktracking=off href="${inviteLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
           Set Up Your Account
         </a>
       </div>
