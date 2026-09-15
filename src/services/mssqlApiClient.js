@@ -1,15 +1,23 @@
 import { getApiBaseUrl, isMssqlApiEnabled } from '../utils/env';
 import { buildRequestContextHeaders } from './requestContext';
 
-const readErrorMessage = async (response) => {
+const readErrorPayload = async (response) => {
   const contentType = response.headers.get('content-type') || '';
 
   if (contentType.includes('application/json')) {
     const payload = await response.json().catch(() => null);
-    return payload?.error || payload?.message || JSON.stringify(payload);
+    return {
+      message: payload?.error || payload?.message || JSON.stringify(payload),
+      code: payload?.code || null,
+      details: payload?.details
+    };
   }
 
-  return response.text().catch(() => '');
+  return {
+    message: await response.text().catch(() => ''),
+    code: null,
+    details: undefined
+  };
 };
 
 export const requestMssqlApi = async (path, options = {}) => {
@@ -33,8 +41,16 @@ export const requestMssqlApi = async (path, options = {}) => {
   });
 
   if (!response.ok) {
-    const errorMessage = await readErrorMessage(response);
-    throw new Error(errorMessage || `MSSQL API request failed with status ${response.status}`);
+    const errorPayload = await readErrorPayload(response);
+    const error = new Error(errorPayload.message || `MSSQL API request failed with status ${response.status}`);
+    error.status = response.status;
+    if (errorPayload.code) {
+      error.code = errorPayload.code;
+    }
+    if (errorPayload.details !== undefined) {
+      error.details = errorPayload.details;
+    }
+    throw error;
   }
 
   if (response.status === 204) {
