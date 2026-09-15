@@ -1,57 +1,54 @@
-import { platformClient } from '../services/platformClient.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { closeMssqlPool, getMssqlPool } from '../api/mssql/pool.js';
 
-// Get current file path for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// The script to execute can be passed as an argument
-// e.g., node src/db/executeSql.js ../scripts/manual_fixes.sql
-const main = async () => {
-  try {
-    let scriptPath = process.argv[2];
-    
-    if (!scriptPath) {
-      console.error('Please provide a SQL script path as an argument');
-      console.error('Example: node src/db/executeSql.js ../scripts/manual_fixes.sql');
-      process.exit(1);
-    }
-    
-    // If path is relative to executeSql.js, resolve it properly
-    if (!path.isAbsolute(scriptPath)) {
-      scriptPath = path.resolve(__dirname, scriptPath);
-    }
-    
-    console.log(`Executing SQL script: ${scriptPath}`);
-    
-    // Read the file
-    if (!fs.existsSync(scriptPath)) {
-      console.error(`File not found: ${scriptPath}`);
-      process.exit(1);
-    }
-    
-    const sqlScript = fs.readFileSync(scriptPath, 'utf8');
-    console.log(`SQL script loaded (${sqlScript.length} characters)`);
-    
-    // Execute the SQL
-    const { error } = await platformClient.rpc('exec_sql', { sql: sqlScript });
-    
-    if (error) {
-      console.error('Error executing SQL via RPC:', error);
-      process.exit(1);
-    } else {
-      console.log('SQL script executed successfully via RPC');
-    }
-    
-  } catch (error) {
-    console.error('Error executing SQL script:', error);
-    process.exit(1);
+const resolveScriptPath = (scriptPath) => {
+  if (path.isAbsolute(scriptPath)) {
+    return scriptPath;
   }
+
+  const fromWorkingDirectory = path.resolve(process.cwd(), scriptPath);
+  if (fs.existsSync(fromWorkingDirectory)) {
+    return fromWorkingDirectory;
+  }
+
+  return path.resolve(__dirname, scriptPath);
 };
 
-main().catch(error => {
-  console.error('Unhandled error:', error);
-  process.exit(1);
-}); 
+const main = async () => {
+  const requestedPath = process.argv[2];
+
+  if (!requestedPath) {
+    throw new Error('Please provide a SQL script path, for example: node src/db/executeSql.js ./migrations/example.sql');
+  }
+
+  const scriptPath = resolveScriptPath(requestedPath);
+  console.log(`Executing SQL script: ${scriptPath}`);
+
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error(`File not found: ${scriptPath}`);
+  }
+
+  const sqlScript = fs.readFileSync(scriptPath, 'utf8');
+  console.log(`SQL script loaded (${sqlScript.length} characters)`);
+
+  const pool = await getMssqlPool();
+  await pool.request().batch(sqlScript);
+  console.log('SQL script executed successfully through the direct MSSQL connection.');
+};
+
+main()
+  .catch((error) => {
+    console.error('Error executing SQL script:', error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeMssqlPool().catch((error) => {
+      console.error('Error closing MSSQL pool:', error);
+      process.exitCode = 1;
+    });
+  });
