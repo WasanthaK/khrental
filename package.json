@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "migrate": "node src/db/runMigration.js",
     "migrate:fresh:mssql": "node src/db/executeSql.js ./migrations/20260913_00_create_fresh_mssql_schema.sql",
+    "migrate:staff-property-assignments": "node src/db/executeSql.js ./migrations/20260915_01_create_staff_property_assignments.sql",
     "migrate:tenant:foundation": "node src/db/executeSql.js ./migrations/20260317_01_create_multi_tenant_foundation.sql",
     "migrate:tenant:backfill": "node src/db/executeSql.js ./migrations/20260317_02_backfill_default_tenant.sql",
     "add-properties-column": "node src/scripts/add_associated_properties_column.js",
