@@ -6,12 +6,12 @@ import { fetchAppUser, mapAppUserToTeamMember } from '../services/appUserService
 import { toast } from 'react-toastify';
 import TaskAssignment from '../components/team/TaskAssignment';
 import PerformanceMetrics from '../components/team/PerformanceMetrics';
+import PropertyAccessPanel from '../components/team/PropertyAccessPanel';
 
 const TeamMemberDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  // State
+
   const [teamMember, setTeamMember] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,14 +19,12 @@ const TeamMemberDetails = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
-  
-  // Fetch team member data
+
   useEffect(() => {
     const fetchTeamMemberData = async () => {
       try {
         setLoading(true);
-        
-        // Fetch team member
+
         const teamMemberData = await fetchAppUser(id);
 
         if (!teamMemberData || teamMemberData.user_type !== 'staff') {
@@ -34,54 +32,51 @@ const TeamMemberDetails = () => {
         }
 
         setTeamMember(mapAppUserToTeamMember(teamMemberData));
-        
-        // Fetch assignments
+
         const { data: assignmentsData, error: assignmentsError } = await fetchData({
           table: 'task_assignments',
           filters: [{ column: 'teammemberid', operator: 'eq', value: id }],
           order: { column: 'createdat', ascending: false },
         });
-        
+
         if (assignmentsError) {
           throw assignmentsError;
         }
-        
+
         setAssignments(assignmentsData || []);
-      } catch (error) {
-        console.error('Error fetching team member data:', error.message);
-        setError(error.message);
-        toast.error(`Failed to load team member: ${error.message}`);
+      } catch (fetchError) {
+        console.error('Error fetching team member data:', fetchError.message);
+        setError(fetchError.message);
+        toast.error(`Failed to load team member: ${fetchError.message}`);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchTeamMemberData();
   }, [id]);
-  
-  // Handle delete team member
+
   const handleDeleteTeamMember = async () => {
     try {
       setDeleteLoading(true);
-      
+
       const result = await deleteTeamMember(id);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to delete team member');
       }
-      
+
       toast.success('Team member deleted successfully!');
       navigate('/dashboard/team');
-    } catch (error) {
-      console.error('Error deleting team member:', error.message);
-      toast.error(`Failed to delete team member: ${error.message}`);
+    } catch (deleteError) {
+      console.error('Error deleting team member:', deleteError.message);
+      toast.error(`Failed to delete team member: ${deleteError.message}`);
       setDeleteConfirmOpen(false);
     } finally {
       setDeleteLoading(false);
     }
   };
-  
-  // Render loading state
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -89,8 +84,7 @@ const TeamMemberDetails = () => {
       </div>
     );
   }
-  
-  // Render error state
+
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -107,11 +101,9 @@ const TeamMemberDetails = () => {
       </div>
     );
   }
-  
-  // Render team member details
+
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-semibold">{teamMember.name}</h1>
@@ -138,10 +130,9 @@ const TeamMemberDetails = () => {
           </button>
         </div>
       </div>
-      
-      {/* Tabs */}
+
       <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="-mb-px flex flex-wrap gap-x-8">
           <button
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'details'
@@ -151,6 +142,16 @@ const TeamMemberDetails = () => {
             onClick={() => setActiveTab('details')}
           >
             Details
+          </button>
+          <button
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'property-access'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+            onClick={() => setActiveTab('property-access')}
+          >
+            Property Access
           </button>
           <button
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -174,14 +175,11 @@ const TeamMemberDetails = () => {
           </button>
         </nav>
       </div>
-      
-      {/* Tab Content */}
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {/* Details Tab */}
         {activeTab === 'details' && (
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Contact Information */}
               <div>
                 <h2 className="text-lg font-medium mb-4">Contact Information</h2>
                 <div className="space-y-3">
@@ -199,8 +197,7 @@ const TeamMemberDetails = () => {
                   </div>
                 </div>
               </div>
-              
-              {/* Skills */}
+
               <div>
                 <h2 className="text-lg font-medium mb-4">Skills</h2>
                 {teamMember.skills && teamMember.skills.length > 0 ? (
@@ -215,8 +212,7 @@ const TeamMemberDetails = () => {
                   <p className="text-gray-500">No skills listed</p>
                 )}
               </div>
-              
-              {/* Availability */}
+
               <div>
                 <h2 className="text-lg font-medium mb-4">Availability</h2>
                 <div className="grid grid-cols-7 gap-2">
@@ -233,8 +229,7 @@ const TeamMemberDetails = () => {
                   ))}
                 </div>
               </div>
-              
-              {/* Notes */}
+
               <div>
                 <h2 className="text-lg font-medium mb-4">Notes</h2>
                 <div className="bg-gray-50 p-4 rounded-md">
@@ -248,19 +243,25 @@ const TeamMemberDetails = () => {
             </div>
           </div>
         )}
-        
-        {/* Task Assignment Tab */}
+
+        {activeTab === 'property-access' && (
+          <PropertyAccessPanel
+            teamMemberId={id}
+            teamMemberName={teamMember.name}
+          />
+        )}
+
         {activeTab === 'tasks' && (
           <div className="p-6">
-            <TaskAssignment 
-              teamMemberId={id} 
+            <TaskAssignment
+              teamMemberId={id}
               teamMemberName={teamMember.name}
               teamMemberRole={teamMember.role}
               onAssignmentCreated={(newAssignment) => {
                 setAssignments(prev => [...prev, newAssignment]);
               }}
             />
-            
+
             <div className="mt-8">
               <h3 className="text-lg font-medium mb-4">Current Assignments</h3>
               {assignments.length > 0 ? (
@@ -268,21 +269,11 @@ const TeamMemberDetails = () => {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Task
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Type
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Assigned Date
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Due Date
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Date</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -298,21 +289,21 @@ const TeamMemberDetails = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(assignment.createdAt).toLocaleDateString()}
+                            {assignment.createdAt ? new Date(assignment.createdAt).toLocaleDateString() : 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {assignment.duedate? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
+                            {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              assignment.status === 'completed' 
-                                ? 'bg-green-100 text-green-800' 
-                                : assignment.status === 'in_progress' 
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-gray-100 text-gray-800'
+                              assignment.status === 'completed'
+                                ? 'bg-green-100 text-green-800'
+                                : assignment.status === 'in_progress'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-gray-100 text-gray-800'
                             }`}>
-                              {assignment.status === 'in_progress' ? 'In Progress' : 
-                               assignment.status === 'completed' ? 'Completed' : 'Pending'}
+                              {assignment.status === 'in_progress' ? 'In Progress' :
+                                assignment.status === 'completed' ? 'Completed' : 'Pending'}
                             </span>
                           </td>
                         </tr>
@@ -328,16 +319,14 @@ const TeamMemberDetails = () => {
             </div>
           </div>
         )}
-        
-        {/* Performance Tab */}
+
         {activeTab === 'performance' && (
           <div className="p-6">
             <PerformanceMetrics teamMemberId={id} assignments={assignments} />
           </div>
         )}
       </div>
-      
-      {/* Delete Confirmation Modal */}
+
       {deleteConfirmOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
@@ -378,4 +367,4 @@ const TeamMemberDetails = () => {
   );
 };
 
-export default TeamMemberDetails; 
+export default TeamMemberDetails;
