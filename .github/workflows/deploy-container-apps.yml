@@ -21,6 +21,7 @@ env:
   AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
   AZURE_RESOURCE_GROUP: khrental-prod-rg
   AZURE_CONTAINER_APP_NAME: khrental-app
+  PASSWORD_RESET_BASE_URL: https://khrental-app.proudpebble-f58b5187.southeastasia.azurecontainerapps.io
 
 jobs:
   verify:
@@ -108,6 +109,7 @@ jobs:
                 EMAIL_FROM="$EMAIL_FROM" \
                 EMAIL_FROM_NAME="$EMAIL_FROM_NAME" \
                 VITE_USE_MSSQL_API=true \
+                PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
               --output none
 
       - name: Deploy immutable image
