@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
+import { authorizePlatformQuery } from './src/api/platform/authorization.js';
 import { isAdminRole } from './src/api/platform/permissionEngine.js';
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
@@ -261,15 +262,37 @@ async function createServer() {
         return;
       }
 
-      if (!isAdminRole({ user: req.user, membership: req.membership })) {
-        res.status(403).json({
-          error: 'This legacy MSSQL business route is restricted to administrators. Use the central platform API for role-scoped access.',
-          code: 'CENTRAL_AUTHORIZATION_REQUIRED'
-        });
+      if (isAdminRole({ user: req.user, membership: req.membership })) {
+        next();
         return;
       }
 
-      next();
+      const compatibilityInsertTable = req.method === 'POST'
+        ? ({ '/agreements': 'agreements', '/invoices': 'invoices' }[req.path] || null)
+        : null;
+
+      if (compatibilityInsertTable) {
+        try {
+          const authorized = authorizePlatformQuery({
+            action: 'insert',
+            table: compatibilityInsertTable,
+            payload: req.body,
+            user: req.user,
+            membership: req.membership
+          });
+          req.body = authorized.payload;
+          next();
+          return;
+        } catch (authorizationError) {
+          next(authorizationError);
+          return;
+        }
+      }
+
+      res.status(403).json({
+        error: 'This legacy MSSQL business route is restricted to administrators. Use the central platform API for role-scoped access.',
+        code: 'CENTRAL_AUTHORIZATION_REQUIRED'
+      });
     });
   };
 
