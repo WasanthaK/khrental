@@ -47,20 +47,90 @@ const requireProperty = async (tenantId, propertyId) => {
   return property;
 };
 
+const loadActiveStaffMembership = async (tenantId, staffUserId) => runSingleQuery(
+  `SELECT TOP 1 tm.id, tm.role, tm.status, au.name, au.email
+   FROM tenant_memberships tm
+   INNER JOIN app_users au ON au.id = tm.app_user_id
+   WHERE tm.tenant_id = @tenantId
+     AND tm.app_user_id = @staffUserId
+     AND tm.status = 'active'`,
+  { tenantId, staffUserId }
+);
+
+const repairMissingStaffMembership = async (tenantId, staffUserId) => {
+  const appUser = await runSingleQuery(
+    `SELECT TOP 1 id, role, user_type, status, name, email
+     FROM app_users
+     WHERE tenant_id = @tenantId
+       AND id = @staffUserId`,
+    { tenantId, staffUserId }
+  );
+
+  if (!appUser) {
+    return null;
+  }
+
+  const userType = String(appUser.user_type || '').trim().toLowerCase();
+  const role = String(appUser.role || '').trim().toLowerCase();
+  const status = String(appUser.status || 'active').trim().toLowerCase();
+
+  if (userType !== 'staff' || status !== 'active' || !STAFF_ROLES.has(role)) {
+    return null;
+  }
+
+  await runQuery(
+    `IF NOT EXISTS (
+       SELECT 1
+       FROM tenant_memberships
+       WHERE tenant_id = @tenantId
+         AND app_user_id = @staffUserId
+     )
+     BEGIN
+       INSERT INTO tenant_memberships (
+         id,
+         tenant_id,
+         app_user_id,
+         role,
+         status,
+         is_default,
+         createdat,
+         updatedat
+       )
+       VALUES (
+         NEWID(),
+         @tenantId,
+         @staffUserId,
+         @role,
+         'active',
+         CASE
+           WHEN EXISTS (
+             SELECT 1
+             FROM tenant_memberships
+             WHERE app_user_id = @staffUserId
+               AND status = 'active'
+           ) THEN 0
+           ELSE 1
+         END,
+         SYSUTCDATETIME(),
+         SYSUTCDATETIME()
+       );
+     END`,
+    { tenantId, staffUserId, role }
+  );
+
+  return loadActiveStaffMembership(tenantId, staffUserId);
+};
+
 const requireStaffMembership = async (tenantId, staffUserId) => {
   if (!staffUserId) {
     throw createRequestError(400, 'staffUserId is required.', 'STAFF_USER_ID_REQUIRED');
   }
 
-  const membership = await runSingleQuery(
-    `SELECT TOP 1 tm.id, tm.role, tm.status, au.name, au.email
-     FROM tenant_memberships tm
-     INNER JOIN app_users au ON au.id = tm.app_user_id
-     WHERE tm.tenant_id = @tenantId
-       AND tm.app_user_id = @staffUserId
-       AND tm.status = 'active'`,
-    { tenantId, staffUserId }
-  );
+  let membership = await loadActiveStaffMembership(tenantId, staffUserId);
+
+  if (!membership) {
+    membership = await repairMissingStaffMembership(tenantId, staffUserId);
+  }
 
   if (!membership || !STAFF_ROLES.has(String(membership.role || '').trim().toLowerCase())) {
     throw createRequestError(
