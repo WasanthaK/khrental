@@ -31,14 +31,15 @@ const ProtectedRoute = ({
 }) => {
   const { user, loading, isAuthenticated, hasAnyPermission, hasAllPermissions } = useAuth();
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const effectiveRole = user?.membership?.role || user?.role;
   
   // Track when user profile is loaded
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
       // Check if profile data is present or if user has a role other than 'authenticated'
-      if (user.profileId || user.role !== 'authenticated') {
+      if (user.profileId || effectiveRole !== 'authenticated') {
         logRoute('User profile loaded', { 
-          role: user.role, 
+          role: effectiveRole, 
           profileId: user.profileId, 
           profileType: user.profileType 
         });
@@ -50,7 +51,7 @@ const ProtectedRoute = ({
         setProfileLoaded(true);
       }
     }
-  }, [loading, isAuthenticated, user]);
+  }, [loading, isAuthenticated, user, effectiveRole]);
   
   // Show loading indicator while checking auth or loading profile
   if (loading || (isAuthenticated && !profileLoaded)) {
@@ -71,13 +72,13 @@ const ProtectedRoute = ({
   }
   
   logRoute('Checking access for user:', { 
-    role: user?.role, 
+    role: effectiveRole, 
     requiredRoles, 
     requiredPermissions 
   });
   
   // Special case: authenticated role (newly registered user)
-  if (user?.role === 'authenticated') {
+  if (effectiveRole === 'authenticated') {
     // If this route allows authenticated users, let them through
     if (allowAuthenticated) {
       logRoute('Authenticated user allowed for special route');
@@ -90,25 +91,26 @@ const ProtectedRoute = ({
   }
   
   // Always allow admin users
-  if (user?.role === 'admin') {
+  if (effectiveRole === 'admin') {
     logRoute('Admin user always allowed');
     return children;
   }
   
   // Check roles if specified
   if (requiredRoles.length > 0) {
-    const hasRequiredRole = requiredRoles.includes(user?.role);
+    const hasRequiredRole = requiredRoles.includes(effectiveRole);
     if (!hasRequiredRole) {
-      logRoute('User role not allowed:', user?.role);
+      logRoute('User role not allowed:', effectiveRole);
       return <Navigate to="/unauthorized" replace />;
     }
   }
   
   // Check permissions if specified
   if (requiredPermissions.length > 0) {
+    const effectiveUser = effectiveRole === user?.role ? user : { ...user, role: effectiveRole };
     const hasRequiredPermissions = requireAll 
-      ? hasAllPermissions(requiredPermissions)
-      : hasAnyPermission(requiredPermissions);
+      ? hasAllPermissions(requiredPermissions, effectiveUser)
+      : hasAnyPermission(requiredPermissions, effectiveUser);
     
     if (!hasRequiredPermissions) {
       logRoute('User lacks required permissions');
