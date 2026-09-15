@@ -71,6 +71,15 @@ const STAFF_SELECT_SCOPES = Object.freeze({
   task_assignments: { column: 'teammemberid', permission: PERMISSIONS.TASKS_READ_ASSIGNED }
 });
 
+const STAFF_PROPERTY_SELECT_SCOPES = Object.freeze({
+  properties: { column: 'id', permission: PERMISSIONS.PROPERTIES_READ },
+  property_units: { column: 'propertyid', permission: PERMISSIONS.PROPERTIES_READ },
+  agreements: { column: 'propertyid', permission: PERMISSIONS.AGREEMENTS_READ },
+  invoices: { column: 'propertyid', permission: PERMISSIONS.INVOICES_READ },
+  utility_readings: { column: 'propertyid', permission: PERMISSIONS.UTILITIES_READ },
+  cameras: { column: 'propertyid', permission: PERMISSIONS.CAMERAS_READ }
+});
+
 const TENANT_INSERT_FIELDS = Object.freeze({
   maintenance_requests: new Set(['title', 'description', 'propertyid', 'priority', 'requesttype', 'notes', 'images', 'createdat', 'updatedat']),
   utility_readings: new Set(['propertyid', 'utilitytype', 'previousreading', 'currentreading', 'readingvalue', 'readingdate', 'photourl', 'meteridentifier', 'notes', 'createdat', 'updatedat']),
@@ -156,6 +165,15 @@ const hasPayloadFields = (payload) => {
 const addOwnerFilter = (filters, column, userId) => [
   ...(Array.isArray(filters) ? filters : []),
   { column, operator: 'eq', value: userId }
+];
+
+const addAssignedPropertyFilter = (filters, column, membership) => [
+  ...(Array.isArray(filters) ? filters : []),
+  {
+    column,
+    operator: 'in',
+    value: Array.isArray(membership?.assignedPropertyIds) ? membership.assignedPropertyIds : []
+  }
 ];
 
 const authorizeAdminQuery = ({ action, table, filters, payload }) => {
@@ -244,6 +262,18 @@ const authorizeStaffQuery = ({ action, table, filters, payload, user, membership
       action,
       table,
       filters: addOwnerFilter(filters, selectScope.column, userId),
+      payload,
+      resourceScope: null
+    };
+  }
+
+  const propertySelectScope = STAFF_PROPERTY_SELECT_SCOPES[table];
+  if (action === 'select' && propertySelectScope) {
+    requirePermission(subject, propertySelectScope.permission);
+    return {
+      action,
+      table,
+      filters: addAssignedPropertyFilter(filters, propertySelectScope.column, membership),
       payload,
       resourceScope: null
     };
