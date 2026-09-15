@@ -5,13 +5,13 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
+import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 
 dotenv.config();
 
 const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
-
 const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
   name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'KH Rentals'
@@ -242,6 +242,7 @@ async function createServer() {
   });
 
   app.use('/api/mssql', createMssqlRouter());
+  app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
   app.use('/storage/:bucket', createStorageDeliveryHandler());
