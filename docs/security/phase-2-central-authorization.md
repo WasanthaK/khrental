@@ -23,8 +23,8 @@ The active tenant membership role is authoritative whenever a membership exists.
 | Stored membership role | Business type | Phase 2 interpretation |
 |---|---|---|
 | `admin` | Administrator | Full named permission set, still subject to platform safety rules |
-| `manager` | Staff | Broad operations on assigned properties; may manage rentees |
-| `finance_staff` | Staff | Finance operations on assigned properties; rentee read only |
+| `manager` | Staff | Broad operations on assigned properties; may manage rentees linked to assigned properties |
+| `finance_staff` | Staff | Finance operations on assigned properties; rentee read only for assigned-property rentees |
 | `maintenance_staff`, `maintenance`, `supervisor`, `staff` | Staff / contractor | Assigned maintenance/task work and limited property visibility as permitted |
 | `rentee` | Tenant | Own-record access and constrained tenant actions |
 | anything else | Unlinked | No business-data access |
@@ -106,9 +106,11 @@ The Team Member Details screen exposes an administrator-only **Property Access**
 
 ## Server-resolved assignment context
 
-For an authenticated user with a selected tenant, tenant-context resolution loads active `staff_property_assignments` rows and attaches only the resulting property IDs to the active membership as `assignedPropertyIds`.
+For an authenticated user with a selected tenant, tenant-context resolution loads active `staff_property_assignments` rows and attaches the resulting property IDs to the active membership as `assignedPropertyIds`.
 
-If the table does not yet exist, the context layer can use legacy `associated_property_ids` temporarily. Once the new table exists it is authoritative, including when the assignment set is empty. An empty set therefore means no property-scoped staff access.
+The context then derives `assignedRenteeIds` on the server by querying agreements in the active tenant whose `propertyid` is in `assignedPropertyIds`. This means staff rentee scope is inferred from trusted agreement/property relationships rather than client-supplied property filters.
+
+If the assignment table does not yet exist, the context layer can use legacy `associated_property_ids` temporarily. Once the new table exists it is authoritative, including when the assignment set is empty. An empty property set therefore also produces an empty assigned-rentee set.
 
 ## Central platform-query enforcement
 
@@ -139,7 +141,9 @@ Manager maintenance reads and updates are property-scoped. Maintenance staff/tas
 
 Manager/finance agreement and invoice mutations are also property-scoped. Update payloads cannot change `propertyid`, preventing a user from moving an authorized record to an unassigned property. Agreement/invoice inserts require a `propertyid` that is already present in the server-resolved assignment list.
 
-Managers may read and manage rentee records; finance staff may read rentees but cannot mutate them. Self-profile access takes precedence over rentee-administration scope so a manager can still update only the permitted fields of their own profile.
+Managers may read and manage only rentee records whose IDs occur on agreements for their assigned properties. Finance staff may read the same assigned-property rentees but cannot mutate them. The server applies both `user_type = 'rentee'` and `id IN assignedRenteeIds`; an empty assignment set returns zero rentees. Self-profile access takes precedence so staff can still access their own permitted profile fields.
+
+A manager may create a new rentee record because that operation is not yet tied to a property, but normal staff read/manage access begins only after an agreement links that rentee to a property assigned to the manager. This prevents creation itself from granting durable tenant-wide visibility.
 
 Property creation remains administrator-only in Phase 2. A newly created property has no approved staff assignment, so allowing staff creation would conflict with the explicit assignment model. Managers operate and update properties after an administrator assigns them.
 
