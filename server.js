@@ -7,6 +7,8 @@ import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/a
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
+import { createBillingRouter } from './src/api/platform/billingRouter.js';
+import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
 import { guardTenancyActivationQuery } from './src/api/platform/tenancyActivationGuard.js';
 import { authorizePermission, authorizePlatformQuery } from './src/api/platform/authorization.js';
 import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
@@ -352,6 +354,8 @@ async function createServer() {
   app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/tenancies', createTenancyOnboardingRouter());
+  app.use('/api/billing', createBillingRouter());
+  app.use('/api/billing', createMonthlyBillingRouter());
   app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
   app.use('/api/platform/auth', createInvitationRouter());
   app.post('/api/platform/query', guardTenancyActivationQuery);

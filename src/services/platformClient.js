@@ -40,6 +40,10 @@ const tenancyRequest = (path = '', options = {}) => (
   scopedRequest('/api/tenancies', path, options)
 );
 
+const billingRequest = (path = '', options = {}) => (
+  scopedRequest('/api/billing', path, options)
+);
+
 export const listPropertyAssignments = async ({ staffUserId, propertyId, status } = {}) => {
   try {
     const params = new URLSearchParams();
@@ -150,6 +154,75 @@ export const getMyTenancySummary = async () => {
   try {
     const payload = await tenancyRequest('/me/summary');
     return { data: payload?.data || { tenancies: [] }, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const getInvoiceAccount = async (invoiceId) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/account`);
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const submitInvoicePaymentProof = async (invoiceId, payment = {}) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/payment-proof`, {
+      method: 'POST',
+      body: payment
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const verifyInvoicePayment = async (invoiceId, verification = {}) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/verify-payment`, {
+      method: 'POST',
+      body: verification
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const recordManualInvoicePayment = async (invoiceId, payment = {}) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/manual-payment`, {
+      method: 'POST',
+      body: payment
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const recordInvoiceReminder = async (invoiceId) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/reminder`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const generateTenancyMonthlyInvoices = async (options = {}) => {
+  try {
+    const payload = await billingRequest('/monthly-invoices', {
+      method: 'POST',
+      body: options
+    });
+    return { data: payload?.data || { created: [], skipped: [], errors: [] }, error: null };
   } catch (error) {
     return { data: null, error };
   }

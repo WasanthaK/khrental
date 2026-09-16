@@ -1,63 +1,51 @@
 import { platform as platformClient } from './platformClient';
+import {
+  generateTenancyMonthlyInvoices,
+  recordInvoiceReminder,
+  recordManualInvoicePayment,
+  submitInvoicePaymentProof,
+  verifyInvoicePayment
+} from './platformClient';
 import { INVOICE_STATUS } from '../utils/constants';
 import { createInvoiceRecord, listInvoices, updateInvoiceRecord } from './invoiceService';
 
 /**
- * Generate a new invoice
- * @param {Object} invoiceData - The invoice data
- * @returns {Promise<Object>} - Result object with success, data, and error properties
+ * Generate a new invoice using the legacy single-invoice form.
+ * Monthly active-tenancy billing uses generateMonthlyInvoices below.
  */
 export const generateInvoice = async (invoiceData) => {
   try {
-    // Add additional fields
     const now = new Date();
     const duedate = new Date(now);
-    duedate.setDate(duedate.getDate() + 30); // Due in 30 days by default
-    
-    // Remove any fields that might cause issues
+    duedate.setDate(duedate.getDate() + 30);
     const { renteeEmail, ...cleanedData } = invoiceData;
-    
-    // Ensure totalamount is set and is a valid number
+
     let totalamount = cleanedData.totalamount;
-    
-    // If totalamount is not set or is invalid, calculate it from components
     if (!totalamount || isNaN(parseFloat(totalamount)) || totalamount <= 0) {
       totalamount = 0;
-      
-      // Calculate from components if available
       if (cleanedData.components && typeof cleanedData.components === 'object') {
         totalamount = Object.values(cleanedData.components).reduce(
-          (sum, value) => sum + (parseFloat(value) || 0), 
+          (sum, value) => sum + (parseFloat(value) || 0),
           0
         );
       }
-      
-      // If it's still 0 or invalid, set a default minimum value
-      if (totalamount <= 0) {
-        totalamount = 1; // Use 1 as absolute minimum to avoid NOT NULL constraint
-      }
+      if (totalamount <= 0) totalamount = 1;
     }
-    
-    // Ensure all field names match the database schema
+
     const invoice = {
       ...cleanedData,
-      totalamount, // Use the validated totalamount
+      totalamount,
       createdat: now.toISOString(),
       updatedat: now.toISOString(),
-      duedate: duedate.toISOString(),
-      status: cleanedData.status || INVOICE_STATUS.PENDING,
+      duedate: cleanedData.duedate || duedate.toISOString(),
+      status: cleanedData.status || INVOICE_STATUS.PENDING
     };
-    
-    console.log('Submitting invoice data:', invoice);
-    
-    // Insert into database
+
     const data = await createInvoiceRecord(invoice);
-    
-    // Send email notification if rentee email is provided
     if (renteeEmail) {
       await sendInvoiceNotification(data.id, renteeEmail);
     }
-    
+
     return { success: true, data };
   } catch (error) {
     console.error('Error generating invoice:', error.message);
@@ -65,22 +53,12 @@ export const generateInvoice = async (invoiceData) => {
   }
 };
 
-/**
- * Update an existing invoice
- * @param {string} id - The invoice ID
- * @param {Object} invoiceData - The updated invoice data
- * @returns {Promise<Object>} - Result object with success, data, and error properties
- */
 export const updateInvoice = async (id, invoiceData) => {
   try {
-    // Make sure we only update fields that exist in the database schema
-    const updateFields = {
+    const data = await updateInvoiceRecord(id, {
       ...invoiceData,
       updatedat: new Date().toISOString()
-    };
-    
-    const data = await updateInvoiceRecord(id, updateFields);
-    
+    });
     return { success: true, data };
   } catch (error) {
     console.error('Error updating invoice:', error.message);
@@ -89,45 +67,38 @@ export const updateInvoice = async (id, invoiceData) => {
 };
 
 /**
- * Upload payment proof for an invoice
- * @param {string} invoiceId - The invoice ID
- * @param {File} file - The payment proof file
- * @returns {Promise<Object>} - Result object with success, data, and error properties
+ * Upload proof to tenant-scoped storage, then create a pending payment through
+ * the dedicated server lifecycle API. Uploading proof is not payment approval.
  */
-export const uploadPaymentProof = async (invoiceId, file) => {
+export const uploadPaymentProof = async (invoiceId, file, paymentDetails = {}) => {
   try {
-    // Upload file to storage
     const fileExt = file.name.split('.').pop();
     const fileName = `${invoiceId}_${Date.now()}.${fileExt}`;
     const filePath = `payment_proofs/${fileName}`;
-    
+
     const { data: uploadData, error: uploadError } = await platformClient.storage
       .from('invoices')
       .upload(filePath, file);
-    
-    if (uploadError) {
-      throw uploadError;
-    }
-    
-    // Get public URL
+
+    if (uploadError) throw uploadError;
+
     const scopedFilePath = uploadData?.scopedPath || uploadData?.path || filePath;
     const { data: urlData } = platformClient.storage
       .from('invoices')
       .getPublicUrl(scopedFilePath);
-    
-    const paymentProofUrl = urlData.publicUrl;
-    
-    // Update invoice with payment proof URL and change status
-    const updateFields = {
-      paymentproofurl: paymentProofUrl,
-      status: INVOICE_STATUS.VERIFICATION_PENDING,
-      paymentdate: new Date().toISOString(),
-      updatedat: new Date().toISOString()
-    };
-    
-    const data = await updateInvoiceRecord(invoiceId, updateFields);
-    
-    return { success: true, data, url: paymentProofUrl };
+    const proofUrl = urlData.publicUrl;
+
+    const { data, error } = await submitInvoicePaymentProof(invoiceId, {
+      proofUrl,
+      ...(paymentDetails.amount !== undefined ? { amount: paymentDetails.amount } : {}),
+      paymentMethod: paymentDetails.paymentMethod || null,
+      transactionReference: paymentDetails.transactionReference || null,
+      paymentDate: paymentDetails.paymentDate || new Date().toISOString(),
+      notes: paymentDetails.notes || null
+    });
+
+    if (error) throw error;
+    return { success: true, data: data?.invoice || null, payment: data?.payment || null, url: proofUrl };
   } catch (error) {
     console.error('Error uploading payment proof:', error.message);
     return { success: false, error: error.message };
@@ -135,31 +106,22 @@ export const uploadPaymentProof = async (invoiceId, file) => {
 };
 
 /**
- * Verify payment proof for an invoice
- * @param {string} invoiceId - The invoice ID
- * @param {boolean} isApproved - Whether the payment is approved
- * @param {string} notes - Verification notes
- * @returns {Promise<Object>} - Result object with success, data, and error properties
+ * Finance/admin verification. The server creates/updates the payment ledger,
+ * receipt and invoice balance atomically.
  */
 export const verifyPaymentProof = async (invoiceId, isApproved, notes = '') => {
   try {
-    const status = isApproved ? INVOICE_STATUS.PAID : INVOICE_STATUS.REJECTED;
-    
-    // Update only the necessary fields with correct column names
-    const updateFields = {
-      status,
-      notes: notes ? `Verification: ${notes}` : '',
-      updatedat: new Date().toISOString(),
+    const { data, error } = await verifyInvoicePayment(invoiceId, {
+      approved: Boolean(isApproved),
+      notes
+    });
+    if (error) throw error;
+    return {
+      success: true,
+      data: data?.invoice || null,
+      payment: data?.payment || null,
+      receipt: data?.receipt || null
     };
-    
-    // If approved, set the payment date
-    if (isApproved) {
-      updateFields.paymentdate = new Date().toISOString();
-    }
-    
-    const data = await updateInvoiceRecord(invoiceId, updateFields);
-    
-    return { success: true, data };
   } catch (error) {
     console.error('Error verifying payment:', error.message);
     return { success: false, error: error.message };
@@ -167,98 +129,53 @@ export const verifyPaymentProof = async (invoiceId, isApproved, notes = '') => {
 };
 
 /**
- * Mark an invoice as paid (for admin use)
- * @param {string} invoiceId - The invoice ID
- * @param {Object} paymentDetails - Payment details like method, reference, etc.
- * @returns {Promise<Object>} - Result object with success, data, and error properties
+ * Record a manually confirmed payment. This no longer bypasses the payment
+ * ledger; it creates a verified payment and receipt through the server API.
  */
 export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
   try {
-    // Update only the necessary fields with correct column names
-    const updateFields = {
-      status: INVOICE_STATUS.PAID,
-      paymentdate: new Date().toISOString(),
-      updatedat: new Date().toISOString(),
+    const { data, error } = await recordManualInvoicePayment(invoiceId, paymentDetails);
+    if (error) throw error;
+    return {
+      success: true,
+      data: data?.invoice || null,
+      payment: data?.payment || null,
+      receipt: data?.receipt || null
     };
-    
-    // Add notes if provided
-    if (paymentDetails.notes) {
-      updateFields.notes = paymentDetails.notes;
-    }
-    
-    const data = await updateInvoiceRecord(invoiceId, updateFields);
-    
-    return { success: true, data };
   } catch (error) {
-    console.error('Error marking invoice as paid:', error.message);
+    console.error('Error recording manual payment:', error.message);
     return { success: false, error: error.message };
   }
 };
 
 /**
- * Send payment reminder for an invoice
- * @param {string} invoiceId - The invoice ID
- * @returns {Promise<Object>} - Result object with success and error properties
+ * Record a reminder event. Email/SMS delivery is deliberately not claimed here;
+ * communication delivery can be attached to this audited event separately.
  */
 export const sendPaymentReminder = async (invoiceId) => {
   try {
-    // Get invoice details
-    const { data: invoices, error: fetchError } = await listInvoices({
-      pageSize: 1000
-    });
-
-    if (fetchError) {
-      throw fetchError;
-    }
-
-    const invoice = invoices?.find((record) => record.id === invoiceId);
-
-    if (!invoice) {
-      throw new Error('Invoice not found');
-    }
-    
-    // In a real application, this would send an email or SMS
-    console.log(`Payment reminder sent for invoice ${invoiceId}`);
-    
-    // Update the invoice to record that a reminder was sent
-    const reminderTimestamp = new Date().toISOString();
-    const existingNotes = invoice.notes ? `${invoice.notes}\n` : '';
-
-    await updateInvoiceRecord(invoiceId, {
-      notes: `${existingNotes}Reminder sent at ${reminderTimestamp}`,
-      updatedat: reminderTimestamp
-    });
-    
-    return { success: true };
+    const { data, error } = await recordInvoiceReminder(invoiceId);
+    if (error) throw error;
+    return { success: true, data };
   } catch (error) {
-    console.error('Error sending payment reminder:', error.message);
+    console.error('Error recording payment reminder:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-/**
- * Check for overdue invoices
- * @returns {Promise<Object>} - Result object with success, data, and error properties
- */
 export const checkOverdueInvoices = async () => {
   try {
-    const today = new Date().toISOString();
-    
-    // Get all unpaid invoices that are past due
+    const today = new Date();
     const { data, error } = await listInvoices({ pageSize: 1000 });
-
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     const overdueInvoices = (data || []).filter((invoice) => {
-      if (invoice.status === INVOICE_STATUS.PAID) {
-        return false;
-      }
-
-      return invoice.duedate && invoice.duedate < today;
+      if (invoice.status === INVOICE_STATUS.PAID) return false;
+      if (!invoice.duedate) return false;
+      const dueDate = new Date(invoice.duedate);
+      return !Number.isNaN(dueDate.getTime()) && dueDate < today;
     });
-    
+
     return { success: true, data: overdueInvoices };
   } catch (error) {
     console.error('Error checking overdue invoices:', error.message);
@@ -267,80 +184,41 @@ export const checkOverdueInvoices = async () => {
 };
 
 /**
- * Generate monthly invoices for all active rentees
- * @param {Object} options - Options for invoice generation
- * @returns {Promise<Object>} - Result object with success, count, and error properties
+ * Generate one monthly invoice per active agreement, combining contractual rent
+ * with approved/pending-invoice utility readings for the selected month.
  */
 export const generateMonthlyInvoices = async (options = {}) => {
   try {
-    console.log('Generating monthly invoices for all active rentees');
-    
-    // Get current billing period if not specified
-    if (!options.billingPeriod) {
-      const now = new Date();
-      options.billingPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    }
-    
-    // Get default due date (14 days from now) if not specified
-    if (!options.dueDate) {
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 14);
-      options.dueDate = dueDate.toISOString().split('T')[0];
-    }
-    
-    // 1. Get all properties with active rentees
-    const { data: properties, error: propertiesError } = await platformClient
-      .from('properties')
-      .select('id, name')
-      .eq('status', 'active');
-      
-    if (propertiesError) {
-      throw propertiesError;
-    }
-    
-    if (!properties || properties.length === 0) {
-      return { success: true, count: 0, message: 'No active properties found' };
-    }
-    
-    // 2. Return early with a message that direct invoice generation needs to be done from the invoices page
-    // This avoids the circular dependency while maintaining the function's interface
-    return { 
-      success: true, 
-      count: 0,
-      propertyCount: properties.length,
-      message: 'Please use the Invoice Generation Wizard to generate invoices for these properties.',
-      propertyIds: properties.map(p => p.id)
+    const now = new Date();
+    const billingPeriod = options.billingPeriod
+      || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const dueDate = options.dueDate || (() => {
+      const value = new Date();
+      value.setDate(value.getDate() + 14);
+      return value.toISOString();
+    })();
+
+    const { data, error } = await generateTenancyMonthlyInvoices({
+      ...options,
+      billingPeriod,
+      dueDate
+    });
+    if (error) throw error;
+
+    return {
+      success: (data?.errors || []).length === 0 || (data?.created || []).length > 0,
+      count: data?.created?.length || 0,
+      data,
+      errors: data?.errors || []
     };
   } catch (error) {
     console.error('Error generating monthly invoices:', error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, count: 0 };
   }
 };
 
-// Helper functions for notifications
-// In a real app, these would send actual emails
-
-/**
- * Send invoice notification to rentee
- * @param {string} invoiceId - The invoice ID
- * @param {string} email - The rentee's email
- * @returns {Promise<void>}
- */
 const sendInvoiceNotification = async (invoiceId, email) => {
-  // In a real application, this would send an email
-  console.log(`Invoice notification sent to ${email} for invoice ${invoiceId}`);
+  // Kept as a compatibility hook for the legacy single-invoice form.
+  console.log(`Invoice notification requested for ${email} for invoice ${invoiceId}`);
   return true;
 };
-
-/**
- * Send payment verification notification to rentee
- * @param {string} invoiceId - The invoice ID
- * @param {string} email - The rentee's email
- * @param {boolean} isApproved - Whether the payment was approved
- * @returns {Promise<void>}
- */
-const sendPaymentVerificationNotification = async (invoiceId, email, isApproved) => {
-  // This is a placeholder for email sending functionality
-  const status = isApproved ? 'approved' : 'rejected';
-  console.log(`Sending payment ${status} notification for invoice #${invoiceId} to ${email}`);
-}; 
