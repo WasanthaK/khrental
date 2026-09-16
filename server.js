@@ -7,6 +7,7 @@ import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/a
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
+import { guardTenancyActivationQuery } from './src/api/platform/tenancyActivationGuard.js';
 import { authorizePermission, authorizePlatformQuery } from './src/api/platform/authorization.js';
 import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
@@ -341,6 +342,7 @@ async function createServer() {
   app.use('/api/tenancies', createTenancyOnboardingRouter());
   app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
   app.use('/api/platform/auth', createInvitationRouter());
+  app.post('/api/platform/query', guardTenancyActivationQuery);
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
   app.use('/storage/:bucket', createStorageDeliveryHandler());
