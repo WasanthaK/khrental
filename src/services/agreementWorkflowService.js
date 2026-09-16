@@ -3,6 +3,7 @@ import { populateMergeFields } from '../utils/documentUtils';
 import { saveMergedDocument } from './DocumentService';
 import { fetchAppUser } from './appUserService';
 import {
+  fetchAgreement,
   fetchProperty,
   fetchPropertyUnit,
   getTemplate,
@@ -54,6 +55,23 @@ const normalizeRelatedRecord = (candidate, expectedId) => {
   }
 
   return null;
+};
+
+const verifyPersistedAgreement = async (agreementId, expectations = {}) => {
+  const persisted = await fetchAgreement(agreementId);
+  if (!persisted?.id) {
+    throw new Error('Agreement write completed, but the saved record could not be read back.');
+  }
+
+  if (expectations.status && persisted.status !== expectations.status) {
+    throw new Error(`Agreement was saved with status ${persisted.status || 'unknown'} instead of ${expectations.status}.`);
+  }
+
+  if (expectations.documenturl && persisted.documenturl !== expectations.documenturl) {
+    throw new Error('Agreement document URL was not persisted correctly.');
+  }
+
+  return persisted;
 };
 
 export const buildAgreementMergeData = async (agreement = {}, related = {}) => {
@@ -143,9 +161,8 @@ const buildAgreementPersistencePayload = ({ formData, status, existingId = null 
     processedcontent: typeof formData?.processedContent === 'string'
       ? formData.processedContent
       : (typeof formData?.processedcontent === 'string' ? formData.processedcontent : null),
-    // Document generation is explicit in this workflow service. Keeping this false
-    // prevents the legacy saveAgreement() implementation from triggering a second,
-    // hidden generation pass.
+    // Generation is orchestrated explicitly here. This must remain false so the
+    // legacy saveAgreement path cannot trigger a hidden second generation pass.
     needs_document_generation: false
   };
 };
@@ -162,7 +179,7 @@ export const persistAgreementForm = async ({
     throw new Error('Agreement save did not return a valid agreement ID.');
   }
 
-  return saved;
+  return verifyPersistedAgreement(saved.id, { status });
 };
 
 export const generateAndAttachAgreementDocument = async ({
@@ -205,7 +222,10 @@ export const generateAndAttachAgreementDocument = async ({
     throw new Error('Agreement document was generated, but the agreement record could not be updated.');
   }
 
-  return updated;
+  return verifyPersistedAgreement(agreement.id, {
+    ...(finalStatus ? { status: finalStatus } : {}),
+    documenturl: documentUrl
+  });
 };
 
 export const saveAgreementForReview = async ({ formData, existingId = null }) => {
