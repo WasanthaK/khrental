@@ -4,7 +4,12 @@ import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
-import { resolveLegacyAdminPath, resolveLegacyTenantPath } from './utils/routePolicy.js';
+import { getPostLoginPath } from './utils/authRedirect.js';
+import {
+  LEGACY_TENANT_ROUTE_ALIASES,
+  resolveLegacyAdminPath,
+  resolveLegacyTenantPath
+} from './utils/routePolicy.js';
 import NotFound from './pages/NotFound';
 
 // Layout components
@@ -81,18 +86,20 @@ const LoadingScreen = ({ message = 'Loading...' }) => (
 
 const PublicRoute = ({ children }) => {
   const { loading, isAuthenticated, user, membership } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen message="Loading..." />;
   }
 
   if (isAuthenticated && user) {
-    return (
-      <Navigate
-        to={getDefaultLandingPath({ user, membership: membership || user.membership || null })}
-        replace
-      />
-    );
+    const defaultPath = getDefaultLandingPath({
+      user,
+      membership: membership || user.membership || null
+    });
+    const targetPath = getPostLoginPath(location.state, defaultPath);
+
+    return <Navigate to={targetPath} replace />;
   }
 
   return children;
@@ -131,6 +138,11 @@ const LegacyRouteRedirect = ({ resolver }) => {
   return <Navigate to={`${targetPath}${location.search || ''}${location.hash || ''}`} replace />;
 };
 
+const FixedLegacyRouteRedirect = ({ target }) => {
+  const location = useLocation();
+  return <Navigate to={`${target}${location.search || ''}${location.hash || ''}`} replace />;
+};
+
 const permissionRoute = (permissions, element, requireAll = false) => (
   <ProtectedRoute requiredPermissions={permissions} requireAll={requireAll}>
     {element}
@@ -142,6 +154,15 @@ const adminRoute = (element) => (
     {element}
   </ProtectedRoute>
 );
+
+const tenantLegacyAliasRoute = ({ path, target }) => ({
+  path,
+  element: (
+    <ProtectedRoute requiredPortalTypes={[PORTAL_TYPES.TENANT]}>
+      <FixedLegacyRouteRedirect target={target} />
+    </ProtectedRoute>
+  )
+});
 
 const tenantPortalChildren = [
   { index: true, element: <RenteePortal /> },
@@ -441,6 +462,15 @@ const routes = [
           </ProtectedRoute>
         ),
         children: tenantPortalChildren
+      },
+      ...LEGACY_TENANT_ROUTE_ALIASES.map(tenantLegacyAliasRoute),
+      {
+        path: 'portal/maintenance/:id',
+        element: (
+          <ProtectedRoute requiredPortalTypes={[PORTAL_TYPES.TENANT]}>
+            <LegacyRouteRedirect resolver={resolveLegacyTenantPath} />
+          </ProtectedRoute>
+        )
       },
       {
         path: 'portal/*',
