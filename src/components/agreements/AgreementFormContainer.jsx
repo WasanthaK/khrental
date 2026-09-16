@@ -91,21 +91,21 @@ const AgreementFormContainer = () => {
 
   const handleSubmit = async (formData, status = AGREEMENT_STATUS.DRAFT) => {
     try {
-      console.log("Submitting agreement with status:", status);
+      console.log('Submitting agreement with status:', status);
       
       // If user wants to send for signature, show signature form
       if (status === AGREEMENT_STATUS.PENDING) {
-        console.log("PENDING status detected - preparing for signature form display");
+        console.log('PENDING status detected - preparing for signature form display');
         
         // Save the agreement first to get an ID if it's a new agreement
         const savedAgreement = await handleSaveAgreement(formData, AGREEMENT_STATUS.DRAFT);
-        console.log("Agreement saved for signature with ID:", savedAgreement.id);
+        console.log('Agreement saved for signature with ID:', savedAgreement.id);
         
         // Set state for signature form
         setFormDataToSign(formData);
         setAgreement(normalizeAgreementRecord(savedAgreement));
         
-        console.log("Setting showSignatureForm to true");
+        console.log('Setting showSignatureForm to true');
         setShowSignatureForm(true);
         return;
       }
@@ -129,58 +129,61 @@ const AgreementFormContainer = () => {
       const processedTerms = {};
       if (termsObject) {
         Object.entries(termsObject).forEach(([key, value]) => {
-          // Convert numbers to strings to avoid issues in document generation
           processedTerms[key] = value !== null && value !== undefined ? String(value) : value;
         });
       }
 
       const existingAgreementId = formData.id || id || agreement?.id || null;
       const isNewAgreement = !existingAgreementId;
-      console.log("Agreement ID:", existingAgreementId || '(new)', "is new:", isNewAgreement);
+      const requiresDocumentGeneration = status === AGREEMENT_STATUS.REVIEW;
+      const persistenceStatus = requiresDocumentGeneration ? AGREEMENT_STATUS.DRAFT : status;
+      console.log('Agreement ID:', existingAgreementId || '(new)', 'is new:', isNewAgreement);
       
-      // Prepare agreement data
+      // Persist the record first. Review status is promoted only after a durable
+      // document has been generated and saved successfully.
       const agreementData = {
         ...(existingAgreementId ? { id: existingAgreementId } : {}),
         templateid: formData.templateid,
         propertyid: formData.propertyid,
         unitid: formData.unitid || null,
         renteeid: formData.renteeid,
-        status: status,
-        terms: processedTerms, // Use processed terms with string values
+        status: persistenceStatus,
+        terms: processedTerms,
         notes: formData.notes,
         processedcontent: typeof formData.processedContent === 'string' ? formData.processedContent : null,
         documenturl: null,
-        needs_document_generation: status === AGREEMENT_STATUS.REVIEW || status === AGREEMENT_STATUS.PENDING
+        needs_document_generation: requiresDocumentGeneration
       };
 
-      console.log("Saving agreement with data:", agreementData);
+      console.log('Saving agreement with data:', agreementData);
 
       const savedAgreement = normalizeAgreementRecord(await persistAgreement(agreementData));
 
-      console.log("Agreement saved successfully:", savedAgreement);
+      console.log('Agreement saved successfully:', savedAgreement);
       setAgreement(savedAgreement);
       setInitialData(savedAgreement);
 
-      // Only call DOCX generation for non-draft statuses that need document generation
-      if (status !== AGREEMENT_STATUS.DRAFT && 
-          agreementData.needs_document_generation && 
-          status === AGREEMENT_STATUS.REVIEW) {
-        console.log('Review status detected - generating DOCX document');
-        await handleDocxGeneration(savedAgreement.id, {
+      if (requiresDocumentGeneration) {
+        console.log('Review requested - generating one durable agreement document');
+        const documentUrl = await handleDocxGeneration(savedAgreement.id, {
           processedContent: formData.processedContent,
           id: savedAgreement.id
-        });
+        }, AGREEMENT_STATUS.REVIEW);
+
+        if (!documentUrl) {
+          throw new Error('Agreement was saved as a draft, but document generation failed.');
+        }
       }
 
-      toast.success('Agreement saved successfully');
+      toast.success(requiresDocumentGeneration
+        ? 'Agreement document generated and saved for review'
+        : 'Agreement saved successfully');
 
       // Navigation strategy based on status
       if (status === AGREEMENT_STATUS.PENDING) {
         navigate('/dashboard/agreements');
       } else if (!id) {
         navigate('/dashboard/agreements');
-      } else if (status === AGREEMENT_STATUS.REVIEW) {
-        navigate(`/dashboard/agreements/${savedAgreement.id}`);
       } else {
         navigate(`/dashboard/agreements/${savedAgreement.id}`);
       }
@@ -195,8 +198,8 @@ const AgreementFormContainer = () => {
 
   const handleSignatureFormSuccess = async (signatureData) => {
     try {
-      console.log("[AgreementFormContainer] Signature form submitted with data:", signatureData);
-      console.log("[AgreementFormContainer] Current agreement state:", {
+      console.log('[AgreementFormContainer] Signature form submitted with data:', signatureData);
+      console.log('[AgreementFormContainer] Current agreement state:', {
         id: agreement?.id,
         documenturl: agreement?.documenturl ? `${agreement.documenturl.substring(0, 30)}...` : 'Missing',
         signatories: signatureData?.signatories?.length || 0
@@ -207,7 +210,6 @@ const AgreementFormContainer = () => {
         throw new Error('Agreement ID is missing');
       }
       
-      // Check if signatureData has required fields
       if (!signatureData) {
         console.error('[AgreementFormContainer] No signature data received');
         throw new Error('No signature data received from form');
@@ -218,56 +220,47 @@ const AgreementFormContainer = () => {
         throw new Error('At least one signatory is required');
       }
       
-      // IMPORTANT: Always generate a fresh DOCX file before sending for signature
-      // This ensures we have a proper document format that Evia can process
+      // Always generate a fresh durable document immediately before signature.
       console.log('[AgreementFormContainer] Generating document file before sending for signature');
       
-      // Get content from either documenturl or processedContent, regardless of format
       const documentContent = agreement.processedContent || agreement.documenturl;
       
-      // Generate a DOCX document
-      const docxUrl = await handleDocxGeneration(agreement.id, { 
+      const documentUrl = await handleDocxGeneration(agreement.id, { 
         processedContent: documentContent,
         id: agreement.id 
       });
       
-      if (!docxUrl) {
+      if (!documentUrl) {
         console.error('[AgreementFormContainer] Failed to generate document file');
         throw new Error('Failed to generate document file for signature');
       }
       
-      console.log('[AgreementFormContainer] Document generated successfully:', docxUrl);
+      console.log('[AgreementFormContainer] Document generated successfully:', documentUrl);
       
-      // Now we need to explicitly call the Evia Sign service
       console.log('[AgreementFormContainer] Calling Evia Sign service to send document for signature');
       
       try {
         const { sendDocumentForSignature } = await import('../../services/eviaSignService');
         
-        // Validate the document URL
-        if (!docxUrl || typeof docxUrl !== 'string' || !docxUrl.startsWith('http')) {
-          console.error('[AgreementFormContainer] Invalid document URL:', docxUrl);
+        if (!documentUrl || typeof documentUrl !== 'string' || !documentUrl.startsWith('http')) {
+          console.error('[AgreementFormContainer] Invalid document URL:', documentUrl);
           throw new Error('Invalid document URL');
         }
         
-        console.log('[AgreementFormContainer] Sending document for signature with URL:', docxUrl);
+        console.log('[AgreementFormContainer] Sending document for signature with URL:', documentUrl);
         
-        // IMPORTANT: Make sure to include the webhook URL
-        // This is the key to removing polling - we'll get updates via webhook instead
         const webhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || null;
         if (!webhookUrl) {
-          console.warn("[AgreementFormContainer] No webhook URL configured. Status updates will require manual refresh.");
+          console.warn('[AgreementFormContainer] No webhook URL configured. Status updates will require manual refresh.');
         }
         
         const signatureResult = await sendDocumentForSignature({
-          documentUrl: docxUrl,
-          title: signatureData.title || "Rental Agreement",
-          message: signatureData.message || "Please sign this rental agreement",
+          documentUrl,
+          title: signatureData.title || 'Rental Agreement',
+          message: signatureData.message || 'Please sign this rental agreement',
           signatories: signatureData.signatories,
-          webhookUrl: webhookUrl,
-          // Make sure documents are attached in the webhooks
+          webhookUrl,
           completedDocumentsAttached: true,
-          // Include our agreement ID for reference
           agreementId: agreement.id
         });
         
@@ -277,17 +270,15 @@ const AgreementFormContainer = () => {
           throw new Error(signatureResult.error || 'Failed to send document for signature');
         }
         
-        // Use the requestId returned from the Evia Sign API
         const eviaSignReference = signatureResult.requestId;
         console.log('[AgreementFormContainer] Evia Sign reference ID:', eviaSignReference);
         
-        console.log("[AgreementFormContainer] Preparing to update agreement with ID:", agreement.id);
-        console.log("[AgreementFormContainer] Update data:", { 
+        console.log('[AgreementFormContainer] Preparing to update agreement with ID:', agreement.id);
+        console.log('[AgreementFormContainer] Update data:', { 
           status: AGREEMENT_STATUS.PENDING, 
           eviasignreference: eviaSignReference || null
         });
 
-        // Update the agreement status to PENDING
         const updatedAgreement = normalizeAgreementRecord(await updateAgreementData(agreement.id, {
           status: AGREEMENT_STATUS.PENDING,
           eviasignreference: eviaSignReference || null,
@@ -300,15 +291,11 @@ const AgreementFormContainer = () => {
         toast.success('Agreement sent for signature successfully');
         setShowSignatureForm(false);
         
-        // No polling needed - the webhook will update the status automatically
-        
-        // Navigate to agreements list
         console.log('[AgreementFormContainer] Navigating to agreements list');
         navigate('/dashboard/agreements');
       } catch (eviaError) {
         console.error('[AgreementFormContainer] Evia Sign API error:', eviaError);
         
-        // More detailed error logging
         if (eviaError.response) {
           console.error('[AgreementFormContainer] API Response status:', eviaError.response.status);
           console.error('[AgreementFormContainer] API Response data:', eviaError.response.data);
@@ -322,52 +309,57 @@ const AgreementFormContainer = () => {
     }
   };
 
-  const handleDocxGeneration = async (agreementId, formData) => {
+  const handleDocxGeneration = async (agreementId, formData, finalStatus = null) => {
     try {
-      // Get the processed HTML content
       const documentContent = formData.processedContent || formData.documenturl;
       
       if (!documentContent) {
         throw new Error('No document content available');
       }
       
-      console.log('Starting DOCX document generation for agreement ID:', agreementId);
+      console.log('Starting agreement document generation for agreement ID:', agreementId);
       
-      // First save the document content as a DOCX file
-      const docxUrl = await saveMergedDocument(documentContent, agreementId);
+      const documentUrl = await saveMergedDocument(documentContent, agreementId);
       
-      if (!docxUrl) {
-        throw new Error('Failed to generate DOCX document');
+      if (!documentUrl) {
+        throw new Error('Failed to generate agreement document');
       }
       
-      console.log('DOCX file saved successfully:', docxUrl);
+      console.log('Agreement document saved successfully:', documentUrl);
       console.log('Document URL properties:', {
-        url: docxUrl,
-        isString: typeof docxUrl === 'string',
-        length: docxUrl ? docxUrl.length : 0,
-        startsWithHttp: docxUrl ? docxUrl.startsWith('http') : false,
-        endsWithDocx: docxUrl ? docxUrl.toLowerCase().endsWith('.docx') : false
+        url: documentUrl,
+        isString: typeof documentUrl === 'string',
+        length: documentUrl ? documentUrl.length : 0,
+        startsWithHttp: documentUrl ? documentUrl.startsWith('http') : false,
+        endsWithPdf: documentUrl ? documentUrl.toLowerCase().endsWith('.pdf') : false
       });
       
-      // Update the agreement with the document URL
-      const updatedAgreement = normalizeAgreementRecord(await updateAgreementData(agreementId, {
-        documenturl: docxUrl,
-        needs_document_generation: false
-      }));
+      const updatePayload = {
+        documenturl: documentUrl,
+        needs_document_generation: false,
+        ...(finalStatus ? { status: finalStatus } : {})
+      };
+
+      const updatedAgreement = normalizeAgreementRecord(await updateAgreementData(agreementId, updatePayload));
       
-      console.log('Agreement updated with document URL:', {
+      console.log('Agreement updated with generated document:', {
         id: updatedAgreement?.id,
+        status: updatedAgreement?.status,
         documenturl: updatedAgreement?.documenturl
       });
       setAgreement((currentAgreement) => normalizeAgreementRecord({
         ...currentAgreement,
         ...updatedAgreement
       }));
+      setInitialData((currentInitialData) => normalizeAgreementRecord({
+        ...currentInitialData,
+        ...updatedAgreement
+      }));
       
       toast.success('Document saved successfully');
-      return docxUrl;
+      return documentUrl;
     } catch (error) {
-      console.error('Error in DOCX document generation:', error);
+      console.error('Error in agreement document generation:', error);
       toast.error('Failed to generate document: ' + error.message);
       return false;
     }
@@ -381,20 +373,16 @@ const AgreementFormContainer = () => {
     setShowSignatureForm(false);
   };
 
-  // Clean up when unmounting - prevent memory leaks
   useEffect(() => {
     return () => {
-      // Clear any state or handlers here if needed
       setShowSignatureForm(false);
       setFormDataToSign(null);
     };
   }, []);
 
-  // Check if we need to prevent navigation due to unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (id && initialData) {
-        // Show a standard confirmation dialog
         e.preventDefault();
         e.returnValue = '';
       }
@@ -453,4 +441,4 @@ const AgreementFormContainer = () => {
   );
 };
 
-export default AgreementFormContainer; 
+export default AgreementFormContainer;
