@@ -34,11 +34,16 @@ The legacy redirect remains administrator-protected. It does not provide staff w
 
 `/rentee` remains the canonical URL during the compatibility period because existing login, invitation, utility and tenant-portal flows already use it.
 
-`/portal/*` is no longer a second mounted copy of the tenant route tree. It redirects, after tenant access validation, to the equivalent `/rentee/*` URL.
+`/portal/*` is no longer a second mounted copy of the tenant route tree. It redirects, after tenant access validation, to the equivalent `/rentee/*` URL. Normal tenant navigation now links directly to `/rentee/*`, so `/portal/*` is compatibility-only.
 
 ## Terminology
 
-User-facing portal and tenant-management surfaces should say **Tenant**, **Tenant / Lessee**, or **Tenant Portal**.
+This slice standardizes the primary Phase 3 surfaces to **Tenant**, **Tenant / Lessee**, or **Tenant Portal**:
+
+- tenant portal shell and account label;
+- tenant portal home links;
+- administrator tenant list and tenant cards;
+- canonical route constants.
 
 Legacy implementation identifiers are intentionally not bulk-renamed in this phase. Examples include:
 
@@ -46,8 +51,9 @@ Legacy implementation identifiers are intentionally not bulk-renamed in this pha
 - database relationship fields such as `renteeid`
 - existing file/component/service names such as `RenteeForm` and `renteeService`
 - legacy route segment `/dashboard/rentees`
+- older workflow components that still use legacy internal naming.
 
-Those identifiers are compatibility contracts and changing them would require a wider data/API migration. They should not be presented to users as role labels.
+Those identifiers are compatibility contracts. Renaming them safely belongs with the workflow/data refactor that owns them rather than a broad search-and-replace.
 
 ## Regression protection
 
@@ -75,4 +81,4 @@ Phase 3D is complete when:
 5. tenant login still lands in `/rentee`;
 6. `/portal/invoices` redirects to `/rentee/invoices` for a tenant;
 7. `/admin/users` redirects to `/dashboard/team` for an administrator;
-8. tenant-facing portal headers and administrator tenant lists use tenant terminology.
+8. tenant-facing portal headers and administrator tenant list/cards use tenant terminology.
