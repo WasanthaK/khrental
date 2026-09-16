@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
+import { getPostLoginPath } from '../utils/authRedirect.js';
 import Button from '../components/ui/Button';
 import FormInput from '../components/ui/FormInput';
 
@@ -16,6 +17,7 @@ const Login = () => {
   
   const { login, setDevBypass } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Check if dev bypass is active
   useEffect(() => {
@@ -53,9 +55,16 @@ const Login = () => {
         return;
       }
       
-      // If we get here, login was successful
+      const returnPath = getPostLoginPath(location.state, null);
+      if (returnPath) {
+        console.log('Login successful, returning to requested route:', returnPath);
+        navigate(returnPath, { replace: true });
+        return;
+      }
+
+      // If there was no protected deep link, PublicRoute will use the normal
+      // portal-specific landing page once the authenticated profile is ready.
       console.log('Login successful, redirecting based on role');
-      // Redirect handled by AuthProvider
     } catch (error) {
       console.error('Login error:', error);
       setError(error.message || 'Failed to log in');
@@ -63,7 +72,7 @@ const Login = () => {
       setLoading(false);
     }
   };
-
+  
   // Clear development bypass
   const clearDevBypass = () => {
     localStorage.removeItem('dev_bypass_role');
@@ -137,6 +146,7 @@ const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
+            
             <FormInput
               id="password"
               label="Password"
@@ -210,4 +220,4 @@ const Login = () => {
   );
 };
 
-export default Login; 
+export default Login;
