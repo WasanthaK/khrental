@@ -94,7 +94,13 @@ const STAFF_BUNDLE_PERMISSIONS = Object.freeze({
 
 export const normalizeRole = (user, membership) => getStoredRole({ user, membership });
 
-export const getRoleType = ({ user, membership }) => getPortalType({ user, membership });
+// Keep the legacy public role-type contract during Phase 3 migration so existing
+// authorization tests and callers continue to see `rentee`. The canonical portal
+// model uses `tenant` internally and can replace this compatibility value later.
+export const getRoleType = ({ user, membership }) => {
+  const portalType = getPortalType({ user, membership });
+  return portalType === PORTAL_TYPES.TENANT ? 'rentee' : portalType;
+};
 
 export const getPermissions = ({ user, membership }) => {
   const portalType = getPortalType({ user, membership });
