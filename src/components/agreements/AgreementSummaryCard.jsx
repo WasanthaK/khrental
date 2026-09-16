@@ -66,6 +66,14 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         borderColor: 'border-l-4 border-green-600',
         label: 'Active'
       };
+    } else if (agreementState === 'closed') {
+      return {
+        icon: FiCheck,
+        color: 'text-gray-700',
+        bgColor: 'bg-gray-100',
+        borderColor: 'border-l-4 border-gray-500',
+        label: 'Closed'
+      };
     } else if (status === 'signed' || status === 'completed' || signatureStatus === 'signing_complete') {
       return {
         icon: FiCheck,
@@ -249,6 +257,15 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           >
             Onboarding
           </Link>
+
+          {['active', 'closed'].includes(agreementState) && (
+            <Link
+              to={`/dashboard/agreements/${agreement.id}?workspace=exit`}
+              className="px-3 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 transition-colors"
+            >
+              {agreementState === 'closed' ? 'Exit History' : 'Renewal / Exit'}
+            </Link>
+          )}
 
           {hasViewableDocument && (
             <button
