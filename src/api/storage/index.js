@@ -93,6 +93,12 @@ class LocalStorageDriver {
 
   async getObject(bucket, relativePath) {
     const safePath = normalizeStoragePath(relativePath);
+    if (!safePath) {
+      const error = new Error('Stored object path is required.');
+      error.status = 404;
+      error.code = 'STORAGE_OBJECT_NOT_FOUND';
+      throw error;
+    }
     const body = await fs.readFile(path.join(STORAGE_ROOT, ensureBucketName(bucket), safePath));
     return { body, contentType: 'application/octet-stream', etag: null };
   }
@@ -285,7 +291,11 @@ export const getStorageDriver = () => {
 export const createStorageDeliveryHandler = () => async (req, res, next) => {
   try {
     const bucket = req.params.bucket;
-    const objectPath = req.params[0] || '';
+    const objectPath = normalizeStoragePath(req.params[0] || req.path || '');
+    if (!objectPath) {
+      res.status(404).json({ error: 'Stored object not found.' });
+      return;
+    }
     const object = await getStorageDriver().getObject(bucket, objectPath);
     res.setHeader('Content-Type', object.contentType);
     if (object.etag) {
@@ -294,7 +304,7 @@ export const createStorageDeliveryHandler = () => async (req, res, next) => {
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(object.body);
   } catch (error) {
-    if (Number(error?.status) === 404 || error?.code === 'ENOENT') {
+    if (Number(error?.status) === 404 || error?.code === 'ENOENT' || error?.code === 'EISDIR' || error?.code === 'STORAGE_OBJECT_NOT_FOUND') {
       res.status(404).json({ error: 'Stored object not found.' });
       return;
     }
