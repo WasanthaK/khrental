@@ -73,6 +73,14 @@ const ResetPassword = () => {
         throw new Error(payload?.error || 'Unable to reset password.');
       }
 
+      // The backend revokes all existing sessions for the account as part of a
+      // successful reset. Clear the browser copy as well so navigation cannot
+      // reuse a now-invalid session and fall into the authenticated portal.
+      const { error: signOutError } = await platformClient.auth.signOut();
+      if (signOutError) {
+        console.warn('Password reset succeeded but local session cleanup reported an error:', signOutError);
+      }
+
       setResetComplete(true);
       setPassword('');
       setConfirmPassword('');
