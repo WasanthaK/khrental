@@ -1,20 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { INVOICE_STATUS } from '../../utils/constants';
 import { findAppUserByAuthId } from '../../services/appUserService';
 import { listProperties } from '../../services/agreementService';
 import { listInvoices } from '../../services/invoiceService';
-
-// Components
+import { getInvoiceAccount } from '../../services/platformClient';
 import InvoiceCard from '../../components/invoices/InvoiceCard';
 import PaymentProofUpload from '../../components/invoices/PaymentProofUpload';
 
 const RenteeInvoices = () => {
   const { user, activeTenantId } = useAuth();
-  
-  // State
   const [invoices, setInvoices] = useState([]);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,148 +19,114 @@ const RenteeInvoices = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [showPaymentUpload, setShowPaymentUpload] = useState(false);
+  const [account, setAccount] = useState(null);
+  const [accountLoading, setAccountLoading] = useState(false);
   const dataFetched = useRef(false);
-  
-  // Fetch rentee's invoices
+
   useEffect(() => {
     dataFetched.current = false;
     setInvoices([]);
     setProperties([]);
     setError(null);
+    setAccount(null);
 
-    // Skip if data has already been fetched or user is not available
-    if (dataFetched.current || !user || !user.id) {
-      return;
-    }
-    
+    if (!user?.id) return;
+
     const fetchRenteeInvoices = async () => {
       try {
         setLoading(true);
-        
-        // First, fetch the rentee profile from app_users table to get the renteeId
         const renteeResult = await findAppUserByAuthId(user.id);
-
-        if (!renteeResult.success) {
-          throw new Error(renteeResult.error || 'No rentee profile found for your account. Please contact support.');
+        if (!renteeResult.success || !renteeResult.data) {
+          throw new Error(renteeResult.error || 'No tenant profile found for your account. Please contact support.');
         }
 
-        const renteeData = renteeResult.data;
-        
-        if (!renteeData) {
-          throw new Error('No rentee profile found for your account. Please contact support.');
-        }
-        
-        const renteeId = renteeData.id;
-        
-        // Fetch invoices for the current rentee
         const { data: invoicesData, error: invoicesError } = await listInvoices({
-          renteeId,
+          renteeId: renteeResult.data.id,
           pageSize: 1000
         });
-        
-        if (invoicesError) {
-          throw invoicesError;
-        }
-        
+        if (invoicesError) throw invoicesError;
+
         setInvoices(invoicesData || []);
-        
-        // Fetch properties for the invoices
-        if (invoicesData && invoicesData.length > 0) {
-          const propertyIds = new Set(invoicesData.map(invoice => invoice.propertyid));
+        if (invoicesData?.length) {
+          const propertyIds = new Set(invoicesData.map((invoice) => invoice.propertyid).filter(Boolean));
           const propertyData = await listProperties();
           setProperties((propertyData || []).filter((property) => propertyIds.has(property.id)));
         }
-        
-        // Mark data as fetched
         dataFetched.current = true;
-      } catch (error) {
-        console.error('Error fetching rentee invoices:', error.message);
-        setError(error.message);
+      } catch (fetchError) {
+        setError(fetchError.message);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchRenteeInvoices();
   }, [user?.id, activeTenantId]);
-  
-  // Filter invoices based on search term and status filter
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.id.toString().includes(searchTerm.toLowerCase()) ||
-      invoice.billingperiod.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (properties.find(p => p.id === invoice.propertyid)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
+
+  const filteredInvoices = invoices.filter((invoice) => {
+    const propertyName = properties.find((property) => property.id === invoice.propertyid)?.name || '';
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = String(invoice.id).toLowerCase().includes(search)
+      || String(invoice.billingperiod || '').toLowerCase().includes(search)
+      || propertyName.toLowerCase().includes(search);
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    
     return matchesSearch && matchesStatus;
   });
-  
-  // Handle payment upload success
+
   const handlePaymentUploadSuccess = (updatedInvoice) => {
-    setInvoices(prevInvoices => 
-      prevInvoices.map(invoice => 
-        invoice.id === updatedInvoice.id ? updatedInvoice : invoice
-      )
-    );
+    if (updatedInvoice) {
+      setInvoices((current) => current.map((invoice) => invoice.id === updatedInvoice.id ? updatedInvoice : invoice));
+    }
     setShowPaymentUpload(false);
     setSelectedInvoice(null);
   };
-  
-  // Handle payment upload error
-  const handlePaymentUploadError = (errorMessage) => {
-    setError(errorMessage);
+
+  const handleViewAccount = async (invoice) => {
+    try {
+      setAccountLoading(true);
+      setError(null);
+      setSelectedInvoice(invoice);
+      const { data, error: accountError } = await getInvoiceAccount(invoice.id);
+      if (accountError) throw accountError;
+      setAccount(data);
+    } catch (accountError) {
+      setError(accountError.message);
+    } finally {
+      setAccountLoading(false);
+    }
   };
-  
-  // Handle record payment click
-  const handleRecordPayment = (invoice) => {
-    setSelectedInvoice(invoice);
-    setShowPaymentUpload(true);
-  };
-  
-  // Render loading state
+
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading your invoices...</div>
-      </div>
-    );
+    return <div className="flex h-64 items-center justify-center"><div className="text-lg">Loading your invoices...</div></div>;
   }
-  
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-6">My Invoices</h1>
-      
-      {/* Error message */}
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">Error!</strong>
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
-      
-      {/* Search and filter */}
+
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search invoices..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          
+          <input
+            type="text"
+            placeholder="Search invoices..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
           <div className="flex items-center gap-2">
-            <label htmlFor="statusFilter" className="text-sm font-medium text-gray-700">
-              Status:
-            </label>
+            <label htmlFor="statusFilter" className="text-sm font-medium text-gray-700">Status:</label>
             <select
               id="statusFilter"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md"
             >
               <option value="all">All</option>
               <option value={INVOICE_STATUS.PENDING}>Pending</option>
@@ -176,59 +138,66 @@ const RenteeInvoices = () => {
           </div>
         </div>
       </div>
-      
-      {/* Invoices list */}
+
       {filteredInvoices.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-gray-600">No invoices found.</p>
-        </div>
+        <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-600">No invoices found.</div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {filteredInvoices.map(invoice => {
-            const property = properties.find(p => p.id === invoice.propertyid);
-            
+          {filteredInvoices.map((invoice) => {
+            const property = properties.find((entry) => entry.id === invoice.propertyid);
+            const canSubmit = [INVOICE_STATUS.PENDING, INVOICE_STATUS.OVERDUE, INVOICE_STATUS.REJECTED].includes(invoice.status);
             return (
               <div key={invoice.id} className="relative">
                 <InvoiceCard
                   invoice={invoice}
                   property={property}
                   rentee={user}
+                  showDetails={false}
+                  showStatusActions={false}
                 />
-                
-                {/* Action buttons for specific statuses */}
-                {(invoice.status === INVOICE_STATUS.PENDING || invoice.status === INVOICE_STATUS.OVERDUE) && (
-                  <div className="absolute top-4 right-4">
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleViewAccount(invoice)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Account & Receipts
+                  </button>
+                  {canSubmit && (
                     <button
-                      onClick={() => handleRecordPayment(invoice)}
-                      className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                      type="button"
+                      onClick={() => {
+                        setSelectedInvoice(invoice);
+                        setShowPaymentUpload(true);
+                        setAccount(null);
+                      }}
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
                     >
-                      Record Payment
+                      Submit Payment Proof
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
-      
-      {/* Payment Upload Modal */}
+
       {showPaymentUpload && selectedInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Upload Payment Proof</h2>
-            <p className="mb-4">
-              Invoice #{selectedInvoice.id} - {formatCurrency(selectedInvoice.totalamount || selectedInvoice.totalAmount || 0)}
+            <h2 className="text-xl font-semibold mb-2">Submit Payment Proof</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Invoice #{selectedInvoice.id.substring(0, 8)} · {formatCurrency(selectedInvoice.totalamount || 0)}
             </p>
-            
             <PaymentProofUpload
               invoiceId={selectedInvoice.id}
               onSuccess={handlePaymentUploadSuccess}
-              onError={handlePaymentUploadError}
+              onError={setError}
             />
-            
             <div className="mt-4 flex justify-end">
               <button
+                type="button"
                 onClick={() => {
                   setShowPaymentUpload(false);
                   setSelectedInvoice(null);
@@ -241,8 +210,63 @@ const RenteeInvoices = () => {
           </div>
         </div>
       )}
+
+      {(accountLoading || account) && selectedInvoice && !showPaymentUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-start gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">Invoice Account</h2>
+                <p className="text-sm text-gray-600">Invoice #{selectedInvoice.id.substring(0, 8)}</p>
+              </div>
+              <button type="button" onClick={() => { setAccount(null); setSelectedInvoice(null); }} className="text-gray-500 hover:text-gray-800">Close</button>
+            </div>
+
+            {accountLoading ? (
+              <p>Loading account history...</p>
+            ) : account ? (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  <div className="rounded bg-gray-50 p-3"><div className="text-xs text-gray-500">Invoice total</div><div className="font-semibold">{formatCurrency(account.invoice?.totalamount || 0)}</div></div>
+                  <div className="rounded bg-gray-50 p-3"><div className="text-xs text-gray-500">Outstanding</div><div className="font-semibold">{formatCurrency(account.outstandingBalance || 0)}</div></div>
+                  <div className="rounded bg-gray-50 p-3"><div className="text-xs text-gray-500">Status</div><div className="font-semibold capitalize">{String(account.invoice?.status || '').replace('_', ' ')}</div></div>
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Payments</h3>
+                  {account.payments?.length ? (
+                    <div className="space-y-2">
+                      {account.payments.map((payment) => (
+                        <div key={payment.id} className="rounded border border-gray-200 p-3 text-sm">
+                          <div className="flex justify-between gap-2"><span>{formatCurrency(payment.amount)}</span><span className="capitalize">{payment.status}</span></div>
+                          <div className="text-gray-500 mt-1">{formatDate(payment.paymentdate || payment.createdat)}</div>
+                          {payment.rejection_reason && <div className="text-red-700 mt-1">Reason: {payment.rejection_reason}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-500">No payments recorded.</p>}
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Receipts</h3>
+                  {account.receipts?.length ? (
+                    <div className="space-y-2">
+                      {account.receipts.map((receipt) => (
+                        <div key={receipt.id} className="rounded border border-green-200 bg-green-50 p-3 text-sm">
+                          <div className="font-medium">Receipt {receipt.receipt_number}</div>
+                          <div>{formatCurrency(receipt.amount)} · {formatDate(receipt.issued_at)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-500">No verified receipts yet.</p>}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default RenteeInvoices; 
+export default RenteeInvoices;
