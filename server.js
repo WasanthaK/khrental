@@ -286,6 +286,18 @@ async function createServer() {
         return;
       }
 
+      const attemptsDirectActivation = req.method === 'PUT'
+        && /^\/agreements\/[^/]+$/.test(req.path)
+        && String(req.body?.status || '').trim().toLowerCase() === 'active';
+
+      if (attemptsDirectActivation) {
+        res.status(409).json({
+          error: 'Tenancy activation must use the dedicated activation endpoint.',
+          code: 'TENANCY_ACTIVATION_REQUIRED'
+        });
+        return;
+      }
+
       if (isAdminRole({ user: req.user, membership: req.membership })) {
         next();
         return;
