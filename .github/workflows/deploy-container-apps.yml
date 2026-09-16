@@ -130,6 +130,8 @@ jobs:
               fi
             done
 
+            node scripts/validate-r2-connection.mjs
+
             az extension add --name containerapp --upgrade --yes
             az containerapp secret set \
               --name "$AZURE_CONTAINER_APP_NAME" \
