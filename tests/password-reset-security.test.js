@@ -7,6 +7,8 @@ import {
   hashPasswordResetToken,
   normalizePasswordResetEmail
 } from '../src/api/auth/passwordResetTokens.js';
+import { isPublicCredentialRequest } from '../src/api/auth/index.js';
+import { isPasswordRecoveryPath } from '../src/services/requestContext.js';
 
 test('password reset token is opaque, random and base64url-safe', () => {
   const first = generatePasswordResetToken();
@@ -66,4 +68,43 @@ test('unused, unrevoked, unexpired password reset token is valid', () => {
     getPasswordResetState({ expires_at: '2026-09-16T00:30:00.000Z' }, now),
     'valid'
   );
+});
+
+test('browser recovery route is identified independently of its token query', () => {
+  assert.equal(isPasswordRecoveryPath('/reset-password'), true);
+  assert.equal(isPasswordRecoveryPath('/reset-password/'), true);
+  assert.equal(isPasswordRecoveryPath('/reset-password?token=opaque-token'), true);
+  assert.equal(isPasswordRecoveryPath('/login'), false);
+  assert.equal(isPasswordRecoveryPath('/dashboard'), false);
+});
+
+test('password recovery API endpoints are explicitly anonymous credential endpoints', () => {
+  assert.equal(isPublicCredentialRequest({
+    method: 'POST',
+    originalUrl: '/api/platform/auth/reset-password',
+    headers: { authorization: 'Bearer stale-token' }
+  }), true);
+
+  assert.equal(isPublicCredentialRequest({
+    method: 'GET',
+    originalUrl: '/api/platform/auth/reset-password/validate?token=opaque-token',
+    headers: { authorization: 'Bearer stale-token' }
+  }), true);
+
+  assert.equal(isPublicCredentialRequest({
+    method: 'POST',
+    originalUrl: '/api/platform/auth/reset-password/redeem',
+    headers: { authorization: 'Bearer stale-token' }
+  }), true);
+});
+
+test('other credential establishment endpoints are public but protected APIs are not', () => {
+  assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/auth/sign-in' }), true);
+  assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/auth/sign-up' }), true);
+  assert.equal(isPublicCredentialRequest({ method: 'GET', originalUrl: '/api/platform/auth/invitations/validate?token=x' }), true);
+  assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/auth/invitations/redeem' }), true);
+
+  assert.equal(isPublicCredentialRequest({ method: 'GET', originalUrl: '/api/platform/auth/context' }), false);
+  assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/query' }), false);
+  assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/auth/invite' }), false);
 });
