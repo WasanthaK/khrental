@@ -112,6 +112,30 @@ jobs:
                 PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
               --output none
 
+      - name: Set up Node for R2 validation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate durable R2 storage
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || vars.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+
+          for required in R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!required:-}" ]; then
+              echo "$required is not configured in the GitHub Production environment." >&2
+              exit 1
+            fi
+          done
+
+          node scripts/validate-r2-connection.mjs
+
       - name: Configure durable R2 storage
         uses: azure/cli@v2
         env:
@@ -122,15 +146,6 @@ jobs:
         with:
           inlineScript: |
             set -euo pipefail
-
-            for required in R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
-              if [ -z "${!required:-}" ]; then
-                echo "$required is not configured in the GitHub Production environment." >&2
-                exit 1
-              fi
-            done
-
-            node scripts/validate-r2-connection.mjs
 
             az extension add --name containerapp --upgrade --yes
             az containerapp secret set \
