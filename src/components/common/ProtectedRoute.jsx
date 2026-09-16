@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { PORTAL_TYPES, getPortalType } from '../../utils/accessModel.js';
 import {
@@ -40,6 +40,7 @@ const ProtectedRoute = ({
   allowAuthenticated = false
 }) => {
   const { user, membership, loading, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -54,7 +55,19 @@ const ProtectedRoute = ({
 
   if (!isAuthenticated || !user) {
     logRoute('Unauthenticated request redirected to login');
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{
+          from: {
+            pathname: location.pathname,
+            search: location.search,
+            hash: location.hash
+          }
+        }}
+      />
+    );
   }
 
   const subject = { user, membership: membership || user.membership || null };
