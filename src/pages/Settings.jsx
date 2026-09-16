@@ -1,11 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { USER_ROLES } from '../utils/constants';
+import { PERMISSIONS, getPortalLabel, hasPermission } from '../utils/accessPolicy.js';
 
 const Settings = () => {
-  const { user, activeTenant, memberships } = useAuth();
-  const isAdmin = user?.role === USER_ROLES.ADMIN;
+  const { user, membership, activeTenant, memberships } = useAuth();
+  const subject = { user, membership: membership || user?.membership || null };
+  const canManageMemberships = hasPermission(subject, PERMISSIONS.MEMBERSHIPS_MANAGE);
+  const canManageTenantSettings = hasPermission(subject, PERMISSIONS.TENANT_SETTINGS_MANAGE);
 
   return (
     <div className="app-page">
@@ -29,8 +31,8 @@ const Settings = () => {
               <div className="mt-1 font-medium text-slate-900">{user?.email || 'Unknown user'}</div>
             </div>
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Role</div>
-              <div className="mt-1 font-medium capitalize text-slate-900">{user?.role || 'User'}</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Portal type</div>
+              <div className="mt-1 font-medium text-slate-900">{getPortalLabel(subject)}</div>
             </div>
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <div className="text-xs uppercase tracking-wide text-slate-500">Active tenant</div>
@@ -43,24 +45,24 @@ const Settings = () => {
         <section className="app-panel">
           <div className="app-panel-header">
             <h2 className="text-lg font-semibold text-slate-900">Administrative surfaces</h2>
-            <p className="text-sm text-slate-500">Route users into the right workflow instead of leaving settings as a stub.</p>
+            <p className="text-sm text-slate-500">Only capabilities granted by the active membership are shown here.</p>
           </div>
           <div className="app-panel-body space-y-3">
-            {isAdmin ? (
-              <>
-                <Link to="/dashboard/tenant-admin" className="app-button w-full no-underline">
-                  Open Tenant Admin
-                </Link>
-                <Link to="/dashboard/admin-dashboard" className="app-button-secondary w-full no-underline">
-                  Open Admin Dashboard
-                </Link>
-              </>
-            ) : null}
+            {canManageMemberships && (
+              <Link to="/dashboard/tenant-admin" className="app-button w-full no-underline">
+                Open Tenant Admin
+              </Link>
+            )}
+            {canManageTenantSettings && (
+              <Link to="/dashboard/admin-dashboard" className="app-button-secondary w-full no-underline">
+                Open Admin Dashboard
+              </Link>
+            )}
             <Link to="/dashboard" className="app-button-secondary w-full no-underline">
               Return to dashboard
             </Link>
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-              This page now acts as a stable settings hub. If we add profile preferences, notification settings, or tenant-specific configuration later, they should slot into this structure instead of replacing it.
+              Profile preferences, notification settings, and tenant configuration can be added here without creating another role-specific settings surface.
             </div>
           </div>
         </section>
@@ -69,4 +71,4 @@ const Settings = () => {
   );
 };
 
-export default Settings; 
+export default Settings;

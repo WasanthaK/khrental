@@ -1,187 +1,128 @@
-// Define permissions
-export const PERMISSIONS = {
-  // Property permissions
-  VIEW_PROPERTIES: 'view_properties',
-  CREATE_PROPERTY: 'create_property',
-  EDIT_PROPERTY: 'edit_property',
-  DELETE_PROPERTY: 'delete_property',
-  
-  // Rentee permissions
-  VIEW_RENTEES: 'view_rentees',
-  CREATE_RENTEE: 'create_rentee',
-  EDIT_RENTEE: 'edit_rentee',
-  DELETE_RENTEE: 'delete_rentee',
-  
-  // Invoice permissions
-  VIEW_INVOICES: 'view_invoices',
-  CREATE_INVOICE: 'create_invoice',
-  EDIT_INVOICE: 'edit_invoice',
-  DELETE_INVOICE: 'delete_invoice',
-  
-  // Maintenance permissions
-  VIEW_MAINTENANCE: 'view_maintenance',
-  CREATE_MAINTENANCE: 'create_maintenance',
-  EDIT_MAINTENANCE: 'edit_maintenance',
-  DELETE_MAINTENANCE: 'delete_maintenance',
-  ASSIGN_MAINTENANCE: 'assign_maintenance',
-  
-  // Agreement permissions
-  VIEW_AGREEMENTS: 'view_agreements',
-  CREATE_AGREEMENT: 'create_agreement',
-  EDIT_AGREEMENT: 'edit_agreement',
-  DELETE_AGREEMENT: 'delete_agreement',
-  
-  // Team permissions
-  VIEW_TEAM: 'view_team',
-  CREATE_TEAM_MEMBER: 'create_team_member',
-  EDIT_TEAM_MEMBER: 'edit_team_member',
-  DELETE_TEAM_MEMBER: 'delete_team_member',
-  
-  // Reports permissions
-  VIEW_REPORTS: 'view_reports',
-  CREATE_REPORT: 'create_report',
-  
-  // Admin tools
-  VIEW_ADMIN_TOOLS: 'view_admin_tools',
+import React from 'react';
+import { PORTAL_TYPES } from './accessModel.js';
+import {
+  PERMISSIONS as CANONICAL_PERMISSIONS,
+  getEffectivePortalType,
+  getPermissions,
+  hasAllPermissions as hasAllCanonicalPermissions,
+  hasAnyPermission as hasAnyCanonicalPermission,
+  hasPermission as hasCanonicalPermission
+} from './accessPolicy.js';
+
+/**
+ * Phase 3C compatibility bridge.
+ *
+ * New browser code should import from accessPolicy.js directly. This module is
+ * retained temporarily for older components that still use the pre-Phase-3
+ * permission names. It translates those names into the canonical shared policy
+ * and does not define an independent role/permission matrix.
+ */
+const LEGACY_PERMISSIONS = Object.freeze({
+  VIEW_PROPERTIES: 'legacy.view_properties',
+  CREATE_PROPERTY: 'legacy.create_property',
+  EDIT_PROPERTY: 'legacy.edit_property',
+  DELETE_PROPERTY: 'legacy.delete_property',
+  VIEW_RENTEES: 'legacy.view_rentees',
+  CREATE_RENTEE: 'legacy.create_rentee',
+  EDIT_RENTEE: 'legacy.edit_rentee',
+  DELETE_RENTEE: 'legacy.delete_rentee',
+  VIEW_INVOICES: 'legacy.view_invoices',
+  CREATE_INVOICE: 'legacy.create_invoice',
+  EDIT_INVOICE: 'legacy.edit_invoice',
+  DELETE_INVOICE: 'legacy.delete_invoice',
+  VIEW_MAINTENANCE: 'legacy.view_maintenance',
+  CREATE_MAINTENANCE: 'legacy.create_maintenance',
+  EDIT_MAINTENANCE: 'legacy.edit_maintenance',
+  DELETE_MAINTENANCE: 'legacy.delete_maintenance',
+  ASSIGN_MAINTENANCE: 'legacy.assign_maintenance',
+  VIEW_AGREEMENTS: 'legacy.view_agreements',
+  CREATE_AGREEMENT: 'legacy.create_agreement',
+  EDIT_AGREEMENT: 'legacy.edit_agreement',
+  DELETE_AGREEMENT: 'legacy.delete_agreement',
+  VIEW_TEAM: 'legacy.view_team',
+  CREATE_TEAM_MEMBER: 'legacy.create_team_member',
+  EDIT_TEAM_MEMBER: 'legacy.edit_team_member',
+  DELETE_TEAM_MEMBER: 'legacy.delete_team_member',
+  VIEW_REPORTS: 'legacy.view_reports',
+  CREATE_REPORT: 'legacy.create_report',
+  VIEW_ADMIN_TOOLS: 'legacy.view_admin_tools'
+});
+
+export const PERMISSIONS = Object.freeze({
+  ...CANONICAL_PERMISSIONS,
+  ...LEGACY_PERMISSIONS
+});
+
+export const ROLES = Object.freeze({
+  ADMIN: PORTAL_TYPES.ADMIN,
+  STAFF: PORTAL_TYPES.STAFF,
+  TENANT: PORTAL_TYPES.TENANT
+});
+
+const isAdministrator = (subject) => getEffectivePortalType(subject) === PORTAL_TYPES.ADMIN;
+
+const LEGACY_PERMISSION_CHECKS = Object.freeze({
+  [LEGACY_PERMISSIONS.VIEW_PROPERTIES]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.PROPERTIES_READ),
+  [LEGACY_PERMISSIONS.CREATE_PROPERTY]: isAdministrator,
+  [LEGACY_PERMISSIONS.EDIT_PROPERTY]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.PROPERTIES_MANAGE),
+  [LEGACY_PERMISSIONS.DELETE_PROPERTY]: isAdministrator,
+  [LEGACY_PERMISSIONS.VIEW_RENTEES]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.RENTEES_READ),
+  [LEGACY_PERMISSIONS.CREATE_RENTEE]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.RENTEES_MANAGE),
+  [LEGACY_PERMISSIONS.EDIT_RENTEE]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.RENTEES_MANAGE),
+  [LEGACY_PERMISSIONS.DELETE_RENTEE]: isAdministrator,
+  [LEGACY_PERMISSIONS.VIEW_INVOICES]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.INVOICES_READ),
+  [LEGACY_PERMISSIONS.CREATE_INVOICE]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.INVOICES_MANAGE),
+  [LEGACY_PERMISSIONS.EDIT_INVOICE]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.INVOICES_MANAGE),
+  [LEGACY_PERMISSIONS.DELETE_INVOICE]: isAdministrator,
+  [LEGACY_PERMISSIONS.VIEW_MAINTENANCE]: (subject) => hasAnyCanonicalPermission(subject, [
+    CANONICAL_PERMISSIONS.MAINTENANCE_MANAGE,
+    CANONICAL_PERMISSIONS.MAINTENANCE_READ_ASSIGNED
+  ]),
+  [LEGACY_PERMISSIONS.CREATE_MAINTENANCE]: isAdministrator,
+  [LEGACY_PERMISSIONS.EDIT_MAINTENANCE]: (subject) => hasAnyCanonicalPermission(subject, [
+    CANONICAL_PERMISSIONS.MAINTENANCE_MANAGE,
+    CANONICAL_PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED
+  ]),
+  [LEGACY_PERMISSIONS.DELETE_MAINTENANCE]: isAdministrator,
+  [LEGACY_PERMISSIONS.ASSIGN_MAINTENANCE]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.MAINTENANCE_MANAGE),
+  [LEGACY_PERMISSIONS.VIEW_AGREEMENTS]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.AGREEMENTS_READ),
+  [LEGACY_PERMISSIONS.CREATE_AGREEMENT]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.AGREEMENTS_MANAGE),
+  [LEGACY_PERMISSIONS.EDIT_AGREEMENT]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.AGREEMENTS_MANAGE),
+  [LEGACY_PERMISSIONS.DELETE_AGREEMENT]: isAdministrator,
+  [LEGACY_PERMISSIONS.VIEW_TEAM]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.MEMBERSHIPS_MANAGE),
+  [LEGACY_PERMISSIONS.CREATE_TEAM_MEMBER]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.MEMBERSHIPS_MANAGE),
+  [LEGACY_PERMISSIONS.EDIT_TEAM_MEMBER]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.MEMBERSHIPS_MANAGE),
+  [LEGACY_PERMISSIONS.DELETE_TEAM_MEMBER]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.MEMBERSHIPS_MANAGE),
+  [LEGACY_PERMISSIONS.VIEW_REPORTS]: isAdministrator,
+  [LEGACY_PERMISSIONS.CREATE_REPORT]: isAdministrator,
+  [LEGACY_PERMISSIONS.VIEW_ADMIN_TOOLS]: (subject) => hasCanonicalPermission(subject, CANONICAL_PERMISSIONS.TENANT_SETTINGS_MANAGE)
+});
+
+export { getPermissions };
+
+export const hasPermission = (subject, permission) => {
+  const legacyCheck = LEGACY_PERMISSION_CHECKS[permission];
+  return legacyCheck ? legacyCheck(subject) : hasCanonicalPermission(subject, permission);
 };
 
-// Define roles with their permissions
-export const ROLES = {
-  ADMIN: {
-    name: 'Administrator',
-    description: 'Full access to all system features',
-    permissions: Object.values(PERMISSIONS), // All permissions
-  },
-  
-  MANAGER: {
-    name: 'Property Manager',
-    description: 'Manages assigned properties, rentees, agreements, invoices, and maintenance',
-    permissions: [
-      // Property permissions. New properties are administrator-created so that
-      // staff assignment is explicit from the start.
-      PERMISSIONS.VIEW_PROPERTIES,
-      PERMISSIONS.EDIT_PROPERTY,
-      
-      // Rentee permissions
-      PERMISSIONS.VIEW_RENTEES,
-      PERMISSIONS.CREATE_RENTEE,
-      PERMISSIONS.EDIT_RENTEE,
-      
-      // Invoice permissions
-      PERMISSIONS.VIEW_INVOICES,
-      PERMISSIONS.CREATE_INVOICE,
-      PERMISSIONS.EDIT_INVOICE,
-      
-      // Maintenance permissions. Managers operate existing property-scoped
-      // requests; new tenant requests use the tenant/admin creation workflow.
-      PERMISSIONS.VIEW_MAINTENANCE,
-      PERMISSIONS.EDIT_MAINTENANCE,
-      PERMISSIONS.ASSIGN_MAINTENANCE,
-      
-      // Agreement permissions
-      PERMISSIONS.VIEW_AGREEMENTS,
-      PERMISSIONS.CREATE_AGREEMENT,
-      PERMISSIONS.EDIT_AGREEMENT,
-      
-      // Reports permissions
-      PERMISSIONS.VIEW_REPORTS,
-    ],
-  },
-  
-  MAINTENANCE_STAFF: {
-    name: 'Maintenance Staff',
-    description: 'Handles maintenance requests',
-    permissions: [
-      // Property permissions (view only)
-      PERMISSIONS.VIEW_PROPERTIES,
-      
-      // Maintenance permissions
-      PERMISSIONS.VIEW_MAINTENANCE,
-      PERMISSIONS.EDIT_MAINTENANCE,
-    ],
-  },
-  
-  FINANCE_STAFF: {
-    name: 'Finance Staff',
-    description: 'Handles invoices and payments',
-    permissions: [
-      // Property permissions (view only)
-      PERMISSIONS.VIEW_PROPERTIES,
-      
-      // Rentee permissions (view only)
-      PERMISSIONS.VIEW_RENTEES,
-      
-      // Invoice permissions
-      PERMISSIONS.VIEW_INVOICES,
-      PERMISSIONS.CREATE_INVOICE,
-      PERMISSIONS.EDIT_INVOICE,
-      
-      // Reports permissions
-      PERMISSIONS.VIEW_REPORTS,
-    ],
-  },
-  
-  RENTEE: {
-    name: 'Rentee',
-    description: 'Tenant who rents a property',
-    permissions: [
-      // Limited view permissions
-      'view_own_invoices',
-      'view_own_agreements',
-      'view_own_properties',
-      'create_maintenance',
-      'view_own_maintenance',
-    ],
-  },
-};
+export const hasAnyPermission = (subject, permissions = []) => (
+  permissions.some((permission) => hasPermission(subject, permission))
+);
 
-// Helper function to check if a user has a specific permission
-export const hasPermission = (user, permission) => {
-  if (!user) {
-    return false;
-  }
+export const hasAllPermissions = (subject, permissions = []) => (
+  permissions.every((permission) => hasPermission(subject, permission))
+);
 
-  const effectiveRole = user.membership?.role || user.role;
-  
-  // Special case: if user has the default "authenticated" role
-  // Allow access to admin-tools so they can link themselves properly
-  if (effectiveRole === 'authenticated' && permission === 'view_admin_tools') {
-    return true;
-  }
-  
-  if (!effectiveRole) {
-    return false;
-  }
-  
-  // Get the role configuration
-  const roleConfig = ROLES[String(effectiveRole).toUpperCase()];
-  if (!roleConfig) {
-    return false;
-  }
-  
-  // Check if the role has the permission
-  return roleConfig.permissions.includes(permission);
-};
-
-// Helper function to check if a user has any of the specified permissions
-export const hasAnyPermission = (user, permissions) => {
-  return permissions.some(permission => hasPermission(user, permission));
-};
-
-// Helper function to check if a user has all of the specified permissions
-export const hasAllPermissions = (user, permissions) => {
-  return permissions.every(permission => hasPermission(user, permission));
-};
-
-// Create a higher-order component for permission-based access control
 export const withPermission = (WrappedComponent, requiredPermission) => {
-  return (props) => {
+  const PermissionWrappedComponent = (props) => {
     const { user } = props;
-    
+
     if (!hasPermission(user, requiredPermission)) {
       return <div>You don't have permission to access this feature.</div>;
     }
-    
+
     return <WrappedComponent {...props} />;
   };
-}; 
+
+  return PermissionWrappedComponent;
+};
