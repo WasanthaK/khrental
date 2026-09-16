@@ -9,41 +9,44 @@ BEGIN TRY
     IF OBJECT_ID(N'dbo.payments', N'U') IS NULL
         THROW 50002, 'dbo.payments must exist before applying the Phase 5 billing migration.', 1;
 
+    -- Use dynamic SQL for additive columns because later statements in the same
+    -- batch depend on them. This avoids SQL Server compile-time name resolution
+    -- failures when the migration runs against the pre-Phase-5 schema.
     IF COL_LENGTH(N'dbo.invoices', N'agreementid') IS NULL
-        ALTER TABLE dbo.invoices ADD agreementid UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.invoices ADD agreementid UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.invoices', N'issued_at') IS NULL
-        ALTER TABLE dbo.invoices ADD issued_at DATETIMEOFFSET NULL;
+        EXEC(N'ALTER TABLE dbo.invoices ADD issued_at DATETIMEOFFSET NULL;');
 
     IF COL_LENGTH(N'dbo.invoices', N'issued_by') IS NULL
-        ALTER TABLE dbo.invoices ADD issued_by UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.invoices ADD issued_by UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.invoices', N'reminderdate') IS NULL
-        ALTER TABLE dbo.invoices ADD reminderdate DATETIMEOFFSET NULL;
+        EXEC(N'ALTER TABLE dbo.invoices ADD reminderdate DATETIMEOFFSET NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'propertyid') IS NULL
-        ALTER TABLE dbo.payments ADD propertyid UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD propertyid UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'renteeid') IS NULL
-        ALTER TABLE dbo.payments ADD renteeid UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD renteeid UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'proofurl') IS NULL
-        ALTER TABLE dbo.payments ADD proofurl NVARCHAR(MAX) NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD proofurl NVARCHAR(MAX) NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'submitted_by') IS NULL
-        ALTER TABLE dbo.payments ADD submitted_by UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD submitted_by UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'submitted_at') IS NULL
-        ALTER TABLE dbo.payments ADD submitted_at DATETIMEOFFSET NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD submitted_at DATETIMEOFFSET NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'verified_by') IS NULL
-        ALTER TABLE dbo.payments ADD verified_by UNIQUEIDENTIFIER NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD verified_by UNIQUEIDENTIFIER NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'verified_at') IS NULL
-        ALTER TABLE dbo.payments ADD verified_at DATETIMEOFFSET NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD verified_at DATETIMEOFFSET NULL;');
 
     IF COL_LENGTH(N'dbo.payments', N'rejection_reason') IS NULL
-        ALTER TABLE dbo.payments ADD rejection_reason NVARCHAR(MAX) NULL;
+        EXEC(N'ALTER TABLE dbo.payments ADD rejection_reason NVARCHAR(MAX) NULL;');
 
     IF OBJECT_ID(N'dbo.invoice_components', N'U') IS NULL
     BEGIN
@@ -100,27 +103,27 @@ BEGIN TRY
 
     IF OBJECT_ID(N'dbo.agreements', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_invoices_agreement')
-        ALTER TABLE dbo.invoices ADD CONSTRAINT FK_invoices_agreement FOREIGN KEY (agreementid) REFERENCES dbo.agreements(id);
+        EXEC(N'ALTER TABLE dbo.invoices ADD CONSTRAINT FK_invoices_agreement FOREIGN KEY (agreementid) REFERENCES dbo.agreements(id);');
 
     IF OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_invoices_issued_by')
-        ALTER TABLE dbo.invoices ADD CONSTRAINT FK_invoices_issued_by FOREIGN KEY (issued_by) REFERENCES dbo.app_users(id);
+        EXEC(N'ALTER TABLE dbo.invoices ADD CONSTRAINT FK_invoices_issued_by FOREIGN KEY (issued_by) REFERENCES dbo.app_users(id);');
 
     IF OBJECT_ID(N'dbo.properties', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_payments_property')
-        ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_property FOREIGN KEY (propertyid) REFERENCES dbo.properties(id);
+        EXEC(N'ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_property FOREIGN KEY (propertyid) REFERENCES dbo.properties(id);');
 
     IF OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_payments_rentee')
-        ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_rentee FOREIGN KEY (renteeid) REFERENCES dbo.app_users(id);
+        EXEC(N'ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_rentee FOREIGN KEY (renteeid) REFERENCES dbo.app_users(id);');
 
     IF OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_payments_submitted_by')
-        ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_submitted_by FOREIGN KEY (submitted_by) REFERENCES dbo.app_users(id);
+        EXEC(N'ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_submitted_by FOREIGN KEY (submitted_by) REFERENCES dbo.app_users(id);');
 
     IF OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_payments_verified_by')
-        ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_verified_by FOREIGN KEY (verified_by) REFERENCES dbo.app_users(id);
+        EXEC(N'ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_verified_by FOREIGN KEY (verified_by) REFERENCES dbo.app_users(id);');
 
     IF OBJECT_ID(N'dbo.tenants', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_invoice_components_tenant')
@@ -158,12 +161,12 @@ BEGIN TRY
         ALTER TABLE dbo.billing_lifecycle_events ADD CONSTRAINT FK_billing_lifecycle_events_actor FOREIGN KEY (actor_user_id) REFERENCES dbo.app_users(id);
 
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.invoices') AND name = N'IX_invoices_agreementid')
-        CREATE INDEX IX_invoices_agreementid ON dbo.invoices (tenant_id, agreementid, billingperiod);
+        EXEC(N'CREATE INDEX IX_invoices_agreementid ON dbo.invoices (tenant_id, agreementid, billingperiod);');
 
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.invoices') AND name = N'UX_invoices_tenancy_billing_period')
-        CREATE UNIQUE INDEX UX_invoices_tenancy_billing_period
+        EXEC(N'CREATE UNIQUE INDEX UX_invoices_tenancy_billing_period
             ON dbo.invoices (tenant_id, agreementid, billingperiod)
-            WHERE agreementid IS NOT NULL AND billingperiod IS NOT NULL;
+            WHERE agreementid IS NOT NULL AND billingperiod IS NOT NULL;');
 
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.payments') AND name = N'IX_payments_invoice_status')
         CREATE INDEX IX_payments_invoice_status ON dbo.payments (tenant_id, invoiceid, status, createdat);
