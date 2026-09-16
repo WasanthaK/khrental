@@ -22,6 +22,22 @@ const suffixAfterPrefix = (pathname, prefix) => {
 };
 
 /**
+ * Explicit aliases for the known tenant portal destinations. React Router can
+ * rank these concrete paths ahead of the compatibility splat, so a bookmarked
+ * deep link cannot be collapsed to the tenant home route by wildcard matching.
+ */
+export const LEGACY_TENANT_ROUTE_ALIASES = Object.freeze([
+  Object.freeze({ path: 'portal', target: '/rentee' }),
+  Object.freeze({ path: 'portal/profile', target: '/rentee/profile' }),
+  Object.freeze({ path: 'portal/invoices', target: '/rentee/invoices' }),
+  Object.freeze({ path: 'portal/agreements', target: '/rentee/agreements' }),
+  Object.freeze({ path: 'portal/maintenance', target: '/rentee/maintenance' }),
+  Object.freeze({ path: 'portal/utilities', target: '/rentee/utilities' }),
+  Object.freeze({ path: 'portal/utilities/submit', target: '/rentee/utilities/submit' }),
+  Object.freeze({ path: 'portal/utilities/history', target: '/rentee/utilities/history' })
+]);
+
+/**
  * `/rentee` remains the canonical tenant-portal URL during the compatibility
  * period because existing invitation/login flows already land there. `/portal`
  * is retained only as a redirect so the application has one mounted portal tree.
