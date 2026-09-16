@@ -120,7 +120,10 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const statusInfo = getStatusInfo();
 
   const handleCancelClick = () => {
-    if (agreementState === 'active' || agreementState === 'completed' || agreementState === 'signed') {
+    if (agreementState === 'active' || agreementState === 'closed') {
+      return;
+    }
+    if (agreementState === 'completed' || agreementState === 'signed') {
       setShowCancelModal(true);
     } else if (window.confirm('Are you sure you want to cancel this agreement?')) {
       onCancelClick(agreement.id);
@@ -277,7 +280,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </button>
           )}
           
-          {onCancelClick && (
+          {onCancelClick && !['active', 'closed'].includes(agreementState) && (
             <button
               onClick={handleCancelClick}
               className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors flex items-center"
@@ -300,9 +303,8 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
       {showCancelModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-5">
-            <h3 className="text-lg font-medium mb-4">Cancel Active Agreement</h3>
+            <h3 className="text-lg font-medium mb-4">Cancel Agreement</h3>
             <p className="mb-4 text-gray-600">
-              This agreement is already active/completed. 
               Please provide a reason for cancellation:
             </p>
             <textarea
