@@ -112,6 +112,46 @@ jobs:
                 PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
               --output none
 
+      - name: Configure durable R2 storage
+        uses: azure/cli@v2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            for required in R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+              if [ -z "${!required:-}" ]; then
+                echo "$required is not configured in the GitHub Production environment." >&2
+                exit 1
+              fi
+            done
+
+            node scripts/validate-r2-connection.mjs
+
+            az extension add --name containerapp --upgrade --yes
+            az containerapp secret set \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets \
+                r2-access-key-id="$R2_ACCESS_KEY_ID" \
+                r2-secret-access-key="$R2_SECRET_ACCESS_KEY" \
+              --output none
+
+            az containerapp update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --set-env-vars \
+                STORAGE_DRIVER=r2 \
+                R2_ACCOUNT_ID="$R2_ACCOUNT_ID" \
+                R2_BUCKET="$R2_BUCKET" \
+                R2_ACCESS_KEY_ID=secretref:r2-access-key-id \
+                R2_SECRET_ACCESS_KEY=secretref:r2-secret-access-key \
+              --output none
+
       - name: Deploy immutable image
         uses: azure/cli@v2
         with:
