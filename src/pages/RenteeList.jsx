@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAppUsers, mapAppUserToRentee } from '../services/appUserService';
 import RenteeCard from '../components/rentees/RenteeCard';
-import { toast } from 'react-toastify';
 
 const RenteeList = () => {
   const [rentees, setRentees] = useState([]);
@@ -10,74 +9,62 @@ const RenteeList = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
-  
-  // Function to fetch rentees from app_users table
+
   const fetchRentees = useCallback(async () => {
     try {
-      console.log('Fetching rentees from app_users table...');
       setLoading(true);
       setError(null);
-      
-      // Fetch rentees from app_users table
+
+      // `rentee` remains the stored legacy user_type during Phase 3 compatibility.
       const data = await fetchAppUsers('rentee');
-      
-      console.log('Fetched data from app_users:', data);
-      
-      // Transform the data to the expected format
       const transformedData = (data || []).map(mapAppUserToRentee);
-      
-      console.log('Transformed data from app_users:', transformedData);
       setRentees(transformedData);
     } catch (error) {
-      console.error('Error fetching rentees:', error.message);
+      console.error('Error fetching tenants:', error.message);
       setError(error.message);
     } finally {
       setLoading(false);
     }
   }, []);
-  
-  // Fetch rentees on mount
+
   useEffect(() => {
     fetchRentees();
   }, [fetchRentees]);
 
-  // Filter and search rentees
-  const filteredRentees = rentees.filter(rentee => {
-    const matchesSearch = 
+  const filteredRentees = rentees.filter((rentee) => {
+    const matchesSearch =
       rentee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rentee.contactDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rentee.contactDetails?.phone?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     if (filter === 'all') return matchesSearch;
     if (filter === 'verified' && rentee.idCopyURL) return matchesSearch;
     if (filter === 'unverified' && !rentee.idCopyURL) return matchesSearch;
     if (filter === 'invited' && rentee.invited && !rentee.authId) return matchesSearch;
     if (filter === 'registered' && rentee.authId) return matchesSearch;
     if (filter === 'not_invited' && !rentee.invited) return matchesSearch;
-    
+
     return false;
   });
-
-  console.log('Filtered rentees:', filteredRentees);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Rentees</h1>
+        <h1 className="text-2xl font-bold">Tenants</h1>
         <Link
           to="/dashboard/rentees/new"
           className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors"
         >
-          Add New Rentee
+          Add New Tenant
         </Link>
       </div>
-      
+
       <div className="mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search rentees..."
+              placeholder="Search tenants..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -89,7 +76,7 @@ const RenteeList = () => {
               onChange={(e) => setFilter(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Rentees</option>
+              <option value="all">All Tenants</option>
               <option value="verified">ID Verified</option>
               <option value="unverified">ID Pending</option>
               <option value="invited">Invited</option>
@@ -107,7 +94,7 @@ const RenteeList = () => {
           </div>
         </div>
       </div>
-      
+
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -119,11 +106,11 @@ const RenteeList = () => {
         </div>
       ) : filteredRentees.length === 0 ? (
         <div className="bg-gray-100 p-6 rounded-lg text-center">
-          <p className="text-gray-600">No rentees found.</p>
+          <p className="text-gray-600">No tenants found.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredRentees.map(rentee => (
+          {filteredRentees.map((rentee) => (
             <RenteeCard key={rentee.id} rentee={rentee} onStatusChange={fetchRentees} />
           ))}
         </div>
@@ -132,4 +119,4 @@ const RenteeList = () => {
   );
 };
 
-export default RenteeList; 
+export default RenteeList;
