@@ -5,6 +5,7 @@ import {
   getActivationBlockingReasons,
   isAgreementSignatureComplete
 } from '../src/api/platform/tenancyActivation.js';
+import { guardTenancyActivationQuery } from '../src/api/platform/tenancyActivationGuard.js';
 
 const readyInput = () => ({
   agreement: {
@@ -72,4 +73,45 @@ test('incomplete move-in checklist blocks activation', () => {
 
   assert.equal(readiness.canActivate, false);
   assert.equal(readiness.checks.moveInChecklistComplete, false);
+});
+
+test('generic agreement CRUD cannot set status active', () => {
+  let nextCalled = false;
+  let responseStatus = null;
+  let responsePayload = null;
+  const req = {
+    body: {
+      action: 'update',
+      table: 'agreements',
+      payload: { status: 'active' }
+    }
+  };
+  const res = {
+    status(value) {
+      responseStatus = value;
+      return this;
+    },
+    json(value) {
+      responsePayload = value;
+      return this;
+    }
+  };
+
+  guardTenancyActivationQuery(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(responseStatus, 409);
+  assert.equal(responsePayload.code, 'TENANCY_ACTIVATION_REQUIRED');
+});
+
+test('normal agreement status updates still pass through generic CRUD', () => {
+  let nextCalled = false;
+  guardTenancyActivationQuery(
+    { body: { action: 'update', table: 'agreements', payload: { status: 'review' } } },
+    { status: () => ({ json: () => undefined }) },
+    () => { nextCalled = true; }
+  );
+  assert.equal(nextCalled, true);
 });
