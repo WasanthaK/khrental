@@ -96,7 +96,6 @@ az containerapp update \
     AUTH_SESSION_TTL_DAYS=30 \
     VITE_API_ENDPOINT= \
     VITE_ENABLE_DEV_BYPASS=false \
-    STORAGE_DRIVER=local \
   --output none
 
 tenant_id="$(az account show --query tenantId -o tsv)"
