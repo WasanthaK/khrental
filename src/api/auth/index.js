@@ -292,8 +292,37 @@ export const clearStorageSessionCookie = (res) => {
   res.append('Set-Cookie', parts.join('; '));
 };
 
+const PUBLIC_CREDENTIAL_ENDPOINTS = new Set([
+  'POST /api/platform/auth/sign-in',
+  'POST /api/platform/auth/sign-up',
+  'POST /api/platform/auth/reset-password',
+  'GET /api/platform/auth/reset-password/validate',
+  'POST /api/platform/auth/reset-password/redeem',
+  'GET /api/platform/auth/invitations/validate',
+  'POST /api/platform/auth/invitations/redeem'
+]);
+
+const normalizeRequestPath = (req) => String(req?.originalUrl || req?.url || req?.path || '')
+  .split('?')[0]
+  .replace(/\/+$/, '') || '/';
+
+export const isPublicCredentialRequest = (req) => {
+  const method = String(req?.method || 'GET').toUpperCase();
+  return PUBLIC_CREDENTIAL_ENDPOINTS.has(`${method} ${normalizeRequestPath(req)}`);
+};
+
 export const createSessionAuthMiddleware = ({ allowStorageCookie = false } = {}) => async (req, res, next) => {
   try {
+    // Credential-establishment and recovery endpoints are intentionally
+    // anonymous. An expired/stale Authorization header must never prevent a
+    // user from signing in, registering, redeeming an invitation, or resetting
+    // a password. Authentication/authorization remains mandatory on all other
+    // routes through their normal guards.
+    if (isPublicCredentialRequest(req)) {
+      next();
+      return;
+    }
+
     const accessToken = extractBearerToken(req) || (allowStorageCookie ? extractStorageCookieToken(req) : null);
     if (!accessToken) {
       next();
