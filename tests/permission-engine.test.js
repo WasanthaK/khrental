@@ -27,8 +27,8 @@ const expectPermissionError = (callback) => {
 test('maps administrator, staff, tenant, and unlinked roles consistently', () => {
   assert.equal(getRoleType({ user: { id: 'admin-1', role: 'admin' } }), 'admin');
   assert.equal(getRoleType({ user: { id: 'staff-1', role: 'maintenance_staff' } }), 'staff');
-  assert.equal(getRoleType({ user: { id: 'tenant-1', role: 'rentee' } }), 'tenant');
-  assert.equal(getRoleType({ user: { id: 'tenant-2', role: 'tenant' } }), 'tenant');
+  assert.equal(getRoleType({ user: { id: 'tenant-1', role: 'rentee' } }), 'rentee');
+  assert.equal(getRoleType({ user: { id: 'tenant-2', role: 'tenant' } }), 'rentee');
   assert.equal(getRoleType({ user: { id: 'unknown-1', role: 'authenticated' } }), 'unlinked');
 });
 
