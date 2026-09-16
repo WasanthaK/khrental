@@ -7,6 +7,7 @@ export const USER_ROLES = {
   FINANCE_STAFF: 'finance_staff',
   MAINTENANCE_STAFF: 'maintenance_staff',
   SUPERVISOR: 'supervisor',
+  // Legacy stored value retained for compatibility. UI terminology is Tenant / Lessee.
   RENTEE: 'rentee',
 };
 
@@ -108,7 +109,7 @@ export const ROUTES = {
   LOGIN: '/login',
   REGISTER: '/register',
   DASHBOARD: '/dashboard',
-  
+
   // Dashboard routes
   PROPERTIES: '/properties',
   PROPERTY_DETAILS: '/properties/:id',
@@ -125,8 +126,16 @@ export const ROUTES = {
   TEAM: '/team',
   TEAM_MEMBER_DETAILS: '/team/:id',
   SETTINGS: '/settings',
-  
-  // Rentee portal routes - /rentee and /portal are both supported
+
+  // Canonical tenant portal routes.
+  TENANT_PORTAL: '/rentee',
+  TENANT_PROFILE: '/rentee/profile',
+  TENANT_INVOICES: '/rentee/invoices',
+  TENANT_AGREEMENTS: '/rentee/agreements',
+  TENANT_MAINTENANCE: '/rentee/maintenance',
+  TENANT_UTILITIES: '/rentee/utilities',
+
+  // Legacy constant names retained so older components do not break.
   RENTEE_PORTAL: '/rentee',
   RENTEE_PROFILE: '/rentee/profile',
   RENTEE_INVOICES: '/rentee/invoices',
@@ -173,8 +182,8 @@ export const MAINTENANCE_PRIORITY = {
 };
 
 // Add a default image constant
-export const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZWVlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5OTk5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+export const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZWVlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5OTk5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
 
 // Note: Storage buckets and folders constants have been moved to fileService.js
 // to prevent duplication. Import them from there instead:
-// import { STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService'; 
+// import { STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';

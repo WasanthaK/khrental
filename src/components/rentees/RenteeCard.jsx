@@ -8,11 +8,11 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
   if (!rentee || !rentee.id) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-        Error: Invalid rentee data
+        Error: Invalid tenant data
       </div>
     );
   }
-  
+
   const {
     id,
     name,
@@ -21,42 +21,40 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
     associatedPropertyIds,
     registrationDate
   } = rentee;
-  
-  // Get invitation status
+
   const {
     status,
     loading: statusLoading,
     error: statusError,
     refresh: refreshStatus
   } = useInvitationStatus(id);
-  
-  // Handle successful invitation
+
   const handleInviteSuccess = async () => {
     try {
       await refreshStatus();
       if (onStatusChange && typeof onStatusChange === 'function') {
         onStatusChange();
       }
-    } catch (error) {
-      // Error is already handled by the hook
+    } catch (_error) {
+      // Error is already handled by the invitation-status hook.
     }
   };
-  
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="p-4">
         <div className="flex items-center mb-4">
           <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg mr-3">
-            {name ? name.charAt(0).toUpperCase() : 'R'}
+            {name ? name.charAt(0).toUpperCase() : 'T'}
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">{name || 'Unnamed Rentee'}</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{name || 'Unnamed Tenant'}</h3>
             <p className="text-sm text-gray-600">
               Registered: {formatDate(registrationDate) || 'N/A'}
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-2 mb-4">
           <p className="text-sm">
             <span className="text-gray-500">Email: </span>
@@ -73,7 +71,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
             </span>
           </p>
         </div>
-        
+
         <div className="flex justify-between items-center mb-3">
           <div className="flex space-x-2">
             {idCopyURL ? (
@@ -85,7 +83,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
                 ID Pending
               </span>
             )}
-            
+
             {statusError ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                 Status Error
@@ -94,20 +92,19 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
               <InvitationStatusBadge status={status} />
             )}
           </div>
-          <Link 
+          <Link
             to={`/dashboard/rentees/${id}`}
             className="text-blue-600 hover:text-blue-800 text-sm font-medium"
           >
             View Details
           </Link>
         </div>
-        
-        {/* Invitation button - only show if not registered */}
+
         {(!statusLoading && status !== 'registered' && !statusError) && (
           <div className="mt-2">
-            <InviteUserButton 
-              userId={id} 
-              onSuccess={handleInviteSuccess} 
+            <InviteUserButton
+              userId={id}
+              onSuccess={handleInviteSuccess}
               fullWidth={true}
               size="sm"
             />
@@ -118,4 +115,4 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
   );
 };
 
-export default RenteeCard; 
+export default RenteeCard;

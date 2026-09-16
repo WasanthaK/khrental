@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { WORKSPACE_SECTIONS, canAccessWorkspaceSection } from '../../utils/navigationPolicy.js';
 
-const MobileNav = ({ isRenteePortal = false }) => {
+const MobileNav = ({ isTenantPortal = false }) => {
   const location = useLocation();
   const { user, membership } = useAuth();
   const subject = { user, membership: membership || user?.membership || null };
@@ -24,7 +24,7 @@ const MobileNav = ({ isRenteePortal = false }) => {
     isActive ? 'text-blue-600' : 'text-gray-600'
   }`;
 
-  if (isRenteePortal) {
+  if (isTenantPortal) {
     return (
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white shadow-lg md:hidden">
         <div className="grid h-16 grid-cols-5">
