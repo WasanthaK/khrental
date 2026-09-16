@@ -17,6 +17,7 @@
     "migrate:staff-property-assignments": "node src/db/executeSql.js ./migrations/20260915_01_create_staff_property_assignments.sql",
     "migrate:user-invitations": "node src/db/executeSql.js ./migrations/20260915_02_create_user_invitations.sql",
     "migrate:password-reset-tokens": "node src/db/executeSql.js ./migrations/20260916_01_create_password_reset_tokens.sql",
+    "migrate:staff-permission-bundles": "node src/db/executeSql.js ./migrations/20260916_02_add_staff_permission_bundles.sql",
     "migrate:tenant:foundation": "node src/db/executeSql.js ./migrations/20260317_01_create_multi_tenant_foundation.sql",
     "migrate:tenant:backfill": "node src/db/executeSql.js ./migrations/20260317_02_backfill_default_tenant.sql",
     "add-properties-column": "node src/scripts/add_associated_properties_column.js",
@@ -45,7 +46,7 @@
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/sortable": "^10.0.2",
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
