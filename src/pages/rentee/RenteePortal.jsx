@@ -24,24 +24,20 @@ const RenteePortal = () => {
     setAgreements([]);
     setError(null);
 
-    // Skip if data has already been fetched or user is not available
     if (dataFetched.current || !user) {
       return;
     }
-    
-    // Set dataFetched to true immediately to prevent multiple fetches
+
     dataFetched.current = true;
-    
+
     const fetchRenteeData = async () => {
       try {
         setLoading(true);
-        
-        // For development bypass user, create mock data
+
         if (DEV_BYPASS_ENABLED && user.id === 'dev-user-id') {
-          // Create mock rentee data
           const mockRentee = {
             id: 'mock-rentee-id',
-            name: 'Development Rentee',
+            name: 'Development Tenant',
             email: user.email,
             propertyName: 'Mock Property',
             propertyAddress: '123 Development St, Test City',
@@ -49,8 +45,7 @@ const RenteePortal = () => {
             leaseStartDate: new Date().toISOString(),
             associatedPropertyIds: ['mock-property-id']
           };
-          
-          // Create mock invoices
+
           const mockInvoices = [
             {
               id: 'mock-invoice-1',
@@ -71,8 +66,7 @@ const RenteePortal = () => {
               createdat: new Date().toISOString()
             }
           ];
-          
-          // Create mock agreements
+
           const mockAgreements = [
             {
               id: 'mock-agreement-1',
@@ -84,40 +78,36 @@ const RenteePortal = () => {
               createdat: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
             }
           ];
-          
+
           setRenteeData(mockRentee);
           setInvoices(mockInvoices);
           setAgreements(mockAgreements);
           setLoading(false);
           return;
         }
-        
-        // For real users, fetch data from the database
-        // Fetch rentee profile from app_users table
+
+        // `rentee` remains the stored legacy user_type during Phase 3 compatibility.
         const renteeLookup = await findAppUserByAuthId(user.id);
 
         if (!renteeLookup.success) {
-          throw new Error(renteeLookup.error || 'Failed to load rentee profile');
+          throw new Error(renteeLookup.error || 'Failed to load tenant profile');
         }
 
         const renteeData = renteeLookup.data;
-        
+
         if (renteeData && renteeData.user_type === 'rentee') {
           const renteeId = renteeData.id;
-          
-          // Get structured associations from storage
+
           let structuredAssociations = getStructuredAssociations(renteeData.id);
           let propertyIds = [];
-          
-          // If no structured associations, construct from associated_property_ids
+
           if (structuredAssociations.length === 0 && renteeData.associated_property_ids) {
             propertyIds = renteeData.associated_property_ids;
             structuredAssociations = propertyIds.map(id => ({ propertyId: id, unitId: null }));
           } else {
             propertyIds = [...new Set(structuredAssociations.map(assoc => assoc.propertyId))];
           }
-          
-          // Fetch associated properties with their units
+
           let associatedProperties = [];
           if (propertyIds.length > 0) {
             const { data: propertiesData, error: propertiesError } = await platformClient
@@ -127,13 +117,12 @@ const RenteePortal = () => {
                 property_units(*)
               `)
               .in('id', propertyIds);
-            
+
             if (propertiesError) {
               throw propertiesError;
             }
-            
+
             if (propertiesData && propertiesData.length > 0) {
-              // For each property, get the associated units if it's an apartment
               associatedProperties = await Promise.all(propertiesData.map(async (property) => {
                 const propertyItem = {
                   id: property.id,
@@ -143,32 +132,28 @@ const RenteePortal = () => {
                   propertytype: property.propertytype || 'residential',
                   units: property.property_units || []
                 };
-                
-                // Get the unit associations for this property
+
                 const unitAssociations = structuredAssociations
                   .filter(assoc => assoc.propertyId === property.id && assoc.unitId)
                   .map(assoc => assoc.unitId);
-                
-                // If it's an apartment and has unit associations, attach them
+
                 if (property.propertytype === 'apartment' && unitAssociations.length > 0) {
                   const associatedUnits = property.property_units
                     ? property.property_units.filter(unit => unitAssociations.includes(unit.id))
                     : [];
-                  
+
                   propertyItem.associatedUnits = associatedUnits;
-                  
-                  // If there's an associated unit, use its rental value if available
+
                   if (associatedUnits.length > 0 && associatedUnits[0].rentalvalues?.rent) {
                     propertyItem.rent = associatedUnits[0].rentalvalues.rent;
                   }
                 }
-                
+
                 return propertyItem;
               }));
             }
           }
-          
-          // Format rentee data
+
           const formattedRentee = {
             id: renteeData.id,
             name: renteeData.name,
@@ -177,43 +162,41 @@ const RenteePortal = () => {
             associatedPropertyIds: renteeData.associated_property_ids || [],
             structuredAssociations: structuredAssociations
           };
-          
+
           setRenteeData(formattedRentee);
-          
-          // Fetch rentee's invoices
+
           const { data: invoicesData, error: invoicesError } = await platformClient
             .from('invoices')
             .select('*')
             .eq('renteeid', renteeId)
             .order('createdat', { ascending: false });
-          
+
           if (invoicesError) {
             throw invoicesError;
           }
           setInvoices(invoicesData || []);
-          
-          // Fetch rentee's agreements
+
           const { data: agreementsData, error: agreementsError } = await platformClient
             .from('agreements')
             .select('*')
             .eq('renteeid', renteeId)
             .order('createdat', { ascending: false });
-          
+
           if (agreementsError) {
             throw agreementsError;
           }
           setAgreements(agreementsData || []);
         } else {
-          throw new Error('User is not a rentee');
+          throw new Error('User is not a tenant');
         }
       } catch (error) {
-        console.error('Error fetching rentee data:', error.message);
+        console.error('Error fetching tenant data:', error.message);
         setError(error.message);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchRenteeData();
   }, [user?.id, activeTenantId]);
 
@@ -237,12 +220,11 @@ const RenteePortal = () => {
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-6">Welcome, {renteeData?.name || user.email}</h1>
-      
-      {/* Property Information */}
+
       {renteeData?.properties?.length > 0 ? (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4">Your Rental {renteeData.properties.length > 1 ? 'Properties' : 'Property'}</h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {renteeData.properties.map(property => (
               <div key={property.id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
@@ -250,24 +232,23 @@ const RenteePortal = () => {
                   <h3 className="font-medium text-gray-900">{property.name}</h3>
                   <p className="text-sm text-gray-500">{property.address}</p>
                 </div>
-                
+
                 <div className="p-4">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Type:</span>
                       <span className="text-gray-900 font-medium capitalize">{property.propertytype}</span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Rent:</span>
                       <span className="text-gray-900 font-medium">{formatCurrency(property.rent || 0)}</span>
                     </div>
-                    
-                    {/* Show unit information for apartments */}
+
                     {property.propertytype === 'apartment' && property.associatedUnits && property.associatedUnits.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Your Unit</h4>
-                        
+
                         {property.associatedUnits.map(unit => (
                           <div key={unit.id} className="bg-blue-50 border border-blue-100 rounded-md p-3">
                             <div className="flex items-center justify-between text-sm">
@@ -307,19 +288,18 @@ const RenteePortal = () => {
           No properties are currently associated with your account.
         </div>
       )}
-      
-      {/* Recent Invoices */}
+
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Recent Invoices</h2>
           <Link
-            to="/portal/invoices"
+            to="/rentee/invoices"
             className="text-blue-600 hover:text-blue-800"
           >
             View All
           </Link>
         </div>
-        
+
         {invoices.length > 0 ? (
           <div className="space-y-4">
             {invoices.slice(0, 3).map(invoice => (
@@ -348,19 +328,18 @@ const RenteePortal = () => {
           <p className="text-gray-500">No invoices found.</p>
         )}
       </div>
-      
-      {/* Recent Agreements */}
+
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Recent Agreements</h2>
           <Link
-            to="/portal/agreements"
+            to="/rentee/agreements"
             className="text-blue-600 hover:text-blue-800"
           >
             View All
           </Link>
         </div>
-        
+
         {agreements.length > 0 ? (
           <div className="space-y-4">
             {agreements.slice(0, 3).map(agreement => (
@@ -394,4 +373,4 @@ const RenteePortal = () => {
   );
 };
 
-export default RenteePortal; 
+export default RenteePortal;
