@@ -66,6 +66,14 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         borderColor: 'border-l-4 border-green-600',
         label: 'Active'
       };
+    } else if (agreementState === 'closed') {
+      return {
+        icon: FiCheck,
+        color: 'text-gray-700',
+        bgColor: 'bg-gray-100',
+        borderColor: 'border-l-4 border-gray-500',
+        label: 'Closed'
+      };
     } else if (status === 'signed' || status === 'completed' || signatureStatus === 'signing_complete') {
       return {
         icon: FiCheck,
@@ -112,7 +120,10 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const statusInfo = getStatusInfo();
 
   const handleCancelClick = () => {
-    if (agreementState === 'active' || agreementState === 'completed' || agreementState === 'signed') {
+    if (agreementState === 'active' || agreementState === 'closed') {
+      return;
+    }
+    if (agreementState === 'completed' || agreementState === 'signed') {
       setShowCancelModal(true);
     } else if (window.confirm('Are you sure you want to cancel this agreement?')) {
       onCancelClick(agreement.id);
@@ -250,6 +261,15 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             Onboarding
           </Link>
 
+          {['active', 'closed'].includes(agreementState) && (
+            <Link
+              to={`/dashboard/agreements/${agreement.id}?workspace=exit`}
+              className="px-3 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 transition-colors"
+            >
+              {agreementState === 'closed' ? 'Exit History' : 'Renewal / Exit'}
+            </Link>
+          )}
+
           {hasViewableDocument && (
             <button
               onClick={handleViewDocument}
@@ -260,7 +280,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </button>
           )}
           
-          {onCancelClick && (
+          {onCancelClick && !['active', 'closed'].includes(agreementState) && (
             <button
               onClick={handleCancelClick}
               className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors flex items-center"
@@ -283,9 +303,8 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
       {showCancelModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-5">
-            <h3 className="text-lg font-medium mb-4">Cancel Active Agreement</h3>
+            <h3 className="text-lg font-medium mb-4">Cancel Agreement</h3>
             <p className="mb-4 text-gray-600">
-              This agreement is already active/completed. 
               Please provide a reason for cancellation:
             </p>
             <textarea
