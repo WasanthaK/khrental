@@ -1,35 +1,92 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { AGREEMENT_STATUS } from '../constants/agreementStatus';
-import { fetchAppUser, fetchAppUsers } from '../services/appUserService';
+import { fetchAppUsers } from '../services/appUserService';
 import {
   fetchProperty,
   fetchPropertyUnit,
   getTemplate,
-  listTemplates,
   listProperties,
-  listPropertyUnits
+  listPropertyUnits,
+  listTemplates
 } from '../services/agreementService';
+import { renderAgreementContent } from '../services/agreementWorkflowService';
+
+const today = () => new Date().toISOString().split('T')[0];
+const oneYearFromToday = () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+const parseObject = (value, fallback = {}) => {
+  if (!value) {
+    return fallback;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+};
+
+const dateOnly = (value, fallback) => {
+  if (!value) {
+    return fallback;
+  }
+  return String(value).split('T')[0];
+};
+
+const firstNonEmpty = (...values) => values.find((value) => (
+  value !== undefined
+  && value !== null
+  && String(value).trim() !== ''
+));
+
+const normalizeInitialData = (initialData) => {
+  if (!initialData) {
+    return {
+      templateid: '',
+      propertyid: '',
+      unitid: '',
+      renteeid: '',
+      status: AGREEMENT_STATUS.DRAFT,
+      propertyType: '',
+      terms: {
+        monthlyRent: '',
+        depositAmount: '',
+        paymentDueDay: '5',
+        noticePeriod: '30',
+        additionalTerms: '',
+        startDate: today(),
+        endDate: oneYearFromToday()
+      }
+    };
+  }
+
+  const terms = parseObject(initialData.terms, {});
+  return {
+    ...initialData,
+    propertyType: initialData.propertyType || initialData.property?.propertytype || initialData.properties?.propertytype || '',
+    terms: {
+      ...terms,
+      monthlyRent: firstNonEmpty(terms.monthlyRent, initialData.rentamount, ''),
+      depositAmount: firstNonEmpty(terms.depositAmount, initialData.depositamount, ''),
+      paymentDueDay: firstNonEmpty(terms.paymentDueDay, '5'),
+      noticePeriod: firstNonEmpty(terms.noticePeriod, '30'),
+      additionalTerms: firstNonEmpty(terms.additionalTerms, terms.specialConditions, ''),
+      startDate: dateOnly(firstNonEmpty(terms.startDate, initialData.startdate), today()),
+      endDate: dateOnly(firstNonEmpty(terms.endDate, initialData.enddate), oneYearFromToday())
+    }
+  };
+};
+
+const getRentalValues = (record) => parseObject(record?.rentalvalues, {});
+const getRecordTerms = (record) => parseObject(record?.terms, {});
 
 export const useAgreementForm = (initialData = null) => {
-  const [formData, setFormData] = useState({
-    templateid: '',
-    propertyid: '',
-    unitid: '',
-    renteeid: '',
-    status: AGREEMENT_STATUS.DRAFT,
-    terms: {
-      monthlyRent: '',
-      depositAmount: '',
-      paymentDueDay: '',
-      noticePeriod: '',
-      additionalTerms: '',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    }
-  });
-
+  const [formData, setFormData] = useState(() => normalizeInitialData(initialData));
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [properties, setProperties] = useState([]);
@@ -37,595 +94,255 @@ export const useAgreementForm = (initialData = null) => {
   const [rentees, setRentees] = useState([]);
   const [templateContent, setTemplateContent] = useState('');
   const [processedContent, setProcessedContent] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [selectedAmenities, setSelectedAmenities] = useState([]);
-  const [amenities, setAmenities] = useState([]);
+  const renderVersionRef = useRef(0);
 
-  // Load initial data
   useEffect(() => {
-    if (initialData) {
-      // Create a deep copy of the initialData
-      const formattedData = {...initialData};
-      
-      // Initialize terms object if it doesn't exist
-      if (!formattedData.terms) {
-        formattedData.terms = {};
-      }
-      
-      // Map database date fields to terms object fields if not already set
-      if (formattedData.startdate && !formattedData.terms.startDate) {
-        console.log('Mapping database startdate to terms.startDate:', formattedData.startdate);
-        formattedData.terms.startDate = formattedData.startdate;
-      }
-      
-      if (formattedData.enddate && !formattedData.terms.endDate) {
-        console.log('Mapping database enddate to terms.endDate:', formattedData.enddate);
-        formattedData.terms.endDate = formattedData.enddate;
-      }
-      
-      // Set the formatted data
-      setFormData(formattedData);
-    }
-    loadData();
+    setFormData(normalizeInitialData(initialData));
   }, [initialData]);
 
-  // Load all necessary data
-  const loadData = async () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [templateRows, propertyRows, renteeRows] = await Promise.all([
+          listTemplates(),
+          listProperties(),
+          fetchAppUsers('rentee')
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const sortedProperties = (propertyRows || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const sortedRentees = (renteeRows || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        setTemplates(templateRows || []);
+        setProperties(sortedProperties);
+        setRentees(sortedRentees);
+
+        const selectedPropertyId = initialData?.propertyid || '';
+        if (selectedPropertyId) {
+          const units = await listPropertyUnits(selectedPropertyId);
+          if (!cancelled) {
+            setPropertyUnits(units || []);
+            const selectedProperty = sortedProperties.find((property) => String(property.id) === String(selectedPropertyId));
+            if (selectedProperty?.propertytype) {
+              setFormData((current) => ({ ...current, propertyType: selectedProperty.propertytype }));
+            }
+          }
+        } else {
+          setPropertyUnits([]);
+        }
+
+        const selectedTemplateId = initialData?.templateid || '';
+        if (selectedTemplateId) {
+          const template = await getTemplate(selectedTemplateId);
+          if (!cancelled) {
+            setTemplateContent(template?.content || '');
+          }
+        } else if (!cancelled) {
+          setTemplateContent('');
+        }
+      } catch (loadError) {
+        console.error('Error loading agreement form data:', loadError);
+        if (!cancelled) {
+          setError(loadError.message);
+          toast.error('Failed to load agreement form data');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.id, initialData?.propertyid, initialData?.templateid]);
+
+  useEffect(() => {
+    if (!templateContent) {
+      setProcessedContent('');
+      return undefined;
+    }
+
+    const version = ++renderVersionRef.current;
+    let cancelled = false;
+
+    const renderPreview = async () => {
+      try {
+        const property = properties.find((item) => String(item.id) === String(formData.propertyid)) || null;
+        const unit = propertyUnits.find((item) => String(item.id) === String(formData.unitid)) || null;
+        const rentee = rentees.find((item) => String(item.id) === String(formData.renteeid)) || null;
+
+        const rendered = await renderAgreementContent({
+          templateContent,
+          agreement: {
+            ...formData,
+            startdate: formData.terms?.startDate || formData.startdate || null,
+            enddate: formData.terms?.endDate || formData.enddate || null
+          },
+          related: { property, unit, rentee }
+        });
+
+        if (!cancelled && version === renderVersionRef.current) {
+          setProcessedContent(rendered);
+        }
+      } catch (renderError) {
+        console.error('Error rendering agreement preview:', renderError);
+        if (!cancelled && version === renderVersionRef.current) {
+          setProcessedContent('');
+        }
+      }
+    };
+
+    renderPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData, templateContent, properties, propertyUnits, rentees]);
+
+  const loadPropertyUnitsForProperty = async (propertyId) => {
+    if (!propertyId) {
+      setPropertyUnits([]);
+      return [];
+    }
+    const units = await listPropertyUnits(propertyId);
+    setPropertyUnits(units || []);
+    return units || [];
+  };
+
+  const loadUnitDetails = async (unitId) => {
+    if (!unitId) {
+      return;
+    }
+
     try {
-      setLoading(true);
-      await Promise.all([
-        loadTemplates(),
-        loadProperties(),
-        loadRentees()
-      ]);
-      
-      if (initialData?.propertyid) {
-        await loadPropertyUnits(initialData.propertyid);
+      const unit = propertyUnits.find((item) => String(item.id) === String(unitId))
+        || await fetchPropertyUnit(unitId);
+      if (!unit) {
+        throw new Error('Unit not found');
       }
-      
-      if (initialData?.templateid) {
-        await loadTemplateContent(initialData.templateid);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setError(error.message);
-      toast.error('Failed to load form data');
-    } finally {
-      setLoading(false);
+
+      const property = properties.find((item) => String(item.id) === String(unit.propertyid))
+        || (unit.propertyid ? await fetchProperty(unit.propertyid).catch(() => null) : null);
+      const unitRental = getRentalValues(unit);
+      const propertyRental = getRentalValues(property);
+      const propertyTerms = getRecordTerms(property);
+
+      setFormData((current) => ({
+        ...current,
+        unitid: unitId,
+        terms: {
+          ...current.terms,
+          monthlyRent: firstNonEmpty(unitRental.monthlyRent, unitRental.rent, unitRental.baseRent, propertyRental.monthlyRent, propertyRental.rent, propertyRental.baseRent, current.terms?.monthlyRent, ''),
+          depositAmount: firstNonEmpty(unitRental.depositAmount, unitRental.deposit, propertyRental.depositAmount, propertyRental.deposit, current.terms?.depositAmount, ''),
+          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay, '5'),
+          noticePeriod: firstNonEmpty(propertyTerms.noticePeriod, current.terms?.noticePeriod, '30')
+        }
+      }));
+    } catch (unitError) {
+      console.error('Error loading unit details:', unitError);
+      toast.error('Failed to load unit details');
     }
   };
 
-  // Load templates
-  const loadTemplates = async () => {
-    const data = await listTemplates();
-    setTemplates(data);
+  const handleInputChange = (field, value) => {
+    setFormData((current) => {
+      if (field.includes('.')) {
+        const [parent, child] = field.split('.');
+        return {
+          ...current,
+          [parent]: {
+            ...current[parent],
+            [child]: value
+          }
+        };
+      }
+
+      return { ...current, [field]: value };
+    });
+
+    if (field === 'unitid' && value) {
+      void loadUnitDetails(value);
+    }
   };
 
-  // Load properties
-  const loadProperties = async () => {
-    const data = await listProperties();
-    setProperties((data || []).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  };
+  const handlePropertyChange = async (propertyId) => {
+    setFormData((current) => ({
+      ...current,
+      propertyid: propertyId,
+      unitid: '',
+      propertyType: ''
+    }));
 
-  // Load property units
-  const loadPropertyUnits = async (propertyId) => {
     if (!propertyId) {
       setPropertyUnits([]);
       return;
     }
 
-    const data = await listPropertyUnits(propertyId);
-    setPropertyUnits(data);
-  };
-
-  // Load rentees
-  const loadRentees = async () => {
-    const data = await fetchAppUsers('rentee');
-    setRentees((data || []).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  };
-
-  // Load and process template content
-  const loadTemplateContent = async (templateId) => {
-    if (!templateId) {
-      setTemplateContent('');
-      setProcessedContent('');
-      return;
-    }
-
-    const data = await getTemplate(templateId);
-    if (!data) {throw new Error('Template not found');}
-    
-    // Check for date placeholders in the template
-    const { content } = data;
-    const datePlaceholders = content.match(/\{\{([^}]*date[^}]*)\}\}/gi);
-    if (datePlaceholders?.length > 0) {
-      console.log('Found date placeholders in template:', datePlaceholders);
-    }
-    
-    setTemplateContent(content);
-    await processTemplate(content);
-  };
-
-  // Process template with form data
-  const processTemplate = async (content) => {
-    if (!content) {return;}
-
     try {
-      let processed = content;
-      console.log("Processing template with data:", {
-        propertyId: formData.propertyid,
-        unitId: formData.unitid,
-        renteeId: formData.renteeid,
-        startDate: formData.terms?.startDate,
-        endDate: formData.terms?.endDate
-      });
-
-      // Get property details if needed
-      if (formData.propertyid) {
-        const property = await fetchProperty(formData.propertyid);
-
-        if (property) {
-          // Standard property placeholders
-          processed = processed.replace(/\{\{property\.([^}]+)\}\}/g, (match, field) => {
-            const value = property[field.toLowerCase()];
-            if (field.toLowerCase() === 'address') {
-              return formatAddress(value);
-            }
-            if (field.toLowerCase() === 'rentalvalues') {
-              return formatCurrency(value.baseRent);
-            }
-            return value || match;
-          });
-
-          // Custom property placeholders
-          processed = processed.replace(/\{\{propertyName\}\}/g, property.name || '');
-          processed = processed.replace(/\{\{propertyAddress\}\}/g, formatAddress(property.address) || '');
-
-          // Process bank details
-          processed = processed.replace(/\{\{bank\.([^}]+)\}\}/g, (match, field) => {
-            switch (field.toLowerCase()) {
-              case 'name':
-                return property.bank_name || match;
-              case 'branch':
-                return property.bank_branch || match;
-              case 'accountnumber':
-                return property.bank_account_number || match;
-              default:
-                return match;
-            }
-          });
-
-          // Custom bank placeholders 
-          processed = processed.replace(/\{\{propertyBankName\}\}/g, property.bank_name || '');
-          processed = processed.replace(/\{\{propertyBankBranch\}\}/g, property.bank_branch || '');
-          processed = processed.replace(/\{\{propertyBankAccount\}\}/g, property.bank_account_number || '');
-        }
+      await loadPropertyUnitsForProperty(propertyId);
+      const property = properties.find((item) => String(item.id) === String(propertyId))
+        || await fetchProperty(propertyId);
+      if (!property) {
+        throw new Error('Property not found');
       }
 
-      // Get unit details if needed
-      if (formData.unitid) {
-        const unit = await fetchPropertyUnit(formData.unitid);
+      const rentalValues = getRentalValues(property);
+      const propertyTerms = getRecordTerms(property);
 
-        if (unit) {
-          // Standard unit placeholders
-          processed = processed.replace(/\{\{unit\.([^}]+)\}\}/g, (match, field) => {
-            return unit[field.toLowerCase()] || match;
-          });
-
-          // Custom unit placeholders
-          processed = processed.replace(/\{\{unitNumber\}\}/g, unit.unitnumber || '');
+      setFormData((current) => ({
+        ...current,
+        propertyid: propertyId,
+        propertyType: property.propertytype || '',
+        terms: {
+          ...current.terms,
+          monthlyRent: firstNonEmpty(rentalValues.monthlyRent, rentalValues.rent, rentalValues.baseRent, current.terms?.monthlyRent, ''),
+          depositAmount: firstNonEmpty(rentalValues.depositAmount, rentalValues.deposit, current.terms?.depositAmount, ''),
+          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay, '5'),
+          noticePeriod: firstNonEmpty(propertyTerms.noticePeriod, current.terms?.noticePeriod, '30')
         }
-      }
-
-      // Enhanced rentee details processing
-      if (formData.renteeid) {
-        const rentee = await fetchAppUser(formData.renteeid);
-
-        if (rentee) {
-          // Standard rentee placeholders
-          processed = processed.replace(/\{\{rentee\.([^}]+)\}\}/g, (match, field) => {
-            switch (field.toLowerCase()) {
-              case 'fullname':
-                return rentee.name;
-              case 'nationalid':
-                return rentee.national_id || match;
-              case 'address':
-                return rentee.permanent_address || match;
-              case 'contact':
-                return rentee.contact_details?.phone || match;
-              default:
-                return rentee[field.toLowerCase()] || match;
-            }
-          });
-
-          // Custom rentee placeholders
-          processed = processed.replace(/\{\{renteeName\}\}/g, rentee.name || '');
-          processed = processed.replace(/\{\{renteeNationalId\}\}/g, rentee.national_id || '');
-          processed = processed.replace(/\{\{renteePermanentAddress\}\}/g, rentee.permanent_address || '');
-        }
-      }
-
-      // Enhanced terms processing
-      if (formData.terms) {
-        // Handle dates directly with explicit logging for debugging
-        if (formData.terms.startDate) {
-          const formattedStartDate = formatDate(formData.terms.startDate);
-          console.log('Replacing startDate:', formData.terms.startDate, formattedStartDate);
-          
-          // Try all possible placeholder formats with case variations
-          processed = processed.replace(/\{\{startDate\}\}/g, formattedStartDate);
-          processed = processed.replace(/\{\{startdate\}\}/g, formattedStartDate);
-          processed = processed.replace(/\{\{StartDate\}\}/g, formattedStartDate);
-          processed = processed.replace(/\{\{terms\.startDate\}\}/g, formattedStartDate);
-          processed = processed.replace(/\{\{terms\.startdate\}\}/g, formattedStartDate);
-          
-          // Also check for database column name format
-          processed = processed.replace(/\{\{agreement\.startdate\}\}/g, formattedStartDate);
-          processed = processed.replace(/\{\{agreement\.startDate\}\}/g, formattedStartDate);
-        }
-        
-        if (formData.terms.endDate) {
-          const formattedEndDate = formatDate(formData.terms.endDate);
-          console.log('Replacing endDate:', formData.terms.endDate, formattedEndDate);
-          
-          // Try all possible placeholder formats with case variations
-          processed = processed.replace(/\{\{endDate\}\}/g, formattedEndDate);
-          processed = processed.replace(/\{\{enddate\}\}/g, formattedEndDate);
-          processed = processed.replace(/\{\{EndDate\}\}/g, formattedEndDate);
-          processed = processed.replace(/\{\{terms\.endDate\}\}/g, formattedEndDate);
-          processed = processed.replace(/\{\{terms\.enddate\}\}/g, formattedEndDate);
-          
-          // Also check for database column name format
-          processed = processed.replace(/\{\{agreement\.enddate\}\}/g, formattedEndDate);
-          processed = processed.replace(/\{\{agreement\.endDate\}\}/g, formattedEndDate);
-        }
-
-        // Standard terms placeholders - we process dates separately above
-        processed = processed.replace(/\{\{terms\.([^}]+)\}\}/g, (match, field) => {
-          // Skip date fields as we've already processed them
-          if (field.toLowerCase().includes('date')) {
-            return match;
-          }
-          
-          const value = formData.terms[field.toLowerCase()];
-          if (field.toLowerCase().includes('amount') || field.toLowerCase().includes('rent')) {
-            return formatCurrency(value);
-          }
-          return value || match;
-        });
-
-        // Custom terms placeholders
-        processed = processed.replace(/\{\{monthlyRent\}\}/g, formatCurrency(formData.terms?.monthlyRent) || '');
-        processed = processed.replace(/\{\{depositAmount\}\}/g, formatCurrency(formData.terms?.depositAmount) || '');
-        processed = processed.replace(/\{\{paymentDueDay\}\}/g, formData.terms?.paymentDueDay || '');
-        processed = processed.replace(/\{\{noticePeriod\}\}/g, formData.terms?.noticePeriod || '');
-      }
-
-      // Add special placeholders
-      processed = processed.replace(/\{\{currentDate\}\}/g, formatDate(new Date()));
-      processed = processed.replace(/\{\{expiryDate\}\}/g, formatDate(addDays(new Date(), 7)));
-
-      // Log missing placeholders for debugging
-      const remainingPlaceholders = processed.match(/\{\{([^}]+)\}\}/g);
-      if (remainingPlaceholders?.length > 0) {
-        console.warn('Remaining unprocessed placeholders:', remainingPlaceholders);
-        
-        // Special handling for unitNumber that's still showing up in logs as unprocessed
-        // IMPORTANT: Using &nbsp; (non-breaking space) instead of empty string or regular space
-        // This special case is needed because in some templates the unitNumber placeholder 
-        // might not be processed by earlier replacements, causing text to render incorrectly
-        // e.g., "Malabe {{unitNumber}} located at" would render as "Malabelocated at" without this fix
-        if (remainingPlaceholders.includes('{{unitNumber}}')) {
-          console.log('Explicitly replacing remaining {{unitNumber}} with non-breaking space');
-          processed = processed.replace(/\{\{unitNumber\}\}/g, '&nbsp;');
-        }
-      }
-
-      // CRITICAL: Do not modify the HTML structure of the processed content
-      // The HTML formatting from the template editor must be preserved exactly as is
-      // Adding line breaks, formatting, or other transformations will break the layout
-      
-      // Add basic styling for tables to ensure they show up properly in the preview
-      processed = processed.replace(/<table/g, '<table style="width:100%; border-collapse:collapse; margin-bottom:1rem; border:1px solid #ddd;"');
-      processed = processed.replace(/<td/g, '<td style="border:1px solid #ddd; padding:8px; vertical-align:top;"');
-      processed = processed.replace(/<th/g, '<th style="border:1px solid #ddd; padding:8px; background-color:#f8f9fa; font-weight:bold; text-align:left;"');
-      
-      // Encode the processed content for use in URLs
-      setProcessedContent(processed);
-    } catch (error) {
-      console.error('Error processing template:', error);
-      toast.error('Failed to process template');
-    }
-  };
-
-  // Handle input changes
-  const handleInputChange = (field, value) => {
-    setFormData(prev => {
-      const newData = { ...prev };
-      if (field.includes('.')) {
-        const [parent, child] = field.split('.');
-        newData[parent] = { ...newData[parent], [child]: value };
-      } else {
-        newData[field] = value;
-        // Load unit details when unit is selected
-        if (field === 'unitid' && value) {
-          loadUnitDetails(value);
-        }
-      }
-      return newData;
-    });
-  };
-
-  // Load unit details and set rental values
-  const loadUnitDetails = async (unitId) => {
-    if (!unitId) {return;}
-
-    try {
-      console.log('Loading unit details for ID:', unitId);
-      
-      // Get both the unit and its associated property
-      const unitData = await fetchPropertyUnit(unitId);
-      const propertyData = unitData?.propertyid
-        ? await fetchProperty(unitData.propertyid).catch(() => null)
-        : null;
-
-      if (!unitData) {throw new Error('Unit not found');}
-      
-      console.log('Unit data loaded:', {
-        unitId: unitData.id,
-        unitNumber: unitData.unitnumber,
-        hasRentalValues: !!unitData.rentalvalues,
-        hasProperty: !!propertyData
-      });
-
-      // Extract rental values with fallbacks
-      let monthlyRent = '';
-      let depositAmount = '';
-      
-      // Try to get values from unit first, then from property
-      if (unitData.rentalvalues) {
-        console.log('Using rental values from unit:', unitData.rentalvalues);
-        monthlyRent = unitData.rentalvalues.monthlyRent || 
-                      unitData.rentalvalues.rent || 
-                      unitData.rentalvalues.baseRent || '';
-        depositAmount = unitData.rentalvalues.depositAmount || 
-                       unitData.rentalvalues.deposit || '';
-      } else if (propertyData?.rentalvalues) {
-        console.log('Using rental values from property:', propertyData.rentalvalues);
-        monthlyRent = propertyData.rentalvalues.monthlyRent || 
-                     propertyData.rentalvalues.rent || 
-                     propertyData.rentalvalues.baseRent || '';
-        depositAmount = propertyData.rentalvalues.depositAmount || 
-                       propertyData.rentalvalues.deposit || '';
-      }
-      
-      // Extract terms from property (units don't have terms)
-      let paymentDueDay = '5'; // Default value
-      let noticePeriod = '30'; // Default value
-      
-      if (propertyData?.terms) {
-        console.log('Using terms from property:', propertyData.terms);
-        if (propertyData.terms.paymentDueDay) {
-          paymentDueDay = propertyData.terms.paymentDueDay;
-        }
-        if (propertyData.terms.noticePeriod) {
-          noticePeriod = propertyData.terms.noticePeriod;
-        }
-      }
-      
-      // Update form data with all values
-      setFormData(prev => {
-        console.log('Updating form data with unit details:', {
-          monthlyRent,
-          depositAmount,
-          paymentDueDay,
-          noticePeriod
-        });
-        
-        return {
-          ...prev,
-          terms: {
-            ...prev.terms,
-            monthlyRent,
-            depositAmount,
-            paymentDueDay,
-            noticePeriod
-          }
-        };
-      });
-    } catch (error) {
-      console.error('Error loading unit details:', error);
-      toast.error('Failed to load unit details');
-    }
-  };
-
-  // Handle property change
-  const handlePropertyChange = async (propertyId) => {
-    handleInputChange('propertyid', propertyId);
-    handleInputChange('unitid', null); // Reset unit to null when property changes
-    await loadPropertyUnits(propertyId);
-    
-    // Load property details and set rental values
-    try {
-      console.log('Loading property details for ID:', propertyId);
-      const property = await fetchProperty(propertyId);
-      if (!property) {throw new Error('Property not found');}
-      
-      console.log('Property data loaded:', {
-        propertyId: property.id,
-        propertyName: property.name,
-        propertyType: property.propertytype,
-        hasRentalValues: !!property.rentalvalues,
-        hasTerms: !!property.terms
-      });
-
-      // Extract rental values with fallbacks
-      let monthlyRent = '';
-      let depositAmount = '';
-      
-      if (property.rentalvalues) {
-        console.log('Using rental values from property:', property.rentalvalues);
-        monthlyRent = property.rentalvalues.monthlyRent || 
-                     property.rentalvalues.rent || 
-                     property.rentalvalues.baseRent || '';
-        depositAmount = property.rentalvalues.depositAmount || 
-                       property.rentalvalues.deposit || '';
-      }
-      
-      // Extract terms from property with defaults
-      let paymentDueDay = '5'; // Default value
-      let noticePeriod = '30'; // Default value
-      
-      if (property.terms) {
-        console.log('Using terms from property:', property.terms);
-        if (property.terms.paymentDueDay) {
-          paymentDueDay = property.terms.paymentDueDay;
-        }
-        if (property.terms.noticePeriod) {
-          noticePeriod = property.terms.noticePeriod;
-        }
-      }
-
-      // Update form data with property values
-      setFormData(prev => {
-        console.log('Updating form data with property details:', {
-          propertyType: property.propertytype,
-          monthlyRent,
-          depositAmount,
-          paymentDueDay,
-          noticePeriod
-        });
-        
-        return {
-          ...prev,
-          propertyType: property.propertytype,
-          terms: {
-            ...prev.terms,
-            monthlyRent,
-            depositAmount,
-            paymentDueDay,
-            noticePeriod
-          }
-        };
-      });
-    } catch (error) {
-      console.error('Error loading property details:', error);
+      }));
+    } catch (propertyError) {
+      console.error('Error loading property details:', propertyError);
       toast.error('Failed to load property details');
     }
   };
 
-  // Handle template change
   const handleTemplateChange = async (templateId) => {
-    handleInputChange('templateid', templateId);
-    await loadTemplateContent(templateId);
-  };
+    setFormData((current) => ({ ...current, templateid: templateId }));
 
-  // Check if agreement is editable
-  const isAgreementEditable = () => {
-    return !formData.id || 
-           formData.status === AGREEMENT_STATUS.DRAFT || 
-           formData.status === AGREEMENT_STATUS.REVIEW;
-  };
+    if (!templateId) {
+      setTemplateContent('');
+      return;
+    }
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount || 0);
-  };
-
-  // Helper functions
-  const formatDate = (date) => {
-    if (!date) {return '';}
-    
     try {
-      // Handle different date formats
-      let dateObj;
-      
-      if (typeof date === 'string') {
-        // For ISO format strings like "2023-05-15"
-        dateObj = new Date(date);
-      } else if (date instanceof Date) {
-        dateObj = date;
-      } else {
-        console.warn('Invalid date format:', date);
-        return '';
+      const template = await getTemplate(templateId);
+      if (!template?.content) {
+        throw new Error('Template not found');
       }
-      
-      // Check if date is valid
-      if (isNaN(dateObj.getTime())) {
-        console.warn('Invalid date:', date);
-        return '';
-      }
-      
-      return dateObj.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error, date);
-      return '';
+      setTemplateContent(template.content);
+    } catch (templateError) {
+      console.error('Error loading template:', templateError);
+      setTemplateContent('');
+      toast.error('Failed to load agreement template');
     }
   };
 
-  const formatAddress = (address) => {
-    return address?.replace(/\n/g, '<br>') || '';
-  };
-
-  const addDays = (date, days) => {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
-  };
-
-  // Update processed content when form data changes
-  useEffect(() => {
-    if (templateContent) {
-      console.log("Form data or template changed - processing template", { 
-        hasTemplate: !!templateContent,
-        propertyId: formData.propertyid,
-        unitId: formData.unitid,
-        renteeId: formData.renteeid,
-        termsKeys: formData.terms ? Object.keys(formData.terms) : []
-      });
-      processTemplate(templateContent);
-    }
-  }, [formData, templateContent]);
-
-  // Force template processing when any data changes
-  useEffect(() => {
-    // This effect runs on mount or when dependencies change
-    if (formData.propertyid && formData.renteeid && formData.templateid && templateContent) {
-      console.log("Critical data changed - forcing template processing");
-      processTemplate(templateContent);
-    }
-  }, [
-    formData.propertyid, 
-    formData.renteeid, 
-    formData.unitid, 
-    formData.terms?.monthlyRent,
-    formData.terms?.depositAmount,
-    formData.terms?.startDate,
-    formData.terms?.endDate,
-    formData.terms?.paymentDueDay,
-    formData.terms?.noticePeriod,
-    formData.terms?.additionalTerms
-  ]);
-
-  useEffect(() => {
-    const areArraysEqual = (arr1, arr2) => {
-      if (arr1?.length !== arr2?.length) {
-        return false;
-      }
-      return arr1?.every((item, index) => item === arr2[index]);
-    };
-
-    if (!areArraysEqual(selectedAmenities, amenities)) {
-      setAmenities(selectedAmenities || []);
-    }
-  }, [selectedAmenities]); // Removed amenities from dependencies to prevent infinite loop
+  const isAgreementEditable = () => (
+    !formData.id
+    || formData.status === AGREEMENT_STATUS.DRAFT
+    || formData.status === AGREEMENT_STATUS.REVIEW
+  );
 
   return {
     formData,
@@ -644,4 +361,4 @@ export const useAgreementForm = (initialData = null) => {
     handleTemplateChange,
     isAgreementEditable
   };
-}; 
+};
