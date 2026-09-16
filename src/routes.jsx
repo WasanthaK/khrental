@@ -117,7 +117,7 @@ const PublicRoute = ({ children }) => {
       if (user.profileId || user.role !== 'authenticated') {
         logRouter('User profile loaded', { 
           role: user.role, 
-          profileId: user.profileId, 
+          profileId: user.profileId,
           profileType: user.profileType 
         });
         setProfileLoaded(true);
@@ -237,11 +237,7 @@ const routes = [
       },
       {
         path: 'reset-password',
-        element: (
-          <PublicRoute>
-            <ResetPassword />
-          </PublicRoute>
-        ),
+        element: <ResetPassword />,
       },
       {
         path: 'setup-account',
