@@ -1,16 +1,16 @@
-import { createBrowserRouter, Navigate, useNavigate, useParams, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useLocation, useNavigate, useParams, RouterProvider } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
+import { resolveLegacyAdminPath, resolveLegacyTenantPath } from './utils/routePolicy.js';
 import NotFound from './pages/NotFound';
 
 // Layout components
 import RootLayout from './components/layouts/RootLayout';
 import DashboardLayout from './components/layouts/DashboardLayout';
 import RenteePortalLayout from './components/layouts/RenteePortalLayout';
-import AdminLayout from './components/layouts/AdminLayout';
 
 // Auth pages
 import Login from './pages/Login';
@@ -52,7 +52,6 @@ import Settings from './pages/Settings';
 import TenantAdmin from './pages/TenantAdmin';
 import AdminTools from './pages/AdminTools';
 import FileUploadTest from './pages/FileUploadTest';
-import AdminPanel from './pages/AdminPanel';
 import AdminDashboard from './pages/AdminDashboard';
 import DigitalSignatureForm from './pages/DigitalSignatureForm';
 import SignatureProgressDemo from './components/agreements/SignatureProgressDemo';
@@ -124,6 +123,12 @@ const UuidGuard = ({ children }) => {
   }, [id, navigate]);
 
   return isValid ? children : <LoadingScreen message="Validating..." />;
+};
+
+const LegacyRouteRedirect = ({ resolver }) => {
+  const location = useLocation();
+  const targetPath = resolver(location.pathname);
+  return <Navigate to={`${targetPath}${location.search || ''}${location.hash || ''}`} replace />;
 };
 
 const permissionRoute = (permissions, element, requireAll = false) => (
@@ -438,33 +443,16 @@ const routes = [
         children: tenantPortalChildren
       },
       {
-        path: 'portal',
+        path: 'portal/*',
         element: (
           <ProtectedRoute requiredPortalTypes={[PORTAL_TYPES.TENANT]}>
-            <RenteePortalLayout />
+            <LegacyRouteRedirect resolver={resolveLegacyTenantPath} />
           </ProtectedRoute>
-        ),
-        children: tenantPortalChildren
+        )
       },
       {
-        path: 'admin',
-        element: adminRoute(<AdminLayout />),
-        children: [
-          { index: true, element: <AdminPanel /> },
-          { path: 'users', element: <TeamList /> },
-          { path: 'settings', element: <Settings /> },
-          { path: 'rentees', element: <RenteeList /> },
-          { path: 'agreements', element: <AgreementList /> },
-          {
-            path: 'invoices',
-            children: [
-              { index: true, element: <InvoiceList /> },
-              { path: 'dashboard', element: <InvoiceList /> },
-              { path: 'generate', element: <InvoiceForm /> },
-              { path: ':id', element: <InvoiceDetails /> }
-            ]
-          }
-        ]
+        path: 'admin/*',
+        element: adminRoute(<LegacyRouteRedirect resolver={resolveLegacyAdminPath} />)
       },
       { path: 'diagnostics/email', element: adminRoute(<EmailDiagnostic />) }
     ]
