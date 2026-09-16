@@ -12,11 +12,12 @@ import {
 } from '../src/api/platform/permissionEngine.js';
 import { authorizePermission } from '../src/api/platform/authorization.js';
 
-const activeMembership = (role, tenantId = 'tenant-a', assignedPropertyIds = undefined) => ({
+const activeMembership = (role, tenantId = 'tenant-a', assignedPropertyIds = undefined, permissionBundle = undefined) => ({
   tenant_id: tenantId,
   role,
   status: 'active',
-  ...(assignedPropertyIds ? { assignedPropertyIds } : {})
+  ...(assignedPropertyIds ? { assignedPropertyIds } : {}),
+  ...(permissionBundle ? { permission_bundle: permissionBundle } : {})
 });
 
 const expectPermissionError = (callback) => {
@@ -26,7 +27,8 @@ const expectPermissionError = (callback) => {
 test('maps administrator, staff, tenant, and unlinked roles consistently', () => {
   assert.equal(getRoleType({ user: { id: 'admin-1', role: 'admin' } }), 'admin');
   assert.equal(getRoleType({ user: { id: 'staff-1', role: 'maintenance_staff' } }), 'staff');
-  assert.equal(getRoleType({ user: { id: 'tenant-1', role: 'rentee' } }), 'rentee');
+  assert.equal(getRoleType({ user: { id: 'tenant-1', role: 'rentee' } }), 'tenant');
+  assert.equal(getRoleType({ user: { id: 'tenant-2', role: 'tenant' } }), 'tenant');
   assert.equal(getRoleType({ user: { id: 'unknown-1', role: 'authenticated' } }), 'unlinked');
 });
 
@@ -82,6 +84,64 @@ test('maintenance staff can update assigned jobs but cannot manage invoices', ()
   };
   assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), true);
   assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), false);
+});
+
+test('canonical staff role uses the explicit property operations bundle', () => {
+  const subject = {
+    user: { id: 'staff-ops-1', role: 'staff' },
+    membership: activeMembership('staff', 'tenant-a', ['property-1'], 'property_operations')
+  };
+
+  assert.equal(getRoleType(subject), 'staff');
+  assert.equal(hasPermission(subject, PERMISSIONS.PROPERTIES_MANAGE), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.RENTEES_MANAGE), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.PROPERTY_ASSIGNMENTS_MANAGE), false);
+});
+
+test('canonical staff role uses the explicit finance bundle', () => {
+  const subject = {
+    user: { id: 'staff-finance-1', role: 'staff' },
+    membership: activeMembership('staff', 'tenant-a', ['property-1'], 'finance')
+  };
+
+  assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.RENTEES_READ), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.RENTEES_MANAGE), false);
+  assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), false);
+});
+
+test('canonical staff role uses the explicit maintenance bundle', () => {
+  const subject = {
+    user: { id: 'staff-maintenance-1', role: 'staff' },
+    membership: activeMembership('staff', 'tenant-a', ['property-1'], 'maintenance')
+  };
+
+  assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.TASKS_UPDATE_ASSIGNED), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), false);
+});
+
+test('canonical staff role supports a safe read-only bundle', () => {
+  const subject = {
+    user: { id: 'staff-read-1', role: 'staff' },
+    membership: activeMembership('staff', 'tenant-a', ['property-1'], 'read_only')
+  };
+
+  assert.equal(hasPermission(subject, PERMISSIONS.PROPERTIES_READ), true);
+  assert.equal(hasPermission(subject, PERMISSIONS.PROPERTIES_MANAGE), false);
+  assert.equal(hasPermission(subject, PERMISSIONS.INVOICES_MANAGE), false);
+  assert.equal(hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), false);
+});
+
+test('legacy staff roles preserve their Phase 2 permissions through bundle mapping', () => {
+  const manager = { user: { id: 'manager-1' }, membership: activeMembership('manager') };
+  const finance = { user: { id: 'finance-1' }, membership: activeMembership('finance_staff') };
+  const maintenance = { user: { id: 'maintenance-1' }, membership: activeMembership('maintenance_staff') };
+
+  assert.equal(hasPermission(manager, PERMISSIONS.PROPERTIES_MANAGE), true);
+  assert.equal(hasPermission(finance, PERMISSIONS.INVOICES_MANAGE), true);
+  assert.equal(hasPermission(maintenance, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED), true);
 });
 
 test('tenant can read own financial records but cannot manage invoices', () => {
