@@ -1,3 +1,11 @@
+import {
+  PORTAL_TYPES,
+  STAFF_PERMISSION_BUNDLES,
+  getPortalType,
+  getStaffPermissionBundle,
+  getStoredRole
+} from '../../utils/accessModel.js';
+
 export const PERMISSIONS = Object.freeze({
   PROPERTIES_READ: 'properties.read',
   PROPERTIES_MANAGE: 'properties.manage',
@@ -26,22 +34,20 @@ export const PERMISSIONS = Object.freeze({
   CAMERAS_MANAGE: 'cameras.manage'
 });
 
-const ADMIN_ROLE = 'admin';
-const TENANT_ROLE = 'rentee';
-const STAFF_ROLES = new Set([
-  'staff',
-  'manager',
-  'finance_staff',
-  'maintenance_staff',
-  'maintenance',
-  'supervisor'
-]);
-
 const ALL_PERMISSIONS = new Set(Object.values(PERMISSIONS));
 
-const ROLE_PERMISSIONS = Object.freeze({
-  admin: ALL_PERMISSIONS,
-  manager: new Set([
+const TENANT_PERMISSIONS = new Set([
+  PERMISSIONS.PROPERTIES_READ,
+  PERMISSIONS.INVOICES_READ,
+  PERMISSIONS.PAYMENTS_READ,
+  PERMISSIONS.AGREEMENTS_READ,
+  PERMISSIONS.UTILITIES_READ,
+  PERMISSIONS.PROFILE_READ_SELF,
+  PERMISSIONS.PROFILE_UPDATE_SELF
+]);
+
+const STAFF_BUNDLE_PERMISSIONS = Object.freeze({
+  [STAFF_PERMISSION_BUNDLES.PROPERTY_OPERATIONS]: new Set([
     PERMISSIONS.PROPERTIES_READ,
     PERMISSIONS.PROPERTIES_MANAGE,
     PERMISSIONS.RENTEES_READ,
@@ -60,7 +66,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.COMMUNICATIONS_MANAGE,
     PERMISSIONS.CAMERAS_READ
   ]),
-  finance_staff: new Set([
+  [STAFF_PERMISSION_BUNDLES.FINANCE]: new Set([
     PERMISSIONS.PROPERTIES_READ,
     PERMISSIONS.RENTEES_READ,
     PERMISSIONS.INVOICES_READ,
@@ -70,7 +76,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.PROFILE_READ_SELF,
     PERMISSIONS.PROFILE_UPDATE_SELF
   ]),
-  maintenance_staff: new Set([
+  [STAFF_PERMISSION_BUNDLES.MAINTENANCE]: new Set([
     PERMISSIONS.PROPERTIES_READ,
     PERMISSIONS.MAINTENANCE_READ_ASSIGNED,
     PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED,
@@ -79,64 +85,40 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.PROFILE_READ_SELF,
     PERMISSIONS.PROFILE_UPDATE_SELF
   ]),
-  maintenance: new Set([
+  [STAFF_PERMISSION_BUNDLES.READ_ONLY]: new Set([
     PERMISSIONS.PROPERTIES_READ,
-    PERMISSIONS.MAINTENANCE_READ_ASSIGNED,
-    PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED,
-    PERMISSIONS.TASKS_READ_ASSIGNED,
-    PERMISSIONS.TASKS_UPDATE_ASSIGNED,
-    PERMISSIONS.PROFILE_READ_SELF,
-    PERMISSIONS.PROFILE_UPDATE_SELF
-  ]),
-  supervisor: new Set([
-    PERMISSIONS.PROPERTIES_READ,
-    PERMISSIONS.MAINTENANCE_READ_ASSIGNED,
-    PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED,
-    PERMISSIONS.TASKS_READ_ASSIGNED,
-    PERMISSIONS.TASKS_UPDATE_ASSIGNED,
-    PERMISSIONS.PROFILE_READ_SELF,
-    PERMISSIONS.PROFILE_UPDATE_SELF
-  ]),
-  staff: new Set([
-    PERMISSIONS.MAINTENANCE_READ_ASSIGNED,
-    PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED,
-    PERMISSIONS.TASKS_READ_ASSIGNED,
-    PERMISSIONS.TASKS_UPDATE_ASSIGNED,
-    PERMISSIONS.PROFILE_READ_SELF,
-    PERMISSIONS.PROFILE_UPDATE_SELF
-  ]),
-  rentee: new Set([
-    PERMISSIONS.PROPERTIES_READ,
-    PERMISSIONS.INVOICES_READ,
-    PERMISSIONS.PAYMENTS_READ,
-    PERMISSIONS.AGREEMENTS_READ,
-    PERMISSIONS.UTILITIES_READ,
     PERMISSIONS.PROFILE_READ_SELF,
     PERMISSIONS.PROFILE_UPDATE_SELF
   ])
 });
 
-export const normalizeRole = (user, membership) => String(membership?.role || user?.role || user?.user_type || '')
-  .trim()
-  .toLowerCase();
+export const normalizeRole = (user, membership) => getStoredRole({ user, membership });
 
+// Keep the legacy public role-type contract during Phase 3 migration so existing
+// authorization tests and callers continue to see `rentee`. The canonical portal
+// model uses `tenant` internally and can replace this compatibility value later.
 export const getRoleType = ({ user, membership }) => {
-  const role = normalizeRole(user, membership);
-  if (role === ADMIN_ROLE) {
-    return ADMIN_ROLE;
-  }
-  if (role === TENANT_ROLE) {
-    return TENANT_ROLE;
-  }
-  if (STAFF_ROLES.has(role)) {
-    return 'staff';
-  }
-  return 'unlinked';
+  const portalType = getPortalType({ user, membership });
+  return portalType === PORTAL_TYPES.TENANT ? 'rentee' : portalType;
 };
 
 export const getPermissions = ({ user, membership }) => {
-  const role = normalizeRole(user, membership);
-  return new Set(ROLE_PERMISSIONS[role] || []);
+  const portalType = getPortalType({ user, membership });
+
+  if (portalType === PORTAL_TYPES.ADMIN) {
+    return new Set(ALL_PERMISSIONS);
+  }
+
+  if (portalType === PORTAL_TYPES.TENANT) {
+    return new Set(TENANT_PERMISSIONS);
+  }
+
+  if (portalType === PORTAL_TYPES.STAFF) {
+    const bundle = getStaffPermissionBundle({ user, membership });
+    return new Set(STAFF_BUNDLE_PERMISSIONS[bundle] || []);
+  }
+
+  return new Set();
 };
 
 export const hasPermission = ({ user, membership }, permission) => getPermissions({ user, membership }).has(permission);
@@ -188,6 +170,6 @@ export const canAccessAssignedProperty = ({ user, membership, tenantId, property
   return effectiveAssignments.some((assignedPropertyId) => String(assignedPropertyId) === String(propertyId));
 };
 
-export const isAdminRole = ({ user, membership }) => normalizeRole(user, membership) === ADMIN_ROLE;
-export const isTenantRole = ({ user, membership }) => normalizeRole(user, membership) === TENANT_ROLE;
-export const isStaffRole = ({ user, membership }) => STAFF_ROLES.has(normalizeRole(user, membership));
+export const isAdminRole = ({ user, membership }) => getPortalType({ user, membership }) === PORTAL_TYPES.ADMIN;
+export const isTenantRole = ({ user, membership }) => getPortalType({ user, membership }) === PORTAL_TYPES.TENANT;
+export const isStaffRole = ({ user, membership }) => getPortalType({ user, membership }) === PORTAL_TYPES.STAFF;
