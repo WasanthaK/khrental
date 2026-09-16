@@ -73,12 +73,15 @@ const ResetPassword = () => {
         throw new Error(payload?.error || 'Unable to reset password.');
       }
 
-      // The backend revokes all existing sessions for the account as part of a
-      // successful reset. Clear the browser copy as well so navigation cannot
-      // reuse a now-invalid session and fall into the authenticated portal.
-      const { error: signOutError } = await platformClient.auth.signOut();
-      if (signOutError) {
-        console.warn('Password reset succeeded but local session cleanup reported an error:', signOutError);
+      // The backend has already revoked every existing session for the account.
+      // signOut() is used here to clear the browser's in-memory/local copy and
+      // notify auth listeners. Its server call may receive 401 because that old
+      // session is now intentionally invalid, so cleanup must not change a
+      // successful password reset into an error state.
+      try {
+        await platformClient.auth.signOut();
+      } catch (cleanupError) {
+        console.warn('Password reset succeeded; the previous session was already invalid during local cleanup:', cleanupError);
       }
 
       setResetComplete(true);
