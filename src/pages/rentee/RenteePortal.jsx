@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { platform as platformClient } from '../../services/platformClient';
+import { getMyTenancySummary, platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
 import { isDevBypassEnabled } from '../../utils/env';
 import { formatCurrency, formatDate } from '../../utils/helpers';
-import { findAppUserByAuthId, getStructuredAssociations } from '../../services/appUserService';
+import { findAppUserByAuthId } from '../../services/appUserService';
 
 const DEV_BYPASS_ENABLED = isDevBypassEnabled();
 
 const RenteePortal = () => {
   const { user, activeTenantId } = useAuth();
   const [renteeData, setRenteeData] = useState(null);
+  const [tenancies, setTenancies] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [agreements, setAgreements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,7 @@ const RenteePortal = () => {
   useEffect(() => {
     dataFetched.current = false;
     setRenteeData(null);
+    setTenancies([]);
     setInvoices([]);
     setAgreements([]);
     setError(null);
@@ -35,163 +37,74 @@ const RenteePortal = () => {
         setLoading(true);
 
         if (DEV_BYPASS_ENABLED && user.id === 'dev-user-id') {
-          const mockRentee = {
+          setRenteeData({
             id: 'mock-rentee-id',
             name: 'Development Tenant',
-            email: user.email,
-            propertyName: 'Mock Property',
-            propertyAddress: '123 Development St, Test City',
-            rent: 50000,
-            leaseStartDate: new Date().toISOString(),
-            associatedPropertyIds: ['mock-property-id']
-          };
-
-          const mockInvoices = [
-            {
-              id: 'mock-invoice-1',
-              renteeId: 'mock-rentee-id',
-              propertyId: 'mock-property-id',
-              billingPeriod: 'May 2023',
-              totalAmount: 52000,
-              status: 'paid',
-              createdat: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-            },
-            {
-              id: 'mock-invoice-2',
-              renteeId: 'mock-rentee-id',
-              propertyId: 'mock-property-id',
-              billingPeriod: 'June 2023',
-              totalAmount: 52000,
-              status: 'pending',
-              createdat: new Date().toISOString()
-            }
-          ];
-
-          const mockAgreements = [
-            {
-              id: 'mock-agreement-1',
-              renteeId: 'mock-rentee-id',
-              propertyId: 'mock-property-id',
-              status: 'signed',
-              startDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-              endDate: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString(),
-              createdat: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
-            }
-          ];
-
-          setRenteeData(mockRentee);
-          setInvoices(mockInvoices);
-          setAgreements(mockAgreements);
+            email: user.email
+          });
+          setTenancies([{
+            agreement_id: 'mock-agreement-1',
+            agreement_status: 'active',
+            property_id: 'mock-property-id',
+            property_name: 'Mock Property',
+            property_address: '123 Development St, Test City',
+            property_type: 'residential',
+            rentamount: 50000,
+            startdate: new Date().toISOString(),
+            enddate: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString()
+          }]);
+          setInvoices([]);
+          setAgreements([]);
           setLoading(false);
           return;
         }
 
-        // `rentee` remains the stored legacy user_type during Phase 3 compatibility.
         const renteeLookup = await findAppUserByAuthId(user.id);
-
         if (!renteeLookup.success) {
           throw new Error(renteeLookup.error || 'Failed to load tenant profile');
         }
 
-        const renteeData = renteeLookup.data;
-
-        if (renteeData && renteeData.user_type === 'rentee') {
-          const renteeId = renteeData.id;
-
-          let structuredAssociations = getStructuredAssociations(renteeData.id);
-          let propertyIds = [];
-
-          if (structuredAssociations.length === 0 && renteeData.associated_property_ids) {
-            propertyIds = renteeData.associated_property_ids;
-            structuredAssociations = propertyIds.map(id => ({ propertyId: id, unitId: null }));
-          } else {
-            propertyIds = [...new Set(structuredAssociations.map(assoc => assoc.propertyId))];
-          }
-
-          let associatedProperties = [];
-          if (propertyIds.length > 0) {
-            const { data: propertiesData, error: propertiesError } = await platformClient
-              .from('properties')
-              .select(`
-                *,
-                property_units(*)
-              `)
-              .in('id', propertyIds);
-
-            if (propertiesError) {
-              throw propertiesError;
-            }
-
-            if (propertiesData && propertiesData.length > 0) {
-              associatedProperties = await Promise.all(propertiesData.map(async (property) => {
-                const propertyItem = {
-                  id: property.id,
-                  name: property.name || 'Unnamed Property',
-                  address: property.address,
-                  rent: property.rentalvalues?.rent || 0,
-                  propertytype: property.propertytype || 'residential',
-                  units: property.property_units || []
-                };
-
-                const unitAssociations = structuredAssociations
-                  .filter(assoc => assoc.propertyId === property.id && assoc.unitId)
-                  .map(assoc => assoc.unitId);
-
-                if (property.propertytype === 'apartment' && unitAssociations.length > 0) {
-                  const associatedUnits = property.property_units
-                    ? property.property_units.filter(unit => unitAssociations.includes(unit.id))
-                    : [];
-
-                  propertyItem.associatedUnits = associatedUnits;
-
-                  if (associatedUnits.length > 0 && associatedUnits[0].rentalvalues?.rent) {
-                    propertyItem.rent = associatedUnits[0].rentalvalues.rent;
-                  }
-                }
-
-                return propertyItem;
-              }));
-            }
-          }
-
-          const formattedRentee = {
-            id: renteeData.id,
-            name: renteeData.name,
-            email: renteeData.email,
-            properties: associatedProperties,
-            associatedPropertyIds: renteeData.associated_property_ids || [],
-            structuredAssociations: structuredAssociations
-          };
-
-          setRenteeData(formattedRentee);
-
-          const { data: invoicesData, error: invoicesError } = await platformClient
-            .from('invoices')
-            .select('*')
-            .eq('renteeid', renteeId)
-            .order('createdat', { ascending: false });
-
-          if (invoicesError) {
-            throw invoicesError;
-          }
-          setInvoices(invoicesData || []);
-
-          const { data: agreementsData, error: agreementsError } = await platformClient
-            .from('agreements')
-            .select('*')
-            .eq('renteeid', renteeId)
-            .order('createdat', { ascending: false });
-
-          if (agreementsError) {
-            throw agreementsError;
-          }
-          setAgreements(agreementsData || []);
-        } else {
+        const profile = renteeLookup.data;
+        if (!profile || profile.user_type !== 'rentee') {
           throw new Error('User is not a tenant');
         }
-      } catch (error) {
-        console.error('Error fetching tenant data:', error.message);
-        setError(error.message);
+
+        setRenteeData({
+          id: profile.id,
+          name: profile.name,
+          email: profile.email
+        });
+
+        const tenancyResult = await getMyTenancySummary();
+        if (tenancyResult.error) {
+          throw tenancyResult.error;
+        }
+        setTenancies(tenancyResult.data?.tenancies || []);
+
+        const { data: invoicesData, error: invoicesError } = await platformClient
+          .from('invoices')
+          .select('*')
+          .eq('renteeid', profile.id)
+          .order('createdat', { ascending: false });
+
+        if (invoicesError) {
+          throw invoicesError;
+        }
+        setInvoices(invoicesData || []);
+
+        const { data: agreementsData, error: agreementsError } = await platformClient
+          .from('agreements')
+          .select('*')
+          .eq('renteeid', profile.id)
+          .order('createdat', { ascending: false });
+
+        if (agreementsError) {
+          throw agreementsError;
+        }
+        setAgreements(agreementsData || []);
+      } catch (fetchError) {
+        console.error('Error fetching tenant data:', fetchError.message);
+        setError(fetchError.message);
       } finally {
         setLoading(false);
       }
@@ -221,62 +134,59 @@ const RenteePortal = () => {
     <div>
       <h1 className="text-2xl font-semibold mb-6">Welcome, {renteeData?.name || user.email}</h1>
 
-      {renteeData?.properties?.length > 0 ? (
+      {tenancies.length > 0 ? (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">Your Rental {renteeData.properties.length > 1 ? 'Properties' : 'Property'}</h2>
-
+          <h2 className="text-lg font-semibold mb-4">Your Active {tenancies.length > 1 ? 'Tenancies' : 'Tenancy'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {renteeData.properties.map(property => (
-              <div key={property.id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+            {tenancies.map((tenancy) => (
+              <div key={tenancy.agreement_id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                  <h3 className="font-medium text-gray-900">{property.name}</h3>
-                  <p className="text-sm text-gray-500">{property.address}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{tenancy.property_name || 'Rental property'}</h3>
+                      <p className="text-sm text-gray-500">{tenancy.property_address}</p>
+                    </div>
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+                  </div>
                 </div>
 
-                <div className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Type:</span>
-                      <span className="text-gray-900 font-medium capitalize">{property.propertytype}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Rent:</span>
-                      <span className="text-gray-900 font-medium">{formatCurrency(property.rent || 0)}</span>
-                    </div>
-
-                    {property.propertytype === 'apartment' && property.associatedUnits && property.associatedUnits.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Your Unit</h4>
-
-                        {property.associatedUnits.map(unit => (
-                          <div key={unit.id} className="bg-blue-50 border border-blue-100 rounded-md p-3">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Unit Number:</span>
-                              <span className="text-gray-900 font-medium">{unit.unitnumber}</span>
-                            </div>
-                            {unit.floor && (
-                              <div className="flex items-center justify-between text-sm mt-1">
-                                <span className="text-gray-600">Floor:</span>
-                                <span className="text-gray-900">{unit.floor}</span>
-                              </div>
-                            )}
-                            {unit.bedrooms && (
-                              <div className="flex items-center justify-between text-sm mt-1">
-                                <span className="text-gray-600">Bedrooms:</span>
-                                <span className="text-gray-900">{unit.bedrooms}</span>
-                              </div>
-                            )}
-                            {unit.bathrooms && (
-                              <div className="flex items-center justify-between text-sm mt-1">
-                                <span className="text-gray-600">Bathrooms:</span>
-                                <span className="text-gray-900">{unit.bathrooms}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="text-gray-900 font-medium capitalize">{tenancy.property_type || 'residential'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Rent:</span>
+                    <span className="text-gray-900 font-medium">{formatCurrency(tenancy.rentamount || 0)}</span>
+                  </div>
+                  {tenancy.unit_id && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-md p-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Unit:</span>
+                        <span className="text-gray-900 font-medium">{tenancy.unit_number}</span>
                       </div>
-                    )}
+                      {tenancy.unit_floor && (
+                        <div className="flex items-center justify-between text-sm mt-1">
+                          <span className="text-gray-600">Floor:</span>
+                          <span className="text-gray-900">{tenancy.unit_floor}</span>
+                        </div>
+                      )}
+                      {tenancy.unit_bedrooms && (
+                        <div className="flex items-center justify-between text-sm mt-1">
+                          <span className="text-gray-600">Bedrooms:</span>
+                          <span className="text-gray-900">{tenancy.unit_bedrooms}</span>
+                        </div>
+                      )}
+                      {tenancy.unit_bathrooms && (
+                        <div className="flex items-center justify-between text-sm mt-1">
+                          <span className="text-gray-600">Bathrooms:</span>
+                          <span className="text-gray-900">{tenancy.unit_bathrooms}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="pt-3 border-t text-sm text-gray-600">
+                    {formatDate(tenancy.startdate)} - {formatDate(tenancy.enddate)}
                   </div>
                 </div>
               </div>
@@ -285,39 +195,27 @@ const RenteePortal = () => {
         </div>
       ) : (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-8">
-          No properties are currently associated with your account.
+          No active tenancy is currently linked to your account. If you are moving in, your onboarding may still be in progress.
         </div>
       )}
 
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Recent Invoices</h2>
-          <Link
-            to="/rentee/invoices"
-            className="text-blue-600 hover:text-blue-800"
-          >
-            View All
-          </Link>
+          <Link to="/rentee/invoices" className="text-blue-600 hover:text-blue-800">View All</Link>
         </div>
 
         {invoices.length > 0 ? (
           <div className="space-y-4">
             {invoices.slice(0, 3).map(invoice => (
-              <div
-                key={invoice.id}
-                className="flex justify-between items-center p-4 border rounded hover:bg-gray-50"
-              >
+              <div key={invoice.id} className="flex justify-between items-center p-4 border rounded hover:bg-gray-50">
                 <div>
                   <p className="font-medium">{invoice.billingperiod}</p>
-                  <p className="text-sm text-gray-500">
-                    {formatDate(invoice.createdat)}
-                  </p>
+                  <p className="text-sm text-gray-500">{formatDate(invoice.createdat)}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-medium">{formatCurrency(invoice.totalamount)}</p>
-                  <p className={`text-sm ${
-                    invoice.status === 'paid' ? 'text-green-600' : 'text-yellow-600'
-                  }`}>
+                  <p className={`text-sm ${invoice.status === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
                     {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                   </p>
                 </div>
@@ -332,33 +230,19 @@ const RenteePortal = () => {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Recent Agreements</h2>
-          <Link
-            to="/rentee/agreements"
-            className="text-blue-600 hover:text-blue-800"
-          >
-            View All
-          </Link>
+          <Link to="/rentee/agreements" className="text-blue-600 hover:text-blue-800">View All</Link>
         </div>
 
         {agreements.length > 0 ? (
           <div className="space-y-4">
             {agreements.slice(0, 3).map(agreement => (
-              <div
-                key={agreement.id}
-                className="flex justify-between items-center p-4 border rounded hover:bg-gray-50"
-              >
+              <div key={agreement.id} className="flex justify-between items-center p-4 border rounded hover:bg-gray-50">
                 <div>
-                  <p className="font-medium">
-                    {formatDate(agreement.startdate)} - {formatDate(agreement.enddate)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Created on {formatDate(agreement.createdat)}
-                  </p>
+                  <p className="font-medium">{formatDate(agreement.startdate)} - {formatDate(agreement.enddate)}</p>
+                  <p className="text-sm text-gray-500">Created on {formatDate(agreement.createdat)}</p>
                 </div>
                 <div>
-                  <span className={`px-2 py-1 rounded text-sm ${
-                    agreement.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-sm ${agreement.status === 'active' || agreement.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {agreement.status.charAt(0).toUpperCase() + agreement.status.slice(1)}
                   </span>
                 </div>
