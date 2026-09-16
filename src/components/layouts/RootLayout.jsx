@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { initializeApp } from '../../services/appInitService';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,6 +12,8 @@ import WelcomeGuide from '../WelcomeGuide';
 
 const RootLayout = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  const isPasswordRecovery = location.pathname === '/reset-password';
   const [initStatus, setInitStatus] = useState({
     initialized: false,
     error: null,
@@ -19,17 +21,14 @@ const RootLayout = () => {
   });
   const [showStorageWarning, setShowStorageWarning] = useState(true);
   
-  // Initialize app when it loads
+  // Initialize app services only for normal application routes. Password
+  // recovery is deliberately isolated from storage, tenant and portal setup.
   useEffect(() => {
-    // Skip initialization if still loading auth state
-    if (loading) return;
+    if (isPasswordRecovery || loading) return;
     
     const initialize = async () => {
       try {
-        // Check if we've shown the warning before in this session
         const dismissedWarning = sessionStorage.getItem('storage_warning_dismissed') === 'true';
-        
-        // Initialize app services
         const result = await initializeApp({ user });
         
         setInitStatus({
@@ -38,7 +37,6 @@ const RootLayout = () => {
           isStorageError: result.isStorageError
         });
         
-        // If warning was previously dismissed, don't show it again
         if (dismissedWarning && result.isStorageError) {
           setShowStorageWarning(false);
         }
@@ -53,13 +51,25 @@ const RootLayout = () => {
     };
     
     initialize();
-  }, [user, loading]); // Run when user or loading state changes
+  }, [user, loading, isPasswordRecovery]);
   
-  // Function to dismiss the storage warning
   const dismissStorageWarning = () => {
     setShowStorageWarning(false);
     sessionStorage.setItem('storage_warning_dismissed', 'true');
   };
+
+  // Recovery must stay independent of the authenticated application shell.
+  // In particular, do not register navigation, show tenant-specific guides, or
+  // trigger app initialization while a user is proving possession of a reset
+  // token and selecting a new password.
+  if (isPasswordRecovery) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <Outlet />
+      </>
+    );
+  }
 
   return (
     <>

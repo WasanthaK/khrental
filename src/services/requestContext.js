@@ -12,7 +12,30 @@ const storage = isBrowser && window.localStorage
       removeItem: (key) => fallbackStorage.delete(key)
     };
 
+const normalizePathname = (pathname = '') => {
+  const normalized = String(pathname || '').split('?')[0].replace(/\/+$/, '');
+  return normalized || '/';
+};
+
+/**
+ * Password recovery is an anonymous credential flow. It must not inherit the
+ * application's stored session because a stale or still-authenticated browser
+ * session can otherwise redirect the user away from the recovery page or cause
+ * the public reset API to be rejected before the reset token is processed.
+ */
+export const isPasswordRecoveryPath = (pathname = '') => normalizePathname(pathname) === '/reset-password';
+
+const isPasswordRecoveryRequest = () => isBrowser && isPasswordRecoveryPath(window.location?.pathname || '');
+
 export const loadStoredSession = () => {
+  // Deliberately leave the stored value untouched here. If the user abandons
+  // recovery, a valid existing session can still be used after a full reload.
+  // Successful recovery explicitly clears the old session after the server has
+  // revoked it.
+  if (isPasswordRecoveryRequest()) {
+    return null;
+  }
+
   const raw = storage.getItem(SESSION_STORAGE_KEY);
   if (!raw) return null;
 
@@ -61,9 +84,14 @@ export const clearActiveTenantId = () => {
 export const getDevBypassRole = () => storage.getItem(DEV_BYPASS_ROLE_KEY) || null;
 
 export const buildRequestContextHeaders = (headers = {}) => {
+  // Recovery requests must be truly anonymous. In particular, do not attach an
+  // old Authorization token, tenant selection, or development bypass identity.
+  if (isPasswordRecoveryRequest()) {
+    return { ...headers };
+  }
+
   const session = loadStoredSession();
   const authId = session?.user?.id || null;
-  const email = session?.user?.email || null;
   const tenantId = getActiveTenantId();
   const devBypassRole = getDevBypassRole();
 
