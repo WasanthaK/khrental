@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDate } from '../../utils/helpers';
-import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriangle, FiDownload, FiX, FiUsers, FiEye, FiLayout } from 'react-icons/fi';
+import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriangle, FiX, FiUsers, FiEye, FiLayout } from 'react-icons/fi';
 import SignatureProgressTracker from '../ui/SignatureProgressTracker';
 import AgreementDocument from './AgreementDocument';
 import { toast } from 'react-hot-toast';
@@ -15,62 +15,33 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   
-  // Ensure dates are properly formatted
   const startDate = agreement.startdate ? formatDate(agreement.startdate) : 'Not set';
   const endDate = agreement.enddate ? formatDate(agreement.enddate) : 'Not set';
 
-  // Get status from agreement data
   const getStatus = () => {
-    // First check signature_status, which comes from webhooks and is more accurate
     if (agreement.signature_status) {
       return agreement.signature_status;
     }
-    
-    // Fall back to agreement.status
     return agreement.status;
   };
 
   const signatureStatus = agreement.signature_status || '';
   const agreementState = agreement.status || '';
   const status = getStatus();
-  
-  // Get signed document URL - try different possible fields
   const signedDocumentUrl = agreement.signed_document_url || agreement.signatureurl || agreement.pdfurl || agreement.documenturl;
-  
-  // Check if document URL is actually HTML content
-  const isDocumentUrlHtml = signedDocumentUrl && (
-    signedDocumentUrl.trim().startsWith('<') || 
-    signedDocumentUrl.includes('<!DOCTYPE') || 
-    signedDocumentUrl.includes('<html') ||
-    signedDocumentUrl.includes('<body') ||
-    signedDocumentUrl.includes('<div') ||
-    signedDocumentUrl.includes('<p')
-  );
-  
-  // Only show the View Document button if we have a valid URL or HTML content
   const hasViewableDocument = !!signedDocumentUrl;
-  
-  // Prepare signatory data for display
   const signatoriesData = signatories.length > 0 ? signatories : [];
-  
-  // Check if any signatures have been completed based on actual data
-  const hasAnySignatures = signatoriesData.some(sig => sig.completed) || 
-                         signatureStatus.startsWith('signed_by_');
-  
-  // Determine if view button should be disabled
-  const disableViewButton = false; // We now allow viewing any agreement
-  
-  // create a mock representation of partial completion
+  const hasAnySignatures = signatoriesData.some(sig => sig.completed) || signatureStatus.startsWith('signed_by_');
+  const disableViewButton = false;
+
   if ((status === 'in_progress' || status === 'partially_signed') && signatoriesData.length === 0) {
     signatoriesData.push(
       { id: 'landlord', name: 'Landlord', completed: true },
       { id: 'tenant', name: 'Tenant', completed: false }
     );
   }
-  
-  // Get color and icon based on status for the card border and header styling
+
   const getStatusInfo = () => {
-    // Priority order for status display
     if (agreementState === 'rejected') {
       return {
         icon: FiAlertTriangle,
@@ -87,13 +58,21 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         borderColor: 'border-l-4 border-orange-600',
         label: agreementState === 'expired' ? 'Expired' : 'Cancelled'
       };
-    } else if (agreementState === 'active' || status === 'signed' || status === 'completed' || signatureStatus === 'signing_complete') {
+    } else if (agreementState === 'active') {
       return {
         icon: FiCheck,
         color: 'text-green-600',
         bgColor: 'bg-green-100',
         borderColor: 'border-l-4 border-green-600',
         label: 'Active'
+      };
+    } else if (status === 'signed' || status === 'completed' || signatureStatus === 'signing_complete') {
+      return {
+        icon: FiCheck,
+        color: 'text-green-600',
+        bgColor: 'bg-green-100',
+        borderColor: 'border-l-4 border-green-600',
+        label: 'Signed — onboarding required'
       };
     } else if (hasAnySignatures || signatureStatus.startsWith('signed_by_')) {
       return {
@@ -109,7 +88,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         color: 'text-yellow-600',
         bgColor: 'bg-yellow-100',
         borderColor: 'border-l-4 border-yellow-600',
-        label: 'Pending Signature'
+        label: status === 'pending_activation' ? 'Pending Activation' : 'Pending Signature'
       };
     } else if (status === 'review') {
       return {
@@ -129,21 +108,17 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
       };
     }
   };
-  
+
   const statusInfo = getStatusInfo();
 
-  // Handle cancel button click
   const handleCancelClick = () => {
-    // For completed agreements, show modal requesting reason
     if (agreementState === 'active' || agreementState === 'completed' || agreementState === 'signed') {
       setShowCancelModal(true);
     } else if (window.confirm('Are you sure you want to cancel this agreement?')) {
-      // For pending agreements, confirm and proceed directly
       onCancelClick(agreement.id);
     }
   };
 
-  // Handle final cancel confirmation with reason
   const handleConfirmCancel = () => {
     if (!cancelReason.trim()) {
       toast.error('Please provide a reason for cancellation');
@@ -151,13 +126,11 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
     }
 
     setIsSubmitting(true);
-    // Call the parent component's cancel handler with the reason
     onCancelClick(agreement.id, cancelReason);
     setShowCancelModal(false);
     setIsSubmitting(false);
   };
 
-  // Toggle document viewer
   const handleViewDocument = (e) => {
     e.preventDefault();
     setShowDocumentViewer(true);
@@ -176,20 +149,17 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           </h3>
           
           <div className="flex flex-col w-full md:w-auto md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-3">
-            {/* Agreement state badge */}
             <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color} flex items-center`}>
               <statusInfo.icon className="mr-1 h-3 w-3" />
               <span>{statusInfo.label}</span>
             </div>
             
-            {/* Signature status badge */}
             {signatureStatus && (
               <div className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                 {signatureStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
               </div>
             )}
             
-            {/* Add the compact signature progress tracker */}
             <SignatureProgressTracker 
               status={agreementState}
               signature_status={signatureStatus}
@@ -233,7 +203,6 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           </div>
         </div>
         
-        {/* Signatories section */}
         <div className="mt-3 mb-3">
           <div className="flex items-center mb-2">
             <FiUsers className="mr-1 h-4 w-4 text-gray-500" />
@@ -273,8 +242,14 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           Created: {formatDate(agreement.createdat)}
         </div>
         
-        <div className="flex space-x-2 mt-2 sm:mt-0">
-          {/* Signed document button - now opens viewer instead of direct link */}
+        <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
+          <Link
+            to={`/dashboard/agreements/${agreement.id}/onboarding`}
+            className="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition-colors"
+          >
+            Onboarding
+          </Link>
+
           {hasViewableDocument && (
             <button
               onClick={handleViewDocument}
@@ -285,7 +260,6 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </button>
           )}
           
-          {/* Cancel button - available for all agreements, but with different behavior */}
           {onCancelClick && (
             <button
               onClick={handleCancelClick}
@@ -296,7 +270,6 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </button>
           )}
           
-          {/* View Details button - always available */}
           <button
             onClick={onViewClick}
             className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
@@ -307,7 +280,6 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         </div>
       </div>
 
-      {/* Cancel Confirmation Modal */}
       {showCancelModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-5">
@@ -343,7 +315,6 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         </div>
       )}
 
-      {/* Document Viewer Modal */}
       {showDocumentViewer && signedDocumentUrl && (
         <AgreementDocument 
           documentUrl={signedDocumentUrl} 
@@ -354,4 +325,4 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   );
 };
 
-export default AgreementSummaryCard; 
+export default AgreementSummaryCard;

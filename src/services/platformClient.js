@@ -2,18 +2,21 @@ import { getApiBaseUrl } from '../utils/env';
 import { buildRequestContextHeaders } from './requestContext';
 import { platformClient as corePlatformClient } from './platformClientCore';
 
-const readPropertyAssignmentError = async (response) => {
+const readApiError = async (response) => {
   const payload = await response.json().catch(() => null);
   const error = new Error(payload?.error || payload?.message || `Request failed with status ${response.status}`);
   if (payload?.code) {
     error.code = payload.code;
   }
+  if (payload?.details) {
+    error.details = payload.details;
+  }
   error.status = response.status;
   return error;
 };
 
-const propertyAssignmentRequest = async (path = '', options = {}) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/property-assignments${path}`, {
+const scopedRequest = async (basePath, path = '', options = {}) => {
+  const response = await fetch(`${getApiBaseUrl()}${basePath}${path}`, {
     method: options.method || 'GET',
     headers: {
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -23,11 +26,19 @@ const propertyAssignmentRequest = async (path = '', options = {}) => {
   });
 
   if (!response.ok) {
-    throw await readPropertyAssignmentError(response);
+    throw await readApiError(response);
   }
 
   return response.json();
 };
+
+const propertyAssignmentRequest = (path = '', options = {}) => (
+  scopedRequest('/api/property-assignments', path, options)
+);
+
+const tenancyRequest = (path = '', options = {}) => (
+  scopedRequest('/api/tenancies', path, options)
+);
 
 export const listPropertyAssignments = async ({ staffUserId, propertyId, status } = {}) => {
   try {
@@ -73,6 +84,72 @@ export const deletePropertyAssignment = async (assignmentId) => {
       method: 'DELETE'
     });
     return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const getTenancyOnboarding = async (agreementId) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/onboarding`);
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const recordTenancyDeposit = async (agreementId, transaction) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/deposits`, {
+      method: 'POST',
+      body: transaction
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const initializeMoveInChecklist = async (agreementId) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/checklist`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const updateMoveInChecklistItem = async (agreementId, itemId, updates) => {
+  try {
+    const payload = await tenancyRequest(
+      `/${encodeURIComponent(agreementId)}/checklist/items/${encodeURIComponent(itemId)}`,
+      { method: 'PATCH', body: updates }
+    );
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const activateTenancy = async (agreementId) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/activate`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const getMyTenancySummary = async () => {
+  try {
+    const payload = await tenancyRequest('/me/summary');
+    return { data: payload?.data || { tenancies: [] }, error: null };
   } catch (error) {
     return { data: null, error };
   }

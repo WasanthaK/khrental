@@ -4,6 +4,8 @@ export const AGREEMENT_STATUS = {
   PENDING: 'pending',
   PENDING_SIGNATURE: 'pending_signature',
   SIGNED: 'signed',
+  PENDING_ACTIVATION: 'pending_activation',
+  ACTIVE: 'active',
   CANCELLED: 'cancelled',
   EXPIRED: 'expired',
   TERMINATED: 'terminated'
@@ -18,5 +20,12 @@ export const isSignableStatus = (status) => {
 };
 
 export const isCompletedStatus = (status) => {
-  return [AGREEMENT_STATUS.SIGNED, AGREEMENT_STATUS.CANCELLED, AGREEMENT_STATUS.EXPIRED, AGREEMENT_STATUS.TERMINATED].includes(status);
-}; 
+  return [
+    AGREEMENT_STATUS.SIGNED,
+    AGREEMENT_STATUS.PENDING_ACTIVATION,
+    AGREEMENT_STATUS.ACTIVE,
+    AGREEMENT_STATUS.CANCELLED,
+    AGREEMENT_STATUS.EXPIRED,
+    AGREEMENT_STATUS.TERMINATED
+  ].includes(status);
+};

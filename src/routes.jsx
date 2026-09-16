@@ -39,6 +39,7 @@ import RenteeForm from './pages/RenteeForm';
 import RenteeDetails from './pages/RenteeDetails';
 import AgreementList from './pages/AgreementList';
 import AgreementFormPage from './pages/AgreementFormPage';
+import TenancyOnboarding from './pages/TenancyOnboarding';
 import AgreementTemplateList from './pages/AgreementTemplateList';
 import AgreementTemplateForm from './pages/AgreementTemplateForm';
 import InvoiceList from './pages/InvoiceList';
@@ -276,6 +277,10 @@ const routes = [
               {
                 path: 'new',
                 element: permissionRoute([PERMISSIONS.AGREEMENTS_MANAGE], <AgreementFormPage />)
+              },
+              {
+                path: ':id/onboarding',
+                element: permissionRoute([PERMISSIONS.AGREEMENTS_MANAGE], <TenancyOnboarding />)
               },
               {
                 path: ':id',
