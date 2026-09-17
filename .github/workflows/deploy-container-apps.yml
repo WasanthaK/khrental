@@ -33,6 +33,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --check scripts/cleanup-known-test-agreements.mjs
       - run: npm run test:authorization
       - run: npm run build
 
