@@ -32,16 +32,12 @@ const AgreementList = () => {
   const fetchAgreements = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       if (isMssqlApiEnabled()) {
-        try {
-          const data = await fetchAgreementsFromMssql();
-          setAgreements(data);
-          return;
-        } catch (mssqlError) {
-          console.error('Error fetching agreements from MSSQL, falling back to the local compatibility layer:', mssqlError);
-          toast.error('Failed to load agreements from MSSQL. Using the local compatibility layer instead.');
-        }
+        const data = await fetchAgreementsFromMssql();
+        setAgreements(data || []);
+        return;
       }
 
       const { data, error } = await platformClient
@@ -77,10 +73,11 @@ const AgreementList = () => {
         throw error;
       }
       setAgreements(data || []);
-    } catch (error) {
-      console.error('Error fetching agreements:', error);
-      setError(error.message);
-      toast.error('Failed to load agreements');
+    } catch (fetchError) {
+      console.error('Error fetching agreements:', fetchError);
+      setError(fetchError.message);
+      setAgreements([]);
+      toast.error('Failed to load agreements from the canonical database');
     } finally {
       setLoading(false);
     }
@@ -124,17 +121,21 @@ const AgreementList = () => {
     return colors[status] || 'bg-gray-100 text-gray-800 border border-gray-300';
   };
 
-  const filteredAgreements = agreements.filter(agreement => {
-    const matchesSearch = 
-      agreement.properties?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      agreement.rentee?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      agreement.template?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = 
-      statusFilter === 'all' || 
-      agreement.status === statusFilter || 
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filteredAgreements = agreements.filter((agreement) => {
+    const property = agreement.properties || agreement.property;
+    const matchesSearch = normalizedSearchTerm === '' || [
+      property?.name,
+      agreement.rentee?.name,
+      agreement.template?.name,
+      agreement.title
+    ].some((value) => String(value || '').toLowerCase().includes(normalizedSearchTerm));
+
+    const matchesStatus =
+      statusFilter === 'all' ||
+      agreement.status === statusFilter ||
       agreement.signature_status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -149,9 +150,6 @@ const AgreementList = () => {
   };
 
   const handleCancelAgreement = async (agreementId, cancelReason = '') => {
-    // Confirmation is handled by the AgreementSummaryCard component for active agreements
-    // For pending agreements, we've already confirmed in the card component
-    
     try {
       const updatedAgreement = await cancelAgreement(agreementId, cancelReason);
       const releasedProperty = ['active', 'signed', 'completed'].includes(agreements.find((agreement) => agreement.id === agreementId)?.status);
@@ -159,11 +157,10 @@ const AgreementList = () => {
       toast.success(releasedProperty
         ? 'Agreement cancelled and property set as available'
         : 'Agreement cancelled successfully');
-      
-      // Update the local state to reflect the change
-      setAgreements(prevAgreements => 
-        prevAgreements.map(agreement => 
-          agreement.id === agreementId 
+
+      setAgreements((prevAgreements) =>
+        prevAgreements.map((agreement) =>
+          agreement.id === agreementId
             ? {
                 ...agreement,
                 ...updatedAgreement,
@@ -173,15 +170,14 @@ const AgreementList = () => {
             : agreement
         )
       );
-    } catch (error) {
-      console.error('Error cancelling agreement:', error);
+    } catch (cancelError) {
+      console.error('Error cancelling agreement:', cancelError);
       toast.error('Failed to cancel agreement');
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header Section */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Agreements</h1>
@@ -196,7 +192,6 @@ const AgreementList = () => {
           </button>
         </div>
 
-        {/* Filters and Search */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-lg shadow-sm">
           <div>
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -255,13 +250,12 @@ const AgreementList = () => {
         </div>
       </div>
 
-      {/* Document Preview Modal */}
       {showPreview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl mx-4 w-full max-w-6xl h-5/6 flex flex-col">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-lg font-medium">Agreement Document</h3>
-              <button 
+              <button
                 onClick={closePreview}
                 className="text-gray-500 hover:text-gray-700 focus:outline-none"
               >
@@ -271,16 +265,16 @@ const AgreementList = () => {
               </button>
             </div>
             <div className="flex-1 overflow-auto p-1 bg-gray-100">
-              <iframe 
-                src={previewUrl} 
+              <iframe
+                src={previewUrl}
                 className="w-full h-full border-0 rounded"
                 title="Agreement Preview"
               />
             </div>
             <div className="p-4 border-t flex justify-end">
-              <a 
-                href={previewUrl} 
-                target="_blank" 
+              <a
+                href={previewUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -291,7 +285,6 @@ const AgreementList = () => {
         </div>
       )}
 
-      {/* Agreements List */}
       {loading ? (
         <div className="text-center py-12">
           <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-blue-500 hover:bg-blue-400 transition ease-in-out duration-150 cursor-not-allowed">
@@ -330,20 +323,17 @@ const AgreementList = () => {
       ) : (
         <div className="grid grid-cols-1 gap-6">
           {filteredAgreements.map((agreement) => {
-            // Prepare signatory data for each agreement
             let signatoryData = [];
             const status = agreement.status || '';
             const signatureStatus = agreement.signature_status || '';
-            
-            // If we have signatories_status data, use it for more accurate information
+
             if (agreement.signatories_status) {
               try {
                 const signatories = typeof agreement.signatories_status === 'string'
                   ? JSON.parse(agreement.signatories_status)
                   : agreement.signatories_status;
-                
-                // Map the signatories data to our format
-                signatoryData = signatories.map(sig => ({
+
+                signatoryData = signatories.map((sig) => ({
                   id: sig.reference || sig.email || sig.type,
                   name: sig.name || (sig.type === 'landlord' ? 'Property Owner' : 'Tenant'),
                   email: sig.email,
@@ -351,40 +341,36 @@ const AgreementList = () => {
                   completed: sig.status === 'completed',
                   signedAt: sig.signed_at || sig.signedAt
                 }));
-              } catch (e) {
-                console.error('Error parsing signatories_status:', e);
-                // Fall back to default logic below
+              } catch (parseError) {
+                console.error('Error parsing signatories_status:', parseError);
               }
             }
-            
-            // If we don't have signatories_status or parsing failed, use default logic
+
             if (signatoryData.length === 0) {
-              // Add landlord - only mark as signed if specifically mentioned in signature_status
-              const landlordSigned = 
-                signatureStatus.includes('landlord') || 
-                signatureStatus === 'signing_complete' || 
+              const landlordSigned =
+                signatureStatus.includes('landlord') ||
+                signatureStatus === 'signing_complete' ||
                 signatureStatus === 'signed' ||
-                status === 'signed' || 
+                status === 'signed' ||
                 status === 'completed' ||
                 status === 'active';
-                
+
               signatoryData.push({
                 id: 'landlord',
                 name: 'Property Owner',
                 type: 'landlord',
                 completed: landlordSigned
               });
-              
-              // Add tenant - only mark as signed if specifically mentioned in signature_status
+
               if (agreement.rentee) {
-                const tenantSigned = 
-                  signatureStatus.includes('tenant') || 
-                  signatureStatus === 'signing_complete' || 
+                const tenantSigned =
+                  signatureStatus.includes('tenant') ||
+                  signatureStatus === 'signing_complete' ||
                   signatureStatus === 'signed' ||
-                  status === 'signed' || 
+                  status === 'signed' ||
                   status === 'completed' ||
                   status === 'active';
-                  
+
                 signatoryData.push({
                   id: agreement.rentee.id,
                   name: agreement.rentee.name,
@@ -394,12 +380,12 @@ const AgreementList = () => {
                 });
               }
             }
-            
+
             return (
               <AgreementSummaryCard
                 key={agreement.id}
                 agreement={agreement}
-                property={agreement.properties}
+                property={agreement.properties || agreement.property}
                 rentee={agreement.rentee}
                 signatories={signatoryData}
                 onViewClick={() => navigate(`/dashboard/agreements/${agreement.id}`)}
@@ -413,4 +399,4 @@ const AgreementList = () => {
   );
 };
 
-export default AgreementList; 
+export default AgreementList;

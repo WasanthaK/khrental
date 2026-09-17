@@ -5,13 +5,11 @@ import { platform as platformClient } from '../../services/platformClient';
 import AgreementFormUI from './AgreementFormUI';
 import SignatureForm from './SignatureForm.jsx';
 import { AGREEMENT_STATUS } from '../../constants/agreementStatus';
-import {
-  fetchAgreement as fetchAgreementRecord,
-  updateAgreementData
-} from '../../services/agreementService';
+import { fetchAgreement as fetchAgreementRecord } from '../../services/agreementService';
 import {
   generateAndAttachAgreementDocument,
-  saveAgreementForStatus
+  saveAgreementForStatus,
+  updateAgreementCanonical
 } from '../../services/agreementWorkflowService';
 import { findAppUserByAuthId } from '../../services/appUserService';
 
@@ -192,7 +190,7 @@ const AgreementFormContainer = () => {
         throw new Error(signatureResult?.error || 'Failed to send document for signature');
       }
 
-      const updatedAgreement = normalizeAgreementRecord(await updateAgreementData(agreement.id, {
+      const updatedAgreement = normalizeAgreementRecord(await updateAgreementCanonical(agreement.id, {
         status: AGREEMENT_STATUS.PENDING,
         eviasignreference: signatureResult.requestId || null,
         signature_status: 'pending',
