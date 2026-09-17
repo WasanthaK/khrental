@@ -1,14 +1,14 @@
 import { platform as platformClient } from './platformClient';
 import axios from 'axios';
 import { formatFileSize } from '../utils/helpers';
-import { getApiBaseUrl } from '../utils/env';
+import { ENV, getApiBaseUrl } from '../utils/env';
 
 // Evia Sign API configuration
 const EVIA_SIGN_API_BASE_URL = 'https://evia.enadocapp.com/_apis';
 const EVIA_SIGN_AUTH_URL = 'https://evia.enadocapp.com/_apis';
 
 // Load client credentials from environment variables
-const EVIA_SIGN_CLIENT_ID = import.meta.env.VITE_EVIA_SIGN_CLIENT_ID || '';
+const EVIA_SIGN_CLIENT_ID = ENV.EVIA_SIGN_CLIENT_ID || '';
 
 // Use a hardcoded port to ensure consistency
 const EVIA_SIGN_REDIRECT_URL = typeof window !== 'undefined' 
@@ -114,6 +114,10 @@ function getDisplayStatus(status) {
  * @returns {string} The authorization URL
  */
 export function getAuthorizationUrl() {
+  if (!EVIA_SIGN_CLIENT_ID) {
+    throw new Error('Evia Sign Client ID is not configured for this deployment.');
+  }
+
   // Generate a random state to prevent CSRF
   const state = Math.random().toString(36).substring(2, 15);
   localStorage.setItem('eviaSignAuthState', state);
