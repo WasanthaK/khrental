@@ -33,6 +33,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --check scripts/cleanup-known-test-agreements.mjs
       - run: npm run test:authorization
       - run: npm run build
 
@@ -167,7 +168,7 @@ jobs:
                 R2_SECRET_ACCESS_KEY=secretref:r2-secret-access-key \
               --output none
 
-      - name: Deploy immutable image
+      - name: Deploy immutable image with guarded cleanup
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -180,7 +181,8 @@ jobs:
             az containerapp update \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --image "${{ steps.image.outputs.name }}:${{ github.sha }}"
+              --image "${{ steps.image.outputs.name }}:${{ github.sha }}" \
+              --set-env-vars CLEANUP_KNOWN_TEST_AGREEMENTS=true
 
       - name: Verify deployment health
         uses: azure/cli@v2
@@ -192,3 +194,35 @@ jobs:
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query properties.configuration.ingress.fqdn -o tsv)
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
+
+      - name: Verify one-time agreement cleanup
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            az extension add --name containerapp --upgrade --yes
+            revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestRevisionName -o tsv)
+
+            for attempt in $(seq 1 10); do
+              logs=$(az containerapp logs show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$revision" \
+                --type console \
+                --tail 300 \
+                --format text 2>/dev/null || true)
+              echo "$logs"
+
+              if echo "$logs" | grep -Eq 'Deleted [0-9]+ known Draft/Review agreement test row|Known test agreement rows are already absent'; then
+                echo "Guarded test agreement cleanup confirmed."
+                exit 0
+              fi
+
+              sleep 6
+            done
+
+            echo "Could not confirm guarded agreement cleanup in the latest revision logs." >&2
+            exit 1
