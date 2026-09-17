@@ -75,6 +75,41 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure Evia Sign OAuth
+        uses: azure/cli@v2
+        env:
+          EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID }}
+          EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            if [ -z "$EVIA_CLIENT_ID" ]; then
+              echo "EVIA_SIGN_CLIENT_ID (or VITE_EVIA_SIGN_CLIENT_ID) is not configured in the GitHub Production environment." >&2
+              exit 1
+            fi
+
+            if [ -z "$EVIA_CLIENT_SECRET" ]; then
+              echo "EVIA_SIGN_CLIENT_SECRET is not configured in the GitHub Production environment." >&2
+              exit 1
+            fi
+
+            az extension add --name containerapp --upgrade --yes
+            az containerapp secret set \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets evia-sign-client-secret="$EVIA_CLIENT_SECRET" \
+              --output none
+
+            az containerapp update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --set-env-vars \
+                EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
+                VITE_EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
+                EVIA_SIGN_CLIENT_SECRET=secretref:evia-sign-client-secret \
+              --output none
+
       - name: Configure server-side email delivery
         uses: azure/cli@v2
         env:
@@ -195,11 +230,15 @@ jobs:
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
 
             runtime_config=$(curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/env-config.js")
-            echo "$runtime_config"
 
             if ! echo "$runtime_config" | grep -Fq "VITE_USE_MSSQL_API: 'true'"; then
               echo "Production browser runtime is not configured to use the MSSQL API." >&2
               exit 1
             fi
 
-            echo "Production browser runtime confirmed with VITE_USE_MSSQL_API=true."
+            if ! echo "$runtime_config" | grep -Eq "VITE_EVIA_SIGN_CLIENT_ID: '[^']+'"; then
+              echo "Production browser runtime is missing the Evia Sign Client ID." >&2
+              exit 1
+            fi
+
+            echo "Production browser runtime confirmed with MSSQL routing and Evia Sign Client ID configured."
