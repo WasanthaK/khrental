@@ -33,6 +33,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --check scripts/inspect-known-test-agreements.mjs
       - run: npm run test:authorization
       - run: npm run build
 
@@ -192,3 +193,41 @@ jobs:
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query properties.configuration.ingress.fqdn -o tsv)
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
+
+      - name: Inspect known test agreement dependencies (read only)
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            az extension add --name containerapp --upgrade --yes
+
+            revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName -o tsv)
+
+            replica=$(az containerapp replica list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$revision" \
+              --query '[0].name' -o tsv)
+
+            container=$(az containerapp replica list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$revision" \
+              --query '[0].properties.containers[0].name' -o tsv)
+
+            if [ -z "$replica" ] || [ -z "$container" ]; then
+              echo "Could not resolve a healthy production replica for read-only inspection." >&2
+              exit 1
+            fi
+
+            printf 'node scripts/inspect-known-test-agreements.mjs\nexit\n' | \
+              az containerapp exec \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$revision" \
+                --replica "$replica" \
+                --container "$container" \
+                --command sh
