@@ -10,6 +10,7 @@ import {
   saveAgreement,
   updateAgreementData
 } from './agreementService';
+import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
 
 const parseObject = (value, fallback = {}) => {
   if (!value) {
@@ -32,6 +33,24 @@ const firstNonEmpty = (...values) => values.find((value) => (
   && value !== null
   && String(value).trim() !== ''
 ));
+
+const toNullableNumber = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = String(value).replace(/[^0-9.-]/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const normalizeTerms = (terms) => {
   const parsed = parseObject(terms, {});
@@ -57,10 +76,50 @@ const normalizeRelatedRecord = (candidate, expectedId) => {
   return null;
 };
 
+const fetchCanonicalAgreement = async (agreementId) => {
+  if (isMssqlApiEnabled()) {
+    return requestMssqlApi(`/api/mssql/agreements/${agreementId}`);
+  }
+
+  return fetchAgreement(agreementId);
+};
+
+const persistCanonicalAgreement = async ({ payload, existingId = null }) => {
+  if (isMssqlApiEnabled()) {
+    if (existingId) {
+      return requestMssqlApi(`/api/mssql/agreements/${existingId}`, {
+        method: 'PUT',
+        body: payload
+      });
+    }
+
+    return requestMssqlApi('/api/mssql/agreements', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  return saveAgreement({
+    ...payload,
+    ...(existingId ? { id: existingId } : {})
+  });
+};
+
+export const updateAgreementCanonical = async (agreementId, updates) => {
+  if (isMssqlApiEnabled()) {
+    return requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
+      method: 'PUT',
+      body: updates
+    });
+  }
+
+  return updateAgreementData(agreementId, updates);
+};
+
 const verifyPersistedAgreement = async (agreementId, expectations = {}) => {
-  const persisted = await fetchAgreement(agreementId);
+  const persisted = await fetchCanonicalAgreement(agreementId);
   if (!persisted?.id) {
-    throw new Error('Agreement write completed, but the saved record could not be read back.');
+    throw new Error('Agreement write completed, but the saved MSSQL record could not be read back.');
   }
 
   if (expectations.status && persisted.status !== expectations.status) {
@@ -156,13 +215,16 @@ const buildAgreementPersistencePayload = ({ formData, status, existingId = null 
     unitid: formData?.unitid || null,
     renteeid: formData?.renteeid || null,
     status,
+    startdate: terms.startDate || formData?.startdate || null,
+    enddate: terms.endDate || formData?.enddate || null,
+    rentamount: toNullableNumber(firstNonEmpty(terms.monthlyRent, formData?.rentamount, null)),
+    depositamount: toNullableNumber(firstNonEmpty(terms.depositAmount, formData?.depositamount, null)),
     terms,
     notes: formData?.notes || null,
     processedcontent: typeof formData?.processedContent === 'string'
       ? formData.processedContent
       : (typeof formData?.processedcontent === 'string' ? formData.processedcontent : null),
-    // Generation is orchestrated explicitly here. This must remain false so the
-    // legacy saveAgreement path cannot trigger a hidden second generation pass.
+    // Document generation is orchestrated explicitly in this service.
     needs_document_generation: false
   };
 };
@@ -172,8 +234,16 @@ export const persistAgreementForm = async ({
   status = AGREEMENT_STATUS.DRAFT,
   existingId = null
 }) => {
-  const payload = buildAgreementPersistencePayload({ formData, status, existingId });
-  const saved = await saveAgreement(payload);
+  const resolvedExistingId = formData?.id || existingId || null;
+  const payload = buildAgreementPersistencePayload({
+    formData,
+    status,
+    existingId: resolvedExistingId
+  });
+  const saved = await persistCanonicalAgreement({
+    payload,
+    existingId: resolvedExistingId
+  });
 
   if (!saved?.id) {
     throw new Error('Agreement save did not return a valid agreement ID.');
@@ -211,7 +281,7 @@ export const generateAndAttachAgreementDocument = async ({
     throw new Error('Agreement document could not be saved to storage.');
   }
 
-  const updated = await updateAgreementData(agreement.id, {
+  const updated = await updateAgreementCanonical(agreement.id, {
     processedcontent: mergedContent,
     documenturl: documentUrl,
     needs_document_generation: false,
@@ -219,7 +289,7 @@ export const generateAndAttachAgreementDocument = async ({
   });
 
   if (!updated?.id) {
-    throw new Error('Agreement document was generated, but the agreement record could not be updated.');
+    throw new Error('Agreement document was generated, but the MSSQL agreement record could not be updated.');
   }
 
   return verifyPersistedAgreement(agreement.id, {
