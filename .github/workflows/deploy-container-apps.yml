@@ -110,6 +110,15 @@ jobs:
                 EVIA_SIGN_CLIENT_SECRET=secretref:evia-sign-client-secret \
               --output none
 
+      - name: Validate Evia API App credentials
+        shell: bash
+        env:
+          EVIA_SIGN_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
+          EVIA_SIGN_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
+        run: |
+          set -euo pipefail
+          node scripts/validate-evia-api-app.mjs
+
       - name: Configure server-side email delivery
         uses: azure/cli@v2
         env:
