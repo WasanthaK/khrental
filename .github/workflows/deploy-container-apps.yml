@@ -78,19 +78,19 @@ jobs:
       - name: Configure Evia Sign OAuth
         uses: azure/cli@v2
         env:
-          EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID }}
-          EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET }}
+          EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
+          EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
         with:
           inlineScript: |
             set -euo pipefail
 
-            if [ -z "$EVIA_CLIENT_ID" ]; then
-              echo "EVIA_SIGN_CLIENT_ID (or VITE_EVIA_SIGN_CLIENT_ID) is not configured in the GitHub Production environment." >&2
+            if [ -z "${EVIA_CLIENT_ID:-}" ]; then
+              echo "Evia Client ID is not configured in the GitHub Production environment." >&2
               exit 1
             fi
 
-            if [ -z "$EVIA_CLIENT_SECRET" ]; then
-              echo "EVIA_SIGN_CLIENT_SECRET is not configured in the GitHub Production environment." >&2
+            if [ -z "${EVIA_CLIENT_SECRET:-}" ]; then
+              echo "Evia Client Secret is not configured under any supported secret name in the GitHub Production environment." >&2
               exit 1
             fi
 
