@@ -80,7 +80,6 @@ jobs:
         env:
           EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
           EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
-          EVIA_SIGN_SCOPES: 'documents:read documents:write webhooks:write webhook.documents.download audit:read'
         with:
           inlineScript: |
             set -euo pipefail
@@ -108,7 +107,6 @@ jobs:
               --set-env-vars \
                 EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
                 VITE_EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
-                VITE_EVIA_SIGN_SCOPES="$EVIA_SIGN_SCOPES" \
                 EVIA_SIGN_CLIENT_SECRET=secretref:evia-sign-client-secret \
               --output none
 
@@ -243,9 +241,4 @@ jobs:
               exit 1
             fi
 
-            if ! echo "$runtime_config" | grep -Fq "VITE_EVIA_SIGN_SCOPES: 'documents:read documents:write webhooks:write webhook.documents.download audit:read'"; then
-              echo "Production browser runtime has unexpected Evia Sign scopes." >&2
-              exit 1
-            fi
-
-            echo "Production browser runtime confirmed with MSSQL routing, Evia Client ID, and granular Evia scopes configured."
+            echo "Production browser runtime confirmed with MSSQL routing and Evia Sign Client ID configured."

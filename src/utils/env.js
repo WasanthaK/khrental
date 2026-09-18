@@ -77,7 +77,6 @@ export const getAppBaseUrl = () => {
 // Export environment variables directly
 export const ENV = {
   EVIA_SIGN_CLIENT_ID: getEnvVar('VITE_EVIA_SIGN_CLIENT_ID'),
-  EVIA_SIGN_SCOPES: getEnvVar('VITE_EVIA_SIGN_SCOPES'),
   API_ENDPOINT: getEnvVar('VITE_API_ENDPOINT'),
   APP_BASE_URL: getEnvVar('VITE_APP_BASE_URL'),
   USE_MSSQL_API: getEnvVar('VITE_USE_MSSQL_API'),
