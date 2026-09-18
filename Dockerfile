@@ -25,4 +25,4 @@ EXPOSE 5174
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 5174) + '/api/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["sh", "-c", "npm run generate-env-config && node server.js"]
+CMD ["sh", "-c", "npm run generate-env-config && node --import ./src/api/evia/v2TokenFetchShim.mjs server.js"]
