@@ -18,6 +18,7 @@ const WEBHOOK_SIGNATURE_HEADER_CANDIDATES = [
 const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 const parseJsonArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -195,6 +196,46 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     nestedPayload.completedAt
   ) || null;
 
+  const recipientEmail = normalizeEmail(firstDefined(
+    root.Email,
+    root.email,
+    root.RecipientEmail,
+    root.recipientEmail,
+    data.Email,
+    data.email,
+    data.RecipientEmail,
+    data.recipientEmail,
+    nestedPayload.Email,
+    nestedPayload.email
+  ));
+
+  const recipientName = String(firstDefined(
+    root.Name,
+    root.name,
+    root.UserName,
+    root.userName,
+    data.Name,
+    data.name,
+    nestedPayload.Name,
+    nestedPayload.name
+  ) || '').trim();
+
+  const deliveryStatus = normalizeStatus(firstDefined(
+    root.EmailDeliveryStatus,
+    root.emailDeliveryStatus,
+    root.email_delivery_status,
+    root.DeliveryStatus,
+    root.deliveryStatus,
+    root.EmailStatus,
+    root.emailStatus,
+    data.EmailDeliveryStatus,
+    data.emailDeliveryStatus,
+    data.DeliveryStatus,
+    data.deliveryStatus,
+    data.EmailStatus,
+    data.emailStatus
+  ));
+
   const documents = firstDefined(root.Documents, root.documents, data.Documents, data.documents, nestedPayload.Documents, nestedPayload.documents) || [];
 
   return {
@@ -203,6 +244,9 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     eventId: Number.isFinite(eventId) ? eventId : null,
     status,
     eventTime,
+    recipientEmail,
+    recipientName,
+    deliveryStatus,
     documents: Array.isArray(documents) ? documents : []
   };
 };
@@ -217,6 +261,39 @@ export const markAllSignatoriesCompleted = (value, completedAt) => {
     signed_at: signatory?.signed_at || signatory?.signedAt || completedAt,
     signedAt: signatory?.signedAt || signatory?.signed_at || completedAt
   }));
+};
+
+export const updateSignatoryEmailDelivery = (value, { email, name, deliveryStatus, eventTime, eventType }) => {
+  const normalizedRecipientEmail = normalizeEmail(email);
+  if (!normalizedRecipientEmail) return null;
+
+  const signatories = parseJsonArray(value);
+  const delivery = deliveryStatus || (eventType === 'request.sent' ? 'sent' : 'unknown');
+  const timestamp = eventTime || new Date().toISOString();
+  const existingIndex = signatories.findIndex((signatory) => normalizeEmail(signatory?.email) === normalizedRecipientEmail);
+  const deliveryPatch = {
+    email_delivery_status: delivery,
+    email_status_updated_at: timestamp,
+    ...(delivery === 'sent' ? { email_sent_at: timestamp } : {}),
+    ...(delivery === 'delivered' ? { email_delivered_at: timestamp } : {}),
+    ...(['failed', 'bounced', 'bounce'].includes(delivery) ? { email_failed_at: timestamp } : {})
+  };
+
+  if (existingIndex >= 0) {
+    return signatories.map((signatory, index) => index === existingIndex
+      ? { ...signatory, ...deliveryPatch }
+      : signatory);
+  }
+
+  return [
+    ...signatories,
+    {
+      name: name || normalizedRecipientEmail,
+      email: normalizedRecipientEmail,
+      status: 'pending',
+      ...deliveryPatch
+    }
+  ];
 };
 
 const getDocumentUrlCandidate = (document) => {
@@ -281,7 +358,20 @@ const mapFinalAgreementState = ({ eventType, eventId, status }) => {
 
 export const processEviaWebhook = async (payload = {}) => {
   const normalized = normalizeEviaWebhookPayload(payload);
+
+  // V2 documentation lists recipient details for request.sent but does not list
+  // RequestId as a documented field. Acknowledge an unmappable sent notification
+  // rather than guessing which agreement it belongs to from email alone.
   if (!normalized.requestId) {
+    if (normalized.eventType === 'request.sent') {
+      console.warn('[EviaWebhook] request.sent received without RequestId; recipient status cannot be safely matched', {
+        recipientEmail: normalized.recipientEmail || null
+      });
+      return {
+        statusCode: 200,
+        body: { received: true, matched: false, reason: 'request_id_missing' }
+      };
+    }
     return { statusCode: 400, body: { received: false, error: 'RequestId is required.' } };
   }
 
@@ -307,17 +397,47 @@ export const processEviaWebhook = async (payload = {}) => {
     };
   }
 
+  const emailStatuses = updateSignatoryEmailDelivery(agreement.signatories_status, {
+    email: normalized.recipientEmail,
+    name: normalized.recipientName,
+    deliveryStatus: normalized.deliveryStatus,
+    eventTime: normalized.eventTime,
+    eventType: normalized.eventType
+  });
+
+  if (emailStatuses) {
+    await runQuery(`
+      UPDATE dbo.agreements
+      SET signatories_status = @signatoriesStatus,
+          updatedat = SYSUTCDATETIME()
+      WHERE id = @agreementId
+        AND eviasignreference = @requestId
+    `, {
+      agreementId: agreement.id,
+      requestId: normalized.requestId,
+      signatoriesStatus: JSON.stringify(emailStatuses)
+    });
+    agreement.signatories_status = JSON.stringify(emailStatuses);
+  }
+
   const finalState = mapFinalAgreementState(normalized);
   if (!finalState) {
-    console.log('[EviaWebhook] Event received with no terminal agreement transition', {
+    console.log('[EviaWebhook] Non-terminal Evia event processed', {
       requestId: normalized.requestId,
       eventType: normalized.eventType || null,
       eventId: normalized.eventId,
-      status: normalized.status || null
+      status: normalized.status || null,
+      recipientEmail: normalized.recipientEmail || null,
+      emailDeliveryStatus: normalized.deliveryStatus || (normalized.eventType === 'request.sent' ? 'sent' : null)
     });
     return {
       statusCode: 200,
-      body: { received: true, matched: true, updated: false, agreementId: agreement.id }
+      body: {
+        received: true,
+        matched: true,
+        updated: Boolean(emailStatuses),
+        agreementId: agreement.id
+      }
     };
   }
 
