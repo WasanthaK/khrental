@@ -1,9 +1,12 @@
+import crypto from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractSignedDocumentUrl,
+  getEviaWebhookSignature,
   markAllSignatoriesCompleted,
-  normalizeEviaWebhookPayload
+  normalizeEviaWebhookPayload,
+  verifyEviaWebhookHmac
 } from '../src/api/evia/webhook.js';
 
 test('normalizes Evia V2 request.completed payloads', () => {
@@ -50,4 +53,19 @@ test('extracts only http(s) signed document URLs', () => {
     'https://example.com/signed.pdf'
   );
   assert.equal(extractSignedDocumentUrl({ SignedDocumentUrl: 'javascript:alert(1)' }), null);
+});
+
+test('verifies hex HMAC SHA-256 over the exact raw body', () => {
+  const rawBody = Buffer.from('{"event":"request.completed","RequestId":"abc"}');
+  const secret = 'test-webhook-secret';
+  const signature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+  assert.equal(verifyEviaWebhookHmac({ rawBody, signature, secret }), true);
+  assert.equal(verifyEviaWebhookHmac({ rawBody, signature: `sha256=${signature}`, secret }), true);
+  assert.equal(verifyEviaWebhookHmac({ rawBody, signature: 'bad-signature', secret }), false);
+});
+
+test('recognizes common webhook signature header names', () => {
+  assert.equal(getEviaWebhookSignature({ 'X-Evia-Signature': 'abc123' }), 'abc123');
+  assert.equal(getEviaWebhookSignature({ 'x-custom-hmac': 'def456' }), 'def456');
 });
