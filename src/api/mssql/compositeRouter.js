@@ -1,13 +1,14 @@
 import express from 'express';
+import { createAgreementDeleteRouter } from './agreementDeleteRouter.js';
 import { createMembershipAdminRouter } from './membershipAdminRouter.js';
 import { createMssqlRouter as createLegacyMssqlRouter } from './router.js';
 
 export const createMssqlRouter = () => {
   const router = express.Router();
 
-  // Phase 3 canonical membership administration takes precedence for the
-  // membership endpoints. All other MSSQL compatibility routes continue
-  // through the existing router until later remediation slices migrate them.
+  // Canonical guarded routes take precedence over the legacy compatibility
+  // router. This prevents unsafe fall-through for destructive operations.
+  router.use(createAgreementDeleteRouter());
   router.use(createMembershipAdminRouter());
   router.use(createLegacyMssqlRouter());
 

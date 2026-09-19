@@ -1,0 +1,34 @@
+name: Test cancelled agreement deletion
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/mssql/agreementDeleteRouter.js'
+      - 'src/api/mssql/compositeRouter.js'
+      - 'src/pages/AgreementList.jsx'
+      - 'tests/agreement-delete.test.js'
+      - '.github/workflows/test-agreement-delete.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/mssql/agreementDeleteRouter.js'
+      - 'src/api/mssql/compositeRouter.js'
+      - 'src/pages/AgreementList.jsx'
+      - 'tests/agreement-delete.test.js'
+      - '.github/workflows/test-agreement-delete.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/agreement-delete.test.js

@@ -20,6 +20,7 @@ const AgreementList = () => {
   const [sortOrder, setSortOrder] = useState('desc');
   const [previewUrl, setPreviewUrl] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [deletingAgreementId, setDeletingAgreementId] = useState(null);
 
   const fetchAgreementsFromMssql = async () => {
     return requestMssqlApi('/api/mssql/agreements?pageSize=500');
@@ -173,6 +174,40 @@ const AgreementList = () => {
     } catch (cancelError) {
       console.error('Error cancelling agreement:', cancelError);
       toast.error('Failed to cancel agreement');
+    }
+  };
+
+  const handleDeleteAgreement = async (agreementId) => {
+    const agreement = agreements.find((item) => item.id === agreementId);
+    if (!agreement || agreement.status !== 'cancelled') {
+      toast.error('Only cancelled agreements can be permanently deleted');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Permanently delete this cancelled agreement? This removes the agreement record and its unused generated documents. This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingAgreementId(agreementId);
+      const result = await requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
+        method: 'DELETE'
+      });
+
+      setAgreements((current) => current.filter((item) => item.id !== agreementId));
+
+      const cleanupWarnings = result?.storage_cleanup?.warnings || [];
+      if (cleanupWarnings.length > 0) {
+        toast.success('Agreement deleted. Some unused document files could not be cleaned up automatically.');
+      } else {
+        toast.success('Cancelled agreement deleted permanently');
+      }
+    } catch (deleteError) {
+      console.error('Error deleting cancelled agreement:', deleteError);
+      toast.error(deleteError.message || 'Failed to delete cancelled agreement');
+    } finally {
+      setDeletingAgreementId(null);
     }
   };
 
@@ -384,15 +419,27 @@ const AgreementList = () => {
             }
 
             return (
-              <AgreementSummaryCard
-                key={agreement.id}
-                agreement={agreement}
-                property={agreement.properties || agreement.property}
-                rentee={agreement.rentee}
-                signatories={signatoryData}
-                onViewClick={() => navigate(`/dashboard/agreements/${agreement.id}`)}
-                onCancelClick={() => handleCancelAgreement(agreement.id)}
-              />
+              <div key={agreement.id}>
+                <AgreementSummaryCard
+                  agreement={agreement}
+                  property={agreement.properties || agreement.property}
+                  rentee={agreement.rentee}
+                  signatories={signatoryData}
+                  onViewClick={() => navigate(`/dashboard/agreements/${agreement.id}`)}
+                  onCancelClick={() => handleCancelAgreement(agreement.id)}
+                />
+                {status === 'cancelled' && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => handleDeleteAgreement(agreement.id)}
+                      disabled={deletingAgreementId === agreement.id}
+                      className="px-3 py-1.5 bg-red-800 text-white text-xs rounded hover:bg-red-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {deletingAgreementId === agreement.id ? 'Deleting…' : 'Delete permanently'}
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

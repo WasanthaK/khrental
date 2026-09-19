@@ -4,11 +4,11 @@ import { formatDate } from '../utils/helpers';
 import { toast } from 'react-hot-toast';
 import SignatureProgressTracker from '../components/ui/SignatureProgressTracker';
 import {
-  deleteAgreement,
   fetchAgreement,
   getTemplate,
   markAgreementAsSigned
 } from '../services/agreementService';
+import { deleteCancelledAgreement } from '../services/cancelledAgreementDeleteService';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -111,12 +111,15 @@ const AgreementDetails = () => {
   const handleDelete = async () => {
     try {
       setLoading(true);
-      await deleteAgreement(id);
-      
+      const result = await deleteCancelledAgreement(id);
+      const cleanupWarnings = result?.storage_cleanup?.warnings || [];
+      toast.success(cleanupWarnings.length > 0
+        ? 'Agreement deleted. Some unused document files could not be cleaned up automatically.'
+        : 'Cancelled agreement deleted permanently');
       navigate('/dashboard/agreements');
-    } catch (error) {
-      console.error('Error deleting agreement:', error.message);
-      setError(error.message);
+    } catch (deleteError) {
+      console.error('Error deleting agreement:', deleteError.message);
+      setError(deleteError.message);
     } finally {
       setLoading(false);
       setShowDeleteConfirm(false);
@@ -205,6 +208,8 @@ const AgreementDetails = () => {
         return 'bg-indigo-100 text-indigo-800';
       case 'expired':
         return 'bg-red-100 text-red-800';
+      case 'cancelled':
+        return 'bg-orange-100 text-orange-800';
       case 'terminated':
         return 'bg-gray-100 text-gray-800';
       default:
@@ -259,8 +264,8 @@ const AgreementDetails = () => {
       <div className="mb-8 flex flex-wrap gap-3">
         <div className="flex-1"></div>
         <div className="flex flex-wrap gap-3">
-          {/* Show sign button only if agreement is not signed */}
-          {agreement.status !== 'signed' && agreement.status !== 'completed' && (
+          {/* Show sign button only if agreement is still editable */}
+          {!['signed', 'completed', 'cancelled'].includes(agreement.status) && (
             <button
               onClick={() => setShowSignConfirm(true)}
               className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center"
@@ -272,8 +277,8 @@ const AgreementDetails = () => {
             </button>
           )}
           
-          {/* Only show Edit button if not signed */}
-          {agreement.status !== 'signed' && agreement.status !== 'completed' && (
+          {/* Only show Edit button if agreement is still editable */}
+          {!['signed', 'completed', 'cancelled'].includes(agreement.status) && (
             <Link
               to={`/dashboard/agreements/${id}/edit`}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
@@ -285,15 +290,17 @@ const AgreementDetails = () => {
             </Link>
           )}
           
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Delete
-          </button>
+          {agreement.status === 'cancelled' && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Delete permanently
+            </button>
+          )}
         </div>
       </div>
       
@@ -458,9 +465,9 @@ const AgreementDetails = () => {
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Deletion</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Permanent Deletion</h3>
             <p className="text-gray-700 mb-6">
-              Are you sure you want to delete this agreement? This action cannot be undone.
+              Permanently delete this cancelled agreement? The agreement record and its unused generated documents will be removed. This cannot be undone.
             </p>
             <div className="flex justify-end space-x-3">
               <button
@@ -471,9 +478,9 @@ const AgreementDetails = () => {
               </button>
               <button
                 onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                className="px-4 py-2 bg-red-800 text-white rounded-md hover:bg-red-900"
               >
-                Delete
+                Delete permanently
               </button>
             </div>
           </div>
@@ -516,4 +523,4 @@ const AgreementDetails = () => {
   );
 };
 
-export default AgreementDetails; 
+export default AgreementDetails;
