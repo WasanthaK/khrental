@@ -1,12 +1,14 @@
-name: Test Evia V2 OAuth
+name: Test Evia V2 integration
 
 on:
   pull_request:
     branches: [main]
     paths:
       - 'src/api/evia/oauthV2.js'
-      - 'src/api/evia/v2TokenFetchShim.mjs'
+      - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v2.test.js'
       - 'server.js'
       - 'Dockerfile'
       - '.github/workflows/test-evia-oauth-v2.yml'
@@ -14,8 +16,10 @@ on:
     branches: [main]
     paths:
       - 'src/api/evia/oauthV2.js'
-      - 'src/api/evia/v2TokenFetchShim.mjs'
+      - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v2.test.js'
       - 'server.js'
       - 'Dockerfile'
       - '.github/workflows/test-evia-oauth-v2.yml'
@@ -33,4 +37,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-oauth-v2.test.js
+      - run: node --test tests/evia-oauth-v2.test.js tests/evia-signing-v2.test.js
