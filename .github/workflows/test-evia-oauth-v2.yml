@@ -1,0 +1,40 @@
+name: Test Evia V2 integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/evia/oauthV2.js'
+      - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV2SigningService.js'
+      - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v2.test.js'
+      - 'server.js'
+      - 'Dockerfile'
+      - '.github/workflows/test-evia-oauth-v2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/evia/oauthV2.js'
+      - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV2SigningService.js'
+      - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v2.test.js'
+      - 'server.js'
+      - 'Dockerfile'
+      - '.github/workflows/test-evia-oauth-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/evia-oauth-v2.test.js tests/evia-signing-v2.test.js
