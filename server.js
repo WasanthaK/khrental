@@ -20,6 +20,7 @@ import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
+import { createEviaWebhookRouter } from './src/api/evia/webhook.js';
 
 dotenv.config();
 
@@ -122,7 +123,20 @@ async function createServer() {
   };
 
   app.use(cors({ origin: isProduction ? (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)) : true }));
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req, _res, buffer) => {
+      if (String(req.originalUrl || '').startsWith('/api/evia/webhook')) {
+        req.rawBody = Buffer.from(buffer);
+      }
+    }
+  }));
+
+  // Evia callbacks are server-to-server notifications and must not depend on a
+  // KH Rentals browser session. Mount the narrowly scoped webhook before the
+  // application session middleware; the OAuth token endpoint below remains
+  // protected by requireApiSession.
+  app.use('/api/evia', createEviaWebhookRouter());
   app.use('/api', createSessionAuthMiddleware());
 
   const requireApiSession = (req, res, next) => {
