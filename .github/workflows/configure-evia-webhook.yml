@@ -1,0 +1,70 @@
+name: Configure Evia webhook security
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/evia/**'
+      - 'server.js'
+      - '.github/workflows/configure-evia-webhook.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure Evia webhook HMAC secret
+        uses: azure/cli@v2
+        env:
+          EVIA_WEBHOOK_HMAC_SECRET: ${{ secrets.EVIA_WEBHOOK_HMAC_SECRET }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            if [ -z "${EVIA_WEBHOOK_HMAC_SECRET:-}" ]; then
+              echo "EVIA_WEBHOOK_HMAC_SECRET is not configured in the GitHub Production environment." >&2
+              exit 1
+            fi
+
+            az extension add --name containerapp --upgrade --yes
+            az containerapp secret set \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets evia-webhook-hmac-secret="$EVIA_WEBHOOK_HMAC_SECRET" \
+              --output none
+
+            az containerapp update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --set-env-vars EVIA_WEBHOOK_HMAC_SECRET=secretref:evia-webhook-hmac-secret \
+              --output none
+
+            configured_secret=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].env[?name=='EVIA_WEBHOOK_HMAC_SECRET'].secretRef | [0]" \
+              -o tsv)
+
+            if [ "$configured_secret" != "evia-webhook-hmac-secret" ]; then
+              echo "Container App webhook HMAC secret reference was not configured correctly." >&2
+              exit 1
+            fi
+
+            echo "Evia webhook HMAC secret reference configured."

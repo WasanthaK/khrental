@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDate } from '../../utils/helpers';
-import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriangle, FiX, FiUsers, FiEye, FiLayout } from 'react-icons/fi';
+import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriangle, FiX, FiUsers, FiEye, FiLayout, FiMail } from 'react-icons/fi';
 import SignatureProgressTracker from '../ui/SignatureProgressTracker';
 import AgreementDocument from './AgreementDocument';
 import { toast } from 'react-hot-toast';
@@ -117,6 +117,23 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
     }
   };
 
+  const getEmailStatusInfo = (emailStatus) => {
+    const normalized = String(emailStatus || '').toLowerCase();
+    if (normalized === 'delivered') {
+      return { label: 'Delivered', className: 'bg-green-100 text-green-800' };
+    }
+    if (['failed', 'bounced', 'bounce', 'undeliverable'].includes(normalized)) {
+      return { label: normalized === 'failed' ? 'Failed' : 'Bounced', className: 'bg-red-100 text-red-800' };
+    }
+    if (normalized === 'sent') {
+      return { label: 'Sent', className: 'bg-blue-100 text-blue-800' };
+    }
+    if (normalized === 'queued') {
+      return { label: 'Queued', className: 'bg-gray-100 text-gray-700' };
+    }
+    return { label: 'Unknown', className: 'bg-gray-100 text-gray-500' };
+  };
+
   const statusInfo = getStatusInfo();
 
   const handleCancelClick = () => {
@@ -220,24 +237,39 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             <span className="text-sm font-semibold text-gray-700">Signatories</span>
           </div>
           <div className="divide-y divide-gray-100 bg-gray-50 rounded-md overflow-hidden">
-            {signatoriesData.map((signatory, index) => (
-              <div key={signatory.id || index} className="px-3 py-2 flex justify-between items-center">
-                <div className="text-sm">
-                  <span className="font-medium">{signatory.name}</span>
-                  {signatory.email && <span className="text-xs text-gray-500 ml-1">({signatory.email})</span>}
+            {signatoriesData.map((signatory, index) => {
+              const emailInfo = getEmailStatusInfo(signatory.emailDeliveryStatus);
+              return (
+                <div key={signatory.id || index} className="px-3 py-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                  <div className="text-sm min-w-0">
+                    <span className="font-medium">{signatory.name}</span>
+                    {signatory.email && <span className="text-xs text-gray-500 ml-1 break-all">({signatory.email})</span>}
+                    {signatory.email && (
+                      <div className="mt-1 flex items-center gap-1 text-xs">
+                        <FiMail className="h-3 w-3 text-gray-400" />
+                        <span className="text-gray-500">Email:</span>
+                        <span className={`px-1.5 py-0.5 rounded ${emailInfo.className}`}>
+                          {emailInfo.label}
+                        </span>
+                        {signatory.emailStatusUpdatedAt && (
+                          <span className="text-gray-400">({formatDate(signatory.emailStatusUpdatedAt)})</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className={`flex items-center text-xs px-2 py-0.5 rounded self-start sm:self-auto ${
+                    signatory.completed 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {signatory.completed 
+                      ? <><FiCheck className="mr-1 h-3 w-3" /> Signed</> 
+                      : <><FiClock className="mr-1 h-3 w-3" /> Pending</>}
+                    {signatory.signedAt && <span className="ml-1">({formatDate(signatory.signedAt)})</span>}
+                  </div>
                 </div>
-                <div className={`flex items-center text-xs px-2 py-0.5 rounded ${
-                  signatory.completed 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {signatory.completed 
-                    ? <><FiCheck className="mr-1 h-3 w-3" /> Signed</> 
-                    : <><FiClock className="mr-1 h-3 w-3" /> Pending</>}
-                  {signatory.signedAt && <span className="ml-1">({formatDate(signatory.signedAt)})</span>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         
