@@ -8,6 +8,7 @@ const EVIA_SIGN_CLIENT_ID = ENV.EVIA_SIGN_CLIENT_ID || '';
 const EVIA_AUTHORIZATION_URL = 'https://evia.enadocapp.com/_apis/falcon/auth/oauth2/authorize';
 const EVIA_AUTH_STORAGE_KEY = 'eviaSignAuth';
 const EVIA_DOCUMENT_UPLOAD_URL = 'https://evia.enadocapp.com/_apis/sign/thumbs/api/Requests/document';
+const EVIA_REQUEST_URL = 'https://evia.enadocapp.com/_apis/sign/api/Requests';
 let eviaAuthBridgeTimer = null;
 
 const requestEviaToken = async (payload) => {
@@ -130,6 +131,19 @@ const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
   throw new Error('Evia document upload returned no document token.');
 };
 
+const normalizeEviaStatus = (value) => {
+  if (value === 3 || value === '3') return 'completed';
+  if (value === 2 || value === '2') return 'in_progress';
+  if (value === 1 || value === '1') return 'pending';
+
+  const status = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (['completed', 'complete', 'signed', 'fully_signed'].includes(status)) return 'completed';
+  if (['in_progress', 'partially_signed', 'partial', 'signing'].includes(status)) return 'in_progress';
+  if (['pending', 'pending_signature', 'sent', 'received', 'created', 'awaiting_signature'].includes(status)) return 'pending';
+  if (['cancelled', 'canceled', 'recalled', 'declined', 'failed'].includes(status)) return status === 'canceled' ? 'cancelled' : status;
+  return status || 'unknown';
+};
+
 const startSameOriginAuthBridge = () => {
   if (typeof window === 'undefined') return;
 
@@ -216,6 +230,50 @@ export async function handleAuthCallback(code) {
   });
 
   return persistEviaAuth(tokenResponse);
+}
+
+/**
+ * Reliable status fallback for existing V1 requests and missed webhooks.
+ * The current Evia V1 request endpoint is retained here because agreements
+ * created before the V2 send migration still carry V1 request IDs.
+ */
+export async function getSignatureStatus(requestId) {
+  try {
+    if (!requestId) throw new Error('Evia request ID is required.');
+    const accessToken = await getActiveEviaAccessToken();
+    const response = await fetch(`${EVIA_REQUEST_URL}/${encodeURIComponent(requestId)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json'
+      }
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json')
+      ? await response.json()
+      : { error: await response.text() };
+
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || `Evia status request failed with status ${response.status}`);
+    }
+
+    const rawStatus = data?.status ?? data?.Status ?? data?.requestStatus ?? data?.RequestStatus;
+    const status = normalizeEviaStatus(rawStatus);
+    return {
+      success: true,
+      status,
+      completed: status === 'completed',
+      rawStatus,
+      signatories: data?.signatories || data?.Signatories || []
+    };
+  } catch (error) {
+    console.error('[eviaSignService] Status lookup failed:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to get signature status'
+    };
+  }
 }
 
 /**
