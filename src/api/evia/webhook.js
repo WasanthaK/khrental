@@ -343,6 +343,13 @@ const isCompletionNotification = ({ eventType, eventId, status }) => {
   return COMPLETED_STATUSES.has(status);
 };
 
+export const shouldAcknowledgeUnmappedWebhook = ({ eventType, eventId, status }) => {
+  if (isCompletionNotification({ eventType, eventId, status })) return false;
+  if (CANCELLED_STATUSES.has(status)) return false;
+  if (REJECTED_STATUSES.has(status)) return false;
+  return true;
+};
+
 const mapFinalAgreementState = ({ eventType, eventId, status }) => {
   if (CANCELLED_STATUSES.has(status)) {
     return { agreementStatus: 'cancelled', signatureStatus: 'failed' };
@@ -359,20 +366,30 @@ const mapFinalAgreementState = ({ eventType, eventId, status }) => {
 export const processEviaWebhook = async (payload = {}) => {
   const normalized = normalizeEviaWebhookPayload(payload);
 
-  // V2 documentation lists recipient details for request.sent but does not list
-  // RequestId as a documented field. Acknowledge an unmappable sent notification
-  // rather than guessing which agreement it belongs to from email alone.
+  // Evia's connection test and request.sent payloads can arrive without a
+  // RequestId. Once HMAC verification has succeeded, acknowledge non-terminal
+  // unmappable payloads without touching agreement data. Terminal events still
+  // require a RequestId so Evia can retry a malformed delivery safely.
   if (!normalized.requestId) {
-    if (normalized.eventType === 'request.sent') {
-      console.warn('[EviaWebhook] request.sent received without RequestId; recipient status cannot be safely matched', {
+    if (shouldAcknowledgeUnmappedWebhook(normalized)) {
+      console.warn('[EviaWebhook] Authenticated webhook received without RequestId; acknowledged without mutation', {
+        eventType: normalized.eventType || null,
+        eventId: normalized.eventId,
+        status: normalized.status || null,
         recipientEmail: normalized.recipientEmail || null
       });
       return {
         statusCode: 200,
-        body: { received: true, matched: false, reason: 'request_id_missing' }
+        body: {
+          received: true,
+          matched: false,
+          updated: false,
+          reason: 'request_id_missing'
+        }
       };
     }
-    return { statusCode: 400, body: { received: false, error: 'RequestId is required.' } };
+
+    return { statusCode: 400, body: { received: false, error: 'RequestId is required for terminal Evia events.' } };
   }
 
   const agreement = await runSingleQuery(`

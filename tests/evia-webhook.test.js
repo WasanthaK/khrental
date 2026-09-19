@@ -6,6 +6,7 @@ import {
   getEviaWebhookSignature,
   markAllSignatoriesCompleted,
   normalizeEviaWebhookPayload,
+  shouldAcknowledgeUnmappedWebhook,
   updateSignatoryEmailDelivery,
   verifyEviaWebhookHmac
 } from '../src/api/evia/webhook.js';
@@ -48,6 +49,19 @@ test('normalizes legacy completion callbacks', () => {
   assert.equal(result.eventId, 3);
   assert.equal(result.eventType, 'requestcompleted');
   assert.equal(result.eventTime, '2026-09-19T05:00:00Z');
+});
+
+test('acknowledges authenticated connection-test and request.sent payloads without RequestId', () => {
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: '', eventId: null, status: '' }), true);
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: 'webhook.test', eventId: null, status: '' }), true);
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: 'request.sent', eventId: null, status: '' }), true);
+});
+
+test('does not acknowledge terminal payloads without RequestId', () => {
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: 'request.completed', eventId: null, status: 'completed' }), false);
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: '', eventId: 3, status: '' }), false);
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: '', eventId: null, status: 'cancelled' }), false);
+  assert.equal(shouldAcknowledgeUnmappedWebhook({ eventType: '', eventId: null, status: 'rejected' }), false);
 });
 
 test('tracks sent email independently from signature status', () => {
