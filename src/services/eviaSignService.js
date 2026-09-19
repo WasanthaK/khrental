@@ -6,6 +6,53 @@ import { buildRequestContextHeaders } from './requestContext';
 const EVIA_SIGN_CLIENT_ID = ENV.EVIA_SIGN_CLIENT_ID || '';
 const EVIA_AUTHORIZATION_URL = 'https://evia.enadocapp.com/_apis/falcon/auth/oauth2/authorize';
 const EVIA_AUTH_STORAGE_KEY = 'eviaSignAuth';
+let eviaAuthBridgeTimer = null;
+
+const startSameOriginAuthBridge = () => {
+  if (typeof window === 'undefined') return;
+
+  if (eviaAuthBridgeTimer) {
+    window.clearInterval(eviaAuthBridgeTimer);
+  }
+
+  const initialValue = localStorage.getItem(EVIA_AUTH_STORAGE_KEY);
+  const startedAt = Date.now();
+
+  eviaAuthBridgeTimer = window.setInterval(() => {
+    if (Date.now() - startedAt > 5 * 60 * 1000) {
+      window.clearInterval(eviaAuthBridgeTimer);
+      eviaAuthBridgeTimer = null;
+      return;
+    }
+
+    const currentValue = localStorage.getItem(EVIA_AUTH_STORAGE_KEY);
+    if (!currentValue || currentValue === initialValue) return;
+
+    try {
+      const authData = JSON.parse(currentValue);
+      if (!authData?.authToken || !authData?.expiresAt || authData.expiresAt <= Date.now()) return;
+
+      window.clearInterval(eviaAuthBridgeTimer);
+      eviaAuthBridgeTimer = null;
+
+      // SignatureForm already listens for this message shape. Dispatching the
+      // same event locally avoids relying solely on window.opener.postMessage,
+      // which can be blocked after the cross-origin Evia round-trip by COOP.
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'EVIA_AUTH_SUCCESS',
+          data: {
+            authToken: authData.authToken,
+            refreshToken: authData.refreshToken || null,
+            userEmail: authData.userEmail || null
+          }
+        }
+      }));
+    } catch (_error) {
+      // Ignore incomplete storage writes and continue polling until timeout.
+    }
+  }, 500);
+};
 
 /**
  * Evia Sign API V2 OAuth authorization URL.
@@ -24,6 +71,7 @@ export function getAuthorizationUrl() {
   }
 
   const redirectUri = `${window.location.origin}/auth/evia-callback`;
+  startSameOriginAuthBridge();
 
   return `${EVIA_AUTHORIZATION_URL}` +
     `?application_state=external` +
