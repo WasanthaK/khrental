@@ -181,21 +181,44 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       setSignatureStatus(result.status);
       setLastChecked(new Date().toISOString());
       
-      // If signed, download the document and update agreement
+      // If signed, download the final PDF and reconcile the canonical agreement.
+      // Preserve documenturl as the original agreement generated before signing.
       if (result.status === 'completed') {
         const signedDoc = await downloadSignedDocument(agreement.eviasignreference);
         if (!signedDoc.success) {
           throw new Error(signedDoc.error || 'Failed to download signed document');
         }
+
+        const completedAt = new Date().toISOString();
+        let signatoriesStatus = [];
+        try {
+          const current = typeof agreement.signatories_status === 'string'
+            ? JSON.parse(agreement.signatories_status)
+            : agreement.signatories_status;
+          if (Array.isArray(current)) {
+            signatoriesStatus = current.map((signatory) => ({
+              ...signatory,
+              status: 'completed',
+              signed_at: signatory.signed_at || signatory.signedAt || completedAt,
+              signedAt: signatory.signedAt || signatory.signed_at || completedAt
+            }));
+          }
+        } catch (_error) {
+          signatoriesStatus = [];
+        }
         
-        // Update agreement with signed document and status
         await updateAgreementData(agreement.id, {
           status: STATUS.SIGNED,
-          documenturl: signedDoc.documentUrl,
-          updatedat: new Date().toISOString()
+          signature_status: 'completed',
+          signature_completed_at: completedAt,
+          signeddate: completedAt,
+          signed_document_url: signedDoc.documentUrl,
+          signeddocumenturl: signedDoc.documentUrl,
+          signature_pdf_url: signedDoc.documentUrl,
+          ...(signatoriesStatus.length > 0 ? { signatories_status: signatoriesStatus } : {}),
+          updatedat: completedAt
         });
         
-        // Notify parent component of status change
         if (onStatusChange) {
           onStatusChange(STATUS.SIGNED);
         }
@@ -215,83 +238,84 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       setLoading(true);
       setError(null);
 
-      // First check if we have a document
       if (!agreement.documenturl) {
         throw new Error('No document available for signature');
       }
 
-      // Get rentee details for signature request
       const renteeData = await fetchAppUser(agreement.renteeid);
-
-      // Get landlord details
       const landlordData = await fetchAppUser(agreement.landlordid);
 
-      // Use our own webhook endpoint instead of relying on environment variable
-      // Only use webhooks in production environment or if specifically configured
       let webhookUrl = null;
       const isProduction = window.location.hostname !== 'localhost' && 
                          window.location.hostname !== '127.0.0.1';
                          
       if (isProduction) {
-        webhookUrl = window.location.origin + '/api/evia-webhook';
+        webhookUrl = window.location.origin + '/api/evia/webhook';
         console.log('Using internal webhook URL:', webhookUrl);
       } else {
         console.log('Running in development environment - webhook notifications disabled');
       }
 
-      // Prepare signature data
+      const signatories = [
+        {
+          name: landlordData.name,
+          email: landlordData.email,
+          identifier: 'landlord',
+          textMarker: 'For Landlord:',
+          mobile: landlordData.contact_details?.phone
+        },
+        {
+          name: renteeData.name,
+          email: renteeData.email,
+          identifier: 'tenant',
+          textMarker: 'For Tenant:',
+          mobile: renteeData.contact_details?.phone
+        }
+      ];
+
       const signatureData = {
         documentUrl: agreement.documenturl,
         title: `Rental Agreement - ${agreement.id}`,
         message: `Please sign this rental agreement between ${landlordData.name} and ${renteeData.name}`,
-        signatories: [
-          {
-            name: landlordData.name,
-            email: landlordData.email,
-            identifier: 'landlord',
-            textMarker: 'For Landlord:',
-            mobile: landlordData.contact_details?.phone
-          },
-          {
-            name: renteeData.name,
-            email: renteeData.email,
-            identifier: 'tenant',
-            textMarker: 'For Tenant:',
-            mobile: renteeData.contact_details?.phone
-          }
-        ],
-        // Add webhook parameters for real-time status updates only if we have a URL
+        signatories,
         ...(webhookUrl && {
           callbackUrl: webhookUrl,
+          callbackTypes: [0],
           completedDocumentsAttached: true
         })
       };
 
-      // Send directly for signature
       const result = await sendDocumentForSignature(signatureData);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to send document for signature');
       }
 
-      // Update agreement with signature request ID
+      const sentAt = new Date().toISOString();
       await updateAgreementData(agreement.id, {
         status: STATUS.PENDING_SIGNATURE,
+        signature_status: 'pending',
+        signature_sent_at: sentAt,
         eviasignreference: result.requestId,
-        updatedat: new Date().toISOString()
+        signatories_status: signatories.map((signatory) => ({
+          name: signatory.name,
+          email: signatory.email,
+          type: signatory.identifier,
+          status: 'pending',
+          email_delivery_status: 'queued',
+          email_status_updated_at: sentAt
+        })),
+        updatedat: sentAt
       });
 
-      // Notify parent component of status change
       if (onStatusChange) {
         onStatusChange(STATUS.PENDING_SIGNATURE);
       }
       toast.success('Document sent for signature');
       
-      // Refresh the signature status to show the pending state immediately
       setSignatureStatus('pending');
-      setLastChecked(new Date().toISOString());
+      setLastChecked(sentAt);
       
-      // Set up webhook for status updates
       console.log('Signature request created with ID:', result.requestId);
       console.log('Status updates will be received via webhook at:', webhookUrl);
 
@@ -469,15 +493,20 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
                   Force Refresh
                 </Button>
               </div>
-              <div className="text-gray-500 mt-2">
-                <div>Reference: <code className="bg-gray-100 px-1 text-xs">{agreement.eviasignreference}</code></div>
-              </div>
             </div>
           </details>
         </div>
       )}
+
+      {error && (
+        <div className="mt-2 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
+          {error}
+        </div>
+      )}
+
+      <AgreementStatusDashboard agreement={agreement} signatureStatus={signatureStatus} />
     </div>
   );
 };
 
-export default AgreementActions; 
+export default AgreementActions;
