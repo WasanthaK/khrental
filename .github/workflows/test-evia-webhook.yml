@@ -1,0 +1,32 @@
+name: Test Evia webhook
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/evia/**'
+      - 'tests/evia-webhook.test.js'
+      - 'server.js'
+      - '.github/workflows/test-evia-webhook.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/evia/**'
+      - 'tests/evia-webhook.test.js'
+      - 'server.js'
+      - '.github/workflows/test-evia-webhook.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/evia-webhook.test.js
