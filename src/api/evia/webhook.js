@@ -1,14 +1,22 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'recalled']);
 const REJECTED_STATUSES = new Set(['rejected', 'declined', 'failed']);
+const WEBHOOK_SIGNATURE_HEADER_CANDIDATES = [
+  'x-evia-signature',
+  'x-eviasign-signature',
+  'x-webhook-signature',
+  'x-hmac-signature',
+  'x-signature',
+  'x-hub-signature-256',
+  'signature'
+];
 
 const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
-
 const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
-
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
 
 const parseJsonArray = (value) => {
@@ -20,6 +28,111 @@ const parseJsonArray = (value) => {
   } catch (_error) {
     return [];
   }
+};
+
+const timingSafeStringEqual = (left, right) => {
+  const leftBuffer = Buffer.from(String(left || ''), 'utf8');
+  const rightBuffer = Buffer.from(String(right || ''), 'utf8');
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+const splitSignatureCandidates = (value) => {
+  const raw = Array.isArray(value) ? value.join(',') : String(value || '');
+  if (!raw.trim()) return [];
+
+  const candidates = new Set();
+  raw.split(',').forEach((part) => {
+    const trimmed = part.trim().replace(/^['"]|['"]$/g, '');
+    if (!trimmed) return;
+    candidates.add(trimmed);
+
+    const equalsIndex = trimmed.indexOf('=');
+    if (equalsIndex > 0) {
+      const key = trimmed.slice(0, equalsIndex).trim().toLowerCase();
+      const candidate = trimmed.slice(equalsIndex + 1).trim();
+      if (['sha256', 'v1', 'signature', 'hmac'].includes(key) && candidate) {
+        candidates.add(candidate);
+      }
+    }
+
+    if (trimmed.toLowerCase().startsWith('sha256:')) {
+      candidates.add(trimmed.slice('sha256:'.length).trim());
+    }
+  });
+
+  return [...candidates];
+};
+
+export const getEviaWebhookSignature = (headers = {}) => {
+  const normalizedHeaders = Object.entries(headers || {}).reduce((result, [key, value]) => {
+    result[String(key).toLowerCase()] = value;
+    return result;
+  }, {});
+
+  for (const headerName of WEBHOOK_SIGNATURE_HEADER_CANDIDATES) {
+    if (normalizedHeaders[headerName]) {
+      return normalizedHeaders[headerName];
+    }
+  }
+
+  const genericHeader = Object.entries(normalizedHeaders).find(([key, value]) =>
+    value && (key.includes('signature') || key.includes('hmac'))
+  );
+  return genericHeader?.[1] || null;
+};
+
+export const verifyEviaWebhookHmac = ({ rawBody, signature, secret }) => {
+  if (!secret || !rawBody || !signature) return false;
+
+  const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
+  const digest = crypto.createHmac('sha256', secret).update(body).digest();
+  const acceptedDigests = [
+    digest.toString('hex'),
+    digest.toString('base64'),
+    digest.toString('base64url')
+  ];
+
+  return splitSignatureCandidates(signature).some((candidate) =>
+    acceptedDigests.some((expected) => timingSafeStringEqual(candidate, expected))
+  );
+};
+
+export const verifyEviaWebhookRequest = (req) => {
+  const secret = process.env.EVIA_WEBHOOK_HMAC_SECRET || '';
+  if (!secret) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'Evia webhook HMAC verification is not configured.'
+    };
+  }
+
+  if (!req.rawBody) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Evia webhook raw request body is unavailable.'
+    };
+  }
+
+  const signature = getEviaWebhookSignature(req.headers);
+  if (!signature) {
+    return {
+      ok: false,
+      statusCode: 401,
+      error: 'Evia webhook signature is missing.'
+    };
+  }
+
+  if (!verifyEviaWebhookHmac({ rawBody: req.rawBody, signature, secret })) {
+    return {
+      ok: false,
+      statusCode: 401,
+      error: 'Evia webhook signature is invalid.'
+    };
+  }
+
+  return { ok: true };
 };
 
 export const normalizeEviaWebhookPayload = (payload = {}) => {
@@ -55,7 +168,8 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     nestedPayload.eventType
   ) || '').trim().toLowerCase();
 
-  const eventId = Number(firstDefined(root.EventId, root.eventId, root.event_id, data.EventId, data.eventId));
+  const eventIdValue = firstDefined(root.EventId, root.eventId, root.event_id, data.EventId, data.eventId);
+  const eventId = eventIdValue === undefined || eventIdValue === null || eventIdValue === '' ? null : Number(eventIdValue);
   const status = normalizeStatus(firstDefined(
     root.Status,
     root.status,
@@ -135,7 +249,7 @@ export const extractSignedDocumentUrl = (payload = {}) => {
     data.documentUrl
   );
 
-  const candidate = direct || (normalizeEviaWebhookPayload(payload).documents.map(getDocumentUrlCandidate).find(Boolean));
+  const candidate = direct || normalizeEviaWebhookPayload(payload).documents.map(getDocumentUrlCandidate).find(Boolean);
   if (!candidate) return null;
 
   try {
@@ -160,9 +274,6 @@ const mapFinalAgreementState = ({ eventType, eventId, status }) => {
     return { agreementStatus: 'rejected', signatureStatus: 'failed' };
   }
   if (isCompletionNotification({ eventType, eventId, status })) {
-    // `request.completed` is documented as the event emitted when all required
-    // signatures are complete. Some Evia payloads omit Status, so the event
-    // itself is sufficient to advance the agreement to signed.
     return { agreementStatus: 'signed', signatureStatus: 'completed' };
   }
   return null;
@@ -190,8 +301,6 @@ export const processEviaWebhook = async (payload = {}) => {
 
   if (!agreement) {
     console.warn('[EviaWebhook] No agreement matches request reference', { requestId: normalized.requestId });
-    // Acknowledge the delivery so Evia does not retry forever for a request that
-    // belongs to another environment or an older deleted test agreement.
     return {
       statusCode: 200,
       body: { received: true, matched: false, requestId: normalized.requestId }
@@ -283,28 +392,24 @@ export const processEviaWebhook = async (payload = {}) => {
   };
 };
 
+const handleWebhook = async (req, res, next) => {
+  try {
+    const verification = verifyEviaWebhookRequest(req);
+    if (!verification.ok) {
+      res.status(verification.statusCode).json({ received: false, error: verification.error });
+      return;
+    }
+
+    const result = await processEviaWebhook(req.body || {});
+    res.status(result.statusCode).json(result.body);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createEviaWebhookRouter = () => {
   const router = express.Router();
-
-  router.post('/webhook', async (req, res, next) => {
-    try {
-      const result = await processEviaWebhook(req.body || {});
-      res.status(result.statusCode).json(result.body);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  // Keep the historical callback path working while the Evia registration is
-  // moved to /api/evia/webhook.
-  router.post('/legacy-webhook', async (req, res, next) => {
-    try {
-      const result = await processEviaWebhook(req.body || {});
-      res.status(result.statusCode).json(result.body);
-    } catch (error) {
-      next(error);
-    }
-  });
-
+  router.post('/webhook', handleWebhook);
+  router.post('/legacy-webhook', handleWebhook);
   return router;
 };
