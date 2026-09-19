@@ -1,13 +1,20 @@
 const EVIA_SIGN_V2_BASE_URL = 'https://evia.enadocapp.com/_apis/sign/api/v2';
 
-const parseJsonResponse = async (response, operation) => {
+const readResponseData = async (response) => {
   const contentType = response.headers.get('content-type') || '';
-  const data = contentType.includes('application/json')
-    ? await response.json()
+  return contentType.includes('application/json')
+    ? response.json()
     : { error: await response.text() };
+};
+
+const parseJsonResponse = async (response, operation) => {
+  const data = await readResponseData(response);
 
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || `${operation} failed with status ${response.status}`);
+    const error = new Error(data?.error || data?.message || `${operation} failed with status ${response.status}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -61,13 +68,52 @@ export const buildV2StampPayloads = (signatory, index) => ([
   }
 ]);
 
+const defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const addStampWithPropagationRetry = async ({
+  requestId,
+  signatoryId,
+  stamp,
+  accessToken,
+  fetchImpl,
+  sleepImpl,
+  retryDelaysMs
+}) => {
+  const url = `${EVIA_SIGN_V2_BASE_URL}/requests/${encodeURIComponent(requestId)}/signatories/${encodeURIComponent(signatoryId)}/stamps`;
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    const response = await fetchImpl(url, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify(stamp)
+    });
+
+    try {
+      return await parseJsonResponse(response, `Evia V2 ${stamp.Type} stamp creation`);
+    } catch (error) {
+      const canRetry = error.status === 404 && attempt < retryDelaysMs.length;
+      if (!canRetry) {
+        if (error.status === 404) {
+          error.message = `${error.message} (requestId=${requestId}, signatoryId=${signatoryId})`;
+        }
+        throw error;
+      }
+      await sleepImpl(retryDelaysMs[attempt]);
+    }
+  }
+
+  throw new Error('Evia V2 stamp creation exhausted retry attempts.');
+};
+
 export async function createAndSendV2SignatureRequest({
   documentToken,
   title,
   message,
   signatories,
   accessToken,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  sleepImpl = defaultSleep,
+  stampRetryDelaysMs = [250, 750, 1500]
 }) {
   if (!documentToken) throw new Error('Evia document token is required.');
   if (!accessToken) throw new Error('Evia access token is required.');
@@ -84,6 +130,11 @@ export async function createAndSendV2SignatureRequest({
   const requestId = created.requestId || created.RequestId;
   if (!requestId) throw new Error('Evia V2 request creation returned no requestId.');
 
+  // Create every participant first. Evia can return a signatoryId before the
+  // participant is immediately visible to the stamp endpoint, so keep the
+  // exact IDs returned by Evia and stamp them only after participant creation
+  // has completed for the request.
+  const addedSignatories = [];
   for (let index = 0; index < signatories.length; index += 1) {
     const signatory = signatories[index];
     const signatoryResponse = await fetchImpl(
@@ -97,18 +148,21 @@ export async function createAndSendV2SignatureRequest({
     const added = await parseJsonResponse(signatoryResponse, 'Evia V2 signatory creation');
     const signatoryId = added.signatoryId || added.SignatoryId;
     if (!signatoryId) throw new Error('Evia V2 signatory creation returned no signatoryId.');
+    addedSignatories.push({ signatory, index, signatoryId });
+  }
 
+  for (const { signatory, index, signatoryId } of addedSignatories) {
     const stampPayloads = buildV2StampPayloads(signatory, index);
     for (const stamp of stampPayloads) {
-      const stampResponse = await fetchImpl(
-        `${EVIA_SIGN_V2_BASE_URL}/requests/${encodeURIComponent(requestId)}/signatories/${encodeURIComponent(signatoryId)}/stamps`,
-        {
-          method: 'POST',
-          headers: authHeaders(accessToken),
-          body: JSON.stringify(stamp)
-        }
-      );
-      await parseJsonResponse(stampResponse, `Evia V2 ${stamp.Type} stamp creation`);
+      await addStampWithPropagationRetry({
+        requestId,
+        signatoryId,
+        stamp,
+        accessToken,
+        fetchImpl,
+        sleepImpl,
+        retryDelaysMs: stampRetryDelaysMs
+      });
     }
   }
 
