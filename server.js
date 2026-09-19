@@ -21,6 +21,7 @@ import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 import { createEviaWebhookRouter } from './src/api/evia/webhook.js';
+import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 
 dotenv.config();
 
@@ -93,34 +94,13 @@ async function createServer() {
     return { success: true, simulated: false, provider: 'twilio-sendgrid', message: 'Email sent successfully.' };
   };
 
-  const exchangeEviaToken = async ({ grantType, code, refreshToken, redirectUri }) => {
-    const clientId = getEviaClientId();
-    const clientSecret = getEviaClientSecret();
-    if (!clientId || !clientSecret) throw new Error('Evia Sign server credentials are not configured.');
-    const payload = { client_id: clientId, client_secret: clientSecret, grant_type: grantType };
-    if (grantType === 'authorization_code') {
-      payload.code = code;
-      payload.redirect_uri = redirectUri;
-    }
-    if (grantType === 'refresh_token') payload.refresh_token = refreshToken;
-    const tokenUrl = 'https://evia.enadocapp.com/_apis/falcon/auth/api/v1/Token';
-    const jsonResponse = await fetch(tokenUrl, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload)
-    });
-    if (jsonResponse.ok) return jsonResponse.json();
-    const fallbackBody = new URLSearchParams();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') fallbackBody.append(key, value);
-    });
-    const formResponse = await fetch(tokenUrl, {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: fallbackBody.toString()
-    });
-    if (!formResponse.ok) {
-      const errorText = await formResponse.text();
-      throw new Error(errorText || `Evia token request failed with status ${formResponse.status}`);
-    }
-    return formResponse.json();
-  };
+  const exchangeEviaToken = async ({ grantType, code, refreshToken }) => exchangeEviaV2Token({
+    grantType,
+    code,
+    refreshToken,
+    clientId: getEviaClientId(),
+    clientSecret: getEviaClientSecret()
+  });
 
   app.use(cors({ origin: isProduction ? (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)) : true }));
   app.use(express.json({
@@ -187,7 +167,7 @@ async function createServer() {
         res.status(400).json({ success: false, error: 'refreshToken is required for refresh_token.' });
         return;
       }
-      res.json(await exchangeEviaToken({ grantType, code, refreshToken, redirectUri }));
+      res.json(await exchangeEviaToken({ grantType, code, refreshToken }));
     } catch (error) { next(error); }
   });
 
