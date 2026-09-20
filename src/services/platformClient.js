@@ -102,6 +102,18 @@ export const getTenancyOnboarding = async (agreementId) => {
   }
 };
 
+export const recordManualAgreementSignature = async (agreementId) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/manual-signature`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const recordTenancyDeposit = async (agreementId, transaction) => {
   try {
     const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/deposits`, {
