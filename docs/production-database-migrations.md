@@ -21,13 +21,13 @@ These credentials are migration-only credentials. Do not configure them on the K
 
 The production database endpoint is resolved from GitHub Production variables/secrets `MSSQL_SERVER` and `MSSQL_DATABASE` when present, otherwise from the existing Container App environment.
 
-## Network access and read-only planning
+## Direct access and read-only planning
 
-GitHub-hosted runners do not currently have a direct network path to the KH Rentals Azure SQL server. The workflow therefore probes SQL first.
+The workflow first probes whether the GitHub-hosted runner can both reach and authenticate to production SQL using the configured migration identity.
 
-If SQL is directly reachable, the plan can run on the GitHub runner. If the runner is network-blocked, `plan` waits until the Container App is serving the same Git commit and then executes the read-only planner inside that serving Container App revision with the existing restricted runtime managed identity.
+If direct authenticated SQL access is available, the plan runs on the GitHub runner. If direct access is unavailable because of networking or database authentication, `plan` waits until the Container App is serving the same Git commit and then executes the read-only planner inside that serving Container App revision with the existing restricted runtime managed identity.
 
-This fallback does not open an Azure SQL firewall rule and does not grant DDL permission to the web application identity. Runtime managed identity is accepted by the migration runner only for `plan`; it is explicitly rejected for `apply`.
+This fallback does not open an Azure SQL firewall rule and does not add the GitHub deployment service principal as a database user merely to inspect migration state. Runtime managed identity is accepted by the migration runner only for `plan`; it is explicitly rejected for `apply`.
 
 ## Applying schema changes
 
@@ -39,7 +39,7 @@ This fallback does not open an Azure SQL firewall rule and does not grant DDL pe
 4. a dedicated privileged migration identity with the required DDL permissions
 5. a migration executor that has a production SQL network path
 
-If production SQL is private from the GitHub-hosted runner, the workflow refuses to open a firewall rule or reuse the web identity for DDL. The intended apply architecture is a dedicated privileged migration executor inside the production network.
+If the GitHub-hosted runner does not have authenticated privileged SQL access, the workflow refuses to open a firewall rule or reuse the web identity for DDL. The intended apply architecture is a dedicated privileged migration executor inside the production network.
 
 Migrations are selected in repository order. Choosing a specific `through` target includes every earlier migration in the manifest.
 
