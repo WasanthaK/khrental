@@ -2,6 +2,8 @@ FROM node:22-alpine3.22
 
 WORKDIR /app
 
+ARG APP_BUILD_SHA=unknown
+
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PORT=5174
 ENV HOST=0.0.0.0
@@ -14,7 +16,8 @@ RUN npm config set fetch-retries 5 \
 
 COPY . .
 
-RUN npm run build
+RUN printf '{"buildSha":"%s"}\n' "$APP_BUILD_SHA" > public/build-info.json \
+  && npm run build
 
 ENV NODE_ENV=production
 
