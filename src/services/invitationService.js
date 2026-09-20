@@ -1,16 +1,14 @@
 /**
  * Unified invitation service.
  *
- * Stage 3A invitations are created by the server. The browser never generates
- * invitation authority from app-user IDs, email addresses, or base64 payloads.
+ * Invitation authority is always created by the KH Rentals server. The browser
+ * only requests a single-use invitation token and then delivers the resulting
+ * setup link through the configured email service.
  */
 
-import { platform as platformClient } from './platformClient';
 import { sendDirectEmail } from './directEmailService';
 import { getAppBaseUrl } from '../utils/env';
-import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
-
-const loadAppUserService = () => import('./appUserService');
+import { requestMssqlApi } from './mssqlApiClient';
 
 const logInvitationDebug = (requestId, message, data = {}) => {
   const safeData = { ...data };
@@ -26,15 +24,18 @@ const logInvitationDebug = (requestId, message, data = {}) => {
   }
 };
 
+const createSecureInvitation = async (userDetails) => requestMssqlApi('/api/platform/auth/invite', {
+  method: 'POST',
+  body: {
+    email: userDetails.email,
+    options: {
+      data: userDetails.id ? { app_user_id: userDetails.id } : {}
+    }
+  }
+});
+
 /**
- * Send a secure invitation to an existing app-user record.
- *
- * The authenticated admin endpoint resolves the target by email inside the
- * active tenant, revokes older unaccepted invitations, persists only a token
- * hash, and returns the raw token once so it can be delivered to the recipient.
- *
- * userDetails.id is optional for backward compatibility with older create-form
- * flows. The server never trusts that client-supplied ID as invitation authority.
+ * Send a secure invitation to an existing organization user.
  */
 export const inviteUser = async (userDetails, simulated = false) => {
   const requestId = `invite_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -43,6 +44,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
     if (!userDetails?.email) {
       return {
         success: false,
+        emailSent: false,
         error: 'Missing required field: email is required'
       };
     }
@@ -53,25 +55,15 @@ export const inviteUser = async (userDetails, simulated = false) => {
       role: userDetails.role
     });
 
-    const { data: inviteData, error: inviteError } = await platformClient.auth.admin.inviteUserByEmail(
-      userDetails.email,
-      {
-        data: userDetails.id ? { app_user_id: userDetails.id } : {}
-      }
-    );
-
-    if (inviteError) {
-      throw inviteError;
-    }
-
+    const inviteData = await createSecureInvitation(userDetails);
     const token = inviteData?.invitation?.token;
     const expiresAt = inviteData?.invitation?.expiresAt;
+
     if (!token) {
       throw new Error('The server did not return a secure invitation token.');
     }
 
-    const baseUrl = getAppBaseUrl();
-    const inviteLink = `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+    const inviteLink = `${getAppBaseUrl()}/accept-invite?token=${encodeURIComponent(token)}`;
 
     logInvitationDebug(requestId, 'Secure invitation created; delivering email', {
       email: userDetails.email,
@@ -90,7 +82,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
       simulated
     });
 
-    if (!emailResult.success) {
+    if (!emailResult?.success) {
       return {
         success: false,
         emailSent: false,
@@ -100,7 +92,6 @@ export const inviteUser = async (userDetails, simulated = false) => {
     }
 
     const wasSimulated = Boolean(emailResult.simulated || simulated);
-
     return {
       success: true,
       emailSent: !wasSimulated,
@@ -114,28 +105,20 @@ export const inviteUser = async (userDetails, simulated = false) => {
     return {
       success: false,
       emailSent: false,
-      error: error.message
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
     };
   }
 };
 
 export const resendInvitation = async (userId, simulated = false) => {
   try {
-    let userData = null;
-
-    if (isMssqlApiEnabled()) {
-      try {
-        userData = await requestMssqlApi(`/api/mssql/app-users/${userId}`);
-      } catch (mssqlError) {
-        console.error('[InvitationService] Failed to load invite target via MSSQL; trying platform API:', mssqlError);
-      }
+    if (!userId) {
+      return { success: false, emailSent: false, error: 'User ID is required' };
     }
 
-    if (!userData) {
-      const { fetchAppUser } = await loadAppUserService();
-      userData = await fetchAppUser(userId);
-    }
-
+    const userData = await requestMssqlApi(`/api/mssql/app-users/${encodeURIComponent(userId)}`);
     if (!userData) {
       return { success: false, emailSent: false, error: 'User not found' };
     }
@@ -144,18 +127,23 @@ export const resendInvitation = async (userId, simulated = false) => {
       id: userData.id,
       email: userData.email,
       name: userData.name,
-      role: userData.role || userData.user_type
+      role: userData.directory_role || userData.role || userData.user_type
     }, simulated);
   } catch (error) {
     console.error('[InvitationService] Error resending invitation:', error);
-    return { success: false, emailSent: false, error: error.message };
+    return {
+      success: false,
+      emailSent: false,
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
+    };
   }
 };
 
 /**
- * Legacy status adapter retained for existing Team UI.
- * A linked auth_id means registered; otherwise invited=true means an invitation
- * has been issued. The invitation ledger is authoritative for token validity.
+ * Compatibility result contract retained for existing Team and renter UI.
+ * The server-side invitation ledger remains authoritative for token validity.
  */
 export const checkInvitationStatus = async (userId) => {
   try {
@@ -163,51 +151,33 @@ export const checkInvitationStatus = async (userId) => {
       return { success: false, error: 'User ID is required' };
     }
 
-    if (isMssqlApiEnabled()) {
-      try {
-        const statusData = await requestMssqlApi(`/api/mssql/app-users/${userId}/invitation-status`);
-        return {
-          success: true,
-          status: statusData.status,
-          hasAuthId: Boolean(statusData.auth_id)
-        };
-      } catch (mssqlError) {
-        console.error('[InvitationService] Failed to load invitation status via MSSQL; trying platform API:', mssqlError);
-      }
-    }
+    const statusData = await requestMssqlApi(
+      `/api/mssql/app-users/${encodeURIComponent(userId)}/invitation-status`
+    );
 
-    const { checkAppUserInvitationStatus } = await loadAppUserService();
-    const statusResult = await checkAppUserInvitationStatus(userId);
-    if (!statusResult.success) {
-      throw new Error(statusResult.error);
-    }
-
-    const userData = statusResult.data;
-    if (!userData) {
+    if (!statusData) {
       return { success: false, error: 'User not found' };
-    }
-
-    let status = 'not_invited';
-    if (userData.auth_id) {
-      status = 'registered';
-    } else if (userData.invited) {
-      status = 'invited';
     }
 
     return {
       success: true,
-      status,
-      hasAuthId: Boolean(userData.auth_id)
+      status: statusData.status || (statusData.auth_id ? 'registered' : statusData.invited ? 'invited' : 'not_invited'),
+      hasAuthId: Boolean(statusData.auth_id)
     };
   } catch (error) {
     console.error('[InvitationService] Error checking invitation status:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
+    };
   }
 };
 
 function getInvitationEmailTemplate(name, inviteLink, role, expiresAt = null) {
   const normalizedRole = String(role || '').trim().toLowerCase();
-  const userTypeLabel = normalizedRole === 'rentee' ? 'Rentee' : 'Team Member';
+  const userTypeLabel = normalizedRole === 'rentee' || normalizedRole === 'tenant' ? 'Tenant' : 'Team Member';
   const expiryText = expiresAt
     ? `This invitation link expires on ${new Date(expiresAt).toLocaleString()}.`
     : 'This invitation link expires after 24 hours.';
