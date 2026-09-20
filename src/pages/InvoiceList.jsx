@@ -1,14 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import InvoiceCard from '../components/invoices/InvoiceCard';
 import { INVOICE_STATUS } from '../utils/constants';
+import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
 import { fetchAppUsers } from '../services/appUserService';
 import { listProperties } from '../services/agreementService';
 import { listInvoices } from '../services/invoiceService';
 import { useAuth } from '../hooks/useAuth';
 
 const InvoiceList = () => {
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, user, membership } = useAuth();
+  const subject = useMemo(() => ({
+    user,
+    membership: membership || user?.membership || null
+  }), [user, membership]);
+  const canManageInvoices = hasPermission(subject, PERMISSIONS.INVOICES_MANAGE);
+
   const [invoices, setInvoices] = useState([]);
   const [properties, setProperties] = useState([]);
   const [rentees, setRentees] = useState([]);
@@ -24,86 +31,79 @@ const InvoiceList = () => {
       try {
         setLoading(true);
         setError(null);
-        
-        // Fetch invoices
+
         const { data: invoicesData, error: invoicesError } = await listInvoices({ pageSize: 1000 });
-        
         if (invoicesError) {
           throw invoicesError;
         }
-        
         setInvoices(invoicesData || []);
-        
-        // Fetch properties for reference
+
         const propertiesData = await listProperties();
         setProperties(propertiesData || []);
-        
-        // Fetch rentees from app_users table
+
         const appUsersData = await fetchAppUsers('rentee');
         setRentees(appUsersData || []);
-      } catch (error) {
-        console.error('Error fetching invoices:', error.message);
-        setError(error.message);
+      } catch (fetchError) {
+        console.error('Error fetching invoices:', fetchError.message);
+        setError(fetchError.message);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchInvoices();
   }, [activeTenantId]);
 
-  // Filter and search invoices
-  const filteredInvoices = invoices.filter(invoice => {
-    // Get associated property and rentee for search
-    const property = properties.find(p => p.id === invoice.propertyid);
-    const rentee = rentees.find(r => r.id === invoice.renteeid);
-    
-    const matchesSearch = 
-      invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.billingperiod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (property && property.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (rentee && rentee.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    // Status filter
+  const filteredInvoices = invoices.filter((invoice) => {
+    const property = properties.find((entry) => entry.id === invoice.propertyid);
+    const rentee = rentees.find((entry) => entry.id === invoice.renteeid);
+    const search = searchTerm.toLowerCase();
+
+    const matchesSearch =
+      String(invoice.id || '').toLowerCase().includes(search) ||
+      String(invoice.billingperiod || '').toLowerCase().includes(search) ||
+      Boolean(property?.name?.toLowerCase().includes(search)) ||
+      Boolean(rentee?.name?.toLowerCase().includes(search));
+
     if (filter !== 'all' && invoice.status !== filter) {
       return false;
     }
-    
-    // Date filter
+
     if (dateFilter !== 'all') {
       const invoiceDate = new Date(invoice.createdat);
       const now = new Date();
-      
+
       if (dateFilter === 'this_month') {
-        const isThisMonth = 
-          invoiceDate.getMonth() === now.getMonth() && 
+        const isThisMonth =
+          invoiceDate.getMonth() === now.getMonth() &&
           invoiceDate.getFullYear() === now.getFullYear();
         if (!isThisMonth) return false;
       } else if (dateFilter === 'last_month') {
         const lastMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
         const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-        const isLastMonth = 
-          invoiceDate.getMonth() === lastMonth && 
+        const isLastMonth =
+          invoiceDate.getMonth() === lastMonth &&
           invoiceDate.getFullYear() === lastMonthYear;
         if (!isLastMonth) return false;
-      } else if (dateFilter === 'this_year') {
-        const isThisYear = invoiceDate.getFullYear() === now.getFullYear();
-        if (!isThisYear) return false;
+      } else if (dateFilter === 'this_year' && invoiceDate.getFullYear() !== now.getFullYear()) {
+        return false;
       }
     }
-    
+
     return matchesSearch;
   });
-  
-  // Sort invoices
+
   const sortedInvoices = [...filteredInvoices].sort((a, b) => {
     if (sortBy === 'date_desc') {
       return new Date(b.createdat) - new Date(a.createdat);
-    } else if (sortBy === 'date_asc') {
+    }
+    if (sortBy === 'date_asc') {
       return new Date(a.createdat) - new Date(b.createdat);
-    } else if (sortBy === 'amount_desc') {
+    }
+    if (sortBy === 'amount_desc') {
       return (b.totalamount || b.totalAmount || 0) - (a.totalamount || a.totalAmount || 0);
-    } else if (sortBy === 'amount_asc') {
+    }
+    if (sortBy === 'amount_asc') {
       return (a.totalamount || a.totalAmount || 0) - (b.totalamount || b.totalAmount || 0);
     }
     return 0;
@@ -128,45 +128,42 @@ const InvoiceList = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl font-semibold">Invoices</h1>
-        <Link
-          to="/dashboard/invoices/new"
-          className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-          </svg>
-          Create Invoice
-        </Link>
+        {canManageInvoices && (
+          <Link
+            to="/dashboard/invoices/batch-generate"
+            className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            Generate Monthly Invoices
+          </Link>
+        )}
       </div>
-      
-      {/* Search and Filter */}
+
       <div className="bg-white p-4 rounded-lg shadow mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
-              Search
-            </label>
+            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">Search</label>
             <input
               type="text"
               id="search"
-              placeholder="Search by ID, property, or rentee"
+              placeholder="Search by ID, property, or tenant"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(event) => setSearchTerm(event.target.value)}
             />
           </div>
-          
+
           <div>
-            <label htmlFor="filter" className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
+            <label htmlFor="filter" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               id="filter"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(event) => setFilter(event.target.value)}
             >
               <option value="all">All Statuses</option>
               <option value={INVOICE_STATUS.PENDING}>Pending</option>
@@ -176,16 +173,14 @@ const InvoiceList = () => {
               <option value={INVOICE_STATUS.REJECTED}>Rejected</option>
             </select>
           </div>
-          
+
           <div>
-            <label htmlFor="dateFilter" className="block text-sm font-medium text-gray-700 mb-1">
-              Date Range
-            </label>
+            <label htmlFor="dateFilter" className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
             <select
               id="dateFilter"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(event) => setDateFilter(event.target.value)}
             >
               <option value="all">All Time</option>
               <option value="this_month">This Month</option>
@@ -193,16 +188,14 @@ const InvoiceList = () => {
               <option value="this_year">This Year</option>
             </select>
           </div>
-          
+
           <div>
-            <label htmlFor="sortBy" className="block text-sm font-medium text-gray-700 mb-1">
-              Sort By
-            </label>
+            <label htmlFor="sortBy" className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
             <select
               id="sortBy"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(event) => setSortBy(event.target.value)}
             >
               <option value="date_desc">Date (Newest First)</option>
               <option value="date_asc">Date (Oldest First)</option>
@@ -212,18 +205,17 @@ const InvoiceList = () => {
           </div>
         </div>
       </div>
-      
-      {/* Invoice Grid */}
+
       {sortedInvoices.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sortedInvoices.map(invoice => {
-            const property = properties.find(p => p.id === invoice.propertyid);
-            const rentee = rentees.find(r => r.id === invoice.renteeid);
-            
+          {sortedInvoices.map((invoice) => {
+            const property = properties.find((entry) => entry.id === invoice.propertyid);
+            const rentee = rentees.find((entry) => entry.id === invoice.renteeid);
+
             return (
-              <InvoiceCard 
-                key={invoice.id} 
-                invoice={invoice} 
+              <InvoiceCard
+                key={invoice.id}
+                invoice={invoice}
                 property={property}
                 rentee={rentee}
               />
@@ -239,4 +231,4 @@ const InvoiceList = () => {
   );
 };
 
-export default InvoiceList; 
+export default InvoiceList;
