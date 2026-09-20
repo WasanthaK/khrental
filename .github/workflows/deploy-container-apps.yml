@@ -62,6 +62,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            APP_BUILD_SHA=${{ github.sha }}
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
@@ -202,22 +204,33 @@ jobs:
                 R2_SECRET_ACCESS_KEY=secretref:r2-secret-access-key \
               --output none
 
-      - name: Deploy immutable image
+      - name: Deploy immutable image to the serving revision
         uses: azure/cli@v2
         with:
           inlineScript: |
             set -euo pipefail
             az extension add --name containerapp --upgrade --yes
+
+            # KH Rentals is not using blue/green or A/B traffic. Single-revision
+            # mode prevents a successful image update from leaving the public
+            # FQDN pinned to an older active revision.
+            az containerapp revision set-mode \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --mode single \
+              --output none
+
             az containerapp ingress update \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --target-port "$CONTAINER_PORT"
+
             az containerapp update \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --image "${{ steps.image.outputs.name }}:${{ github.sha }}"
 
-      - name: Verify deployment health and browser MSSQL routing
+      - name: Verify public deployment revision and browser routing
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -227,8 +240,27 @@ jobs:
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query properties.configuration.ingress.fqdn -o tsv)
 
-            curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
+            revision_mode=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.activeRevisionsMode -o tsv)
+
+            if [ "${revision_mode,,}" != "single" ]; then
+              echo "Production Container App is not in single-revision mode: $revision_mode" >&2
+              exit 1
+            fi
+
+            health=$(curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health")
+            echo "$health"
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/mssql/health"
+
+            build_info=$(curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/build-info.json")
+            echo "Public build fingerprint: $build_info"
+
+            if ! echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+              echo "Public FQDN is not serving the just-deployed commit ${GITHUB_SHA}." >&2
+              exit 1
+            fi
 
             runtime_config=$(curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/env-config.js")
 
@@ -242,4 +274,4 @@ jobs:
               exit 1
             fi
 
-            echo "Production browser runtime confirmed with live MSSQL connectivity, browser routing, and Evia Sign Client ID configured."
+            echo "Production public FQDN is serving ${GITHUB_SHA} with live MSSQL connectivity and expected browser runtime configuration."
