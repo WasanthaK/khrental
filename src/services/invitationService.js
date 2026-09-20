@@ -49,6 +49,24 @@ export const inviteUser = async (userDetails, simulated = false) => {
       };
     }
 
+    // Simulation must be side-effect free. In particular it must not create a
+    // new one-time token (which would invalidate an earlier real invitation)
+    // and it must never call the email delivery endpoint.
+    if (simulated) {
+      logInvitationDebug(requestId, 'Invitation simulation completed without delivery', {
+        appUserId: userDetails.id || null,
+        email: userDetails.email,
+        role: userDetails.role
+      });
+      return {
+        success: true,
+        emailSent: false,
+        simulated: true,
+        message: 'Invitation simulated. No email was sent.',
+        method: 'simulation'
+      };
+    }
+
     logInvitationDebug(requestId, 'Creating secure invitation', {
       appUserId: userDetails.id || null,
       email: userDetails.email,
@@ -78,8 +96,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
         inviteLink,
         inviteData?.user?.role || userDetails.role,
         expiresAt
-      ),
-      simulated
+      )
     });
 
     if (!emailResult?.success) {
@@ -87,18 +104,25 @@ export const inviteUser = async (userDetails, simulated = false) => {
         success: false,
         emailSent: false,
         error: 'A secure invitation was created, but the invitation email could not be sent.',
-        debug: { emailError: emailResult?.error || null }
+        debug: { emailError: emailResult?.error || emailResult?.message || null }
       };
     }
 
-    const wasSimulated = Boolean(emailResult.simulated || simulated);
+    logInvitationDebug(requestId, 'Invitation email accepted for delivery', {
+      email: userDetails.email,
+      provider: emailResult.provider || null,
+      providerMessageId: emailResult.providerMessageId || null
+    });
+
     return {
       success: true,
-      emailSent: !wasSimulated,
-      simulated: wasSimulated,
-      message: wasSimulated ? 'Invitation email was simulated' : 'Invitation sent successfully',
+      emailSent: true,
+      simulated: false,
+      message: 'Invitation email accepted for delivery',
       method: 'secure_direct_email',
-      expiresAt: expiresAt || null
+      expiresAt: expiresAt || null,
+      provider: emailResult.provider || null,
+      providerMessageId: emailResult.providerMessageId || null
     };
   } catch (error) {
     logInvitationDebug(requestId, 'Secure invitation failed', { error: error.message });
