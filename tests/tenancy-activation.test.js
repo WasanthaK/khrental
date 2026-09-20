@@ -39,6 +39,21 @@ test('pending activation with explicit completion evidence is sufficient', () =>
   }), true);
 });
 
+test('manual signed marker alone is not sufficient signature evidence', () => {
+  assert.equal(isAgreementSignatureComplete({
+    status: 'pending_activation',
+    signature_status: 'manual_signed'
+  }), false);
+});
+
+test('manual signed agreement requires a completion timestamp', () => {
+  assert.equal(isAgreementSignatureComplete({
+    status: 'pending_activation',
+    signature_status: 'manual_signed',
+    signature_completed_at: '2026-09-20T00:00:00Z'
+  }), true);
+});
+
 test('signature completion timestamp is sufficient signature evidence', () => {
   assert.equal(isAgreementSignatureComplete({ status: 'pending', signature_completed_at: '2026-09-16T00:00:00Z' }), true);
 });
