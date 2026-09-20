@@ -1,6 +1,13 @@
 name: Run production database migrations
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+      - 'scripts/run-production-migrations.mjs'
+      - 'scripts/probe-production-db.mjs'
+      - '.github/workflows/run-production-db-migrations.yml'
   workflow_dispatch:
     inputs:
       mode:
@@ -39,10 +46,13 @@ env:
   AZURE_RESOURCE_GROUP: khrental-prod-rg
   AZURE_CONTAINER_APP_NAME: khrental-app
   AZURE_SQL_RESOURCE_GROUP: ${{ vars.AZURE_SQL_RESOURCE_GROUP || 'khrental-prod-rg' }}
+  MIGRATION_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'plan' }}
+  MIGRATION_THROUGH: ${{ github.event_name == 'workflow_dispatch' && inputs.through || 'all' }}
+  MIGRATION_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.confirmation || '' }}
 
 jobs:
   migrate:
-    name: ${{ inputs.mode }} production migrations
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'plan' }} production migrations
     runs-on: ubuntu-latest
     environment: Production
     timeout-minutes: 20
@@ -54,11 +64,17 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Validate manual confirmation
+      - name: Validate migration mode and confirmation
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirmation }}" != "APPLY-PRODUCTION" ]; then
+
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] && [ "$MIGRATION_MODE" != "plan" ]; then
+            echo "Automatic production migration runs are restricted to plan mode." >&2
+            exit 1
+          fi
+
+          if [ "$MIGRATION_MODE" = "apply" ] && [ "$MIGRATION_CONFIRMATION" != "APPLY-PRODUCTION" ]; then
             echo "Apply mode requires confirmation text APPLY-PRODUCTION." >&2
             exit 1
           fi
@@ -186,8 +202,8 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/run-production-migrations.mjs \
-            --mode="${{ inputs.mode }}" \
-            --through="${{ inputs.through }}" | tee migration-output.txt
+            --mode="$MIGRATION_MODE" \
+            --through="$MIGRATION_THROUGH" | tee migration-output.txt
 
           {
             echo '### Production database migration result'
