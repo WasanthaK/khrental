@@ -75,7 +75,8 @@ export const createInvitationRouter = () => {
   });
 
   // Backward-compatible endpoint used by platformClient.auth.admin.inviteUserByEmail.
-  // Unlike the legacy implementation, it does not pre-create an auth account.
+  // Identity email is globally unique; createUserInvitation performs the
+  // organization ownership/membership validation before issuing a token.
   router.post('/invite', requireAdminTenant, requireAdmin, async (req, res, next) => {
     try {
       const email = normalizeInvitationEmail(req.body?.email);
@@ -84,10 +85,10 @@ export const createInvitationRouter = () => {
         return;
       }
 
-      const target = await findAppUserByEmail(email, req.tenantId);
+      const target = await findAppUserByEmail(email);
       if (!target) {
         res.status(404).json({
-          error: 'Create the user in the active tenant before sending an invitation.',
+          error: 'Create or attach the user to the active organization before sending an invitation.',
           code: 'INVITATION_TARGET_NOT_FOUND'
         });
         return;
