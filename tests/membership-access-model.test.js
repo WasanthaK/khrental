@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeMembershipAccess } from '../src/api/mssql/membershipAdminRepository.js';
+import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -20,6 +21,13 @@ test('canonicalizes administrator and tenant membership roles', () => {
     permission_bundle: null,
     portal_type: 'tenant'
   });
+});
+
+test('renter directory accepts canonical tenant and legacy rentee membership roles only', () => {
+  assert.equal(isRenteeMembership({ role: 'rentee' }), true);
+  assert.equal(isRenteeMembership({ role: 'tenant' }), true);
+  assert.equal(isRenteeMembership({ role: 'staff' }), false);
+  assert.equal(isRenteeMembership({ role: 'admin' }), false);
 });
 
 test('canonical staff role persists an explicit permission bundle', () => {
