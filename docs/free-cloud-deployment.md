@@ -21,7 +21,7 @@ For a new, empty Azure SQL database, apply the fresh-install schema first:
 npm run execute-sql -- ./migrations/20260913_00_create_fresh_mssql_schema.sql
 ```
 
-The fresh-install migration creates the SQL Server versions of the application tables and a default `KH Rentals` tenant. Do not run the older PostgreSQL/Supabase migrations against Azure SQL.
+The fresh-install migration creates the SQL Server versions of the application tables and a default `KH Rentals` tenant. Do not run the older PostgreSQL migration history under `src/db/migrations/` against Azure SQL.
 
 Then apply the authentication schema:
 
@@ -95,6 +95,7 @@ MSSQL_TRUST_SERVER_CERTIFICATE=false
 AUTH_SESSION_TTL_DAYS=30
 CORS_ORIGINS=https://khrentals.kubeira.com
 VITE_API_ENDPOINT=
+VITE_USE_MSSQL_API=true
 VITE_ENABLE_DEV_BYPASS=false
 ```
 
@@ -137,8 +138,9 @@ After the first healthy deployment, add `khrentals.kubeira.com` as the Container
 Verify:
 
 1. `/api/health` reports a configured encrypted MSSQL connection.
-2. Sign-up/sign-in creates rows in `auth_users` and `auth_sessions`.
-3. API requests without a bearer session are rejected.
-4. Upload, list, open, and delete work for one file in R2.
-5. A second tenant cannot address the first tenant's storage prefix.
-6. Container restart does not lose the session or uploaded object.
+2. `/api/mssql/health` successfully executes a live database query.
+3. Sign-up/sign-in creates rows in `auth_users` and `auth_sessions`.
+4. API requests without a bearer session are rejected.
+5. Upload, list, open, and delete work for one file in R2.
+6. A second tenant cannot address the first tenant's storage prefix.
+7. Container restart does not lose the session or uploaded object.

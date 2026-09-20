@@ -18,7 +18,7 @@ RewriteRule ^src/.*$ / [R=301,L]
   Header set X-Content-Type-Options "nosniff"
   Header set X-XSS-Protection "1; mode=block"
   Header set X-Frame-Options "SAMEORIGIN"
-  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' blob: data:; font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.sendgrid.com;"
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' blob: data:; font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'self' https://api.sendgrid.com;"
 </IfModule>
 
 # Disable directory browsing
@@ -31,4 +31,4 @@ Options -Indexes
   AddType image/svg+xml .svg
   AddType application/font-woff .woff
   AddType application/font-woff2 .woff2
-</IfModule> 
+</IfModule>
