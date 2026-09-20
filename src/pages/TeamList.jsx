@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAppUsers, mapAppUserToTeamMember } from '../services/appUserService';
+import { mapAppUserToTeamMember } from '../services/appUserService';
+import { fetchTeamDirectory } from '../services/teamMemberService';
 import TeamMemberCard from '../components/team/TeamMemberCard';
+
+const BUNDLE_LABELS = {
+  property_operations: 'Property Operations',
+  finance: 'Finance',
+  maintenance: 'Maintenance',
+  read_only: 'Read Only'
+};
 
 const TeamList = () => {
   const [teamMembers, setTeamMembers] = useState([]);
@@ -16,13 +24,12 @@ const TeamList = () => {
       setLoading(true);
       setError(null);
 
-      const data = await fetchAppUsers('staff');
-
-      // Tenant administrators are appointed by Platform Admin and deliberately
-      // do not appear in the tenant's Team maintenance surface.
-      const transformedData = (data || [])
-        .map(mapAppUserToTeamMember)
-        .filter((member) => String(member.role || '').trim().toLowerCase() !== 'admin');
+      const data = await fetchTeamDirectory();
+      const transformedData = (data || []).map((record) => ({
+        ...mapAppUserToTeamMember(record),
+        role: BUNDLE_LABELS[record.permission_bundle] || 'Staff',
+        permissionBundle: record.permission_bundle || 'read_only'
+      }));
 
       setTeamMembers(transformedData);
     } catch (fetchError) {
@@ -38,15 +45,14 @@ const TeamList = () => {
   }, [fetchTeamMembers]);
 
   const filteredMembers = teamMembers.filter((member) => {
+    const normalizedSearch = searchTerm.toLowerCase();
     const matchesSearch =
-      member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.contactDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.contactDetails?.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.role?.toLowerCase().includes(searchTerm.toLowerCase());
+      member.name?.toLowerCase().includes(normalizedSearch) ||
+      member.contactDetails?.email?.toLowerCase().includes(normalizedSearch) ||
+      member.contactDetails?.phone?.toLowerCase().includes(normalizedSearch) ||
+      member.role?.toLowerCase().includes(normalizedSearch);
 
-    const matchesRole =
-      roleFilter === 'all' ||
-      member.role?.toLowerCase() === roleFilter.toLowerCase();
+    const matchesRole = roleFilter === 'all' || member.permissionBundle === roleFilter;
 
     let matchesInvitation = true;
     if (invitationFilter === 'invited') {
@@ -92,10 +98,11 @@ const TeamList = () => {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Roles</option>
-              <option value="staff">Staff</option>
+              <option value="all">All Access</option>
+              <option value="property_operations">Property Operations</option>
+              <option value="finance">Finance</option>
               <option value="maintenance">Maintenance</option>
-              <option value="manager">Manager</option>
+              <option value="read_only">Read Only</option>
             </select>
           </div>
           <div>
