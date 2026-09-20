@@ -149,16 +149,19 @@ export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
 };
 
 /**
- * Record a reminder event. Email/SMS delivery is deliberately not claimed here;
- * communication delivery can be attached to this audited event separately.
+ * Deliver an audited payment reminder email through the dedicated billing API.
  */
 export const sendPaymentReminder = async (invoiceId) => {
   try {
     const { data, error } = await recordInvoiceReminder(invoiceId);
     if (error) throw error;
-    return { success: true, data };
+    return {
+      success: true,
+      data: data?.invoice || null,
+      delivery: data?.delivery || null
+    };
   } catch (error) {
-    console.error('Error recording payment reminder:', error.message);
+    console.error('Error sending payment reminder:', error.message);
     return { success: false, error: error.message };
   }
 };
