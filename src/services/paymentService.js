@@ -1,7 +1,6 @@
 import { platform as platformClient } from './platformClient';
 import {
   generateTenancyMonthlyInvoices,
-  recordInvoiceReminder,
   recordManualInvoicePayment,
   submitInvoicePaymentProof,
   verifyInvoicePayment
@@ -149,16 +148,24 @@ export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
 };
 
 /**
- * Record a reminder event. Email/SMS delivery is deliberately not claimed here;
- * communication delivery can be attached to this audited event separately.
+ * Deliver a payment reminder through the dedicated server billing action.
+ * The server records attempted/sent/failed lifecycle events and only advances
+ * reminderdate after the email provider accepts the message.
  */
 export const sendPaymentReminder = async (invoiceId) => {
   try {
-    const { data, error } = await recordInvoiceReminder(invoiceId);
-    if (error) throw error;
-    return { success: true, data };
+    const response = await fetch(`/api/billing/invoices/${encodeURIComponent(invoiceId)}/send-reminder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || `Payment reminder failed with status ${response.status}`);
+    }
+    return { success: true, data: payload?.data || null };
   } catch (error) {
-    console.error('Error recording payment reminder:', error.message);
+    console.error('Error sending payment reminder:', error.message);
     return { success: false, error: error.message };
   }
 };
