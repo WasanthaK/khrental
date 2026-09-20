@@ -8,6 +8,7 @@ import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
 import { createBillingRouter } from './src/api/platform/billingRouter.js';
+import { createPaymentReminderRouter } from './src/api/platform/paymentReminderRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
 import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
@@ -211,6 +212,7 @@ async function createServer() {
   app.use('/api/mssql', guardBillingMssqlCompatibility, guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/tenancies', createTenancyOnboardingRouter());
+  app.use('/api/billing', createPaymentReminderRouter({ sendEmail }));
   app.use('/api/billing', createBillingRouter());
   app.use('/api/billing', createBillingAdjustmentsRouter());
   app.use('/api/billing', createMonthlyBillingRouter());
