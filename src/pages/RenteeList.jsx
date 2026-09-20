@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAppUsers, mapAppUserToRentee } from '../services/appUserService';
+import { mapAppUserToRentee } from '../services/appUserService';
+import { fetchRenteeDirectory } from '../services/renteeDirectoryService';
 import RenteeCard from '../components/rentees/RenteeCard';
 
 const RenteeList = () => {
@@ -15,13 +16,16 @@ const RenteeList = () => {
       setLoading(true);
       setError(null);
 
-      // `rentee` remains the stored legacy user_type during Phase 3 compatibility.
-      const data = await fetchAppUsers('rentee');
+      // Load the active tenant-scoped directory directly from the server.
+      // This must not silently collapse to an empty list when a valid session
+      // is still being restored, and it tolerates older rows whose role is
+      // `rentee` even if user_type was stored inconsistently.
+      const data = await fetchRenteeDirectory();
       const transformedData = (data || []).map(mapAppUserToRentee);
       setRentees(transformedData);
     } catch (error) {
       console.error('Error fetching tenants:', error.message);
-      setError(error.message);
+      setError(error.message || 'Failed to load tenants');
     } finally {
       setLoading(false);
     }
