@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: khrental-production
+  group: ${{ github.event_name == 'pull_request' && format('khrental-pr-{0}', github.event.pull_request.number) || 'khrental-production' }}
   cancel-in-progress: true
 
 env:

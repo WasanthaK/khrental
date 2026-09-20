@@ -5,10 +5,10 @@ import {
   activateTenancy,
   getTenancyOnboarding,
   initializeMoveInChecklist,
+  recordManualAgreementSignature,
   recordTenancyDeposit,
   updateMoveInChecklistItem
 } from '../services/platformClient';
-import { updateAgreementData } from '../services/agreementService';
 import { resendInvitation } from '../services/invitationService';
 import { formatCurrency, formatDate } from '../utils/helpers';
 
@@ -88,20 +88,13 @@ const TenancyOnboarding = () => {
     if (!confirmed) return;
 
     setWorking(true);
-    const completedAt = new Date().toISOString();
-
-    try {
-      await updateAgreementData(id, {
-        signature_status: 'manual_signed',
-        signature_completed_at: completedAt,
-        signeddate: completedAt
-      });
+    const result = await recordManualAgreementSignature(id);
+    if (result.error) {
+      toast.error(result.error.message || 'Failed to record manual signature');
+    } else {
       toast.success('Contract marked as manually signed');
-      await load();
-    } catch (error) {
-      toast.error(error?.message || 'Failed to record manual signature');
+      setData(result.data);
     }
-
     setWorking(false);
   };
 
