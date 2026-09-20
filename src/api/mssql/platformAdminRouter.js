@@ -64,13 +64,65 @@ const requirePlatformAdmin = asyncHandler(async (req, res, next) => {
   next();
 });
 
+const listMemberships = (tenantId) => listTenantMemberships(tenantId, { pageSize: 500 });
+
 const findMembershipForUser = async (tenantId, appUserId) => {
-  const memberships = await listTenantMemberships(tenantId, { pageSize: 500 });
+  const memberships = await listMemberships(tenantId);
   return memberships.find((membership) => String(membership.app_user_id) === String(appUserId)) || null;
 };
 
+const findMembershipById = async (tenantId, membershipId) => {
+  const memberships = await listMemberships(tenantId);
+  return memberships.find((membership) => String(membership.id) === String(membershipId)) || null;
+};
+
+const requireAdministratorMembershipTarget = asyncHandler(async (req, res, next) => {
+  const membership = await findMembershipById(req.params.tenantId, req.params.membershipId);
+  if (!membership) {
+    res.status(404).json({
+      error: 'Tenant administrator membership not found.',
+      code: 'TENANT_ADMIN_MEMBERSHIP_NOT_FOUND'
+    });
+    return;
+  }
+
+  if (normalizeRole(membership.role) !== 'admin') {
+    res.status(403).json({
+      error: 'Platform administrators may only modify tenant-administrator memberships.',
+      code: 'PLATFORM_MEMBERSHIP_ROLE_RESTRICTED'
+    });
+    return;
+  }
+
+  req.platformTargetMembership = membership;
+  next();
+});
+
 export const createPlatformAdminRouter = () => {
   const router = express.Router();
+
+  // Unlike the container-level /api/health endpoint, this executes a real SQL
+  // round-trip. Deploy verification and operators can therefore distinguish a
+  // running web container from a working application database connection.
+  router.get('/health', async (_req, res) => {
+    try {
+      const result = await runSingleQuery('SELECT 1 AS ready');
+      res.json({
+        ok: result?.ready === 1,
+        provider: 'mssql',
+        connection: 'ready'
+      });
+    } catch (error) {
+      console.error('[MSSQL Health] Database probe failed:', error);
+      res.status(503).json({
+        ok: false,
+        provider: 'mssql',
+        connection: 'unavailable',
+        error: 'The application database is unavailable.',
+        code: 'MSSQL_HEALTHCHECK_FAILED'
+      });
+    }
+  });
 
   // Any authenticated user may ask whether their identity is registered as a
   // platform administrator. The response grants no additional data or powers.
@@ -120,17 +172,27 @@ export const createPlatformAdminRouter = () => {
     });
   });
 
-  router.put('/admin/tenants/:tenantId/memberships/:membershipId', (req, res, next) => {
-    if (!req.body?.role || normalizeRole(req.body.role) === 'admin') {
-      next();
-      return;
-    }
+  router.put(
+    '/admin/tenants/:tenantId/memberships/:membershipId',
+    requireAdministratorMembershipTarget,
+    (req, res, next) => {
+      if (!req.body?.role || normalizeRole(req.body.role) === 'admin') {
+        next();
+        return;
+      }
 
-    res.status(403).json({
-      error: 'Platform administrators may only manage tenant-administrator memberships.',
-      code: 'PLATFORM_MEMBERSHIP_ROLE_RESTRICTED'
-    });
-  });
+      res.status(403).json({
+        error: 'Platform administrators may only manage tenant-administrator memberships.',
+        code: 'PLATFORM_MEMBERSHIP_ROLE_RESTRICTED'
+      });
+    }
+  );
+
+  router.delete(
+    '/admin/tenants/:tenantId/memberships/:membershipId',
+    requireAdministratorMembershipTarget,
+    (_req, _res, next) => next()
+  );
 
   router.get('/admin/tenants/:tenantId/administrators', asyncHandler(async (req, res) => {
     const tenant = await getTenantById(req.params.tenantId);
@@ -139,7 +201,7 @@ export const createPlatformAdminRouter = () => {
       return;
     }
 
-    const memberships = await listTenantMemberships(req.params.tenantId, { pageSize: 500 });
+    const memberships = await listMemberships(req.params.tenantId);
     const administrators = memberships.filter((membership) => normalizeRole(membership.role) === 'admin');
     res.json({ data: administrators, meta: { count: administrators.length } });
   }));
