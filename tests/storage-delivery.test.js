@@ -38,3 +38,10 @@ test('direct storage API service covers shared file operations', () => {
   assert.match(storageApiServiceSource, /\/api\/platform\/storage\/upload/);
   assert.match(storageApiServiceSource, /\/api\/platform\/storage\/objects/);
 });
+
+test('direct storage URLs preserve active-tenant scoping from the compatibility client', () => {
+  assert.match(storageApiServiceSource, /getActiveTenantId/);
+  assert.match(storageApiServiceSource, /scopeTenantStoragePath/);
+  assert.match(storageApiServiceSource, /Cross-tenant storage paths are not allowed/);
+  assert.match(storageApiServiceSource, /const safePath = scopeTenantStoragePath\(path\)/);
+});
