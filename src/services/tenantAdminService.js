@@ -78,7 +78,7 @@ export const inviteTenantAdministrator = async (tenantId, appUserId, user = {}) 
   });
 
   if (!emailResult?.success) {
-    throw new Error(emailResult?.error || 'Invitation email could not be sent.');
+    throw new Error(emailResult?.error || emailResult?.message || 'Invitation email could not be sent.');
   }
 
   return {
