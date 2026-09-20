@@ -1,506 +1,355 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
-import { INVOICE_STATUS } from '../utils/constants';
-import { fetchAppUser } from '../services/appUserService';
-import { fetchProperty } from '../services/agreementService';
-import { fetchInvoice } from '../services/invoiceService';
+import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
+import { getInvoiceAccount } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
-
-// Components
-import InvoiceComponentsTable from '../components/invoices/InvoiceComponentsTable';
-import PaymentProofUpload from '../components/invoices/PaymentProofUpload';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 
-// UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const todayValue = () => new Date().toISOString().slice(0, 10);
 
 const InvoiceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  // State
-  const [invoice, setInvoice] = useState(null);
-  const [property, setProperty] = useState(null);
-  const [rentee, setRentee] = useState(null);
+  const { user, membership } = useAuth();
+  const subject = useMemo(() => ({ user, membership: membership || user?.membership || null }), [user, membership]);
+  const canManageInvoices = hasPermission(subject, PERMISSIONS.INVOICES_MANAGE);
+  const canManagePayments = hasPermission(subject, PERMISSIONS.PAYMENTS_MANAGE);
+
+  const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showPaymentUpload, setShowPaymentUpload] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [showPaymentVerification, setShowPaymentVerification] = useState(false);
-  const [userRole, setUserRole] = useState('admin'); // This would come from auth context in a real app
-  
-  // Fetch invoice data
-  useEffect(() => {
-    const fetchInvoiceData = async () => {
-      try {
-        setLoading(true);
-        
-        // Debug logging
-        console.log(`InvoiceDetails - Received ID param: "${id}"`);
-        
-        // Check for special route paths first
-        const specialRoutes = {
-          'batch-generate': '/dashboard/invoices/batch-generate',
-          'new': '/dashboard/invoices/new',
-          'dashboard': '/dashboard/invoices/dashboard',
-          'generate': '/dashboard/invoices/generate'
-        };
-        
-        // If this is a special route, navigate to it and skip the rest of the logic
-        if (specialRoutes[id]) {
-          console.log(`Detected special route: ${id} -> ${specialRoutes[id]}`);
-          
-          // Avoid infinite loop by checking if we're already at this URL
-          const currentPath = window.location.pathname;
-          if (currentPath !== specialRoutes[id]) {
-            navigate(specialRoutes[id]);
-            return;
-          } else {
-            // This component shouldn't display for special routes
-            // Just wait for the navigation to happen
-            return;
-          }
-        }
-        
-        // For normal invoice IDs, validate UUID format
-        if (!id || !UUID_REGEX.test(id)) {
-          throw new Error(`Invalid invoice ID format: ${id}`);
-        }
-        
-        // Fetch invoice details
-        const invoiceData = await fetchInvoice(id);
-        
-        if (invoiceData) {
-          setInvoice(invoiceData);
-          
-          // Fetch property details
-          if (invoiceData.propertyid) {
-            const propertyData = await fetchProperty(invoiceData.propertyid);
-            setProperty(propertyData || null);
-          }
-          
-          // Fetch rentee details from app_users table
-          if (invoiceData.renteeid) {
-            const renteeData = await fetchAppUser(invoiceData.renteeid);
+  const [showManualPayment, setShowManualPayment] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [manualPayment, setManualPayment] = useState({
+    amount: '',
+    paymentMethod: '',
+    transactionReference: '',
+    paymentDate: todayValue(),
+    notes: ''
+  });
 
-            if (renteeData?.user_type && renteeData.user_type !== 'rentee') {
-              throw new Error('Rentee not found');
-            }
-            
-            setRentee(renteeData);
-          }
-        } else {
-          throw new Error('Invoice not found');
-        }
-      } catch (error) {
-        console.error('Error fetching invoice data:', error.message);
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchInvoiceData();
+  const loadAccount = useCallback(async () => {
+    if (!id || !UUID_REGEX.test(id)) {
+      setError(`Invalid invoice ID format: ${id || ''}`);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const { data, error: accountError } = await getInvoiceAccount(id);
+      if (accountError) throw accountError;
+      if (!data?.invoice) throw new Error('Invoice not found');
+      setAccount(data);
+    } catch (accountError) {
+      setError(accountError.message || 'Failed to load invoice account.');
+      setAccount(null);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
-  
-  // Handle payment upload success
-  const handlePaymentUploadSuccess = (updatedInvoice) => {
-    setInvoice(updatedInvoice);
-    setShowPaymentUpload(false);
-  };
-  
-  // Handle payment verification success
-  const handleVerificationSuccess = (updatedInvoice) => {
-    setInvoice(updatedInvoice);
+
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
+
+  const invoice = account?.invoice || null;
+  const payments = account?.payments || [];
+  const receipts = account?.receipts || [];
+  const components = account?.components || [];
+  const outstandingBalance = Number(account?.outstandingBalance) || 0;
+  const pendingPayment = payments.find((payment) => String(payment.status).toLowerCase() === 'pending') || null;
+  const paymentProofUrl = pendingPayment?.proofurl || invoice?.paymentproofurl || null;
+
+  useEffect(() => {
+    if (showManualPayment && outstandingBalance > 0) {
+      setManualPayment((current) => ({ ...current, amount: String(outstandingBalance) }));
+    }
+  }, [showManualPayment, outstandingBalance]);
+
+  const handleVerificationSuccess = async () => {
     setShowPaymentVerification(false);
+    setNotice('Payment verification recorded.');
+    await loadAccount();
   };
-  
-  // Handle error
-  const handleError = (errorMessage) => {
-    setError(errorMessage);
-  };
-  
-  // Mark invoice as paid
-  const handleMarkAsPaid = async () => {
+
+  const handleManualPayment = async (event) => {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+
+    const amount = Number(manualPayment.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > outstandingBalance) {
+      setError(`Payment amount must be greater than zero and cannot exceed ${formatCurrency(outstandingBalance)}.`);
+      return;
+    }
+
     try {
-      setError(null);
-      
-      // Only update the specific fields we need
-      const updateFields = {
-        status: INVOICE_STATUS.PAID,
-        paymentdate: new Date().toISOString(),
-        updatedat: new Date().toISOString()
-      };
-      
-      const result = await markInvoiceAsPaid(id);
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to mark invoice as paid');
-      }
-      
-      // Update the local state with the changes
-      setInvoice(result.data);
-      
-      alert('Invoice has been marked as paid.');
-    } catch (error) {
-      console.error('Error marking invoice as paid:', error.message);
-      setError(error.message);
+      setWorking(true);
+      const result = await markInvoiceAsPaid(id, {
+        amount,
+        paymentMethod: manualPayment.paymentMethod || 'manual',
+        transactionReference: manualPayment.transactionReference || null,
+        paymentDate: manualPayment.paymentDate
+          ? new Date(`${manualPayment.paymentDate}T00:00:00.000Z`).toISOString()
+          : new Date().toISOString(),
+        notes: manualPayment.notes || null
+      });
+      if (!result.success) throw new Error(result.error || 'Failed to record payment');
+      setShowManualPayment(false);
+      setNotice(`Payment of ${formatCurrency(amount)} recorded and receipt created.`);
+      await loadAccount();
+    } catch (paymentError) {
+      setError(paymentError.message || 'Failed to record payment.');
+    } finally {
+      setWorking(false);
     }
   };
-  
-  // Send reminder
-  const handleSendReminder = async () => {
+
+  const handleRecordReminder = async () => {
     try {
+      setWorking(true);
       setError(null);
-      
-      // In a real application, this would call an API to send an email/SMS
-      // For now, we'll just simulate it
-      
-      alert(`Reminder sent to ${rentee?.name || 'rentee'} for invoice #${invoice.id}`);
-      
-      // Update the invoice to record that a reminder was sent
+      setNotice(null);
       const result = await sendPaymentReminder(id);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to send reminder');
-      }
-
-      setInvoice((currentInvoice) => currentInvoice ? {
-        ...currentInvoice,
-        reminderDate: new Date().toISOString()
-      } : currentInvoice);
-    } catch (error) {
-      console.error('Error sending reminder:', error.message);
-      setError(error.message);
+      if (!result.success) throw new Error(result.error || 'Failed to record reminder follow-up');
+      setNotice('Reminder follow-up recorded. No email or SMS was sent by this action.');
+      await loadAccount();
+    } catch (reminderError) {
+      setError(reminderError.message || 'Failed to record reminder follow-up.');
+    } finally {
+      setWorking(false);
     }
   };
-  
-  // Download invoice
+
   const handleDownloadInvoice = () => {
+    if (!invoice) return;
+
     try {
-      // Create a simple invoice representation
-      const invoiceContent = `
-        INVOICE #${invoice.id}
-        
-        Date: ${formatDate(invoice.createdat)}
-        Due Date: ${formatDate(invoice.duedate)}
-        Status: ${invoice.status}
-        
-        Property: ${property?.name || 'N/A'}
-        Rentee: ${rentee?.name || 'N/A'}
-        
-        INVOICE COMPONENTS:
-        ${Object.entries(invoice.components || {})
-          .map(([key, value]) => `${key}: ${formatCurrency(value)}`)
-          .join('\n        ')}
-        
-        Total Amount: ${formatCurrency(invoice.totalamount)}
-      `;
-      
-      // Create a blob and download it
+      const componentLines = components.length > 0
+        ? components.map((component) => `${component.description || component.component_type}: ${formatCurrency(component.amount)}`)
+        : Object.entries(invoice.components || {}).map(([key, value]) => `${key}: ${formatCurrency(value)}`);
+      const invoiceContent = [
+        `INVOICE #${invoice.id}`,
+        `Billing Period: ${invoice.billingperiod || 'N/A'}`,
+        `Issued: ${formatDate(invoice.issued_at || invoice.createdat)}`,
+        `Due Date: ${formatDate(invoice.duedate)}`,
+        `Status: ${invoice.status}`,
+        `Property: ${invoice.property_name || 'N/A'}`,
+        `Tenant: ${invoice.rentee_name || 'N/A'}`,
+        '',
+        'INVOICE COMPONENTS:',
+        ...componentLines,
+        '',
+        `Total Amount: ${formatCurrency(invoice.totalamount)}`,
+        `Outstanding Balance: ${formatCurrency(outstandingBalance)}`
+      ].join('\n');
+
       const blob = new Blob([invoiceContent], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Invoice-${invoice.id}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Invoice-${invoice.id}.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading invoice:', error.message);
-      setError('Failed to download invoice. Please try again.');
+    } catch (downloadError) {
+      setError(downloadError.message || 'Failed to download invoice.');
     }
   };
-  
-  // Get status badge color
+
   const getStatusBadgeColor = (status) => {
-    switch (status) {
-      case INVOICE_STATUS.PAID:
-        return 'bg-green-100 text-green-800';
-      case INVOICE_STATUS.PENDING:
-        return 'bg-yellow-100 text-yellow-800';
-      case INVOICE_STATUS.VERIFICATION_PENDING:
-        return 'bg-blue-100 text-blue-800';
-      case INVOICE_STATUS.OVERDUE:
-        return 'bg-red-100 text-red-800';
-      case INVOICE_STATUS.REJECTED:
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+    switch (String(status || '').toLowerCase()) {
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'verification_pending': return 'bg-blue-100 text-blue-800';
+      case 'overdue': return 'bg-red-100 text-red-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
-  
-  // Render loading state
+
   if (loading) {
+    return <div className="flex h-64 items-center justify-center"><div className="text-lg">Loading invoice account...</div></div>;
+  }
+
+  if (error && !invoice) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading invoice details...</div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">{error}</div>
+        <button onClick={() => navigate('/dashboard/invoices')} className="mt-4 px-4 py-2 border rounded-md">Back to Invoices</button>
       </div>
     );
   }
-  
-  // Render error state
-  if (error) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-        <strong className="font-bold">Error!</strong>
-        <span className="block sm:inline"> {error}</span>
-        <div className="mt-4">
-          <button
-            onClick={() => navigate('/dashboard/invoices')}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Back to Invoices
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
-  // Render if invoice not found
-  if (!invoice) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-semibold mb-4">Invoice Not Found</h2>
-        <p className="mb-6">The invoice you are looking for does not exist or has been removed.</p>
-        <button
-          onClick={() => navigate('/dashboard/invoices')}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Back to Invoices
-        </button>
-      </div>
-    );
-  }
-  
+
+  if (!invoice) return null;
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h1 className="text-2xl font-semibold">Invoice Details</h1>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => navigate('/dashboard/invoices')}
-            className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
-          >
-            Back to Invoices
-          </button>
-          
-          {userRole === 'admin' && (
-            <Link
-              to={`/dashboard/invoices/edit/${id}`}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              Edit Invoice
-            </Link>
-          )}
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <p className="text-sm text-gray-500">Billing account</p>
+          <h1 className="text-2xl font-semibold">Invoice #{invoice.id.substring(0, 8)}</h1>
         </div>
+        <button onClick={() => navigate('/dashboard/invoices')} className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm">Back to Invoices</button>
       </div>
-      
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
-          <strong className="font-bold">Error!</strong>
-          <span className="block sm:inline"> {error}</span>
+
+      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">{error}</div>}
+      {notice && <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded" role="status">{notice}</div>}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Invoice total</div><div className="text-lg font-semibold">{formatCurrency(invoice.totalamount || 0)}</div></div>
+        <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Outstanding</div><div className="text-lg font-semibold">{formatCurrency(outstandingBalance)}</div></div>
+        <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Billing period</div><div className="text-lg font-semibold">{invoice.billingperiod || 'N/A'}</div></div>
+        <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Status</div><span className={`mt-1 inline-block rounded-full px-2 py-1 text-sm font-medium ${getStatusBadgeColor(invoice.status)}`}>{String(invoice.status || '').replaceAll('_', ' ')}</span></div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="rounded-lg border bg-white p-5 lg:col-span-2">
+          <h2 className="text-lg font-semibold mb-4">Invoice</h2>
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 mb-5">
+            <div><span className="text-gray-500">Property:</span> <strong>{invoice.property_name || 'N/A'}</strong></div>
+            <div><span className="text-gray-500">Tenant:</span> <strong>{invoice.rentee_name || 'N/A'}</strong></div>
+            <div><span className="text-gray-500">Issued:</span> <strong>{formatDate(invoice.issued_at || invoice.createdat)}</strong></div>
+            <div><span className="text-gray-500">Due:</span> <strong>{formatDate(invoice.duedate)}</strong></div>
+          </div>
+
+          <h3 className="font-medium mb-2">Components</h3>
+          {components.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b text-left text-gray-500"><th className="py-2">Description</th><th className="py-2">Type</th><th className="py-2 text-right">Amount</th></tr></thead>
+                <tbody>
+                  {components.map((component) => (
+                    <tr key={component.id} className="border-b last:border-0">
+                      <td className="py-2">{component.description || component.component_type}</td>
+                      <td className="py-2 capitalize">{String(component.component_type || '').replaceAll('_', ' ')}</td>
+                      <td className="py-2 text-right">{formatCurrency(component.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No source-linked components are available for this invoice.</p>
+          )}
+        </section>
+
+        <aside className="rounded-lg border bg-white p-5">
+          <h2 className="text-lg font-semibold mb-4">Actions</h2>
+          <div className="space-y-2">
+            {canManagePayments && pendingPayment && (
+              <button type="button" onClick={() => setShowPaymentVerification(true)} className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Verify pending payment</button>
+            )}
+            {canManagePayments && outstandingBalance > 0 && !pendingPayment && (
+              <button type="button" onClick={() => setShowManualPayment(true)} className="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Record manual payment</button>
+            )}
+            {canManageInvoices && outstandingBalance > 0 && (
+              <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">Record reminder follow-up</button>
+            )}
+            <button type="button" onClick={handleDownloadInvoice} className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Download account summary</button>
+          </div>
+          {invoice.reminderdate && <p className="mt-3 text-xs text-gray-500">Last reminder follow-up: {formatDate(invoice.reminderdate)}</p>}
+          <p className="mt-4 text-xs text-gray-500">Reminder follow-up records an audited action only. Email/SMS delivery is not yet attached to this control.</p>
+        </aside>
+      </div>
+
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="text-lg font-semibold mb-4">Payments</h2>
+        {payments.length > 0 ? (
+          <div className="space-y-3">
+            {payments.map((payment) => (
+              <div key={payment.id} className="rounded-md border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong>{formatCurrency(payment.amount)}</strong>
+                  <span className="capitalize">{String(payment.status || '').replaceAll('_', ' ')}</span>
+                </div>
+                <div className="mt-1 text-gray-500">{formatDate(payment.paymentdate || payment.createdat)}</div>
+                {payment.paymentmethod && <div className="mt-1">Method: {payment.paymentmethod}</div>}
+                {payment.transactionreference && <div className="mt-1">Reference: {payment.transactionreference}</div>}
+                {payment.rejection_reason && <div className="mt-1 text-red-700">Rejection: {payment.rejection_reason}</div>}
+                {payment.proofurl && <a href={payment.proofurl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-blue-600 hover:underline">Open payment proof</a>}
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-gray-500">No payment attempts recorded.</p>}
+      </section>
+
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="text-lg font-semibold mb-4">Receipts</h2>
+        {receipts.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {receipts.map((receipt) => (
+              <div key={receipt.id} className="rounded-md border border-green-200 bg-green-50 p-3 text-sm">
+                <div className="font-medium">Receipt {receipt.receipt_number}</div>
+                <div>{formatCurrency(receipt.amount)} · {formatDate(receipt.issued_at)}</div>
+                {receipt.paymentmethod && <div className="mt-1 text-gray-600">Method: {receipt.paymentmethod}</div>}
+                {receipt.transactionreference && <div className="mt-1 text-gray-600">Reference: {receipt.transactionreference}</div>}
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-gray-500">No verified receipts yet.</p>}
+      </section>
+
+      {showPaymentVerification && pendingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5">
+            <PaymentVerification
+              invoiceId={id}
+              paymentProofUrl={paymentProofUrl}
+              payment={pendingPayment}
+              onSuccess={handleVerificationSuccess}
+              onError={setError}
+            />
+            <button type="button" onClick={() => setShowPaymentVerification(false)} className="mt-4 w-full px-4 py-2 border rounded-md">Cancel</button>
+          </div>
         </div>
       )}
-      
-      {/* Invoice Card */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-        <div className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+
+      {showManualPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <form onSubmit={handleManualPayment} className="w-full max-w-lg rounded-lg bg-white p-6 shadow-lg space-y-4">
             <div>
-              <h2 className="text-xl font-semibold">Invoice #{invoice.id}</h2>
-              <p className="text-gray-600 text-sm">Created on {formatDate(invoice.createdat)}</p>
+              <h2 className="text-xl font-semibold">Record manual payment</h2>
+              <p className="mt-1 text-sm text-gray-500">Outstanding balance: {formatCurrency(outstandingBalance)}</p>
             </div>
-            <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(invoice.status)} mt-2 sm:mt-0`}>
-              {invoice.status}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            {/* Left column */}
-            <div>
-              <h3 className="text-lg font-medium mb-3">Invoice Details</h3>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-gray-600">Property:</span>
-                  <span className="ml-2 font-medium">{property?.name || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Rentee:</span>
-                  <span className="ml-2 font-medium">{rentee?.name || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Billing Period:</span>
-                  <span className="ml-2 font-medium">{invoice.billingperiod}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Due Date:</span>
-                  <span className="ml-2 font-medium">{formatDate(invoice.duedate)}</span>
-                </div>
-                {invoice.paymentdate && (
-                  <div>
-                    <span className="text-gray-600">Payment Date:</span>
-                    <span className="ml-2 font-medium">{formatDate(invoice.paymentdate)}</span>
-                  </div>
-                )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Amount</label>
+                <input type="number" min="0.01" step="0.01" max={outstandingBalance} required value={manualPayment.amount} onChange={(event) => setManualPayment((current) => ({ ...current, amount: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Payment date</label>
+                <input type="date" required value={manualPayment.paymentDate} onChange={(event) => setManualPayment((current) => ({ ...current, paymentDate: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Method</label>
+                <input type="text" placeholder="Cash, bank transfer..." value={manualPayment.paymentMethod} onChange={(event) => setManualPayment((current) => ({ ...current, paymentMethod: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Reference</label>
+                <input type="text" value={manualPayment.transactionReference} onChange={(event) => setManualPayment((current) => ({ ...current, transactionReference: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
               </div>
             </div>
-            
-            {/* Right column */}
             <div>
-              <h3 className="text-lg font-medium mb-3">Payment Information</h3>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-gray-600">Total Amount:</span>
-                  <span className="ml-2 font-medium">{formatCurrency(invoice.totalamount)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Payment Method:</span>
-                  <span className="ml-2 font-medium">{invoice.paymentmethod || 'Not specified'}</span>
-                </div>
-                {invoice.paymentreference && (
-                  <div>
-                    <span className="text-gray-600">Payment Reference:</span>
-                    <span className="ml-2 font-medium">{invoice.paymentreference}</span>
-                  </div>
-                )}
-                {invoice.notes && (
-                  <div>
-                    <span className="text-gray-600">Notes:</span>
-                    <span className="ml-2 font-medium break-words">{invoice.notes}</span>
-                  </div>
-                )}
-              </div>
+              <label className="mb-1 block text-sm font-medium">Notes</label>
+              <textarea rows={2} value={manualPayment.notes} onChange={(event) => setManualPayment((current) => ({ ...current, notes: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
             </div>
-          </div>
-          
-          {/* Invoice Components */}
-          <div className="mb-6 overflow-x-auto">
-            <h3 className="text-lg font-medium mb-3">Invoice Components</h3>
-            <InvoiceComponentsTable components={invoice.components} />
-          </div>
-          
-          {/* Payment Proof */}
-          {invoice.paymentproofurl && (
-            <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3">Payment Proof</h3>
-              <div className="border rounded-md p-4">
-                <a 
-                  href={invoice.paymentproofurl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View Payment Proof
-                </a>
-              </div>
+            <div className="flex gap-3">
+              <button type="button" disabled={working} onClick={() => setShowManualPayment(false)} className="flex-1 px-4 py-2 border rounded-md">Cancel</button>
+              <button type="submit" disabled={working} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md disabled:bg-gray-300">{working ? 'Recording…' : 'Record payment'}</button>
             </div>
-          )}
-          
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 mt-6">
-            {/* Admin actions */}
-            {userRole === 'admin' && (
-              <>
-                {invoice.status === INVOICE_STATUS.VERIFICATION_PENDING && (
-                  <button
-                    onClick={() => setShowPaymentVerification(true)}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-                  >
-                    Verify Payment
-                  </button>
-                )}
-                
-                {(invoice.status === INVOICE_STATUS.PENDING || invoice.status === INVOICE_STATUS.OVERDUE) && (
-                  <button
-                    onClick={handleMarkAsPaid}
-                    className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-                  >
-                    Mark as Paid
-                  </button>
-                )}
-                
-                {invoice.status !== INVOICE_STATUS.PAID && (
-                  <button
-                    onClick={handleSendReminder}
-                    className="px-3 py-1.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
-                  >
-                    Send Reminder
-                  </button>
-                )}
-              </>
-            )}
-            
-            {/* Rentee actions */}
-            {userRole === 'rentee' && (
-              <>
-                {(invoice.status === INVOICE_STATUS.PENDING || invoice.status === INVOICE_STATUS.OVERDUE) && (
-                  <button
-                    onClick={() => setShowPaymentUpload(true)}
-                    className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-                  >
-                    Record Payment
-                  </button>
-                )}
-              </>
-            )}
-            
-            {/* Common actions */}
-            <button
-              onClick={handleDownloadInvoice}
-              className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
-            >
-              Download Invoice
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Payment Upload Form */}
-      {showPaymentUpload && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6 p-6">
-          <h3 className="text-lg font-medium mb-4">Upload Payment Proof</h3>
-          <PaymentProofUpload
-            invoiceId={id}
-            onSuccess={handlePaymentUploadSuccess}
-            onError={handleError}
-          />
-          <button
-            onClick={() => setShowPaymentUpload(false)}
-            className="mt-4 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-      
-      {/* Payment Verification Form */}
-      {showPaymentVerification && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6 p-6">
-          <h3 className="text-lg font-medium mb-4">Verify Payment</h3>
-          <PaymentVerification
-            invoiceId={id}
-            paymentProofUrl={invoice.paymentproofurl}
-            onSuccess={handleVerificationSuccess}
-            onError={handleError}
-          />
-          <button
-            onClick={() => setShowPaymentVerification(false)}
-            className="mt-4 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
+          </form>
         </div>
       )}
     </div>
   );
 };
 
-export default InvoiceDetails; 
+export default InvoiceDetails;
