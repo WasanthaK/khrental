@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { verifyPaymentProof } from '../../services/paymentService';
 import FormTextarea from '../ui/FormTextarea';
 
-const PaymentVerification = ({ invoiceId, paymentProofUrl, onSuccess, onError }) => {
+const PaymentVerification = ({ invoiceId, paymentProofUrl, payment, onSuccess, onError }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [verificationNotes, setVerificationNotes] = useState('');
+  const isPdf = /\.pdf(?:$|\?)/i.test(String(paymentProofUrl || ''));
 
   const handleApprove = async () => {
     await handleVerification(true);
@@ -37,12 +38,12 @@ const PaymentVerification = ({ invoiceId, paymentProofUrl, onSuccess, onError })
           receipt: result.receipt || null
         });
       }
-    } catch (error) {
-      console.error('Error verifying payment:', error.message);
-      setError(error.message);
+    } catch (verificationError) {
+      console.error('Error verifying payment:', verificationError.message);
+      setError(verificationError.message);
 
       if (onError) {
-        onError(error.message);
+        onError(verificationError.message);
       }
     } finally {
       setLoading(false);
@@ -59,15 +60,34 @@ const PaymentVerification = ({ invoiceId, paymentProofUrl, onSuccess, onError })
         </div>
       )}
 
+      {payment && (
+        <div className="mb-4 grid grid-cols-1 gap-2 rounded-md bg-gray-50 p-3 text-sm sm:grid-cols-2">
+          <div><span className="text-gray-500">Amount:</span> <strong>{payment.amount}</strong></div>
+          <div><span className="text-gray-500">Method:</span> <strong>{payment.paymentmethod || 'Not specified'}</strong></div>
+          {payment.transactionreference && <div className="sm:col-span-2"><span className="text-gray-500">Reference:</span> <strong>{payment.transactionreference}</strong></div>}
+        </div>
+      )}
+
       <div className="mb-3 sm:mb-4">
         <h3 className="text-md font-medium mb-2">Payment Proof</h3>
         {paymentProofUrl ? (
-          <div className="border border-gray-200 rounded-lg p-1 sm:p-2">
-            <img
-              src={paymentProofUrl}
-              alt="Payment Proof"
-              className="max-w-full h-auto rounded"
-            />
+          <div className="border border-gray-200 rounded-lg p-2">
+            {isPdf ? (
+              <a
+                href={paymentProofUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              >
+                Open PDF payment proof
+              </a>
+            ) : (
+              <img
+                src={paymentProofUrl}
+                alt="Payment Proof"
+                className="max-w-full h-auto rounded"
+              />
+            )}
           </div>
         ) : (
           <p className="text-gray-500 text-sm">No payment proof available</p>
