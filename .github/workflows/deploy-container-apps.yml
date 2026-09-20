@@ -211,9 +211,6 @@ jobs:
             set -euo pipefail
             az extension add --name containerapp --upgrade --yes
 
-            # KH Rentals is not using blue/green or A/B traffic. Single-revision
-            # mode prevents a successful image update from leaving the public
-            # FQDN pinned to an older active revision.
             az containerapp revision set-mode \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -230,11 +227,13 @@ jobs:
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --image "${{ steps.image.outputs.name }}:${{ github.sha }}"
 
-      - name: Verify public deployment revision and browser routing
+      - name: Verify latest revision readiness and public browser build
         uses: azure/cli@v2
         with:
           inlineScript: |
             set -euo pipefail
+            az extension add --name containerapp --upgrade --yes
+
             fqdn=$(az containerapp show \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -247,6 +246,64 @@ jobs:
 
             if [ "${revision_mode,,}" != "single" ]; then
               echo "Production Container App is not in single-revision mode: $revision_mode" >&2
+              exit 1
+            fi
+
+            latest_revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestRevisionName -o tsv)
+
+            echo "Latest Azure revision: $latest_revision"
+
+            ready_revision=""
+            for attempt in $(seq 1 30); do
+              ready_revision=$(az containerapp show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query properties.latestReadyRevisionName -o tsv)
+
+              if [ "$ready_revision" = "$latest_revision" ]; then
+                echo "Latest revision is ready: $latest_revision"
+                break
+              fi
+
+              echo "Waiting for $latest_revision to become ready (latest ready: ${ready_revision:-none}, attempt $attempt/30)..."
+              sleep 6
+            done
+
+            ready_revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName -o tsv)
+
+            if [ "$ready_revision" != "$latest_revision" ]; then
+              echo "Latest revision did not become ready. Latest: $latest_revision; ready: ${ready_revision:-none}" >&2
+              echo "Revision state:" >&2
+              az containerapp revision show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" \
+                -o jsonc || true
+
+              echo "Latest revision system logs:" >&2
+              az containerapp logs show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --type system \
+                --tail 100 \
+                --format text || true
+
+              echo "Latest revision console logs:" >&2
+              az containerapp logs show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --type console \
+                --tail 100 \
+                --format text || true
               exit 1
             fi
 
@@ -274,4 +331,4 @@ jobs:
               exit 1
             fi
 
-            echo "Production public FQDN is serving ${GITHUB_SHA} with live MSSQL connectivity and expected browser runtime configuration."
+            echo "Production public FQDN is serving ${GITHUB_SHA} from ready revision $latest_revision with live MSSQL connectivity and expected browser runtime configuration."
