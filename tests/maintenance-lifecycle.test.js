@@ -9,8 +9,14 @@ import {
 import {
   guardMaintenancePlatformQuery,
   hasMaintenanceLifecycleFields,
+  isProtectedMaintenanceCommentAccess,
   isProtectedMaintenanceMutation
 } from '../src/api/platform/maintenanceMutationGuard.js';
+import {
+  canCompleteTaskForMaintenanceStatus,
+  isLinkedMaintenanceCompletion,
+  requiresMaintenanceCompletion
+} from '../src/services/teamMaintenanceLifecyclePolicy.js';
 
 const createMockResponse = () => ({
   statusCode: 200,
@@ -86,6 +92,23 @@ test('generic maintenance creation, deletion and lifecycle updates are blocked',
   }), false);
 });
 
+test('maintenance comment table is lifecycle-only for reads and writes', () => {
+  assert.equal(isProtectedMaintenanceCommentAccess({ table: 'maintenance_request_comments' }), true);
+  assert.equal(isProtectedMaintenanceCommentAccess({ table: 'maintenance_requests' }), false);
+
+  const response = createMockResponse();
+  let nextCalled = false;
+  guardMaintenancePlatformQuery(
+    { body: { action: 'select', table: 'maintenance_request_comments' } },
+    response,
+    () => { nextCalled = true; }
+  );
+
+  assert.equal(nextCalled, false);
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body?.code, 'MAINTENANCE_COMMENTS_LIFECYCLE_REQUIRED');
+});
+
 test('generic maintenance lifecycle writes return MAINTENANCE_LIFECYCLE_REQUIRED', () => {
   const response = createMockResponse();
   let nextCalled = false;
@@ -113,4 +136,31 @@ test('descriptive maintenance edits still pass the generic guard', () => {
 
   assert.equal(nextCalled, true);
   assert.equal(response.statusCode, 200);
+});
+
+test('linked maintenance task completion only applies to linked maintenance work', () => {
+  assert.equal(isLinkedMaintenanceCompletion({
+    status: 'completed',
+    taskType: 'maintenance',
+    relatedEntityId: 'request-1'
+  }), true);
+  assert.equal(isLinkedMaintenanceCompletion({
+    status: 'completed',
+    taskType: 'inspection',
+    relatedEntityId: 'request-1'
+  }), false);
+  assert.equal(isLinkedMaintenanceCompletion({
+    status: 'in_progress',
+    taskType: 'maintenance',
+    relatedEntityId: 'request-1'
+  }), false);
+});
+
+test('linked task completion requires maintenance to be in progress or already completed', () => {
+  assert.equal(canCompleteTaskForMaintenanceStatus('in_progress'), true);
+  assert.equal(canCompleteTaskForMaintenanceStatus('completed'), true);
+  assert.equal(canCompleteTaskForMaintenanceStatus('pending'), false);
+  assert.equal(canCompleteTaskForMaintenanceStatus('cancelled'), false);
+  assert.equal(requiresMaintenanceCompletion('in_progress'), true);
+  assert.equal(requiresMaintenanceCompletion('completed'), false);
 });

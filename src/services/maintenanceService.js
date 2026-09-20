@@ -1,5 +1,7 @@
 export * from './maintenanceServiceLegacy.js';
 export {
+  addMaintenanceComment,
+  getMaintenanceComments,
   createMaintenanceRequest,
   assignMaintenanceRequest,
   startMaintenanceWork,
