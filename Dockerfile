@@ -28,4 +28,7 @@ EXPOSE 5174
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 5174) + '/api/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["sh", "-c", "npm run migrate:billing-adjustments && npm run migrate:platform-admins && node src/db/executeSql.js ./migrations/20260920_03_backfill_legacy_app_user_memberships.sql && npm run generate-env-config && node server.js"]
+# Production runs with a restricted database identity that intentionally cannot
+# create or alter schema. DDL migrations belong in a separate privileged
+# deployment step, not in the web container startup path.
+CMD ["sh", "-c", "npm run generate-env-config && node server.js"]
