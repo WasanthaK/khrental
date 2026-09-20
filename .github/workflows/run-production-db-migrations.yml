@@ -237,12 +237,8 @@ jobs:
 
           echo "Running read-only plan inside ready revision: $ready_revision"
 
-          az containerapp exec \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$ready_revision" \
-            --command "/bin/sh -c 'MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true node scripts/run-production-migrations.mjs --mode=plan --through=${MIGRATION_THROUGH}'" \
-            | tee migration-output.txt
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command \"/bin/sh -c 'MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true node scripts/run-production-migrations.mjs --mode=plan --through=${MIGRATION_THROUGH}'\""
+          script -q -e -c "$exec_command" /dev/null | tee migration-output.txt
 
           {
             echo '### Production database migration result'
