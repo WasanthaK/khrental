@@ -1,64 +1,59 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAppUsers, mapAppUserToTeamMember } from '../services/appUserService';
+import { mapAppUserToTeamMember } from '../services/appUserService';
+import { fetchTeamDirectory } from '../services/teamMemberService';
 import TeamMemberCard from '../components/team/TeamMemberCard';
-import { toast } from 'react-toastify';
+
+const BUNDLE_LABELS = {
+  property_operations: 'Property Operations',
+  finance: 'Finance',
+  maintenance: 'Maintenance',
+  read_only: 'Read Only'
+};
 
 const TeamList = () => {
-  // State
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [invitationFilter, setInvitationFilter] = useState('all');
-  
-  // Function to fetch team members from app_users table
+
   const fetchTeamMembers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('Fetching team members from app_users table...');
-      
-      // Fetch team members from app_users table
-      const data = await fetchAppUsers('staff');
-      
-      console.log('Fetched data from app_users:', data);
-      
-      // Transform the data to the expected format
-      const transformedData = (data || []).map(mapAppUserToTeamMember);
-      
-      console.log('Transformed data from app_users:', transformedData);
+
+      const data = await fetchTeamDirectory();
+      const transformedData = (data || []).map((record) => ({
+        ...mapAppUserToTeamMember(record),
+        role: BUNDLE_LABELS[record.permission_bundle] || 'Staff',
+        permissionBundle: record.permission_bundle || 'read_only'
+      }));
+
       setTeamMembers(transformedData);
-    } catch (error) {
-      console.error('Error fetching team members:', error.message);
-      setError(error.message);
+    } catch (fetchError) {
+      console.error('Error fetching team members:', fetchError.message);
+      setError(fetchError.message);
     } finally {
       setLoading(false);
     }
   }, []);
-  
-  // Fetch team members on mount
+
   useEffect(() => {
     fetchTeamMembers();
   }, [fetchTeamMembers]);
-  
-  // Filter team members based on search term and filters
-  const filteredMembers = teamMembers.filter(member => {
-    // Search filter
-    const matchesSearch = 
-      member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.contactDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.contactDetails?.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.role?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Role filter
-    const matchesRole = 
-      roleFilter === 'all' || 
-      member.role?.toLowerCase() === roleFilter.toLowerCase();
-    
-    // Invitation status filter
+
+  const filteredMembers = teamMembers.filter((member) => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchesSearch =
+      member.name?.toLowerCase().includes(normalizedSearch) ||
+      member.contactDetails?.email?.toLowerCase().includes(normalizedSearch) ||
+      member.contactDetails?.phone?.toLowerCase().includes(normalizedSearch) ||
+      member.role?.toLowerCase().includes(normalizedSearch);
+
+    const matchesRole = roleFilter === 'all' || member.permissionBundle === roleFilter;
+
     let matchesInvitation = true;
     if (invitationFilter === 'invited') {
       matchesInvitation = member.invited && !member.authId;
@@ -67,14 +62,17 @@ const TeamList = () => {
     } else if (invitationFilter === 'not_invited') {
       matchesInvitation = !member.invited;
     }
-    
+
     return matchesSearch && matchesRole && matchesInvitation;
   });
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Team Members</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Team Members</h1>
+          <p className="mt-1 text-sm text-gray-500">Manage staff and contractors for this organization. Tenant administrators are managed by Platform Admin.</p>
+        </div>
         <Link
           to="/dashboard/team/new"
           className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors"
@@ -82,7 +80,7 @@ const TeamList = () => {
           Add Team Member
         </Link>
       </div>
-      
+
       <div className="mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
@@ -100,11 +98,11 @@ const TeamList = () => {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="staff">Staff</option>
+              <option value="all">All Access</option>
+              <option value="property_operations">Property Operations</option>
+              <option value="finance">Finance</option>
               <option value="maintenance">Maintenance</option>
-              <option value="manager">Manager</option>
+              <option value="read_only">Read Only</option>
             </select>
           </div>
           <div>
@@ -129,7 +127,7 @@ const TeamList = () => {
           </div>
         </div>
       </div>
-      
+
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -145,7 +143,7 @@ const TeamList = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMembers.map(member => (
+          {filteredMembers.map((member) => (
             <TeamMemberCard key={member.id} member={member} onStatusChange={fetchTeamMembers} />
           ))}
         </div>
@@ -154,4 +152,4 @@ const TeamList = () => {
   );
 };
 
-export default TeamList; 
+export default TeamList;

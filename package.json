@@ -23,6 +23,7 @@
     "migrate:maintenance-lifecycle": "node src/db/executeSql.js ./migrations/20260916_05_add_maintenance_lifecycle.sql",
     "migrate:tenancy-exit-settlement": "node src/db/executeSql.js ./migrations/20260916_06_add_tenancy_exit_settlement.sql",
     "migrate:billing-adjustments": "node src/db/executeSql.js ./migrations/20260920_01_add_tenancy_billing_adjustments.sql",
+    "migrate:platform-admins": "node src/db/executeSql.js ./migrations/20260920_02_create_platform_admins.sql",
     "migrate:tenant:foundation": "node src/db/executeSql.js ./migrations/20260317_01_create_multi_tenant_foundation.sql",
     "migrate:tenant:backfill": "node src/db/executeSql.js ./migrations/20260317_02_backfill_default_tenant.sql",
     "add-properties-column": "node src/scripts/add_associated_properties_column.js",

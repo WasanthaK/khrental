@@ -228,6 +228,7 @@ jobs:
               --query properties.configuration.ingress.fqdn -o tsv)
 
             curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
+            curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/api/mssql/health"
 
             runtime_config=$(curl --fail --retry 10 --retry-delay 6 "https://${fqdn}/env-config.js")
 
@@ -241,4 +242,4 @@ jobs:
               exit 1
             fi
 
-            echo "Production browser runtime confirmed with MSSQL routing and Evia Sign Client ID configured."
+            echo "Production browser runtime confirmed with live MSSQL connectivity, browser routing, and Evia Sign Client ID configured."
