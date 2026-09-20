@@ -45,7 +45,21 @@ const mapRenteeRow = (row) => {
     mapped[key] = JSON_FIELDS.has(key) ? parseJsonValue(value) : value;
   });
 
-  mapped.contact_details ??= null;
+  const existingContactDetails = mapped.contact_details && typeof mapped.contact_details === 'object'
+    ? mapped.contact_details
+    : {};
+  const canonicalEmail = normalizeEmail(mapped.email || existingContactDetails.email);
+
+  if (canonicalEmail) {
+    mapped.email = canonicalEmail;
+    mapped.contact_details = {
+      ...existingContactDetails,
+      email: canonicalEmail
+    };
+  } else {
+    mapped.contact_details = existingContactDetails;
+  }
+
   mapped.associated_property_ids ??= [];
   mapped.skills ??= [];
   mapped.availability ??= null;
