@@ -11,6 +11,10 @@ import {
   WORKSPACE_SECTIONS,
   canAccessWorkspaceSection
 } from '../src/utils/navigationPolicy.js';
+import {
+  isRenteeDirectoryRecord,
+  normalizeRenteeDirectoryRecords
+} from '../src/utils/renteeDirectory.js';
 
 const subject = (role, permissionBundle = undefined) => ({
   user: { id: `${role}-user`, role },
@@ -72,4 +76,19 @@ test('tenant and administrator navigation capabilities remain separated', () => 
   assert.equal(canAccessWorkspaceSection(admin, WORKSPACE_SECTIONS.SETTINGS), true);
   assert.equal(hasPermission(tenant, PERMISSIONS.INVOICES_READ), true);
   assert.equal(hasPermission(tenant, PERMISSIONS.INVOICES_MANAGE), false);
+});
+
+test('tenant directory keeps canonical and legacy rentee rows visible', () => {
+  assert.equal(isRenteeDirectoryRecord({ user_type: 'rentee', role: 'rentee' }), true);
+  assert.equal(isRenteeDirectoryRecord({ user_type: 'staff', role: 'rentee' }), true);
+  assert.equal(isRenteeDirectoryRecord({ user_type: 'staff', role: 'staff' }), false);
+
+  const records = normalizeRenteeDirectoryRecords([
+    { id: 'rentee-1', user_type: 'rentee', role: 'rentee' },
+    { id: 'rentee-2', user_type: 'staff', role: 'rentee' },
+    { id: 'staff-1', user_type: 'staff', role: 'staff' },
+    { id: 'rentee-1', user_type: 'rentee', role: 'rentee' }
+  ]);
+
+  assert.deepEqual(records.map((record) => record.id), ['rentee-1', 'rentee-2']);
 });
