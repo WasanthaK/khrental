@@ -1,24 +1,14 @@
-import { platform as platformClient } from './platformClient';
-import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
+import { requestMssqlApi } from './mssqlApiClient';
 import { normalizeRenteeDirectoryRecords } from '../utils/renteeDirectory';
 
+/**
+ * The renter directory is always an organization-aware MSSQL projection.
+ *
+ * Do not fall back to the generic platform app_users query: that legacy query
+ * scopes app_users by their default tenant pointer and cannot reliably represent
+ * a global identity that belongs to this organization through tenant_memberships.
+ */
 export const fetchRenteeDirectory = async () => {
-  if (isMssqlApiEnabled()) {
-    try {
-      // The canonical renter endpoint resolves both legacy tenant ownership and
-      // active renter memberships for the current organization.
-      const users = await requestMssqlApi('/api/mssql/rentees');
-      return normalizeRenteeDirectoryRecords(users);
-    } catch (error) {
-      console.error('Error fetching tenant directory via MSSQL:', error);
-      throw error;
-    }
-  }
-
-  const { data, error } = await platformClient
-    .from('app_users')
-    .select('*');
-
-  if (error) throw error;
-  return normalizeRenteeDirectoryRecords(data || []);
+  const users = await requestMssqlApi('/api/mssql/rentees');
+  return normalizeRenteeDirectoryRecords(users);
 };
