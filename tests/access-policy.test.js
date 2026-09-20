@@ -78,17 +78,19 @@ test('tenant and administrator navigation capabilities remain separated', () => 
   assert.equal(hasPermission(tenant, PERMISSIONS.INVOICES_MANAGE), false);
 });
 
-test('tenant directory keeps canonical and legacy rentee rows visible', () => {
+test('tenant directory keeps canonical, legacy and membership-backed rentee rows visible', () => {
   assert.equal(isRenteeDirectoryRecord({ user_type: 'rentee', role: 'rentee' }), true);
   assert.equal(isRenteeDirectoryRecord({ user_type: 'staff', role: 'rentee' }), true);
+  assert.equal(isRenteeDirectoryRecord({ directory_role: 'rentee', user_type: 'staff', role: 'staff' }), true);
   assert.equal(isRenteeDirectoryRecord({ user_type: 'staff', role: 'staff' }), false);
 
   const records = normalizeRenteeDirectoryRecords([
     { id: 'rentee-1', user_type: 'rentee', role: 'rentee' },
     { id: 'rentee-2', user_type: 'staff', role: 'rentee' },
+    { id: 'rentee-3', directory_role: 'rentee', user_type: 'staff', role: 'staff' },
     { id: 'staff-1', user_type: 'staff', role: 'staff' },
     { id: 'rentee-1', user_type: 'rentee', role: 'rentee' }
   ]);
 
-  assert.deepEqual(records.map((record) => record.id), ['rentee-1', 'rentee-2']);
+  assert.deepEqual(records.map((record) => record.id), ['rentee-1', 'rentee-2', 'rentee-3']);
 });
