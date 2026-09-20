@@ -1,787 +1,481 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { platform as platformClient } from '../services/platformClient';
-import { saveFile, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
-import { createAppUser, updateAppUser, inviteAppUser, fetchAppUser, findAppUserByEmail, storeStructuredAssociations, getStructuredAssociations } from '../services/appUserService';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { v4 as uuidv4 } from 'uuid';
-import { inviteUser, resendInvitation } from '../services/invitationService';
-import { createAppUser as createRenteeUser } from '../services/createAppUser';
-import { resendInvitation as newResendInvitation } from '../services/invitationService';
-
-// UI Components
 import FormInput from '../components/ui/FormInput';
-import Button from '../components/ui/Button';
-import Alert from '../components/ui/Alert';
-import PropertySelector from '../components/properties/PropertySelector';
-import ImageUpload from '../components/common/ImageUpload';
-import FormSelect from '../components/ui/FormSelect';
+import {
+  createRentee,
+  getRentee,
+  sendRenteeInvitation,
+  updateRentee
+} from '../services/renteeService';
+import {
+  listTenantProperties,
+  listTenantPropertyUnits
+} from '../services/propertyDirectoryService';
+import {
+  deleteTenantFiles,
+  extractStoragePath,
+  uploadTenantFile
+} from '../services/storageApiService';
+import {
+  getRenteeAssociations,
+  storeRenteeAssociations
+} from '../services/renteeAssociationCache';
+
+const ID_COPY_BUCKET = 'images';
+const ID_COPY_FOLDER = 'id-copies';
+
+const normalizePropertyIds = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
 
 const RenteeForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const isEditMode = !!id;
-  
-  // Form state
+  const isEditMode = Boolean(id);
+
   const [formData, setFormData] = useState({
     name: '',
-    contactDetails: {
-      email: '',
-      phone: '',
-      alternatePhone: '',
-      emergencyContact: ''
-    },
+    email: '',
+    phone: '',
+    nationalId: '',
+    permanentAddress: '',
     associatedPropertyIds: [],
-    national_id: '',
-    permanent_address: '',
     structuredAssociations: []
   });
-  
-  // UI state
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [idCopy, setIdCopy] = useState(null);
-  const [existingIdCopy, setExistingIdCopy] = useState(null);
   const [properties, setProperties] = useState([]);
   const [selectedProperty, setSelectedProperty] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
   const [propertyUnits, setPropertyUnits] = useState([]);
-  
-  // Fetch rentee data if in edit mode and available properties
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [idCopyFile, setIdCopyFile] = useState(null);
+  const [idCopyPreview, setIdCopyPreview] = useState(null);
+  const [existingIdCopyUrl, setExistingIdCopyUrl] = useState(null);
+
   useEffect(() => {
-    const fetchInitialData = async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         setLoading(true);
-        
-        // Fetch available properties
-        const { data: propertiesData, error: propertiesError } = await platformClient
-          .from('properties')
-          .select('*');
-        
-        if (propertiesError) {
-          throw propertiesError;
-        }
-        
-        // Format properties for display
-        const formattedProperties = propertiesData?.map(property => ({
-          id: property.id,
-          name: property.name || property.address || 'Unnamed Property',
-          propertytype: property.propertytype
-        })) || [];
-        
-        setProperties(formattedProperties);
-        
-        // If in edit mode, fetch rentee data from app_users table
-        if (isEditMode) {
-          const renteeData = await fetchAppUser(id);
-          
-          // Get structured associations from storage
-          const structuredAssociations = getStructuredAssociations(id);
-          
-          setFormData({
-            name: renteeData.name || '',
-            contactDetails: {
-              email: renteeData.email || '',
-              phone: renteeData.contact_details?.phone || '',
-              address: renteeData.contact_details?.address || ''
-            },
-            associatedPropertyIds: renteeData.associated_property_ids || [],
-            idCopy: renteeData.id_copy_url || null,
-            idCopyFile: null,
-            structuredAssociations: structuredAssociations.length > 0 ? structuredAssociations : [],
-            national_id: renteeData.national_id || '',
-            permanent_address: renteeData.permanent_address || '',
-          });
-          
-          if (renteeData.id_copy_url) {
-            setExistingIdCopy(renteeData.id_copy_url);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching initial data:', error.message);
-        setError(error.message);
+        setError(null);
+
+        const propertyData = await listTenantProperties();
+        if (cancelled) return;
+
+        setProperties(propertyData.map((property) => ({
+          ...property,
+          displayName: property.name || property.address || 'Unnamed Property'
+        })));
+
+        if (!isEditMode) return;
+
+        const rentee = await getRentee(id);
+        if (cancelled) return;
+
+        setFormData({
+          name: rentee?.name || '',
+          email: rentee?.email || rentee?.contact_details?.email || '',
+          phone: rentee?.contact_details?.phone || '',
+          nationalId: rentee?.national_id || '',
+          permanentAddress: rentee?.permanent_address || '',
+          associatedPropertyIds: normalizePropertyIds(rentee?.associated_property_ids),
+          structuredAssociations: getRenteeAssociations(id)
+        });
+        setExistingIdCopyUrl(rentee?.id_copy_url || null);
+      } catch (loadError) {
+        console.error('Failed to load tenant form:', loadError);
+        if (!cancelled) setError(loadError.message || 'Failed to load tenant information.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    
-    fetchInitialData();
-  }, [id, isEditMode]);
-  
-  // Fetch units for selected property
-  useEffect(() => {
-    if (selectedProperty) {
-      fetchPropertyUnits(selectedProperty);
-    } else {
-      setPropertyUnits([]);
-      setSelectedUnit('');
-    }
-  }, [selectedProperty]);
-  
-  // Handle form input change
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-  
-  // Handle contact details changes
-  const handleContactChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      contactDetails: {
-        ...prev.contactDetails,
-        [name]: value,
-      },
-    }));
-  };
-  
-  // Handle ID copy upload
-  const handleIdCopyUpload = async (file) => {
-    const fileName = `${uuidv4()}-${file.name}`;
-    const filePath = `${STORAGE_BUCKETS.IMAGES}/id-copies/${fileName}`;
-    
-    const { data, error } = await platformClient.storage
-      .from(STORAGE_BUCKETS.IMAGES.split('/')[0])
-      .upload(`id-copies/${fileName}`, file);
-    
-    if (error) {
-      throw error;
-    }
-    
-    const scopedFilePath = data?.scopedPath || data?.path || `id-copies/${fileName}`;
-    const { data: urlData } = platformClient.storage
-      .from(STORAGE_BUCKETS.IMAGES.split('/')[0])
-      .getPublicUrl(scopedFilePath);
-    
-    return urlData.publicUrl;
-  };
-  
-  // Handle ID copy preview
-  const handleIdCopyChange = async (file) => {
-    try {
-      setIdCopy(file);
-      
-      // If it's a new file, show preview
-      if (file instanceof File) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setExistingIdCopy(reader.result);
-        };
-        reader.readAsDataURL(file);
-      }
-    } catch (error) {
-      console.error('Error handling ID copy:', error);
-      toast.error('Failed to process ID copy');
-    }
-  };
-  
-  // Handle ID copy removal
-  const handleRemoveIdCopy = async () => {
-    try {
-      if (existingIdCopy) {
-        const fileName = existingIdCopy.split('/').pop();
-        await platformClient.storage
-          .from(STORAGE_BUCKETS.IMAGES.split('/')[0])
-          .remove([`id-copies/${fileName}`]);
-        
-        setExistingIdCopy(null);
-        
-        if (isEditMode) {
-          const result = await updateAppUser(id, { id_copy_url: null });
 
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to update rentee ID copy');
-          }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isEditMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUnits = async () => {
+      if (!selectedProperty) {
+        setPropertyUnits([]);
+        setSelectedUnit('');
+        return;
+      }
+
+      try {
+        const units = await listTenantPropertyUnits(selectedProperty);
+        if (!cancelled) setPropertyUnits(units);
+      } catch (unitError) {
+        console.error('Failed to load property units:', unitError);
+        if (!cancelled) {
+          setPropertyUnits([]);
+          toast.error('Unable to load units for this property.');
         }
       }
-      
-      setIdCopy(null);
-    } catch (error) {
-      console.error('Error removing ID copy:', error);
-      toast.error('Failed to remove ID copy');
-    }
+    };
+
+    loadUnits();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProperty]);
+
+  const selectedPropertyRecord = useMemo(
+    () => properties.find((property) => String(property.id) === String(selectedProperty)) || null,
+    [properties, selectedProperty]
+  );
+
+  const selectedPropertyIsApartment = selectedPropertyRecord?.propertytype === 'apartment';
+
+  const updateField = (field) => (event) => {
+    setFormData((previous) => ({ ...previous, [field]: event.target.value }));
   };
-  
-  // Handle property selection
-  const handlePropertyChange = (e) => {
-    setSelectedProperty(e.target.value);
-    setSelectedUnit(''); // Reset unit selection when property changes
-  };
-  
-  // Handle unit selection
-  const handleUnitChange = (e) => {
-    setSelectedUnit(e.target.value);
-  };
-  
-  // Check if property is an apartment
-  const isSelectedPropertyApartment = () => {
-    if (!selectedProperty) {
-      return false;
-    }
-    const property = properties.find(p => p.id === selectedProperty);
-    return property?.propertytype === 'apartment';
-  };
-  
-  // Add selected property to associated properties
-  const handleAddProperty = () => {
-    // Skip if no property selected or if already associated
-    if (!selectedProperty) {
+
+  const handleIdCopyChange = (event) => {
+    const file = event.target.files?.[0] || null;
+    setIdCopyFile(file);
+
+    if (!file) {
+      setIdCopyPreview(null);
       return;
     }
-    
-    // Check if this property-unit combination already exists
-    const alreadyExists = formData.structuredAssociations.some(
-      assoc => assoc.propertyId === selectedProperty && 
-              (!isSelectedPropertyApartment() || assoc.unitId === selectedUnit)
-    );
-    
-    if (alreadyExists) {
-      toast.error('This property or unit is already associated with this rentee');
+
+    const reader = new FileReader();
+    reader.onload = () => setIdCopyPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const removeExistingIdCopy = async () => {
+    try {
+      if (existingIdCopyUrl) {
+        const storedPath = extractStoragePath(existingIdCopyUrl, ID_COPY_BUCKET);
+        await deleteTenantFiles({ bucket: ID_COPY_BUCKET, paths: [storedPath] });
+
+        if (isEditMode) {
+          await updateRentee(id, { id_copy_url: null });
+        }
+      }
+
+      setExistingIdCopyUrl(null);
+      setIdCopyFile(null);
+      setIdCopyPreview(null);
+    } catch (removeError) {
+      console.error('Failed to remove ID copy:', removeError);
+      toast.error(removeError.message || 'Failed to remove ID copy.');
+    }
+  };
+
+  const addPropertyAssociation = () => {
+    if (!selectedProperty) return;
+
+    if (selectedPropertyIsApartment && !selectedUnit) {
+      toast.error('Select a unit for this apartment.');
       return;
     }
-    
-    // For apartments, require unit selection
-    if (isSelectedPropertyApartment() && !selectedUnit) {
-      toast.error('Please select a unit for this apartment property');
+
+    const duplicate = formData.structuredAssociations.some((association) => (
+      String(association.propertyId) === String(selectedProperty)
+      && String(association.unitId || '') === String(selectedPropertyIsApartment ? selectedUnit : '')
+    ));
+
+    if (duplicate) {
+      toast.error('This property or unit is already associated with the tenant.');
       return;
     }
-    
-    // Add to legacy array (for backward compatibility)
-    if (!formData.associatedPropertyIds.includes(selectedProperty)) {
-      setFormData(prev => ({
-        ...prev,
-        associatedPropertyIds: [...prev.associatedPropertyIds, selectedProperty]
-      }));
-    }
-    
-    // Add to structured associations
-    setFormData(prev => ({
-      ...prev,
-      structuredAssociations: [...prev.structuredAssociations, {
-        propertyId: selectedProperty,
-        unitId: isSelectedPropertyApartment() ? selectedUnit : null
-      }]
+
+    setFormData((previous) => ({
+      ...previous,
+      associatedPropertyIds: previous.associatedPropertyIds.some((propertyId) => String(propertyId) === String(selectedProperty))
+        ? previous.associatedPropertyIds
+        : [...previous.associatedPropertyIds, selectedProperty],
+      structuredAssociations: [
+        ...previous.structuredAssociations,
+        {
+          propertyId: selectedProperty,
+          unitId: selectedPropertyIsApartment ? selectedUnit : null
+        }
+      ]
     }));
-    
-    // Reset selections
+
     setSelectedProperty('');
     setSelectedUnit('');
   };
-  
-  // Remove property from associated properties
-  const handleRemoveProperty = (index) => {
-    const association = formData.structuredAssociations[index];
-    
-    // Update structured associations
-    setFormData(prev => ({
-      ...prev,
-      structuredAssociations: prev.structuredAssociations.filter((_, i) => i !== index)
-    }));
-    
-    // Check if this property is no longer associated in any unit
-    // If so, also remove from legacy array
-    const stillAssociated = formData.structuredAssociations.some(
-      (assoc, i) => i !== index && assoc.propertyId === association.propertyId
-    );
-    
-    if (!stillAssociated) {
-      setFormData(prev => ({
-        ...prev,
-        associatedPropertyIds: prev.associatedPropertyIds.filter(id => id !== association.propertyId)
-      }));
+
+  const removePropertyAssociation = (index) => {
+    setFormData((previous) => {
+      const removed = previous.structuredAssociations[index];
+      const structuredAssociations = previous.structuredAssociations.filter((_, associationIndex) => associationIndex !== index);
+      const stillUsesProperty = structuredAssociations.some(
+        (association) => String(association.propertyId) === String(removed?.propertyId)
+      );
+
+      return {
+        ...previous,
+        structuredAssociations,
+        associatedPropertyIds: stillUsesProperty
+          ? previous.associatedPropertyIds
+          : previous.associatedPropertyIds.filter((propertyId) => String(propertyId) !== String(removed?.propertyId))
+      };
+    });
+  };
+
+  const describeAssociation = (association) => {
+    const property = properties.find((item) => String(item.id) === String(association.propertyId));
+    const propertyName = property?.displayName || association.propertyId;
+
+    if (!association.unitId) return propertyName;
+
+    const unit = propertyUnits.find((item) => String(item.id) === String(association.unitId));
+    return `${propertyName} — Unit ${unit?.unitnumber || association.unitId}`;
+  };
+
+  const saveTenant = async ({ inviteAfterSave }) => {
+    const email = formData.email.trim().toLowerCase();
+    const name = formData.name.trim();
+
+    if (!name || !email || !formData.phone.trim() || !formData.nationalId.trim() || !formData.permanentAddress.trim()) {
+      throw new Error('Complete all required tenant information before saving.');
+    }
+
+    let idCopyUrl = existingIdCopyUrl;
+    if (idCopyFile) {
+      const safeName = idCopyFile.name.replace(/[^A-Za-z0-9._-]/g, '_');
+      const uniquePart = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const upload = await uploadTenantFile({
+        bucket: ID_COPY_BUCKET,
+        path: `${ID_COPY_FOLDER}/${uniquePart}-${safeName}`,
+        file: idCopyFile
+      });
+      idCopyUrl = upload.url;
+    }
+
+    const payload = {
+      name,
+      email,
+      role: 'rentee',
+      user_type: 'rentee',
+      contact_details: {
+        email,
+        phone: formData.phone.trim()
+      },
+      id_copy_url: idCopyUrl || null,
+      associated_property_ids: formData.associatedPropertyIds,
+      national_id: formData.nationalId.trim(),
+      permanent_address: formData.permanentAddress.trim()
+    };
+
+    const saved = isEditMode
+      ? await updateRentee(id, payload)
+      : await createRentee(payload);
+
+    const renterId = isEditMode ? id : saved?.id;
+    if (!renterId) {
+      throw new Error('The server saved the tenant but did not return an identity ID.');
+    }
+
+    storeRenteeAssociations(renterId, formData.structuredAssociations);
+
+    if (inviteAfterSave) {
+      await sendRenteeInvitation({ id: renterId, email, name });
     }
   };
-  
-  // Fetch units for a property
-  const fetchPropertyUnits = async (propertyId) => {
-    try {
-      const { data, error } = await platformClient
-        .from('property_units')
-        .select('*')
-        .eq('propertyid', propertyId)
-        .order('unitnumber');
-      
-      if (error) {
-        throw error;
-      }
-      setPropertyUnits(data || []);
-    } catch (error) {
-      console.error('Error fetching property units:', error);
-      setPropertyUnits([]);
-    }
-  };
-  
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const inviteAfterSave = event.nativeEvent?.submitter?.value === 'save-invite';
+
     try {
       setSubmitting(true);
       setError(null);
-      setSuccess(null);
-      
-      // Validate required fields
-      if (!formData.name) {
-        throw new Error('Name is required');
-      }
-      if (!formData.contactDetails.email) {
-        throw new Error('Email is required');
-      }
-      
-      // Process form data
-      const processedFormData = { ...formData };
-      
-      // Upload ID copy if provided
-      let idCopyUrl = isEditMode ? existingIdCopy : null;
-      if (idCopy instanceof File) {
-        try {
-          console.log('Uploading new ID copy...');
-          idCopyUrl = await handleIdCopyUpload(idCopy);
-          console.log('ID copy uploaded, URL:', idCopyUrl);
-        } catch (error) {
-          console.error('Error uploading ID copy:', error);
-          throw new Error('Failed to upload ID copy: ' + error.message);
-        }
-      }
-      
-      // Prepare data for app_users table
-      const appUserData = {
-        name: processedFormData.name,
-        email: processedFormData.contactDetails.email,
-        role: 'rentee',
-        user_type: 'rentee',
-        contact_details: processedFormData.contactDetails,
-        id_copy_url: idCopyUrl || null,
-        associated_property_ids: Array.isArray(processedFormData.associatedPropertyIds) ? processedFormData.associatedPropertyIds : [],
-        invited: false,
-        national_id: processedFormData.national_id,
-        permanent_address: processedFormData.permanent_address,
-      };
-      
-      // Save to app_users table
-      let result;
-      if (isEditMode) {
-        result = await updateAppUser(id, appUserData);
-      } else {
-        result = await createRenteeUser(appUserData, 'rentee');
-      }
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save rentee');
-      }
-      
-      // Get the user ID from the result data
-      const userId = isEditMode ? id : (result.data ? result.data.id : null);
-      
-      // Store structured associations separately
-      if (userId) {
-        const structuredAssociations = Array.isArray(processedFormData.structuredAssociations) 
-          ? processedFormData.structuredAssociations 
-          : [];
-        
-        storeStructuredAssociations(userId, structuredAssociations);
-      }
-      
-      // Don't automatically send invitation - just show success message
-      setSuccess(`Rentee ${isEditMode ? 'updated' : 'created'} successfully!`);
-      
-      // Navigate back to rentee list after a short delay
-      setTimeout(() => {
-        navigate('/dashboard/rentees');
-      }, 1500);
-      
-    } catch (error) {
-      console.error('Error saving rentee:', error.message);
-      setError(error.message);
+      await saveTenant({ inviteAfterSave });
+      toast.success(inviteAfterSave ? 'Tenant saved and invitation sent.' : 'Tenant saved successfully.');
+      navigate('/dashboard/rentees');
+    } catch (saveError) {
+      console.error('Failed to save tenant:', saveError);
+      setError(saveError.message || 'Failed to save tenant.');
     } finally {
       setSubmitting(false);
     }
   };
-  
-  // Replace the handleSendInvitation function with a new implementation
-  const handleSendInvitation = async () => {
-    try {
-      if (!formData.contactDetails.email) {
-        toast.error('Email is required to send an invitation');
-        return;
-      }
 
-      // For newly created users, we need to look up the user ID by email
-      let userIdToUse = id; // For edit mode, use the existing ID
-      
-      if (!userIdToUse) {
-        // If we're in create mode and just created a user, we need to find their ID
-        const lookupResult = await findAppUserByEmail(formData.contactDetails.email.toLowerCase());
-        const foundUser = lookupResult.data;
-
-        if (!lookupResult.success || !foundUser) {
-          toast.error('Could not find user record. Please try again.');
-          console.error('Error finding user by email:', lookupResult.error);
-          return;
-        }
-        
-        userIdToUse = foundUser.id;
-      }
-      
-      if (!userIdToUse) {
-        toast.error('User ID not available. Please try again.');
-        return;
-      }
-
-      console.log(`Sending invitation to ${formData.name} (${formData.contactDetails.email})`);
-      
-      // For existing users, use resendInvitation
-      if (isEditMode) {
-        const result = await newResendInvitation(userIdToUse);
-        
-        if (!result.success) {
-          toast.error(`Failed to send invitation: ${result.error}`);
-          console.error('Invitation error details:', result);
-          return;
-        }
-        
-        if (result.emailSent) {
-          toast.success('Invitation email sent successfully!');
-        } else {
-          toast.success('Invitation processed but there was an issue with the email service');
-        }
-      } 
-      // For new users, create and invite in one step
-      else {
-        const result = await inviteUser({
-          email: formData.contactDetails.email,
-          name: formData.name,
-          role: 'rentee',
-          userType: 'rentee'
-        });
-        
-        if (!result.success) {
-          toast.error(`Failed to create user: ${result.error}`);
-          console.error('User creation error:', result);
-          return;
-        }
-        
-        if (result.emailSent) {
-          toast.success('User created and invitation email sent successfully!');
-        } else {
-          toast.success('User created but there was an issue with the email service');
-        }
-      }
-      
-      // Force refresh after a short delay
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
-      console.error('Error sending invitation:', error);
-      toast.error(`Failed to send invitation: ${error.message}`);
-    }
-  };
-  
-  // Helper to get property name
-  const getPropertyName = (propertyId) => {
-    const property = properties.find(p => p.id === propertyId);
-    return property ? property.name : propertyId;
-  };
-  
-  // Helper to get unit number
-  const getUnitNumber = (unitId) => {
-    if (!unitId) {
-      return null;
-    }
-    
-    for (const property of properties) {
-      if (property.propertytype !== 'apartment') {
-        continue;
-      }
-      
-      const units = propertyUnits.filter(u => u.propertyid === property.id);
-      const unit = units.find(u => u.id === unitId);
-      if (unit) {
-        return unit.unitnumber;
-      }
-    }
-    
-    return unitId;
-  };
-  
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading rentee data...</div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="text-lg">Loading tenant information...</div>
       </div>
     );
   }
-  
+
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-6">
-        {isEditMode ? 'Edit Rentee' : 'Add New Rentee'}
-      </h1>
-      
+    <div className="container mx-auto max-w-5xl px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">{isEditMode ? 'Edit Tenant' : 'Add Tenant'}</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Tenant identity, organization membership and portal invitation are managed as one tenant workflow.
+        </p>
+      </div>
+
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
-          <strong className="font-bold">Error!</strong>
-          <span className="block sm:inline ml-2">{error}</span>
+        <div className="mb-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-red-700" role="alert">
+          {error}
         </div>
       )}
-      
-      {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-6" role="alert">
-          <strong className="font-bold">Success!</strong>
-          <span className="block sm:inline ml-2">{success}</span>
-          
-          {/* Show invitation option after success */}
-          <div className="mt-4 pt-4 border-t border-green-300">
-            <strong className="font-bold">Next step:</strong>
-            <span className="block sm:inline ml-2">Send an invitation to allow this rentee to set up their account.</span>
-            
-            <button
-              type="button"
-              onClick={handleSendInvitation}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
-            >
-              Send Invitation
-            </button>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <section className="rounded-lg bg-white p-6 shadow">
+          <h2 className="mb-4 text-lg font-medium">Basic Information</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormInput label="Full Name" id="name" name="name" value={formData.name} onChange={updateField('name')} required />
+            <FormInput label="Email" id="email" name="email" type="email" value={formData.email} onChange={updateField('email')} required />
+            <FormInput label="Phone Number" id="phone" name="phone" value={formData.phone} onChange={updateField('phone')} required />
+            <FormInput label="National ID" id="national_id" name="national_id" value={formData.nationalId} onChange={updateField('nationalId')} required />
           </div>
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Basic Information */}
-          <div>
-            <h2 className="text-lg font-medium mb-4">Basic Information</h2>
-            
-            <FormInput
-              label="Full Name"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              placeholder="e.g., John Doe"
+
+          <div className="mt-4">
+            <label htmlFor="permanent_address" className="block text-sm font-medium text-gray-700">
+              Permanent Address <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="permanent_address"
+              rows={3}
+              value={formData.permanentAddress}
+              onChange={updateField('permanentAddress')}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
               required
             />
-            
-            <FormInput
-              label="Email"
-              id="email"
-              name="email"
-              type="email"
-              value={formData.contactDetails.email}
-              onChange={handleContactChange}
-              placeholder="e.g., john.doe@example.com"
-              required
-            />
-            
-            <FormInput
-              label="Phone Number"
-              id="phone"
-              name="phone"
-              value={formData.contactDetails.phone}
-              onChange={handleContactChange}
-              placeholder="e.g., 0771234567"
-              required
+          </div>
+
+          <div className="mt-6">
+            <label htmlFor="id-copy" className="block text-sm font-medium text-gray-700">ID Copy</label>
+            <input
+              id="id-copy"
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={handleIdCopyChange}
+              className="mt-2 block w-full text-sm text-gray-600"
             />
 
-            <FormInput
-              label="National ID"
-              id="national_id"
-              name="national_id"
-              value={formData.national_id || ''}
-              onChange={handleInputChange}
-              placeholder="e.g., 123456789"
-              required
-            />
-
-            <div className="mb-4">
-              <label htmlFor="permanent_address" className="block text-sm font-medium text-gray-700">
-                Permanent Address <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                id="permanent_address"
-                name="permanent_address"
-                rows={3}
-                value={formData.permanent_address || ''}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="Enter permanent residential address"
-                required
-              />
-            </div>
-            
-            {/* ID Copy Upload */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ID Copy
-              </label>
-              <ImageUpload
-                onImagesChange={(files) => handleIdCopyChange(files[0])}
-                maxImages={1}
-                initialImages={existingIdCopy ? [{ url: existingIdCopy }] : []}
-                bucket={STORAGE_BUCKETS.IMAGES}
-                folder="id-copies"
-                acceptedTypes={['image/jpeg', 'image/png', 'image/gif', 'application/pdf']}
-                maxSizeInMB={5}
-              />
-              {existingIdCopy && (
-                <div className="mt-2">
-                  {existingIdCopy.endsWith('.pdf') ? (
-                    <div className="flex items-center space-x-2">
-                      <svg className="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
-                      </svg>
-                      <span className="text-sm text-gray-500">PDF Document</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={existingIdCopy}
-                      alt="ID Copy Preview"
-                      className="h-32 w-auto object-contain rounded-md"
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleRemoveIdCopy}
-                    className="mt-2 text-sm text-red-600 hover:text-red-800"
-                  >
-                    Remove ID Copy
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Property Assignment */}
-          <div>
-            <h2 className="text-lg font-medium mb-4">Property Assignment</h2>
-            
-            <div className="mb-4">
-              <label htmlFor="property" className="block text-sm font-medium text-gray-700 mb-1">
-                Select Property
-              </label>
-              <div className="flex flex-col space-y-2">
-                <div className="flex-grow">
-                  <select
-                    id="property"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedProperty}
-                    onChange={handlePropertyChange}
-                  >
-                    <option value="">Select a property</option>
-                    {properties.map(property => (
-                      <option 
-                        key={property.id} 
-                        value={property.id}
-                      >
-                        {property.name} ({property.propertytype})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* Show unit selection for apartments */}
-                {isSelectedPropertyApartment() && (
-                  <div className="flex-grow">
-                    <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1">
-                      Select Unit
-                    </label>
-                    <select
-                      id="unit"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      value={selectedUnit}
-                      onChange={handleUnitChange}
-                    >
-                      <option value="">Select a unit</option>
-                      {propertyUnits.map(unit => (
-                        <option 
-                          key={unit.id} 
-                          value={unit.id}
-                        >
-                          Unit {unit.unitnumber}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            {(idCopyPreview || existingIdCopyUrl) && (
+              <div className="mt-3 flex items-center gap-4">
+                {(idCopyFile?.type || '').startsWith('image/') || (!idCopyFile && existingIdCopyUrl && !existingIdCopyUrl.toLowerCase().endsWith('.pdf')) ? (
+                  <img src={idCopyPreview || existingIdCopyUrl} alt="ID copy preview" className="h-28 max-w-xs rounded object-contain" />
+                ) : (
+                  <span className="text-sm text-gray-600">ID document selected</span>
                 )}
-                
-                <button
-                  type="button"
-                  onClick={handleAddProperty}
-                  disabled={!selectedProperty || (isSelectedPropertyApartment() && !selectedUnit)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  Add Property
+                <button type="button" onClick={removeExistingIdCopy} className="text-sm text-red-600 hover:text-red-800">
+                  Remove ID Copy
                 </button>
               </div>
-            </div>
-            
-            {/* Associated Properties */}
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg bg-white p-6 shadow">
+          <h2 className="mb-4 text-lg font-medium">Property Assignment</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Associated Properties
-              </label>
-              
-              {formData.structuredAssociations.length > 0 ? (
-                <div className="space-y-3">
-                  {formData.structuredAssociations.map((assoc, index) => {
-                    const property = properties.find(p => p.id === assoc.propertyId);
-                    const propertyName = property ? property.name : assoc.propertyId;
-                    const unitNumber = assoc.unitId ? getUnitNumber(assoc.unitId) : null;
-                    
-                    return (
-                      <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-white">
-                        <div>
-                          <span className="text-sm font-medium">{propertyName}</span>
-                          {unitNumber && (
-                            <span className="text-sm text-gray-500 ml-2">
-                              (Unit {unitNumber})
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveProperty(index)}
-                          className="text-red-600 hover:text-red-800"
-                          aria-label="Remove property"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
-                  <p className="text-sm text-gray-500">No properties assigned yet.</p>
-                </div>
-              )}
+              <label htmlFor="property" className="block text-sm font-medium text-gray-700">Property</label>
+              <select
+                id="property"
+                value={selectedProperty}
+                onChange={(event) => {
+                  setSelectedProperty(event.target.value);
+                  setSelectedUnit('');
+                }}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              >
+                <option value="">Select a property</option>
+                {properties.map((property) => (
+                  <option key={property.id} value={property.id}>
+                    {property.displayName} ({property.propertytype})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedPropertyIsApartment && (
+              <div>
+                <label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unit</label>
+                <select
+                  id="unit"
+                  value={selectedUnit}
+                  onChange={(event) => setSelectedUnit(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+                >
+                  <option value="">Select a unit</option>
+                  {propertyUnits.map((unit) => (
+                    <option key={unit.id} value={unit.id}>Unit {unit.unitnumber}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={addPropertyAssociation}
+                disabled={!selectedProperty || (selectedPropertyIsApartment && !selectedUnit)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                Add Property
+              </button>
             </div>
           </div>
-        </div>
-        
-        {/* Form Actions */}
-        <div className="flex justify-end space-x-3">
+
+          <div className="mt-5 space-y-2">
+            <div className="text-sm font-medium text-gray-700">Associated Properties</div>
+            {formData.structuredAssociations.length === 0 ? (
+              <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">No properties assigned yet.</div>
+            ) : (
+              formData.structuredAssociations.map((association, index) => (
+                <div key={`${association.propertyId}-${association.unitId || 'property'}-${index}`} className="flex items-center justify-between rounded border border-gray-200 p-3">
+                  <span className="text-sm">{describeAssociation(association)}</span>
+                  <button type="button" onClick={() => removePropertyAssociation(index)} className="text-sm text-red-600 hover:text-red-800">Remove</button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={() => navigate('/dashboard/rentees')}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
             disabled={submitting}
+            className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            value="save"
             disabled={submitting}
+            className="rounded-md border border-blue-600 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
           >
-            {submitting ? 'Saving...' : isEditMode ? 'Update Rentee' : 'Add Rentee'}
+            {submitting ? 'Saving...' : 'Save Tenant'}
+          </button>
+          <button
+            type="submit"
+            value="save-invite"
+            disabled={submitting}
+            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {submitting ? 'Saving...' : 'Save & Invite'}
           </button>
         </div>
       </form>
@@ -789,4 +483,4 @@ const RenteeForm = () => {
   );
 };
 
-export default RenteeForm; 
+export default RenteeForm;

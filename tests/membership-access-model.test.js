@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { normalizeMembershipAccess } from '../src/api/mssql/membershipAdminRepository.js';
 import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
+
+const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
+const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -94,4 +98,17 @@ test('rejects unknown roles and staff bundles', () => {
     () => normalizeMembershipAccess({ role: 'staff', permission_bundle: 'everything' }),
     (error) => error?.status === 400 && error?.code === 'TENANT_MEMBERSHIP_INVALID_PERMISSION_BUNDLE'
   );
+});
+
+test('attaching an existing global renter identity applies the submitted profile before membership projection', () => {
+  assert.match(renteeRepositorySource, /const profileUpdates = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
+  assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profileUpdates\);/);
+});
+
+test('tenant onboarding no longer depends on the Supabase-shaped compatibility client', () => {
+  assert.doesNotMatch(renteeFormSource, /platformClient/);
+  assert.doesNotMatch(renteeFormSource, /appUserService/);
+  assert.match(renteeFormSource, /createRentee/);
+  assert.match(renteeFormSource, /sendRenteeInvitation/);
+  assert.match(renteeFormSource, /Save & Invite/);
 });

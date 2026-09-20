@@ -23,6 +23,18 @@ const RENTEE_PROFILE_FIELDS = new Set([
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
 
+const buildProfileUpdates = (payload = {}) => {
+  const updates = {};
+
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (RENTEE_PROFILE_FIELDS.has(key) && value !== undefined) {
+      updates[key] = key === 'email' ? normalizeEmail(value) : value;
+    }
+  });
+
+  return updates;
+};
+
 const parseJsonValue = (value) => {
   if (typeof value !== 'string') {
     return value;
@@ -166,13 +178,7 @@ export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
     return null;
   }
 
-  const updates = {};
-  Object.entries(payload || {}).forEach(([key, value]) => {
-    if (RENTEE_PROFILE_FIELDS.has(key) && value !== undefined) {
-      updates[key] = key === 'email' ? normalizeEmail(value) : value;
-    }
-  });
-
+  const updates = buildProfileUpdates(payload);
   if (Object.keys(updates).length === 0) {
     return current;
   }
@@ -203,10 +209,17 @@ export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
     });
     created = true;
   } else {
-    // Older renter rows were intentionally not given memberships during the
-    // multi-tenant backfill. Preserve their original organization before
-    // attaching the same identity to another organization.
+    // Preserve any legacy/default organization before the same global identity
+    // gains another organization membership.
     await seedLegacyDefaultMembership(user, tenantId);
+
+    // Attach must behave like the business-level create operation. Apply the
+    // submitted renter profile to the reused global identity instead of merely
+    // creating a membership and returning stale/missing profile data.
+    const profileUpdates = buildProfileUpdates({ ...payload, email });
+    if (Object.keys(profileUpdates).length > 0) {
+      user = await updateAppUser(user.id, profileUpdates);
+    }
   }
 
   let membership = await getTenantMembership(tenantId, user.id);
