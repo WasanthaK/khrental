@@ -9,6 +9,8 @@ const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', imp
 const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.js', import.meta.url), 'utf8');
 const inviteButtonSource = readFileSync(new URL('../src/components/common/InviteUserButton.jsx', import.meta.url), 'utf8');
 const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
+const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
+const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -137,4 +139,27 @@ test('simulated invitations never create a token or call the email delivery endp
   assert.doesNotMatch(simulationBlock, /sendDirectEmail/);
   assert.match(invitationServiceSource, /const inviteData = await createSecureInvitation\(userDetails\);/);
   assert.match(invitationServiceSource, /const emailResult = await sendDirectEmail\(\{/);
+});
+
+test('production database migrations are manual, ordered and checksum tracked', () => {
+  assert.match(migrationWorkflowSource, /workflow_dispatch:/);
+  assert.doesNotMatch(migrationWorkflowSource, /\n\s+push:/);
+  assert.match(migrationWorkflowSource, /environment: Production/);
+  assert.match(migrationWorkflowSource, /APPLY-PRODUCTION/);
+  assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN/);
+  assert.match(migrationWorkflowSource, /firewall-rule create/);
+  assert.match(migrationWorkflowSource, /if: always\(\).*AZURE_SQL_FIREWALL_RULE/);
+
+  const migrationOrder = [
+    '20260920_01_add_tenancy_billing_adjustments',
+    '20260920_02_create_platform_admins',
+    '20260920_03_backfill_legacy_app_user_memberships'
+  ].map((id) => migrationRunnerSource.indexOf(`id: '${id}'`));
+
+  assert.ok(migrationOrder.every((position) => position >= 0));
+  assert.ok(migrationOrder[0] < migrationOrder[1] && migrationOrder[1] < migrationOrder[2]);
+  assert.match(migrationRunnerSource, /createHash\('sha256'\)/);
+  assert.match(migrationRunnerSource, /dbo\.schema_migrations/);
+  assert.match(migrationRunnerSource, /previously applied with checksum/);
+  assert.match(migrationRunnerSource, /await item\.migration\.verify\(pool\);/);
 });
