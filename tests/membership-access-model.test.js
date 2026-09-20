@@ -6,6 +6,7 @@ import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 
 const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
 const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
+const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.js', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -103,6 +104,12 @@ test('rejects unknown roles and staff bundles', () => {
 test('attaching an existing global renter identity applies the submitted profile before membership projection', () => {
   assert.match(renteeRepositorySource, /const profileUpdates = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
   assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profileUpdates\);/);
+});
+
+test('renter create service returns the created renter record instead of the create metadata envelope', () => {
+  assert.match(renteeServiceSource, /const result = await requestMssqlApi\('\/api\/mssql\/rentees'/);
+  assert.match(renteeServiceSource, /return result\?\.data \|\| result;/);
+  assert.match(renteeFormSource, /const renterId = isEditMode \? id : saved\?\.id;/);
 });
 
 test('tenant onboarding no longer depends on the Supabase-shaped compatibility client', () => {
