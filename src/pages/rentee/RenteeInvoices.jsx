@@ -19,6 +19,7 @@ const RenteeInvoices = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [showPaymentUpload, setShowPaymentUpload] = useState(false);
+  const [paymentLoadingId, setPaymentLoadingId] = useState(null);
   const [account, setAccount] = useState(null);
   const [accountLoading, setAccountLoading] = useState(false);
   const dataFetched = useRef(false);
@@ -79,6 +80,26 @@ const RenteeInvoices = () => {
     }
     setShowPaymentUpload(false);
     setSelectedInvoice(null);
+    setAccount(null);
+  };
+
+  const handleOpenPaymentUpload = async (invoice) => {
+    try {
+      setPaymentLoadingId(invoice.id);
+      setError(null);
+      const { data, error: accountError } = await getInvoiceAccount(invoice.id);
+      if (accountError) throw accountError;
+      if (!data || Number(data.outstandingBalance) <= 0) {
+        throw new Error('This invoice has no outstanding balance to pay.');
+      }
+      setSelectedInvoice(invoice);
+      setAccount(data);
+      setShowPaymentUpload(true);
+    } catch (paymentError) {
+      setError(paymentError.message);
+    } finally {
+      setPaymentLoadingId(null);
+    }
   };
 
   const handleViewAccount = async (invoice) => {
@@ -166,14 +187,11 @@ const RenteeInvoices = () => {
                   {canSubmit && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedInvoice(invoice);
-                        setShowPaymentUpload(true);
-                        setAccount(null);
-                      }}
-                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                      disabled={paymentLoadingId === invoice.id}
+                      onClick={() => handleOpenPaymentUpload(invoice)}
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:bg-gray-400"
                     >
-                      Submit Payment Proof
+                      {paymentLoadingId === invoice.id ? 'Loading Balance…' : 'Submit Payment Proof'}
                     </button>
                   )}
                 </div>
@@ -185,13 +203,14 @@ const RenteeInvoices = () => {
 
       {showPaymentUpload && selectedInvoice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-semibold mb-2">Submit Payment Proof</h2>
             <p className="mb-4 text-sm text-gray-600">
-              Invoice #{selectedInvoice.id.substring(0, 8)} · {formatCurrency(selectedInvoice.totalamount || 0)}
+              Invoice #{selectedInvoice.id.substring(0, 8)} · {formatCurrency(selectedInvoice.totalamount || 0)} total
             </p>
             <PaymentProofUpload
               invoiceId={selectedInvoice.id}
+              outstandingBalance={account?.outstandingBalance}
               onSuccess={handlePaymentUploadSuccess}
               onError={setError}
             />
@@ -201,6 +220,7 @@ const RenteeInvoices = () => {
                 onClick={() => {
                   setShowPaymentUpload(false);
                   setSelectedInvoice(null);
+                  setAccount(null);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
@@ -240,6 +260,8 @@ const RenteeInvoices = () => {
                         <div key={payment.id} className="rounded border border-gray-200 p-3 text-sm">
                           <div className="flex justify-between gap-2"><span>{formatCurrency(payment.amount)}</span><span className="capitalize">{payment.status}</span></div>
                           <div className="text-gray-500 mt-1">{formatDate(payment.paymentdate || payment.createdat)}</div>
+                          {payment.paymentmethod && <div className="text-gray-500 mt-1">Method: {payment.paymentmethod}</div>}
+                          {payment.transactionreference && <div className="text-gray-500 mt-1">Reference: {payment.transactionreference}</div>}
                           {payment.rejection_reason && <div className="text-red-700 mt-1">Reason: {payment.rejection_reason}</div>}
                         </div>
                       ))}

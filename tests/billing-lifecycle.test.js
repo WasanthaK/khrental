@@ -3,11 +3,45 @@ import assert from 'node:assert/strict';
 import {
   PAYMENT_STATUS,
   INVOICE_STATUS,
+  agreementOverlapsBillingPeriod,
   calculateVerifiedPaymentTotal,
   calculateOutstandingBalance,
   getInvoiceStatusAfterVerification,
   canSubmitPaymentProof
 } from '../src/api/platform/billingLifecycle.js';
+
+test('billing period must overlap the agreement term', () => {
+  const periodStart = '2026-09-01T00:00:00.000Z';
+  const periodEnd = '2026-10-01T00:00:00.000Z';
+
+  assert.equal(agreementOverlapsBillingPeriod({
+    agreementStart: '2026-09-10T00:00:00.000Z',
+    agreementEnd: '2027-09-09T00:00:00.000Z',
+    periodStart,
+    periodEnd
+  }), true);
+
+  assert.equal(agreementOverlapsBillingPeriod({
+    agreementStart: '2026-10-01T00:00:00.000Z',
+    agreementEnd: '2027-09-30T00:00:00.000Z',
+    periodStart,
+    periodEnd
+  }), false);
+
+  assert.equal(agreementOverlapsBillingPeriod({
+    agreementStart: '2025-09-01T00:00:00.000Z',
+    agreementEnd: '2026-08-31T23:59:59.000Z',
+    periodStart,
+    periodEnd
+  }), false);
+});
+
+test('open-ended agreement dates still allow overlapping billing', () => {
+  assert.equal(agreementOverlapsBillingPeriod({
+    periodStart: '2026-09-01T00:00:00.000Z',
+    periodEnd: '2026-10-01T00:00:00.000Z'
+  }), true);
+});
 
 test('verified payments alone reduce the outstanding balance', () => {
   const payments = [

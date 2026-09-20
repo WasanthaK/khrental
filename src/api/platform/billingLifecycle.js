@@ -18,6 +18,29 @@ const toAmount = (value) => {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
 };
 
+const toDate = (value) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+export const agreementOverlapsBillingPeriod = ({
+  agreementStart = null,
+  agreementEnd = null,
+  periodStart,
+  periodEnd
+}) => {
+  const start = toDate(agreementStart);
+  const end = toDate(agreementEnd);
+  const billingStart = toDate(periodStart);
+  const billingEnd = toDate(periodEnd);
+
+  if (!billingStart || !billingEnd || billingEnd <= billingStart) return false;
+  if (start && start >= billingEnd) return false;
+  if (end && end < billingStart) return false;
+  return true;
+};
+
 export const calculateVerifiedPaymentTotal = (payments = []) => (
   Math.round((payments || []).reduce((total, payment) => (
     String(payment?.status || '').toLowerCase() === PAYMENT_STATUS.VERIFIED
