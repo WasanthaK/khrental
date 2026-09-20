@@ -228,6 +228,42 @@ export const recordInvoiceReminder = async (invoiceId) => {
   }
 };
 
+export const getMonthlyBillingContext = async ({ propertyId, billingPeriod } = {}) => {
+  try {
+    const params = new URLSearchParams();
+    if (propertyId) params.set('propertyId', propertyId);
+    if (billingPeriod) params.set('billingPeriod', billingPeriod);
+    const payload = await billingRequest(`/monthly-billing-context?${params.toString()}`);
+    return { data: payload?.data || { tenancies: [], adjustments: [], schemaAvailable: false }, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const createBillingAdjustment = async (agreementId, adjustment = {}) => {
+  try {
+    const payload = await billingRequest(`/agreements/${encodeURIComponent(agreementId)}/billing-adjustments`, {
+      method: 'POST',
+      body: adjustment
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const voidBillingAdjustment = async (adjustmentId, reason) => {
+  try {
+    const payload = await billingRequest(`/billing-adjustments/${encodeURIComponent(adjustmentId)}/void`, {
+      method: 'POST',
+      body: { reason }
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const generateTenancyMonthlyInvoices = async (options = {}) => {
   try {
     const payload = await billingRequest('/monthly-invoices', {
