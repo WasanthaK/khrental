@@ -1,6 +1,6 @@
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
 
-const SIGNED_STATUSES = new Set(['signed', 'pending_activation', 'active']);
+const SIGNED_STATUSES = new Set(['signed', 'active']);
 const SIGNATURE_COMPLETE_STATUSES = new Set([
   'signed',
   'completed',
