@@ -2,15 +2,17 @@
 
 KH Rentals production web containers must not run schema DDL during startup. The application identity is intentionally restricted to runtime data access.
 
-Production schema changes use the manual GitHub Actions workflow:
+Production schema changes use the GitHub Actions workflow:
 
 `Run production database migrations`
 
+Relevant migration changes pushed to `main` automatically run a read-only `plan` through all managed migrations. Production schema writes remain explicit and separately authorized.
+
 ## Authentication
 
-The workflow signs in to Azure with the existing GitHub OIDC Production credentials and obtains an Azure SQL access token. The OIDC service principal must exist as a user in the KH Rentals production database and must have the DDL permissions required by approved migrations.
+The workflow signs in to Azure with the existing GitHub OIDC Production credentials and obtains an Azure SQL access token.
 
-If Azure OIDC database permissions are not available, the workflow can instead use dedicated GitHub Production secrets:
+If a dedicated privileged SQL migration identity is used for schema changes, configure the GitHub Production secrets:
 
 - `MSSQL_MIGRATION_USER`
 - `MSSQL_MIGRATION_PASSWORD`
@@ -19,27 +21,31 @@ These credentials are migration-only credentials. Do not configure them on the K
 
 The production database endpoint is resolved from GitHub Production variables/secrets `MSSQL_SERVER` and `MSSQL_DATABASE` when present, otherwise from the existing Container App environment.
 
-## Network access
+## Network access and read-only planning
 
-For a GitHub-hosted runner, the workflow temporarily opens one Azure SQL firewall rule for that runner's public IP. The rule is removed in an `always()` cleanup step, including after migration failures.
+GitHub-hosted runners do not currently have a direct network path to the KH Rentals Azure SQL server. The workflow therefore probes SQL first.
 
-If the SQL server uses private networking only, move the migration job to a runner inside the production network instead of broadening database network exposure.
+If SQL is directly reachable, the plan can run on the GitHub runner. If the runner is network-blocked, `plan` waits until the Container App is serving the same Git commit and then executes the read-only planner inside that serving Container App revision with the existing restricted runtime managed identity.
 
-## Running a migration
+This fallback does not open an Azure SQL firewall rule and does not grant DDL permission to the web application identity. Runtime managed identity is accepted by the migration runner only for `plan`; it is explicitly rejected for `apply`.
 
-1. Open **Actions** in the repository.
-2. Select **Run production database migrations**.
-3. First run with `mode = plan` and the desired `through` target.
-4. Review the pending/applied list and checksums in the workflow summary.
-5. Run again with `mode = apply`.
-6. Type `APPLY-PRODUCTION` exactly in the confirmation field.
-7. Approve the GitHub `Production` environment gate if one is configured.
+## Applying schema changes
+
+`apply` remains manual and requires:
+
+1. `mode = apply`
+2. the desired `through` target
+3. confirmation text `APPLY-PRODUCTION`
+4. a dedicated privileged migration identity with the required DDL permissions
+5. a migration executor that has a production SQL network path
+
+If production SQL is private from the GitHub-hosted runner, the workflow refuses to open a firewall rule or reuse the web identity for DDL. The intended apply architecture is a dedicated privileged migration executor inside the production network.
 
 Migrations are selected in repository order. Choosing a specific `through` target includes every earlier migration in the manifest.
 
 ## Migration ledger
 
-Successful migrations are recorded in `dbo.schema_migrations` with:
+Successful applied migrations are recorded in `dbo.schema_migrations` with:
 
 - migration ID
 - SHA-256 checksum
@@ -48,6 +54,8 @@ Successful migrations are recorded in `dbo.schema_migrations` with:
 - source commit SHA
 
 If an already-applied migration file changes later, the runner fails on the checksum mismatch instead of silently reapplying modified SQL.
+
+A read-only plan can inspect an existing ledger but never creates it.
 
 ## Current managed migrations
 
@@ -59,4 +67,6 @@ Each migration is verified after execution before it is written to the ledger.
 
 ## Deployment separation
 
-The normal `Build and deploy KH Rentals container` workflow never executes database migrations. A failed database migration therefore cannot prevent the currently healthy web revision from starting or serving traffic.
+The normal `Build and deploy KH Rentals container` workflow never executes database migrations during web-container startup. A failed migration therefore cannot prevent the currently healthy web revision from starting or serving traffic.
+
+The automatic migration plan may wait for the matching application commit to become the serving revision, but the plan itself performs no schema mutation.

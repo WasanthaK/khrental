@@ -95,12 +95,15 @@ const requiredEnv = (name) => {
   return value;
 };
 
+const envFlag = (name) => String(process.env[name] || '').trim().toLowerCase() === 'true';
+
 const createConnectionConfig = () => {
   const server = requiredEnv('MSSQL_SERVER');
   const database = requiredEnv('MSSQL_DATABASE');
   const migrationUser = String(process.env.MSSQL_MIGRATION_USER || '').trim();
   const migrationPassword = String(process.env.MSSQL_MIGRATION_PASSWORD || '').trim();
   const accessToken = String(process.env.MSSQL_ACCESS_TOKEN || '').trim();
+  const useManagedIdentity = envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY');
 
   const base = {
     server,
@@ -122,8 +125,18 @@ const createConnectionConfig = () => {
     return { ...base, user: migrationUser, password: migrationPassword };
   }
 
+  if (useManagedIdentity) {
+    return {
+      ...base,
+      authentication: {
+        type: 'azure-active-directory-default',
+        options: {}
+      }
+    };
+  }
+
   if (!accessToken) {
-    throw new Error('No privileged migration authentication is configured. Provide MSSQL_ACCESS_TOKEN or dedicated MSSQL_MIGRATION_USER/MSSQL_MIGRATION_PASSWORD credentials.');
+    throw new Error('No privileged migration authentication is configured. Provide MSSQL_ACCESS_TOKEN, dedicated MSSQL_MIGRATION_USER/MSSQL_MIGRATION_PASSWORD credentials, or explicitly enable runtime managed identity for read-only planning.');
   }
 
   return {
@@ -207,6 +220,11 @@ const recordMigration = async (pool, migration, checksum) => {
 const main = async () => {
   const { mode, through } = parseArgs();
   const selected = getSelectedMigrations(through);
+
+  if (mode === 'apply' && envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY')) {
+    throw new Error('Runtime managed identity is permitted for read-only migration planning only. Production migration apply requires the dedicated privileged migration identity.');
+  }
+
   const pool = await new sql.ConnectionPool(createConnectionConfig()).connect();
 
   try {

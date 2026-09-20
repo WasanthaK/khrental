@@ -45,7 +45,6 @@ env:
   AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
   AZURE_RESOURCE_GROUP: khrental-prod-rg
   AZURE_CONTAINER_APP_NAME: khrental-app
-  AZURE_SQL_RESOURCE_GROUP: ${{ vars.AZURE_SQL_RESOURCE_GROUP || 'khrental-prod-rg' }}
   MIGRATION_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'plan' }}
   MIGRATION_THROUGH: ${{ github.event_name == 'workflow_dispatch' && inputs.through || 'all' }}
   MIGRATION_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.confirmation || '' }}
@@ -55,7 +54,7 @@ jobs:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'plan' }} production migrations
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -127,10 +126,8 @@ jobs:
             exit 1
           fi
 
-          sql_resource_name="${server%%.*}"
           echo "MSSQL_SERVER=$server" >> "$GITHUB_ENV"
           echo "MSSQL_DATABASE=$database" >> "$GITHUB_ENV"
-          echo "AZURE_SQL_SERVER_NAME=$sql_resource_name" >> "$GITHUB_ENV"
           echo "Resolved production database endpoint: $server / $database"
 
       - name: Obtain Azure SQL access token
@@ -148,7 +145,7 @@ jobs:
           echo "::add-mask::$token"
           echo "MSSQL_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
 
-      - name: Probe production database connectivity
+      - name: Probe production database connectivity from GitHub runner
         id: db_probe
         shell: bash
         env:
@@ -164,37 +161,21 @@ jobs:
           case "$probe_exit" in
             0)
               echo "status=reachable" >> "$GITHUB_OUTPUT"
-              echo "Existing production network path is sufficient; no firewall change is required."
+              echo "GitHub runner can reach production SQL directly."
               ;;
             2)
-              echo "status=firewall" >> "$GITHUB_OUTPUT"
-              echo "Azure SQL reported that this runner IP is blocked; a temporary firewall rule is required."
+              echo "status=network" >> "$GITHUB_OUTPUT"
+              echo "GitHub runner cannot reach production SQL directly. The workflow will use the running Container App for read-only planning."
               ;;
             *)
               echo "status=error" >> "$GITHUB_OUTPUT"
-              echo "The database was reachable, but authentication or database authorization failed. Refusing to change the firewall because that would not fix this error." >&2
+              echo "Production SQL was reachable from the GitHub runner, but authentication or database authorization failed." >&2
               exit 1
               ;;
           esac
 
-      - name: Temporarily allow this runner through Azure SQL firewall
-        if: steps.db_probe.outputs.status == 'firewall'
-        shell: bash
-        run: |
-          set -euo pipefail
-          runner_ip=$(curl --fail --silent --show-error https://api.ipify.org)
-          rule_name="gh-migrate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "AZURE_SQL_FIREWALL_RULE=$rule_name" >> "$GITHUB_ENV"
-          echo "Runner public IP: $runner_ip"
-          az sql server firewall-rule create \
-            --resource-group "$AZURE_SQL_RESOURCE_GROUP" \
-            --server "$AZURE_SQL_SERVER_NAME" \
-            --name "$rule_name" \
-            --start-ip-address "$runner_ip" \
-            --end-ip-address "$runner_ip" \
-            --output none
-
-      - name: Run migration plan/apply
+      - name: Run migration directly when SQL is reachable
+        if: steps.db_probe.outputs.status == 'reachable'
         shell: bash
         env:
           MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
@@ -213,12 +194,69 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remove temporary Azure SQL firewall rule
-        if: always() && env.AZURE_SQL_FIREWALL_RULE != ''
+      - name: Refuse remote apply when production SQL is private
+        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'apply'
         shell: bash
         run: |
-          az sql server firewall-rule delete \
-            --resource-group "$AZURE_SQL_RESOURCE_GROUP" \
-            --server "$AZURE_SQL_SERVER_NAME" \
-            --name "$AZURE_SQL_FIREWALL_RULE" \
-            --output none || true
+          echo "Production SQL is not reachable from the GitHub-hosted runner." >&2
+          echo "No firewall rule will be opened and the restricted web identity will not be granted DDL permission." >&2
+          echo "Apply requires a dedicated privileged migration executor inside the production network." >&2
+          exit 1
+
+      - name: Wait for this commit to be the serving Container App revision
+        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'plan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+
+          for attempt in $(seq 1 75); do
+            build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+              echo "Serving Container App revision now matches ${GITHUB_SHA}."
+              exit 0
+            fi
+            echo "Waiting for Container App to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
+            sleep 8
+          done
+
+          echo "Container App did not begin serving ${GITHUB_SHA} within the migration-plan wait window." >&2
+          exit 1
+
+      - name: Run read-only migration plan inside the Container App
+        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'plan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          echo "Running read-only plan inside ready revision: $ready_revision"
+
+          az containerapp exec \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$ready_revision" \
+            --command "/bin/sh -c 'MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true node scripts/run-production-migrations.mjs --mode=plan --through=${MIGRATION_THROUGH}'" \
+            | tee migration-output.txt
+
+          {
+            echo '### Production database migration result'
+            echo
+            echo 'Executed read-only inside the serving Container App because production SQL is not publicly reachable from GitHub-hosted runners.'
+            echo
+            echo '```text'
+            cat migration-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

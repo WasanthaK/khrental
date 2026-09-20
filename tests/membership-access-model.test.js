@@ -10,6 +10,7 @@ const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.
 const inviteButtonSource = readFileSync(new URL('../src/components/common/InviteUserButton.jsx', import.meta.url), 'utf8');
 const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
 const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
+const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-db.mjs', import.meta.url), 'utf8');
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
@@ -141,7 +142,7 @@ test('simulated invitations never create a token or call the email delivery endp
   assert.match(invitationServiceSource, /const emailResult = await sendDirectEmail\(\{/);
 });
 
-test('production database migrations auto-plan safely while apply stays manual, ordered and checksum tracked', () => {
+test('production database migrations auto-plan safely while apply stays isolated, ordered and checksum tracked', () => {
   assert.match(migrationWorkflowSource, /\n\s+push:/);
   assert.match(migrationWorkflowSource, /branches: \[main\]/);
   assert.match(migrationWorkflowSource, /workflow_dispatch:/);
@@ -150,8 +151,17 @@ test('production database migrations auto-plan safely while apply stays manual, 
   assert.match(migrationWorkflowSource, /APPLY-PRODUCTION/);
   assert.match(migrationWorkflowSource, /environment: Production/);
   assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN/);
-  assert.match(migrationWorkflowSource, /firewall-rule create/);
-  assert.match(migrationWorkflowSource, /if: always\(\).*AZURE_SQL_FIREWALL_RULE/);
+  assert.doesNotMatch(migrationWorkflowSource, /firewall-rule create/);
+  assert.match(migrationWorkflowSource, /az containerapp exec/);
+  assert.match(migrationWorkflowSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
+  assert.match(migrationWorkflowSource, /build-info\.json/);
+  assert.match(migrationWorkflowSource, /No firewall rule will be opened/);
+  assert.match(migrationWorkflowSource, /dedicated privileged migration executor inside the production network/);
+
+  assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
+  assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
+  assert.match(migrationRunnerSource, /type: 'azure-active-directory-default'/);
+  assert.match(migrationRunnerSource, /Runtime managed identity is permitted for read-only migration planning only/);
 
   const migrationOrder = [
     '20260920_01_add_tenancy_billing_adjustments',
