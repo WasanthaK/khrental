@@ -8,6 +8,7 @@ import {
   recordTenancyDeposit,
   updateMoveInChecklistItem
 } from '../services/platformClient';
+import { updateAgreementData } from '../services/agreementService';
 import { resendInvitation } from '../services/invitationService';
 import { formatCurrency, formatDate } from '../utils/helpers';
 
@@ -79,6 +80,31 @@ const TenancyOnboarding = () => {
     setWorking(false);
   };
 
+  const handleManualSignature = async () => {
+    const confirmed = window.confirm(
+      'Confirm that the landlord and tenant have manually signed this contract outside Evia. This will satisfy the agreement-signature requirement for tenancy activation.'
+    );
+
+    if (!confirmed) return;
+
+    setWorking(true);
+    const completedAt = new Date().toISOString();
+
+    try {
+      await updateAgreementData(id, {
+        signature_status: 'manual_signed',
+        signature_completed_at: completedAt,
+        signeddate: completedAt
+      });
+      toast.success('Contract marked as manually signed');
+      await load();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to record manual signature');
+    }
+
+    setWorking(false);
+  };
+
   const handleCreateChecklist = async () => {
     setWorking(true);
     const result = await initializeMoveInChecklist(id);
@@ -132,6 +158,7 @@ const TenancyOnboarding = () => {
 
   const { agreement, rentee, property, unit, invitation, readiness, checklist } = data;
   const isActive = agreement?.status === 'active';
+  const isManuallySigned = agreement?.signature_status === 'manual_signed';
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -216,12 +243,25 @@ const TenancyOnboarding = () => {
 
           <section className="bg-white rounded-lg shadow p-5">
             <h2 className="text-lg font-semibold mb-1">4. Agreement</h2>
-            <p className="text-sm text-gray-500 mb-4">Agreement preparation and Evia signing remain in the existing agreement workflow.</p>
+            <p className="text-sm text-gray-500 mb-4">Use Evia signing when available. If the parties sign outside Evia, record that manual completion here before activation.</p>
             <div className="flex flex-wrap gap-3 text-sm">
               <span className="border rounded px-3 py-2">Status: <strong>{agreement.status}</strong></span>
-              <span className="border rounded px-3 py-2">Signature: <strong>{agreement.signature_status || 'not completed'}</strong></span>
+              <span className="border rounded px-3 py-2">Signature: <strong>{isManuallySigned ? 'manually signed' : agreement.signature_status || 'not completed'}</strong></span>
               <Link to={`/dashboard/agreements/${agreement.id}`} className="px-3 py-2 bg-gray-900 text-white rounded hover:bg-gray-800">Open agreement</Link>
+              {!isActive && !readiness.checks.agreementSigned && (
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={handleManualSignature}
+                  className="px-3 py-2 border border-amber-500 text-amber-800 rounded hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Mark contract as manually signed
+                </button>
+              )}
             </div>
+            {isManuallySigned && agreement.signature_completed_at && (
+              <p className="text-xs text-amber-700 mt-3">Manual signature recorded {formatDate(agreement.signature_completed_at)}.</p>
+            )}
           </section>
 
           <section className="bg-white rounded-lg shadow p-5">
