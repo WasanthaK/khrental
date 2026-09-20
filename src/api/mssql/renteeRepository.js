@@ -116,20 +116,21 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {
        FROM tenant_memberships tm
        WHERE tm.tenant_id = @tenantId
          AND tm.app_user_id = au.id
-         AND tm.status = 'active'
        ORDER BY CASE WHEN tm.is_default = 1 THEN 0 ELSE 1 END, tm.createdat ASC
      ) tm_link
      WHERE (
        (
-         au.tenant_id = @tenantId
+         tm_link.id IS NOT NULL
+         AND LOWER(COALESCE(tm_link.status, 'active')) = 'active'
+         AND LOWER(COALESCE(tm_link.role, '')) IN ('rentee', 'tenant')
+       )
+       OR (
+         tm_link.id IS NULL
+         AND au.tenant_id = @tenantId
          AND (
            LOWER(COALESCE(au.user_type, '')) = 'rentee'
            OR LOWER(COALESCE(au.role, '')) = 'rentee'
          )
-       )
-       OR (
-         tm_link.id IS NOT NULL
-         AND LOWER(COALESCE(tm_link.role, '')) IN ('rentee', 'tenant')
        )
      )
      ${searchClause}
