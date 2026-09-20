@@ -10,6 +10,7 @@ import {
   normalizeBillingAdjustmentAmount,
   normalizeBillingAdjustmentType
 } from './billingAdjustments.js';
+import { getBillingReminderPortalUrl, sendBillingReminderEmail } from './billingReminderEmail.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -106,6 +107,11 @@ const insertLifecycleEvent = async (executor, {
       metadata: JSON.stringify(metadata || {})
     }
   );
+};
+
+const formatMoney = (amount) => {
+  const value = Number(amount || 0);
+  return Number.isFinite(value) ? value.toFixed(2) : '0.00';
 };
 
 export const createBillingAdjustmentsRouter = () => {
@@ -387,6 +393,133 @@ export const createBillingAdjustmentsRouter = () => {
       } catch (error) {
         await transaction.rollback().catch(() => {});
         throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/invoices/:invoiceId/send-reminder', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const pool = await getMssqlPool();
+      const invoice = await runSingle(
+        pool,
+        `SELECT TOP 1 i.id, i.propertyid, i.renteeid, i.billingperiod, i.totalamount,
+                i.duedate, i.status, i.reminderdate,
+                p.name AS property_name,
+                au.name AS rentee_name,
+                au.email AS rentee_email
+         FROM invoices i
+         LEFT JOIN properties p
+           ON p.id = i.propertyid
+          AND p.tenant_id = i.tenant_id
+         LEFT JOIN app_users au
+           ON au.id = i.renteeid
+          AND au.tenant_id = i.tenant_id
+         WHERE i.tenant_id = @tenantId AND i.id = @invoiceId`,
+        { tenantId: req.tenantId, invoiceId: req.params.invoiceId }
+      );
+
+      if (!invoice) {
+        throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+      }
+      requirePropertyScope(req, invoice.propertyid);
+      if (String(invoice.status || '').toLowerCase() === 'paid') {
+        throw createRequestError(409, 'A reminder is not required for a paid invoice.', 'INVOICE_ALREADY_PAID');
+      }
+      if (!invoice.rentee_email) {
+        throw createRequestError(409, 'The tenant does not have an email address for payment reminders.', 'RENTEE_EMAIL_REQUIRED');
+      }
+
+      await insertLifecycleEvent(pool, {
+        tenantId: req.tenantId,
+        eventType: 'payment_reminder_attempted',
+        actorUserId: req.user.id,
+        metadata: {
+          invoiceId: invoice.id,
+          to: invoice.rentee_email
+        }
+      });
+
+      const portalUrl = getBillingReminderPortalUrl();
+      const subject = `KH Rentals payment reminder - ${invoice.billingperiod || 'invoice'}`;
+      const tenantName = invoice.rentee_name || 'Tenant';
+      const propertyName = invoice.property_name || 'your property';
+      const dueDate = invoice.duedate ? new Date(invoice.duedate).toLocaleDateString('en-GB') : 'the invoice due date';
+      const amount = formatMoney(invoice.totalamount);
+      const text = [
+        `Dear ${tenantName},`,
+        '',
+        `This is a payment reminder for your KH Rentals invoice for ${propertyName}.`,
+        `Billing period: ${invoice.billingperiod || 'N/A'}`,
+        `Invoice amount: ${amount}`,
+        `Due date: ${dueDate}`,
+        '',
+        portalUrl ? `View your invoices: ${portalUrl}` : 'Please open the KH Rentals tenant portal to review your invoice.',
+        '',
+        'If you have already paid, please submit your payment proof in the tenant portal.',
+        '',
+        'KH Rentals'
+      ].join('\n');
+      const html = `<p>Dear ${tenantName},</p><p>This is a payment reminder for your KH Rentals invoice for <strong>${propertyName}</strong>.</p><p><strong>Billing period:</strong> ${invoice.billingperiod || 'N/A'}<br><strong>Invoice amount:</strong> ${amount}<br><strong>Due date:</strong> ${dueDate}</p>${portalUrl ? `<p><a href="${portalUrl}">View your invoices</a></p>` : '<p>Please open the KH Rentals tenant portal to review your invoice.</p>'}<p>If you have already paid, please submit your payment proof in the tenant portal.</p><p>KH Rentals</p>`;
+
+      try {
+        const delivery = await sendBillingReminderEmail({
+          to: invoice.rentee_email,
+          subject,
+          text,
+          html
+        });
+
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        try {
+          await runQuery(
+            transaction,
+            `UPDATE invoices
+             SET reminderdate = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
+             WHERE tenant_id = @tenantId AND id = @invoiceId`,
+            { tenantId: req.tenantId, invoiceId: invoice.id }
+          );
+          await insertLifecycleEvent(transaction, {
+            tenantId: req.tenantId,
+            eventType: 'payment_reminder_sent',
+            actorUserId: req.user.id,
+            metadata: {
+              invoiceId: invoice.id,
+              to: invoice.rentee_email,
+              provider: delivery.provider
+            }
+          });
+          await transaction.commit();
+        } catch (error) {
+          await transaction.rollback().catch(() => {});
+          throw error;
+        }
+
+        res.json({
+          data: {
+            invoiceId: invoice.id,
+            sent: true,
+            provider: delivery.provider,
+            to: invoice.rentee_email
+          },
+          error: null
+        });
+      } catch (deliveryError) {
+        await insertLifecycleEvent(pool, {
+          tenantId: req.tenantId,
+          eventType: 'payment_reminder_failed',
+          actorUserId: req.user.id,
+          metadata: {
+            invoiceId: invoice.id,
+            to: invoice.rentee_email,
+            code: deliveryError?.code || null,
+            error: deliveryError?.message || 'Email delivery failed'
+          }
+        }).catch(() => {});
+        throw deliveryError;
       }
     } catch (error) {
       next(error);
