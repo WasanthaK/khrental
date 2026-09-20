@@ -89,6 +89,7 @@ const loadAgreement = async (pool, tenantId, agreementId) => runSingle(
 
 const insertLifecycleEvent = async (executor, {
   tenantId,
+  invoiceId = null,
   eventType,
   actorUserId,
   metadata
@@ -96,12 +97,13 @@ const insertLifecycleEvent = async (executor, {
   await runQuery(
     executor,
     `INSERT INTO billing_lifecycle_events (
-       tenant_id, event_type, actor_user_id, metadata
+       tenant_id, invoice_id, event_type, actor_user_id, metadata
      ) VALUES (
-       @tenantId, @eventType, @actorUserId, @metadata
+       @tenantId, @invoiceId, @eventType, @actorUserId, @metadata
      )`,
     {
       tenantId,
+      invoiceId,
       eventType,
       actorUserId,
       metadata: JSON.stringify(metadata || {})
@@ -113,6 +115,13 @@ const formatMoney = (amount) => {
   const value = Number(amount || 0);
   return Number.isFinite(value) ? value.toFixed(2) : '0.00';
 };
+
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
 
 export const createBillingAdjustmentsRouter = () => {
   const router = express.Router();
@@ -409,7 +418,17 @@ export const createBillingAdjustmentsRouter = () => {
                 i.duedate, i.status, i.reminderdate,
                 p.name AS property_name,
                 au.name AS rentee_name,
-                au.email AS rentee_email
+                au.email AS rentee_email,
+                COALESCE((
+                  SELECT SUM(CASE WHEN pay.status = 'verified' THEN pay.amount ELSE 0 END)
+                  FROM payments pay
+                  WHERE pay.tenant_id = i.tenant_id AND pay.invoiceid = i.id
+                ), 0) AS verified_amount,
+                COALESCE((
+                  SELECT SUM(CASE WHEN pay.status = 'pending' THEN 1 ELSE 0 END)
+                  FROM payments pay
+                  WHERE pay.tenant_id = i.tenant_id AND pay.invoiceid = i.id
+                ), 0) AS pending_payment_count
          FROM invoices i
          LEFT JOIN properties p
            ON p.id = i.propertyid
@@ -425,8 +444,20 @@ export const createBillingAdjustmentsRouter = () => {
         throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
       }
       requirePropertyScope(req, invoice.propertyid);
-      if (String(invoice.status || '').toLowerCase() === 'paid') {
+
+      const outstandingBalance = Math.max(
+        0,
+        Math.round((Number(invoice.totalamount || 0) - Number(invoice.verified_amount || 0)) * 100) / 100
+      );
+      if (String(invoice.status || '').toLowerCase() === 'paid' || outstandingBalance <= 0) {
         throw createRequestError(409, 'A reminder is not required for a paid invoice.', 'INVOICE_ALREADY_PAID');
+      }
+      if (Number(invoice.pending_payment_count || 0) > 0) {
+        throw createRequestError(
+          409,
+          'A payment proof is already awaiting verification. Review it before sending a reminder.',
+          'PAYMENT_VERIFICATION_PENDING'
+        );
       }
       if (!invoice.rentee_email) {
         throw createRequestError(409, 'The tenant does not have an email address for payment reminders.', 'RENTEE_EMAIL_REQUIRED');
@@ -434,11 +465,12 @@ export const createBillingAdjustmentsRouter = () => {
 
       await insertLifecycleEvent(pool, {
         tenantId: req.tenantId,
+        invoiceId: invoice.id,
         eventType: 'payment_reminder_attempted',
         actorUserId: req.user.id,
         metadata: {
-          invoiceId: invoice.id,
-          to: invoice.rentee_email
+          to: invoice.rentee_email,
+          outstandingBalance
         }
       });
 
@@ -447,13 +479,13 @@ export const createBillingAdjustmentsRouter = () => {
       const tenantName = invoice.rentee_name || 'Tenant';
       const propertyName = invoice.property_name || 'your property';
       const dueDate = invoice.duedate ? new Date(invoice.duedate).toLocaleDateString('en-GB') : 'the invoice due date';
-      const amount = formatMoney(invoice.totalamount);
+      const amountDue = formatMoney(outstandingBalance);
       const text = [
         `Dear ${tenantName},`,
         '',
         `This is a payment reminder for your KH Rentals invoice for ${propertyName}.`,
         `Billing period: ${invoice.billingperiod || 'N/A'}`,
-        `Invoice amount: ${amount}`,
+        `Outstanding balance: ${amountDue}`,
         `Due date: ${dueDate}`,
         '',
         portalUrl ? `View your invoices: ${portalUrl}` : 'Please open the KH Rentals tenant portal to review your invoice.',
@@ -462,7 +494,13 @@ export const createBillingAdjustmentsRouter = () => {
         '',
         'KH Rentals'
       ].join('\n');
-      const html = `<p>Dear ${tenantName},</p><p>This is a payment reminder for your KH Rentals invoice for <strong>${propertyName}</strong>.</p><p><strong>Billing period:</strong> ${invoice.billingperiod || 'N/A'}<br><strong>Invoice amount:</strong> ${amount}<br><strong>Due date:</strong> ${dueDate}</p>${portalUrl ? `<p><a href="${portalUrl}">View your invoices</a></p>` : '<p>Please open the KH Rentals tenant portal to review your invoice.</p>'}<p>If you have already paid, please submit your payment proof in the tenant portal.</p><p>KH Rentals</p>`;
+      const safeTenantName = escapeHtml(tenantName);
+      const safePropertyName = escapeHtml(propertyName);
+      const safeBillingPeriod = escapeHtml(invoice.billingperiod || 'N/A');
+      const safeDueDate = escapeHtml(dueDate);
+      const safeAmountDue = escapeHtml(amountDue);
+      const safePortalUrl = portalUrl ? escapeHtml(portalUrl) : null;
+      const html = `<p>Dear ${safeTenantName},</p><p>This is a payment reminder for your KH Rentals invoice for <strong>${safePropertyName}</strong>.</p><p><strong>Billing period:</strong> ${safeBillingPeriod}<br><strong>Outstanding balance:</strong> ${safeAmountDue}<br><strong>Due date:</strong> ${safeDueDate}</p>${safePortalUrl ? `<p><a href="${safePortalUrl}">View your invoices</a></p>` : '<p>Please open the KH Rentals tenant portal to review your invoice.</p>'}<p>If you have already paid, please submit your payment proof in the tenant portal.</p><p>KH Rentals</p>`;
 
       try {
         const delivery = await sendBillingReminderEmail({
@@ -484,12 +522,13 @@ export const createBillingAdjustmentsRouter = () => {
           );
           await insertLifecycleEvent(transaction, {
             tenantId: req.tenantId,
+            invoiceId: invoice.id,
             eventType: 'payment_reminder_sent',
             actorUserId: req.user.id,
             metadata: {
-              invoiceId: invoice.id,
               to: invoice.rentee_email,
-              provider: delivery.provider
+              provider: delivery.provider,
+              outstandingBalance
             }
           });
           await transaction.commit();
@@ -503,18 +542,20 @@ export const createBillingAdjustmentsRouter = () => {
             invoiceId: invoice.id,
             sent: true,
             provider: delivery.provider,
-            to: invoice.rentee_email
+            to: invoice.rentee_email,
+            outstandingBalance
           },
           error: null
         });
       } catch (deliveryError) {
         await insertLifecycleEvent(pool, {
           tenantId: req.tenantId,
+          invoiceId: invoice.id,
           eventType: 'payment_reminder_failed',
           actorUserId: req.user.id,
           metadata: {
-            invoiceId: invoice.id,
             to: invoice.rentee_email,
+            outstandingBalance,
             code: deliveryError?.code || null,
             error: deliveryError?.message || 'Email delivery failed'
           }
