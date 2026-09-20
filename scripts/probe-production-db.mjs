@@ -46,11 +46,17 @@ const createConnectionConfig = () => {
   };
 };
 
-const isFirewallBlock = (error) => {
+const isNetworkBlock = (error) => {
   const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
+
   return message.includes('firewall')
     || message.includes('client with ip address')
-    || message.includes('not allowed to access the server');
+    || message.includes('not allowed to access the server')
+    || message.includes('failed to connect to')
+    || message.includes('connection timeout')
+    || message.includes('connect timed out')
+    || code === 'ETIMEOUT';
 };
 
 let pool;
@@ -60,7 +66,7 @@ try {
   console.log('Production database connectivity probe succeeded.');
 } catch (error) {
   console.error(`Production database connectivity probe failed: ${error?.message || error}`);
-  process.exitCode = isFirewallBlock(error) ? 2 : 1;
+  process.exitCode = isNetworkBlock(error) ? 2 : 1;
 } finally {
   if (pool) {
     await pool.close().catch(() => {});
