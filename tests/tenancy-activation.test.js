@@ -25,6 +25,20 @@ test('signed agreement status is sufficient signature evidence', () => {
   assert.equal(isAgreementSignatureComplete({ status: 'signed' }), true);
 });
 
+test('pending activation status alone is not sufficient signature evidence', () => {
+  assert.equal(isAgreementSignatureComplete({
+    status: 'pending_activation',
+    signature_status: 'send_for_signature'
+  }), false);
+});
+
+test('pending activation with explicit completion evidence is sufficient', () => {
+  assert.equal(isAgreementSignatureComplete({
+    status: 'pending_activation',
+    signature_status: 'signing_complete'
+  }), true);
+});
+
 test('signature completion timestamp is sufficient signature evidence', () => {
   assert.equal(isAgreementSignatureComplete({ status: 'pending', signature_completed_at: '2026-09-16T00:00:00Z' }), true);
 });
@@ -44,6 +58,17 @@ test('tenancy is ready only when every activation requirement is satisfied', () 
   assert.equal(readiness.canActivate, true);
   assert.equal(readiness.securityDepositOutstanding, 0);
   assert.deepEqual(getActivationBlockingReasons(readiness), []);
+});
+
+test('pending signature blocks tenancy activation even when every other requirement is complete', () => {
+  const input = readyInput();
+  input.agreement.status = 'pending_activation';
+  input.agreement.signature_status = 'send_for_signature';
+  const readiness = evaluateTenancyActivationReadiness(input);
+
+  assert.equal(readiness.canActivate, false);
+  assert.equal(readiness.checks.agreementSigned, false);
+  assert.match(getActivationBlockingReasons(readiness).join(' '), /signature/i);
 });
 
 test('security deposit requirement is enforced independently of confirmation advance', () => {
