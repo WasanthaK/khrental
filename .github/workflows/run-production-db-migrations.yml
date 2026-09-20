@@ -1,0 +1,178 @@
+name: Run production database migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Plan only or apply pending migrations
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+      through:
+        description: Apply/plan migrations in order through this target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - 20260920_01_add_tenancy_billing_adjustments
+          - 20260920_02_create_platform_admins
+          - 20260920_03_backfill_legacy_app_user_memberships
+      confirmation:
+        description: For apply mode, type APPLY-PRODUCTION exactly
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-production-db-migrations
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+  AZURE_SQL_RESOURCE_GROUP: ${{ vars.AZURE_SQL_RESOURCE_GROUP || 'khrental-prod-rg' }}
+
+jobs:
+  migrate:
+    name: ${{ inputs.mode }} production migrations
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validate manual confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirmation }}" != "APPLY-PRODUCTION" ]; then
+            echo "Apply mode requires confirmation text APPLY-PRODUCTION." >&2
+            exit 1
+          fi
+
+      - name: Install migration dependencies
+        run: npm ci
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve production database target
+        shell: bash
+        env:
+          MSSQL_SERVER_CONFIG: ${{ vars.MSSQL_SERVER || secrets.MSSQL_SERVER }}
+          MSSQL_DATABASE_CONFIG: ${{ vars.MSSQL_DATABASE || secrets.MSSQL_DATABASE }}
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          server="${MSSQL_SERVER_CONFIG:-}"
+          database="${MSSQL_DATABASE_CONFIG:-}"
+
+          if [ -z "$server" ]; then
+            server=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].env[?name=='MSSQL_SERVER'].value | [0]" \
+              -o tsv)
+          fi
+
+          if [ -z "$database" ]; then
+            database=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].env[?name=='MSSQL_DATABASE'].value | [0]" \
+              -o tsv)
+          fi
+
+          if [ -z "$server" ] || [ "$server" = "None" ]; then
+            echo "Unable to resolve MSSQL_SERVER. Configure the Production environment variable MSSQL_SERVER." >&2
+            exit 1
+          fi
+
+          if [ -z "$database" ] || [ "$database" = "None" ]; then
+            echo "Unable to resolve MSSQL_DATABASE. Configure the Production environment variable MSSQL_DATABASE." >&2
+            exit 1
+          fi
+
+          sql_resource_name="${server%%.*}"
+          echo "MSSQL_SERVER=$server" >> "$GITHUB_ENV"
+          echo "MSSQL_DATABASE=$database" >> "$GITHUB_ENV"
+          echo "AZURE_SQL_SERVER_NAME=$sql_resource_name" >> "$GITHUB_ENV"
+          echo "Resolved production database endpoint: $server / $database"
+
+      - name: Obtain Azure SQL access token
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(az account get-access-token \
+            --resource https://database.windows.net/ \
+            --query accessToken \
+            -o tsv)
+          if [ -z "$token" ]; then
+            echo "Azure OIDC login did not return an Azure SQL access token." >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "MSSQL_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Temporarily allow this runner through Azure SQL firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_ip=$(curl --fail --silent --show-error https://api.ipify.org)
+          rule_name="gh-migrate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "Runner public IP: $runner_ip"
+          az sql server firewall-rule create \
+            --resource-group "$AZURE_SQL_RESOURCE_GROUP" \
+            --server "$AZURE_SQL_SERVER_NAME" \
+            --name "$rule_name" \
+            --start-ip-address "$runner_ip" \
+            --end-ip-address "$runner_ip" \
+            --output none
+          echo "AZURE_SQL_FIREWALL_RULE=$rule_name" >> "$GITHUB_ENV"
+
+      - name: Run migration plan/apply
+        shell: bash
+        env:
+          MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
+          MSSQL_MIGRATION_PASSWORD: ${{ secrets.MSSQL_MIGRATION_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node scripts/run-production-migrations.mjs \
+            --mode="${{ inputs.mode }}" \
+            --through="${{ inputs.through }}" | tee migration-output.txt
+
+          {
+            echo '### Production database migration result'
+            echo
+            echo '```text'
+            cat migration-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary Azure SQL firewall rule
+        if: always() && env.AZURE_SQL_FIREWALL_RULE != ''
+        shell: bash
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$AZURE_SQL_RESOURCE_GROUP" \
+            --server "$AZURE_SQL_SERVER_NAME" \
+            --name "$AZURE_SQL_FIREWALL_RULE" \
+            --output none || true
