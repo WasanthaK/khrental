@@ -1,3 +1,5 @@
+import { guardMaintenancePlatformQuery } from './maintenanceMutationGuard.js';
+
 const PROTECTED_BILLING_TABLES = new Set(['invoices', 'payments']);
 const MUTATING_ACTIONS = new Set(['insert', 'update', 'delete', 'upsert']);
 
@@ -22,7 +24,10 @@ export const guardBillingPlatformQuery = (req, res, next) => {
     return;
   }
 
-  next();
+  // This middleware is already mounted in front of the central platform query
+  // endpoint. Delegate the next protected business lifecycle here so legacy
+  // generic table writes cannot bypass the dedicated maintenance API.
+  guardMaintenancePlatformQuery(req, res, next);
 };
 
 const getCompatibilityBillingTable = (path = '') => {
