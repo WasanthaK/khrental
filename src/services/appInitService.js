@@ -3,289 +3,62 @@ import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
 
 const platformClient = getPlatformClient();
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Track initialization state
 let storageInitialized = false;
-let initializationPromise = null;
 
-const defaultPolicies = {
-  'authenticated': {
-    insert: true,
-    select: true,
-    update: true,
-    delete: true
-  }
-};
+const ensureBucket = async (bucketName) => {
+  const { data: bucket, error: getBucketError } = await platformClient.storage.getBucket(bucketName);
 
-/**
- * Set up storage policies for a bucket
- * @param {string} bucketName - Name of the bucket to set up policies for
- */
-const setupStoragePolicies = async (bucketName) => {
-  try {
-    console.log(`Setting up storage policies for bucket: ${bucketName}`);
-
-    // First verify the bucket exists and get its current configuration
-    const { data: buckets, error: listError } = await platformClient.storage.listBuckets();
-    
-    if (listError) {
-      console.error('Error listing buckets:', listError);
-      return;
-    }
-
-    const bucket = buckets?.find(b => b.name === bucketName);
-    if (!bucket) {
-      console.error(`Bucket ${bucketName} not found`);
-      return;
-    }
-
-    // Now we can safely update the bucket configuration
-    const { error: updateError } = await platformClient.storage.updateBucket(bucketName, {
-          public: true,
-      fileSizeLimit: 52428800,
-      allowedMimeTypes: bucketName === 'images'
-        ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-        : ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-    });
-
-    if (updateError) {
-      console.error('Error updating bucket configuration:', updateError);
-      return;
-    }
-
-    // Use RPC to create policies directly
-    const policies = [
-      {
-        name: `Allow public read access to ${bucketName}`,
-        definition: `(bucket_id = '${bucketName}')`,
-        operation: 'SELECT'
-      },
-      {
-        name: `Allow authenticated users to upload ${bucketName}`,
-        definition: `(bucket_id = '${bucketName}' AND auth.role() = 'authenticated')`,
-        operation: 'INSERT'
-      },
-      {
-        name: `Allow authenticated users to update their own ${bucketName}`,
-        definition: `(bucket_id = '${bucketName}' AND auth.role() = 'authenticated')`,
-        operation: 'UPDATE'
-      },
-      {
-        name: `Allow authenticated users to delete their own ${bucketName}`,
-        definition: `(bucket_id = '${bucketName}' AND auth.role() = 'authenticated')`,
-        operation: 'DELETE'
-      }
-    ];
-
-    // Execute each policy creation SQL
-    for (const policy of policies) {
-      try {
-        const { error: policyError } = await platformClient.rpc('create_policy', {
-          table_name: 'storage.objects',
-          policy_name: policy.name,
-          definition: policy.definition,
-          operation: policy.operation
-        });
-
-        if (policyError && !policyError.message?.includes('already exists')) {
-          console.error(`Error creating policy ${policy.name}:`, policyError);
-        }
-      } catch (err) {
-        // Ignore policy already exists errors
-        if (!err.message?.includes('already exists')) {
-          console.error('Error creating policy:', err);
-        }
-      }
-    }
-
-    console.log(`Storage policies set up successfully for bucket: ${bucketName}`);
-  } catch (error) {
-    console.error('Error setting up storage policies:', error);
-  }
-};
-
-/**
- * Check if a folder exists in a bucket
- * @param {string} bucketName - Bucket name
- * @param {string} folderPath - Folder path to check
- * @returns {Promise<boolean>} - Whether the folder exists
- */
-const folderExists = async (bucketName, folderPath) => {
-  try {
-    const { data } = await platformClient.storage
-      .from(bucketName)
-      .list(folderPath);
-      
-    return !!(data && data.length > 0);
-  } catch (error) {
-    console.error(`Error checking if folder exists (${bucketName}/${folderPath}):`, error);
-    return false;
-  }
-};
-
-/**
- * Verify if a bucket exists and is accessible
- * @param {string} bucketName - Name of the bucket to verify
- * @returns {Promise<boolean>} - Whether the bucket exists and is accessible
- */
-const verifyBucketExists = async (bucketName) => {
-  try {
-    // Try to list the contents of the bucket instead of listing all buckets
-    const { data, error } = await platformClient.storage
-      .from(bucketName)
-      .list();
-    
-    if (error) {
-      if (error.message?.includes('not found') || error.message?.includes('does not exist')) {
-        return false;
-      }
-      // For other errors, assume bucket exists to prevent recreation attempts
-      console.warn(`Error verifying bucket ${bucketName}:`, error);
-      return true;
-    }
-    
+  if (bucket) {
     return true;
-  } catch (error) {
-    console.warn(`Error verifying bucket ${bucketName}:`, error);
-    return false;
+  }
+
+  if (getBucketError && !String(getBucketError.message || '').toLowerCase().includes('not found')) {
+    throw getBucketError;
+  }
+
+  const { error: createError } = await platformClient.storage.createBucket(bucketName);
+  if (createError) {
+    throw createError;
+  }
+
+  return true;
+};
+
+const ensureFolder = async (bucketName, folderPath) => {
+  const { data, error } = await platformClient.storage
+    .from(bucketName)
+    .list(folderPath);
+
+  if (error) {
+    throw error;
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    return;
+  }
+
+  const { error: uploadError } = await platformClient.storage
+    .from(bucketName)
+    .upload(`${folderPath}/.keep`, new Blob([''], { type: 'text/plain' }));
+
+  if (uploadError && !String(uploadError.message || '').toLowerCase().includes('already exists')) {
+    throw uploadError;
   }
 };
 
 /**
- * Create a bucket with retries
- * @param {string} bucketName - Name of the bucket to create
- * @param {Object} options - Bucket options
- * @returns {Promise<boolean>} - Whether the bucket was created successfully
+ * Initialize the logical storage structure exposed by the KH Rentals storage
+ * API. Production objects live in Cloudflare R2; local development may use the
+ * local storage driver. Authorization and tenant scoping are enforced by the
+ * application API, not by database/storage-provider row-level-security rules.
  */
-const createBucket = async (bucketName, options = {}) => {
-  const maxRetries = 3;
-  let retryCount = 0;
-
-  while (retryCount < maxRetries) {
-    try {
-      // First check if bucket exists using getBucket
-      const { data: bucket, error: getBucketError } = await platformClient.storage.getBucket(bucketName);
-      
-      if (bucket) {
-        console.log(`Bucket ${bucketName} already exists, skipping creation`);
-        return true;
-      }
-
-      if (getBucketError && !getBucketError.message?.includes('not found')) {
-        throw getBucketError;
-      }
-
-      console.log(`Creating bucket: ${bucketName}`);
-      const { error: createError } = await platformClient.storage.createBucket(bucketName, {
-        public: options.public || false,
-        fileSizeLimit: options.fileSizeLimit || 52428800,
-        allowedMimeTypes: options.allowedMimeTypes || null
-      });
-
-      if (!createError) {
-        console.log(`Successfully created bucket: ${bucketName}`);
-        await delay(2000); // Wait after creation before returning
-        return true;
-      }
-
-      if (createError.message?.includes('already exists')) {
-        console.log(`Bucket ${bucketName} already exists (from create error)`);
-        return true;
-      }
-
-      throw createError;
-    } catch (error) {
-      retryCount++;
-      console.warn(`Attempt ${retryCount} failed to create bucket ${bucketName}:`, error);
-      
-      // If bucket already exists, consider it a success
-      if (error.message?.includes('already exists')) {
-        console.log(`Bucket ${bucketName} already exists (from catch)`);
-        return true;
-      }
-      
-      if (retryCount < maxRetries) {
-        await delay(2000 * retryCount); // Longer delay between retries
-        continue;
-      }
-      console.error(`Failed to create bucket ${bucketName} after ${maxRetries} attempts:`, error);
-      return false;
-    }
-  }
-  return false;
-};
-
-/**
- * Update bucket configuration
- * @param {string} bucketName - Name of the bucket to update
- * @param {Object} options - Bucket options
- * @returns {Promise<boolean>} - Whether the configuration was updated successfully
- */
-const updateBucketConfig = async (bucketName, options = {}) => {
-  const maxRetries = 3;
-  let retryCount = 0;
-
-  while (retryCount < maxRetries) {
-    try {
-      // First check if bucket exists using getBucket
-      const { data: bucket, error: getBucketError } = await platformClient.storage.getBucket(bucketName);
-      
-      if (getBucketError) {
-        if (getBucketError.message?.includes('not found')) {
-          console.warn(`Bucket ${bucketName} not found, attempting to create it first`);
-          const created = await createBucket(bucketName, options);
-          if (!created) {
-            console.error(`Failed to create bucket ${bucketName}, skipping configuration update`);
-            return false;
-          }
-          // Wait a bit after creation before updating config
-          await delay(2000);
-        } else {
-          throw getBucketError;
-        }
-      }
-
-      console.log(`Updating configuration for bucket: ${bucketName}`);
-      const { error: updateError } = await platformClient.storage.updateBucket(bucketName, {
-        public: options.public ?? false,
-        fileSizeLimit: options.fileSizeLimit ?? 52428800,
-        allowedMimeTypes: options.allowedMimeTypes ?? null
-      });
-
-      if (!updateError) {
-        console.log(`Successfully updated configuration for bucket: ${bucketName}`);
-        return true;
-      }
-
-      throw updateError;
-    } catch (error) {
-      retryCount++;
-      console.warn(`Attempt ${retryCount} failed to update bucket ${bucketName} configuration:`, error);
-      
-      if (retryCount < maxRetries) {
-        await delay(2000 * retryCount);
-        continue;
-      }
-      console.error(`Failed to update bucket ${bucketName} configuration after ${maxRetries} attempts:`, error);
-      return false;
-    }
-  }
-  return false;
-};
-
-/**
- * Initialize storage buckets and folders
- */
-export async function initializeStorage() {
+export const initializeStorage = async () => {
   if (storageInitialized) {
-    return { success: true, skipped: false };
+    return { success: true, skipped: true, reason: 'Storage already initialized.' };
   }
 
   try {
-    // Get current session
     const { data: { session } } = await platformClient.auth.getSession();
-    
     if (!session) {
       return {
         success: true,
@@ -294,76 +67,22 @@ export async function initializeStorage() {
       };
     }
 
-    // Initialize each bucket
     for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-      const exists = await verifyBucketExists(bucketName);
-      
-      if (!exists) {
-        const created = await createBucket(bucketName, {
-          public: true,
-          fileSizeLimit: 52428800,
-          allowedMimeTypes: bucketName === 'images'
-            ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-            : ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-        });
-        
-        if (!created) {
-          return {
-            success: false,
-            skipped: false,
-            error: `Failed to create storage bucket: ${bucketName}`
-          };
+      await ensureBucket(bucketName);
+
+      const folderPaths = BUCKET_FOLDERS[bucketName]
+        ? Object.values(BUCKET_FOLDERS[bucketName])
+        : [];
+
+      for (const folderPath of folderPaths) {
+        try {
+          await ensureFolder(bucketName, folderPath);
+        } catch (folderError) {
+          console.warn(`Unable to initialize storage folder ${bucketName}/${folderPath}:`, folderError);
         }
       }
     }
-    
-    // Try to create folder structure in existing buckets only
-    for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-      try {
-        // Try to list the contents of the bucket to check if it exists
-        const { data, error } = await platformClient.storage
-          .from(bucketName)
-          .list('', { limit: 1 });
-        
-        if (error) {
-          continue;
-        }
-        
-        // Try to create folder structure in existing buckets only
-        if (data !== null) {
-          // Get folders for this bucket - now an object with properties
-          const folderPaths = BUCKET_FOLDERS[bucketName] 
-            ? Object.values(BUCKET_FOLDERS[bucketName]) 
-            : [];
-            
-          for (const folder of folderPaths) {
-            try {
-              // Check if folder already exists first
-              const { data: folderData, error: folderListError } = await platformClient.storage
-                .from(bucketName)
-                .list(folder);
-                
-              if (!folderListError && (!folderData || folderData.length === 0)) {
-                // Only create the folder if it doesn't exist
-                const folderPath = `${folder}/.keep`;
-                await platformClient.storage
-                  .from(bucketName)
-                  .upload(folderPath, new Blob([''], { type: 'text/plain' }), {
-                    upsert: true
-                  });
-                  
-                console.log(`Created folder ${folder} in bucket ${bucketName}`);
-              }
-            } catch (folderError) {
-              console.warn(`Error creating folder ${folder} in bucket ${bucketName}:`, folderError);
-            }
-          }
-        }
-      } catch (bucketError) {
-        // Silently handle bucket errors
-      }
-    }
-    
+
     storageInitialized = true;
     return { success: true, skipped: false };
   } catch (error) {
@@ -373,18 +92,17 @@ export async function initializeStorage() {
       error: error.message || 'Storage initialization failed.'
     };
   }
-}
+};
 
-// Export the initialization function
 export const initializeApp = async () => {
   try {
-    // Try to initialize storage but don't fail the whole app if it doesn't work
     const storageResult = await initializeStorage();
+
     if (!storageResult.success && !storageResult.skipped) {
-      console.warn("Storage initialization failed, but application will continue. Some file upload features may not work properly.");
+      console.warn('Storage initialization failed; the application will continue.', storageResult.error);
       return {
         success: true,
-        error: storageResult.error || 'Storage initialization failed. Some file upload features may not work properly.',
+        error: storageResult.error || 'Storage initialization failed. Some file features may be unavailable.',
         isStorageError: true
       };
     }
@@ -393,7 +111,7 @@ export const initializeApp = async () => {
       success: true,
       error: null,
       isStorageError: false,
-      storageSkipped: !!storageResult.skipped
+      storageSkipped: Boolean(storageResult.skipped)
     };
   } catch (error) {
     console.error('Error during app initialization:', error);
@@ -404,7 +122,6 @@ export const initializeApp = async () => {
   }
 };
 
-// Add a function to force re-initialization if needed (e.g. for admin purposes)
 export const forceStorageReinitialization = () => {
   storageInitialized = false;
-}; 
+};
