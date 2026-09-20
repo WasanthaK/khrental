@@ -5,7 +5,8 @@ import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
 import {
   evaluateTenancyActivationReadiness,
-  getActivationBlockingReasons
+  getActivationBlockingReasons,
+  isAgreementSignatureComplete
 } from './tenancyActivation.js';
 
 const createRequestError = (status, message, code, details = null) => {
@@ -517,6 +518,64 @@ export const createTenancyOnboardingRouter = () => {
 
       await refreshChecklistCompletion(req.tenantId, checklist.id, req.user.id);
       res.json({ data: await loadChecklist(req.tenantId, agreement.id), error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/:agreementId/manual-signature', async (req, res, next) => {
+    try {
+      requireManagementPermission(req);
+      const agreement = await loadAgreementContext(req.tenantId, req.params.agreementId);
+      requirePropertyScope(req, agreement.propertyid);
+
+      if (String(agreement.status).toLowerCase() === 'active' || isAgreementSignatureComplete(agreement)) {
+        res.json({ data: await buildOnboardingProjection(req.tenantId, agreement), error: null });
+        return;
+      }
+
+      const previousSignatureStatus = agreement.signature_status || null;
+      await runQuery(
+        `SET XACT_ABORT ON;
+         BEGIN TRY
+           BEGIN TRANSACTION;
+
+           UPDATE agreements
+           SET signature_status = 'manual_signed',
+               signature_completed_at = SYSUTCDATETIME(),
+               signeddate = SYSUTCDATETIME(),
+               updatedat = SYSUTCDATETIME()
+           WHERE tenant_id = @tenantId
+             AND id = @agreementId
+             AND status <> 'active';
+
+           INSERT INTO tenancy_lifecycle_events (
+             tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata
+           ) VALUES (
+             @tenantId, @agreementId, 'manual_signature_recorded', @agreementStatus, @agreementStatus, @actorUserId, @metadata
+           );
+
+           COMMIT TRANSACTION;
+         END TRY
+         BEGIN CATCH
+           IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+           THROW;
+         END CATCH;`,
+        {
+          tenantId: req.tenantId,
+          agreementId: agreement.id,
+          agreementStatus: agreement.status,
+          actorUserId: req.user.id,
+          metadata: JSON.stringify({
+            source: 'manual',
+            previousSignatureStatus,
+            confirmation: 'landlord_and_tenant_signed_outside_evia'
+          })
+        }
+      );
+
+      const updatedAgreement = await loadAgreementContext(req.tenantId, agreement.id);
+      res.json({ data: await buildOnboardingProjection(req.tenantId, updatedAgreement), error: null });
     } catch (error) {
       next(error);
     }
