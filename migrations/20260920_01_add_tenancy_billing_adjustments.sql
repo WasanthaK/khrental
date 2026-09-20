@@ -3,6 +3,16 @@ SET XACT_ABORT ON;
 BEGIN TRY
     BEGIN TRANSACTION;
 
+    DECLARE @migrationLockResult INT;
+    EXEC @migrationLockResult = sys.sp_getapplock
+        @Resource = N'KH_Rentals_20260920_01_billing_adjustments',
+        @LockMode = N'Exclusive',
+        @LockOwner = N'Transaction',
+        @LockTimeout = 60000;
+
+    IF @migrationLockResult < 0
+        THROW 50000, 'Could not acquire the billing-adjustment migration lock.', 1;
+
     IF OBJECT_ID(N'dbo.agreements', N'U') IS NULL
         THROW 50001, 'dbo.agreements must exist before applying the billing-adjustment migration.', 1;
 
