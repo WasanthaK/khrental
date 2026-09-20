@@ -1,7 +1,8 @@
 const normalizeType = (value) => String(value || '').trim().toLowerCase();
 
 export const isRenteeDirectoryRecord = (record = {}) => (
-  normalizeType(record.user_type || record.userType) === 'rentee'
+  normalizeType(record.directory_role || record.directoryRole) === 'rentee'
+  || normalizeType(record.user_type || record.userType) === 'rentee'
   || normalizeType(record.role) === 'rentee'
 );
 

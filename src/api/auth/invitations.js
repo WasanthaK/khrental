@@ -52,10 +52,10 @@ const loadInvitationTarget = async (tenantId, appUserId) => {
       tm.status AS membership_status
     FROM dbo.app_users au
     LEFT JOIN dbo.tenant_memberships tm
-      ON tm.tenant_id = au.tenant_id
+      ON tm.tenant_id = @tenantId
      AND tm.app_user_id = au.id
-    WHERE au.tenant_id = @tenantId
-      AND au.id = @appUserId
+    WHERE au.id = @appUserId
+      AND (au.tenant_id = @tenantId OR tm.id IS NOT NULL)
   `, { tenantId, appUserId });
 };
 
@@ -69,7 +69,7 @@ const deriveInvitationRole = (target) => {
 
 const validateTargetForInvitation = async (target) => {
   if (!target) {
-    throw createInvitationError(404, 'The invitation target was not found in the active tenant.', 'INVITATION_TARGET_NOT_FOUND');
+    throw createInvitationError(404, 'The invitation target was not found in the active organization.', 'INVITATION_TARGET_NOT_FOUND');
   }
 
   if (normalizeStatus(target.app_user_status || 'active') !== 'active') {
@@ -115,7 +115,9 @@ export const createUserInvitation = async ({
 
   const email = normalizeInvitationEmail(target.email);
   const intendedRole = deriveInvitationRole(target);
-  const userType = normalizeRole(target.user_type || (intendedRole === 'rentee' ? 'rentee' : 'staff'));
+  const userType = intendedRole === 'rentee'
+    ? 'rentee'
+    : normalizeRole(target.user_type || 'staff');
   const rawToken = generateInvitationToken();
   const tokenHash = hashInvitationToken(rawToken);
   const expiresAt = createInvitationExpiry(new Date(), ttlHours);
@@ -155,8 +157,7 @@ export const createUserInvitation = async ({
       UPDATE dbo.app_users
       SET invited = 1,
           updatedat = SYSUTCDATETIME()
-      WHERE tenant_id = @tenantId
-        AND id = @appUserId;
+      WHERE id = @appUserId;
     `, {
       tenantId,
       appUserId,
@@ -201,6 +202,7 @@ const loadInvitationByToken = async (token) => {
         i.expires_at,
         i.accepted_at,
         i.revoked_at,
+        au.tenant_id AS app_user_tenant_id,
         au.email AS current_email,
         au.name AS app_user_name,
         au.auth_id,
@@ -214,7 +216,6 @@ const loadInvitationByToken = async (token) => {
       FROM dbo.user_invitations i
       INNER JOIN dbo.app_users au
         ON au.id = i.app_user_id
-       AND au.tenant_id = i.tenant_id
       INNER JOIN dbo.tenants t
         ON t.id = i.tenant_id
       LEFT JOIN dbo.tenant_memberships tm
@@ -248,8 +249,13 @@ const getInvitationAvailability = (row, now = new Date()) => {
     if (normalizeRole(row.membership_role) !== normalizeRole(row.intended_role)) {
       return 'stale';
     }
-  } else if (normalizeRole(row.app_user_role) !== normalizeRole(row.intended_role)) {
-    return 'stale';
+  } else {
+    if (String(row.app_user_tenant_id || '') !== String(row.tenant_id || '')) {
+      return 'unavailable';
+    }
+    if (normalizeRole(row.app_user_role) !== normalizeRole(row.intended_role)) {
+      return 'stale';
+    }
   }
 
   return 'valid';
@@ -312,6 +318,7 @@ export const redeemUserInvitation = async ({ token, password }) => {
         i.expires_at,
         i.accepted_at,
         i.revoked_at,
+        au.tenant_id AS app_user_tenant_id,
         au.email AS current_email,
         au.name AS app_user_name,
         au.auth_id,
@@ -324,7 +331,6 @@ export const redeemUserInvitation = async ({ token, password }) => {
       FROM dbo.user_invitations i WITH (UPDLOCK, HOLDLOCK)
       INNER JOIN dbo.app_users au WITH (UPDLOCK, HOLDLOCK)
         ON au.id = i.app_user_id
-       AND au.tenant_id = i.tenant_id
       LEFT JOIN dbo.tenant_memberships tm
         ON tm.tenant_id = i.tenant_id
        AND tm.app_user_id = i.app_user_id
@@ -416,6 +422,11 @@ export const redeemUserInvitation = async ({ token, password }) => {
         appUserId: invitation.app_user_id,
         role: intendedRole
       }).query(`
+        UPDATE dbo.tenant_memberships
+        SET is_default = 0,
+            updatedat = SYSUTCDATETIME()
+        WHERE app_user_id = @appUserId;
+
         INSERT INTO dbo.tenant_memberships (
           id,
           tenant_id,
@@ -440,7 +451,6 @@ export const redeemUserInvitation = async ({ token, password }) => {
     }
 
     await bindTransactionParams(new sql.Request(transaction), {
-      tenantId: invitation.tenant_id,
       appUserId: invitation.app_user_id,
       authId,
       invitationId: invitation.id
@@ -449,8 +459,7 @@ export const redeemUserInvitation = async ({ token, password }) => {
       SET auth_id = @authId,
           invited = 1,
           updatedat = SYSUTCDATETIME()
-      WHERE tenant_id = @tenantId
-        AND id = @appUserId
+      WHERE id = @appUserId
         AND auth_id IS NULL;
 
       IF @@ROWCOUNT <> 1

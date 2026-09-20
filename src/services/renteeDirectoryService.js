@@ -5,13 +5,13 @@ import { normalizeRenteeDirectoryRecords } from '../utils/renteeDirectory';
 export const fetchRenteeDirectory = async () => {
   if (isMssqlApiEnabled()) {
     try {
-      // Ask the server for the active tenant-scoped directory first. We filter
-      // locally so older rows with role='rentee' but an inconsistent user_type
-      // do not disappear from the Tenants screen.
-      const users = await requestMssqlApi('/api/mssql/app-users');
+      // The canonical renter endpoint resolves both legacy tenant ownership and
+      // active renter memberships for the current organization.
+      const users = await requestMssqlApi('/api/mssql/rentees');
       return normalizeRenteeDirectoryRecords(users);
     } catch (error) {
       console.error('Error fetching tenant directory via MSSQL:', error);
+      throw error;
     }
   }
 
