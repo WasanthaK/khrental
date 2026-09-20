@@ -80,7 +80,7 @@
     "axios": "^1.8.4",
     "body-parser": "^2.2.0",
     "bootstrap": "^5.3.3",
-    "cors": "^2.2.0",
+    "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "docx": "^9.3.0",
     "express": "^5.1.0",
