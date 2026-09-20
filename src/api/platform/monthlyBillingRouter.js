@@ -3,6 +3,7 @@ import { getMssqlPool, sql } from '../mssql/pool.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole } from './permissionEngine.js';
+import { agreementOverlapsBillingPeriod } from './billingLifecycle.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -102,6 +103,21 @@ export const createMonthlyBillingRouter = () => {
       for (const agreement of agreements) {
         try {
           requirePropertyScope(req, agreement.propertyid);
+
+          if (!agreementOverlapsBillingPeriod({
+            agreementStart: agreement.startdate,
+            agreementEnd: agreement.enddate,
+            periodStart: start,
+            periodEnd: end
+          })) {
+            results.skipped.push({
+              agreementId: agreement.id,
+              propertyId: agreement.propertyid,
+              reason: 'outside_agreement_period'
+            });
+            continue;
+          }
+
           const transaction = new sql.Transaction(pool);
           await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
           try {
@@ -131,13 +147,17 @@ export const createMonthlyBillingRouter = () => {
                  AND billing_status = 'pending_invoice'
                  AND readingdate >= @periodStart
                  AND readingdate < @periodEnd
+                 AND (@agreementStart IS NULL OR readingdate >= @agreementStart)
+                 AND (@agreementEnd IS NULL OR readingdate <= @agreementEnd)
                ORDER BY readingdate, createdat`,
               {
                 tenantId: req.tenantId,
                 renteeId: agreement.renteeid,
                 propertyId: agreement.propertyid,
                 periodStart: start,
-                periodEnd: end
+                periodEnd: end,
+                agreementStart: agreement.startdate || null,
+                agreementEnd: agreement.enddate || null
               }
             );
 
@@ -253,14 +273,18 @@ export const createMonthlyBillingRouter = () => {
                    AND invoice_id IS NULL
                    AND billing_status = 'pending_invoice'
                    AND readingdate >= @periodStart
-                   AND readingdate < @periodEnd`,
+                   AND readingdate < @periodEnd
+                   AND (@agreementStart IS NULL OR readingdate >= @agreementStart)
+                   AND (@agreementEnd IS NULL OR readingdate <= @agreementEnd)`,
                 {
                   tenantId: req.tenantId,
                   invoiceId: invoice.id,
                   renteeId: agreement.renteeid,
                   propertyId: agreement.propertyid,
                   periodStart: start,
-                  periodEnd: end
+                  periodEnd: end,
+                  agreementStart: agreement.startdate || null,
+                  agreementEnd: agreement.enddate || null
                 }
               );
             }
