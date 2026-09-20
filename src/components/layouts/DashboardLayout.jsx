@@ -17,7 +17,7 @@ import { setStoredPreferredLanguage } from '../../utils/userPreferences';
 
 const DashboardLayout = () => {
   const { user, membership, logout, setUser } = useAuth();
-  const { isPlatformAdmin } = usePlatformAdminStatus();
+  const { isPlatformAdmin, loading: platformAdminLoading } = usePlatformAdminStatus();
   const navigate = useNavigate();
   const location = useLocation();
   const subject = { user, membership: membership || user?.membership || null };
@@ -30,18 +30,19 @@ const DashboardLayout = () => {
 
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
   const isAgreementRoute = location.pathname.includes('/dashboard/agreements');
+  const showTenantWorkspace = !platformAdminLoading && !isPlatformAdmin;
 
-  const showProperties = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.PROPERTIES);
-  const showRentees = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.RENTEES);
-  const showAgreements = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.AGREEMENTS);
-  const showInvoices = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.INVOICES);
-  const showUtilities = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.UTILITIES);
-  const showMaintenance = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.MAINTENANCE);
-  const showCameras = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.CAMERAS);
-  const showTeam = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.TEAM);
-  const showSettings = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.SETTINGS);
-  const showInvoiceManagement = canManageInvoices(subject);
-  const portalLabel = getPortalLabel(subject);
+  const showProperties = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.PROPERTIES);
+  const showRentees = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.RENTEES);
+  const showAgreements = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.AGREEMENTS);
+  const showInvoices = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.INVOICES);
+  const showUtilities = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.UTILITIES);
+  const showMaintenance = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.MAINTENANCE);
+  const showCameras = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.CAMERAS);
+  const showTeam = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.TEAM);
+  const showSettings = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.SETTINGS);
+  const showInvoiceManagement = showTenantWorkspace && canManageInvoices(subject);
+  const portalLabel = isPlatformAdmin ? 'Platform Administrator' : getPortalLabel(subject);
 
   useEffect(() => {
     if (isInvoiceRoute) {
@@ -58,6 +59,16 @@ const DashboardLayout = () => {
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (platformAdminLoading || !isPlatformAdmin) {
+      return;
+    }
+
+    if (location.pathname !== '/dashboard/tenant-admin') {
+      navigate('/dashboard/tenant-admin', { replace: true });
+    }
+  }, [isPlatformAdmin, platformAdminLoading, location.pathname, navigate]);
 
   const handleSignOut = async () => {
     await logout();
@@ -117,14 +128,17 @@ const DashboardLayout = () => {
             </div>
           </div>
 
-          <div className="mt-1">
-            <UserLanguageSelector
-              value={user?.preferred_language || 'en'}
-              onChange={handleLanguageChange}
-            />
-          </div>
-
-          <TenantSwitcher />
+          {!isPlatformAdmin && (
+            <>
+              <div className="mt-1">
+                <UserLanguageSelector
+                  value={user?.preferred_language || 'en'}
+                  onChange={handleLanguageChange}
+                />
+              </div>
+              <TenantSwitcher />
+            </>
+          )}
 
           <button
             onClick={handleSignOut}
@@ -137,9 +151,11 @@ const DashboardLayout = () => {
 
       <div className="flex-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
         <nav className="space-y-1">
-          <NavLink to="/dashboard" end className={getNavLinkClass}>
-            Dashboard
-          </NavLink>
+          {showTenantWorkspace && (
+            <NavLink to="/dashboard" end className={getNavLinkClass}>
+              Dashboard
+            </NavLink>
+          )}
 
           {showProperties && (
             <NavLink to="/dashboard/properties" className={getNavLinkClass}>
