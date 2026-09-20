@@ -1,8 +1,11 @@
 import { platform as platformClient } from './platformClient';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
 import { completeMaintenanceRequest } from './maintenanceLifecycleService';
-
-const normalize = (value) => String(value || '').trim().toLowerCase();
+import {
+  canCompleteTaskForMaintenanceStatus,
+  isLinkedMaintenanceCompletion,
+  requiresMaintenanceCompletion
+} from './teamMaintenanceLifecyclePolicy';
 
 export const updateTaskAssignment = async (id, assignmentData = {}) => {
   try {
@@ -18,9 +21,11 @@ export const updateTaskAssignment = async (id, assignmentData = {}) => {
     const dbData = toDatabaseFormat(assignmentData);
     dbData.updatedat = new Date().toISOString();
 
-    const completingMaintenance = normalize(dbData.status) === 'completed'
-      && normalize(currentAssignment.tasktype) === 'maintenance'
-      && currentAssignment.relatedentityid;
+    const completingMaintenance = isLinkedMaintenanceCompletion({
+      status: dbData.status,
+      taskType: currentAssignment.tasktype,
+      relatedEntityId: currentAssignment.relatedentityid
+    });
 
     if (completingMaintenance) {
       const { data: maintenanceRequest, error: maintenanceReadError } = await platformClient
@@ -32,12 +37,11 @@ export const updateTaskAssignment = async (id, assignmentData = {}) => {
       if (maintenanceReadError) throw maintenanceReadError;
       if (!maintenanceRequest) throw new Error('Linked maintenance request not found');
 
-      const maintenanceStatus = normalize(maintenanceRequest.status);
-      if (maintenanceStatus !== 'completed') {
-        if (maintenanceStatus !== 'in_progress') {
-          throw new Error(`Linked maintenance request must be in progress before the task can be completed. Current status: ${maintenanceRequest.status || 'unknown'}.`);
-        }
+      if (!canCompleteTaskForMaintenanceStatus(maintenanceRequest.status)) {
+        throw new Error(`Linked maintenance request must be in progress before the task can be completed. Current status: ${maintenanceRequest.status || 'unknown'}.`);
+      }
 
+      if (requiresMaintenanceCompletion(maintenanceRequest.status)) {
         const completion = await completeMaintenanceRequest(currentAssignment.relatedentityid, {
           notes: dbData.notes || currentAssignment.notes || maintenanceRequest.notes || 'Completed from linked task assignment'
         });
