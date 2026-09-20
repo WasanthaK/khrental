@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateTenancyActivationReadiness,
   getActivationBlockingReasons,
+  isActiveTenantMembership,
   isAgreementSignatureComplete
 } from '../src/api/platform/tenancyActivation.js';
 import { guardTenancyActivationQuery } from '../src/api/platform/tenancyActivationGuard.js';
@@ -15,7 +16,7 @@ const readyInput = () => ({
     depositamount: 1000
   },
   rentee: { auth_id: 'auth-1' },
-  membership: { status: 'active' },
+  membership: { status: 'active', role: 'tenant' },
   checklist: { status: 'completed' },
   securityDepositReceived: 1000
 });
@@ -26,6 +27,16 @@ test('signed agreement status is sufficient signature evidence', () => {
 
 test('signature completion timestamp is sufficient signature evidence', () => {
   assert.equal(isAgreementSignatureComplete({ status: 'pending', signature_completed_at: '2026-09-16T00:00:00Z' }), true);
+});
+
+test('active tenant or rentee membership satisfies the tenancy membership gate', () => {
+  assert.equal(isActiveTenantMembership({ status: 'active', role: 'tenant' }), true);
+  assert.equal(isActiveTenantMembership({ status: 'active', role: 'rentee' }), true);
+});
+
+test('active non-tenant membership cannot satisfy the tenancy membership gate', () => {
+  assert.equal(isActiveTenantMembership({ status: 'active', role: 'staff' }), false);
+  assert.equal(isActiveTenantMembership({ status: 'active', role: 'admin' }), false);
 });
 
 test('tenancy is ready only when every activation requirement is satisfied', () => {
@@ -64,6 +75,25 @@ test('unaccepted invitation blocks activation', () => {
   assert.equal(readiness.canActivate, false);
   assert.equal(readiness.checks.accountAccepted, false);
   assert.match(getActivationBlockingReasons(readiness).join(' '), /invitation/i);
+});
+
+test('inactive tenant membership blocks activation', () => {
+  const input = readyInput();
+  input.membership.status = 'inactive';
+  const readiness = evaluateTenancyActivationReadiness(input);
+
+  assert.equal(readiness.canActivate, false);
+  assert.equal(readiness.checks.membershipActive, false);
+});
+
+test('active staff membership on the assigned app user blocks tenancy activation', () => {
+  const input = readyInput();
+  input.membership.role = 'staff';
+  const readiness = evaluateTenancyActivationReadiness(input);
+
+  assert.equal(readiness.canActivate, false);
+  assert.equal(readiness.checks.membershipActive, false);
+  assert.match(getActivationBlockingReasons(readiness).join(' '), /tenant\/rentee membership/i);
 });
 
 test('incomplete move-in checklist blocks activation', () => {
