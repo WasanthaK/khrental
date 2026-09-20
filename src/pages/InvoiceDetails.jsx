@@ -118,11 +118,12 @@ const InvoiceDetails = () => {
       setError(null);
       setNotice(null);
       const result = await sendPaymentReminder(id);
-      if (!result.success) throw new Error(result.error || 'Failed to record reminder follow-up');
-      setNotice('Reminder follow-up recorded. No email or SMS was sent by this action.');
+      if (!result.success) throw new Error(result.error || 'Failed to send payment reminder');
+      const recipient = result.data?.to ? ` to ${result.data.to}` : '';
+      setNotice(`Payment reminder email sent${recipient}.`);
       await loadAccount();
     } catch (reminderError) {
-      setError(reminderError.message || 'Failed to record reminder follow-up.');
+      setError(reminderError.message || 'Failed to send payment reminder.');
     } finally {
       setWorking(false);
     }
@@ -251,12 +252,12 @@ const InvoiceDetails = () => {
               <button type="button" onClick={() => setShowManualPayment(true)} className="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Record manual payment</button>
             )}
             {canManageInvoices && outstandingBalance > 0 && (
-              <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">Record reminder follow-up</button>
+              <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">{working ? 'Sending…' : 'Send payment reminder'}</button>
             )}
             <button type="button" onClick={handleDownloadInvoice} className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Download account summary</button>
           </div>
-          {invoice.reminderdate && <p className="mt-3 text-xs text-gray-500">Last reminder follow-up: {formatDate(invoice.reminderdate)}</p>}
-          <p className="mt-4 text-xs text-gray-500">Reminder follow-up records an audited action only. Email/SMS delivery is not yet attached to this control.</p>
+          {invoice.reminderdate && <p className="mt-3 text-xs text-gray-500">Last reminder sent: {formatDate(invoice.reminderdate)}</p>}
+          <p className="mt-4 text-xs text-gray-500">Payment reminders are sent by email to the tenant address on file and recorded in the billing lifecycle audit log.</p>
         </aside>
       </div>
 
