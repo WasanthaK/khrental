@@ -50,6 +50,23 @@ export const extractStoragePath = (urlOrPath, bucket) => {
   return normalizePath(value);
 };
 
+export const listStorageBuckets = async () => {
+  const payload = await requestJson('/api/platform/storage/buckets');
+  return payload?.data || [];
+};
+
+export const listTenantFiles = async ({ bucket, path = '' }) => {
+  if (!bucket) {
+    throw new Error('Bucket is required to list storage files.');
+  }
+
+  const payload = await requestJson(
+    `/api/platform/storage/list?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(normalizePath(path))}`
+  );
+
+  return payload?.data || [];
+};
+
 export const uploadTenantFile = async ({ bucket, path, file }) => {
   if (!bucket || !path || !file) {
     throw new Error('Bucket, path and file are required for upload.');
