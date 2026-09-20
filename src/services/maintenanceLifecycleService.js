@@ -8,10 +8,12 @@ import {
   notifyAboutCancellation
 } from './notificationService';
 import {
+  addMaintenanceLifecycleComment,
   assignMaintenanceLifecycleRequest,
   cancelMaintenanceLifecycleRequest,
   completeMaintenanceLifecycleRequest,
   createMaintenanceLifecycleRequest,
+  getMaintenanceLifecycleRequest,
   startMaintenanceLifecycleRequest
 } from './maintenanceLifecycleClient';
 
@@ -67,6 +69,51 @@ const bestEffortNotify = async (notifier, payload) => {
     await notifier(payload);
   } catch (error) {
     console.error('Maintenance notification failed:', error);
+  }
+};
+
+const mapLifecycleComment = (comment = {}) => ({
+  id: comment.id,
+  content: comment.comment || '',
+  createdBy: {
+    name: comment.user_name || 'Unknown User',
+    role: comment.user_role || ''
+  },
+  createdat: comment.created_at || comment.createdat || null,
+  isInternal: Boolean(comment.is_internal ?? comment.isInternal),
+  isAdminMessage: false
+});
+
+export const getMaintenanceComments = async (requestId) => {
+  try {
+    const { data, error } = await getMaintenanceLifecycleRequest(requestId);
+    if (error) throw error;
+    return {
+      success: true,
+      data: (data?.comments || []).map(mapLifecycleComment),
+      error: null
+    };
+  } catch (error) {
+    console.error('Error loading maintenance comments through lifecycle API:', error);
+    return { success: false, data: [], error: error.message || 'Failed to load maintenance comments' };
+  }
+};
+
+export const addMaintenanceComment = async (requestId, commentData = {}) => {
+  try {
+    const comment = String(commentData.content || commentData.comment || '').trim();
+    if (!comment) return { success: false, error: 'Comment is required' };
+
+    const { data, error } = await addMaintenanceLifecycleComment(requestId, {
+      comment,
+      isInternal: Boolean(commentData.isInternal)
+    });
+    if (error) throw error;
+
+    return { success: true, data: mapLifecycleComment(data), error: null };
+  } catch (error) {
+    console.error('Error adding maintenance comment through lifecycle API:', error);
+    return { success: false, data: null, error: error.message || 'Failed to add maintenance comment' };
   }
 };
 
