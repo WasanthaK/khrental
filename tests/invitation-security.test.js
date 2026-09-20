@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { publicSignupRequiresInvitation } from '../src/api/auth/invitations.js';
 import {
   createInvitationExpiry,
@@ -9,6 +10,11 @@ import {
   isInvitationUsable,
   normalizeInvitationEmail
 } from '../src/api/auth/invitationTokens.js';
+
+const invitationServiceSource = readFileSync(
+  new URL('../src/services/invitationService.js', import.meta.url),
+  'utf8'
+);
 
 test('invitation token is opaque, random and base64url-safe', () => {
   const first = generateInvitationToken();
@@ -74,4 +80,12 @@ test('normal public signup must not claim an existing app-user record', () => {
   assert.equal(publicSignupRequiresInvitation(null), false);
   assert.equal(publicSignupRequiresInvitation(undefined), false);
   assert.equal(publicSignupRequiresInvitation({ id: 'existing-app-user' }), true);
+});
+
+test('shared invitation service uses explicit KH Rentals APIs without compatibility fallback', () => {
+  assert.doesNotMatch(invitationServiceSource, /platformClient/);
+  assert.doesNotMatch(invitationServiceSource, /isMssqlApiEnabled/);
+  assert.doesNotMatch(invitationServiceSource, /appUserService/);
+  assert.match(invitationServiceSource, /\/api\/platform\/auth\/invite/);
+  assert.match(invitationServiceSource, /\/api\/mssql\/app-users\/\$\{encodeURIComponent\(userId\)\}/);
 });
