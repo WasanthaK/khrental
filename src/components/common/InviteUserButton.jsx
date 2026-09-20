@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { fetchAppUser } from '../../services/appUserService';
 import { resendInvitation } from '../../services/invitationService';
 
@@ -15,70 +15,58 @@ import { resendInvitation } from '../../services/invitationService';
 const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false, sendReal = false }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [resultMessage, setResultMessage] = useState(null);
   const [useSendReal, setUseSendReal] = useState(sendReal);
-  
-  // Size classes
+
   const sizeClasses = {
     sm: 'px-2 py-1 text-xs',
     md: 'px-3 py-1.5 text-sm',
     lg: 'px-4 py-2 text-base'
   };
-  
-  // Handle invitation
+
   const handleInvite = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+      setResultMessage(null);
+
       const userData = await fetchAppUser(userId);
-      
-      // Get email from contact_details or directly from the user object
       const email = userData.contact_details?.email || userData.email;
-      
+
       if (!email) {
         throw new Error('User has no email address');
       }
-      
+
       console.log(`Sending invitation to ${userData.name || 'User'} (${email})`);
-      
-      // Use the resendInvitation function from invitationService
-      // Pass simulated=false if sendReal is true to send a real email
+
+      // A checked box means a real SendGrid delivery. Leaving it unchecked is
+      // a true simulation and must not call the email delivery endpoint.
       const result = await resendInvitation(userId, !useSendReal);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to send invitation');
       }
-      
-      // Show success message based on simulation status
-      if (!result.simulated) {
-        toast.success('Real invitation email sent successfully');
-      } else {
-        toast.success('Simulated invitation email sent successfully');
-      }
-      
-      // Call success callback if provided
+
+      const successMessage = result.simulated
+        ? 'Invitation simulated. No email was sent.'
+        : 'Invitation email accepted for delivery.';
+
+      setResultMessage(successMessage);
+      toast.success(successMessage);
+
       if (onSuccess && typeof onSuccess === 'function') {
-        onSuccess();
+        await onSuccess();
       }
-    } catch (error) {
-      console.error('Error sending invitation:', error);
-      setError(error.message);
-      
-      // Show a more user-friendly error message
-      if (error.message && (
-        error.message.includes('app_users') || 
-        error.message.includes('relation') || 
-        error.message.includes('does not exist')
-      )) {
-        toast.error('The app_users table does not exist. Please run the migration first.');
-      } else {
-        toast.error(`Failed to send invitation: ${error.message}`);
-      }
+    } catch (inviteError) {
+      console.error('Error sending invitation:', inviteError);
+      const message = inviteError.message || 'Failed to send invitation';
+      setError(message);
+      toast.error(`Failed to send invitation: ${message}`);
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <div>
       <div className="flex items-center mb-2">
@@ -86,7 +74,12 @@ const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false, s
           id={`send-real-checkbox-${userId}`}
           type="checkbox"
           checked={useSendReal}
-          onChange={() => setUseSendReal(!useSendReal)}
+          disabled={loading}
+          onChange={() => {
+            setUseSendReal((previous) => !previous);
+            setResultMessage(null);
+            setError(null);
+          }}
           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
         />
         <label htmlFor={`send-real-checkbox-${userId}`} className="ml-2 block text-sm text-gray-600">
@@ -94,12 +87,13 @@ const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false, s
         </label>
       </div>
       <button
+        type="button"
         onClick={handleInvite}
         disabled={loading}
         className={`
           ${sizeClasses[size] || sizeClasses.md}
           ${fullWidth ? 'w-full' : ''}
-          ${useSendReal ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white 
+          ${useSendReal ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white
           rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
           disabled:opacity-50 disabled:cursor-not-allowed
           flex items-center justify-center
@@ -119,14 +113,19 @@ const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false, s
               <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
               <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
             </svg>
-            {useSendReal ? 'Send Real Invitation' : 'Send Invitation'}
+            {useSendReal ? 'Send Real Invitation' : 'Simulate Invitation'}
           </>
         )}
       </button>
-      
-      {/* Display error message if any */}
+
+      {resultMessage && (
+        <div className="mt-2 rounded bg-green-50 px-2 py-1 text-sm text-green-700" role="status">
+          {resultMessage}
+        </div>
+      )}
+
       {error && (
-        <div className="mt-2 text-red-600 text-sm">
+        <div className="mt-2 rounded bg-red-50 px-2 py-1 text-sm text-red-700" role="alert">
           Error: {error}
         </div>
       )}
@@ -134,4 +133,4 @@ const InviteUserButton = ({ userId, onSuccess, size = 'md', fullWidth = false, s
   );
 };
 
-export default InviteUserButton; 
+export default InviteUserButton;
