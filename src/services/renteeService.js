@@ -7,10 +7,17 @@ export const getRentee = async (id) => {
   return requestMssqlApi(`/api/mssql/rentees/${encodeURIComponent(id)}`);
 };
 
-export const createRentee = async (payload) => requestMssqlApi('/api/mssql/rentees', {
-  method: 'POST',
-  body: payload
-});
+export const createRentee = async (payload) => {
+  const result = await requestMssqlApi('/api/mssql/rentees', {
+    method: 'POST',
+    body: payload
+  });
+
+  // The canonical create endpoint returns create/attach metadata around the
+  // actual renter record. Keep the browser service contract consistent with
+  // getRentee/updateRentee by returning the renter itself to form callers.
+  return result?.data || result;
+};
 
 export const updateRentee = async (id, payload) => {
   if (!id) throw new Error('Renter ID is required.');
