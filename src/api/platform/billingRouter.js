@@ -250,13 +250,24 @@ export const createBillingRouter = () => {
         );
         if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
 
-        const pending = await singleTransaction(
+        const lockedPayments = await queryTransaction(
           transaction,
-          `SELECT TOP 1 id FROM payments WITH (UPDLOCK, HOLDLOCK)
-           WHERE tenant_id = @tenantId AND invoiceid = @invoiceId AND status = 'pending'`,
+          `SELECT * FROM payments WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND invoiceid = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
-        if (pending) throw createRequestError(409, 'A payment is already awaiting verification for this invoice.', 'PAYMENT_ALREADY_PENDING');
+        const lockedOutstanding = calculateOutstandingBalance(lockedInvoice.totalamount, lockedPayments);
+        const pending = lockedPayments.find((payment) => String(payment.status).toLowerCase() === PAYMENT_STATUS.PENDING);
+        if (!canSubmitPaymentProof({
+          invoiceStatus: lockedInvoice.status,
+          outstandingBalance: lockedOutstanding,
+          hasPendingPayment: Boolean(pending)
+        })) {
+          throw createRequestError(409, 'A payment proof cannot be submitted for this invoice in its current state.', 'PAYMENT_SUBMISSION_BLOCKED');
+        }
+        if (requestedAmount > lockedOutstanding) {
+          throw createRequestError(409, 'The outstanding balance changed before this payment was submitted.', 'PAYMENT_EXCEEDS_OUTSTANDING_BALANCE');
+        }
 
         const payment = await singleTransaction(
           transaction,
@@ -304,7 +315,7 @@ export const createBillingRouter = () => {
           invoiceId: invoice.id,
           paymentId: payment.id,
           eventType: 'payment_submitted',
-          fromStatus: invoice.status,
+          fromStatus: lockedInvoice.status,
           toStatus: 'verification_pending',
           actorUserId: req.user.id,
           metadata: { amount: requestedAmount }
@@ -343,6 +354,8 @@ export const createBillingRouter = () => {
            WHERE tenant_id = @tenantId AND id = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
+        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+
         const payment = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM payments WITH (UPDLOCK, HOLDLOCK)
@@ -351,6 +364,23 @@ export const createBillingRouter = () => {
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
         if (!payment) throw createRequestError(409, 'No payment is awaiting verification for this invoice.', 'NO_PENDING_PAYMENT');
+
+        if (approved) {
+          const otherPayments = await queryTransaction(
+            transaction,
+            `SELECT * FROM payments WITH (UPDLOCK, HOLDLOCK)
+             WHERE tenant_id = @tenantId AND invoiceid = @invoiceId AND id <> @paymentId`,
+            { tenantId: req.tenantId, invoiceId: invoice.id, paymentId: payment.id }
+          );
+          const outstandingBeforeApproval = calculateOutstandingBalance(lockedInvoice.totalamount, otherPayments);
+          if (Number(payment.amount) > outstandingBeforeApproval) {
+            throw createRequestError(
+              409,
+              'This payment exceeds the invoice balance remaining after other verified payments.',
+              'PAYMENT_EXCEEDS_OUTSTANDING_BALANCE'
+            );
+          }
+        }
 
         const newPaymentStatus = approved ? PAYMENT_STATUS.VERIFIED : PAYMENT_STATUS.REJECTED;
         const updatedPayment = await singleTransaction(
@@ -434,12 +464,6 @@ export const createBillingRouter = () => {
       requirePaymentManage(req);
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
-      const currentPayments = await loadPayments(req.tenantId, invoice.id);
-      const outstanding = calculateOutstandingBalance(invoice.totalamount, currentPayments);
-      const amount = req.body?.amount === undefined ? outstanding : Number(req.body.amount);
-      if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
-        throw createRequestError(400, 'Payment amount must be greater than zero and cannot exceed the outstanding balance.', 'INVALID_PAYMENT_AMOUNT');
-      }
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -451,6 +475,29 @@ export const createBillingRouter = () => {
            WHERE tenant_id = @tenantId AND id = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
+        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+
+        const lockedPayments = await queryTransaction(
+          transaction,
+          `SELECT * FROM payments WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND invoiceid = @invoiceId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id }
+        );
+        const pending = lockedPayments.find((payment) => String(payment.status).toLowerCase() === PAYMENT_STATUS.PENDING);
+        if (pending) {
+          throw createRequestError(
+            409,
+            'A tenant payment is awaiting verification. Verify or reject it before recording a manual payment.',
+            'PAYMENT_ALREADY_PENDING'
+          );
+        }
+
+        const outstanding = calculateOutstandingBalance(lockedInvoice.totalamount, lockedPayments);
+        const amount = req.body?.amount === undefined ? outstanding : Number(req.body.amount);
+        if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
+          throw createRequestError(400, 'Payment amount must be greater than zero and cannot exceed the outstanding balance.', 'INVALID_PAYMENT_AMOUNT');
+        }
+
         const payment = await singleTransaction(
           transaction,
           `INSERT INTO payments (
@@ -482,11 +529,7 @@ export const createBillingRouter = () => {
           payment,
           actorUserId: req.user.id
         });
-        const allPayments = await queryTransaction(
-          transaction,
-          `SELECT * FROM payments WHERE tenant_id = @tenantId AND invoiceid = @invoiceId`,
-          { tenantId: req.tenantId, invoiceId: invoice.id }
-        );
+        const allPayments = [...lockedPayments, payment];
         const nextInvoiceStatus = getInvoiceStatusAfterVerification({
           invoiceAmount: lockedInvoice.totalamount,
           payments: allPayments,
