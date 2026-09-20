@@ -141,11 +141,14 @@ test('simulated invitations never create a token or call the email delivery endp
   assert.match(invitationServiceSource, /const emailResult = await sendDirectEmail\(\{/);
 });
 
-test('production database migrations are manual, ordered and checksum tracked', () => {
+test('production database migrations auto-plan safely while apply stays manual, ordered and checksum tracked', () => {
+  assert.match(migrationWorkflowSource, /\n\s+push:/);
+  assert.match(migrationWorkflowSource, /branches: \[main\]/);
   assert.match(migrationWorkflowSource, /workflow_dispatch:/);
-  assert.doesNotMatch(migrationWorkflowSource, /\n\s+push:/);
-  assert.match(migrationWorkflowSource, /environment: Production/);
+  assert.match(migrationWorkflowSource, /MIGRATION_MODE: .*workflow_dispatch.*inputs\.mode.*'plan'/);
+  assert.match(migrationWorkflowSource, /Automatic production migration runs are restricted to plan mode/);
   assert.match(migrationWorkflowSource, /APPLY-PRODUCTION/);
+  assert.match(migrationWorkflowSource, /environment: Production/);
   assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN/);
   assert.match(migrationWorkflowSource, /firewall-rule create/);
   assert.match(migrationWorkflowSource, /if: always\(\).*AZURE_SQL_FIREWALL_RULE/);
