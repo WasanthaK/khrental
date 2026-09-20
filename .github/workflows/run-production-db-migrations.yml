@@ -132,12 +132,43 @@ jobs:
           echo "::add-mask::$token"
           echo "MSSQL_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
 
+      - name: Probe production database connectivity
+        id: db_probe
+        shell: bash
+        env:
+          MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
+          MSSQL_MIGRATION_PASSWORD: ${{ secrets.MSSQL_MIGRATION_PASSWORD }}
+        run: |
+          set +e
+          node scripts/probe-production-db.mjs > db-probe.txt 2>&1
+          probe_exit=$?
+          set -e
+          cat db-probe.txt
+
+          case "$probe_exit" in
+            0)
+              echo "status=reachable" >> "$GITHUB_OUTPUT"
+              echo "Existing production network path is sufficient; no firewall change is required."
+              ;;
+            2)
+              echo "status=firewall" >> "$GITHUB_OUTPUT"
+              echo "Azure SQL reported that this runner IP is blocked; a temporary firewall rule is required."
+              ;;
+            *)
+              echo "status=error" >> "$GITHUB_OUTPUT"
+              echo "The database was reachable, but authentication or database authorization failed. Refusing to change the firewall because that would not fix this error." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Temporarily allow this runner through Azure SQL firewall
+        if: steps.db_probe.outputs.status == 'firewall'
         shell: bash
         run: |
           set -euo pipefail
           runner_ip=$(curl --fail --silent --show-error https://api.ipify.org)
           rule_name="gh-migrate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "AZURE_SQL_FIREWALL_RULE=$rule_name" >> "$GITHUB_ENV"
           echo "Runner public IP: $runner_ip"
           az sql server firewall-rule create \
             --resource-group "$AZURE_SQL_RESOURCE_GROUP" \
@@ -146,7 +177,6 @@ jobs:
             --start-ip-address "$runner_ip" \
             --end-ip-address "$runner_ip" \
             --output none
-          echo "AZURE_SQL_FIREWALL_RULE=$rule_name" >> "$GITHUB_ENV"
 
       - name: Run migration plan/apply
         shell: bash
