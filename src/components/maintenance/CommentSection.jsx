@@ -1,11 +1,29 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { formatDateTime } from '../../utils/helpers';
+import { getMaintenanceComments } from '../../services/maintenanceService';
 
 const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => {
+  const { id: requestId } = useParams();
   const [newComment, setNewComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [lifecycleComments, setLifecycleComments] = useState(null);
+
+  const refreshComments = useCallback(async () => {
+    if (!requestId) return;
+    const result = await getMaintenanceComments(requestId);
+    if (!result.success) {
+      console.error('Failed to load maintenance lifecycle comments:', result.error);
+      return;
+    }
+    setLifecycleComments(result.data || []);
+  }, [requestId]);
+
+  useEffect(() => {
+    refreshComments();
+  }, [refreshComments]);
 
   // Handle comment submission
   const handleSubmit = async (e) => {
@@ -33,6 +51,7 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
       if (success) {
         setNewComment('');
         setIsInternal(false);
+        await refreshComments();
       }
     } catch (err) {
       console.error('Error adding comment:', err.message);
@@ -42,16 +61,15 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
     }
   };
 
-  const isStaff = userRole === 'staff' || userRole === 'admin';
+  const isStaff = userRole === 'staff' || userRole === 'admin' || userRole === 'maintenance';
+  const sourceComments = lifecycleComments === null ? comments : lifecycleComments;
 
-  // Filter comments based on user role
-  const visibleComments = comments.filter(comment => {
-    // If user is staff or admin, show all comments
+  // The server already strips internal comments from tenant projections. Keep the
+  // client filter as a second display guard for legacy/fallback comment data.
+  const visibleComments = sourceComments.filter(comment => {
     if (userRole === 'admin' || userRole === 'staff' || userRole === 'maintenance') {
       return true;
     }
-    
-    // If user is rentee, only show non-internal comments
     return !comment.isInternal;
   });
 
@@ -59,7 +77,6 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
     <div className="bg-white rounded-lg shadow-sm p-4 border">
       <h3 className="text-lg font-medium mb-4">Comments & Updates</h3>
       
-      {/* Comment Form */}
       <form onSubmit={handleSubmit} className="mb-6">
         <div className="mb-3">
           <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">
@@ -76,7 +93,6 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
           ></textarea>
         </div>
         
-        {/* Internal comment checkbox only for staff */}
         {isStaff && (
           <div className="flex items-center space-x-2 mb-2">
             <input
@@ -109,20 +125,21 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
         </div>
       </form>
       
-      {/* Comments List */}
       {visibleComments.length === 0 ? (
         <p className="text-gray-500 text-center py-4">No comments yet.</p>
       ) : (
         <div className="space-y-4">
           {visibleComments.map((comment, index) => (
             <div 
-              key={index} 
+              key={comment.id || index} 
               className={`p-4 rounded-lg ${comment.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'}`}
             >
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center">
                   <div className="font-medium text-gray-900">{comment.createdBy?.name || 'Unknown User'}</div>
-                  <div className="text-sm text-gray-500 ml-2">({comment.createdBy?.role || 'unknown'})</div>
+                  {comment.createdBy?.role && (
+                    <div className="text-sm text-gray-500 ml-2">({comment.createdBy.role})</div>
+                  )}
                   
                   {comment.isInternal && (
                     <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
@@ -142,4 +159,4 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
   );
 };
 
-export default CommentSection; 
+export default CommentSection;
