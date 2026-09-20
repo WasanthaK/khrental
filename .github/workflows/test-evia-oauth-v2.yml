@@ -1,4 +1,4 @@
-name: Test Evia V2 integration
+name: Test Evia integration
 
 on:
   pull_request:
@@ -6,8 +6,10 @@ on:
     paths:
       - 'src/api/evia/oauthV2.js'
       - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV1AutoStampService.js'
       - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v1-autostamp.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'server.js'
       - 'Dockerfile'
@@ -17,8 +19,10 @@ on:
     paths:
       - 'src/api/evia/oauthV2.js'
       - 'src/services/eviaSignService.js'
+      - 'src/services/eviaV1AutoStampService.js'
       - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-signing-v1-autostamp.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'server.js'
       - 'Dockerfile'
@@ -37,4 +41,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-oauth-v2.test.js tests/evia-signing-v2.test.js
+      - run: node --test tests/evia-oauth-v2.test.js tests/evia-signing-v1-autostamp.test.js tests/evia-signing-v2.test.js
