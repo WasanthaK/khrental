@@ -7,6 +7,8 @@ import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
 const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
 const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.js', import.meta.url), 'utf8');
+const inviteButtonSource = readFileSync(new URL('../src/components/common/InviteUserButton.jsx', import.meta.url), 'utf8');
+const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -118,4 +120,21 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /createRentee/);
   assert.match(renteeFormSource, /sendRenteeInvitation/);
   assert.match(renteeFormSource, /Save & Invite/);
+});
+
+test('invitation card uses the mounted toast system and renders persistent feedback', () => {
+  assert.match(inviteButtonSource, /from 'react-hot-toast'/);
+  assert.doesNotMatch(inviteButtonSource, /from 'react-toastify'/);
+  assert.match(inviteButtonSource, /setResultMessage\(successMessage\)/);
+  assert.match(inviteButtonSource, /role="status"/);
+  assert.match(inviteButtonSource, /Simulate Invitation/);
+});
+
+test('simulated invitations never create a token or call the email delivery endpoint', () => {
+  const simulationBlock = invitationServiceSource.match(/if \(simulated\) \{[\s\S]*?\n    \}/)?.[0] || '';
+  assert.match(simulationBlock, /Invitation simulation completed without delivery/);
+  assert.doesNotMatch(simulationBlock, /createSecureInvitation/);
+  assert.doesNotMatch(simulationBlock, /sendDirectEmail/);
+  assert.match(invitationServiceSource, /const inviteData = await createSecureInvitation\(userDetails\);/);
+  assert.match(invitationServiceSource, /const emailResult = await sendDirectEmail\(\{/);
 });
