@@ -3,6 +3,7 @@ import { ChevronDownIcon, ChevronUpIcon, Bars3Icon, XMarkIcon } from '@heroicons
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../hooks/useAuth';
+import usePlatformAdminStatus from '../../hooks/usePlatformAdminStatus';
 import { getPortalLabel } from '../../utils/accessPolicy.js';
 import {
   WORKSPACE_SECTIONS,
@@ -16,6 +17,7 @@ import { setStoredPreferredLanguage } from '../../utils/userPreferences';
 
 const DashboardLayout = () => {
   const { user, membership, logout, setUser } = useAuth();
+  const { isPlatformAdmin } = usePlatformAdminStatus();
   const navigate = useNavigate();
   const location = useLocation();
   const subject = { user, membership: membership || user?.membership || null };
@@ -38,8 +40,6 @@ const DashboardLayout = () => {
   const showCameras = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.CAMERAS);
   const showTeam = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.TEAM);
   const showSettings = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.SETTINGS);
-  const showTenantAdmin = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.TENANT_ADMIN);
-  const showAdminDashboard = canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.ADMIN_DASHBOARD);
   const showInvoiceManagement = canManageInvoices(subject);
   const portalLabel = getPortalLabel(subject);
 
@@ -243,15 +243,9 @@ const DashboardLayout = () => {
             </NavLink>
           )}
 
-          {showTenantAdmin && (
+          {isPlatformAdmin && (
             <NavLink to="/dashboard/tenant-admin" className={getNavLinkClass}>
-              Tenant Admin
-            </NavLink>
-          )}
-
-          {showAdminDashboard && (
-            <NavLink to="/dashboard/admin-dashboard" className={getNavLinkClass}>
-              Admin Dashboard
+              Platform Admin
             </NavLink>
           )}
         </nav>
