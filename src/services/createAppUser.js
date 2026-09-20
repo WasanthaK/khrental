@@ -1,18 +1,21 @@
 import { createAppUserRecord } from './appUserRepository';
-import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
+import { requestMssqlApi } from './mssqlApiClient';
 
 /**
  * Create a new app user (staff or rentee) without sending welcome emails.
- * Rentee creation uses the canonical organization-aware endpoint so an existing
- * global identity can be attached to the active organization instead of failing
- * on the global email uniqueness constraint.
+ *
+ * Rentee creation is always organization-aware. It must never fall back to the
+ * generic app_users insert contract because app_users.email is globally unique
+ * while renter access belongs to tenant_memberships. The canonical endpoint can
+ * therefore create a new global identity or attach an existing one to the
+ * active organization without producing a misleading duplicate-email error.
  *
  * @param {Object} userData - User data
  * @param {string} userType - 'staff' or 'rentee'
  * @returns {Promise<Object>} - Result of the creation
  */
 export const createAppUser = async (userData, userType) => {
-  if (String(userType || '').trim().toLowerCase() === 'rentee' && isMssqlApiEnabled()) {
+  if (String(userType || '').trim().toLowerCase() === 'rentee') {
     try {
       const data = await requestMssqlApi('/api/mssql/rentees', {
         method: 'POST',
