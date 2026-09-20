@@ -3,10 +3,22 @@ import {
   createAppUser,
   createTenantMembership,
   findAppUserByEmail,
+  updateAppUser,
   updateTenantMembershipById
 } from './repositories.js';
 
 const JSON_FIELDS = new Set(['contact_details', 'associated_property_ids', 'skills', 'availability']);
+const RENTEE_PROFILE_FIELDS = new Set([
+  'name',
+  'email',
+  'contact_details',
+  'id_copy_url',
+  'associated_property_ids',
+  'national_id',
+  'permanent_address',
+  'profile_image_url',
+  'status'
+]);
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
@@ -41,8 +53,8 @@ const mapRenteeRow = (row) => {
   mapped.status ||= 'active';
   mapped.active = mapped.active === undefined ? mapped.status === 'active' : Boolean(mapped.active);
 
-  // This is a tenant-directory projection. Membership role is authoritative for
-  // the relationship even when the same global identity is staff elsewhere.
+  // This is an organization-scoped directory projection. Membership role is
+  // authoritative even when the same global identity has another role elsewhere.
   mapped.directory_role = 'rentee';
   return mapped;
 };
@@ -56,7 +68,7 @@ const getTenantMembership = async (tenantId, appUserId) => runSingleQuery(
   { tenantId, appUserId }
 );
 
-const isRenteeMembership = (membership) => {
+export const isRenteeMembership = (membership) => {
   const role = normalizeRole(membership?.role);
   return role === 'rentee' || role === 'tenant';
 };
@@ -131,6 +143,27 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {
 export const getTenantRenteeById = async (tenantId, appUserId) => {
   const rows = await listTenantRentees(tenantId, { pageSize: 500 });
   return rows.find((row) => String(row.id) === String(appUserId)) || null;
+};
+
+export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
+  const current = await getTenantRenteeById(tenantId, appUserId);
+  if (!current) {
+    return null;
+  }
+
+  const updates = {};
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (RENTEE_PROFILE_FIELDS.has(key) && value !== undefined) {
+      updates[key] = key === 'email' ? normalizeEmail(value) : value;
+    }
+  });
+
+  if (Object.keys(updates).length === 0) {
+    return current;
+  }
+
+  await updateAppUser(appUserId, updates);
+  return getTenantRenteeById(tenantId, appUserId);
 };
 
 export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
