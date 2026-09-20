@@ -8,8 +8,7 @@ const TeamMemberForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
-  
-  // Form state
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -33,129 +32,125 @@ const TeamMemberForm = () => {
     notes: '',
     status: 'active'
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(isEditMode);
   const [error, setError] = useState(null);
   const [skillInput, setSkillInput] = useState('');
-  
-  // Fetch team member data if in edit mode
+
   useEffect(() => {
     if (isEditMode) {
       const fetchTeamMember = async () => {
         try {
           setFetchLoading(true);
-          
-          // Fetch from app_users table
           const data = await fetchAppUser(id);
-          
+
+          if (String(data?.role || '').trim().toLowerCase() === 'admin') {
+            throw new Error('Tenant administrators are managed by Platform Admin, not Team.');
+          }
+
           if (data) {
             setFormData({
               ...data,
-              contact_details: data.contact_details || {
-                email: '',
-                phone: '',
-                address: ''
+              contact_details: {
+                ...(data.contact_details || {}),
+                email: data.email || data.contact_details?.email || '',
+                phone: data.contact_details?.phone || '',
+                address: data.contact_details?.address || ''
               }
             });
           }
-        } catch (error) {
-          console.error('Error fetching team member:', error.message);
-          setError(error.message);
-          toast.error(`Failed to load team member: ${error.message}`);
+        } catch (fetchError) {
+          console.error('Error fetching team member:', fetchError.message);
+          setError(fetchError.message);
+          toast.error(`Failed to load team member: ${fetchError.message}`);
         } finally {
           setFetchLoading(false);
         }
       };
-      
+
       fetchTeamMember();
     }
   }, [id, isEditMode]);
-  
-  // Handle input changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
     if (name.startsWith('contact_details.')) {
       const field = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
+      setFormData((previous) => ({
+        ...previous,
         contact_details: {
-          ...prev.contact_details,
+          ...previous.contact_details,
           [field]: value
         }
       }));
     } else {
-      setFormData(prev => ({
-        ...prev,
+      setFormData((previous) => ({
+        ...previous,
         [name]: value
       }));
     }
   };
-  
-  // Handle availability toggle
+
   const handleAvailabilityToggle = (day) => {
-    setFormData(prev => ({
-      ...prev,
+    setFormData((previous) => ({
+      ...previous,
       availability: {
-        ...prev.availability,
-        [day]: !prev.availability[day]
+        ...previous.availability,
+        [day]: !previous.availability[day]
       }
     }));
   };
-  
-  // Handle adding a skill
+
   const handleAddSkill = () => {
     if (skillInput.trim() && !formData.skills.includes(skillInput.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        skills: [...prev.skills, skillInput.trim()]
+      setFormData((previous) => ({
+        ...previous,
+        skills: [...previous.skills, skillInput.trim()]
       }));
       setSkillInput('');
     }
   };
-  
-  // Handle removing a skill
+
   const handleRemoveSkill = (skillToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.filter(skill => skill !== skillToRemove)
+    setFormData((previous) => ({
+      ...previous,
+      skills: previous.skills.filter((skill) => skill !== skillToRemove)
     }));
   };
-  
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
     try {
       setLoading(true);
       setError(null);
-      
+
       const processedFormData = {
         ...formData,
+        user_type: 'staff',
         contact_details: formData.contact_details,
         email: formData.contact_details.email
       };
-      
+
       let userId;
       if (id) {
         const result = await updateAppUser(id, processedFormData);
-
         if (!result.success) throw new Error(result.error || 'Failed to update team member');
         userId = result.data.id;
       } else {
         const result = await createAppUser(processedFormData, 'staff');
-
         if (!result.success) throw new Error(result.error || 'Failed to create team member');
         userId = result.data.id;
       }
-      
+
       if (userId && processedFormData.contact_details.email) {
         const invitationResult = await inviteUser({
           id: userId,
           email: processedFormData.contact_details.email,
           name: processedFormData.name,
-          role: processedFormData.user_type || 'staff'
+          role: processedFormData.role || 'staff'
         });
 
         if (!invitationResult.success) {
@@ -166,18 +161,18 @@ const TeamMemberForm = () => {
           throw new Error('Team member was saved, but email delivery is not configured');
         }
       }
-      
+
       toast.success(`Team member ${id ? 'updated' : 'created'} and invitation email sent successfully`);
       navigate('/dashboard/team');
-    } catch (error) {
-      console.error('Error saving team member:', error);
-      setError(error.message);
+    } catch (saveError) {
+      console.error('Error saving team member:', saveError);
+      setError(saveError.message);
       toast.error('Error saving team member');
     } finally {
       setLoading(false);
     }
   };
-  
+
   if (fetchLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -185,23 +180,24 @@ const TeamMemberForm = () => {
       </div>
     );
   }
-  
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">
+      <h1 className="text-2xl font-semibold mb-2">
         {isEditMode ? 'Edit Team Member' : 'Add New Team Member'}
       </h1>
-      
-      {/* Error message */}
+      <p className="mb-6 text-sm text-gray-500">
+        Team is for staff and contractors. Tenant administrators are appointed by Platform Admin.
+      </p>
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">Error!</strong>
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-        {/* Basic Information */}
         <div className="mb-6">
           <h2 className="text-lg font-medium mb-4">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -221,7 +217,7 @@ const TeamMemberForm = () => {
             </div>
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-                Role *
+                Team role *
               </label>
               <select
                 id="role"
@@ -231,15 +227,14 @@ const TeamMemberForm = () => {
                 value={formData.role}
                 onChange={handleChange}
               >
-                <option value="admin">Admin</option>
-                <option value="staff">Staff</option>
+                <option value="staff">Staff / Contractor</option>
                 <option value="maintenance">Maintenance</option>
+                <option value="manager">Property Manager</option>
               </select>
             </div>
           </div>
         </div>
-        
-        {/* Contact Details */}
+
         <div className="mb-6">
           <h2 className="text-lg font-medium mb-4">Contact Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -286,8 +281,7 @@ const TeamMemberForm = () => {
             </div>
           </div>
         </div>
-        
-        {/* Skills */}
+
         <div className="mb-6">
           <h2 className="text-lg font-medium mb-4">Skills</h2>
           <div className="flex items-center mb-2">
@@ -297,8 +291,8 @@ const TeamMemberForm = () => {
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder="Add a skill (e.g., Plumbing, Electrical, Customer Service)"
               value={skillInput}
-              onChange={(e) => setSkillInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())}
+              onChange={(event) => setSkillInput(event.target.value)}
+              onKeyPress={(event) => event.key === 'Enter' && (event.preventDefault(), handleAddSkill())}
             />
             <button
               type="button"
@@ -328,17 +322,14 @@ const TeamMemberForm = () => {
             )}
           </div>
         </div>
-        
-        {/* Availability */}
+
         <div className="mb-6">
           <h2 className="text-lg font-medium mb-4">Availability</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2">
             {Object.entries(formData.availability).map(([day, isAvailable]) => (
               <div
                 key={day}
-                className={`cursor-pointer p-3 rounded-md text-center ${
-                  isAvailable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                }`}
+                className={`cursor-pointer p-3 rounded-md text-center ${isAvailable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}
                 onClick={() => handleAvailabilityToggle(day)}
               >
                 <div className="font-medium capitalize">{day.slice(0, 3)}</div>
@@ -347,8 +338,7 @@ const TeamMemberForm = () => {
             ))}
           </div>
         </div>
-        
-        {/* Notes */}
+
         <div className="mb-6">
           <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
             Notes
@@ -363,8 +353,7 @@ const TeamMemberForm = () => {
             placeholder="Additional information about this team member"
           ></textarea>
         </div>
-        
-        {/* Form Actions */}
+
         <div className="flex justify-end space-x-3">
           <button
             type="button"
@@ -377,7 +366,7 @@ const TeamMemberForm = () => {
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center"
-            disabled={loading}
+            disabled={loading || Boolean(error && isEditMode)}
           >
             {loading ? (
               <>
