@@ -145,7 +145,7 @@ jobs:
           echo "::add-mask::$token"
           echo "MSSQL_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
 
-      - name: Probe production database connectivity from GitHub runner
+      - name: Probe direct production database access from GitHub runner
         id: db_probe
         shell: bash
         env:
@@ -158,23 +158,16 @@ jobs:
           set -e
           cat db-probe.txt
 
-          case "$probe_exit" in
-            0)
-              echo "status=reachable" >> "$GITHUB_OUTPUT"
-              echo "GitHub runner can reach production SQL directly."
-              ;;
-            2)
-              echo "status=network" >> "$GITHUB_OUTPUT"
-              echo "GitHub runner cannot reach production SQL directly. The workflow will use the running Container App for read-only planning."
-              ;;
-            *)
-              echo "status=error" >> "$GITHUB_OUTPUT"
-              echo "Production SQL was reachable from the GitHub runner, but authentication or database authorization failed." >&2
-              exit 1
-              ;;
-          esac
+          if [ "$probe_exit" -eq 0 ]; then
+            echo "status=reachable" >> "$GITHUB_OUTPUT"
+            echo "GitHub runner can reach and authenticate to production SQL directly."
+          else
+            echo "status=container" >> "$GITHUB_OUTPUT"
+            echo "Direct GitHub-runner SQL access is unavailable (probe exit ${probe_exit})."
+            echo "Read-only plan mode will use the serving Container App's restricted runtime identity instead."
+          fi
 
-      - name: Run migration directly when SQL is reachable
+      - name: Run migration directly when privileged SQL access is available
         if: steps.db_probe.outputs.status == 'reachable'
         shell: bash
         env:
@@ -194,17 +187,17 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Refuse remote apply when production SQL is private
-        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'apply'
+      - name: Refuse apply without direct privileged migration access
+        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
         shell: bash
         run: |
-          echo "Production SQL is not reachable from the GitHub-hosted runner." >&2
+          echo "The GitHub-hosted runner does not currently have authenticated privileged production SQL access." >&2
           echo "No firewall rule will be opened and the restricted web identity will not be granted DDL permission." >&2
           echo "Apply requires a dedicated privileged migration executor inside the production network." >&2
           exit 1
 
       - name: Wait for this commit to be the serving Container App revision
-        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'plan'
+        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
         shell: bash
         run: |
           set -euo pipefail
@@ -230,7 +223,7 @@ jobs:
           exit 1
 
       - name: Run read-only migration plan inside the Container App
-        if: steps.db_probe.outputs.status == 'network' && env.MIGRATION_MODE == 'plan'
+        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
         shell: bash
         run: |
           set -euo pipefail
@@ -254,7 +247,7 @@ jobs:
           {
             echo '### Production database migration result'
             echo
-            echo 'Executed read-only inside the serving Container App because production SQL is not publicly reachable from GitHub-hosted runners.'
+            echo 'Executed read-only inside the serving Container App because direct privileged SQL access was unavailable to the GitHub-hosted runner.'
             echo
             echo '```text'
             cat migration-output.txt
