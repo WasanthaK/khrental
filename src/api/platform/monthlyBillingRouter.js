@@ -4,6 +4,10 @@ import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole } from './permissionEngine.js';
 import { agreementOverlapsBillingPeriod } from './billingLifecycle.js';
+import {
+  attachBillingAdjustmentsToInvoice,
+  loadApprovedBillingAdjustments
+} from './billingAdjustmentsPersistence.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -161,13 +165,21 @@ export const createMonthlyBillingRouter = () => {
               }
             );
 
+            const adjustmentRows = await loadApprovedBillingAdjustments(transaction, {
+              tenantId: req.tenantId,
+              agreementId: agreement.id,
+              billingPeriod
+            });
+
             const componentRows = [];
             const legacyComponents = {
               rent: 0,
               electricity: 0,
               water: 0,
               pastDues: 0,
-              taxes: 0
+              taxes: 0,
+              adjustments: 0,
+              other: 0
             };
 
             const rentAmount = toMoney(agreement.rentamount);
@@ -199,6 +211,28 @@ export const createMonthlyBillingRouter = () => {
                 metadata: {
                   readingDate: reading.readingdate,
                   meterIdentifier: reading.meteridentifier || null
+                }
+              });
+            }
+
+            for (const adjustment of adjustmentRows) {
+              const amount = toMoney(adjustment.amount);
+              if (amount === 0) continue;
+              const componentType = String(adjustment.component_type || '').trim().toLowerCase();
+              if (componentType === 'arrears') legacyComponents.pastDues += amount;
+              if (componentType === 'tax') legacyComponents.taxes += amount;
+              if (componentType === 'adjustment') legacyComponents.adjustments += amount;
+              if (componentType === 'other') legacyComponents.other += amount;
+              componentRows.push({
+                componentType,
+                description: adjustment.description,
+                amount,
+                sourceType: 'tenancy_billing_adjustment',
+                sourceId: adjustment.id,
+                metadata: {
+                  billingPeriod,
+                  approvedBy: adjustment.approved_by || null,
+                  approvedAt: adjustment.approved_at || null
                 }
               });
             }
@@ -289,6 +323,15 @@ export const createMonthlyBillingRouter = () => {
               );
             }
 
+            if (adjustmentRows.length > 0) {
+              await attachBillingAdjustmentsToInvoice(transaction, {
+                tenantId: req.tenantId,
+                agreementId: agreement.id,
+                billingPeriod,
+                invoiceId: invoice.id
+              });
+            }
+
             await queryTransaction(
               transaction,
               `INSERT INTO billing_lifecycle_events (
@@ -304,6 +347,7 @@ export const createMonthlyBillingRouter = () => {
                   agreementId: agreement.id,
                   billingPeriod,
                   componentCount: componentRows.length,
+                  adjustmentCount: adjustmentRows.length,
                   totalAmount
                 })
               }
@@ -316,7 +360,8 @@ export const createMonthlyBillingRouter = () => {
               propertyId: agreement.propertyid,
               renteeId: agreement.renteeid,
               totalAmount,
-              componentCount: componentRows.length
+              componentCount: componentRows.length,
+              adjustmentCount: adjustmentRows.length
             });
           } catch (error) {
             await transaction.rollback().catch(() => {});

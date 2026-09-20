@@ -14,6 +14,11 @@ import {
   guardBillingPlatformQuery,
   isProtectedBillingMutation
 } from '../src/api/platform/billingMutationGuard.js';
+import {
+  isBillingAdjustmentAmountAllowed,
+  isBillingAdjustmentTypeAllowed,
+  normalizeBillingAdjustmentAmount
+} from '../src/api/platform/billingAdjustments.js';
 
 const createMockResponse = () => {
   const response = {
@@ -210,4 +215,29 @@ test('legacy MSSQL invoice writes are blocked but reads remain available', () =>
 
   assert.equal(readNextCalled, true);
   assert.equal(readResponse.statusCode, 200);
+});
+
+test('billing adjustment types are limited to traceable monthly charge categories', () => {
+  for (const type of ['arrears', 'tax', 'adjustment', 'other']) {
+    assert.equal(isBillingAdjustmentTypeAllowed(type), true);
+  }
+  assert.equal(isBillingAdjustmentTypeAllowed('rent'), false);
+  assert.equal(isBillingAdjustmentTypeAllowed('utility'), false);
+});
+
+test('only adjustments may be negative while charges must be positive', () => {
+  assert.equal(isBillingAdjustmentAmountAllowed('arrears', 50), true);
+  assert.equal(isBillingAdjustmentAmountAllowed('tax', 10.25), true);
+  assert.equal(isBillingAdjustmentAmountAllowed('other', 5), true);
+  assert.equal(isBillingAdjustmentAmountAllowed('arrears', -50), false);
+  assert.equal(isBillingAdjustmentAmountAllowed('tax', 0), false);
+  assert.equal(isBillingAdjustmentAmountAllowed('adjustment', -25), true);
+  assert.equal(isBillingAdjustmentAmountAllowed('adjustment', 25), true);
+  assert.equal(isBillingAdjustmentAmountAllowed('adjustment', 0), false);
+});
+
+test('billing adjustment amounts are rounded to cents', () => {
+  assert.equal(normalizeBillingAdjustmentAmount('12.345'), 12.35);
+  assert.equal(normalizeBillingAdjustmentAmount('-3.456'), -3.46);
+  assert.equal(Number.isNaN(normalizeBillingAdjustmentAmount('not-a-number')), true);
 });

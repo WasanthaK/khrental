@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PropertySelector from '../properties/PropertySelector';
+import BillingAdjustmentsPanel from './BillingAdjustmentsPanel';
 import { useProperty } from '../../contexts/PropertyContext';
 import { generateTenancyMonthlyInvoices } from '../../services/platformClient';
 import { formatCurrency } from '../../utils/helpers';
@@ -87,7 +88,7 @@ const InvoiceGenerationWizard = () => {
   return (
     <div className="space-y-6">
       <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        Monthly billing is generated from <strong>active tenancies</strong>. Rent comes from the active agreement and approved utility readings for the selected month are attached to the same invoice. Re-running the same property/month safely skips existing tenancy invoices.
+        Monthly billing is generated from <strong>active tenancies</strong>. Rent comes from the active agreement, approved utility readings are attached for the selected month, and approved one-off tenancy charges are consumed into the same auditable invoice. Re-running the same property/month safely skips existing tenancy invoices.
       </div>
 
       <PropertySelector
@@ -128,6 +129,8 @@ const InvoiceGenerationWizard = () => {
           className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
         />
       </div>
+
+      <BillingAdjustmentsPanel propertyIds={selectedProperties} billingPeriod={billingPeriod} />
 
       {error && (
         <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-red-800">
@@ -179,7 +182,7 @@ const InvoiceGenerationWizard = () => {
 
           {result.skipped.length > 0 && (
             <div className="text-sm text-gray-700">
-              {result.skipped.length} tenancy invoice(s) were skipped because they already exist for this month or had no billable components.
+              {result.skipped.length} tenancy invoice(s) were skipped because they already exist for this month, fall outside the agreement period, or had no billable components.
             </div>
           )}
 
