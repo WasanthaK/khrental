@@ -19,6 +19,10 @@ import {
   isBillingAdjustmentTypeAllowed,
   normalizeBillingAdjustmentAmount
 } from '../src/api/platform/billingAdjustments.js';
+import {
+  getBillingReminderPortalUrl,
+  sendBillingReminderEmail
+} from '../src/api/platform/billingReminderEmail.js';
 
 const createMockResponse = () => {
   const response = {
@@ -240,4 +244,37 @@ test('billing adjustment amounts are rounded to cents', () => {
   assert.equal(normalizeBillingAdjustmentAmount('12.345'), 12.35);
   assert.equal(normalizeBillingAdjustmentAmount('-3.456'), -3.46);
   assert.equal(Number.isNaN(normalizeBillingAdjustmentAmount('not-a-number')), true);
+});
+
+test('billing reminder portal URL uses the configured public application URL', () => {
+  const previousPublicUrl = process.env.PUBLIC_APP_URL;
+  try {
+    process.env.PUBLIC_APP_URL = 'https://rentals.example.com/';
+    assert.equal(getBillingReminderPortalUrl(), 'https://rentals.example.com/rentee/invoices');
+  } finally {
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+  }
+});
+
+test('billing reminder delivery fails clearly when server email is not configured', async () => {
+  const previousTwilioKey = process.env.TWILIO_SENDGRID_API_KEY;
+  const previousSendGridKey = process.env.SENDGRID_API_KEY;
+  try {
+    delete process.env.TWILIO_SENDGRID_API_KEY;
+    delete process.env.SENDGRID_API_KEY;
+    await assert.rejects(
+      () => sendBillingReminderEmail({
+        to: 'tenant@example.com',
+        subject: 'Payment reminder',
+        text: 'Payment reminder'
+      }),
+      (error) => error?.status === 503 && error?.code === 'EMAIL_NOT_CONFIGURED'
+    );
+  } finally {
+    if (previousTwilioKey === undefined) delete process.env.TWILIO_SENDGRID_API_KEY;
+    else process.env.TWILIO_SENDGRID_API_KEY = previousTwilioKey;
+    if (previousSendGridKey === undefined) delete process.env.SENDGRID_API_KEY;
+    else process.env.SENDGRID_API_KEY = previousSendGridKey;
+  }
 });
