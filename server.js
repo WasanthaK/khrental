@@ -9,6 +9,7 @@ import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssi
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
 import { createBillingRouter } from './src/api/platform/billingRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
+import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
 import { createTenancyExitRouter } from './src/api/platform/tenancyExitRouter.js';
 import { guardBillingMssqlCompatibility, guardBillingPlatformQuery } from './src/api/platform/billingMutationGuard.js';
@@ -211,6 +212,7 @@ async function createServer() {
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/tenancies', createTenancyOnboardingRouter());
   app.use('/api/billing', createBillingRouter());
+  app.use('/api/billing', createBillingAdjustmentsRouter());
   app.use('/api/billing', createMonthlyBillingRouter());
   app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
   app.use('/api/tenancy-exit', createTenancyExitRouter());
