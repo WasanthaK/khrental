@@ -9,6 +9,27 @@ import {
   getInvoiceStatusAfterVerification,
   canSubmitPaymentProof
 } from '../src/api/platform/billingLifecycle.js';
+import {
+  guardBillingMssqlCompatibility,
+  guardBillingPlatformQuery,
+  isProtectedBillingMutation
+} from '../src/api/platform/billingMutationGuard.js';
+
+const createMockResponse = () => {
+  const response = {
+    statusCode: 200,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    }
+  };
+  return response;
+};
 
 test('billing period must overlap the agreement term', () => {
   const periodStart = '2026-09-01T00:00:00.000Z';
@@ -124,4 +145,69 @@ test('paid or zero-balance invoices reject new proof submissions', () => {
     outstandingBalance: 0,
     hasPendingPayment: false
   }), false);
+});
+
+test('invoice and payment mutations are reserved for the billing lifecycle APIs', () => {
+  for (const table of ['invoices', 'payments']) {
+    for (const action of ['insert', 'update', 'delete', 'upsert']) {
+      assert.equal(isProtectedBillingMutation({ table, action }), true, `${table} ${action} should be protected`);
+    }
+    assert.equal(isProtectedBillingMutation({ table, action: 'select' }), false);
+  }
+
+  assert.equal(isProtectedBillingMutation({ table: 'agreements', action: 'update' }), false);
+});
+
+test('generic platform billing writes return BILLING_LIFECYCLE_REQUIRED', () => {
+  const response = createMockResponse();
+  let nextCalled = false;
+
+  guardBillingPlatformQuery(
+    { body: { action: 'update', table: 'invoices', payload: { status: 'paid' } } },
+    response,
+    () => { nextCalled = true; }
+  );
+
+  assert.equal(nextCalled, false);
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body?.code, 'BILLING_LIFECYCLE_REQUIRED');
+});
+
+test('generic platform billing reads still pass through', () => {
+  const response = createMockResponse();
+  let nextCalled = false;
+
+  guardBillingPlatformQuery(
+    { body: { action: 'select', table: 'invoices' } },
+    response,
+    () => { nextCalled = true; }
+  );
+
+  assert.equal(nextCalled, true);
+  assert.equal(response.statusCode, 200);
+});
+
+test('legacy MSSQL invoice writes are blocked but reads remain available', () => {
+  const blockedResponse = createMockResponse();
+  let blockedNextCalled = false;
+  guardBillingMssqlCompatibility(
+    { method: 'PUT', path: '/invoices/invoice-1' },
+    blockedResponse,
+    () => { blockedNextCalled = true; }
+  );
+
+  assert.equal(blockedNextCalled, false);
+  assert.equal(blockedResponse.statusCode, 409);
+  assert.equal(blockedResponse.body?.code, 'BILLING_LIFECYCLE_REQUIRED');
+
+  const readResponse = createMockResponse();
+  let readNextCalled = false;
+  guardBillingMssqlCompatibility(
+    { method: 'GET', path: '/invoices/invoice-1' },
+    readResponse,
+    () => { readNextCalled = true; }
+  );
+
+  assert.equal(readNextCalled, true);
+  assert.equal(readResponse.statusCode, 200);
 });

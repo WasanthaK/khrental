@@ -11,6 +11,7 @@ import { createBillingRouter } from './src/api/platform/billingRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
 import { createTenancyExitRouter } from './src/api/platform/tenancyExitRouter.js';
+import { guardBillingMssqlCompatibility, guardBillingPlatformQuery } from './src/api/platform/billingMutationGuard.js';
 import { guardTenancyActivationQuery } from './src/api/platform/tenancyActivationGuard.js';
 import { guardTenancyClosureQuery } from './src/api/platform/tenancyClosureGuard.js';
 import { authorizePermission, authorizePlatformQuery } from './src/api/platform/authorization.js';
@@ -194,7 +195,7 @@ async function createServer() {
           next(); return;
         } catch (authorizationError) { next(authorizationError); return; }
       }
-      const compatibilityInsertTable = req.method === 'POST' ? ({ '/agreements': 'agreements', '/invoices': 'invoices' }[req.path] || null) : null;
+      const compatibilityInsertTable = req.method === 'POST' ? ({ '/agreements': 'agreements' }[req.path] || null) : null;
       if (compatibilityInsertTable) {
         try {
           const authorized = authorizePlatformQuery({ action: 'insert', table: compatibilityInsertTable, payload: req.body, user: req.user, membership: req.membership });
@@ -206,7 +207,7 @@ async function createServer() {
     });
   };
 
-  app.use('/api/mssql', guardMssqlCompatibilityRoutes, createMssqlRouter());
+  app.use('/api/mssql', guardBillingMssqlCompatibility, guardMssqlCompatibilityRoutes, createMssqlRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/tenancies', createTenancyOnboardingRouter());
   app.use('/api/billing', createBillingRouter());
@@ -215,6 +216,7 @@ async function createServer() {
   app.use('/api/tenancy-exit', createTenancyExitRouter());
   app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
   app.use('/api/platform/auth', createInvitationRouter());
+  app.post('/api/platform/query', guardBillingPlatformQuery);
   app.post('/api/platform/query', guardTenancyActivationQuery);
   app.post('/api/platform/query', guardTenancyClosureQuery);
   app.use('/api/platform', createPlatformRouter());
