@@ -1,8 +1,8 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-21  
-**Current production baseline:** `f8b8001198f4cb536bb1273fedb212a8d1b4d35b`  
-**Purpose:** This file is the single source of truth for what we work on next. It should be updated after every completed production change.
+**Last verified behavior-changing application baseline:** `f8b8001198f4cb536bb1273fedb212a8d1b4d35b`  
+**Purpose:** This file is the single source of truth for what we work on next. It should be updated after every completed production change. Documentation-only commits do not require changing the application baseline above.
 
 ## Operating rules
 
@@ -25,7 +25,7 @@
 - [x] Production database migration planning is isolated from web startup. (#84-#91)
 - [x] Azure stale startup-command recovery was completed with explicit `scripts/start-container.sh`. (#92-#95)
 - [x] Recovery revision became Ready and public MSSQL health passed.
-- [x] The normal production deployment for the current baseline also completed successfully.
+- [x] The normal production deployment for the current application baseline also completed successfully.
 
 ### Tenant/rentee data model
 
@@ -238,7 +238,7 @@ Scope: Make the normal deployment path deterministically own the web startup com
 Out of scope: Tenant UX changes, Evia signing, compatibility-client cleanup, schema feature work.
 PR: Not started yet.
 CI result: Pending.
-Production revision/SHA: Current verified baseline f8b8001198f4cb536bb1273fedb212a8d1b4d35b.
+Production revision/SHA: Last verified behavior-changing application baseline f8b8001198f4cb536bb1273fedb212a8d1b4d35b.
 Runtime proof: Current normal production deploy is green; public revision and MSSQL were verified during recovery/deployment.
 Result: Pending.
 Next item: P0.2 - Production core smoke test.
