@@ -58,7 +58,14 @@ const TenantSwitcher = ({ compact = false }) => {
       return;
     }
 
-    toast.success('Tenant switched');
+    // Keep this transient confirmation away from top-right page actions such as
+    // Add Property. A short duration also avoids a stale-looking notification
+    // after the tenant-scoped route tree remounts.
+    toast.success('Tenant switched', {
+      duration: 2000,
+      position: 'bottom-center',
+      id: 'tenant-switch-success'
+    });
   };
 
   if (!isAuthenticated) {
