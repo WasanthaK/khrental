@@ -81,7 +81,7 @@ Evidence:
 
 Run the checklist in this order and stop on the first failure. That failure becomes the only active repair item.
 
-1. [ ] Tenant Admin can log in to the production tenant workspace.
+1. [x] Tenant Admin can log in to the production tenant workspace. — Passed 2026-09-21 in a logged-out production browser session using the normal Tenant Admin account.
 2. [ ] Tenants directory loads the expected current-organization renters.
 3. [ ] Create a brand-new tenant identity with an intentionally unique test email.
 4. [ ] Verify the new tenant immediately appears in the Tenants directory and remains visible after reload.
@@ -251,10 +251,10 @@ Scope: Execute the P0.2 checklist in order, stop on first failure, collect evide
 Out of scope: schema evolution, Evia signing, DocumentService cleanup, general compatibility refactoring, new features.
 PR: None unless a smoke-test failure requires a focused repair.
 CI result: N/A at start of smoke test.
-Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. At P0.2 start, read `/build-info.json` and use the current live fingerprint because documentation-only commits can trigger a newer deployment without changing application behavior.
-Runtime proof at start: P0.1 normal deployment run 35564526487 was green with deterministic startup, exact public SHA, MSSQL Ready, and expected runtime config.
-Result: IN PROGRESS.
-Next item after all checks pass: P0.3 - Invitation/email observability.
+Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. At P0.2 start, production pre-checks passed on live documentation-only build 5e16d9833de3e50708f76bd1b28afe11b026976c; deployment run 35565122193 was green, latest revision was Ready, startup command remained /bin/sh scripts/start-container.sh, exact public SHA matched, and MSSQL health was Ready.
+Smoke-test progress: item 1 Tenant Admin production login passed on 2026-09-21 from a logged-out browser session using the normal Tenant Admin account.
+Result: IN PROGRESS — item 2 is active.
+Next item: P0.2 item 2 - verify Tenants directory loads expected current-organization renters.
 ```
 
 ---
