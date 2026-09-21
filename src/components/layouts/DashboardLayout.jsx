@@ -16,7 +16,7 @@ import TenantSwitcher from '../common/TenantSwitcher';
 import { setStoredPreferredLanguage } from '../../utils/userPreferences';
 
 const DashboardLayout = () => {
-  const { user, membership, logout, setUser } = useAuth();
+  const { user, membership, logout, setUser, hasTenantAccess } = useAuth();
   const { isPlatformAdmin, loading: platformAdminLoading } = usePlatformAdminStatus();
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,7 +30,7 @@ const DashboardLayout = () => {
 
   const isInvoiceRoute = location.pathname.includes('/dashboard/invoices');
   const isAgreementRoute = location.pathname.includes('/dashboard/agreements');
-  const showTenantWorkspace = !platformAdminLoading && !isPlatformAdmin;
+  const showTenantWorkspace = !platformAdminLoading && (!isPlatformAdmin || hasTenantAccess);
 
   const showProperties = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.PROPERTIES);
   const showRentees = showTenantWorkspace && canAccessWorkspaceSection(subject, WORKSPACE_SECTIONS.RENTEES);
@@ -61,14 +61,14 @@ const DashboardLayout = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (platformAdminLoading || !isPlatformAdmin) {
+    if (platformAdminLoading || !isPlatformAdmin || hasTenantAccess) {
       return;
     }
 
     if (location.pathname !== '/dashboard/tenant-admin') {
       navigate('/dashboard/tenant-admin', { replace: true });
     }
-  }, [isPlatformAdmin, platformAdminLoading, location.pathname, navigate]);
+  }, [hasTenantAccess, isPlatformAdmin, platformAdminLoading, location.pathname, navigate]);
 
   const handleSignOut = async () => {
     await logout();
@@ -128,7 +128,7 @@ const DashboardLayout = () => {
             </div>
           </div>
 
-          {!isPlatformAdmin && (
+          {showTenantWorkspace && (
             <>
               <div className="mt-1">
                 <UserLanguageSelector
