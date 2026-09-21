@@ -225,7 +225,9 @@ jobs:
             az containerapp update \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --image "${{ steps.image.outputs.name }}:${{ github.sha }}"
+              --image "${{ steps.image.outputs.name }}:${{ github.sha }}" \
+              --command "/bin/sh" \
+              --args "scripts/start-container.sh"
 
       - name: Verify latest revision readiness and public browser build
         uses: azure/cli@v2
@@ -248,6 +250,23 @@ jobs:
               echo "Production Container App is not in single-revision mode: $revision_mode" >&2
               exit 1
             fi
+
+            startup_command=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].command[0]" -o tsv)
+
+            startup_arg=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].args[0]" -o tsv)
+
+            if [ "$startup_command" != "/bin/sh" ] || [ "$startup_arg" != "scripts/start-container.sh" ]; then
+              echo "Unexpected production startup command. command=${startup_command:-none}; arg=${startup_arg:-none}" >&2
+              exit 1
+            fi
+
+            echo "Verified production startup command: $startup_command $startup_arg"
 
             latest_revision=$(az containerapp show \
               --name "$AZURE_CONTAINER_APP_NAME" \
@@ -331,4 +350,4 @@ jobs:
               exit 1
             fi
 
-            echo "Production public FQDN is serving ${GITHUB_SHA} from ready revision $latest_revision with live MSSQL connectivity and expected browser runtime configuration."
+            echo "Production public FQDN is serving ${GITHUB_SHA} from ready revision $latest_revision with deterministic startup, live MSSQL connectivity and expected browser runtime configuration."
