@@ -14,6 +14,11 @@ import {
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
 
+export const PLATFORM_BOOTSTRAP_OWNER_EMAIL = 'wweerakoone@gmail.com';
+
+export const isBootstrapPlatformOwner = (user) =>
+  normalizeEmail(user?.email) === PLATFORM_BOOTSTRAP_OWNER_EMAIL;
+
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
     await handler(req, res, next);
@@ -22,17 +27,22 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-const isPlatformAdmin = async (appUserId) => {
-  if (!appUserId) {
+const isPlatformAdmin = async (user) => {
+  if (!user?.id) {
     return false;
   }
+
+  // The platform-owner migration bootstraps this same identity. Keep that owner
+  // recoverable while production schema migration execution is unavailable so
+  // a missing registry table/row cannot lock the platform owner out entirely.
+  const isBootstrapOwner = isBootstrapPlatformOwner(user);
 
   const tableState = await runSingleQuery(
     `SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NULL THEN 0 ELSE 1 END AS exists_value`
   );
 
   if (!tableState?.exists_value) {
-    return false;
+    return isBootstrapOwner;
   }
 
   const row = await runSingleQuery(
@@ -40,10 +50,10 @@ const isPlatformAdmin = async (appUserId) => {
      FROM dbo.platform_admins
      WHERE app_user_id = @appUserId
        AND LOWER(COALESCE(status, 'active')) = 'active'`,
-    { appUserId }
+    { appUserId: user.id }
   );
 
-  return Boolean(row?.id);
+  return Boolean(row?.id) || isBootstrapOwner;
 };
 
 const requireResolvedUser = createTenantContextMiddleware({
@@ -53,7 +63,7 @@ const requireResolvedUser = createTenantContextMiddleware({
 });
 
 const requirePlatformAdmin = asyncHandler(async (req, res, next) => {
-  if (!(await isPlatformAdmin(req.user?.id))) {
+  if (!(await isPlatformAdmin(req.user))) {
     res.status(403).json({
       error: 'Platform administrator access is required.',
       code: 'PLATFORM_ADMIN_REQUIRED'
@@ -129,7 +139,7 @@ export const createPlatformAdminRouter = () => {
   router.get('/platform-admin/status', requireResolvedUser, asyncHandler(async (req, res) => {
     res.json({
       data: {
-        isPlatformAdmin: await isPlatformAdmin(req.user?.id)
+        isPlatformAdmin: await isPlatformAdmin(req.user)
       }
     });
   }));
