@@ -5,11 +5,13 @@ on:
     branches:
       - chore/preflight-legacy-memberships
     paths:
+      - 'scripts/preflight-legacy-memberships.mjs'
       - '.github/workflows/preflight-legacy-memberships-revision.yml'
 
 permissions:
   contents: read
   id-token: write
+  packages: write
 
 env:
   AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
@@ -21,8 +23,22 @@ jobs:
     name: zero-traffic read-only membership preflight
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Build temporary diagnostic image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:legacy-membership-preflight-${GITHUB_SHA}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build --build-arg APP_BUILD_SHA="$GITHUB_SHA" -t "$image" .
+          docker push "$image"
+          echo "DIAG_IMAGE=$image" >> "$GITHUB_ENV"
+
       - name: Sign in to Azure with OIDC
         uses: azure/login@v2
         with:
@@ -130,10 +146,7 @@ jobs:
 
           build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json")
           original_build_sha=$(echo "$build_info" | jq -r '.buildSha')
-          if [ -z "$original_build_sha" ] || [ "$original_build_sha" = "null" ]; then
-            echo "Could not capture current build SHA." >&2
-            exit 1
-          fi
+          [ -n "$original_build_sha" ] && [ "$original_build_sha" != "null" ] || exit 1
 
           db_ready=false
           for attempt in $(seq 1 20); do
@@ -175,8 +188,6 @@ jobs:
 
           suffix="legacychk${GITHUB_RUN_NUMBER}"
           diag_revision="${AZURE_CONTAINER_APP_NAME}--${suffix}"
-          payload_b64='KGFzeW5jICgpID0+IHsKICBjb25zdCB7IHJ1blF1ZXJ5IH0gPSBhd2FpdCBpbXBvcnQoJ2ZpbGU6Ly8vYXBwL3NyYy9hcGkvbXNzcWwvcXVlcnkuanMnKTsKCiAgY29uc3Qgcm93cyA9IGF3YWl0IHJ1blF1ZXJ5KGAKICAgIFNFTEVDVAogICAgICBhdS5pZCBBUyBhcHBfdXNlcl9pZCwKICAgICAgYXUudGVuYW50X2lkIEFTIGxlZ2FjeV90ZW5hbnRfaWQsCiAgICAgIHQubmFtZSBBUyBsZWdhY3lfdGVuYW50X25hbWUsCiAgICAgIGF1LnJvbGUgQVMgYXBwX3VzZXJfcm9sZSwKICAgICAgYXUudXNlcl90eXBlIEFTIGFwcF91c2VyX3R5cGUsCiAgICAgIGF1LnN0YXR1cyBBUyBhcHBfdXNlcl9zdGF0dXMsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nCiAgICAgICAgV0hFUkUgZXhpc3RpbmcuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBfY291bnQsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nX2RlZmF1bHQKICAgICAgICBXSEVSRSBleGlzdGluZ19kZWZhdWx0LmFwcF91c2VyX2lkID0gYXUuaWQKICAgICAgICAgIEFORCBleGlzdGluZ19kZWZhdWx0LmlzX2RlZmF1bHQgPSAxCiAgICAgICkgQVMgZXhpc3RpbmdfZGVmYXVsdF9jb3VudCwKICAgICAgKAogICAgICAgIFNFTEVDVCBTVFJJTkdfQUdHKAogICAgICAgICAgQ09OQ0FUKAogICAgICAgICAgICBDT05WRVJUKG52YXJjaGFyKDM2KSwgZXhpc3RpbmdfZGV0YWlsLnRlbmFudF9pZCksCiAgICAgICAgICAgIE4nfCcsIENPQUxFU0NFKGV4aXN0aW5nX2RldGFpbC5yb2xlLCBOJycpLAogICAgICAgICAgICBOJ3wnLCBDT0FMRVNDRShleGlzdGluZ19kZXRhaWwuc3RhdHVzLCBOJycpLAogICAgICAgICAgICBOJ3xkZWZhdWx0PScsIENPTlZFUlQobnZhcmNoYXIoMSksIGV4aXN0aW5nX2RldGFpbC5pc19kZWZhdWx0KQogICAgICAgICAgKSwKICAgICAgICAgIE4nOyAnCiAgICAgICAgKQogICAgICAgIEZST00gZGJvLnRlbmFudF9tZW1iZXJzaGlwcyBleGlzdGluZ19kZXRhaWwKICAgICAgICBXSEVSRSBleGlzdGluZ19kZXRhaWwuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBzCiAgICBGUk9NIGRiby5hcHBfdXNlcnMgYXUKICAgIElOTkVSIEpPSU4gZGJvLnRlbmFudHMgdAogICAgICBPTiB0LmlkID0gYXUudGVuYW50X2lkCiAgICBXSEVSRSBhdS50ZW5hbnRfaWQgSVMgTk9UIE5VTEwKICAgICAgQU5EIE5PVCBFWElTVFMgKAogICAgICAgIFNFTEVDVCAxCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIHRtCiAgICAgICAgV0hFUkUgdG0udGVuYW50X2lkID0gYXUudGVuYW50X2lkCiAgICAgICAgICBBTkQgdG0uYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApCiAgICBPUkRFUiBCWSBhdS5jcmVhdGVkYXQgQVNDLCBhdS5pZCBBU0M7CiAgYCk7CgogIGNvbnNvbGUubG9nKCdMRUdBQ1lfTUVNQkVSU0hJUF9QUkVGTElHSFRfT0snKTsKICBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeShyb3dzLCBudWxsLCAyKSk7Cn0pKCkuY2F0Y2goKGVycm9yKSA9PiB7CiAgY29uc29sZS5lcnJvcihlcnJvcj8uc3RhY2sgfHwgZXJyb3IpOwogIHByb2Nlc3MuZXhpdCgxKTsKfSk7'
-          diag_command="echo ${payload_b64} | base64 -d > /tmp/preflight.js && node /tmp/preflight.js; rc=\$?; echo DIAGNOSTIC_PROCESS_EXIT=\$rc; sleep 300"
 
           az containerapp revision copy \
             --name "$AZURE_CONTAINER_APP_NAME" \
@@ -184,10 +195,11 @@ jobs:
             --from-revision "$current_revision" \
             --revision-suffix "$suffix" \
             --container-name "$current_container" \
+            --image "$DIAG_IMAGE" \
             --min-replicas 1 \
             --max-replicas 1 \
-            --command /bin/sh \
-            --args=-c "$diag_command" \
+            --command node \
+            --args scripts/preflight-legacy-memberships.mjs \
             --output none
 
           traffic=$(az containerapp show \
@@ -201,7 +213,7 @@ jobs:
 
           found=false
           : > diagnostic.log
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 30); do
             replica=$(az containerapp replica list \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -222,11 +234,8 @@ jobs:
                 found=true
                 break
               fi
-              if grep -Fq 'DIAGNOSTIC_PROCESS_EXIT=' diagnostic.log; then
-                break
-              fi
             fi
-            echo "Waiting for diagnostic output (attempt ${attempt}/24)..."
+            echo "Waiting for diagnostic output (attempt ${attempt}/30)..."
             sleep 5
           done
 
