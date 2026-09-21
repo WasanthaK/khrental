@@ -1,0 +1,83 @@
+name: Diagnose production schema
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check-production-schema.mjs'
+      - '.github/workflows/diagnose-production-schema.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-production-schema-diagnostic
+  cancel-in-progress: true
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  diagnose:
+    name: read-only production schema check
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Wait for this commit to be serving
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+
+          for attempt in $(seq 1 75); do
+            build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+              echo "Serving revision matches ${GITHUB_SHA}."
+              exit 0
+            fi
+            echo "Waiting for production to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
+            sleep 8
+          done
+
+          echo "Production did not begin serving ${GITHUB_SHA} within the diagnostic wait window." >&2
+          exit 1
+
+      - name: Run read-only schema check inside Container App
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          echo "Checking schema inside ready revision: $ready_revision"
+
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command 'node scripts/check-production-schema.mjs'"
+          script -q -e -c "$exec_command" /dev/null | tee schema-diagnostic.txt
+
+          {
+            echo '### Read-only production schema diagnostic'
+            echo
+            echo '```text'
+            cat schema-diagnostic.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
