@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth';
 import ScrollToTop from '../common/ScrollToTop';
 import RouteChangeHandler from '../common/RouteChangeHandler';
 import ForceRefresh from '../common/ForceRefresh';
-import { Toaster } from 'react-hot-toast';
 import { ConfirmContextProvider } from '../../contexts/ConfirmContext';
 import NavigationRegistrar from './NavigationRegistrar';
 import WelcomeGuide from '../WelcomeGuide';
@@ -61,14 +60,10 @@ const RootLayout = () => {
   // Recovery must stay independent of the authenticated application shell.
   // In particular, do not register navigation, show tenant-specific guides, or
   // trigger app initialization while a user is proving possession of a reset
-  // token and selecting a new password.
+  // token and selecting a new password. Toast rendering remains owned by the
+  // single global Toaster in App.jsx so route/tenant remounts cannot duplicate it.
   if (isPasswordRecovery) {
-    return (
-      <>
-        <Toaster position="top-right" />
-        <Outlet />
-      </>
-    );
+    return <Outlet />;
   }
 
   return (
@@ -80,8 +75,6 @@ const RootLayout = () => {
       <WelcomeGuide />
       
       <ConfirmContextProvider>
-        <Toaster position="top-right" />
-        
         {initStatus.error && showStorageWarning && (
           <div className={`border-l-4 p-4 fixed bottom-0 right-0 z-50 max-w-md shadow-md flex justify-between ${
             initStatus.isStorageError 
@@ -115,4 +108,4 @@ const RootLayout = () => {
   );
 };
 
-export default RootLayout; 
+export default RootLayout;
