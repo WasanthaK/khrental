@@ -1,0 +1,117 @@
+name: Backfill legacy tenant memberships
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backfill-legacy-tenant-memberships.mjs'
+      - '.github/workflows/backfill-legacy-tenant-memberships.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-legacy-tenant-membership-backfill
+  cancel-in-progress: true
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+  EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT: '2'
+
+jobs:
+  backfill:
+    name: backfill exactly two legacy tenant memberships
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Wait for this commit and MSSQL to be serving
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+          echo "PRODUCTION_FQDN=$fqdn" >> "$GITHUB_ENV"
+
+          serving=false
+          for attempt in $(seq 1 75); do
+            build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+              echo "Serving revision matches ${GITHUB_SHA}."
+              serving=true
+              break
+            fi
+            echo "Waiting for production to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
+            sleep 8
+          done
+
+          if [ "$serving" != "true" ]; then
+            echo "Production did not begin serving ${GITHUB_SHA} within the backfill wait window." >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 20); do
+            mssql_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$mssql_health" | grep -Fq '"connection":"ready"'; then
+              echo "Production MSSQL connection is ready."
+              exit 0
+            fi
+            echo "Waiting for production MSSQL readiness (attempt ${attempt}/20)..."
+            sleep 10
+          done
+
+          echo "Production MSSQL did not become ready within the backfill wait window." >&2
+          exit 1
+
+      - name: Run capped data correction inside Container App
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          echo "Backfilling inside ready revision: $ready_revision"
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command 'sh -c \"EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT=${EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT} node scripts/backfill-legacy-tenant-memberships.mjs\"'"
+
+          : > backfill-result.txt
+          set +e
+          script -q -e -c "$exec_command" /dev/null | tee backfill-result.txt
+          set -e
+
+          if ! grep -Fq 'LEGACY_MEMBERSHIP_BACKFILL_OK' backfill-result.txt; then
+            echo "Legacy membership backfill did not complete successfully." >&2
+            cat backfill-result.txt >&2
+            exit 1
+          fi
+
+          if ! grep -Fq '"remaining_missing_count": 0' backfill-result.txt; then
+            echo "Legacy membership backfill did not verify zero remaining missing memberships." >&2
+            cat backfill-result.txt >&2
+            exit 1
+          fi
+
+          {
+            echo '### Legacy tenant membership backfill'
+            echo
+            echo '```text'
+            cat backfill-result.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
