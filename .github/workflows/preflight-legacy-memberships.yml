@@ -1,0 +1,84 @@
+name: Preflight legacy tenant memberships
+
+on:
+  push:
+    branches:
+      - chore/preflight-legacy-memberships
+    paths:
+      - '.github/workflows/preflight-legacy-memberships.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  preflight:
+    name: read-only missing membership preflight
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Wait for production MSSQL readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+
+          for attempt in $(seq 1 20); do
+            health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$health" | grep -Fq '"connection":"ready"'; then
+              echo "Production MSSQL connection is ready."
+              exit 0
+            fi
+            echo "Waiting for MSSQL readiness (attempt ${attempt}/20)..."
+            sleep 10
+          done
+
+          echo "Production MSSQL did not become ready." >&2
+          exit 1
+
+      - name: Inspect users missing their legacy tenant membership
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          payload_b64='KGFzeW5jICgpID0+IHsKICBjb25zdCB7IHJ1blF1ZXJ5IH0gPSBhd2FpdCBpbXBvcnQoJ2ZpbGU6Ly8vYXBwL3NyYy9hcGkvbXNzcWwvcXVlcnkuanMnKTsKCiAgY29uc3Qgcm93cyA9IGF3YWl0IHJ1blF1ZXJ5KGAKICAgIFNFTEVDVAogICAgICBhdS5pZCBBUyBhcHBfdXNlcl9pZCwKICAgICAgYXUudGVuYW50X2lkIEFTIGxlZ2FjeV90ZW5hbnRfaWQsCiAgICAgIHQubmFtZSBBUyBsZWdhY3lfdGVuYW50X25hbWUsCiAgICAgIGF1LnJvbGUgQVMgYXBwX3VzZXJfcm9sZSwKICAgICAgYXUudXNlcl90eXBlIEFTIGFwcF91c2VyX3R5cGUsCiAgICAgIGF1LnN0YXR1cyBBUyBhcHBfdXNlcl9zdGF0dXMsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nCiAgICAgICAgV0hFUkUgZXhpc3RpbmcuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBfY291bnQsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nX2RlZmF1bHQKICAgICAgICBXSEVSRSBleGlzdGluZ19kZWZhdWx0LmFwcF91c2VyX2lkID0gYXUuaWQKICAgICAgICAgIEFORCBleGlzdGluZ19kZWZhdWx0LmlzX2RlZmF1bHQgPSAxCiAgICAgICkgQVMgZXhpc3RpbmdfZGVmYXVsdF9jb3VudCwKICAgICAgKAogICAgICAgIFNFTEVDVCBTVFJJTkdfQUdHKAogICAgICAgICAgQ09OQ0FUKAogICAgICAgICAgICBDT05WRVJUKG52YXJjaGFyKDM2KSwgZXhpc3RpbmdfZGV0YWlsLnRlbmFudF9pZCksCiAgICAgICAgICAgIE4nfCcsIENPQUxFU0NFKGV4aXN0aW5nX2RldGFpbC5yb2xlLCBOJycpLAogICAgICAgICAgICBOJ3wnLCBDT0FMRVNDRShleGlzdGluZ19kZXRhaWwuc3RhdHVzLCBOJycpLAogICAgICAgICAgICBOJ3xkZWZhdWx0PScsIENPTlZFUlQobnZhcmNoYXIoMSksIGV4aXN0aW5nX2RldGFpbC5pc19kZWZhdWx0KQogICAgICAgICAgKSwKICAgICAgICAgIE4nOyAnCiAgICAgICAgKQogICAgICAgIEZST00gZGJvLnRlbmFudF9tZW1iZXJzaGlwcyBleGlzdGluZ19kZXRhaWwKICAgICAgICBXSEVSRSBleGlzdGluZ19kZXRhaWwuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBzCiAgICBGUk9NIGRiby5hcHBfdXNlcnMgYXUKICAgIElOTkVSIEpPSU4gZGJvLnRlbmFudHMgdAogICAgICBPTiB0LmlkID0gYXUudGVuYW50X2lkCiAgICBXSEVSRSBhdS50ZW5hbnRfaWQgSVMgTk9UIE5VTEwKICAgICAgQU5EIE5PVCBFWElTVFMgKAogICAgICAgIFNFTEVDVCAxCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIHRtCiAgICAgICAgV0hFUkUgdG0udGVuYW50X2lkID0gYXUudGVuYW50X2lkCiAgICAgICAgICBBTkQgdG0uYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApCiAgICBPUkRFUiBCWSBhdS5jcmVhdGVkYXQgQVNDLCBhdS5pZCBBU0M7CiAgYCk7CgogIGNvbnNvbGUubG9nKCdMRUdBQ1lfTUVNQkVSU0hJUF9QUkVGTElHSFRfT0snKTsKICBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeShyb3dzLCBudWxsLCAyKSk7Cn0pKCkuY2F0Y2goKGVycm9yKSA9PiB7CiAgY29uc29sZS5lcnJvcihlcnJvcj8uc3RhY2sgfHwgZXJyb3IpOwogIHByb2Nlc3MuZXhpdCgxKTsKfSk7'
+          command="node -e \"eval(Buffer.from('${payload_b64}','base64').toString())\""
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command \"$command\""
+
+          script -q -e -c "$exec_command" /dev/null | tee preflight.txt
+
+          if ! grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' preflight.txt; then
+            echo "Preflight query did not complete successfully." >&2
+            exit 1
+          fi
+
+          {
+            echo '### Legacy tenant-membership preflight'
+            echo
+            echo '```text'
+            cat preflight.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
