@@ -5,7 +5,6 @@ on:
     branches:
       - chore/preflight-legacy-memberships
     paths:
-      - 'scripts/preflight-legacy-memberships.mjs'
       - '.github/workflows/preflight-legacy-memberships.yml'
 
 permissions:
@@ -24,16 +23,6 @@ jobs:
     environment: Production
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-
-      - name: Install database dependencies
-        run: npm ci
-
       - name: Sign in to Azure with OIDC
         uses: azure/login@v2
         with:
@@ -41,83 +30,84 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Resolve production database target
+      - name: Wait for production MSSQL readiness
         shell: bash
-        env:
-          MSSQL_SERVER_CONFIG: ${{ vars.MSSQL_SERVER || secrets.MSSQL_SERVER }}
-          MSSQL_DATABASE_CONFIG: ${{ vars.MSSQL_DATABASE || secrets.MSSQL_DATABASE }}
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
-
-          server="${MSSQL_SERVER_CONFIG:-}"
-          database="${MSSQL_DATABASE_CONFIG:-}"
-
-          if [ -z "$server" ]; then
-            server=$(az containerapp show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --query "properties.template.containers[0].env[?name=='MSSQL_SERVER'].value | [0]" \
-              -o tsv)
-          fi
-
-          if [ -z "$database" ]; then
-            database=$(az containerapp show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --query "properties.template.containers[0].env[?name=='MSSQL_DATABASE'].value | [0]" \
-              -o tsv)
-          fi
-
-          if [ -z "$server" ] || [ "$server" = "None" ]; then
-            echo "Unable to resolve MSSQL_SERVER." >&2
-            exit 1
-          fi
-
-          if [ -z "$database" ] || [ "$database" = "None" ]; then
-            echo "Unable to resolve MSSQL_DATABASE." >&2
-            exit 1
-          fi
-
-          echo "MSSQL_SERVER=$server" >> "$GITHUB_ENV"
-          echo "MSSQL_DATABASE=$database" >> "$GITHUB_ENV"
-          echo "Resolved production database endpoint: $server / $database"
-
-      - name: Obtain Azure SQL access token
-        shell: bash
-        run: |
-          set -euo pipefail
-          token=$(az account get-access-token \
-            --resource https://database.windows.net/ \
-            --query accessToken \
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
             -o tsv)
-          if [ -z "$token" ]; then
-            echo "Azure OIDC login did not return an Azure SQL access token." >&2
+
+          for attempt in $(seq 1 20); do
+            health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$health" | grep -Fq '"connection":"ready"'; then
+              echo "Production MSSQL connection is ready."
+              exit 0
+            fi
+            echo "Waiting for MSSQL readiness (attempt ${attempt}/20)..."
+            sleep 10
+          done
+
+          echo "Production MSSQL did not become ready." >&2
+          exit 1
+
+      - name: Resolve exact live replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+          container=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.template.containers[0].name \
+            -o tsv)
+
+          replica=""
+          for attempt in $(seq 1 10); do
+            replica=$(az containerapp replica list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$revision" \
+              --query '[0].name' \
+              -o tsv 2>/dev/null || true)
+            if [ -n "$replica" ] && [ "$replica" != "None" ]; then
+              break
+            fi
+            echo "Waiting for a live replica (attempt ${attempt}/10)..."
+            sleep 5
+          done
+
+          if [ -z "$replica" ] || [ "$replica" = "None" ]; then
+            echo "No live replica could be resolved for $revision." >&2
             exit 1
           fi
-          echo "::add-mask::$token"
-          echo "MSSQL_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
 
-      - name: Prove direct authenticated production SQL access
+          echo "LIVE_REVISION=$revision" >> "$GITHUB_ENV"
+          echo "LIVE_REPLICA=$replica" >> "$GITHUB_ENV"
+          echo "LIVE_CONTAINER=$container" >> "$GITHUB_ENV"
+          echo "Resolved live target: $revision / $replica / $container"
+
+      - name: Inspect users missing their legacy tenant membership
         shell: bash
-        env:
-          MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
-          MSSQL_MIGRATION_PASSWORD: ${{ secrets.MSSQL_MIGRATION_PASSWORD }}
         run: |
           set -euo pipefail
-          node scripts/probe-production-db.mjs
+          payload_b64='KGFzeW5jICgpID0+IHsKICBjb25zdCB7IHJ1blF1ZXJ5IH0gPSBhd2FpdCBpbXBvcnQoJ2ZpbGU6Ly8vYXBwL3NyYy9hcGkvbXNzcWwvcXVlcnkuanMnKTsKCiAgY29uc3Qgcm93cyA9IGF3YWl0IHJ1blF1ZXJ5KGAKICAgIFNFTEVDVAogICAgICBhdS5pZCBBUyBhcHBfdXNlcl9pZCwKICAgICAgYXUudGVuYW50X2lkIEFTIGxlZ2FjeV90ZW5hbnRfaWQsCiAgICAgIHQubmFtZSBBUyBsZWdhY3lfdGVuYW50X25hbWUsCiAgICAgIGF1LnJvbGUgQVMgYXBwX3VzZXJfcm9sZSwKICAgICAgYXUudXNlcl90eXBlIEFTIGFwcF91c2VyX3R5cGUsCiAgICAgIGF1LnN0YXR1cyBBUyBhcHBfdXNlcl9zdGF0dXMsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nCiAgICAgICAgV0hFUkUgZXhpc3RpbmcuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBfY291bnQsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nX2RlZmF1bHQKICAgICAgICBXSEVSRSBleGlzdGluZ19kZWZhdWx0LmFwcF91c2VyX2lkID0gYXUuaWQKICAgICAgICAgIEFORCBleGlzdGluZ19kZWZhdWx0LmlzX2RlZmF1bHQgPSAxCiAgICAgICkgQVMgZXhpc3RpbmdfZGVmYXVsdF9jb3VudCwKICAgICAgKAogICAgICAgIFNFTEVDVCBTVFJJTkdfQUdHKAogICAgICAgICAgQ09OQ0FUKAogICAgICAgICAgICBDT05WRVJUKG52YXJjaGFyKDM2KSwgZXhpc3RpbmdfZGV0YWlsLnRlbmFudF9pZCksCiAgICAgICAgICAgIE4nfCcsIENPQUxFU0NFKGV4aXN0aW5nX2RldGFpbC5yb2xlLCBOJycpLAogICAgICAgICAgICBOJ3wnLCBDT0FMRVNDRShleGlzdGluZ19kZXRhaWwuc3RhdHVzLCBOJycpLAogICAgICAgICAgICBOJ3xkZWZhdWx0PScsIENPTlZFUlQobnZhcmNoYXIoMSksIGV4aXN0aW5nX2RldGFpbC5pc19kZWZhdWx0KQogICAgICAgICAgKSwKICAgICAgICAgIE4nOyAnCiAgICAgICAgKQogICAgICAgIEZST00gZGJvLnRlbmFudF9tZW1iZXJzaGlwcyBleGlzdGluZ19kZXRhaWwKICAgICAgICBXSEVSRSBleGlzdGluZ19kZXRhaWwuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBzCiAgICBGUk9NIGRiby5hcHBfdXNlcnMgYXUKICAgIElOTkVSIEpPSU4gZGJvLnRlbmFudHMgdAogICAgICBPTiB0LmlkID0gYXUudGVuYW50X2lkCiAgICBXSEVSRSBhdS50ZW5hbnRfaWQgSVMgTk9UIE5VTEwKICAgICAgQU5EIE5PVCBFWElTVFMgKAogICAgICAgIFNFTEVDVCAxCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIHRtCiAgICAgICAgV0hFUkUgdG0udGVuYW50X2lkID0gYXUudGVuYW50X2lkCiAgICAgICAgICBBTkQgdG0uYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApCiAgICBPUkRFUiBCWSBhdS5jcmVhdGVkYXQgQVNDLCBhdS5pZCBBU0M7CiAgYCk7CgogIGNvbnNvbGUubG9nKCdMRUdBQ1lfTUVNQkVSU0hJUF9QUkVGTElHSFRfT0snKTsKICBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeShyb3dzLCBudWxsLCAyKSk7Cn0pKCkuY2F0Y2goKGVycm9yKSA9PiB7CiAgY29uc29sZS5lcnJvcihlcnJvcj8uc3RhY2sgfHwgZXJyb3IpOwogIHByb2Nlc3MuZXhpdCgxKTsKfSk7'
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$LIVE_REVISION' --replica '$LIVE_REPLICA' --container '$LIVE_CONTAINER' --command \"/bin/sh -c 'echo ${payload_b64} | base64 -d > /tmp/preflight.js && node /tmp/preflight.js'\""
 
-      - name: Inspect only users missing their legacy tenant membership
-        shell: bash
-        env:
-          MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
-          MSSQL_MIGRATION_PASSWORD: ${{ secrets.MSSQL_MIGRATION_PASSWORD }}
-        run: |
-          set -euo pipefail
-          node scripts/preflight-legacy-memberships.mjs | tee preflight.txt
+          set +e
+          script -q -e -c "$exec_command" /dev/null | tee preflight.txt
+          exec_exit=${PIPESTATUS[0]}
+          set -e
 
-          if ! grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' preflight.txt; then
-            echo "Read-only legacy-membership preflight did not complete." >&2
+          if [ "$exec_exit" -ne 0 ] || ! grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' preflight.txt; then
+            echo "Exact-replica read-only preflight did not complete." >&2
             exit 1
           fi
 
