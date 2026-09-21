@@ -58,19 +58,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ready_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestReadyRevisionName \
-            -o tsv)
 
           payload_b64='KGFzeW5jICgpID0+IHsKICBjb25zdCB7IHJ1blF1ZXJ5IH0gPSBhd2FpdCBpbXBvcnQoJ2ZpbGU6Ly8vYXBwL3NyYy9hcGkvbXNzcWwvcXVlcnkuanMnKTsKCiAgY29uc3Qgcm93cyA9IGF3YWl0IHJ1blF1ZXJ5KGAKICAgIFNFTEVDVAogICAgICBhdS5pZCBBUyBhcHBfdXNlcl9pZCwKICAgICAgYXUudGVuYW50X2lkIEFTIGxlZ2FjeV90ZW5hbnRfaWQsCiAgICAgIHQubmFtZSBBUyBsZWdhY3lfdGVuYW50X25hbWUsCiAgICAgIGF1LnJvbGUgQVMgYXBwX3VzZXJfcm9sZSwKICAgICAgYXUudXNlcl90eXBlIEFTIGFwcF91c2VyX3R5cGUsCiAgICAgIGF1LnN0YXR1cyBBUyBhcHBfdXNlcl9zdGF0dXMsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nCiAgICAgICAgV0hFUkUgZXhpc3RpbmcuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBfY291bnQsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nX2RlZmF1bHQKICAgICAgICBXSEVSRSBleGlzdGluZ19kZWZhdWx0LmFwcF91c2VyX2lkID0gYXUuaWQKICAgICAgICAgIEFORCBleGlzdGluZ19kZWZhdWx0LmlzX2RlZmF1bHQgPSAxCiAgICAgICkgQVMgZXhpc3RpbmdfZGVmYXVsdF9jb3VudCwKICAgICAgKAogICAgICAgIFNFTEVDVCBTVFJJTkdfQUdHKAogICAgICAgICAgQ09OQ0FUKAogICAgICAgICAgICBDT05WRVJUKG52YXJjaGFyKDM2KSwgZXhpc3RpbmdfZGV0YWlsLnRlbmFudF9pZCksCiAgICAgICAgICAgIE4nfCcsIENPQUxFU0NFKGV4aXN0aW5nX2RldGFpbC5yb2xlLCBOJycpLAogICAgICAgICAgICBOJ3wnLCBDT0FMRVNDRShleGlzdGluZ19kZXRhaWwuc3RhdHVzLCBOJycpLAogICAgICAgICAgICBOJ3xkZWZhdWx0PScsIENPTlZFUlQobnZhcmNoYXIoMSksIGV4aXN0aW5nX2RldGFpbC5pc19kZWZhdWx0KQogICAgICAgICAgKSwKICAgICAgICAgIE4nOyAnCiAgICAgICAgKQogICAgICAgIEZST00gZGJvLnRlbmFudF9tZW1iZXJzaGlwcyBleGlzdGluZ19kZXRhaWwKICAgICAgICBXSEVSRSBleGlzdGluZ19kZXRhaWwuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBzCiAgICBGUk9NIGRiby5hcHBfdXNlcnMgYXUKICAgIElOTkVSIEpPSU4gZGJvLnRlbmFudHMgdAogICAgICBPTiB0LmlkID0gYXUudGVuYW50X2lkCiAgICBXSEVSRSBhdS50ZW5hbnRfaWQgSVMgTk9UIE5VTEwKICAgICAgQU5EIE5PVCBFWElTVFMgKAogICAgICAgIFNFTEVDVCAxCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIHRtCiAgICAgICAgV0hFUkUgdG0udGVuYW50X2lkID0gYXUudGVuYW50X2lkCiAgICAgICAgICBBTkQgdG0uYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApCiAgICBPUkRFUiBCWSBhdS5jcmVhdGVkYXQgQVNDLCBhdS5pZCBBU0M7CiAgYCk7CgogIGNvbnNvbGUubG9nKCdMRUdBQ1lfTUVNQkVSU0hJUF9QUkVGTElHSFRfT0snKTsKICBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeShyb3dzLCBudWxsLCAyKSk7Cn0pKCkuY2F0Y2goKGVycm9yKSA9PiB7CiAgY29uc29sZS5lcnJvcihlcnJvcj8uc3RhY2sgfHwgZXJyb3IpOwogIHByb2Nlc3MuZXhpdCgxKTsKfSk7'
-          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command \"/bin/sh -c 'echo ${payload_b64} | base64 -d > /tmp/preflight.js && node /tmp/preflight.js'\""
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --command \"/bin/sh -c 'echo ${payload_b64} | base64 -d > /tmp/preflight.js && node /tmp/preflight.js'\""
 
-          script -q -e -c "$exec_command" /dev/null | tee preflight.txt
+          success=false
+          for attempt in 1 2 3 4; do
+            : > preflight.txt
+            set +e
+            script -q -e -c "$exec_command" /dev/null | tee preflight.txt
+            exec_exit=${PIPESTATUS[0]}
+            set -e
 
-          if ! grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' preflight.txt; then
+            if [ "$exec_exit" -eq 0 ] && grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' preflight.txt; then
+              success=true
+              break
+            fi
+
+            echo "Container exec preflight did not complete (attempt ${attempt}/4)."
+            sleep 10
+          done
+
+          if [ "$success" != "true" ]; then
             echo "Preflight query did not complete successfully." >&2
+            cat preflight.txt >&2
             exit 1
           fi
 
