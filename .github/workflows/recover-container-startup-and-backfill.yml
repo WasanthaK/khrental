@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/recover-container-startup-and-backfill.yml'
       - 'scripts/backfill-legacy-tenant-memberships.mjs'
+      - 'scripts/start-container.sh'
 
 permissions:
   contents: read
@@ -28,7 +29,7 @@ jobs:
     name: recover startup command and backfill two memberships
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +66,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy image and clear stale startup override
+      - name: Deploy image with explicit web startup script
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -88,9 +89,15 @@ jobs:
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --image "${{ steps.image.outputs.name }}:${{ github.sha }}" \
-              --command "" \
-              --args "" \
+              --command "/bin/sh" \
+              --args "scripts/start-container.sh" \
               --output none
+
+            az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].{image:image,command:command,args:args}" \
+              -o jsonc
 
       - name: Wait for recovered revision
         shell: bash
@@ -111,7 +118,7 @@ jobs:
             --query properties.latestRevisionName \
             -o tsv)
 
-          for attempt in $(seq 1 40); do
+          for attempt in $(seq 1 80); do
             ready_revision=$(az containerapp show \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -121,7 +128,7 @@ jobs:
               echo "Recovered revision is ready: $latest_revision"
               break
             fi
-            echo "Waiting for recovered revision $latest_revision (ready: ${ready_revision:-none}, attempt ${attempt}/40)..."
+            echo "Waiting for recovered revision $latest_revision (ready: ${ready_revision:-none}, attempt ${attempt}/80)..."
             sleep 6
           done
 
@@ -132,17 +139,31 @@ jobs:
             -o tsv)
           if [ "$ready_revision" != "$latest_revision" ]; then
             echo "Recovered revision did not become ready. Latest: $latest_revision; ready: ${ready_revision:-none}" >&2
+            echo "Container template command/args:" >&2
+            az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "properties.template.containers[0].{image:image,command:command,args:args}" \
+              -o jsonc || true
+            echo "Revision state:" >&2
+            az containerapp revision show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" \
+              -o jsonc || true
+            echo "Console logs:" >&2
             az containerapp logs show \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --revision "$latest_revision" \
               --type console \
-              --tail 120 \
+              --tail 200 \
               --format text || true
             exit 1
           fi
 
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 24); do
             build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
             mssql_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
             if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\"" \
@@ -150,7 +171,7 @@ jobs:
               echo "Recovered public revision is serving ${GITHUB_SHA} with MSSQL ready."
               exit 0
             fi
-            echo "Waiting for public build fingerprint and MSSQL readiness (attempt ${attempt}/20)..."
+            echo "Waiting for public build fingerprint and MSSQL readiness (attempt ${attempt}/24)..."
             sleep 10
           done
 
