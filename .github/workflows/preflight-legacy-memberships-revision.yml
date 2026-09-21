@@ -1,0 +1,245 @@
+name: Preflight legacy memberships via isolated revision
+
+on:
+  push:
+    branches:
+      - chore/preflight-legacy-memberships
+    paths:
+      - '.github/workflows/preflight-legacy-memberships-revision.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  preflight:
+    name: zero-traffic read-only membership preflight
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run isolated read-only query and restore production
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          changed_mode=false
+          diag_revision=""
+          current_revision=""
+          fqdn=""
+          original_build_sha=""
+
+          cleanup() {
+            original_rc=$?
+            trap - EXIT
+            set +e
+            cleanup_rc=0
+
+            if [ -n "$diag_revision" ]; then
+              az containerapp revision deactivate \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$diag_revision" \
+                --output none >/dev/null 2>&1 || true
+            fi
+
+            if [ "$changed_mode" = "true" ] && [ -n "$current_revision" ]; then
+              az containerapp ingress traffic set \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision-weight "$current_revision=100" \
+                --output none || cleanup_rc=1
+
+              az containerapp revision set-mode \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --mode single \
+                --output none || cleanup_rc=1
+            fi
+
+            if [ -n "$fqdn" ] && [ -n "$original_build_sha" ]; then
+              restored=false
+              for attempt in $(seq 1 20); do
+                build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+                db_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+                if echo "$build_info" | grep -Fq "\"buildSha\":\"${original_build_sha}\"" \
+                  && echo "$db_health" | grep -Fq '"connection":"ready"'; then
+                  restored=true
+                  break
+                fi
+                sleep 10
+              done
+              [ "$restored" = "true" ] || cleanup_rc=1
+            fi
+
+            final_mode=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.activeRevisionsMode \
+              -o tsv 2>/dev/null || true)
+            [ "${final_mode,,}" = "single" ] || cleanup_rc=1
+
+            if [ "$cleanup_rc" -ne 0 ]; then
+              echo "Production cleanup verification failed." >&2
+              exit 99
+            fi
+
+            echo "Production restored: Single mode, original public build, live MSSQL."
+            exit "$original_rc"
+          }
+          trap cleanup EXIT
+
+          mode=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.activeRevisionsMode \
+            -o tsv)
+          if [ "${mode,,}" != "single" ]; then
+            echo "Expected Single mode before preflight; found $mode." >&2
+            exit 1
+          fi
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+          current_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+          current_container=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.template.containers[0].name \
+            -o tsv)
+
+          build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json")
+          original_build_sha=$(echo "$build_info" | jq -r '.buildSha')
+          if [ -z "$original_build_sha" ] || [ "$original_build_sha" = "null" ]; then
+            echo "Could not capture current build SHA." >&2
+            exit 1
+          fi
+
+          db_ready=false
+          for attempt in $(seq 1 20); do
+            db_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$db_health" | grep -Fq '"connection":"ready"'; then
+              db_ready=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$db_ready" != "true" ]; then
+            echo "Production MSSQL is not ready." >&2
+            exit 1
+          fi
+
+          echo "Baseline: revision=$current_revision build=$original_build_sha"
+
+          az containerapp revision set-mode \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --mode multiple \
+            --output none
+          changed_mode=true
+
+          az containerapp ingress traffic set \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision-weight "$current_revision=100" \
+            --output none
+
+          traffic=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.traffic \
+            -o json)
+          echo "$traffic" | jq -e --arg revision "$current_revision" \
+            'length == 1 and .[0].revisionName == $revision and .[0].weight == 100' >/dev/null
+          echo "Production traffic pinned 100% to $current_revision."
+
+          suffix="legacychk${GITHUB_RUN_NUMBER}"
+          diag_revision="${AZURE_CONTAINER_APP_NAME}--${suffix}"
+          payload_b64='KGFzeW5jICgpID0+IHsKICBjb25zdCB7IHJ1blF1ZXJ5IH0gPSBhd2FpdCBpbXBvcnQoJ2ZpbGU6Ly8vYXBwL3NyYy9hcGkvbXNzcWwvcXVlcnkuanMnKTsKCiAgY29uc3Qgcm93cyA9IGF3YWl0IHJ1blF1ZXJ5KGAKICAgIFNFTEVDVAogICAgICBhdS5pZCBBUyBhcHBfdXNlcl9pZCwKICAgICAgYXUudGVuYW50X2lkIEFTIGxlZ2FjeV90ZW5hbnRfaWQsCiAgICAgIHQubmFtZSBBUyBsZWdhY3lfdGVuYW50X25hbWUsCiAgICAgIGF1LnJvbGUgQVMgYXBwX3VzZXJfcm9sZSwKICAgICAgYXUudXNlcl90eXBlIEFTIGFwcF91c2VyX3R5cGUsCiAgICAgIGF1LnN0YXR1cyBBUyBhcHBfdXNlcl9zdGF0dXMsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nCiAgICAgICAgV0hFUkUgZXhpc3RpbmcuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBfY291bnQsCiAgICAgICgKICAgICAgICBTRUxFQ1QgQ09VTlRfQklHKCopCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIGV4aXN0aW5nX2RlZmF1bHQKICAgICAgICBXSEVSRSBleGlzdGluZ19kZWZhdWx0LmFwcF91c2VyX2lkID0gYXUuaWQKICAgICAgICAgIEFORCBleGlzdGluZ19kZWZhdWx0LmlzX2RlZmF1bHQgPSAxCiAgICAgICkgQVMgZXhpc3RpbmdfZGVmYXVsdF9jb3VudCwKICAgICAgKAogICAgICAgIFNFTEVDVCBTVFJJTkdfQUdHKAogICAgICAgICAgQ09OQ0FUKAogICAgICAgICAgICBDT05WRVJUKG52YXJjaGFyKDM2KSwgZXhpc3RpbmdfZGV0YWlsLnRlbmFudF9pZCksCiAgICAgICAgICAgIE4nfCcsIENPQUxFU0NFKGV4aXN0aW5nX2RldGFpbC5yb2xlLCBOJycpLAogICAgICAgICAgICBOJ3wnLCBDT0FMRVNDRShleGlzdGluZ19kZXRhaWwuc3RhdHVzLCBOJycpLAogICAgICAgICAgICBOJ3xkZWZhdWx0PScsIENPTlZFUlQobnZhcmNoYXIoMSksIGV4aXN0aW5nX2RldGFpbC5pc19kZWZhdWx0KQogICAgICAgICAgKSwKICAgICAgICAgIE4nOyAnCiAgICAgICAgKQogICAgICAgIEZST00gZGJvLnRlbmFudF9tZW1iZXJzaGlwcyBleGlzdGluZ19kZXRhaWwKICAgICAgICBXSEVSRSBleGlzdGluZ19kZXRhaWwuYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApIEFTIGV4aXN0aW5nX21lbWJlcnNoaXBzCiAgICBGUk9NIGRiby5hcHBfdXNlcnMgYXUKICAgIElOTkVSIEpPSU4gZGJvLnRlbmFudHMgdAogICAgICBPTiB0LmlkID0gYXUudGVuYW50X2lkCiAgICBXSEVSRSBhdS50ZW5hbnRfaWQgSVMgTk9UIE5VTEwKICAgICAgQU5EIE5PVCBFWElTVFMgKAogICAgICAgIFNFTEVDVCAxCiAgICAgICAgRlJPTSBkYm8udGVuYW50X21lbWJlcnNoaXBzIHRtCiAgICAgICAgV0hFUkUgdG0udGVuYW50X2lkID0gYXUudGVuYW50X2lkCiAgICAgICAgICBBTkQgdG0uYXBwX3VzZXJfaWQgPSBhdS5pZAogICAgICApCiAgICBPUkRFUiBCWSBhdS5jcmVhdGVkYXQgQVNDLCBhdS5pZCBBU0M7CiAgYCk7CgogIGNvbnNvbGUubG9nKCdMRUdBQ1lfTUVNQkVSU0hJUF9QUkVGTElHSFRfT0snKTsKICBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeShyb3dzLCBudWxsLCAyKSk7Cn0pKCkuY2F0Y2goKGVycm9yKSA9PiB7CiAgY29uc29sZS5lcnJvcihlcnJvcj8uc3RhY2sgfHwgZXJyb3IpOwogIHByb2Nlc3MuZXhpdCgxKTsKfSk7'
+          diag_command="echo ${payload_b64} | base64 -d > /tmp/preflight.js && node /tmp/preflight.js; rc=\$?; echo DIAGNOSTIC_PROCESS_EXIT=\$rc; sleep 300"
+
+          az containerapp revision copy \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --from-revision "$current_revision" \
+            --revision-suffix "$suffix" \
+            --container-name "$current_container" \
+            --min-replicas 1 \
+            --max-replicas 1 \
+            --command /bin/sh \
+            --args=-c "$diag_command" \
+            --output none
+
+          traffic=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.traffic \
+            -o json)
+          echo "$traffic" | jq -e --arg revision "$current_revision" \
+            'length == 1 and .[0].revisionName == $revision and .[0].weight == 100' >/dev/null
+          echo "Diagnostic revision created with zero traffic: $diag_revision"
+
+          found=false
+          : > diagnostic.log
+          for attempt in $(seq 1 24); do
+            replica=$(az containerapp replica list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$diag_revision" \
+              --query '[0].name' \
+              -o tsv 2>/dev/null || true)
+
+            if [ -n "$replica" ] && [ "$replica" != "None" ]; then
+              az containerapp logs show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$diag_revision" \
+                --type console \
+                --tail 200 \
+                --format text > diagnostic.log 2>&1 || true
+
+              if grep -Fq 'LEGACY_MEMBERSHIP_PREFLIGHT_OK' diagnostic.log; then
+                found=true
+                break
+              fi
+              if grep -Fq 'DIAGNOSTIC_PROCESS_EXIT=' diagnostic.log; then
+                break
+              fi
+            fi
+            echo "Waiting for diagnostic output (attempt ${attempt}/24)..."
+            sleep 5
+          done
+
+          cat diagnostic.log
+          if [ "$found" != "true" ]; then
+            echo "The isolated query did not return its success marker." >&2
+            exit 1
+          fi
+
+          {
+            echo '### Legacy tenant-membership preflight'
+            echo
+            echo '```text'
+            cat diagnostic.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
