@@ -34,7 +34,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Wait for this commit to be serving
+      - name: Wait for this commit and MSSQL to be serving
         shell: bash
         run: |
           set -euo pipefail
@@ -45,18 +45,36 @@ jobs:
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --query properties.configuration.ingress.fqdn \
             -o tsv)
+          echo "PRODUCTION_FQDN=$fqdn" >> "$GITHUB_ENV"
 
+          serving=false
           for attempt in $(seq 1 75); do
-            build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
             if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
               echo "Serving revision matches ${GITHUB_SHA}."
-              exit 0
+              serving=true
+              break
             fi
             echo "Waiting for production to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
             sleep 8
           done
 
-          echo "Production did not begin serving ${GITHUB_SHA} within the diagnostic wait window." >&2
+          if [ "$serving" != "true" ]; then
+            echo "Production did not begin serving ${GITHUB_SHA} within the diagnostic wait window." >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 20); do
+            mssql_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$mssql_health" | grep -Fq '"connection":"ready"'; then
+              echo "Production MSSQL connection is ready."
+              exit 0
+            fi
+            echo "Waiting for production MSSQL readiness (attempt ${attempt}/20)..."
+            sleep 10
+          done
+
+          echo "Production MSSQL did not become ready within the diagnostic wait window." >&2
           exit 1
 
       - name: Run read-only schema check inside Container App
@@ -70,9 +88,29 @@ jobs:
             -o tsv)
 
           echo "Checking schema inside ready revision: $ready_revision"
-
           exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command 'node scripts/check-production-schema.mjs'"
-          script -q -e -c "$exec_command" /dev/null | tee schema-diagnostic.txt
+
+          success=false
+          for attempt in 1 2 3; do
+            : > schema-diagnostic.txt
+            set +e
+            script -q -e -c "$exec_command" /dev/null | tee schema-diagnostic.txt
+            set -e
+
+            if grep -Fq 'SCHEMA_DIAGNOSTIC_OK' schema-diagnostic.txt; then
+              success=true
+              break
+            fi
+
+            echo "Read-only schema diagnostic did not complete successfully (attempt ${attempt}/3)."
+            sleep 10
+          done
+
+          if [ "$success" != "true" ]; then
+            echo "Read-only schema diagnostic failed after 3 attempts." >&2
+            cat schema-diagnostic.txt >&2
+            exit 1
+          fi
 
           {
             echo '### Read-only production schema diagnostic'
