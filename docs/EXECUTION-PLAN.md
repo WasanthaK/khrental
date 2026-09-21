@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-21  
-**Last verified behavior-changing application baseline:** `f1e76d120898c1d6c0ae31989ab93636a07c9886`  
+**Last verified behavior-changing application baseline:** `fc3cf044937a3683673ec01d7d2b465f1c70b1d7`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -29,6 +29,7 @@
 - [x] Deployment verification checks the Azure command/args state before accepting a revision. (#97)
 - [x] Temporary startup recovery/backfill workflow has been retired. (#98)
 - [x] Final normal production deployment after recovery-workflow removal passed authorization tests, build, immutable image deploy, Azure revision readiness, startup-command verification, exact public SHA verification, MSSQL health, and runtime-config verification. Run `35564526487`, SHA `b6af12bdd0ecefe870e8297c984a985cffa98dd7`.
+- [x] Bootstrap platform-owner access is recoverable even while the dedicated `platform_admins` production migration path remains unavailable. PR #100, SHA `fc3cf044937a3683673ec01d7d2b465f1c70b1d7`, production run `35595451678`; authorization tests/build passed, revision `khrental-app--0000103` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
 
 ### Tenant/rentee data model
 
@@ -209,7 +210,7 @@ After the core flows above are stable, run focused regression passes for Platfor
 - Performance optimization without a measured production problem.
 - New feature work unrelated to the active phase.
 - Optional architecture improvements that do not fix a verified business problem.
-- `platform_admins` and `tenancy_billing_adjustments` production schema work until separately scheduled.
+- Repair the dedicated privileged production migration executor, then apply/reconcile `platform_admins` and `tenancy_billing_adjustments` through the managed migration ledger. The current bootstrap-owner fallback does not replace this future schema work.
 
 ---
 
@@ -246,14 +247,15 @@ Next item: P0.2 - Production core smoke test.
 
 ```text
 Active item: P0.2 - Production core smoke test
-Problem/evidence: Recent renter/membership and deployment repairs are individually verified, but the complete tenant-admin business workflow has not yet had one controlled production smoke-test pass on the stabilized baseline.
-Scope: Execute the P0.2 checklist in order, stop on first failure, collect evidence, make only a narrow repair if required, deploy/reverify, then continue.
+Problem/evidence: Recent renter/membership and deployment repairs are individually verified, but the complete tenant-admin business workflow has not yet had one controlled production smoke-test pass on the stabilized baseline. During controlled setup for item 5, the designated platform owner was found to be locked out of Platform Admin because access depended entirely on the not-yet-reconciled platform_admins registry.
+Scope: Execute the P0.2 checklist in order, stop on first failure, collect evidence, make only a narrow repair if required, deploy/reverify, then continue. Platform-owner access was narrowly restored without schema mutation so item 5 setup can proceed.
 Out of scope: schema evolution, Evia signing, DocumentService cleanup, general compatibility refactoring, new features.
-PR: None unless a smoke-test failure requires a focused repair.
-CI result: N/A at start of smoke test.
-Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. At P0.2 start, production pre-checks passed on live documentation-only build 5e16d9833de3e50708f76bd1b28afe11b026976c; deployment run 35565122193 was green, latest revision was Ready, startup command remained /bin/sh scripts/start-container.sh, exact public SHA matched, and MSSQL health was Ready.
+PR: #100 restored the repository-designated bootstrap platform owner fallback for wweerakoone@gmail.com; it does not grant platform rights to ordinary workspace administrators.
+CI result: PR #100 authorization tests and production build passed in run 35595335233. Production deployment run 35595451678 completed successfully.
+Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. Current behavior-changing production SHA is fc3cf044937a3683673ec01d7d2b465f1c70b1d7 after PR #100.
+Runtime proof: production revision khrental-app--0000103 became Ready; startup command remained /bin/sh scripts/start-container.sh; public /build-info.json matched fc3cf044937a3683673ec01d7d2b465f1c70b1d7; /api/mssql/health returned ready; runtime MSSQL/Evia configuration verification passed. Earlier one-shot DML repair attempts never reached Node/SQL because Azure Container Apps exec failed at the WebSocket handshake, so those attempts made no database change.
 Smoke-test progress: item 1 Tenant Admin production login passed on 2026-09-21 from a logged-out browser session using the normal Tenant Admin account. Item 2 Tenants directory passed on 2026-09-21; the production renter directory loaded and the Tenant Admin confirmed the visible current-organization renters were correct. Item 3 brand-new tenant creation passed on 2026-09-21; the Tenant Admin confirmed the production create completed successfully. Item 4 tenant visibility/persistence passed on 2026-09-21; the new tenant remained visible after reload.
-Result: IN PROGRESS — item 5 is active.
+Result: IN PROGRESS — item 5 is active. Platform-owner browser access requires one authenticated production verification after PR #100 before using Platform Admin to establish the controlled existing-global-identity fixture.
 Next item: P0.2 item 5 - verify create-or-attach for an existing global identity that is not yet a renter in the current organization.
 ```
 
