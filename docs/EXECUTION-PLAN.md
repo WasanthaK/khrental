@@ -2,8 +2,8 @@
 
 **Status date:** 2026-09-21  
 **Last verified behavior-changing application baseline:** `f1e76d120898c1d6c0ae31989ab93636a07c9886`  
-**Latest verified production deployment:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
-**Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change.
+**P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
+**Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
 ## Operating rules
 
@@ -73,7 +73,7 @@ Evidence:
 - PR #97 production run `35563887278`: green.
 - PR #98: temporary recovery/backfill workflow removed.
 - PR #98 final production run `35564526487`: green.
-- Final verified deployed SHA: `b6af12bdd0ecefe870e8297c984a985cffa98dd7`.
+- P0.1 completion proof SHA: `b6af12bdd0ecefe870e8297c984a985cffa98dd7`.
 
 ### P0.2 - Production core smoke test — **ACTIVE / NEXT**
 
@@ -91,7 +91,7 @@ Run the checklist in this order and stop on the first failure. That failure beco
 8. [ ] Tenant card **Send real email / Send Real Invitation** produces explicit success or visible error feedback.
 9. [ ] Team directory still loads correctly after the membership/data corrections.
 10. [ ] Property and property-unit directories used by tenant onboarding still load.
-11. [ ] Public `/build-info.json` still matches the deployed production SHA.
+11. [ ] Public `/build-info.json` matches the current live deployed SHA at the time of the smoke test.
 12. [ ] `/api/mssql/health` still reports Ready after the smoke-test operations.
 
 Rules for P0.2:
@@ -236,7 +236,7 @@ Problem/evidence: Production had inherited a stale Azure command override and re
 Scope: Make normal deployment own the web startup command, verify production, then retire recovery workflow.
 PR: #97 and #98.
 CI/deploy result: Production runs 35563887278 and 35564526487 succeeded.
-Production SHA: b6af12bdd0ecefe870e8297c984a985cffa98dd7.
+Production proof SHA: b6af12bdd0ecefe870e8297c984a985cffa98dd7.
 Runtime proof: startup command verified as /bin/sh scripts/start-container.sh; latest revision Ready; exact public SHA verified; MSSQL Ready; expected runtime config verified.
 Result: COMPLETE.
 Next item: P0.2 - Production core smoke test.
@@ -251,8 +251,8 @@ Scope: Execute the P0.2 checklist in order, stop on first failure, collect evide
 Out of scope: schema evolution, Evia signing, DocumentService cleanup, general compatibility refactoring, new features.
 PR: None unless a smoke-test failure requires a focused repair.
 CI result: N/A at start of smoke test.
-Production revision/SHA: b6af12bdd0ecefe870e8297c984a985cffa98dd7.
-Runtime proof at start: normal deployment run 35564526487 green with deterministic startup, exact public SHA, MSSQL Ready, and expected runtime config.
+Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. At P0.2 start, read `/build-info.json` and use the current live fingerprint because documentation-only commits can trigger a newer deployment without changing application behavior.
+Runtime proof at start: P0.1 normal deployment run 35564526487 was green with deterministic startup, exact public SHA, MSSQL Ready, and expected runtime config.
 Result: IN PROGRESS.
 Next item after all checks pass: P0.3 - Invitation/email observability.
 ```
