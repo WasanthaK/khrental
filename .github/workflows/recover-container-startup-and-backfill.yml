@@ -1,0 +1,196 @@
+name: Recover container startup and backfill memberships
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-container-startup-and-backfill.yml'
+      - 'scripts/backfill-legacy-tenant-memberships.mjs'
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: khrental-startup-recovery-backfill
+  cancel-in-progress: true
+
+env:
+  CONTAINER_PORT: '5174'
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+  EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT: '2'
+
+jobs:
+  recover-and-backfill:
+    name: recover startup command and backfill two memberships
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push recovery image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_BUILD_SHA=${{ github.sha }}
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:recovery-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy image with normal web startup command
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            az extension add --name containerapp --upgrade --yes
+
+            az containerapp revision set-mode \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --mode single \
+              --output none
+
+            az containerapp ingress update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --target-port "$CONTAINER_PORT" \
+              --output none
+
+            az containerapp update \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --image "${{ steps.image.outputs.name }}:${{ github.sha }}" \
+              --command "/bin/sh" \
+              --args "-c" "npm run generate-env-config && node server.js" \
+              --output none
+
+      - name: Wait for recovered revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+          echo "PRODUCTION_FQDN=$fqdn" >> "$GITHUB_ENV"
+
+          latest_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestRevisionName \
+            -o tsv)
+
+          for attempt in $(seq 1 40); do
+            ready_revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName \
+              -o tsv)
+            if [ "$ready_revision" = "$latest_revision" ]; then
+              echo "Recovered revision is ready: $latest_revision"
+              break
+            fi
+            echo "Waiting for recovered revision $latest_revision (ready: ${ready_revision:-none}, attempt ${attempt}/40)..."
+            sleep 6
+          done
+
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+          if [ "$ready_revision" != "$latest_revision" ]; then
+            echo "Recovered revision did not become ready. Latest: $latest_revision; ready: ${ready_revision:-none}" >&2
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --type console \
+              --tail 120 \
+              --format text || true
+            exit 1
+          fi
+
+          for attempt in $(seq 1 20); do
+            build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            mssql_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health" 2>/dev/null || true)
+            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\"" \
+              && echo "$mssql_health" | grep -Fq '"connection":"ready"'; then
+              echo "Recovered public revision is serving ${GITHUB_SHA} with MSSQL ready."
+              exit 0
+            fi
+            echo "Waiting for public build fingerprint and MSSQL readiness (attempt ${attempt}/20)..."
+            sleep 10
+          done
+
+          echo "Recovered public revision did not become externally ready in time." >&2
+          exit 1
+
+      - name: Run capped legacy membership backfill
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          echo "Backfilling inside ready revision: $ready_revision"
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command 'sh -c \"EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT=${EXPECTED_LEGACY_MEMBERSHIP_BACKFILL_COUNT} node scripts/backfill-legacy-tenant-memberships.mjs\"'"
+
+          : > backfill-result.txt
+          set +e
+          script -q -e -c "$exec_command" /dev/null | tee backfill-result.txt
+          set -e
+
+          if ! grep -Fq 'LEGACY_MEMBERSHIP_BACKFILL_OK' backfill-result.txt; then
+            echo "Legacy membership backfill did not complete successfully." >&2
+            cat backfill-result.txt >&2
+            exit 1
+          fi
+
+          if ! grep -Fq '"remaining_missing_count": 0' backfill-result.txt; then
+            echo "Legacy membership backfill did not verify zero remaining missing memberships." >&2
+            cat backfill-result.txt >&2
+            exit 1
+          fi
+
+          {
+            echo '### Startup recovery and legacy tenant membership backfill'
+            echo
+            echo '```text'
+            cat backfill-result.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
