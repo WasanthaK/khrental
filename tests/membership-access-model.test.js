@@ -12,6 +12,7 @@ const invitationServiceSource = readFileSync(new URL('../src/services/invitation
 const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
 const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-db.mjs', import.meta.url), 'utf8');
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
+const dashboardLayoutSource = readFileSync(new URL('../src/components/layouts/DashboardLayout.jsx', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
@@ -123,6 +124,18 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /createRentee/);
   assert.match(renteeFormSource, /sendRenteeInvitation/);
   assert.match(renteeFormSource, /Save & Invite/);
+});
+
+test('platform administrator with tenant membership keeps tenant workspace access', () => {
+  assert.match(
+    dashboardLayoutSource,
+    /const showTenantWorkspace = !platformAdminLoading && \(!isPlatformAdmin \|\| hasTenantAccess\);/
+  );
+  assert.match(
+    dashboardLayoutSource,
+    /if \(platformAdminLoading \|\| !isPlatformAdmin \|\| hasTenantAccess\) \{\s*return;/
+  );
+  assert.match(dashboardLayoutSource, /<TenantSwitcher \/>/);
 });
 
 test('invitation card uses the mounted toast system and renders persistent feedback', () => {
