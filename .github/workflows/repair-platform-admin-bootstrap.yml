@@ -1,0 +1,133 @@
+name: One-shot platform admin bootstrap
+
+on:
+  push:
+    branches:
+      - repair/platform-admin-bootstrap
+    paths:
+      - '.github/workflows/repair-platform-admin-bootstrap.yml'
+      - 'scripts/repair-platform-admin-bootstrap.mjs'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-platform-admin-bootstrap
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  repair:
+    name: repair platform owner registry
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run scoped DML repair inside serving container
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          cat > /tmp/repair-platform-admin-bootstrap.mjs <<'NODE'
+          import { runQuery, runSingleQuery } from './src/api/mssql/query.js';
+          import { closeMssqlPool } from './src/api/mssql/pool.js';
+
+          const email = 'wweerakoone@gmail.com';
+
+          const main = async () => {
+            const tableState = await runSingleQuery(`
+              SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NULL THEN 0 ELSE 1 END AS exists_value;
+            `);
+            if (!tableState?.exists_value) {
+              console.error('PLATFORM_ADMIN_TABLE_MISSING');
+              process.exitCode = 3;
+              return;
+            }
+
+            const appUser = await runSingleQuery(`
+              SELECT TOP 1 id FROM dbo.app_users
+              WHERE LOWER(LTRIM(RTRIM(email))) = LOWER(@email);
+            `, { email });
+            if (!appUser?.id) {
+              console.error('PLATFORM_ADMIN_USER_NOT_FOUND');
+              process.exitCode = 2;
+              return;
+            }
+
+            const existing = await runSingleQuery(`
+              SELECT TOP 1 id FROM dbo.platform_admins WHERE app_user_id = @appUserId;
+            `, { appUserId: appUser.id });
+
+            if (existing?.id) {
+              await runQuery(`
+                UPDATE dbo.platform_admins
+                SET status = N'active', updatedat = SYSUTCDATETIME()
+                WHERE id = @id;
+              `, { id: existing.id });
+              console.log('Platform administrator registry entry reactivated.');
+            } else {
+              await runQuery(`
+                INSERT INTO dbo.platform_admins (app_user_id, status)
+                VALUES (@appUserId, N'active');
+              `, { appUserId: appUser.id });
+              console.log('Platform administrator registry entry created.');
+            }
+
+            const verified = await runSingleQuery(`
+              SELECT TOP 1 id FROM dbo.platform_admins
+              WHERE app_user_id = @appUserId
+                AND LOWER(COALESCE(status, N'active')) = N'active';
+            `, { appUserId: appUser.id });
+            if (!verified?.id) throw new Error('Platform administrator verification failed after repair.');
+            console.log('PLATFORM_ADMIN_BOOTSTRAP_OK');
+          };
+
+          main()
+            .catch((error) => {
+              console.error(`PLATFORM_ADMIN_BOOTSTRAP_FAILED: ${error?.message || error}`);
+              process.exitCode = 1;
+            })
+            .finally(async () => {
+              await closeMssqlPool().catch(() => {});
+            });
+          NODE
+
+          payload=$(base64 -w0 /tmp/repair-platform-admin-bootstrap.mjs)
+          remote="cd /app && echo '$payload' | base64 -d > repair-platform-admin-bootstrap.mjs && node repair-platform-admin-bootstrap.mjs; rc=\$?; rm -f repair-platform-admin-bootstrap.mjs; exit \$rc"
+
+          echo "Running one-shot platform-admin repair in revision: $ready_revision"
+          set +e
+          script -q -e -c "az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command \"/bin/sh -c '$remote'\"" /dev/null | tee repair-output.txt
+          repair_exit=${PIPESTATUS[0]}
+          set -e
+
+          cat repair-output.txt
+          if grep -Fq 'PLATFORM_ADMIN_BOOTSTRAP_OK' repair-output.txt; then
+            echo 'Platform administrator bootstrap verified.'
+            exit 0
+          fi
+          if grep -Fq 'PLATFORM_ADMIN_TABLE_MISSING' repair-output.txt; then
+            echo 'The platform_admins table is missing; no data change was made.' >&2
+            exit 3
+          fi
+          echo "Platform administrator repair did not produce a verified success marker (exec exit ${repair_exit})." >&2
+          exit 1
