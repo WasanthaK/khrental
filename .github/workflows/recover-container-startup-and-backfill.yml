@@ -65,7 +65,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy image with normal web startup command
+      - name: Deploy image and clear stale startup override
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -88,8 +88,8 @@ jobs:
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --image "${{ steps.image.outputs.name }}:${{ github.sha }}" \
-              --command "/bin/sh" \
-              --args "-c" "npm run generate-env-config && node server.js" \
+              --command "" \
+              --args "" \
               --output none
 
       - name: Wait for recovered revision
