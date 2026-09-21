@@ -83,7 +83,7 @@ Run the checklist in this order and stop on the first failure. That failure beco
 
 1. [x] Tenant Admin can log in to the production tenant workspace. — Passed 2026-09-21 in a logged-out production browser session using the normal Tenant Admin account.
 2. [x] Tenants directory loads the expected current-organization renters. — Passed 2026-09-21; production browser showed the current renter cards and the Tenant Admin confirmed the directory contents were correct.
-3. [ ] Create a brand-new tenant identity with an intentionally unique test email.
+3. [x] Create a brand-new tenant identity with an intentionally unique test email. — Passed 2026-09-21; the Tenant Admin confirmed the production create operation completed successfully.
 4. [ ] Verify the new tenant immediately appears in the Tenants directory and remains visible after reload.
 5. [ ] Verify create-or-attach behavior for a global identity that already exists but is not yet a renter in the current organization.
 6. [ ] Plain **Save Tenant** persists the tenant without attempting an invitation.
@@ -252,9 +252,9 @@ Out of scope: schema evolution, Evia signing, DocumentService cleanup, general c
 PR: None unless a smoke-test failure requires a focused repair.
 CI result: N/A at start of smoke test.
 Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. At P0.2 start, production pre-checks passed on live documentation-only build 5e16d9833de3e50708f76bd1b28afe11b026976c; deployment run 35565122193 was green, latest revision was Ready, startup command remained /bin/sh scripts/start-container.sh, exact public SHA matched, and MSSQL health was Ready.
-Smoke-test progress: item 1 Tenant Admin production login passed on 2026-09-21 from a logged-out browser session using the normal Tenant Admin account. Item 2 Tenants directory passed on 2026-09-21; the production renter directory loaded and the Tenant Admin confirmed the visible current-organization renters were correct.
-Result: IN PROGRESS — item 3 is active.
-Next item: P0.2 item 3 - create a brand-new tenant identity with an intentionally unique test email.
+Smoke-test progress: item 1 Tenant Admin production login passed on 2026-09-21 from a logged-out browser session using the normal Tenant Admin account. Item 2 Tenants directory passed on 2026-09-21; the production renter directory loaded and the Tenant Admin confirmed the visible current-organization renters were correct. Item 3 brand-new tenant creation passed on 2026-09-21; the Tenant Admin confirmed the production create completed successfully.
+Result: IN PROGRESS — item 4 is active.
+Next item: P0.2 item 4 - verify the new tenant appears immediately and remains visible after reload.
 ```
 
 ---
