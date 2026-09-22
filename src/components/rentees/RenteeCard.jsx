@@ -24,6 +24,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
 
   const {
     status,
+    details: invitationDetails,
     loading: statusLoading,
     error: statusError,
     refresh: refreshStatus
@@ -39,6 +40,13 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
       // Error is already handled by the invitation-status hook.
     }
   };
+
+  const invitationDateLabel = invitationDetails?.invitedAt
+    ? `Sent: ${formatDate(invitationDetails.invitedAt)}`
+    : null;
+  const expiryDateLabel = invitationDetails?.expiresAt && ['pending', 'expired'].includes(status)
+    ? `${status === 'expired' ? 'Expired' : 'Expires'}: ${formatDate(invitationDetails.expiresAt)}`
+    : null;
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -66,44 +74,41 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
           </p>
           <p className="text-sm">
             <span className="text-gray-500">Properties: </span>
-            <span className="text-gray-900">
-              {associatedPropertyIds?.length || 0} assigned
-            </span>
+            <span className="text-gray-900">{associatedPropertyIds?.length || 0} assigned</span>
           </p>
         </div>
 
         <div className="flex justify-between items-center mb-3">
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             {idCopyURL ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                ID Verified
-              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">ID Verified</span>
             ) : (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                ID Pending
-              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">ID Pending</span>
             )}
 
             {statusError ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                Status Error
-              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Status Error</span>
             ) : statusLoading ? null : (
               <InvitationStatusBadge status={status} />
             )}
           </div>
-          <Link
-            to={`/dashboard/rentees/${id}`}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-          >
+          <Link to={`/dashboard/rentees/${id}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
             View Details
           </Link>
         </div>
+
+        {!statusLoading && !statusError && (invitationDateLabel || expiryDateLabel) && (
+          <div className="mb-3 text-xs text-gray-600" role="status">
+            {invitationDateLabel && <div>{invitationDateLabel}</div>}
+            {expiryDateLabel && <div>{expiryDateLabel}</div>}
+          </div>
+        )}
 
         {(!statusLoading && status !== 'registered' && !statusError) && (
           <div className="mt-2">
             <InviteUserButton
               userId={id}
+              invitationStatus={status}
               onSuccess={handleInviteSuccess}
               fullWidth={true}
               size="sm"
