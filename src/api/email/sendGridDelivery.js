@@ -5,6 +5,12 @@ const safeString = (value, maxLength = 160) => {
   return String(value).replace(/[\r\n\t]/g, ' ').slice(0, maxLength);
 };
 
+const safeNumber = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
 const createDeliveryError = (message, {
   status = 502,
   code = 'EMAIL_PROVIDER_REQUEST_FAILED',
@@ -47,11 +53,11 @@ export const buildEmailDeliveryLog = (event, details = {}) => ({
   event: safeString(event, 80),
   requestId: safeString(details.requestId, 128),
   provider: safeString(details.provider || EMAIL_PROVIDER, 80),
-  providerStatus: Number.isFinite(Number(details.providerStatus)) ? Number(details.providerStatus) : null,
+  providerStatus: safeNumber(details.providerStatus),
   providerMessageId: safeString(details.providerMessageId, 200),
-  durationMs: Number.isFinite(Number(details.durationMs)) ? Number(details.durationMs) : null,
+  durationMs: safeNumber(details.durationMs),
   errorCode: safeString(details.errorCode, 100),
-  attachmentCount: Number.isFinite(Number(details.attachmentCount)) ? Number(details.attachmentCount) : 0,
+  attachmentCount: safeNumber(details.attachmentCount) ?? 0,
   hasHtml: Boolean(details.hasHtml),
   hasText: Boolean(details.hasText)
 });
