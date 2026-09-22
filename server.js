@@ -218,7 +218,21 @@ async function createServer() {
   app.post('/api/platform/query', guardTenancyClosureQuery);
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
-  app.use('/storage/:bucket', createStorageDeliveryHandler());
+  app.use(
+    '/storage/:bucket',
+    (req, res, next) => {
+      const parts = String(req.path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      const tenantIdFromPath = parts[0] === 'tenants' ? parts[1] : null;
+      if (!tenantIdFromPath) {
+        res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
+        return;
+      }
+      req.query = { ...req.query, tenantId: tenantIdFromPath };
+      next();
+    },
+    createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
+    createStorageDeliveryHandler()
+  );
 
   if (isProduction) {
     const publicPath = path.resolve(process.cwd(), 'public');
