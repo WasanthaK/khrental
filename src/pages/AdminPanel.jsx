@@ -1,49 +1,20 @@
 import { platform as platformClient } from '../services/platformClient';
+import { listTenantFiles, uploadTenantFile } from '../services/storageApiService';
 
 const AdminPanel = () => {
   async function testStorageUpload() {
     try {
-      // First, check if we're authenticated
       const { data: { session }, error: authError } = await platformClient.auth.getSession();
-      
       if (authError || !session) {
-        console.error('Authentication error:', authError || 'No session found');
         alert('You must be authenticated to upload files');
         return;
       }
 
-      // Create a test blob
       const blob = new Blob(['This is a test file content from admin panel.'], { type: 'text/plain' });
       const fileName = `agreements/test-file-${new Date().toISOString()}.txt`;
-
-      // Upload the file
-      const { data, error } = await platformClient.storage
-        .from('files')
-        .upload(fileName, blob, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) {
-        console.error('Error uploading file:', error);
-        alert(`Upload failed: ${error.message}`);
-        return;
-      }
-
-      console.log('File uploaded successfully:', data);
+      await uploadTenantFile({ bucket: 'files', path: fileName, file: blob });
+      await listTenantFiles({ bucket: 'files', path: 'agreements' });
       alert('Test file uploaded successfully!');
-
-      // Test reading the file back
-      const { data: files, error: listError } = await platformClient.storage
-        .from('files')
-        .list('agreements');
-
-      if (listError) {
-        console.error('Error listing files:', listError);
-      } else {
-        console.log('Files in agreements folder:', files);
-      }
-
     } catch (error) {
       console.error('Upload process failed:', error);
       alert(`Upload process failed: ${error.message}`);
@@ -53,8 +24,6 @@ const AdminPanel = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">Admin Panel</h1>
-      
-      {/* Add test upload button */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-4">Storage Test</h2>
         <button
@@ -64,10 +33,8 @@ const AdminPanel = () => {
           Test File Upload
         </button>
       </div>
-
-      {/* ... rest of your existing admin panel content ... */}
     </div>
   );
 };
 
-export default AdminPanel; 
+export default AdminPanel;
