@@ -6,17 +6,17 @@ import { toast } from 'react-toastify';
 import InvitationStatusBadge from '../components/common/InvitationStatusBadge';
 import useInvitationStatus from '../hooks/useInvitationStatus';
 import InviteUserButton from '../components/common/InviteUserButton';
-import PropertyCard from '../components/properties/PropertyCard';
 import AgreementCard from '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
-import { deleteAppUser, fetchAppUser, mapAppUserToRentee, getStructuredAssociations } from '../services/appUserService';
+import { mapAppUserToRentee } from '../services/appUserService';
+import { getRentee, updateRentee } from '../services/renteeService';
 
 // Custom component for displaying agreements in RenteeDetails page
 const AgreementSummaryCard = ({ agreement, property, rentee }) => {
   const formattedStartDate = formatDate(agreement.startdate);
   const formattedEndDate = formatDate(agreement.enddate);
   const hasUnit = agreement.unitid && agreement.unit;
-  
+
   return (
     <Link to={`/dashboard/agreements/${agreement.id}`} className="block">
       <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
@@ -45,7 +45,7 @@ const AgreementSummaryCard = ({ agreement, property, rentee }) => {
             </span>
           </div>
         </div>
-        
+
         <div className="mt-2 pt-2 border-t border-gray-100 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Monthly Rent:</span>
@@ -69,15 +69,15 @@ const AgreementSummaryCard = ({ agreement, property, rentee }) => {
 const RenteePropertyCard = ({ property }) => {
   const isApartment = property.propertytype === 'apartment';
   const hasAssignedUnits = isApartment && property.assignedUnits && property.assignedUnits.length > 0;
-  
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
       <Link to={`/dashboard/properties/${property.id}`} className="block">
         <div className="relative h-40 bg-gray-100">
           {property.images && property.images.length > 0 ? (
-            <img 
-              src={property.images[0]} 
-              alt={property.name} 
+            <img
+              src={property.images[0]}
+              alt={property.name}
               className="w-full h-full object-cover"
             />
           ) : (
@@ -98,11 +98,11 @@ const RenteePropertyCard = ({ property }) => {
             </span>
           </div>
         </div>
-        
+
         <div className="p-4">
           <h3 className="font-semibold text-lg mb-1 text-gray-900">{property.name}</h3>
           <p className="text-sm text-gray-600 mb-2">{property.address}</p>
-          
+
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-900">
               ${property.rentalvalues?.rent ? property.rentalvalues.rent.toLocaleString() : '0'}/month
@@ -111,25 +111,29 @@ const RenteePropertyCard = ({ property }) => {
               {property.propertytype || 'Residential'}
             </span>
           </div>
-          
+
           {isApartment && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <h4 className="text-sm font-medium text-gray-700 mb-2">
                 {hasAssignedUnits ? 'Assigned Units:' : 'No Units Assigned'}
               </h4>
-              
+
               {hasAssignedUnits && (
                 <div className="flex flex-wrap gap-2">
-                  {property.assignedUnits.map(unit => (
-                    <span 
+                  {property.assignedUnits.map((unit) => (
+                    <span
                       key={unit.id}
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                     >
                       Unit {unit.unitnumber}
                       {unit.status && (
-                        <span className="ml-1 w-2 h-2 rounded-full inline-block" 
-                              style={{backgroundColor: unit.status === 'occupied' ? '#4f46e5' : 
-                                     unit.status === 'available' ? '#10b981' : '#d97706'}} />
+                        <span
+                          className="ml-1 w-2 h-2 rounded-full inline-block"
+                          style={{
+                            backgroundColor: unit.status === 'occupied' ? '#4f46e5'
+                              : unit.status === 'available' ? '#10b981' : '#d97706'
+                          }}
+                        />
                       )}
                     </span>
                   ))}
@@ -146,210 +150,197 @@ const RenteePropertyCard = ({ property }) => {
 const RenteeDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [rentee, setRentee] = useState(null);
   const [properties, setProperties] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [agreements, setAgreements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  // Get invitation status only when needed (not during form edits)
-  const invitationStatus = useInvitationStatus(id, true);
-  
-  // Add a function to manually check status when needed
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+
+  const invitationStatus = useInvitationStatus(rentee?.active === false ? null : id);
+
   const checkInvitationStatus = () => {
     invitationStatus.refresh();
   };
-  
+
   useEffect(() => {
     const fetchRenteeData = async () => {
       try {
         setLoading(true);
-        
-        // Fetch rentee details from app_users table
-        const renteeData = await fetchAppUser(id);
-        
-        if (renteeData && renteeData.user_type === 'rentee') {
-          // Map the rentee data to the state
-          const renteeInfo = {
-            ...mapAppUserToRentee(renteeData),
-            structuredAssociations: getStructuredAssociations(renteeData.id)
-          };
-          
-          setRentee(renteeInfo);
-          
-          // Prepare for property fetching
-          let propertyIds = [];
-          
-          // Use structured associations if available, fall back to legacy format
-          if (renteeInfo.structuredAssociations && renteeInfo.structuredAssociations.length > 0) {
-            propertyIds = [...new Set(renteeInfo.structuredAssociations.map(assoc => assoc.propertyId))];
-          } else if (renteeInfo.associatedPropertyIds && renteeInfo.associatedPropertyIds.length > 0) {
-            propertyIds = renteeInfo.associatedPropertyIds;
+
+        // The renter identity and organization membership are loaded from the
+        // canonical tenant-scoped MSSQL endpoint. Structured property/unit
+        // assignments come from that same server projection, never sessionStorage.
+        const renteeData = await getRentee(id);
+
+        if (!renteeData) {
+          throw new Error('Tenant not found');
+        }
+
+        const renteeInfo = {
+          ...mapAppUserToRentee(renteeData),
+          structuredAssociations: renteeData.associated_properties || []
+        };
+
+        setRentee(renteeInfo);
+
+        let propertyIds = [];
+
+        if (renteeInfo.structuredAssociations.length > 0) {
+          propertyIds = [...new Set(renteeInfo.structuredAssociations.map((association) => (
+            association.propertyId || association.propertyid
+          )).filter(Boolean))];
+        } else if (renteeInfo.associatedPropertyIds?.length > 0) {
+          propertyIds = renteeInfo.associatedPropertyIds;
+        }
+
+        if (propertyIds.length > 0) {
+          const { data: propertiesData, error: propertiesError } = await platformClient
+            .from('properties')
+            .select(`
+              *,
+              property_units(*)
+            `)
+            .in('id', propertyIds);
+
+          if (propertiesError) {
+            throw propertiesError;
           }
-          
-          if (propertyIds.length > 0) {
-            // Fetch all associated properties
-            const { data: propertiesData, error: propertiesError } = await platformClient
-              .from('properties')
-              .select(`
-                *,
-                property_units(*)
-              `)
-              .in('id', propertyIds);
-            
-            if (propertiesError) {
-              throw propertiesError;
-            }
-            
-            // Map properties to display format and include unit information
-            const associatedProperties = await Promise.all(propertiesData.map(async (property) => {
-              const propertyItem = {
-                id: property.id,
-                name: property.name || property.address || 'Unnamed Property',
-                address: property.address || '',
-                propertytype: property.propertytype || property.type || 'Residential',
-                status: property.status || 'available',
-                images: property.images || [],
-                rentalvalues: property.rentalvalues || { rent: 0 },
-                unitconfiguration: property.unitconfiguration || property.type || '',
-                description: property.description || 'No description available',
-                amenities: property.amenities || [],
-                units: property.property_units || []
-              };
-              
-              // If it's an apartment, attach which units this rentee is assigned to
-              if (property.propertytype === 'apartment' && renteeInfo.structuredAssociations) {
-                const associatedUnits = renteeInfo.structuredAssociations
-                  .filter(assoc => assoc.propertyId === property.id && assoc.unitId)
-                  .map(assoc => assoc.unitId);
-                
-                if (associatedUnits.length > 0) {
-                  // Fetch the unit details for display
-                  const { data: unitData, error: unitError } = await platformClient
-                    .from('property_units')
-                    .select('*')
-                    .in('id', associatedUnits);
-                  
-                  if (!unitError && unitData) {
-                    propertyItem.assignedUnits = unitData;
-                  } else {
-                    console.error('Error fetching unit details:', unitError);
-                    propertyItem.assignedUnits = [];
-                  }
+
+          const associatedProperties = await Promise.all(propertiesData.map(async (property) => {
+            const propertyItem = {
+              id: property.id,
+              name: property.name || property.address || 'Unnamed Property',
+              address: property.address || '',
+              propertytype: property.propertytype || property.type || 'Residential',
+              status: property.status || 'available',
+              images: property.images || [],
+              rentalvalues: property.rentalvalues || { rent: 0 },
+              unitconfiguration: property.unitconfiguration || property.type || '',
+              description: property.description || 'No description available',
+              amenities: property.amenities || [],
+              units: property.property_units || []
+            };
+
+            if (property.propertytype === 'apartment') {
+              const associatedUnits = renteeInfo.structuredAssociations
+                .filter((association) => String(association.propertyId || association.propertyid) === String(property.id))
+                .map((association) => association.unitId || association.unitid)
+                .filter(Boolean);
+
+              if (associatedUnits.length > 0) {
+                const { data: unitData, error: unitError } = await platformClient
+                  .from('property_units')
+                  .select('*')
+                  .in('id', associatedUnits);
+
+                if (!unitError && unitData) {
+                  propertyItem.assignedUnits = unitData;
                 } else {
+                  console.error('Error fetching unit details:', unitError);
                   propertyItem.assignedUnits = [];
                 }
+              } else {
+                propertyItem.assignedUnits = [];
               }
-              
-              return propertyItem;
-            }));
-            
-            setProperties(associatedProperties);
-          }
-          
-          // Fetch invoices for this rentee
-          const { data: invoicesData, error: invoicesError } = await platformClient
-            .from('invoices')
-            .select(`
-              *,
-              property:propertyid (
-                id,
-                name,
-                address
-              )
-            `)
-            .eq('renteeid', id);
-          
-          if (invoicesError) {
-            console.error('Error fetching invoices:', invoicesError);
-            throw invoicesError;
-          } else {
-            // Format invoices data with all required fields
-            const formattedInvoices = invoicesData.map(invoice => ({
-              id: invoice.id,
-              status: invoice.status || 'pending',
-              createdat: invoice.createdat || invoice.created_at || new Date().toISOString(),
-              totalamount: invoice.amount || invoice.totalamount || 0,
-              billingperiod: invoice.billingperiod || `${formatDate(invoice.startdate || invoice.createdat)} - ${formatDate(invoice.duedate || invoice.due_date)}`,
-              duedate: invoice.duedate || invoice.due_date,
-              paymentdate: invoice.paymentdate || invoice.payment_date,
-              property: invoice.property,
-              propertyid: invoice.propertyid
-            }));
-            
-            setInvoices(formattedInvoices || []);
-          }
-          
-          // Fetch agreements for this rentee
-          const { data: agreementsData, error: agreementsError } = await platformClient
-            .from('agreements')
-            .select(`
-              *,
-              properties:propertyid (
-                id,
-                name,
-                address
-              ),
-              unit:unitid (
-                id,
-                unitnumber
-              )
-            `)
-            .eq('renteeid', id)
-            .order('createdat', { ascending: false });
-          
-          if (agreementsError) {
-            console.error('Error fetching agreements:', agreementsError);
-            throw agreementsError;
-          } else {
-            setAgreements(agreementsData || []);
-          }
+            }
+
+            return propertyItem;
+          }));
+
+          setProperties(associatedProperties);
         } else {
-          throw new Error('Rentee not found');
+          setProperties([]);
         }
-      } catch (error) {
-        console.error('Error fetching rentee data:', error.message);
-        setError(error.message);
+
+        const { data: invoicesData, error: invoicesError } = await platformClient
+          .from('invoices')
+          .select(`
+            *,
+            property:propertyid (
+              id,
+              name,
+              address
+            )
+          `)
+          .eq('renteeid', id);
+
+        if (invoicesError) {
+          console.error('Error fetching invoices:', invoicesError);
+          throw invoicesError;
+        }
+
+        const formattedInvoices = invoicesData.map((invoice) => ({
+          id: invoice.id,
+          status: invoice.status || 'pending',
+          createdat: invoice.createdat || invoice.created_at || new Date().toISOString(),
+          totalamount: invoice.amount || invoice.totalamount || 0,
+          billingperiod: invoice.billingperiod || `${formatDate(invoice.startdate || invoice.createdat)} - ${formatDate(invoice.duedate || invoice.due_date)}`,
+          duedate: invoice.duedate || invoice.due_date,
+          paymentdate: invoice.paymentdate || invoice.payment_date,
+          property: invoice.property,
+          propertyid: invoice.propertyid
+        }));
+
+        setInvoices(formattedInvoices || []);
+
+        const { data: agreementsData, error: agreementsError } = await platformClient
+          .from('agreements')
+          .select(`
+            *,
+            properties:propertyid (
+              id,
+              name,
+              address
+            ),
+            unit:unitid (
+              id,
+              unitnumber
+            )
+          `)
+          .eq('renteeid', id)
+          .order('createdat', { ascending: false });
+
+        if (agreementsError) {
+          console.error('Error fetching agreements:', agreementsError);
+          throw agreementsError;
+        }
+
+        setAgreements(agreementsData || []);
+      } catch (fetchError) {
+        console.error('Error fetching tenant data:', fetchError.message);
+        setError(fetchError.message);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchRenteeData();
   }, [id]);
-  
-  const handleDelete = async () => {
+
+  const handleDeactivate = async () => {
     try {
       setLoading(true);
-      
-      // Delete from app_users table
-      const result = await deleteAppUser(id);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete rentee');
-      }
-      
-      toast.success('Rentee deleted successfully');
+      await updateRentee(id, { status: 'inactive' });
+      toast.success('Tenant deactivated for this organization.');
       navigate('/dashboard/rentees');
-    } catch (error) {
-      console.error('Error deleting rentee:', error.message);
-      setError(error.message);
-      toast.error(`Error deleting rentee: ${error.message}`);
+    } catch (deactivateError) {
+      console.error('Error deactivating tenant:', deactivateError.message);
+      setError(deactivateError.message);
+      toast.error(`Error deactivating tenant: ${deactivateError.message}`);
     } finally {
       setLoading(false);
-      setShowDeleteConfirm(false);
+      setShowDeactivateConfirm(false);
     }
   };
-  
-  // Handle successful invitation
+
   const handleInviteSuccess = () => {
     checkInvitationStatus();
     toast.success('Invitation sent successfully');
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -357,7 +348,7 @@ const RenteeDetails = () => {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -366,20 +357,27 @@ const RenteeDetails = () => {
       </div>
     );
   }
-  
+
   if (!rentee) {
     return (
       <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
         <strong className="font-bold">Not Found!</strong>
-        <span className="block sm:inline"> The requested rentee could not be found.</span>
+        <span className="block sm:inline"> The requested tenant could not be found.</span>
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">{rentee.name}</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">{rentee.name}</h1>
+          <span className={`mt-2 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            rentee.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'
+          }`}>
+            {rentee.active ? 'Active Tenant' : 'Inactive Tenant'}
+          </span>
+        </div>
         <div className="flex space-x-2">
           <Link
             to={`/dashboard/rentees/${id}/edit`}
@@ -387,65 +385,68 @@ const RenteeDetails = () => {
           >
             Edit
           </Link>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-          >
-            Delete
-          </button>
+          {rentee.active && (
+            <button
+              onClick={() => setShowDeactivateConfirm(true)}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+            >
+              Deactivate
+            </button>
+          )}
         </div>
       </div>
-      
-      {showDeleteConfirm && (
+
+      {showDeactivateConfirm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Confirm Deletion</h2>
-            <p className="mb-6">Are you sure you want to delete {rentee.name}? This action cannot be undone.</p>
+            <h2 className="text-xl font-semibold mb-4">Deactivate Tenant</h2>
+            <p className="mb-6">
+              Deactivate {rentee.name} for this organization? Their global KH Rentals identity and relationships with other organizations will not be deleted.
+            </p>
             <div className="flex justify-end space-x-2">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => setShowDeactivateConfirm(false)}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleDeactivate}
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
               >
-                Delete
+                Deactivate
               </button>
             </div>
           </div>
         </div>
       )}
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - Basic Info */}
         <div className={`lg:col-span-1 ${properties.length === 0 ? 'lg:col-span-2' : ''}`}>
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-lg font-medium mb-4">Basic Information</h2>
-            
+
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Name</h3>
                 <p className="mt-1">{rentee.name}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Email</h3>
                 <p className="mt-1">{rentee.contactDetails?.email || 'Not provided'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Phone</h3>
                 <p className="mt-1">{rentee.contactDetails?.phone || 'Not provided'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Registration Date</h3>
                 <p className="mt-1">{formatDate(rentee.registrationDate) || 'Not available'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">ID Copy</h3>
                 <p className="mt-1">
@@ -463,80 +464,81 @@ const RenteeDetails = () => {
                   )}
                 </p>
               </div>
-              
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">Invitation Status</h3>
-                <div className="mt-2 flex items-center">
-                  <InvitationStatusBadge status={invitationStatus.status} />
-                  
-                  {invitationStatus.status !== 'registered' && !invitationStatus.loading && (
-                    <div className="ml-2">
-                      <InviteUserButton 
-                        userId={id} 
-                        onSuccess={handleInviteSuccess} 
-                        size="sm"
-                      />
-                    </div>
-                  )}
+
+              {rentee.active && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Invitation Status</h3>
+                  <div className="mt-2 flex items-center">
+                    <InvitationStatusBadge status={invitationStatus.status} />
+
+                    {invitationStatus.status !== 'registered' && !invitationStatus.loading && (
+                      <div className="ml-2">
+                        <InviteUserButton
+                          userId={id}
+                          invitationStatus={invitationStatus.status}
+                          onSuccess={handleInviteSuccess}
+                          size="sm"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
-        
-        {/* Middle column - Associated Properties - Only show if properties exist */}
+
         {properties.length > 0 && (
           <div className="lg:col-span-1">
             <div className="bg-white shadow-md rounded-lg p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Associated Properties</h2>
               <div className="space-y-6">
                 {properties.map((property) => (
-                  <RenteePropertyCard 
-                    key={property.id} 
-                    property={property} 
+                  <RenteePropertyCard
+                    key={property.id}
+                    property={property}
                   />
                 ))}
               </div>
             </div>
           </div>
         )}
-        
-        {/* Right column - Agreements & Invoices */}
+
         <div className="lg:col-span-1">
           <div className="bg-white shadow-md rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Agreements</h2>
-            
+
             {agreements.length === 0 ? (
-              <p className="text-gray-500">No agreements found for this rentee.</p>
+              <p className="text-gray-500">No agreements found for this tenant.</p>
             ) : (
               <div className="space-y-6">
                 {agreements.map((agreement) => (
-                  <AgreementSummaryCard 
-                    key={agreement.id} 
-                    agreement={agreement} 
-                    property={agreement.properties} 
+                  <AgreementSummaryCard
+                    key={agreement.id}
+                    agreement={agreement}
+                    property={agreement.properties}
                     rentee={rentee}
                   />
                 ))}
               </div>
             )}
           </div>
-          
+
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-medium mb-4">Invoices</h2>
-            
+
             {invoices.length > 0 ? (
               <div className="space-y-6">
-                {invoices.map(invoice => (
-                  <InvoiceCard 
-                    key={invoice.id} 
-                    invoice={invoice} 
+                {invoices.map((invoice) => (
+                  <InvoiceCard
+                    key={invoice.id}
+                    invoice={invoice}
                     rentee={rentee}
                   />
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500">No invoices found for this rentee.</p>
+              <p className="text-gray-500">No invoices found for this tenant.</p>
             )}
           </div>
         </div>
@@ -545,4 +547,4 @@ const RenteeDetails = () => {
   );
 };
 
-export default RenteeDetails; 
+export default RenteeDetails;

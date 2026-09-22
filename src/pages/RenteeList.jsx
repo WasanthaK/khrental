@@ -9,18 +9,17 @@ const RenteeList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('active');
 
   const fetchRentees = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load the active tenant-scoped directory directly from the server.
-      // This must not silently collapse to an empty list when a valid session
-      // is still being restored, and it tolerates older rows whose role is
-      // `rentee` even if user_type was stored inconsistently.
-      const data = await fetchRenteeDirectory();
+      // Load both active and inactive organization memberships so an inactive
+      // renter remains discoverable and can be reactivated without touching the
+      // person's global identity record.
+      const data = await fetchRenteeDirectory({ status: 'all' });
       const transformedData = (data || []).map(mapAppUserToRentee);
       setRentees(transformedData);
     } catch (error) {
@@ -41,12 +40,16 @@ const RenteeList = () => {
       rentee.contactDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rentee.contactDetails?.phone?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (filter === 'all') return matchesSearch;
-    if (filter === 'verified' && rentee.idCopyURL) return matchesSearch;
-    if (filter === 'unverified' && !rentee.idCopyURL) return matchesSearch;
-    if (filter === 'invited' && rentee.invited && !rentee.authId) return matchesSearch;
-    if (filter === 'registered' && rentee.authId) return matchesSearch;
-    if (filter === 'not_invited' && !rentee.invited) return matchesSearch;
+    if (!matchesSearch) return false;
+    if (filter === 'all') return true;
+    if (filter === 'active') return rentee.active;
+    if (filter === 'inactive') return !rentee.active;
+    if (!rentee.active) return false;
+    if (filter === 'verified') return Boolean(rentee.idCopyURL);
+    if (filter === 'unverified') return !rentee.idCopyURL;
+    if (filter === 'invited') return rentee.invited && !rentee.authId;
+    if (filter === 'registered') return Boolean(rentee.authId);
+    if (filter === 'not_invited') return !rentee.invited;
 
     return false;
   });
@@ -80,6 +83,8 @@ const RenteeList = () => {
               onChange={(e) => setFilter(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              <option value="active">Active Tenants</option>
+              <option value="inactive">Inactive Tenants</option>
               <option value="all">All Tenants</option>
               <option value="verified">ID Verified</option>
               <option value="unverified">ID Pending</option>

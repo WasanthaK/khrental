@@ -17,10 +17,6 @@ import {
   extractStoragePath,
   uploadTenantFile
 } from '../services/storageApiService';
-import {
-  getRenteeAssociations,
-  storeRenteeAssociations
-} from '../services/renteeAssociationCache';
 
 const ID_COPY_BUCKET = 'images';
 const ID_COPY_FOLDER = 'id-copies';
@@ -35,6 +31,17 @@ const normalizePropertyIds = (value) => {
   } catch (_error) {
     return [];
   }
+};
+
+const normalizeStructuredAssociations = (value) => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((association) => ({
+      propertyId: association?.propertyId || association?.propertyid || association?.property_id || '',
+      unitId: association?.unitId || association?.unitid || association?.unit_id || null
+    }))
+    .filter((association) => Boolean(association.propertyId));
 };
 
 const RenteeForm = () => {
@@ -90,7 +97,7 @@ const RenteeForm = () => {
           nationalId: rentee?.national_id || '',
           permanentAddress: rentee?.permanent_address || '',
           associatedPropertyIds: normalizePropertyIds(rentee?.associated_property_ids),
-          structuredAssociations: getRenteeAssociations(id)
+          structuredAssociations: normalizeStructuredAssociations(rentee?.associated_properties)
         });
         setExistingIdCopyUrl(rentee?.id_copy_url || null);
       } catch (loadError) {
@@ -275,6 +282,7 @@ const RenteeForm = () => {
       },
       id_copy_url: idCopyUrl || null,
       associated_property_ids: formData.associatedPropertyIds,
+      associated_properties: formData.structuredAssociations,
       national_id: formData.nationalId.trim(),
       permanent_address: formData.permanentAddress.trim()
     };
@@ -287,8 +295,6 @@ const RenteeForm = () => {
     if (!renterId) {
       throw new Error('The server saved the tenant but did not return an identity ID.');
     }
-
-    storeRenteeAssociations(renterId, formData.structuredAssociations);
 
     if (inviteAfterSave) {
       await sendRenteeInvitation({ id: renterId, email, name });
