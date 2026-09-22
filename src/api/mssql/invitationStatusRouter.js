@@ -39,6 +39,8 @@ export const createInvitationStatusRouter = () => {
       return;
     }
 
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.set('Pragma', 'no-cache');
     res.json({ data: status });
   }));
 

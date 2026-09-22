@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { checkAppUserInvitationStatus } from '../services/appUserService';
 
-const useInvitationStatus = (userId, skipCheck = false) => {
+const PENDING_REFRESH_INTERVAL_MS = 30000;
+
+const useInvitationStatus = (userId) => {
   const [status, setStatus] = useState('loading');
   const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(!skipCheck);
+  const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState(null);
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async ({ silent = false } = {}) => {
     if (!userId) {
       setStatus('unknown');
       setDetails(null);
@@ -16,7 +18,9 @@ const useInvitationStatus = (userId, skipCheck = false) => {
     }
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
       const result = await checkAppUserInvitationStatus(userId);
 
@@ -33,19 +37,42 @@ const useInvitationStatus = (userId, skipCheck = false) => {
       setStatus('error');
       setDetails(null);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [userId]);
 
   useEffect(() => {
-    if (!skipCheck) {
-      fetchStatus();
-    } else {
-      setLoading(false);
-      setStatus('unknown');
-      setDetails(null);
+    fetchStatus();
+  }, [fetchStatus]);
+
+  useEffect(() => {
+    if (!userId) {
+      return undefined;
     }
-  }, [fetchStatus, skipCheck]);
+
+    const refreshIfVisible = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+        fetchStatus({ silent: true });
+      }
+    };
+
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+
+    const intervalId = status === 'pending'
+      ? window.setInterval(refreshIfVisible, PENDING_REFRESH_INTERVAL_MS)
+      : null;
+
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [fetchStatus, status, userId]);
 
   return {
     status,
