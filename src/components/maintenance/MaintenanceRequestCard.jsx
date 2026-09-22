@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDate } from '../../utils/helpers';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../../utils/constants';
-import { format } from 'date-fns';
-import { platform as platformClient } from '../../services/platformClient';
 import { toast } from 'react-hot-toast';
-import { STORAGE_BUCKETS, BUCKET_FOLDERS } from '../../services/fileService';
 import { useAuth } from '../../hooks/useAuth';
 import { cancelMaintenanceRequest } from '../../services/maintenanceService';
 
@@ -42,14 +39,6 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
     const type = requesttype?.substring(0, 3).toUpperCase() || 'GEN';
     const shortId = id.substring(0, 4);
     return `MR-${year}${month}-${type}-${shortId}`;
-  };
-
-  // Get images from maintenance_request_images
-  const getImages = () => {
-    if (Array.isArray(maintenance_request_images)) {
-      return maintenance_request_images.map(img => img.image_url);
-    }
-    return [];
   };
 
   // Get status color
@@ -145,25 +134,6 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
 
   const priorityInfo = getPriorityInfo();
 
-  // Get image URL from storage or return direct URL
-  const getImageUrl = (path) => {
-    if (!path) return null;
-    
-    // If the path is already a full URL, return it
-    if (path.startsWith('http')) {
-      return path;
-    }
-    
-    // Otherwise, get the URL from storage
-    try {
-      const { data } = platformClient.storage.from('maintenance').getPublicUrl(path);
-      return data.publicUrl;
-    } catch (error) {
-      console.error('Error getting image URL:', error);
-      return null;
-    }
-  };
-
   return (
     <div className={`border rounded-lg shadow-sm ${getStatusColor()} transition-all hover:shadow-md`}>
       {/* Header */}
@@ -256,4 +226,4 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
   );
 };
 
-export default MaintenanceRequestCard; 
+export default MaintenanceRequestCard;
