@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-09-21  
-**Last verified behavior-changing application baseline:** `0f4ad15563df30c76f431d03b16c6985245d24ed`  
+**Status date:** 2026-09-22  
+**Last verified behavior-changing application baseline:** `190e0d412d702aed6b11f2546872c167d5808ea8`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -30,7 +30,8 @@
 - [x] Temporary startup recovery/backfill workflow has been retired. (#98)
 - [x] Final normal production deployment after recovery-workflow removal passed authorization tests, build, immutable image deploy, Azure revision readiness, startup-command verification, exact public SHA verification, MSSQL health, and runtime-config verification. Run `35564526487`, SHA `b6af12bdd0ecefe870e8297c984a985cffa98dd7`.
 - [x] Bootstrap platform-owner access is recoverable even while the dedicated `platform_admins` production migration path remains unavailable. PR #100, SHA `fc3cf044937a3683673ec01d7d2b465f1c70b1d7`, production run `35595451678`; authorization tests/build passed, revision `khrental-app--0000103` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
-- [x] A Platform Administrator who also has tenant membership is no longer forced out of the tenant workspace. PR #101, SHA `0f4ad15563df30c76f431d03b16c6985245d24ed`, production run `35602332768`; authorization tests/build passed, revision `khrental-app--0000105` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready. Browser verification passed on 2026-09-21: the same identity could enter the KH Rentals tenant workspace and return to Platform Admin.
+- [x] A Platform Administrator who also has tenant membership is no longer forced out of the tenant workspace. PR #101, SHA `0f4ad15563df30c76f431d03b16c6985245d24ed`, production run `35602332768`; authorization tests/build passed, revision `khrental-app--0000105` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
+- [x] Tenant-switch notifications no longer block top-right page actions. PR #102, SHA `190e0d412d702aed6b11f2546872c167d5808ea8`, production run `35616577333`; authorization tests/build passed, revision `khrental-app--0000111` became Ready, public build fingerprint matched exactly, and MSSQL health returned Ready. Browser verification passed on 2026-09-22.
 
 ### Tenant/rentee data model
 
@@ -40,11 +41,12 @@
 - [x] Tenant create response contract returns the renter identity expected by the UI. (#80)
 - [x] Tenant onboarding, invitations, and shared storage have started moving off the compatibility client. (#77-#79)
 - [x] Invitation-card feedback and simulation behavior were corrected. (#83)
+- [x] Controlled production core smoke test completed successfully through all 12 P0.2 checks on 2026-09-22.
 
 ### Known unresolved or insufficiently verified areas
 
-- [ ] Core tenant/rentee flows need one controlled production smoke-test pass after the recent data/deployment changes. **This is the active item (P0.2).**
-- [ ] Invitation delivery needs stronger server-side observability: provider acceptance/failure and SendGrid message ID where available.
+- [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
+- [ ] Invitation delivery needs stronger server-side observability: provider acceptance/failure and SendGrid message ID where available. **This is the active item (P0.3).**
 - [ ] Password-reset flow needs a fresh end-to-end regression check.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -77,37 +79,28 @@ Evidence:
 - PR #98 final production run `35564526487`: green.
 - P0.1 completion proof SHA: `b6af12bdd0ecefe870e8297c984a985cffa98dd7`.
 
-### P0.2 - Production core smoke test — **ACTIVE / NEXT**
+### P0.2 - Production core smoke test — **COMPLETE**
 
 **Goal:** Verify the current production system as a business workflow before making more changes.
 
-Run the checklist in this order and stop on the first failure. That failure becomes the only active repair item.
-
 1. [x] Tenant Admin can log in to the production tenant workspace. — Passed 2026-09-21 in a logged-out production browser session using the normal Tenant Admin account.
-2. [x] Tenants directory loads the expected current-organization renters. — Passed 2026-09-21; production browser showed the current renter cards and the Tenant Admin confirmed the directory contents were correct.
+2. [x] Tenants directory loads the expected current-organization renters. — Passed 2026-09-21; the Tenant Admin confirmed the production renter directory contents were correct.
 3. [x] Create a brand-new tenant identity with an intentionally unique test email. — Passed 2026-09-21; the Tenant Admin confirmed the production create operation completed successfully.
-4. [x] Verify the new tenant immediately appears in the Tenants directory and remains visible after reload. — Passed 2026-09-21; the new tenant remained visible after reload.
+4. [x] Verify the new tenant immediately appears in the Tenants directory and remains visible after reload. — Passed 2026-09-21.
 5. [x] Verify create-or-attach behavior for a global identity that already exists but is not yet a renter in the current organization. — Passed 2026-09-21 using a controlled two-organization test; the second save reused the existing global identity and attached it to KH Rentals without a duplicate-email error.
 6. [x] Plain **Save Tenant** persists the tenant without attempting an invitation. — Passed 2026-09-21; the Tenant Admin confirmed the saved tenant persisted and no invitation was attempted automatically.
 7. [x] **Save & Invite** persists the tenant and attempts the secure invitation flow. — Passed 2026-09-21; the Tenant Admin confirmed the tenant persisted and the invitation flow was attempted.
-8. [ ] Tenant card **Send real email / Send Real Invitation** produces explicit success or visible error feedback.
-9. [ ] Team directory still loads correctly after the membership/data corrections.
-10. [ ] Property and property-unit directories used by tenant onboarding still load.
-11. [ ] Public `/build-info.json` matches the current live deployed SHA at the time of the smoke test.
-12. [ ] `/api/mssql/health` still reports Ready after the smoke-test operations.
+8. [x] Tenant card **Send real email / Send Real Invitation** produces explicit success or visible error feedback. — Passed 2026-09-22; the Tenant Admin confirmed the action produced explicit feedback rather than failing silently.
+9. [x] Team directory still loads correctly after the membership/data corrections. — Passed 2026-09-22 by production browser confirmation.
+10. [x] Property and property-unit directories used by tenant onboarding still load. — Passed 2026-09-22 by production browser confirmation.
+11. [x] Public `/build-info.json` matches the current live deployed SHA at the time of the smoke test. — Passed 2026-09-22 with `{"buildSha":"190e0d412d702aed6b11f2546872c167d5808ea8"}`.
+12. [x] `/api/mssql/health` still reports Ready after the smoke-test operations. — Passed 2026-09-22 with `{"ok":true,"provider":"mssql","connection":"ready"}`.
 
-Rules for P0.2:
+P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea8`, deployment run `35616577333`, revision `khrental-app--0000111` Ready, deterministic startup `/bin/sh scripts/start-container.sh`, exact public build fingerprint verified, MSSQL Ready.
 
-- Do not change schema during the smoke test.
-- Do not start Evia/signing work.
-- Do not resume compatibility-client cleanup.
-- Do not broaden a failure into a general refactor.
-- For every failure, capture the exact UI message, endpoint, HTTP status/response, and relevant server evidence before editing code.
-- If code is required, use one focused PR for the failed business behavior, deploy it, repeat the failed test, then continue the checklist.
+Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-Exit criteria: every P0.2 checkbox passes. Any failed item must be fixed and reverified before proceeding to P0.3.
-
-### P0.3 - Invitation/email observability
+### P0.3 - Invitation/email observability — **ACTIVE / NEXT**
 
 Scope:
 
@@ -233,31 +226,30 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: P0.1 - Make startup ownership permanent
-Problem/evidence: Production had inherited a stale Azure command override and required a temporary recovery workflow.
-Scope: Make normal deployment own the web startup command, verify production, then retire recovery workflow.
-PR: #97 and #98.
-CI/deploy result: Production runs 35563887278 and 35564526487 succeeded.
-Production proof SHA: b6af12bdd0ecefe870e8297c984a985cffa98dd7.
-Runtime proof: startup command verified as /bin/sh scripts/start-container.sh; latest revision Ready; exact public SHA verified; MSSQL Ready; expected runtime config verified.
-Result: COMPLETE.
-Next item: P0.2 - Production core smoke test.
+Active item: P0.2 - Production core smoke test
+Problem/evidence: Recent renter/membership and deployment repairs required one controlled end-to-end production validation before further changes.
+Scope: Execute all 12 P0.2 checks in order and stop/fix on any failed business behavior.
+PRs involved during P0.2: #100 platform-owner access; #101 dual-role tenant workspace; #102 tenant-switch toast overlay.
+CI/deploy result: Latest behavior-changing production run 35616577333 succeeded for PR #102.
+Production proof SHA: 190e0d412d702aed6b11f2546872c167d5808ea8.
+Runtime proof: revision khrental-app--0000111 Ready; startup command /bin/sh scripts/start-container.sh; public /build-info.json matched 190e0d412d702aed6b11f2546872c167d5808ea8; /api/mssql/health returned ready; browser checks 1-10 were confirmed by the Tenant Admin.
+Result: COMPLETE — all 12 production smoke-test checks passed by 2026-09-22.
+Next item: P0.3 - Invitation/email observability.
 ```
 
 ## Current active item
 
 ```text
-Active item: P0.2 - Production core smoke test
-Problem/evidence: Recent renter/membership and deployment repairs are individually verified, but the complete tenant-admin business workflow has not yet had one controlled production smoke-test pass on the stabilized baseline. During controlled setup for item 5, the designated platform owner was first found to be locked out of Platform Admin, then after that repair the same global identity was forced out of its tenant workspace because DashboardLayout treated Platform Admin status as mutually exclusive with tenant membership.
-Scope: Execute the P0.2 checklist in order, stop on first failure, collect evidence, make only a narrow repair if required, deploy/reverify, then continue. Platform-owner access and dual-role tenant-workspace navigation were narrowly repaired without schema mutation so item 5 setup can proceed.
-Out of scope: schema evolution, Evia signing, DocumentService cleanup, general compatibility refactoring, new features.
-PR: #100 restored the repository-designated bootstrap platform owner fallback for wweerakoone@gmail.com. #101 preserves tenant workspace access for a Platform Administrator who also has an active tenant membership; platform-only users remain platform-only.
-CI result: PR #100 authorization tests/build passed and production deployment run 35595451678 succeeded. PR #101 authorization tests/build passed; production deployment run 35602332768 succeeded.
-Production baseline: P0.1 was proven on b6af12bdd0ecefe870e8297c984a985cffa98dd7. Current behavior-changing production SHA is 0f4ad15563df30c76f431d03b16c6985245d24ed after PR #101.
-Runtime proof: production revision khrental-app--0000105 became Ready; startup command remained /bin/sh scripts/start-container.sh; public /build-info.json matched 0f4ad15563df30c76f431d03b16c6985245d24ed; /api/mssql/health returned ready; runtime MSSQL/Evia configuration verification passed. The health endpoint briefly returned 503 while the new revision warmed, then passed within the deployment retry window. Earlier one-shot DML repair attempts never reached Node/SQL because Azure Container Apps exec failed at the WebSocket handshake, so those attempts made no database change.
-Smoke-test progress: item 1 Tenant Admin production login passed on 2026-09-21 from a logged-out browser session using the normal Tenant Admin account. Item 2 Tenants directory passed on 2026-09-21; the production renter directory loaded and the Tenant Admin confirmed the visible current-organization renters were correct. Item 3 brand-new tenant creation passed on 2026-09-21; the Tenant Admin confirmed the production create completed successfully. Item 4 tenant visibility/persistence passed on 2026-09-21; the new tenant remained visible after reload. Controlled setup for item 5 also passed on 2026-09-21: the dual-role platform-owner identity could enter the KH Rentals tenant workspace and return to Platform Admin. Item 5 create-or-attach passed on 2026-09-21 using a controlled two-organization test; the second save reused the existing global identity and attached it to KH Rentals without a duplicate-email error. Item 6 Plain Save Tenant passed on 2026-09-21; the saved tenant persisted and no invitation was attempted automatically. Item 7 Save & Invite passed on 2026-09-21; the tenant persisted and the secure invitation flow was attempted.
-Result: IN PROGRESS — item 8 is active.
-Next item: P0.2 item 8 - verify Tenant-card Send real email / Send Real Invitation produces explicit success or visible error feedback.
+Active item: P0.3 - Invitation/email observability
+Problem/evidence: P0.2 confirmed invitation actions are usable and provide visible feedback, but production still lacks durable provider-level evidence showing whether SendGrid accepted or rejected a message and the provider message ID when available.
+Scope: Make invitation delivery state unambiguous in the UI; add structured server-side success/failure logging around /api/send-email; capture SendGrid x-message-id when available without logging email bodies, invitation tokens, secrets, or other sensitive content.
+Out of scope: schema changes unless separately approved through the privileged migration path; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
+PR: pending.
+CI result: pending.
+Production baseline: 190e0d412d702aed6b11f2546872c167d5808ea8.
+Runtime proof baseline: production revision khrental-app--0000111 Ready; public fingerprint matched; MSSQL health ready.
+Result: ACTIVE.
+Next item: Complete P0.3 exit criteria before starting P0.4.
 ```
 
 ---
