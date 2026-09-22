@@ -9,7 +9,7 @@
     "dev": "npm run generate-env-config && node server.js",
     "dev:vite": "npm run generate-env-config && vite",
     "build": "npm run generate-env-config && vite build",
-    "test:authorization": "node --test tests/platform-authorization.test.js tests/platform-owner-bootstrap.test.js tests/permission-engine.test.js tests/membership-access-model.test.js tests/access-policy.test.js tests/route-policy.test.js tests/auth-redirect.test.js tests/invitation-security.test.js tests/password-reset-security.test.js tests/tenancy-activation.test.js tests/billing-lifecycle.test.js tests/maintenance-lifecycle.test.js tests/storage-delivery.test.js tests/tenancy-exit.test.js tests/agreement-document-merge.test.js",
+    "test:authorization": "node --test tests/platform-authorization.test.js tests/platform-owner-bootstrap.test.js tests/permission-engine.test.js tests/membership-access-model.test.js tests/access-policy.test.js tests/route-policy.test.js tests/auth-redirect.test.js tests/invitation-security.test.js tests/invitation-lifecycle-ui.test.js tests/password-reset-security.test.js tests/tenancy-activation.test.js tests/billing-lifecycle.test.js tests/maintenance-lifecycle.test.js tests/storage-delivery.test.js tests/tenancy-exit.test.js tests/agreement-document-merge.test.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "migrate": "node src/db/runMigration.js",

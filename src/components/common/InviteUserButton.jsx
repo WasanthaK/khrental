@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { fetchAppUser } from '../../services/appUserService';
 import { resendInvitation } from '../../services/invitationService';
 import useInvitationStatus from '../../hooks/useInvitationStatus';
+import { getInvitationActionLabel } from '../../utils/invitationLifecycle';
 
 const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = 'md', fullWidth = false }) => {
   const [loading, setLoading] = useState(false);
@@ -17,18 +17,14 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
   };
 
   const effectiveStatus = invitationStatus || internalInvitationStatus.status;
-  const isResend = effectiveStatus !== 'not_invited' && effectiveStatus !== 'unknown' && effectiveStatus !== 'loading';
-  const actionLabel = isResend ? 'Resend Invitation' : 'Send Invitation';
+  const actionLabel = getInvitationActionLabel(effectiveStatus) || 'Invitation Accepted';
+  const actionUnavailable = effectiveStatus === 'registered';
 
   const handleInvite = async () => {
     try {
       setLoading(true);
       setError(null);
       setResultMessage(null);
-
-      const userData = await fetchAppUser(userId);
-      const email = userData.contact_details?.email || userData.email;
-      if (!email) throw new Error('User has no email address');
 
       const result = await resendInvitation(userId, false);
       if (!result.success) throw new Error(result.error || 'Failed to send invitation');
@@ -48,7 +44,6 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
         await onSuccess(result);
       }
     } catch (inviteError) {
-      console.error('Error sending invitation:', inviteError);
       const message = inviteError.message || 'Failed to send invitation';
       setError(message);
       toast.error(`Failed to send invitation: ${message}`);
@@ -62,7 +57,7 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
       <button
         type="button"
         onClick={handleInvite}
-        disabled={loading}
+        disabled={loading || actionUnavailable}
         className={`
           ${sizeClasses[size] || sizeClasses.md}
           ${fullWidth ? 'w-full' : ''}

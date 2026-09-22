@@ -24,6 +24,10 @@ const invitationStatusSource = readFileSync(
   new URL('../src/api/auth/invitationStatus.js', import.meta.url),
   'utf8'
 );
+const invitationsSource = readFileSync(
+  new URL('../src/api/auth/invitations.js', import.meta.url),
+  'utf8'
+);
 const serverSource = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 
 test('invitation token is opaque, random and base64url-safe', () => {
@@ -83,6 +87,9 @@ test('shared invitation service uses explicit KH Rentals APIs without compatibil
   assert.doesNotMatch(invitationServiceSource, /platformClient/);
   assert.doesNotMatch(invitationServiceSource, /isMssqlApiEnabled/);
   assert.doesNotMatch(invitationServiceSource, /appUserService/);
+  assert.doesNotMatch(invitationServiceSource, /directEmailService/);
+  assert.match(invitationServiceSource, /invitationEmailService/);
+  assert.match(invitationServiceSource, /invitationStatusService/);
   assert.match(invitationServiceSource, /\/api\/platform\/auth\/invite/);
   assert.match(invitationServiceSource, /\/api\/mssql\/app-users\/\$\{encodeURIComponent\(userId\)\}/);
 });
@@ -95,6 +102,19 @@ test('canonical invitation status distinguishes pending, expired, revoked and re
   assert.equal(derive({ user: {}, invitation: { expires_at: '2026-09-21T23:59:59.000Z' }, now }), 'expired');
   assert.equal(derive({ user: {}, invitation: { expires_at: '2026-09-23T00:00:00.000Z', revoked_at: '2026-09-21T00:00:00.000Z' }, now }), 'revoked');
   assert.equal(derive({ user: { auth_id: 'auth-user' }, invitation: null, now }), 'registered');
+  assert.equal(derive({ user: {}, invitation: { accepted_at: '2026-09-21T20:00:00.000Z' }, now }), 'registered');
+});
+
+test('successful redemption persists auth linkage and accepted timestamp before commit', () => {
+  const redeemBlock = invitationsSource.match(/export const redeemUserInvitation = async \([\s\S]*?\n};/)?.[0] || '';
+  assert.match(redeemBlock, /UPDATE dbo\.app_users[\s\S]*SET auth_id = @authId/);
+  assert.match(redeemBlock, /UPDATE dbo\.user_invitations[\s\S]*SET accepted_at = SYSUTCDATETIME\(\)/);
+  assert.match(redeemBlock, /await transaction\.commit\(\);/);
+
+  const appUserUpdate = redeemBlock.indexOf('UPDATE dbo.app_users');
+  const invitationUpdate = redeemBlock.indexOf('UPDATE dbo.user_invitations');
+  const commit = redeemBlock.indexOf('await transaction.commit();');
+  assert.ok(appUserUpdate >= 0 && invitationUpdate > appUserUpdate && commit > invitationUpdate);
 });
 
 test('canonical invitation status projection never selects invitation token material', () => {

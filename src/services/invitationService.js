@@ -3,17 +3,30 @@
  *
  * Invitation authority is always created by the KH Rentals server. The browser
  * only requests a single-use invitation token and then delivers the resulting
- * setup link through the configured email service.
+ * setup link through the observable server email endpoint.
  */
 
-import { sendDirectEmail } from './directEmailService';
+import { sendInvitationEmail } from './invitationEmailService';
+import { checkCanonicalInvitationStatus } from './invitationStatusService';
 import { getAppBaseUrl } from '../utils/env';
 import { requestMssqlApi } from './mssqlApiClient';
 
+const INVITATION_LOG_FIELDS = new Set([
+  'appUserId',
+  'expiresAt',
+  'provider',
+  'providerMessageId',
+  'providerStatus',
+  'errorCode',
+  'status'
+]);
+
+const sanitizeInvitationLogData = (data = {}) => Object.fromEntries(
+  Object.entries(data).filter(([key, value]) => INVITATION_LOG_FIELDS.has(key) && value !== undefined)
+);
+
 const logInvitationDebug = (requestId, message, data = {}) => {
-  const safeData = { ...data };
-  delete safeData.token;
-  delete safeData.inviteLink;
+  const safeData = sanitizeInvitationLogData(data);
   const timestamp = new Date().toISOString();
   const logMsg = `[${timestamp}][${requestId}][InvitationService] ${message}`;
 
@@ -54,9 +67,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
     // and it must never call the email delivery endpoint.
     if (simulated) {
       logInvitationDebug(requestId, 'Invitation simulation completed without delivery', {
-        appUserId: userDetails.id || null,
-        email: userDetails.email,
-        role: userDetails.role
+        appUserId: userDetails.id || null
       });
       return {
         success: true,
@@ -68,9 +79,7 @@ export const inviteUser = async (userDetails, simulated = false) => {
     }
 
     logInvitationDebug(requestId, 'Creating secure invitation', {
-      appUserId: userDetails.id || null,
-      email: userDetails.email,
-      role: userDetails.role
+      appUserId: userDetails.id || null
     });
 
     const inviteData = await createSecureInvitation(userDetails);
@@ -84,11 +93,10 @@ export const inviteUser = async (userDetails, simulated = false) => {
     const inviteLink = `${getAppBaseUrl()}/accept-invite?token=${encodeURIComponent(token)}`;
 
     logInvitationDebug(requestId, 'Secure invitation created; delivering email', {
-      email: userDetails.email,
       expiresAt: expiresAt || null
     });
 
-    const emailResult = await sendDirectEmail({
+    const emailResult = await sendInvitationEmail({
       to: userDetails.email,
       subject: 'Your Invitation to KH Rentals',
       html: getInvitationEmailTemplate(
@@ -104,13 +112,13 @@ export const inviteUser = async (userDetails, simulated = false) => {
         success: false,
         emailSent: false,
         error: 'A secure invitation was created, but the invitation email could not be sent.',
-        debug: { emailError: emailResult?.error || emailResult?.message || null }
+        debug: { emailError: emailResult?.message || null }
       };
     }
 
     logInvitationDebug(requestId, 'Invitation email accepted for delivery', {
-      email: userDetails.email,
       provider: emailResult.provider || null,
+      providerStatus: emailResult.providerStatus || null,
       providerMessageId: emailResult.providerMessageId || null
     });
 
@@ -125,7 +133,10 @@ export const inviteUser = async (userDetails, simulated = false) => {
       providerMessageId: emailResult.providerMessageId || null
     };
   } catch (error) {
-    logInvitationDebug(requestId, 'Secure invitation failed', { error: error.message });
+    logInvitationDebug(requestId, 'Secure invitation failed', {
+      errorCode: error.code || null,
+      status: error.status || null
+    });
     return {
       success: false,
       emailSent: false,
@@ -154,7 +165,6 @@ export const resendInvitation = async (userId, simulated = false) => {
       role: userData.directory_role || userData.role || userData.user_type
     }, simulated);
   } catch (error) {
-    console.error('[InvitationService] Error resending invitation:', error);
     return {
       success: false,
       emailSent: false,
@@ -170,33 +180,17 @@ export const resendInvitation = async (userId, simulated = false) => {
  * The server-side invitation ledger remains authoritative for token validity.
  */
 export const checkInvitationStatus = async (userId) => {
-  try {
-    if (!userId) {
-      return { success: false, error: 'User ID is required' };
-    }
-
-    const statusData = await requestMssqlApi(
-      `/api/mssql/app-users/${encodeURIComponent(userId)}/invitation-status`
-    );
-
-    if (!statusData) {
-      return { success: false, error: 'User not found' };
-    }
-
-    return {
-      success: true,
-      status: statusData.status || (statusData.auth_id ? 'registered' : statusData.invited ? 'invited' : 'not_invited'),
-      hasAuthId: Boolean(statusData.auth_id)
-    };
-  } catch (error) {
-    console.error('[InvitationService] Error checking invitation status:', error);
-    return {
-      success: false,
-      error: error.message,
-      ...(error.code ? { code: error.code } : {}),
-      ...(error.status ? { status: error.status } : {})
-    };
+  const result = await checkCanonicalInvitationStatus(userId);
+  if (!result.success) {
+    return result;
   }
+
+  const statusData = result.data || {};
+  return {
+    success: true,
+    status: statusData.status || (statusData.auth_id ? 'registered' : statusData.invited ? 'invited' : 'not_invited'),
+    hasAuthId: Boolean(statusData.auth_id)
+  };
 };
 
 function getInvitationEmailTemplate(name, inviteLink, role, expiresAt = null) {

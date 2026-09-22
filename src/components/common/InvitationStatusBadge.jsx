@@ -1,38 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { checkUserAuthStatus } from '../../services/userManagement';
+import React from 'react';
 
-const InvitationStatusBadge = ({ userId, status: providedStatus, hideLabel = false }) => {
-  const [status, setStatus] = useState(providedStatus || 'loading');
-  const [loading, setLoading] = useState(!providedStatus);
-
-  useEffect(() => {
-    if (providedStatus) {
-      setStatus(providedStatus);
-      setLoading(false);
-      return;
-    }
-
-    const checkStatus = async () => {
-      if (!userId) {
-        setStatus('unknown');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const result = await checkUserAuthStatus(userId);
-        setStatus(result.success ? (result.registered ? 'registered' : 'not_registered') : 'error');
-      } catch (error) {
-        console.error('Error in InvitationStatusBadge:', error);
-        setStatus('error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkStatus();
-  }, [userId, providedStatus]);
-
+const InvitationStatusBadge = ({ status = 'unknown', hideLabel = false }) => {
   const statusStyles = {
     loading: 'bg-gray-100 text-gray-800',
     unknown: 'bg-gray-100 text-gray-800',
@@ -47,7 +15,7 @@ const InvitationStatusBadge = ({ userId, status: providedStatus, hideLabel = fal
   };
 
   const statusLabels = {
-    loading: 'Loading...',
+    loading: 'Checking...',
     unknown: 'Unknown',
     not_registered: 'Not Registered',
     not_invited: 'Not Invited',
@@ -61,14 +29,7 @@ const InvitationStatusBadge = ({ userId, status: providedStatus, hideLabel = fal
 
   return (
     <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[status] || statusStyles.unknown}`}>
-      {loading ? (
-        <>
-          <span className="inline-block h-2 w-2 rounded-full bg-current animate-pulse mr-1" />
-          {!hideLabel && 'Checking...'}
-        </>
-      ) : (
-        !hideLabel && statusLabels[status]
-      )}
+      {!hideLabel && statusLabels[status]}
     </span>
   );
 };
