@@ -1,0 +1,28 @@
+name: Phase 5 finalize release hardening
+
+on:
+  push:
+    branches:
+      - phase-5-release-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-5-release-hardening
+          fetch-depth: 0
+      - name: Remove compatibility storage core and add aggregate regression
+        run: python scripts/phase5_release_hardening.py
+      - name: Commit final hardening
+        run: |
+          rm .github/workflows/phase-5-finalize.yml scripts/phase5_release_hardening.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Phase 5 retire compatibility storage shim and add release gate"
+          git push origin HEAD:phase-5-release-hardening
