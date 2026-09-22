@@ -13,6 +13,16 @@ const storageApiServiceSource = readFileSync(
   'utf8'
 );
 
+const utilityReadingFormSource = readFileSync(
+  new URL('../src/pages/rentee/UtilityReadingForm.jsx', import.meta.url),
+  'utf8'
+);
+
+const utilityMeterFormSource = readFileSync(
+  new URL('../src/components/utilities/UtilityMeterForm.jsx', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -44,4 +54,14 @@ test('direct storage URLs preserve active-tenant scoping from the compatibility 
   assert.match(storageApiServiceSource, /scopeTenantStoragePath/);
   assert.match(storageApiServiceSource, /Cross-tenant storage paths are not allowed/);
   assert.match(storageApiServiceSource, /const safePath = scopeTenantStoragePath\(path\)/);
+});
+
+test('utility reading photos use explicit tenant-scoped storage APIs', () => {
+  for (const source of [utilityReadingFormSource, utilityMeterFormSource]) {
+    assert.doesNotMatch(source, /platformClient\.storage/);
+    assert.match(source, /uploadTenantFile/);
+    assert.match(source, /uploadData\?\.url/);
+  }
+  assert.match(utilityReadingFormSource, /bucket: 'images'/);
+  assert.match(utilityMeterFormSource, /bucket: 'media'/);
 });

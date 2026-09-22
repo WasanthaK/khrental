@@ -5,6 +5,7 @@ import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { findAppUserByAuthId } from '../../services/appUserService';
 import { useAuth } from '../../hooks/useAuth';
+import { uploadTenantFile } from '../../services/storageApiService';
 
 const UtilityReadingForm = () => {
   const { activeTenantId } = useAuth();
@@ -157,23 +158,20 @@ const UtilityReadingForm = () => {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `utility-readings/${userId}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await platformClient.storage
-        .from('images')
-        .upload(filePath, file);
+      const uploadData = await uploadTenantFile({
+        bucket: 'images',
+        path: filePath,
+        file
+      });
+      const photoUrl = uploadData?.url;
 
-      if (uploadError) {
-        throw uploadError;
+      if (!photoUrl) {
+        throw new Error('Utility photo upload did not return a storage URL.');
       }
-
-      // Get the public URL
-      const scopedFilePath = uploadData?.scopedPath || uploadData?.path || filePath;
-      const { data: { publicUrl } } = platformClient.storage
-        .from('images')
-        .getPublicUrl(scopedFilePath);
 
       setFormData(prev => ({
         ...prev,
-        photoUrl: publicUrl
+        photoUrl
       }));
 
       toast.success('Photo uploaded successfully');
