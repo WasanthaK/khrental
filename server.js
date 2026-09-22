@@ -24,6 +24,7 @@ import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 import { createEviaWebhookRouter } from './src/api/evia/webhook.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
+import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
 
 dotenv.config();
 
@@ -32,20 +33,6 @@ const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
   name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'KH Rentals'
 });
-
-const normalizeEmailAttachments = (attachments = []) => {
-  if (!Array.isArray(attachments)) return [];
-  return attachments
-    .filter((attachment) => attachment && attachment.filename && attachment.content)
-    .map((attachment) => ({
-      content: String(attachment.content),
-      filename: String(attachment.filename),
-      ...(attachment.type ? { type: String(attachment.type) } : {}),
-      ...(attachment.disposition ? { disposition: String(attachment.disposition) } : {}),
-      ...(attachment.content_id ? { content_id: String(attachment.content_id) } : {}),
-      ...(attachment.contentId ? { content_id: String(attachment.contentId) } : {})
-    }));
-};
 
 async function createServer() {
   const app = express();
@@ -65,36 +52,15 @@ async function createServer() {
   const getEviaClientId = () => process.env.EVIA_SIGN_CLIENT_ID || process.env.VITE_EVIA_SIGN_CLIENT_ID || '';
   const getEviaClientSecret = () => process.env.EVIA_SIGN_CLIENT_SECRET || '';
 
-  const sendEmail = async ({ to, subject, html, text, from, fromName, attachments }) => {
-    const apiKey = getTwilioSendGridApiKey();
-    const sender = getDefaultEmailSender({ from, fromName });
-    const normalizedAttachments = normalizeEmailAttachments(attachments);
-    if (!apiKey) {
-      const error = new Error('Email delivery is not configured. TWILIO_SENDGRID_API_KEY is missing on the server.');
-      error.status = 503;
-      error.code = 'EMAIL_NOT_CONFIGURED';
-      throw error;
-    }
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }] }],
-        from: sender,
-        subject,
-        content: [
-          ...(text ? [{ type: 'text/plain', value: text }] : []),
-          ...(html ? [{ type: 'text/html', value: html }] : [])
-        ],
-        ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {})
-      })
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `SendGrid request failed with status ${response.status}`);
-    }
-    return { success: true, simulated: false, provider: 'twilio-sendgrid', message: 'Email sent successfully.' };
-  };
+  const sendEmail = async ({ to, subject, html, text, from, fromName, attachments }) => sendViaSendGrid({
+    apiKey: getTwilioSendGridApiKey(),
+    sender: getDefaultEmailSender({ from, fromName }),
+    to,
+    subject,
+    html,
+    text,
+    attachments
+  });
 
   const exchangeEviaToken = async ({ grantType, code, refreshToken }) => exchangeEviaV2Token({
     grantType,
@@ -114,10 +80,6 @@ async function createServer() {
     }
   }));
 
-  // Evia callbacks are server-to-server notifications and must not depend on a
-  // KH Rentals browser session. Mount the narrowly scoped webhook before the
-  // application session middleware; the OAuth token endpoint below remains
-  // protected by requireApiSession.
   app.use('/api/evia', createEviaWebhookRouter());
   app.use('/api', createSessionAuthMiddleware());
 
@@ -143,15 +105,48 @@ async function createServer() {
   });
 
   app.post('/api/send-email', requireApiSession, async (req, res, next) => {
+    const requestId = String(req.get('x-request-id') || req.get('x-correlation-id') || `email_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const startedAt = Date.now();
+    const { to, subject, html, text, from, fromName, attachments } = req.body || {};
+    const normalizedAttachments = normalizeEmailAttachments(attachments);
+    const logContext = {
+      requestId,
+      attachmentCount: normalizedAttachments.length,
+      hasHtml: Boolean(html),
+      hasText: Boolean(text)
+    };
+
+    if (!to || !subject || (!html && !text)) {
+      writeEmailDeliveryLog('warn', 'email_request_rejected', {
+        ...logContext,
+        durationMs: Date.now() - startedAt,
+        errorCode: 'EMAIL_REQUEST_INVALID'
+      });
+      res.status(400).json({ success: false, error: 'Missing required fields: to, subject, and either html or text.', code: 'EMAIL_REQUEST_INVALID', requestId });
+      return;
+    }
+
     try {
-      const { to, subject, html, text, from, fromName, attachments } = req.body || {};
-      if (!to || !subject || (!html && !text)) {
-        res.status(400).json({ success: false, error: 'Missing required fields: to, subject, and either html or text.' });
-        return;
-      }
-      const result = await sendEmail({ to, subject, html, text, from, fromName, attachments });
-      res.json({ ...result, to, subject, timestamp: new Date().toISOString() });
-    } catch (error) { next(error); }
+      const result = await sendEmail({ to, subject, html, text, from, fromName, attachments: normalizedAttachments });
+      writeEmailDeliveryLog('info', 'email_provider_accepted', {
+        ...logContext,
+        provider: result.provider,
+        providerStatus: result.providerStatus,
+        providerMessageId: result.providerMessageId,
+        durationMs: Date.now() - startedAt
+      });
+      res.json({ ...result, requestId, timestamp: new Date().toISOString() });
+    } catch (error) {
+      writeEmailDeliveryLog('error', 'email_provider_failed', {
+        ...logContext,
+        provider: error.provider,
+        providerStatus: error.providerStatus,
+        providerMessageId: error.providerMessageId,
+        durationMs: Date.now() - startedAt,
+        errorCode: error.code || 'EMAIL_PROVIDER_REQUEST_FAILED'
+      });
+      next(error);
+    }
   });
 
   app.post('/api/evia/token', requireApiSession, async (req, res, next) => {
@@ -242,7 +237,11 @@ async function createServer() {
 
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found' }); });
   app.use((error, _req, res, _next) => {
-    console.error('[Server] Unhandled API error:', error);
+    console.error('[Server] Unhandled API error:', {
+      message: error?.message || 'Unexpected server error',
+      code: error?.code || null,
+      status: Number(error?.status) || 500
+    });
     res.status(Number(error?.status) || 500).json({
       error: error.message || 'Unexpected server error',
       ...(error?.code ? { code: error.code } : {}),
