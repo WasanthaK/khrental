@@ -1,4 +1,3 @@
-import { platform as platformClient } from './platformClient';
 import {
   generateTenancyMonthlyInvoices,
   recordManualInvoicePayment,
@@ -7,6 +6,7 @@ import {
 } from './platformClient';
 import { INVOICE_STATUS } from '../utils/constants';
 import { createInvoiceRecord, listInvoices, updateInvoiceRecord } from './invoiceService';
+import { uploadTenantFile } from './storageApiService';
 
 /**
  * Generate a new invoice using the legacy single-invoice form.
@@ -75,17 +75,16 @@ export const uploadPaymentProof = async (invoiceId, file, paymentDetails = {}) =
     const fileName = `${invoiceId}_${Date.now()}.${fileExt}`;
     const filePath = `payment_proofs/${fileName}`;
 
-    const { data: uploadData, error: uploadError } = await platformClient.storage
-      .from('invoices')
-      .upload(filePath, file);
+    const uploadData = await uploadTenantFile({
+      bucket: 'invoices',
+      path: filePath,
+      file
+    });
+    const proofUrl = uploadData?.url;
 
-    if (uploadError) throw uploadError;
-
-    const scopedFilePath = uploadData?.scopedPath || uploadData?.path || filePath;
-    const { data: urlData } = platformClient.storage
-      .from('invoices')
-      .getPublicUrl(scopedFilePath);
-    const proofUrl = urlData.publicUrl;
+    if (!proofUrl) {
+      throw new Error('Payment proof upload did not return a storage URL.');
+    }
 
     const { data, error } = await submitInvoicePaymentProof(invoiceId, {
       proofUrl,
