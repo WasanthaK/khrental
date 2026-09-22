@@ -87,6 +87,31 @@ export const listStorageBuckets = async () => {
   return payload?.data || [];
 };
 
+export const createStorageBucket = async (bucketName) => {
+  const normalizedBucketName = String(bucketName || '').trim();
+  if (!normalizedBucketName) {
+    throw new Error('Bucket name is required.');
+  }
+
+  const payload = await requestJson('/api/platform/storage/buckets', {
+    method: 'POST',
+    body: JSON.stringify({ bucketName: normalizedBucketName })
+  });
+  return payload?.data || null;
+};
+
+export const deleteStorageBucket = async (bucketName) => {
+  const normalizedBucketName = String(bucketName || '').trim();
+  if (!normalizedBucketName) {
+    throw new Error('Bucket name is required.');
+  }
+
+  const payload = await requestJson(`/api/platform/storage/buckets/${encodeURIComponent(normalizedBucketName)}`, {
+    method: 'DELETE'
+  });
+  return payload?.data ?? true;
+};
+
 export const listTenantFiles = async ({ bucket, path = '' }) => {
   if (!bucket) {
     throw new Error('Bucket is required to list storage files.');

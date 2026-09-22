@@ -1162,7 +1162,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/storage/buckets', requireAuthenticated, async (req, res, next) => {
+  router.post('/storage/buckets', requireAuthenticated, requireAdmin, async (req, res, next) => {
     try {
       const bucketName = req.body?.bucketName || req.body?.name;
       res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
@@ -1171,7 +1171,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/buckets/:bucket', requireAuthenticated, async (req, res, next) => {
+  router.delete('/storage/buckets/:bucket', requireAuthenticated, requireAdmin, async (req, res, next) => {
     try {
       await getStorageDriver().deleteBucket(req.params.bucket);
       res.json({ data: true });
