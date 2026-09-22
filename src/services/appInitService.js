@@ -1,56 +1,14 @@
 import { getPlatformClient } from './platformClient';
-import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import { STORAGE_BUCKETS } from './fileService';
+import { listStorageBuckets } from './storageApiService';
 
 const platformClient = getPlatformClient();
-
 let storageInitialized = false;
 
-const ensureBucket = async (bucketName) => {
-  const { data: bucket, error: getBucketError } = await platformClient.storage.getBucket(bucketName);
-
-  if (bucket) {
-    return true;
-  }
-
-  if (getBucketError && !String(getBucketError.message || '').toLowerCase().includes('not found')) {
-    throw getBucketError;
-  }
-
-  const { error: createError } = await platformClient.storage.createBucket(bucketName);
-  if (createError) {
-    throw createError;
-  }
-
-  return true;
-};
-
-const ensureFolder = async (bucketName, folderPath) => {
-  const { data, error } = await platformClient.storage
-    .from(bucketName)
-    .list(folderPath);
-
-  if (error) {
-    throw error;
-  }
-
-  if (Array.isArray(data) && data.length > 0) {
-    return;
-  }
-
-  const { error: uploadError } = await platformClient.storage
-    .from(bucketName)
-    .upload(`${folderPath}/.keep`, new Blob([''], { type: 'text/plain' }));
-
-  if (uploadError && !String(uploadError.message || '').toLowerCase().includes('already exists')) {
-    throw uploadError;
-  }
-};
-
 /**
- * Initialize the logical storage structure exposed by the KH Rentals storage
- * API. Production objects live in Cloudflare R2; local development may use the
- * local storage driver. Authorization and tenant scoping are enforced by the
- * application API, not by database/storage-provider row-level-security rules.
+ * Verify the server-owned storage configuration. Browser startup is deliberately
+ * read-only: bucket creation/deletion is an administrator operation and object
+ * folders are virtual prefixes created naturally by uploads.
  */
 export const initializeStorage = async () => {
   if (storageInitialized) {
@@ -63,24 +21,16 @@ export const initializeStorage = async () => {
       return {
         success: true,
         skipped: true,
-        reason: 'No authenticated session available for storage initialization.'
+        reason: 'No authenticated session available for storage readiness check.'
       };
     }
 
-    for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-      await ensureBucket(bucketName);
+    const buckets = await listStorageBuckets();
+    const configuredNames = new Set((buckets || []).map((bucket) => bucket?.name || bucket?.id).filter(Boolean));
+    const missingBuckets = Object.values(STORAGE_BUCKETS).filter((bucketName) => !configuredNames.has(bucketName));
 
-      const folderPaths = BUCKET_FOLDERS[bucketName]
-        ? Object.values(BUCKET_FOLDERS[bucketName])
-        : [];
-
-      for (const folderPath of folderPaths) {
-        try {
-          await ensureFolder(bucketName, folderPath);
-        } catch (folderError) {
-          console.warn(`Unable to initialize storage folder ${bucketName}/${folderPath}:`, folderError);
-        }
-      }
+    if (missingBuckets.length > 0) {
+      throw new Error(`Missing configured storage buckets: ${missingBuckets.join(', ')}`);
     }
 
     storageInitialized = true;
@@ -89,7 +39,7 @@ export const initializeStorage = async () => {
     return {
       success: false,
       skipped: false,
-      error: error.message || 'Storage initialization failed.'
+      error: error.message || 'Storage readiness check failed.'
     };
   }
 };
@@ -99,10 +49,10 @@ export const initializeApp = async () => {
     const storageResult = await initializeStorage();
 
     if (!storageResult.success && !storageResult.skipped) {
-      console.warn('Storage initialization failed; the application will continue.', storageResult.error);
+      console.warn('Storage readiness check failed; the application will continue.', storageResult.error);
       return {
         success: true,
-        error: storageResult.error || 'Storage initialization failed. Some file features may be unavailable.',
+        error: storageResult.error || 'Storage is not ready. Some file features may be unavailable.',
         isStorageError: true
       };
     }
