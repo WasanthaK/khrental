@@ -1,49 +1,42 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import InvitationStatusBadge from '../common/InvitationStatusBadge';
 import InviteUserButton from '../common/InviteUserButton';
 import useInvitationStatus from '../../hooks/useInvitationStatus';
+import { formatDate } from '../../utils/helpers';
 
 const TeamMemberCard = ({ member, onStatusChange }) => {
-  console.log('TeamMemberCard props:', { member });
-  
   if (!member || !member.id) {
-    console.error('Invalid member data:', member);
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
         Error: Invalid team member data
       </div>
     );
   }
-  
-  // Ensure member and contactDetails are properly initialized
-  const { id, name, role, contactDetails = {}, assignedTasks = [], active } = member || {};
-  
-  // Get invitation status
+
+  const { id, name, role, contactDetails = {}, assignedTasks = [], active } = member;
   const invitationStatus = useInvitationStatus(id);
   const status = invitationStatus.status;
   const statusLoading = invitationStatus.loading;
   const statusError = invitationStatus.error;
   const refreshStatus = invitationStatus.refresh;
-  
-  console.log('Invitation status:', { id, status, statusLoading, statusError });
-  
-  // Handle successful invitation
-  const handleInviteSuccess = () => {
-    console.log('Invitation success, refreshing status');
-    try {
-      refreshStatus();
-    } catch (error) {
-      console.error('Error refreshing status:', error);
-    }
-    
-    // Call parent's onStatusChange if provided
+  const invitationDetails = invitationStatus.details;
+
+  const handleInviteSuccess = async () => {
+    await refreshStatus();
+
     if (onStatusChange && typeof onStatusChange === 'function') {
       onStatusChange();
     }
   };
-  
-  // Get role badge color
+
+  const invitationDateLabel = invitationDetails?.invitedAt
+    ? `Invitation created: ${formatDate(invitationDetails.invitedAt)}`
+    : null;
+  const expiryDateLabel = invitationDetails?.expiresAt && ['pending', 'expired'].includes(status)
+    ? `${status === 'expired' ? 'Expired' : 'Expires'}: ${formatDate(invitationDetails.expiresAt)}`
+    : null;
+
   const getRoleBadgeColor = () => {
     switch (role?.toLowerCase()) {
       case 'admin':
@@ -56,7 +49,7 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
         return 'bg-gray-100 text-gray-800';
     }
   };
-  
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="p-6">
@@ -91,9 +84,9 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
             </svg>
           </Link>
         </div>
-        
+
         <div className="space-y-3">
-          {contactDetails && contactDetails.email && (
+          {contactDetails.email && (
             <div className="flex items-start">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 mr-2 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
@@ -102,8 +95,8 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
               <span className="text-gray-600">{contactDetails.email}</span>
             </div>
           )}
-          
-          {contactDetails && contactDetails.phone && (
+
+          {contactDetails.phone && (
             <div className="flex items-start">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 mr-2 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -111,15 +104,22 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
               <span className="text-gray-600">{contactDetails.phone}</span>
             </div>
           )}
-          
-          {(!contactDetails || (!contactDetails.email && !contactDetails.phone)) && (
+
+          {!contactDetails.email && !contactDetails.phone && (
             <div className="text-sm text-gray-500">No contact information available</div>
           )}
         </div>
-        
+
+        {!statusLoading && !statusError && (invitationDateLabel || expiryDateLabel) && (
+          <div className="mt-3 text-xs text-gray-600" role="status">
+            {invitationDateLabel && <div>{invitationDateLabel}</div>}
+            {expiryDateLabel && <div>{expiryDateLabel}</div>}
+          </div>
+        )}
+
         <div className="mt-4">
           <h4 className="text-sm font-medium text-gray-700 mb-2">Assigned Tasks</h4>
-          {assignedTasks && assignedTasks.length > 0 ? (
+          {assignedTasks.length > 0 ? (
             <div className="text-sm text-gray-600">
               <span className="font-medium">{assignedTasks.length}</span> tasks assigned
             </div>
@@ -127,19 +127,18 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
             <div className="text-sm text-gray-500">No tasks currently assigned</div>
           )}
         </div>
-        
-        {/* Invitation button - only show if not registered */}
+
         {(!statusLoading && status !== 'registered' && !statusError) && (
           <div className="mt-4">
-            <InviteUserButton 
-              userId={id} 
-              onSuccess={handleInviteSuccess} 
+            <InviteUserButton
+              userId={id}
+              invitationStatus={status}
+              onSuccess={handleInviteSuccess}
               fullWidth={true}
             />
           </div>
         )}
-        
-        {/* View profile button - only show if already registered or no status */}
+
         {(statusLoading || status === 'registered' || statusError) && (
           <div className="mt-4">
             <Link
@@ -155,4 +154,4 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
   );
 };
 
-export default TeamMemberCard; 
+export default TeamMemberCard;
