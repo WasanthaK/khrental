@@ -15,6 +15,9 @@ BEGIN TRY
     IF OBJECT_ID(N'dbo.properties', N'U') IS NULL
         THROW 50004, 'dbo.properties must exist before renter property assignments can be created.', 1;
 
+    IF OBJECT_ID(N'dbo.property_units', N'U') IS NULL
+        THROW 50005, 'dbo.property_units must exist before renter property assignments can be created.', 1;
+
     IF OBJECT_ID(N'dbo.rentee_property_assignments', N'U') IS NULL
     BEGIN
         CREATE TABLE dbo.rentee_property_assignments (
