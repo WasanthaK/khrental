@@ -350,4 +350,23 @@ jobs:
               exit 1
             fi
 
-            echo "Production public FQDN is serving ${GITHUB_SHA} from ready revision $latest_revision with deterministic startup, live MSSQL connectivity and expected browser runtime configuration."
+            # Regression guard: recovery validation must remain anonymous even if
+            # the browser still has a stale/expired Authorization token. An
+            # intentionally invalid reset token is safe and must produce a normal
+            # validation response rather than AUTH_CONTEXT_REQUIRED/INVALID_SESSION.
+            reset_probe=$(curl --fail --retry 5 --retry-delay 3 \
+              -H 'Authorization: Bearer intentionally-stale-production-probe' \
+              "https://${fqdn}/api/platform/auth/reset-password/validate?token=intentionally-invalid-production-probe")
+            echo "Password recovery anonymous probe: $reset_probe"
+
+            if ! echo "$reset_probe" | grep -Fq '"valid":false'; then
+              echo "Password recovery validation did not return the expected anonymous invalid-token response." >&2
+              exit 1
+            fi
+
+            if echo "$reset_probe" | grep -Eq 'AUTH_CONTEXT_REQUIRED|INVALID_SESSION'; then
+              echo "Password recovery was incorrectly blocked by stale authentication context." >&2
+              exit 1
+            fi
+
+            echo "Production public FQDN is serving ${GITHUB_SHA} from ready revision $latest_revision with deterministic startup, live MSSQL connectivity, expected browser runtime configuration, and anonymous password recovery validation."
