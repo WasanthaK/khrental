@@ -1,10 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { formatDate } from '../../utils/helpers';
+import { updateRentee } from '../../services/renteeService';
 import InvitationStatusBadge from '../common/InvitationStatusBadge';
 import InviteUserButton from '../common/InviteUserButton';
 import useInvitationStatus from '../../hooks/useInvitationStatus';
 
 const RenteeCard = ({ rentee, onStatusChange }) => {
+  const [updatingMembership, setUpdatingMembership] = useState(false);
+
   if (!rentee || !rentee.id) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
@@ -19,7 +24,8 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
     contactDetails,
     idCopyURL,
     associatedPropertyIds,
-    registrationDate
+    registrationDate,
+    active = true
   } = rentee;
 
   const {
@@ -28,16 +34,42 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
     loading: statusLoading,
     error: statusError,
     refresh: refreshStatus
-  } = useInvitationStatus(id);
+  } = useInvitationStatus(active ? id : null);
+
+  const notifyParent = async () => {
+    if (onStatusChange && typeof onStatusChange === 'function') {
+      await onStatusChange();
+    }
+  };
 
   const handleInviteSuccess = async () => {
     try {
       await refreshStatus();
-      if (onStatusChange && typeof onStatusChange === 'function') {
-        onStatusChange();
-      }
+      await notifyParent();
     } catch (_error) {
       // Error is already handled by the invitation-status hook.
+    }
+  };
+
+  const handleMembershipToggle = async () => {
+    const nextStatus = active ? 'inactive' : 'active';
+    const action = active ? 'deactivate' : 'reactivate';
+
+    if (active && typeof window !== 'undefined' && !window.confirm(
+      'Deactivate this tenant relationship? The person will remain a global KH Rentals identity but will no longer be active in this organization.'
+    )) {
+      return;
+    }
+
+    try {
+      setUpdatingMembership(true);
+      await updateRentee(id, { status: nextStatus });
+      toast.success(`Tenant ${action}d successfully.`);
+      await notifyParent();
+    } catch (error) {
+      toast.error(error.message || `Unable to ${action} tenant.`);
+    } finally {
+      setUpdatingMembership(false);
     }
   };
 
@@ -83,24 +115,30 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
 
         <div className="flex justify-between items-center mb-3">
           <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {active ? 'Active Tenant' : 'Inactive Tenant'}
+            </span>
+
             {idCopyURL ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">ID Verified</span>
             ) : (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">ID Pending</span>
             )}
 
-            {statusError ? (
+            {active && (statusError ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Status Error</span>
             ) : statusLoading ? null : (
               <InvitationStatusBadge status={status} />
-            )}
+            ))}
           </div>
           <Link to={`/dashboard/rentees/${id}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
             View Details
           </Link>
         </div>
 
-        {!statusLoading && !statusError && (invitationDateLabel || acceptedDateLabel || expiryDateLabel) && (
+        {active && !statusLoading && !statusError && (invitationDateLabel || acceptedDateLabel || expiryDateLabel) && (
           <div className="mb-3 text-xs text-gray-600" role="status">
             {invitationDateLabel && <div>{invitationDateLabel}</div>}
             {acceptedDateLabel && <div>{acceptedDateLabel}</div>}
@@ -108,7 +146,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
           </div>
         )}
 
-        {(!statusLoading && status !== 'registered' && !statusError) && (
+        {active && !statusLoading && status !== 'registered' && !statusError && (
           <div className="mt-2">
             <InviteUserButton
               userId={id}
@@ -119,6 +157,23 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
             />
           </div>
         )}
+
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={handleMembershipToggle}
+            disabled={updatingMembership}
+            className={`w-full rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50 ${
+              active
+                ? 'border-red-200 text-red-700 hover:bg-red-50'
+                : 'border-green-200 text-green-700 hover:bg-green-50'
+            }`}
+          >
+            {updatingMembership
+              ? (active ? 'Deactivating...' : 'Reactivating...')
+              : (active ? 'Deactivate Tenant' : 'Reactivate Tenant')}
+          </button>
+        </div>
       </div>
     </div>
   );
