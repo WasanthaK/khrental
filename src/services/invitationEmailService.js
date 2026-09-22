@@ -1,5 +1,5 @@
-import { getApiBaseUrl } from '../utils/env';
-import { buildRequestContextHeaders } from './requestContext';
+import { getApiBaseUrl } from '../utils/env.js';
+import { buildRequestContextHeaders } from './requestContext.js';
 
 const parseResponsePayload = async (response) => {
   const contentType = response.headers.get('content-type') || '';
