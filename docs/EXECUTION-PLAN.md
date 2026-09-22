@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-22  
-**Last verified behavior-changing application baseline:** `190e0d412d702aed6b11f2546872c167d5808ea8`  
+**Last verified behavior-changing application baseline:** `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -32,6 +32,7 @@
 - [x] Bootstrap platform-owner access is recoverable even while the dedicated `platform_admins` production migration path remains unavailable. PR #100, SHA `fc3cf044937a3683673ec01d7d2b465f1c70b1d7`, production run `35595451678`; authorization tests/build passed, revision `khrental-app--0000103` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
 - [x] A Platform Administrator who also has tenant membership is no longer forced out of the tenant workspace. PR #101, SHA `0f4ad15563df30c76f431d03b16c6985245d24ed`, production run `35602332768`; authorization tests/build passed, revision `khrental-app--0000105` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
 - [x] Tenant-switch notifications no longer block top-right page actions. PR #102, SHA `190e0d412d702aed6b11f2546872c167d5808ea8`, production run `35616577333`; authorization tests/build passed, revision `khrental-app--0000111` became Ready, public build fingerprint matched exactly, and MSSQL health returned Ready. Browser verification passed on 2026-09-22.
+- [x] P0.3 invitation/email observability deployed through PR #103, behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`, production run `35673793484`; authorization tests/build passed, revision `khrental-app--0000113` became Ready, startup remained `/bin/sh scripts/start-container.sh`, public build fingerprint matched exactly, MSSQL health returned Ready, and server-side SendGrid configuration reported configured. Authenticated invitation/provider-log verification remains pending before P0.3 can close.
 
 ### Tenant/rentee data model
 
@@ -46,7 +47,7 @@
 ### Known unresolved or insufficiently verified areas
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
-- [ ] Invitation delivery needs stronger server-side observability: provider acceptance/failure and SendGrid message ID where available. **This is the active item (P0.3).**
+- [ ] Invitation delivery needs stronger server-side observability: provider acceptance/failure and SendGrid message ID where available. **This is the active item (P0.3); code/deployment verification is complete, authenticated production invitation/log proof remains.**
 - [ ] Password-reset flow needs a fresh end-to-end regression check.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -100,7 +101,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / IMPLEMENTED, VERIFYING**
+### P0.3 - Invitation/email observability — **ACTIVE / DEPLOYED, FINAL PRODUCTION CHECK PENDING**
 
 Scope:
 
@@ -109,7 +110,7 @@ Scope:
 - Add structured server-side success/failure logging for `/api/send-email`.
 - Capture SendGrid `x-message-id` when available without logging email body, tokens, or secrets.
 
-Implementation evidence on branch `p0.3-invitation-email-observability`:
+Implementation and verification evidence:
 
 - [x] Normal tenant-card action is explicit **Send Invitation / Resend Invitation**; simulation is no longer exposed in the business UI.
 - [x] `Save & Invite` and tenant-card resend use the same secure invitation service and provider-result contract.
@@ -118,9 +119,10 @@ Implementation evidence on branch `p0.3-invitation-email-observability`:
 - [x] `/api/send-email` uses structured allow-listed success/failure logs and captures SendGrid `x-message-id` when present.
 - [x] SendGrid rejection handling no longer reads or logs the raw provider response body.
 - [x] Automated regression coverage added for lifecycle-state derivation, `x-message-id`, rejection-body suppression, and log-field allow-listing.
-- [x] Authorization test suite and production build passed on code head `09d7c7abc7ae9d21ab98d76c7957af265748e50f`, PR verification run `35673482971`; all four PR workflows on that code head passed.
-- [ ] Production revision/SHA/health verification completed after merge.
-- [ ] Authenticated production invitation proves provider acceptance/failure logging without sensitive content.
+- [x] Authorization test suite and production build passed on PR #103; all PR-head workflows passed before merge.
+- [x] PR #103 merged as behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`.
+- [x] Production run `35673793484` passed: `khrental-app--0000113` Ready; startup `/bin/sh scripts/start-container.sh`; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`; `/build-info.json` returned `{"buildSha":"6ce7d95096b2868cdf27f8d5628eb1e68b963f7e"}`; runtime email configuration reported configured.
+- [ ] Authenticated production invitation proves provider acceptance/failure logging without sensitive content and confirms the user-visible lifecycle state/date.
 
 Exit criteria:
 
@@ -254,15 +256,14 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: P0.3 - Invitation/email observability
-Problem/evidence: P0.2 confirmed invitation actions are usable and provide visible feedback, but production still lacks durable provider-level evidence showing whether SendGrid accepted or rejected a message and the provider message ID when available.
+Problem/evidence: P0.2 confirmed invitation actions are usable and provide visible feedback, but production lacked durable provider-level evidence showing whether SendGrid accepted or rejected a message and the provider message ID when available.
 Scope: Make invitation delivery state unambiguous in the UI; add structured server-side success/failure logging around /api/send-email; capture SendGrid x-message-id when available without logging email bodies, invitation tokens, secrets, or other sensitive content.
 Out of scope: schema changes unless separately approved through the privileged migration path; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
-PR: #103 — p0.3-invitation-email-observability.
-CI result: Code head 09d7c7abc7ae9d21ab98d76c7957af265748e50f passed authorization tests, production build, Evia webhook, Evia V2 integration, and cancelled-agreement deletion checks; build/authorization run 35673482971 succeeded. Documentation-head CI remains the final pre-merge gate.
-Production baseline: 190e0d412d702aed6b11f2546872c167d5808ea8.
-Implementation result: Code complete for provider observability, canonical invitation lifecycle projection, explicit Send/Resend UI, shared Save & Invite delivery path, accurate creation-vs-provider wording, and focused regression tests. Awaiting final PR head CI and production verification.
-Runtime proof baseline: production revision khrental-app--0000111 Ready; public fingerprint matched; MSSQL health ready.
-Result: ACTIVE — implementation and code-head CI complete; production verification pending.
+PR: #103 — merged as 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e.
+CI result: All PR-head workflows passed before merge; production run 35673793484 also passed authorization tests and build.
+Production revision/SHA: khrental-app--0000113 Ready; behavior SHA 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e.
+Runtime proof: /bin/sh scripts/start-container.sh verified; public /build-info.json matched 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e; /api/mssql/health returned ready; /api/health reported email configured and sender configured.
+Result: ACTIVE — implementation, CI and deployment verification complete; authenticated production invitation/provider-log proof remains before exit criteria can close.
 Next item: Complete P0.3 exit criteria before starting P0.4.
 ```
 
