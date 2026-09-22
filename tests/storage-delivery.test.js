@@ -13,6 +13,11 @@ const storageApiServiceSource = readFileSync(
   'utf8'
 );
 
+const legacyEviaSource = readFileSync(
+  new URL('../src/services/eviaSignServiceLegacy.js', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -44,4 +49,12 @@ test('direct storage URLs preserve active-tenant scoping from the compatibility 
   assert.match(storageApiServiceSource, /scopeTenantStoragePath/);
   assert.match(storageApiServiceSource, /Cross-tenant storage paths are not allowed/);
   assert.match(storageApiServiceSource, /const safePath = scopeTenantStoragePath\(path\)/);
+});
+
+test('legacy Evia completed documents use explicit tenant-scoped storage', () => {
+  assert.doesNotMatch(legacyEviaSource, /platformClient\.storage/);
+  assert.match(legacyEviaSource, /uploadTenantFile/);
+  assert.match(legacyEviaSource, /bucket: 'files'/);
+  assert.match(legacyEviaSource, /const filePath = `agreements\/\$\{fileName\}`/);
+  assert.match(legacyEviaSource, /const documentUrl = uploadData\?\.url/);
 });
