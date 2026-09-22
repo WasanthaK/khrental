@@ -44,6 +44,9 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
   const invitationDateLabel = invitationDetails?.invitedAt
     ? `Invitation created: ${formatDate(invitationDetails.invitedAt)}`
     : null;
+  const acceptedDateLabel = invitationDetails?.acceptedAt
+    ? `Invitation accepted: ${formatDate(invitationDetails.acceptedAt)}`
+    : null;
   const expiryDateLabel = invitationDetails?.expiresAt && ['pending', 'expired'].includes(status)
     ? `${status === 'expired' ? 'Expired' : 'Expires'}: ${formatDate(invitationDetails.expiresAt)}`
     : null;
@@ -58,7 +61,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
           <div>
             <h3 className="text-lg font-semibold text-gray-900">{name || 'Unnamed Tenant'}</h3>
             <p className="text-sm text-gray-600">
-              Registered: {formatDate(registrationDate) || 'N/A'}
+              Tenant added: {formatDate(registrationDate) || 'N/A'}
             </p>
           </div>
         </div>
@@ -97,9 +100,10 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
           </Link>
         </div>
 
-        {!statusLoading && !statusError && (invitationDateLabel || expiryDateLabel) && (
+        {!statusLoading && !statusError && (invitationDateLabel || acceptedDateLabel || expiryDateLabel) && (
           <div className="mb-3 text-xs text-gray-600" role="status">
             {invitationDateLabel && <div>{invitationDateLabel}</div>}
+            {acceptedDateLabel && <div>{acceptedDateLabel}</div>}
             {expiryDateLabel && <div>{expiryDateLabel}</div>}
           </div>
         )}
