@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { checkAppUserInvitationStatus } from '../services/appUserService';
+import { checkCanonicalInvitationStatus } from '../services/invitationStatusService';
+import { shouldPollInvitationStatus } from '../utils/invitationLifecycle';
 
 const PENDING_REFRESH_INTERVAL_MS = 30000;
 
@@ -22,7 +23,7 @@ const useInvitationStatus = (userId) => {
         setLoading(true);
       }
       setError(null);
-      const result = await checkAppUserInvitationStatus(userId);
+      const result = await checkCanonicalInvitationStatus(userId);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to check invitation status');
@@ -32,7 +33,6 @@ const useInvitationStatus = (userId) => {
       setDetails(invitation);
       setStatus(invitation.status || (invitation.auth_id ? 'registered' : 'not_invited'));
     } catch (err) {
-      console.error(`Error checking invitation status for ${userId}:`, err);
       setError(err.message);
       setStatus('error');
       setDetails(null);
@@ -48,12 +48,12 @@ const useInvitationStatus = (userId) => {
   }, [fetchStatus]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || typeof window === 'undefined' || typeof document === 'undefined') {
       return undefined;
     }
 
     const refreshIfVisible = () => {
-      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      if (document.visibilityState !== 'hidden') {
         fetchStatus({ silent: true });
       }
     };
@@ -61,7 +61,7 @@ const useInvitationStatus = (userId) => {
     window.addEventListener('focus', refreshIfVisible);
     document.addEventListener('visibilitychange', refreshIfVisible);
 
-    const intervalId = status === 'pending'
+    const intervalId = shouldPollInvitationStatus(status)
       ? window.setInterval(refreshIfVisible, PENDING_REFRESH_INTERVAL_MS)
       : null;
 
