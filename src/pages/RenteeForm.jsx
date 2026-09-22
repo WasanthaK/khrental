@@ -303,7 +303,7 @@ const RenteeForm = () => {
       setSubmitting(true);
       setError(null);
       await saveTenant({ inviteAfterSave });
-      toast.success(inviteAfterSave ? 'Tenant saved and invitation sent.' : 'Tenant saved successfully.');
+      toast.success(inviteAfterSave ? 'Tenant saved and invitation accepted for delivery.' : 'Tenant saved successfully.');
       navigate('/dashboard/rentees');
     } catch (saveError) {
       console.error('Failed to save tenant:', saveError);
