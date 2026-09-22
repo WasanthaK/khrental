@@ -7,7 +7,7 @@ import {
   hashPasswordResetToken,
   normalizePasswordResetEmail
 } from '../src/api/auth/passwordResetTokens.js';
-import { isPublicCredentialRequest } from '../src/api/auth/index.js';
+import { createSessionAuthMiddleware, isPublicCredentialRequest } from '../src/api/auth/index.js';
 import { isPasswordRecoveryPath } from '../src/services/requestContext.js';
 
 test('password reset token is opaque, random and base64url-safe', () => {
@@ -96,6 +96,36 @@ test('password recovery API endpoints are explicitly anonymous credential endpoi
     originalUrl: '/api/platform/auth/reset-password/redeem',
     headers: { authorization: 'Bearer stale-token' }
   }), true);
+});
+
+test('session middleware ignores stale Authorization on password recovery endpoints', async () => {
+  const middleware = createSessionAuthMiddleware();
+  let nextCalled = false;
+  let statusCalled = false;
+
+  const req = {
+    method: 'GET',
+    originalUrl: '/api/platform/auth/reset-password/validate?token=opaque-token',
+    headers: { authorization: 'Bearer definitely-stale-token' }
+  };
+  const res = {
+    status() {
+      statusCalled = true;
+      return this;
+    },
+    json() {
+      throw new Error('Public recovery middleware must not write an auth failure response.');
+    }
+  };
+
+  await middleware(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, true);
+  assert.equal(statusCalled, false);
+  assert.equal(req.authSession, undefined);
+  assert.equal(req.authIdentity, undefined);
 });
 
 test('other credential establishment endpoints are public but protected APIs are not', () => {
