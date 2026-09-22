@@ -1,0 +1,398 @@
+from pathlib import Path
+
+
+def replace_once(text, old, new, label):
+    if old not in text:
+        raise SystemExit(f'missing expected block: {label}')
+    return text.replace(old, new, 1)
+
+
+# Explicit storage client gains authenticated download and tenant-bound delivery URLs.
+p = Path('src/services/storageApiService.js')
+s = p.read_text()
+old = """export const buildStorageUrl = (bucket, path) => {
+  const safeBucket = encodeURIComponent(String(bucket || ''));
+  const safePath = scopeTenantStoragePath(path)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  return `${getApiBaseUrl().replace(/\/$/, '')}/storage/${safeBucket}/${safePath}`;
+};
+"""
+new = """export const buildStorageUrl = (bucket, path) => {
+  const safeBucket = encodeURIComponent(String(bucket || ''));
+  const safePath = scopeTenantStoragePath(path)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const activeTenantId = normalizePath(getActiveTenantId());
+  const tenantQuery = activeTenantId ? `?tenantId=${encodeURIComponent(activeTenantId)}` : '';
+
+  return `${getApiBaseUrl().replace(/\/$/, '')}/storage/${safeBucket}/${safePath}${tenantQuery}`;
+};
+"""
+s = replace_once(s, old, new, 'buildStorageUrl')
+old = """  if (markerIndex >= 0) {
+    return decodeURIComponent(value.slice(markerIndex + marker.length));
+  }
+"""
+new = """  if (markerIndex >= 0) {
+    const encodedPath = value.slice(markerIndex + marker.length).split(/[?#]/, 1)[0];
+    return decodeURIComponent(encodedPath);
+  }
+"""
+s = replace_once(s, old, new, 'extractStoragePath query stripping')
+marker = "export const deleteTenantFiles = async ({ bucket, paths }) => {\n"
+download = """export const downloadTenantFile = async ({ bucket, path }) => {
+  if (!bucket || !path) {
+    throw new Error('Bucket and path are required for download.');
+  }
+
+  const response = await fetch(buildStorageUrl(bucket, path), {
+    method: 'GET',
+    headers: buildRequestContextHeaders()
+  });
+
+  if (!response.ok) throw await readError(response);
+  return response.blob();
+};
+
+"""
+if download.strip() not in s:
+    if marker not in s:
+        raise SystemExit('missing deleteTenantFiles marker')
+    s = s.replace(marker, download + marker, 1)
+p.write_text(s)
+
+# Preserve all document rendering behavior; replace only storage I/O.
+p = Path('src/services/DocumentService.js')
+s = p.read_text()
+import_marker = "import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';\n"
+storage_import = "import { buildStorageUrl, downloadTenantFile, listTenantFiles, uploadTenantFile } from './storageApiService';\n"
+if storage_import not in s:
+    s = s.replace(import_marker, import_marker + storage_import, 1)
+
+old = """    // Standard upload options
+    const uploadOptions = {
+      contentType: 'application/pdf',
+      upsert: true
+    };
+    
+    try {
+      // Standard upload via local storage compatibility client
+      const { data, error } = await platformClient.storage
+        .from(STORAGE_BUCKETS.FILES)
+        .upload(filePath, pdfBlob, uploadOptions);
+      
+      if (error) {
+        console.error('Error saving document:', error);
+        throw error;
+      }
+      
+      console.log('PDF uploaded successfully:', data);
+      
+      // Get the public URL
+      const scopedFilePath = data?.scopedPath || data?.path || filePath;
+      const { data: urlData } = platformClient.storage
+        .from(STORAGE_BUCKETS.FILES)
+        .getPublicUrl(scopedFilePath);
+      
+      const publicUrl = urlData?.publicUrl;
+      console.log('Document public URL generated:', publicUrl);
+      
+      return publicUrl;
+"""
+new = """    try {
+      const uploaded = await uploadTenantFile({
+        bucket: STORAGE_BUCKETS.FILES,
+        path: filePath,
+        file: pdfBlob
+      });
+      const storedPath = uploaded?.path || filePath;
+      const publicUrl = uploaded?.url || buildStorageUrl(STORAGE_BUCKETS.FILES, storedPath);
+
+      console.log('PDF uploaded successfully:', { path: storedPath });
+      console.log('Document storage URL generated:', publicUrl);
+      return publicUrl;
+"""
+s = replace_once(s, old, new, 'saveMergedDocument storage')
+
+old = """    // List files in directory to debug any issues
+    const { data: fileData, error: fileError } = await platformClient.storage
+      .from(STORAGE_BUCKETS.FILES)
+      .list(`${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}`);
+    
+    if (fileError) {
+      console.error('Error listing files in directory:', fileError);
+    } else {
+      console.log('Files available in directory:', fileData);
+    }
+    
+    // Download the DOCX file from storage
+    const { data: docxData, error: docxError } = await platformClient.storage
+      .from(STORAGE_BUCKETS.FILES)
+      .download(docxPath);
+      
+    // Handle download errors
+    if (docxError) {
+      console.error('Error downloading DOCX file:', docxError);
+      throw new Error(`Failed to download DOCX file: ${docxError.message}`);
+    }
+"""
+new = """    // List files in directory to debug any issues
+    try {
+      const fileData = await listTenantFiles({
+        bucket: STORAGE_BUCKETS.FILES,
+        path: `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}`
+      });
+      console.log('Files available in directory:', fileData);
+    } catch (fileError) {
+      console.error('Error listing files in directory:', fileError);
+    }
+
+    // Download the DOCX file from tenant-scoped storage
+    const docxData = await downloadTenantFile({
+      bucket: STORAGE_BUCKETS.FILES,
+      path: docxPath
+    });
+"""
+s = replace_once(s, old, new, 'convertDocxToPdf list/download')
+
+old = """    // Add a link to the original DOCX
+    const { data: urlData } = platformClient.storage
+      .from(STORAGE_BUCKETS.FILES)
+      .getPublicUrl(docxPath);
+      
+    if (urlData?.publicUrl) {
+"""
+new = """    // Add a tenant-scoped link to the original DOCX
+    const docxUrl = buildStorageUrl(STORAGE_BUCKETS.FILES, docxPath);
+
+    if (docxUrl) {
+"""
+s = replace_once(s, old, new, 'convertDocxToPdf url')
+s = replace_once(s, "      page.drawText(urlData.publicUrl, {\n", "      page.drawText(docxUrl, {\n", 'convertDocxToPdf draw url')
+
+old = """    // Upload PDF to platform storage
+    const { data, error } = await platformClient.storage
+      .from(STORAGE_BUCKETS.FILES)
+      .upload(pdfPath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+    
+    if (error) {
+      console.error('Error uploading PDF:', error);
+      throw error;
+    }
+    
+    // Get the public URL for the PDF
+    const scopedPdfPath = data?.scopedPath || data?.path || pdfPath;
+    const { data: urlData } = platformClient.storage
+      .from(STORAGE_BUCKETS.FILES)
+      .getPublicUrl(scopedPdfPath);
+    
+    const pdfUrl = urlData.publicUrl;
+"""
+new = """    // Upload PDF through the explicit tenant-scoped storage API
+    const uploadedPdf = await uploadTenantFile({
+      bucket: STORAGE_BUCKETS.FILES,
+      path: pdfPath,
+      file: pdfBlob
+    });
+    const storedPdfPath = uploadedPdf?.path || pdfPath;
+    const pdfUrl = uploadedPdf?.url || buildStorageUrl(STORAGE_BUCKETS.FILES, storedPdfPath);
+"""
+s = replace_once(s, old, new, 'generatePdf storage')
+
+old = """    // Upload the file to platform storage
+    const { data, error } = await platformClient.storage
+      .from('documents')
+      .upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+    
+    if (error) {
+      console.error('Error uploading document to storage:', error);
+      return { success: false, error };
+    }
+    
+    // Get the public URL for the file
+    const scopedFilePath = data?.scopedPath || data?.path || filePath;
+    const { data: urlData } = platformClient.storage
+      .from('documents')
+      .getPublicUrl(scopedFilePath);
+    
+    console.log(`Document created successfully: ${urlData.publicUrl}`);
+    
+    return {
+      success: true,
+      url: urlData.publicUrl,
+      path: scopedFilePath
+    };
+"""
+new = """    // Upload the file through the explicit tenant-scoped storage API
+    try {
+      const uploadedDocument = await uploadTenantFile({
+        bucket: 'documents',
+        path: filePath,
+        file: pdfBlob
+      });
+      const storedFilePath = uploadedDocument?.path || filePath;
+      const documentUrl = uploadedDocument?.url || buildStorageUrl('documents', storedFilePath);
+
+      console.log(`Document created successfully: ${documentUrl}`);
+      return {
+        success: true,
+        url: documentUrl,
+        path: storedFilePath
+      };
+    } catch (storageError) {
+      console.error('Error uploading document to storage:', storageError);
+      return { success: false, error: storageError };
+    }
+"""
+s = replace_once(s, old, new, 'createDocument storage')
+
+if 'platformClient.storage' in s:
+    raise SystemExit('DocumentService still contains compatibility storage calls')
+p.write_text(s)
+
+# Signed agreement persistence uses the same explicit storage authority.
+p = Path('src/services/agreementService.js')
+s = p.read_text()
+import_marker = "import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';\n"
+storage_import = "import { uploadTenantFile } from './storageApiService';\n"
+if storage_import not in s:
+    s = s.replace(import_marker, import_marker + storage_import, 1)
+old = """          // Save the signed document to storage
+          const { data: uploadData, error: uploadError } = await platformClient.storage
+            .from('files')
+            .upload(
+              `agreements/${agreement.id}/signed_agreement.pdf`,
+              Buffer.from(signedDoc.DocumentContent, 'base64'),
+              {
+                contentType: 'application/pdf',
+                upsert: true
+              }
+            );
+
+          if (uploadError) {
+            console.error('Error uploading signed document:', uploadError);
+          } else {
+            // Get the public URL
+            const scopedFilePath = uploadData?.scopedPath || uploadData?.path || `agreements/${agreement.id}/signed_agreement.pdf`;
+            const { data: { publicUrl } } = platformClient.storage
+              .from('files')
+              .getPublicUrl(scopedFilePath);
+
+            updateData.signed_document_url = publicUrl;
+            updateData.pdfurl = publicUrl; // For backward compatibility
+          }
+"""
+new = """          // Save the signed document through the explicit tenant-scoped storage API
+          try {
+            const signedPath = `agreements/${agreement.id}/signed_agreement.pdf`;
+            const uploadedDocument = await uploadTenantFile({
+              bucket: 'files',
+              path: signedPath,
+              file: Buffer.from(signedDoc.DocumentContent, 'base64')
+            });
+            const signedDocumentUrl = uploadedDocument?.url;
+
+            updateData.signed_document_url = signedDocumentUrl;
+            updateData.pdfurl = signedDocumentUrl; // For backward compatibility
+          } catch (uploadError) {
+            console.error('Error uploading signed document:', uploadError);
+          }
+"""
+s = replace_once(s, old, new, 'signed agreement storage')
+if 'platformClient.storage' in s:
+    raise SystemExit('agreementService still contains compatibility storage calls')
+p.write_text(s)
+
+# Require the tenant named in the storage object path to be an active membership.
+p = Path('server.js')
+s = p.read_text()
+old = """  app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
+  app.use('/storage/:bucket', createStorageDeliveryHandler());
+"""
+new = """  app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
+  app.use(
+    '/storage/:bucket',
+    (req, res, next) => {
+      const parts = String(req.path || '').replace(/^\\/+|\\/+$/g, '').split('/').filter(Boolean);
+      const tenantIdFromPath = parts[0] === 'tenants' ? parts[1] : null;
+      if (!tenantIdFromPath) {
+        res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
+        return;
+      }
+      req.query = { ...req.query, tenantId: tenantIdFromPath };
+      next();
+    },
+    createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
+    createStorageDeliveryHandler()
+  );
+"""
+s = replace_once(s, old, new, 'storage delivery tenant guard')
+p.write_text(s)
+
+# Regression coverage for explicit document storage and tenant-bound delivery.
+p = Path('tests/storage-delivery.test.js')
+s = p.read_text()
+source_marker = """const storageApiServiceSource = readFileSync(
+  new URL('../src/services/storageApiService.js', import.meta.url),
+  'utf8'
+);
+"""
+source_add = source_marker + """
+const documentServiceSource = readFileSync(
+  new URL('../src/services/DocumentService.js', import.meta.url),
+  'utf8'
+);
+
+const agreementServiceSource = readFileSync(
+  new URL('../src/services/agreementService.js', import.meta.url),
+  'utf8'
+);
+
+const serverSource = readFileSync(
+  new URL('../server.js', import.meta.url),
+  'utf8'
+);
+"""
+if 'const documentServiceSource' not in s:
+    s = replace_once(s, source_marker, source_add, 'storage test source imports')
+
+extra_tests = r"""
+
+test('agreement document storage uses explicit tenant-scoped APIs only', () => {
+  assert.doesNotMatch(documentServiceSource, /platformClient\.storage/);
+  assert.match(documentServiceSource, /uploadTenantFile/);
+  assert.match(documentServiceSource, /downloadTenantFile/);
+  assert.match(documentServiceSource, /listTenantFiles/);
+  assert.match(documentServiceSource, /buildStorageUrl/);
+  assert.doesNotMatch(agreementServiceSource, /platformClient\.storage/);
+  assert.match(agreementServiceSource, /uploadTenantFile/);
+});
+
+test('storage download client keeps tenant context and strips URL query from stored paths', () => {
+  assert.match(storageApiServiceSource, /export const downloadTenantFile/);
+  assert.match(storageApiServiceSource, /headers: buildRequestContextHeaders\(\)/);
+  assert.match(storageApiServiceSource, /tenantId=/);
+  assert.match(storageApiServiceSource, /split\(\/\[\?#\]\/\, 1\)/);
+});
+
+test('storage delivery requires the tenant encoded in the object path', () => {
+  assert.match(serverSource, /TENANT_STORAGE_PATH_REQUIRED/);
+  assert.match(serverSource, /tenantIdFromPath/);
+  assert.match(serverSource, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
+});
+"""
+if "agreement document storage uses explicit tenant-scoped APIs only" not in s:
+    s += extra_tests
+p.write_text(s)
