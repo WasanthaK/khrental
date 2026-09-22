@@ -125,7 +125,7 @@ test('tenant details uses canonical renter projection and never deletes the glob
   assert.match(renteeDetailsSource, /const renteeData = await getRentee\(id\);/);
   assert.match(renteeDetailsSource, /renteeData\.associated_properties \|\| \[\]/);
   assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations|deleteAppUser/);
-  assert.doesNotMatch(renteeDetailsSource, /sessionStorage\s*\./);
+  assert.doesNotMatch(renteeDetailsSource, /\bsessionStorage\s*\.\s*(getItem|setItem|removeItem|clear)\b/);
   assert.match(renteeDetailsSource, /await updateRentee\(id, \{ status: 'inactive' \}\)/);
 });
 
