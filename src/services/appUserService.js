@@ -35,6 +35,10 @@ export const mapAppUserToRentee = (rentee) => ({
   idCopyUrl: rentee.id_copy_url,
   registrationDate: rentee.createdat || rentee.created_at,
   associatedPropertyIds: rentee.associated_property_ids || [],
+  associatedProperties: rentee.associated_properties || [],
+  status: rentee.tenant_membership_status || rentee.status || 'active',
+  active: (rentee.tenant_membership_status || rentee.status || 'active') === 'active',
+  membershipId: rentee.tenant_membership_id || null,
   invited: rentee.invited,
   authId: rentee.auth_id,
   createdAt: rentee.createdat || rentee.created_at || new Date().toISOString(),
@@ -84,40 +88,37 @@ export const createAppUser = async (userData, userType) => {
  */
 export const inviteAppUser = async (email, name, userType, userId, sendReal = false) => {
   console.log(`[appUserService] Inviting ${userType} ${name} (${email}) with ID ${userId} - CONSOLIDATED VERSION`);
-  
+
   try {
     if (!email || !name || !userType || !userId) {
       console.error('[appUserService] Missing required parameters for invitation');
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: 'Missing required parameters for invitation',
         debug: { email, name, userType, userId }
       };
     }
-    
-    // Use the token-based invitation system to create a secure setup link
+
     console.log(`[appUserService] Calling sendInvitation to generate token for user ${userId}`);
-    
-    // Create userDetails object to match the expected format in sendInvitation
+
     const userDetails = {
       id: userId,
-      email: email,
-      name: name,
+      email,
+      name,
       role: userType
     };
-    
-    // Pass forceSimulation=false if sendReal is true
+
     const result = await inviteUser(userDetails, !sendReal);
-    
+
     if (!result.success) {
-      console.error(`[appUserService] Invitation failed:`, result.error);
+      console.error('[appUserService] Invitation failed:', result.error);
       return {
         success: false,
         error: result.error,
         debug: result
       };
     }
-    
+
     console.log(`[appUserService] Invitation sent successfully to ${email}`, result);
     return {
       success: true,
@@ -130,8 +131,8 @@ export const inviteAppUser = async (email, name, userType, userId, sendReal = fa
     };
   } catch (error) {
     console.error(`[appUserService] Unexpected error inviting user ${email}:`, error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: error.message,
       debug: { error: error.toString(), stack: error.stack }
     };
@@ -146,11 +147,11 @@ export const inviteAppUser = async (email, name, userType, userId, sendReal = fa
  */
 export const linkAppUser = async (authId, appUserId) => {
   console.log(`[linkAppUser] Linking auth user ${authId} to app_user ${appUserId}`);
-  
+
   if (!authId || !appUserId) {
     console.error('[linkAppUser] Missing required parameters:', { authId, appUserId });
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Auth ID and app_user ID are both required',
       debug: { authId, appUserId }
     };
@@ -164,9 +165,9 @@ export const linkAppUser = async (authId, appUserId) => {
 
     return result;
   } catch (error) {
-    console.error(`[linkAppUser] Exception linking user record:`, error);
-    return { 
-      success: false, 
+    console.error('[linkAppUser] Exception linking user record:', error);
+    return {
+      success: false,
       error: `Exception: ${error.message}`,
       debug: { error: error.toString(), stack: error.stack }
     };
@@ -208,7 +209,7 @@ export const findAppUserByAuthId = async (authId) => {
  */
 export const checkAppUserInvitationStatus = async (userId) => {
   console.log(`Checking invitation status for user ${userId}`);
-  
+
   try {
     if (!userId) {
       console.error('No userId provided to checkAppUserInvitationStatus');
@@ -290,49 +291,5 @@ export const deleteAppUser = async (id) => {
   } catch (error) {
     console.error('Error in deleteAppUser:', error);
     return { success: false, error: error.message };
-  }
-};
-
-// Helper functions for handling structured property associations
-const STORAGE_KEY = 'kh_rentals_structured_associations';
-
-/**
- * Store structured property associations in session storage
- * @param {string} userId - ID of the user
- * @param {Array} associations - Structured property associations
- */
-export const storeStructuredAssociations = (userId, associations) => {
-  try {
-    // Get existing data
-    const existingData = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
-    
-    // Update with new data
-    existingData[userId] = associations;
-    
-    // Save back to storage
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
-    console.log(`[appUserService] Stored ${associations.length} structured associations for user ${userId}`);
-    return true;
-  } catch (error) {
-    console.error('[appUserService] Error storing structured associations:', error);
-    return false;
-  }
-};
-
-/**
- * Get structured property associations from session storage
- * @param {string} userId - ID of the user
- * @returns {Array} - Structured property associations
- */
-export const getStructuredAssociations = (userId) => {
-  try {
-    // Get existing data
-    const existingData = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
-    
-    // Return data for the user
-    return existingData[userId] || [];
-  } catch (error) {
-    console.error('[appUserService] Error getting structured associations:', error);
-    return [];
   }
 };

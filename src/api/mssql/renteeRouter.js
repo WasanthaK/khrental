@@ -58,7 +58,8 @@ export const createRenteeRouter = () => {
     requirePermission(req, PERMISSIONS.RENTEES_READ);
     const rentees = await listTenantRentees(req.tenantId, {
       search: req.query.search,
-      pageSize: req.query.pageSize
+      pageSize: req.query.pageSize,
+      status: req.query.status
     });
 
     res.json({ data: rentees, meta: { count: rentees.length } });
@@ -160,7 +161,8 @@ export const createRenteeRouter = () => {
   router.get('/admin/tenants/:tenantId/rentees', requireAdminContext, ensureAdminUser, asyncHandler(async (req, res) => {
     const rentees = await listTenantRentees(req.params.tenantId, {
       search: req.query.search,
-      pageSize: req.query.pageSize
+      pageSize: req.query.pageSize,
+      status: req.query.status
     });
     res.json({ data: rentees, meta: { count: rentees.length } });
   }));
