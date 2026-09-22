@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { fetchAppUser } from '../../services/appUserService';
 import { resendInvitation } from '../../services/invitationService';
+import useInvitationStatus from '../../hooks/useInvitationStatus';
 
-const InviteUserButton = ({ userId, invitationStatus = 'not_invited', onSuccess, size = 'md', fullWidth = false }) => {
+const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = 'md', fullWidth = false }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resultMessage, setResultMessage] = useState(null);
+  const internalInvitationStatus = useInvitationStatus(invitationStatus ? null : userId);
 
   const sizeClasses = {
     sm: 'px-2 py-1 text-xs',
@@ -14,7 +16,8 @@ const InviteUserButton = ({ userId, invitationStatus = 'not_invited', onSuccess,
     lg: 'px-4 py-2 text-base'
   };
 
-  const isResend = invitationStatus !== 'not_invited' && invitationStatus !== 'unknown';
+  const effectiveStatus = invitationStatus || internalInvitationStatus.status;
+  const isResend = effectiveStatus !== 'not_invited' && effectiveStatus !== 'unknown' && effectiveStatus !== 'loading';
   const actionLabel = isResend ? 'Resend Invitation' : 'Send Invitation';
 
   const handleInvite = async () => {
@@ -36,6 +39,10 @@ const InviteUserButton = ({ userId, invitationStatus = 'not_invited', onSuccess,
 
       setResultMessage(successMessage);
       toast.success(successMessage);
+
+      if (!invitationStatus) {
+        await internalInvitationStatus.refresh();
+      }
 
       if (onSuccess && typeof onSuccess === 'function') {
         await onSuccess(result);
