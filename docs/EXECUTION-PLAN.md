@@ -100,7 +100,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / NEXT**
+### P0.3 - Invitation/email observability — **ACTIVE / IMPLEMENTED, VERIFYING**
 
 Scope:
 
@@ -108,6 +108,19 @@ Scope:
 - Show canonical invitation state/date.
 - Add structured server-side success/failure logging for `/api/send-email`.
 - Capture SendGrid `x-message-id` when available without logging email body, tokens, or secrets.
+
+Implementation evidence on branch `p0.3-invitation-email-observability`:
+
+- [x] Normal tenant-card action is explicit **Send Invitation / Resend Invitation**; simulation is no longer exposed in the business UI.
+- [x] `Save & Invite` and tenant-card resend use the same secure invitation service and provider-result contract.
+- [x] Canonical invitation status is projected from `dbo.user_invitations` as `not_invited`, `pending`, `expired`, `revoked`, or `registered`, with safe lifecycle dates and no token material.
+- [x] Tenant cards show the canonical state plus invitation-created/expiry date where applicable; provider acceptance is not conflated with invitation creation.
+- [x] `/api/send-email` uses structured allow-listed success/failure logs and captures SendGrid `x-message-id` when present.
+- [x] SendGrid rejection handling no longer reads or logs the raw provider response body.
+- [x] Automated regression coverage added for lifecycle-state derivation, `x-message-id`, rejection-body suppression, and log-field allow-listing.
+- [x] Authorization test suite and production build passed on code head `09d7c7abc7ae9d21ab98d76c7957af265748e50f`, PR verification run `35673482971`; all four PR workflows on that code head passed.
+- [ ] Production revision/SHA/health verification completed after merge.
+- [ ] Authenticated production invitation proves provider acceptance/failure logging without sensitive content.
 
 Exit criteria:
 
@@ -244,11 +257,12 @@ Active item: P0.3 - Invitation/email observability
 Problem/evidence: P0.2 confirmed invitation actions are usable and provide visible feedback, but production still lacks durable provider-level evidence showing whether SendGrid accepted or rejected a message and the provider message ID when available.
 Scope: Make invitation delivery state unambiguous in the UI; add structured server-side success/failure logging around /api/send-email; capture SendGrid x-message-id when available without logging email bodies, invitation tokens, secrets, or other sensitive content.
 Out of scope: schema changes unless separately approved through the privileged migration path; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
-PR: pending.
-CI result: pending.
+PR: #103 — p0.3-invitation-email-observability.
+CI result: Code head 09d7c7abc7ae9d21ab98d76c7957af265748e50f passed authorization tests, production build, Evia webhook, Evia V2 integration, and cancelled-agreement deletion checks; build/authorization run 35673482971 succeeded. Documentation-head CI remains the final pre-merge gate.
 Production baseline: 190e0d412d702aed6b11f2546872c167d5808ea8.
+Implementation result: Code complete for provider observability, canonical invitation lifecycle projection, explicit Send/Resend UI, shared Save & Invite delivery path, accurate creation-vs-provider wording, and focused regression tests. Awaiting final PR head CI and production verification.
 Runtime proof baseline: production revision khrental-app--0000111 Ready; public fingerprint matched; MSSQL health ready.
-Result: ACTIVE.
+Result: ACTIVE — implementation and code-head CI complete; production verification pending.
 Next item: Complete P0.3 exit criteria before starting P0.4.
 ```
 
