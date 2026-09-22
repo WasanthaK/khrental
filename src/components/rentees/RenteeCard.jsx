@@ -42,7 +42,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
   };
 
   const invitationDateLabel = invitationDetails?.invitedAt
-    ? `Sent: ${formatDate(invitationDetails.invitedAt)}`
+    ? `Invitation created: ${formatDate(invitationDetails.invitedAt)}`
     : null;
   const expiryDateLabel = invitationDetails?.expiresAt && ['pending', 'expired'].includes(status)
     ? `${status === 'expired' ? 'Expired' : 'Expires'}: ${formatDate(invitationDetails.expiresAt)}`
