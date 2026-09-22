@@ -12,7 +12,7 @@ const deriveInvitationStatus = ({ user, invitation, now = new Date() }) => {
 
 /**
  * Read-only projection of the invitation ledger for UI/status use.
- * Deliberately excludes token_hash and all message content.
+ * Deliberately excludes all invitation credential material and message content.
  */
 export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = new Date() }) => {
   if (!tenantId || !appUserId) return null;
