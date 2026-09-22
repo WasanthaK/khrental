@@ -1,0 +1,60 @@
+name: Phase 5 assemble release hardening branch
+
+on:
+  push:
+    branches:
+      - phase-5-release-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.head_commit.message == 'Phase 5 trigger integration assembly'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-5-release-hardening
+          fetch-depth: 0
+      - name: Fetch prepared phase branches
+        run: |
+          git fetch origin \
+            p0.4-password-reset-hardening \
+            phase-1-rentee-integrity \
+            phase-2-signature-placement \
+            phase-3-document-storage \
+            phase-4-payment-proof-storage \
+            phase-4-utility-media-storage \
+            phase-4-maintenance-media-storage \
+            phase-4-admin-storage-tooling \
+            phase-4-legacy-evia-storage
+      - name: Assemble prepared work
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for branch in \
+            p0.4-password-reset-hardening \
+            phase-1-rentee-integrity \
+            phase-2-signature-placement \
+            phase-3-document-storage \
+            phase-4-payment-proof-storage \
+            phase-4-utility-media-storage \
+            phase-4-maintenance-media-storage \
+            phase-4-admin-storage-tooling \
+            phase-4-legacy-evia-storage
+          do
+            echo "Merging $branch"
+            if ! git merge --no-ff --no-edit "origin/$branch"; then
+              echo "Merge conflict while integrating $branch"
+              git status --short
+              exit 1
+            fi
+          done
+      - name: Remove temporary assembly workflow and push
+        run: |
+          rm .github/workflows/phase-5-integrate.yml
+          git add -A
+          git commit -m "Phase 5 assemble validated implementation branches"
+          git push origin HEAD:phase-5-release-hardening
