@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   createPasswordResetExpiry,
   generatePasswordResetToken,
@@ -9,6 +10,20 @@ import {
 } from '../src/api/auth/passwordResetTokens.js';
 import { isPublicCredentialRequest } from '../src/api/auth/index.js';
 import { isPasswordRecoveryPath } from '../src/services/requestContext.js';
+
+const resetPasswordPageSource = readFileSync(
+  new URL('../src/pages/ResetPassword.jsx', import.meta.url),
+  'utf8'
+);
+const routesSource = readFileSync(new URL('../src/routes.jsx', import.meta.url), 'utf8');
+const rootLayoutSource = readFileSync(
+  new URL('../src/components/layouts/RootLayout.jsx', import.meta.url),
+  'utf8'
+);
+const passwordResetsSource = readFileSync(
+  new URL('../src/api/auth/passwordResets.js', import.meta.url),
+  'utf8'
+);
 
 test('password reset token is opaque, random and base64url-safe', () => {
   const first = generatePasswordResetToken();
@@ -107,4 +122,39 @@ test('other credential establishment endpoints are public but protected APIs are
   assert.equal(isPublicCredentialRequest({ method: 'GET', originalUrl: '/api/platform/auth/context' }), false);
   assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/query' }), false);
   assert.equal(isPublicCredentialRequest({ method: 'POST', originalUrl: '/api/platform/auth/invite' }), false);
+});
+
+test('reset password browser route is not wrapped in PublicRoute', () => {
+  assert.match(
+    routesSource,
+    /\{ path: 'reset-password', element: <ResetPassword \/> \}/
+  );
+  assert.doesNotMatch(
+    routesSource,
+    /path: 'reset-password'.*<PublicRoute><ResetPassword \/><\/PublicRoute>/
+  );
+});
+
+test('root layout isolates password recovery from tenant application initialization', () => {
+  assert.match(rootLayoutSource, /const isPasswordRecovery = location\.pathname === '\/reset-password'/);
+  assert.match(rootLayoutSource, /if \(isPasswordRecovery\) \{\s*return <Outlet \/>;\s*\}/);
+});
+
+test('emailed reset token is validated before the new-password form can be submitted', () => {
+  assert.match(resetPasswordPageSource, /\/api\/platform\/auth\/reset-password\/validate\?token=/);
+  assert.match(resetPasswordPageSource, /cache: 'no-store'/);
+  assert.match(resetPasswordPageSource, /tokenValidation\.status !== 'valid'/);
+  assert.match(resetPasswordPageSource, /tokenValidation\.status === 'valid'/);
+});
+
+test('password redemption updates the credential, consumes the token and revokes prior sessions atomically', () => {
+  const updateCredentialIndex = passwordResetsSource.indexOf('UPDATE dbo.auth_users');
+  const consumeTokenIndex = passwordResetsSource.indexOf('UPDATE dbo.password_reset_tokens', updateCredentialIndex);
+  const revokeSessionsIndex = passwordResetsSource.indexOf('UPDATE dbo.auth_sessions', consumeTokenIndex);
+  const commitIndex = passwordResetsSource.indexOf('await transaction.commit()', revokeSessionsIndex);
+
+  assert.ok(updateCredentialIndex >= 0);
+  assert.ok(consumeTokenIndex > updateCredentialIndex);
+  assert.ok(revokeSessionsIndex > consumeTokenIndex);
+  assert.ok(commitIndex > revokeSessionsIndex);
 });
