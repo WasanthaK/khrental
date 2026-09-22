@@ -56,6 +56,30 @@ const MIGRATIONS = [
         throw new Error(`Membership backfill verification failed: ${missing} legacy users remain without memberships.`);
       }
     }
+  },
+  {
+    id: '20260922_01_create_rentee_property_assignments',
+    file: 'migrations/20260922_01_create_rentee_property_assignments.sql',
+    verify: async (pool) => {
+      const result = await pool.request().query(`
+        SELECT
+          CASE WHEN OBJECT_ID(N'dbo.rentee_property_assignments', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+          CASE WHEN EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.rentee_property_assignments')
+              AND name = N'UX_rentee_property_assignments_scope'
+          ) THEN 1 ELSE 0 END AS unique_index_exists,
+          CASE WHEN EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.rentee_property_assignments')
+              AND name = N'IX_rentee_property_assignments_renter'
+          ) THEN 1 ELSE 0 END AS renter_index_exists;
+      `);
+      const row = result.recordset?.[0] || {};
+      if (!row.table_exists || !row.unique_index_exists || !row.renter_index_exists) {
+        throw new Error('Renter property-assignment migration verification failed.');
+      }
+    }
   }
 ];
 
