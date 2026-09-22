@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-22  
-**Last verified behavior-changing application baseline:** `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`  
+**Last verified behavior-changing application baseline:** `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -32,7 +32,11 @@
 - [x] Bootstrap platform-owner access is recoverable even while the dedicated `platform_admins` production migration path remains unavailable. PR #100, SHA `fc3cf044937a3683673ec01d7d2b465f1c70b1d7`, production run `35595451678`; authorization tests/build passed, revision `khrental-app--0000103` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
 - [x] A Platform Administrator who also has tenant membership is no longer forced out of the tenant workspace. PR #101, SHA `0f4ad15563df30c76f431d03b16c6985245d24ed`, production run `35602332768`; authorization tests/build passed, revision `khrental-app--0000105` became Ready, startup remained deterministic, exact public SHA matched, and MSSQL health was Ready.
 - [x] Tenant-switch notifications no longer block top-right page actions. PR #102, SHA `190e0d412d702aed6b11f2546872c167d5808ea8`, production run `35616577333`; authorization tests/build passed, revision `khrental-app--0000111` became Ready, public build fingerprint matched exactly, and MSSQL health returned Ready. Browser verification passed on 2026-09-22.
-- [x] P0.3 invitation/email observability deployed through PR #103, behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`, production run `35673793484`; authorization tests/build passed, revision `khrental-app--0000113` became Ready, startup remained `/bin/sh scripts/start-container.sh`, public build fingerprint matched exactly, MSSQL health returned Ready, and server-side SendGrid configuration reported configured. Authenticated invitation/provider-log verification remains pending before P0.3 can close.
+- [x] P0.3 provider observability deployed through PR #103, behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`, production run `35673793484`; authorization tests/build passed, revision `khrental-app--0000113` became Ready, startup remained `/bin/sh scripts/start-container.sh`, public build fingerprint matched exactly, MSSQL health returned Ready, and server-side SendGrid configuration reported configured.
+- [x] Controlled production invitation reached the configured provider/mailbox path on 2026-09-22; SendGrid accepted the request and the test message arrived in the controlled mailbox (Junk). This proved delivery while also exposing a separate invitation-lifecycle refresh defect.
+- [x] PR #105, SHA `1a7269d866c662125d0e35966e8bcae94fc68c23`, corrected stale/unknown invitation lifecycle presentation: canonical status always loads, pending state refreshes on focus/visibility and every 30 seconds, and invitation-status responses are non-cacheable.
+- [x] PR #106 finalized P0.3 invitation lifecycle/privacy hardening as behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: invitation-only observable email delivery, canonical no-cache status client, shared Send/Resend semantics, Team/Tenant lifecycle parity, unambiguous Tenant-added wording, accepted-date display, client log hardening, redemption/status regression coverage, and the final physical acceptance stories.
+- [x] Production run `35725686513` passed for SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: authorization/lifecycle tests and build passed, immutable image deployed, `khrental-app--0000116` became Ready, startup remained `/bin/sh scripts/start-container.sh`, `/api/health` reported email configured, `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`, and public `/build-info.json` matched the exact behavior SHA.
 
 ### Tenant/rentee data model
 
@@ -47,7 +51,7 @@
 ### Known unresolved or insufficiently verified areas
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
-- [ ] Invitation delivery needs stronger server-side observability: provider acceptance/failure and SendGrid message ID where available. **This is the active item (P0.3); code/deployment verification is complete, authenticated production invitation/log proof remains.**
+- [ ] P0.3 implementation, automated tests, CI, provider-delivery proof and production deployment verification are complete. **Only the single final physical acceptance pass in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` remains before P0.3 can close.**
 - [ ] Password-reset flow needs a fresh end-to-end regression check.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -101,7 +105,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / DEPLOYED, FINAL PRODUCTION CHECK PENDING**
+### P0.3 - Invitation/email observability — **ACTIVE / IMPLEMENTATION DEPLOYED, FINAL PHYSICAL ACCEPTANCE PENDING**
 
 Scope:
 
@@ -109,26 +113,35 @@ Scope:
 - Show canonical invitation state/date.
 - Add structured server-side success/failure logging for `/api/send-email`.
 - Capture SendGrid `x-message-id` when available without logging email body, tokens, or secrets.
+- Keep tenant and team invitation lifecycle semantics consistent through send, resend, redemption and registered state.
 
 Implementation and verification evidence:
 
-- [x] Normal tenant-card action is explicit **Send Invitation / Resend Invitation**; simulation is no longer exposed in the business UI.
-- [x] `Save & Invite` and tenant-card resend use the same secure invitation service and provider-result contract.
-- [x] Canonical invitation status is projected from `dbo.user_invitations` as `not_invited`, `pending`, `expired`, `revoked`, or `registered`, with safe lifecycle dates and no token material.
-- [x] Tenant cards show the canonical state plus invitation-created/expiry date where applicable; provider acceptance is not conflated with invitation creation.
+- [x] Normal tenant/team action is explicit **Send Invitation / Resend Invitation** and registered accounts no longer expose an invitation action.
+- [x] `Save & Invite`, tenant-card send/resend and team-card send/resend use the same secure invitation authority and observable server email-delivery path.
+- [x] Canonical invitation status is projected from `dbo.user_invitations` plus authenticated-account linkage as `not_invited`, `pending`, `expired`, `revoked`, or `registered`, with safe lifecycle dates and no token material.
+- [x] Successful redemption is regression-locked to persist both `app_users.auth_id` and `user_invitations.accepted_at` before transaction commit; either accepted timestamp or auth linkage projects as `registered`.
+- [x] Tenant cards distinguish **Tenant added** from invitation lifecycle and show created/expiry/accepted dates where applicable; Team cards use the same lifecycle semantics.
+- [x] Tenant details no longer intentionally suppress the canonical status lookup; valid accessible users should not remain **Unknown** after the lookup completes.
+- [x] Pending status refreshes quietly every 30 seconds and when the admin browser regains focus/visibility; canonical status requests and responses are explicitly non-cacheable.
 - [x] `/api/send-email` uses structured allow-listed success/failure logs and captures SendGrid `x-message-id` when present.
-- [x] SendGrid rejection handling no longer reads or logs the raw provider response body.
-- [x] Automated regression coverage added for lifecycle-state derivation, `x-message-id`, rejection-body suppression, and log-field allow-listing.
-- [x] Authorization test suite and production build passed on PR #103; all PR-head workflows passed before merge.
-- [x] PR #103 merged as behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`.
-- [x] Production run `35673793484` passed: `khrental-app--0000113` Ready; startup `/bin/sh scripts/start-container.sh`; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`; `/build-info.json` returned `{"buildSha":"6ce7d95096b2868cdf27f8d5628eb1e68b963f7e"}`; runtime email configuration reported configured.
-- [ ] Authenticated production invitation proves provider acceptance/failure logging without sensitive content and confirms the user-visible lifecycle state/date.
+- [x] Invitation delivery now uses a dedicated `/api/send-email` client with no EmailJS fallback and no recipient/subject/body console logging.
+- [x] Invitation client telemetry uses an allow-list that excludes recipient email, subject, email body, invitation token/link, reset token, password and API secrets.
+- [x] SendGrid rejection handling does not read or log the raw provider response body.
+- [x] Automated regression coverage includes lifecycle derivation, redemption persistence, canonical action labels, focus/visibility/pending refresh, no-cache status reads, provider message ID, rejection-body suppression, log-field allow-listing, Team/Tenant parity and the dedicated observable email path.
+- [x] New lifecycle regression coverage is wired into `npm run test:authorization`; final PR #106 head passed the full authorization suite and production build before merge.
+- [x] PR #103 merged as behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`; production run `35673793484` verified provider-ready email configuration and exact runtime SHA.
+- [x] Controlled production invitation email reached the test mailbox on 2026-09-22 (Junk), proving provider/mailbox delivery.
+- [x] PR #105 merged as behavior SHA `1a7269d866c662125d0e35966e8bcae94fc68c23` to repair stale/Unknown lifecycle presentation.
+- [x] PR #106 merged as final P0.3 behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b` with lifecycle/privacy hardening, stronger tests and `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`.
+- [x] Production run `35725686513` passed for final behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: `khrental-app--0000116` Ready; startup `/bin/sh scripts/start-container.sh`; `/api/health` email configured; `/api/mssql/health` returned ready after normal revision warmup; `/build-info.json` matched the exact SHA; browser runtime MSSQL configuration was correct.
+- [ ] Run the single final physical production acceptance pass defined in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` and record PASS/FAIL evidence for US-INV-01 through US-INV-09.
 
 Exit criteria:
 
-- [ ] Production evidence shows whether an invitation request reached the email provider.
-- [ ] User-visible invitation status is unambiguous.
-- [ ] No sensitive invitation content is written to logs.
+- [x] Production evidence shows an invitation request reached the email provider/mailbox path.
+- [ ] User-visible invitation status is unambiguous across the final physical Send/Resend/Accept/reload checks.
+- [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
 ### P0.4 - Password reset regression
 
@@ -256,15 +269,15 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: P0.3 - Invitation/email observability
-Problem/evidence: P0.2 confirmed invitation actions are usable and provide visible feedback, but production lacked durable provider-level evidence showing whether SendGrid accepted or rejected a message and the provider message ID when available.
-Scope: Make invitation delivery state unambiguous in the UI; add structured server-side success/failure logging around /api/send-email; capture SendGrid x-message-id when available without logging email bodies, invitation tokens, secrets, or other sensitive content.
-Out of scope: schema changes unless separately approved through the privileged migration path; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
-PR: #103 — merged as 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e.
-CI result: All PR-head workflows passed before merge; production run 35673793484 also passed authorization tests and build.
-Production revision/SHA: khrental-app--0000113 Ready; behavior SHA 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e.
-Runtime proof: /bin/sh scripts/start-container.sh verified; public /build-info.json matched 6ce7d95096b2868cdf27f8d5628eb1e68b963f7e; /api/mssql/health returned ready; /api/health reported email configured and sender configured.
-Result: ACTIVE — implementation, CI and deployment verification complete; authenticated production invitation/provider-log proof remains before exit criteria can close.
-Next item: Complete P0.3 exit criteria before starting P0.4.
+Problem/evidence: Provider observability was added, then controlled production acceptance exposed two lifecycle defects: a tenant could remain visually Pending after acceptance and the details page could show Unknown because status refresh/checking was inconsistent. Final hardening also removed legacy invitation email/logging fallbacks that could undermine observability/privacy.
+Scope: Make Send/Resend/Registered semantics canonical across Tenant and Team surfaces; refresh Pending state after external acceptance; keep details and cards on one authoritative status; preserve provider-level SendGrid evidence; prevent sensitive invitation content from client/server logs; regression-lock redemption persistence; run one final physical acceptance pack before closure.
+Out of scope: schema changes; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
+PRs: #103 provider observability (`6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`); #105 lifecycle refresh (`1a7269d866c662125d0e35966e8bcae94fc68c23`); #106 final lifecycle/privacy hardening (`8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`).
+CI result: Final #106 head passed the complete `npm run test:authorization` gate, including the new invitation lifecycle suite, and production build. Main deployment run `35725686513` repeated authorization tests/build successfully before deployment.
+Production revision/SHA: `khrental-app--0000116` Ready; behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`.
+Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` reported email configured; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}` after revision warmup; public `/build-info.json` returned `{"buildSha":"8ae3a2a84e65363f48f6991c8f5bb7542c1f967b"}`; runtime browser MSSQL configuration verified.
+Result: ACTIVE — implementation, automated tests, CI, deployment verification and provider/mailbox delivery proof are complete. Only the final physical US-INV-01 through US-INV-09 acceptance pass remains.
+Next item: Execute `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`; if all stories pass, mark P0.3 COMPLETE and only then move P0.4 to ACTIVE.
 ```
 
 ---
