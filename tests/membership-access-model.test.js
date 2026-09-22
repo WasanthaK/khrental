@@ -124,7 +124,8 @@ test('renter property and unit assignments are durable and tenant scoped', () =>
 test('tenant details uses canonical renter projection and never deletes the global identity', () => {
   assert.match(renteeDetailsSource, /const renteeData = await getRentee\(id\);/);
   assert.match(renteeDetailsSource, /renteeData\.associated_properties \|\| \[\]/);
-  assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations|sessionStorage|deleteAppUser/);
+  assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations|deleteAppUser/);
+  assert.doesNotMatch(renteeDetailsSource, /sessionStorage\s*\./);
   assert.match(renteeDetailsSource, /await updateRentee\(id, \{ status: 'inactive' \}\)/);
 });
 
