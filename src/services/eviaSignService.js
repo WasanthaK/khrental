@@ -2,7 +2,7 @@ export * from './eviaSignServiceLegacy.js';
 
 import { ENV, getApiBaseUrl } from '../utils/env';
 import { buildRequestContextHeaders } from './requestContext';
-import { createAndSendV2SignatureRequest } from './eviaV2SigningService';
+import { createAndSendV1AutoStampRequest } from './eviaV1AutoStampService';
 
 const EVIA_SIGN_CLIENT_ID = ENV.EVIA_SIGN_CLIENT_ID || '';
 const EVIA_AUTHORIZATION_URL = 'https://evia.enadocapp.com/_apis/falcon/auth/oauth2/authorize';
@@ -73,7 +73,7 @@ const getActiveEviaAccessToken = async () => {
   return persistEviaAuth(refreshed, storedAuth.userEmail).authToken;
 };
 
-const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
+const uploadDocumentForSignatureRequest = async (documentUrl, accessToken) => {
   if (!documentUrl) throw new Error('No document available for signature.');
 
   let blob;
@@ -187,9 +187,6 @@ const startSameOriginAuthBridge = () => {
   }, 500);
 };
 
-/**
- * Evia Sign API V2 OAuth authorization URL.
- */
 export function getAuthorizationUrl() {
   if (!EVIA_SIGN_CLIENT_ID) {
     throw new Error('Evia Sign Client ID is not configured for this deployment.');
@@ -210,9 +207,6 @@ export function getAuthorizationUrl() {
     `&redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-/**
- * Exchange the Evia authorization code through the KH Rentals server.
- */
 export async function handleAuthCallback(code) {
   if (!code) {
     throw new Error('No authorization code provided');
@@ -232,11 +226,6 @@ export async function handleAuthCallback(code) {
   return persistEviaAuth(tokenResponse);
 }
 
-/**
- * Reliable status fallback for existing V1 requests and missed webhooks.
- * The current Evia V1 request endpoint is retained here because agreements
- * created before the V2 send migration still carry V1 request IDs.
- */
 export async function getSignatureStatus(requestId) {
   try {
     if (!requestId) throw new Error('Evia request ID is required.');
@@ -277,19 +266,16 @@ export async function getSignatureStatus(requestId) {
 }
 
 /**
- * Send the signature request through Evia Sign API V2.
- *
- * Keep the proven document-upload step, then follow Evia's V2 migration flow:
- * create skeleton request -> add signatories -> add AutoStamp identifiers -> send.
- * Webhook delivery is handled by the separately configured V2 webhook
- * subscription rather than by a request-specific callback URL.
+ * Business-safe recovery path: keep the current OAuth/token and document-upload
+ * implementations, but send the signing request through the proven V1 type=3
+ * AutoStamp contract so marker matching, offsets and stamp sizes are preserved.
  */
 export async function sendDocumentForSignature(params) {
   try {
     const accessToken = await getActiveEviaAccessToken();
-    const documentToken = await uploadDocumentForV2Request(params.documentUrl, accessToken);
+    const documentToken = await uploadDocumentForSignatureRequest(params.documentUrl, accessToken);
 
-    return await createAndSendV2SignatureRequest({
+    return await createAndSendV1AutoStampRequest({
       documentToken,
       title: params.title,
       message: params.message,
@@ -297,7 +283,7 @@ export async function sendDocumentForSignature(params) {
       accessToken
     });
   } catch (error) {
-    console.error('[eviaSignService] V2 signature request failed:', error);
+    console.error('[eviaSignService] V1 AutoStamp signature request failed:', error);
     return {
       success: false,
       error: error.message || 'Failed to send document for signature'
