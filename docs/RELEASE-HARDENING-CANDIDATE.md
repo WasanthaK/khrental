@@ -26,6 +26,12 @@ The exact candidate head must pass:
 
 `tests/release-hardening.test.js` is included in `npm run test:authorization` and protects the final storage/compatibility boundaries.
 
+### Verified behavior-head evidence
+
+Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed the full authorization/regression suite, production build, Evia V2 integration workflow and Evia webhook workflow on 2026-09-23. The deployment job was correctly skipped because this is a pull-request candidate, not an authorized production rollout.
+
+Documentation-only follow-up commits do not change that behavior, but the final PR head is still expected to receive its own normal CI run before the candidate is considered code-ready.
+
 ## Physical gate
 
 The physical source of truth is:
