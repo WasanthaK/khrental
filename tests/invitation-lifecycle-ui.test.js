@@ -16,6 +16,7 @@ const teamCardSource = readFileSync(new URL('../src/components/team/TeamMemberCa
 const renteeCardSource = readFileSync(new URL('../src/components/rentees/RenteeCard.jsx', import.meta.url), 'utf8');
 const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
 const badgeSource = readFileSync(new URL('../src/components/common/InvitationStatusBadge.jsx', import.meta.url), 'utf8');
+const routesSource = readFileSync(new URL('../src/routes.jsx', import.meta.url), 'utf8');
 
 test('invitation action labels follow canonical lifecycle state', () => {
   assert.equal(getInvitationActionLabel('not_invited'), 'Send Invitation');
@@ -112,4 +113,10 @@ test('renter details and badge cannot suppress or replace canonical status', () 
   assert.doesNotMatch(badgeSource, /checkUserAuthStatus|userManagement|useEffect/);
   assert.match(badgeSource, /registered: 'Registered'/);
   assert.match(badgeSource, /pending: 'Invitation Pending'/);
+});
+
+
+test('secure invitation redemption is not swallowed by an existing authenticated browser session', () => {
+  assert.match(routesSource, /path: 'accept-invite', element: <AcceptInvite \/>/);
+  assert.doesNotMatch(routesSource, /path: 'accept-invite', element: <PublicRoute><AcceptInvite \/><\/PublicRoute>/);
 });
