@@ -47,6 +47,7 @@ test('explicit storage API remains tenant scoped and server authorized', () => {
   assert.match(storageApiSource, /buildRequestContextHeaders/);
   assert.match(platformRouterSource, /router\.post\('\/storage\/buckets', requireAuthenticated, requireAdmin/);
   assert.match(platformRouterSource, /router\.delete\('\/storage\/buckets\/:bucket', requireAuthenticated, requireAdmin/);
+  assert.match(platformRouterSource, /!isAdminRole\(\{ user: req\.user, membership: req\.membership \}\)/);
 });
 
 test('renter relationship state remains server canonical', () => {
