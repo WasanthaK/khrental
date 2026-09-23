@@ -189,8 +189,14 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /az containerapp exec/);
   assert.match(migrationWorkflowSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
   assert.match(migrationWorkflowSource, /build-info\.json/);
-  assert.match(migrationWorkflowSource, /No firewall rule will be opened/);
-  assert.match(migrationWorkflowSource, /dedicated privileged migration executor inside the production network/);
+  assert.match(migrationWorkflowSource, /Apply migration in isolated Container Apps Job/);
+  assert.match(migrationWorkflowSource, /az containerapp job create/);
+  assert.match(migrationWorkflowSource, /az containerapp job start/);
+  assert.match(migrationWorkflowSource, /az containerapp job execution show/);
+  assert.match(migrationWorkflowSource, /az containerapp job delete/);
+  assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN=secretref:mssql-access-token/);
+  assert.match(migrationWorkflowSource, /no firewall rule or web-runtime DDL elevation is required/);
+  assert.match(migrationWorkflowSource, /20260922_01_create_rentee_property_assignments/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
   assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
   assert.match(migrationRunnerSource, /type: 'azure-active-directory-default'/);
