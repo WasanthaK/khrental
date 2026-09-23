@@ -14,6 +14,7 @@ This branch assembles the prepared work after P0.3 so the code can be validated 
 - Phase 4 payment-proof, utility-media, maintenance-media, admin-storage and legacy-Evia storage cleanup.
 - Retirement of the obsolete application-facing `platformClient.storage` compatibility shim after domain consumers were removed.
 - Aggregate release-hardening regression coverage in `tests/release-hardening.test.js`.
+- Storage bucket mutation authorization aligned with the canonical membership-aware administrator role (`isAdminRole`) rather than relying only on the auth-record role.
 
 ## Automated gate
 
@@ -24,13 +25,13 @@ The exact candidate head must pass:
 - `npm run build`
 - existing Evia integration workflows where triggered
 
-`tests/release-hardening.test.js` is included in `npm run test:authorization` and protects the final storage/compatibility boundaries.
+`tests/release-hardening.test.js` is included in `npm run test:authorization` and protects the final storage/compatibility and canonical-admin boundaries.
 
 ### Verified behavior-head evidence
 
 Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed the full authorization/regression suite, production build, Evia V2 integration workflow and Evia webhook workflow on 2026-09-23. The deployment job was correctly skipped because this is a pull-request candidate, not an authorized production rollout.
 
-Documentation-only follow-up commits do not change that behavior, but the final PR head is still expected to receive its own normal CI run before the candidate is considered code-ready.
+A subsequent security review aligned storage bucket mutation authorization with the canonical membership-aware administrator definition. The final PR head therefore must pass the complete gate again before the candidate is considered code-ready.
 
 ## Physical gate
 
