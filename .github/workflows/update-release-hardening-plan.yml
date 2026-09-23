@@ -1,0 +1,109 @@
+name: Update release hardening execution plan
+
+on:
+  push:
+    branches:
+      - phase-5-release-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  update-plan:
+    if: github.event.head_commit.message == 'Trigger release hardening plan update'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-5-release-hardening
+          fetch-depth: 0
+      - name: Update execution plan
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/EXECUTION-PLAN.md')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              if old not in text:
+                  raise SystemExit(f'Expected plan text not found: {old[:100]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once('**Status date:** 2026-09-22', '**Status date:** 2026-09-23')
+
+          replace_once(
+          """- [ ] Password-reset flow needs a fresh end-to-end regression check.\n- [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.\n- [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.""",
+          """- [ ] P0.4 password-reset hardening is implemented and regression-tested on the prepared release candidate, but it is **not deployed/production-accepted**; the logged-out physical reset stories remain pending.\n- [ ] Phase 1 renter-integrity hardening is implemented and regression-tested on the prepared release candidate, but it is **not deployed/production-accepted**; physical create/edit/association/deactivate/reactivate stories remain pending.\n- [ ] Phase 2 signature placement now restores the proven marker/AutoStamp send path while retaining the current OAuth flow, with automated placement coverage; **physical Evia placement/lifecycle acceptance remains pending**.\n- [ ] Phase 3-5 document/storage and compatibility cleanup is assembled on one release-hardening candidate with aggregate regression coverage; it is **not merged, deployed, or production-accepted**."""
+          )
+
+          replace_once(
+          '### P0.4 - Password reset regression\n\nScope:',
+          '''### P0.4 - Password reset regression — **IMPLEMENTATION PREPARED / NOT DEPLOYED**\n\nPrepared implementation evidence:\n\n- [x] Reset page validates emailed reset tokens before exposing the new-password form.\n- [x] Recovery reads remain non-cacheable and the anonymous reset route stays isolated from tenant/application initialization.\n- [x] Automated security coverage regression-locks atomic credential update, single-use token consumption and prior-session revocation.\n- [x] The dedicated draft implementation passed the full authorization/regression suite and production build before integration.\n- [ ] Physical acceptance: run QC-RH-01 and QC-RH-02 after P0.3 closes and the integrated candidate is intentionally deployed.\n\nScope:'''
+          )
+
+          replace_once(
+          '## Phase 1 - Tenant/rentee workflow integrity',
+          '## Phase 1 - Tenant/rentee workflow integrity — **IMPLEMENTATION PREPARED / NOT DEPLOYED**'
+          )
+          replace_once(
+          '**Goal:** Treat Tenants as the renter/lessee workflow and Team as the staff/contractor workflow.\n\nWork in this order:',
+          '''**Goal:** Treat Tenants as the renter/lessee workflow and Team as the staff/contractor workflow.\n\nPrepared implementation evidence:\n\n- [x] Renter list/details/form now use canonical server relationship state rather than browser/session-storage fallback state.\n- [x] Structured property/unit associations are persisted through the renter API and production migration path.\n- [x] Deactivate/reactivate behavior is server-canonical and regression-covered.\n- [x] Existing-identity attachment and tenant/staff/platform-admin boundaries are covered by the authorization/membership suite.\n- [ ] Physical acceptance remains: QC-RH-03 through QC-RH-05.\n\nWork in this order:'''
+          )
+
+          replace_once(
+          '## Phase 2 - Agreement generation and digital signing',
+          '## Phase 2 - Agreement generation and digital signing — **IMPLEMENTATION PREPARED / NOT DEPLOYED**'
+          )
+          replace_once(
+          '**Goal:** Satisfy the business requirement: generate the agreement, place landlord/tenant signatures correctly, retain the signed document, and advance agreement lifecycle state.\n\nWork in this order:',
+          '''**Goal:** Satisfy the business requirement: generate the agreement, place landlord/tenant signatures correctly, retain the signed document, and advance agreement lifecycle state.\n\nPrepared implementation evidence:\n\n- [x] The current Evia OAuth/token flow is retained.\n- [x] Signature sending is routed back through the proven legacy type-3 AutoStamp/marker placement behavior rather than replacing marker placement with a new coordinate guess.\n- [x] Automated placement regression coverage is part of `npm run test:authorization`.\n- [x] Existing Evia OAuth/signing/webhook workflows passed on the prepared signing branch and the integrated candidate preserves them.\n- [ ] Physical acceptance remains: QC-RH-06 and QC-RH-07.\n\nWork in this order:'''
+          )
+
+          replace_once(
+          '## Phase 3 - Document/storage domain cleanup',
+          '## Phase 3 - Document/storage domain cleanup — **IMPLEMENTATION PREPARED / NOT DEPLOYED**'
+          )
+          replace_once('- [ ] Review `DocumentService` / agreement document storage.', '- [x] Review `DocumentService` / agreement document storage.')
+          replace_once('- [ ] Route agreement document storage through explicit KH Rentals storage APIs.', '- [x] Route agreement document storage through explicit KH Rentals storage APIs.')
+          replace_once('- [ ] Preserve tenant-scoped R2 paths and cross-tenant protections.', '- [x] Preserve tenant-scoped R2 paths and cross-tenant protections.')
+          replace_once('- [ ] Remove only the compatibility dependency for this domain.', '- [x] Remove only the compatibility dependency for this domain.')
+          replace_once(
+          'Exit criteria: agreement/document storage no longer depends on the compatibility storage shape and signing behavior remains unchanged.',
+          'Exit criteria: agreement/document storage no longer depends on the compatibility storage shape and signing behavior remains unchanged. **Implementation is prepared and automated checks pass; physical QC-RH-08 remains before production acceptance.**'
+          )
+
+          replace_once(
+          '## Phase 4 - Remaining compatibility-client removal',
+          '## Phase 4 - Remaining compatibility-client removal — **IMPLEMENTATION PREPARED / NOT DEPLOYED**'
+          )
+          replace_once(
+          'Do **not** perform a repo-wide rewrite.',
+          '''Do **not** perform a repo-wide rewrite.\n\nPrepared domain-by-domain implementation:\n\n- [x] Payment-proof storage uses the explicit tenant storage API without changing billing lifecycle rules.\n- [x] Utility media uses the explicit tenant storage API.\n- [x] Maintenance card no longer reconstructs media URLs through the compatibility storage client.\n- [x] Admin/test storage tooling uses the explicit storage API; bucket mutation routes require administrator authorization; browser startup is read-only for storage provisioning.\n- [x] Legacy Evia signed-document persistence uses the explicit tenant storage API without changing OAuth/webhook/status behavior.\n- [x] After all domain consumers were removed, the obsolete `platformClient.storage` shim and its public storage aliases were retired on the integrated candidate.\n- [x] Aggregate regression prevents application source from reintroducing the retired storage shim.\n- [ ] Physical acceptance remains: QC-RH-09 through QC-RH-14.'''
+          )
+
+          replace_once(
+          '## Phase 5 - Product regression and release hardening',
+          '## Phase 5 - Product regression and release hardening — **CANDIDATE ASSEMBLED / NOT DEPLOYED**'
+          )
+          replace_once(
+          'After the core flows above are stable, run focused regression passes for Platform Admin, properties/units, billing/invoices/receipts, maintenance lifecycle, notifications/email, agreement cancellation/deletion, and authorization boundaries.',
+          '''After the core flows above are stable, run focused regression passes for Platform Admin, properties/units, billing/invoices/receipts, maintenance lifecycle, notifications/email, agreement cancellation/deletion, and authorization boundaries.\n\nPrepared candidate evidence:\n\n- [x] Behavior candidate assembled on `phase-5-release-hardening`; pre-document behavior SHA `55aa191468ec5f94de5e7f2217a5a22a437c2cf9`.\n- [x] P0.4, renter integrity, signing placement, document storage and all Phase 4 storage domains coexist on the same branch.\n- [x] Cross-branch integration exposed only the expected additive conflict in `tests/storage-delivery.test.js`; the test coverage was consolidated and product code merged cleanly.\n- [x] `tests/release-hardening.test.js` is wired into the full authorization/regression command and enforces the final compatibility/storage boundaries.\n- [x] Physical acceptance stories are defined in `docs/RELEASE-HARDENING-PHYSICAL-QC.md`.\n- [ ] Draft PR #116 must pass the exact-head full CI/build gate after documentation settles.\n- [ ] Do not merge/deploy PR #116 until P0.3 US-INV-01 through US-INV-09 pass.\n- [ ] After intentional candidate deployment, run QC-RH-01 through QC-RH-15 and record runtime proof before marking any prepared phase production-complete.'''
+          )
+
+          anchor = '# Parked backlog - do not interrupt the active phase'
+          section = '''# Prepared release-hardening candidate — **NOT PRODUCTION-ACCEPTED**\n\n- Draft PR: **#116** (`phase-5-release-hardening` -> `main`).\n- Behavior candidate before documentation-only follow-ups: `55aa191468ec5f94de5e7f2217a5a22a437c2cf9`.\n- This candidate intentionally contains P0.4 through Phase 5 prepared work so all code can be validated together before the final physical pass.\n- It does **not** supersede the active P0.3 production gate.\n- No candidate code is considered deployed merely because a PR workflow is green; production proof still requires Ready revision, exact public SHA, deterministic startup and MSSQL Ready.\n- Physical QC source of truth for the candidate: `docs/RELEASE-HARDENING-PHYSICAL-QC.md`.\n\n---\n\n'''
+          if section.splitlines()[0] not in text:
+              replace_once(anchor, section + anchor)
+
+          path.write_text(text)
+          PY
+      - name: Commit plan update and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/update-release-hardening-plan.yml
+          git add docs/EXECUTION-PLAN.md .github/workflows/update-release-hardening-plan.yml
+          git commit -m "Document prepared release hardening candidate"
+          git push origin HEAD:phase-5-release-hardening
