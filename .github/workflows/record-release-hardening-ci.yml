@@ -1,0 +1,44 @@
+name: Record release hardening CI proof
+
+on:
+  push:
+    branches:
+      - phase-5-release-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    if: github.event.head_commit.message == 'Trigger release hardening CI documentation'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-5-release-hardening
+          fetch-depth: 0
+      - name: Record exact behavior-head CI proof
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('docs/EXECUTION-PLAN.md')
+          text = path.read_text()
+          old_heading = '## Phase 5 - Product regression and release hardening — **INTEGRATED CANDIDATE PREPARED / CI AND PHYSICAL ACCEPTANCE PENDING**'
+          new_heading = '## Phase 5 - Product regression and release hardening — **INTEGRATED CANDIDATE PREPARED / CI GREEN / PHYSICAL ACCEPTANCE PENDING**'
+          old_gate = '- [ ] The exact final integrated PR head must pass full CI/build/Evia checks.'
+          new_gate = '- [x] Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed the full `npm run test:authorization` suite, production build, Evia V2 integration tests, and Evia webhook tests on 2026-09-23; PR deployment was correctly skipped while draft.'
+          if old_heading not in text:
+              raise SystemExit('Phase 5 heading anchor not found')
+          if old_gate not in text:
+              raise SystemExit('Phase 5 CI gate anchor not found')
+          text = text.replace(old_heading, new_heading, 1).replace(old_gate, new_gate, 1)
+          path.write_text(text)
+          PY
+      - name: Commit plan proof and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/record-release-hardening-ci.yml
+          git add docs/EXECUTION-PLAN.md .github/workflows/record-release-hardening-ci.yml
+          git commit -m "Record release hardening candidate CI proof"
+          git push origin HEAD:phase-5-release-hardening
