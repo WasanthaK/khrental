@@ -1,0 +1,57 @@
+name: Fix release candidate admin boundary
+
+on:
+  push:
+    branches:
+      - phase-5-release-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Trigger canonical admin boundary fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-5-release-hardening
+          fetch-depth: 0
+      - name: Align storage admin authorization with canonical membership role
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          router = Path('src/api/platform/router.js')
+          text = router.read_text()
+          old_import = "import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';\n"
+          new_import = old_import + "import { isAdminRole } from './permissionEngine.js';\n"
+          if "import { isAdminRole } from './permissionEngine.js';" not in text:
+              if old_import not in text:
+                  raise SystemExit('router import anchor not found')
+              text = text.replace(old_import, new_import, 1)
+
+          old_guard = """  const requireAdmin = (req, res, next) => {\n    if (String(req.user?.role || '').trim().toLowerCase() !== 'admin') {\n      res.status(403).json({ error: 'Administrator access is required.', code: 'ADMIN_ACCESS_REQUIRED' });\n      return;\n    }\n    next();\n  };\n"""
+          new_guard = """  const requireAdmin = (req, res, next) => {\n    if (!isAdminRole({ user: req.user, membership: req.membership })) {\n      res.status(403).json({ error: 'Administrator access is required.', code: 'ADMIN_ACCESS_REQUIRED' });\n      return;\n    }\n    next();\n  };\n"""
+          if old_guard not in text:
+              raise SystemExit('router admin guard anchor not found')
+          router.write_text(text.replace(old_guard, new_guard, 1))
+
+          test_file = Path('tests/release-hardening.test.js')
+          test = test_file.read_text()
+          anchor = "  assert.match(platformRouterSource, /router\\.delete\\('\\/storage\\/buckets\\/:bucket', requireAuthenticated, requireAdmin/);\n"
+          addition = anchor + "  assert.match(platformRouterSource, /!isAdminRole\\(\\{ user: req\\.user, membership: req\\.membership \\}\\)/);\n"
+          if addition not in test:
+              if anchor not in test:
+                  raise SystemExit('release test admin anchor not found')
+              test = test.replace(anchor, addition, 1)
+          test_file.write_text(test)
+          PY
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/fix-release-admin-boundary.yml
+          git add src/api/platform/router.js tests/release-hardening.test.js .github/workflows/fix-release-admin-boundary.yml
+          git commit -m "Use canonical admin role for storage mutations"
+          git push origin HEAD:phase-5-release-hardening
