@@ -265,7 +265,7 @@ Prepared domains on the integrated candidate:
 
 ---
 
-## Phase 5 - Product regression and release hardening — **INTEGRATED CANDIDATE PREPARED / CI AND PHYSICAL ACCEPTANCE PENDING**
+## Phase 5 - Product regression and release hardening — **INTEGRATED CANDIDATE PREPARED / CI GREEN / PHYSICAL ACCEPTANCE PENDING**
 
 After the core flows above are stable, run focused regression passes for Platform Admin, properties/units, billing/invoices/receipts, maintenance lifecycle, notifications/email, agreement cancellation/deletion, and authorization boundaries.
 
@@ -275,7 +275,7 @@ Prepared evidence:
 - [x] Storage-domain test additions were consolidated into one aggregate regression file.
 - [x] `tests/release-hardening.test.js` is wired into `npm run test:authorization`.
 - [x] `docs/RELEASE-HARDENING-ACCEPTANCE-STORIES.md` defines RH-01 through RH-16.
-- [ ] The exact final integrated PR head must pass full CI/build/Evia checks.
+- [x] Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed the full `npm run test:authorization` suite, production build, Evia V2 integration tests, and Evia webhook tests on 2026-09-23; PR deployment was correctly skipped while draft.
 - [ ] RH-01 through RH-15 must pass before production acceptance.
 - [ ] RH-16 must pass after any authorized production deployment.
 
