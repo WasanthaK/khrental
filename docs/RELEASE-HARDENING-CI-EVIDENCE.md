@@ -4,7 +4,7 @@
 **Draft PR:** #116  
 **Branch:** `phase-5-release-hardening`
 
-## Last behavior-changing candidate validated
+## Previously validated behavior head
 
 Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed:
 
@@ -13,7 +13,11 @@ Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed:
 - Evia V2 OAuth/signing integration workflow;
 - Evia webhook workflow.
 
-The PR deployment job was skipped as intended because the release-hardening PR remains draft and is blocked by the P0.3 physical acceptance gate.
+## Current behavior head under exact-head validation
+
+Behavior head `4259e4880bab39e0da7b67676f0a250a6a733cfd` additionally aligns storage bucket mutation authorization with the canonical tenant administrator role check (`isAdminRole({ user, membership })`) and regression-locks that boundary. Because the code changed after the previous green run, this head and its user-authored documentation descendant must pass the same full CI/build/Evia gates before the candidate is considered implementation-validated.
+
+The PR deployment job must remain skipped while the release-hardening PR is draft and blocked by the P0.3 physical acceptance gate.
 
 ## Release rule
 
