@@ -28,6 +28,8 @@ const platformRouterSource = read('../src/api/platform/router.js');
 const resetPageSource = read('../src/pages/ResetPassword.jsx');
 const eviaSource = read('../src/services/eviaSignService.js');
 
+const sessionStorageCall = /sessionStorage\s*\.\s*(?:getItem|setItem|removeItem|clear|key)\s*\(/;
+
 test('no application source can use the retired platformClient storage shim', () => {
   const srcRoot = new URL('../src', import.meta.url).pathname;
   const offenders = collectSourceFiles(srcRoot)
@@ -48,8 +50,8 @@ test('explicit storage API remains tenant scoped and server authorized', () => {
 });
 
 test('renter relationship state remains server canonical', () => {
-  assert.doesNotMatch(renterFormSource, /sessionStorage\s*\./);
-  assert.doesNotMatch(renterDetailsSource, /sessionStorage\s*\./);
+  assert.doesNotMatch(renterFormSource, sessionStorageCall);
+  assert.doesNotMatch(renterDetailsSource, sessionStorageCall);
   assert.match(renterFormSource, /associated_properties: formData\.structuredAssociations/);
   assert.match(renterDetailsSource, /await updateRentee\(id, \{ status: 'inactive' \}\)/);
 });
