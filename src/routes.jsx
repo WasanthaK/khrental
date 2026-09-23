@@ -211,7 +211,7 @@ const routes = [
       { path: 'register', element: <PublicRoute><Register /></PublicRoute> },
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'setup-account', element: <PublicRoute><SetupAccount /></PublicRoute> },
-      { path: 'accept-invite', element: <PublicRoute><AcceptInvite /></PublicRoute> },
+      { path: 'accept-invite', element: <AcceptInvite /> },
       { path: 'update-password', element: <PublicRoute><UpdatePassword /></PublicRoute> },
       { path: 'account-setup', element: <PublicRoute><AccountSetup /></PublicRoute> },
       { path: 'auth/callback', element: <AuthCallback /> },
