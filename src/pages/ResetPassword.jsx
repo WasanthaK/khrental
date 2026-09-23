@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { platform as platformClient } from '../services/platformClient';
 import { getApiBaseUrl } from '../utils/env';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+
+const RESET_TOKEN_MESSAGES = {
+  expired: 'This password reset link has expired. Request a new reset link.',
+  used: 'This password reset link has already been used. Request a new reset link if you still need to change your password.',
+  revoked: 'This password reset link has been replaced by a newer request. Use the newest reset email.',
+  stale: 'This password reset link is no longer valid. Request a new reset link.',
+  invalid: 'This password reset link is invalid. Request a new reset link.'
+};
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -15,7 +23,65 @@ const ResetPassword = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [resetComplete, setResetComplete] = useState(false);
+  const [tokenValidation, setTokenValidation] = useState({
+    checking: isRedeemMode,
+    valid: !isRedeemMode,
+    state: isRedeemMode ? null : 'not_required'
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isRedeemMode) {
+      setTokenValidation({ checking: false, valid: true, state: 'not_required' });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const validateToken = async () => {
+      try {
+        setTokenValidation({ checking: true, valid: false, state: null });
+        setError('');
+
+        const response = await fetch(
+          `${getApiBaseUrl()}/api/platform/auth/reset-password/validate?token=${encodeURIComponent(token)}`,
+          {
+            method: 'GET',
+            headers: { Accept: 'application/json' }
+          }
+        );
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Unable to validate this password reset link.');
+        }
+
+        const result = payload?.data || {};
+        if (cancelled) return;
+
+        if (!result.valid) {
+          const state = result.state || 'invalid';
+          setTokenValidation({ checking: false, valid: false, state });
+          setError(RESET_TOKEN_MESSAGES[state] || RESET_TOKEN_MESSAGES.invalid);
+          return;
+        }
+
+        setTokenValidation({ checking: false, valid: true, state: 'valid' });
+      } catch (validationError) {
+        if (cancelled) return;
+        setTokenValidation({ checking: false, valid: false, state: 'error' });
+        setError(validationError.message || 'Unable to validate this password reset link.');
+      }
+    };
+
+    validateToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRedeemMode, token]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -46,6 +112,11 @@ const ResetPassword = () => {
 
   const handleSetNewPassword = async (e) => {
     e.preventDefault();
+
+    if (!tokenValidation.valid) {
+      setError('This password reset link is not valid. Request a new reset link.');
+      return;
+    }
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
@@ -96,6 +167,8 @@ const ResetPassword = () => {
     }
   };
 
+  const canShowRedeemForm = isRedeemMode && !tokenValidation.checking && tokenValidation.valid;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -110,6 +183,12 @@ const ResetPassword = () => {
           </p>
         </div>
 
+        {tokenValidation.checking && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded" role="status">
+            Checking your password reset link...
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
             <span className="block sm:inline">{error}</span>
@@ -122,7 +201,7 @@ const ResetPassword = () => {
           </div>
         )}
 
-        {!resetComplete && (
+        {!resetComplete && ((!isRedeemMode) || canShowRedeemForm) && (
           <form className="mt-8 space-y-6" onSubmit={isRedeemMode ? handleSetNewPassword : handleResetPassword}>
             {isRedeemMode ? (
               <div className="rounded-md shadow-sm space-y-3">
@@ -188,6 +267,18 @@ const ResetPassword = () => {
               </button>
             </div>
           </form>
+        )}
+
+        {isRedeemMode && !tokenValidation.checking && !tokenValidation.valid && (
+          <div className="text-sm text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/reset-password', { replace: true })}
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              Request a New Reset Link
+            </button>
+          </div>
         )}
 
         <div className="text-sm text-center">
