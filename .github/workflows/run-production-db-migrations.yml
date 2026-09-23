@@ -28,6 +28,7 @@ on:
           - 20260920_01_add_tenancy_billing_adjustments
           - 20260920_02_create_platform_admins
           - 20260920_03_backfill_legacy_app_user_memberships
+          - 20260922_01_create_rentee_property_assignments
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false
@@ -35,6 +36,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
   id-token: write
 
 concurrency:
@@ -164,7 +166,7 @@ jobs:
           else
             echo "status=container" >> "$GITHUB_OUTPUT"
             echo "Direct GitHub-runner SQL access is unavailable (probe exit ${probe_exit})."
-            echo "Read-only plan mode will use the serving Container App's restricted runtime identity instead."
+            echo "The migration workflow will keep plan mode read-only and use an isolated in-network job for an explicitly confirmed apply."
           fi
 
       - name: Run migration directly when privileged SQL access is available
@@ -187,17 +189,8 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Refuse apply without direct privileged migration access
-        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
-        shell: bash
-        run: |
-          echo "The GitHub-hosted runner does not currently have authenticated privileged production SQL access." >&2
-          echo "No firewall rule will be opened and the restricted web identity will not be granted DDL permission." >&2
-          echo "Apply requires a dedicated privileged migration executor inside the production network." >&2
-          exit 1
-
       - name: Wait for this commit to be the serving Container App revision
-        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
+        if: steps.db_probe.outputs.status == 'container'
         shell: bash
         run: |
           set -euo pipefail
@@ -219,8 +212,165 @@ jobs:
             sleep 8
           done
 
-          echo "Container App did not begin serving ${GITHUB_SHA} within the migration-plan wait window." >&2
+          echo "Container App did not begin serving ${GITHUB_SHA} within the migration wait window." >&2
           exit 1
+
+      - name: Apply migration in isolated Container Apps Job
+        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
+        shell: bash
+        env:
+          MSSQL_MIGRATION_USER: ${{ secrets.MSSQL_MIGRATION_USER }}
+          MSSQL_MIGRATION_PASSWORD: ${{ secrets.MSSQL_MIGRATION_PASSWORD }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          job_name="khrental-db-migrate"
+          environment_id=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.environmentId \
+            -o tsv)
+          image=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].image" \
+            -o tsv)
+
+          if [ -z "$environment_id" ] || [ "$environment_id" = "None" ]; then
+            echo "Unable to resolve the production Container Apps environment." >&2
+            exit 1
+          fi
+          if [ -z "$image" ] || [ "$image" = "None" ]; then
+            echo "Unable to resolve the serving production image." >&2
+            exit 1
+          fi
+          if ! echo "$image" | grep -Fq ":${GITHUB_SHA}"; then
+            echo "Refusing migration: serving image does not match workflow SHA. image=$image sha=${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+          az containerapp job delete \
+            --name "$job_name" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --yes --output none 2>/dev/null || true
+
+          cleanup() {
+            az containerapp job delete \
+              --name "$job_name" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --yes --output none 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          secret_args=()
+          env_args=(
+            "MSSQL_SERVER=$MSSQL_SERVER"
+            "MSSQL_DATABASE=$MSSQL_DATABASE"
+          )
+
+          if [ -n "${MSSQL_MIGRATION_USER:-}" ] || [ -n "${MSSQL_MIGRATION_PASSWORD:-}" ]; then
+            if [ -z "${MSSQL_MIGRATION_USER:-}" ] || [ -z "${MSSQL_MIGRATION_PASSWORD:-}" ]; then
+              echo "Both MSSQL_MIGRATION_USER and MSSQL_MIGRATION_PASSWORD are required when SQL migration credentials are configured." >&2
+              exit 1
+            fi
+            echo "::add-mask::$MSSQL_MIGRATION_USER"
+            echo "::add-mask::$MSSQL_MIGRATION_PASSWORD"
+            secret_args+=(
+              "mssql-migration-user=$MSSQL_MIGRATION_USER"
+              "mssql-migration-password=$MSSQL_MIGRATION_PASSWORD"
+            )
+            env_args+=(
+              "MSSQL_MIGRATION_USER=secretref:mssql-migration-user"
+              "MSSQL_MIGRATION_PASSWORD=secretref:mssql-migration-password"
+            )
+          else
+            if [ -z "${MSSQL_ACCESS_TOKEN:-}" ]; then
+              echo "No privileged migration authentication is available." >&2
+              exit 1
+            fi
+            secret_args+=("mssql-access-token=$MSSQL_ACCESS_TOKEN")
+            env_args+=("MSSQL_ACCESS_TOKEN=secretref:mssql-access-token")
+          fi
+
+          echo "Using an isolated in-network migration job; no firewall rule or web-runtime DDL elevation is required."
+
+          az containerapp job create \
+            --name "$job_name" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --environment "$environment_id" \
+            --trigger-type Manual \
+            --replica-timeout 900 \
+            --replica-retry-limit 0 \
+            --replica-completion-count 1 \
+            --parallelism 1 \
+            --image "$image" \
+            --cpu 0.5 \
+            --memory 1.0Gi \
+            --command "/bin/sh" \
+            --args "-c" "node scripts/run-production-migrations.mjs --mode=apply --through=${MIGRATION_THROUGH}" \
+            --registry-server ghcr.io \
+            --registry-username "$GHCR_USERNAME" \
+            --registry-password "$GHCR_TOKEN" \
+            --secrets "${secret_args[@]}" \
+            --env-vars "${env_args[@]}" \
+            --output none
+
+          execution_name=$(az containerapp job start \
+            --name "$job_name" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query name -o tsv)
+
+          if [ -z "$execution_name" ]; then
+            echo "Container Apps migration job did not return an execution name." >&2
+            exit 1
+          fi
+
+          final_status=""
+          for attempt in $(seq 1 120); do
+            status=$(az containerapp job execution show \
+              --name "$job_name" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status -o tsv 2>/dev/null || true)
+            case "${status,,}" in
+              succeeded) final_status="succeeded"; break ;;
+              failed)
+                echo "Container Apps migration execution failed: $execution_name" >&2
+                exit 1
+                ;;
+            esac
+            echo "Waiting for migration execution $execution_name (status=${status:-pending}, attempt $attempt/120)..."
+            sleep 5
+          done
+
+          if [ "$final_status" != "succeeded" ]; then
+            echo "Migration execution did not complete successfully within the wait window." >&2
+            exit 1
+          fi
+
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+
+          echo "Migration job succeeded. Verifying the applied ledger/schema read-only from ready revision: $ready_revision"
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command \"/bin/sh -c 'MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true node scripts/run-production-migrations.mjs --mode=plan --through=${MIGRATION_THROUGH}'\""
+          script -q -e -c "$exec_command" /dev/null | tee migration-output.txt
+
+          {
+            echo '### Production database migration result'
+            echo
+            echo 'Applied through an isolated Container Apps Job because the GitHub-hosted runner could not reach production SQL directly.'
+            echo 'The web runtime identity remained read-only for migration planning.'
+            echo
+            echo '```text'
+            cat migration-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run read-only migration plan inside the Container App
         if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
