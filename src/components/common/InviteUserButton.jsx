@@ -18,9 +18,11 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
 
   const effectiveStatus = invitationStatus || internalInvitationStatus.status;
   const actionLabel = getInvitationActionLabel(effectiveStatus) || 'Invitation Accepted';
-  const actionUnavailable = effectiveStatus === 'registered';
+  const actionUnavailable = ['registered', 'setup_incomplete'].includes(effectiveStatus);
 
   const handleInvite = async () => {
+    if (actionUnavailable) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -58,6 +60,9 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
         type="button"
         onClick={handleInvite}
         disabled={loading || actionUnavailable}
+        title={effectiveStatus === 'setup_incomplete'
+          ? 'This account was claimed but setup was not fully verified. Use account recovery instead of issuing another invitation.'
+          : undefined}
         className={`
           ${sizeClasses[size] || sizeClasses.md}
           ${fullWidth ? 'w-full' : ''}

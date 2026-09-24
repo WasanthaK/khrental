@@ -199,6 +199,14 @@ export const createInvitationRouter = () => {
         }
       }
 
+      // Persist a non-secret verification marker only after the credential has
+      // passed the same verifier used by normal sign-in. This lets lifecycle
+      // status distinguish a usable invitation-created account from legacy or
+      // partially written auth records without storing password material.
+      record = await updateAuthRecord(record, {
+        metadata: { invitation_registration_verified: true }
+      });
+
       const establishSession = req.body?.establishSession !== false;
       const session = establishSession ? await buildSession(record) : null;
       if (session) {

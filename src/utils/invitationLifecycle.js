@@ -12,7 +12,7 @@ export const getInvitationActionLabel = (status) => {
   }
 
   if (normalized === 'setup_incomplete') {
-    return 'Resend Invitation';
+    return 'Account Recovery Required';
   }
 
   if (['pending', 'expired', 'revoked', 'invited'].includes(normalized)) {
