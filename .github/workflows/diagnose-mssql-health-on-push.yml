@@ -1,0 +1,97 @@
+name: Diagnose production MSSQL health
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-mssql-health-on-push.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Capture MSSQL health and revision logs
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -u
+            az extension add --name containerapp --upgrade --yes >/dev/null
+
+            fqdn=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.ingress.fqdn -o tsv)
+
+            latest_revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestRevisionName -o tsv)
+
+            ready_revision=$(az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName -o tsv)
+
+            echo "FQDN: $fqdn"
+            echo "Latest revision: $latest_revision"
+            echo "Latest ready revision: $ready_revision"
+
+            echo "Revision state:"
+            az containerapp revision show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" \
+              -o jsonc || true
+
+            echo "Container-level health:"
+            curl -sS -i "https://${fqdn}/api/health" || true
+            echo
+
+            echo "MSSQL health response including body:"
+            curl -sS -i "https://${fqdn}/api/mssql/health" || true
+            echo
+
+            echo "System logs:"
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --type system \
+              --tail 100 \
+              --format text || true
+
+            replica=$(az containerapp replica list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --query '[0].name' -o tsv 2>/dev/null || true)
+
+            if [ -n "$replica" ]; then
+              echo "Console logs for replica $replica:"
+              az containerapp logs show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --replica "$replica" \
+                --type console \
+                --tail 200 \
+                --format text || true
+            fi
