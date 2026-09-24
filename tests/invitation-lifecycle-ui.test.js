@@ -15,6 +15,7 @@ const inviteButtonSource = readFileSync(new URL('../src/components/common/Invite
 const teamCardSource = readFileSync(new URL('../src/components/team/TeamMemberCard.jsx', import.meta.url), 'utf8');
 const renteeCardSource = readFileSync(new URL('../src/components/rentees/RenteeCard.jsx', import.meta.url), 'utf8');
 const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
+const acceptInviteSource = readFileSync(new URL('../src/pages/AcceptInvite.jsx', import.meta.url), 'utf8');
 const badgeSource = readFileSync(new URL('../src/components/common/InvitationStatusBadge.jsx', import.meta.url), 'utf8');
 const routesSource = readFileSync(new URL('../src/routes.jsx', import.meta.url), 'utf8');
 
@@ -115,8 +116,17 @@ test('renter details and badge cannot suppress or replace canonical status', () 
   assert.match(badgeSource, /pending: 'Invitation Pending'/);
 });
 
-
 test('secure invitation redemption is not swallowed by an existing authenticated browser session', () => {
   assert.match(routesSource, /path: 'accept-invite', element: <AcceptInvite \/>/);
   assert.doesNotMatch(routesSource, /path: 'accept-invite', element: <PublicRoute><AcceptInvite \/><\/PublicRoute>/);
+});
+
+test('secure invitation redemption preserves a different existing browser session', () => {
+  assert.match(acceptInviteSource, /platformClient\.auth\.getSession\(\)/);
+  assert.match(acceptInviteSource, /shouldPreserveExistingSession\(existingSession, invitation\.email\)/);
+  assert.match(acceptInviteSource, /if \(preserveSession\) \{[\s\S]*setPreservedExistingSession\(true\);[\s\S]*setSuccess\(true\);[\s\S]*return;/);
+
+  const preserveBlock = acceptInviteSource.match(/if \(preserveSession\) \{[\s\S]*?\n      \}/)?.[0] || '';
+  assert.doesNotMatch(preserveBlock, /signInWithPassword/);
+  assert.match(acceptInviteSource, /Your existing signed-in account was kept active in this browser/);
 });
