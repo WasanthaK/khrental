@@ -26,8 +26,10 @@ test('invitation action labels follow canonical lifecycle state', () => {
   assert.equal(getInvitationActionLabel('pending'), 'Resend Invitation');
   assert.equal(getInvitationActionLabel('expired'), 'Resend Invitation');
   assert.equal(getInvitationActionLabel('revoked'), 'Resend Invitation');
+  assert.equal(getInvitationActionLabel('setup_incomplete'), 'Resend Invitation');
   assert.equal(getInvitationActionLabel('registered'), null);
   assert.equal(isRegisteredInvitationStatus('REGISTERED'), true);
+  assert.equal(isRegisteredInvitationStatus('setup_incomplete'), false);
   assert.equal(shouldPollInvitationStatus('pending'), true);
   assert.equal(shouldPollInvitationStatus('registered'), false);
 });
@@ -115,6 +117,7 @@ test('renter details and badge cannot suppress or replace canonical status', () 
   assert.doesNotMatch(badgeSource, /checkUserAuthStatus|userManagement|useEffect/);
   assert.match(badgeSource, /registered: 'Registered'/);
   assert.match(badgeSource, /pending: 'Invitation Pending'/);
+  assert.match(badgeSource, /setup_incomplete: 'Setup Incomplete'/);
 });
 
 test('secure invitation redemption is not swallowed by an existing authenticated browser session', () => {
