@@ -221,7 +221,7 @@ test('SendGrid rejection never reads or propagates the provider response body', 
   await assert.rejects(
     () => sendViaSendGrid({
       apiKey: 'test-key',
-      sender: { email: 'recipient@example.com' },
+      sender: { email: 'sender@example.com' },
       to: 'recipient@example.com',
       subject: 'Invitation',
       html: '<p>private invitation</p>',
