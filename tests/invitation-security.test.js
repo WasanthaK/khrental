@@ -111,15 +111,56 @@ test('shared invitation service uses explicit KH Rentals APIs without compatibil
   assert.match(invitationServiceSource, /\/api\/mssql\/app-users\/\$\{encodeURIComponent\(userId\)\}/);
 });
 
-test('canonical invitation status distinguishes pending, expired, revoked and registered', () => {
+test('canonical invitation status requires complete auth linkage before registered', () => {
   const now = new Date('2026-09-22T00:00:00.000Z');
   const derive = invitationStatusInternals.deriveInvitationStatus;
-  assert.equal(derive({ user: {}, invitation: null, now }), 'not_invited');
-  assert.equal(derive({ user: {}, invitation: { expires_at: '2026-09-23T00:00:00.000Z' }, now }), 'pending');
-  assert.equal(derive({ user: {}, invitation: { expires_at: '2026-09-21T23:59:59.000Z' }, now }), 'expired');
-  assert.equal(derive({ user: {}, invitation: { expires_at: '2026-09-23T00:00:00.000Z', revoked_at: '2026-09-21T00:00:00.000Z' }, now }), 'revoked');
-  assert.equal(derive({ user: { auth_id: 'auth-user' }, invitation: null, now }), 'registered');
-  assert.equal(derive({ user: {}, invitation: { accepted_at: '2026-09-21T20:00:00.000Z' }, now }), 'registered');
+  const user = {
+    id: 'app-user',
+    auth_id: 'auth-user',
+    email: 'person@example.com'
+  };
+  const auth = {
+    id: 'auth-row',
+    auth_id: 'auth-user',
+    app_user_id: 'app-user',
+    email: 'person@example.com',
+    has_credential: 1
+  };
+
+  assert.equal(derive({ user: {}, auth: null, invitation: null, now }), 'not_invited');
+  assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-23T00:00:00.000Z' }, now }), 'pending');
+  assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-21T23:59:59.000Z' }, now }), 'expired');
+  assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-23T00:00:00.000Z', revoked_at: '2026-09-21T00:00:00.000Z' }, now }), 'revoked');
+  assert.equal(derive({ user, auth, invitation: null, now }), 'registered');
+
+  // Invitation acceptance is historical evidence only. It does not prove that
+  // a usable authentication identity exists.
+  assert.equal(
+    derive({ user: { id: 'app-user', email: 'person@example.com' }, auth: null, invitation: { accepted_at: '2026-09-21T20:00:00.000Z' }, now }),
+    'setup_incomplete'
+  );
+  assert.equal(derive({ user, auth: null, invitation: null, now }), 'setup_incomplete');
+  assert.equal(
+    derive({
+      user: { id: 'app-user', email: 'person@example.com' },
+      auth: { ...auth, auth_id: 'orphan-auth' },
+      invitation: null,
+      now
+    }),
+    'setup_incomplete'
+  );
+});
+
+test('canonical registration completeness requires matching identity, app-user, email and credential', () => {
+  const complete = invitationStatusInternals.isAuthRegistrationComplete;
+  const user = { id: 'app-user', auth_id: 'auth-user', email: 'person@example.com' };
+  const auth = { id: 'auth-row', auth_id: 'auth-user', app_user_id: 'app-user', email: 'person@example.com', has_credential: 1 };
+
+  assert.equal(complete({ user, auth }), true);
+  assert.equal(complete({ user, auth: { ...auth, has_credential: 0 } }), false);
+  assert.equal(complete({ user, auth: { ...auth, app_user_id: 'different-app-user' } }), false);
+  assert.equal(complete({ user, auth: { ...auth, auth_id: 'different-auth-user' } }), false);
+  assert.equal(complete({ user, auth: { ...auth, email: 'different@example.com' } }), false);
 });
 
 test('successful redemption persists auth linkage and accepted timestamp before commit', () => {
@@ -134,9 +175,12 @@ test('successful redemption persists auth linkage and accepted timestamp before 
   assert.ok(appUserUpdate >= 0 && invitationUpdate > appUserUpdate && commit > invitationUpdate);
 });
 
-test('canonical invitation status projection never selects invitation token material', () => {
+test('canonical invitation status projection verifies auth linkage without exposing credential material', () => {
+  assert.match(invitationStatusSource, /FROM dbo\.auth_users/);
+  assert.match(invitationStatusSource, /registrationComplete/);
   assert.doesNotMatch(invitationStatusSource, /token_hash/);
   assert.doesNotMatch(invitationStatusSource, /SELECT[\s\S]*\btoken\b/i);
+  assert.doesNotMatch(invitationStatusSource, /passwordHash|passwordSalt/);
 });
 
 test('email delivery log is allow-listed and excludes sensitive message fields', () => {

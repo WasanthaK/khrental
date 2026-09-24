@@ -10,6 +10,7 @@ const InvitationStatusBadge = ({ status = 'unknown', hideLabel = false }) => {
     pending: 'bg-blue-100 text-blue-800',
     expired: 'bg-amber-100 text-amber-800',
     revoked: 'bg-gray-100 text-gray-700',
+    setup_incomplete: 'bg-red-100 text-red-800',
     registered: 'bg-green-100 text-green-800',
     error: 'bg-red-100 text-red-800'
   };
@@ -23,6 +24,7 @@ const InvitationStatusBadge = ({ status = 'unknown', hideLabel = false }) => {
     pending: 'Invitation Pending',
     expired: 'Invitation Expired',
     revoked: 'Invitation Superseded',
+    setup_incomplete: 'Setup Incomplete',
     registered: 'Registered',
     error: 'Error'
   };
