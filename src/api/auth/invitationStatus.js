@@ -4,7 +4,17 @@ const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
 const normalizeId = (value) => String(value || '').trim().toLowerCase();
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
-const isAuthRegistrationComplete = ({ user, auth }) => Boolean(
+const parseMetadata = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return {};
+  }
+};
+
+const isAuthRegistrationStructurallyComplete = ({ user, auth }) => Boolean(
   user?.id &&
   user?.auth_id &&
   auth?.id &&
@@ -16,12 +26,22 @@ const isAuthRegistrationComplete = ({ user, auth }) => Boolean(
   normalizeEmail(user.email) === normalizeEmail(auth.email)
 );
 
+const isAuthRegistrationComplete = ({ user, auth }) => {
+  if (!isAuthRegistrationStructurallyComplete({ user, auth })) return false;
+
+  const metadata = parseMetadata(auth.metadata);
+  return Boolean(
+    auth.last_login_at ||
+    metadata.invitation_registration_verified === true
+  );
+};
+
 const deriveInvitationStatus = ({ user, auth = null, invitation, now = new Date() }) => {
   if (isAuthRegistrationComplete({ user, auth })) return 'registered';
 
-  // An accepted invitation or partial auth linkage is evidence that setup was
-  // attempted, but it must never be presented as Registered unless the actual
-  // auth_users credential is present and correctly linked to app_users.
+  // An accepted invitation or partial/unverified auth linkage is evidence that
+  // setup was attempted, but it must never be presented as Registered until
+  // account access has actually been verified by the server.
   if (invitation?.accepted_at || user?.auth_id || auth?.id) return 'setup_incomplete';
 
   if (!invitation) return 'not_invited';
@@ -32,9 +52,10 @@ const deriveInvitationStatus = ({ user, auth = null, invitation, now = new Date(
 
 /**
  * Read-only projection of the invitation ledger for UI/status use.
- * Deliberately excludes invitation credential material, password material and
- * message content. Registration is considered complete only when the app-user
- * and auth-user records are mutually linked and a password credential exists.
+ * Deliberately excludes invitation token material, password material and
+ * message content. Registration is complete only when the app-user/auth-user
+ * linkage is valid and account access has been verified by invitation setup or
+ * a successful login.
  */
 export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = new Date() }) => {
   if (!tenantId || !appUserId) return null;
@@ -60,6 +81,8 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
       a.auth_id,
       a.app_user_id,
       a.email,
+      a.metadata,
+      a.last_login_at,
       CASE
         WHEN a.password_hash IS NULL OR LTRIM(RTRIM(a.password_hash)) = '' THEN 0
         WHEN a.password_algorithm IS NULL OR LTRIM(RTRIM(a.password_algorithm)) = '' THEN 0
@@ -97,6 +120,7 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
     ORDER BY i.createdat DESC, i.id DESC
   `, { tenantId, appUserId });
 
+  const authStructureComplete = isAuthRegistrationStructurallyComplete({ user, auth });
   const registrationComplete = isAuthRegistrationComplete({ user, auth });
   const status = deriveInvitationStatus({ user, auth, invitation, now });
 
@@ -106,6 +130,7 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
     auth_id: user.auth_id || null,
     invited: Boolean(invitation),
     status,
+    authStructureComplete,
     registrationComplete,
     invitationId: invitation?.id || null,
     invitedAt: invitation?.createdat || null,
@@ -118,5 +143,6 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
 export const invitationStatusInternals = {
   deriveInvitationStatus,
   isAuthRegistrationComplete,
+  isAuthRegistrationStructurallyComplete,
   normalizeStatus
 };
