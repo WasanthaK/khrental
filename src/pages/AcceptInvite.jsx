@@ -17,6 +17,14 @@ const readResponse = async (response) => {
 
 const invitationApiUrl = (path) => `${getApiBaseUrl()}${path}`;
 
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+
+const shouldPreserveExistingSession = (session, invitationEmail) => {
+  const existingEmail = normalizeEmail(session?.user?.email);
+  const invitedEmail = normalizeEmail(invitationEmail);
+  return Boolean(session && existingEmail && invitedEmail && existingEmail !== invitedEmail);
+};
+
 const getRoleRedirect = (role) => (
   String(role || '').trim().toLowerCase() === 'rentee' ? '/rentee' : '/dashboard'
 );
@@ -30,6 +38,7 @@ const AcceptInvite = () => {
   const [error, setError] = useState(null);
   const [invitation, setInvitation] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [preservedExistingSession, setPreservedExistingSession] = useState(false);
 
   const token = new URLSearchParams(location.search).get('token') || '';
 
@@ -103,6 +112,14 @@ const AcceptInvite = () => {
       setLoading(true);
       setError(null);
 
+      // Preserve any different account that is already signed in to this
+      // browser. Invitation redemption is server-side and must not silently
+      // replace an administrator/staff session just because the email link was
+      // opened in the same browser profile.
+      const { data: existingSessionData } = await platformClient.auth.getSession();
+      const existingSession = existingSessionData?.session || null;
+      const preserveSession = shouldPreserveExistingSession(existingSession, invitation.email);
+
       const redeemResponse = await fetch(
         invitationApiUrl('/api/platform/auth/invitations/redeem'),
         {
@@ -114,8 +131,15 @@ const AcceptInvite = () => {
       const redeemPayload = await readResponse(redeemResponse);
       const redeemedInvitation = redeemPayload?.data?.invitation || {};
 
-      // Use the normal client sign-in path after atomic redemption so the
-      // browser stores the session in the same place as every other login.
+      if (preserveSession) {
+        setPreservedExistingSession(true);
+        setSuccess(true);
+        toast.success('Account setup completed successfully!');
+        return;
+      }
+
+      // With no different browser session to protect, use the normal sign-in
+      // path so the invited user lands in the standard persisted session.
       const { error: signInError } = await platformClient.auth.signInWithPassword({
         email: invitation.email,
         password
@@ -178,7 +202,11 @@ const AcceptInvite = () => {
           <div className="text-center">
             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
               <strong className="font-bold">Success! </strong>
-              <span className="block sm:inline">Your account has been set up successfully.</span>
+              <span className="block sm:inline">
+                {preservedExistingSession
+                  ? 'The invited account has been created. Your existing signed-in account was kept active in this browser. Use a private/incognito window or sign out before signing in as the invited user.'
+                  : 'Your account has been set up successfully.'}
+              </span>
             </div>
           </div>
         </div>
