@@ -1,0 +1,132 @@
+name: Diagnose Container Apps revision
+
+on:
+  workflow_dispatch:
+    inputs:
+      restart_latest:
+        description: 'Restart the latest revision before checking it'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  diagnose:
+    name: inspect production revision
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Inspect latest revision
+        shell: bash
+        env:
+          RESTART_LATEST: ${{ inputs.restart_latest }}
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          latest_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestRevisionName -o tsv)
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName -o tsv)
+
+          echo "Latest revision: $latest_revision"
+          echo "Latest ready revision: $ready_revision"
+
+          az containerapp revision show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight,createdTime:properties.createdTime}" \
+            -o jsonc
+
+          echo "System logs for the Container App:"
+          az containerapp logs show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --type system \
+            --tail 100 \
+            --format text || true
+
+          echo "Replica inventory for $latest_revision:"
+          az containerapp replica list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            -o jsonc || true
+
+          if [ "$RESTART_LATEST" = "true" ]; then
+            echo "Restarting $latest_revision..."
+            az containerapp revision restart \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision"
+
+            for attempt in $(seq 1 30); do
+              state=$(az containerapp revision show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --query properties.runningState -o tsv)
+              health=$(az containerapp revision show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$latest_revision" \
+                --query properties.healthState -o tsv)
+              echo "Post-restart state: running=$state health=$health (attempt $attempt/30)"
+              if [ "$state" = "Running" ] && { [ "$health" = "Healthy" ] || [ "$health" = "None" ]; }; then
+                break
+              fi
+              sleep 6
+            done
+          fi
+
+          replica=$(az containerapp replica list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query '[0].name' -o tsv 2>/dev/null || true)
+
+          if [ -n "$replica" ]; then
+            echo "Console logs for replica $replica:"
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --replica "$replica" \
+              --type console \
+              --tail 100 \
+              --format text || true
+          fi
+
+          final_state=$(az containerapp revision show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query properties.runningState -o tsv)
+          final_health=$(az containerapp revision show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query properties.healthState -o tsv)
+
+          echo "Final state: revision=$latest_revision running=$final_state health=$final_health"
