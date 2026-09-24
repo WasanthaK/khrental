@@ -3,6 +3,12 @@ import { findAppUserByEmail } from '../mssql/repositories.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { isAdminRole } from '../platform/permissionEngine.js';
 import {
+  issueAuthSession,
+  setStorageSessionCookie,
+  updateAuthRecord,
+  verifyPasswordCredential
+} from './index.js';
+import {
   createUserInvitation,
   redeemUserInvitation,
   validateUserInvitation
@@ -20,6 +26,16 @@ const buildAuthUser = (record) => ({
   },
   user_metadata: record.metadata || {}
 });
+
+const buildSession = async (record) => {
+  const issued = await issueAuthSession(record);
+  return {
+    access_token: issued.accessToken,
+    token_type: 'bearer',
+    expires_at: Math.floor(new Date(issued.expiresAt).getTime() / 1000),
+    user: buildAuthUser(record)
+  };
+};
 
 const requireAdmin = (req, res, next) => {
   if (!isAdminRole({ user: req.user, membership: req.membership })) {
@@ -163,17 +179,36 @@ export const createInvitationRouter = () => {
 
   router.post('/invitations/redeem', async (req, res, next) => {
     try {
-      const { record, invitation } = await redeemUserInvitation({
+      const password = req.body?.password;
+      let { record, invitation } = await redeemUserInvitation({
         token: req.body?.token,
-        password: req.body?.password
+        password
       });
 
-      // Redemption establishes the credential atomically. The client then uses
-      // the normal sign-in endpoint once so there is only one active browser
-      // session and session persistence follows the standard login path.
+      // Redemption is not successful until the just-persisted credential can
+      // be verified through the same verifier used by normal sign-in. Repair
+      // once with the submitted password if persistence produced an unusable
+      // credential, then fail closed if verification still does not pass.
+      if (!(await verifyPasswordCredential(record, password))) {
+        record = await updateAuthRecord(record, { password });
+        if (!(await verifyPasswordCredential(record, password))) {
+          const error = new Error('The account was created but its credential could not be verified.');
+          error.status = 500;
+          error.code = 'INVITATION_CREDENTIAL_VERIFICATION_FAILED';
+          throw error;
+        }
+      }
+
+      const establishSession = req.body?.establishSession !== false;
+      const session = establishSession ? await buildSession(record) : null;
+      if (session) {
+        setStorageSessionCookie(res, session);
+      }
+
       res.status(201).json({
         data: {
           user: buildAuthUser(record),
+          session,
           invitation
         }
       });

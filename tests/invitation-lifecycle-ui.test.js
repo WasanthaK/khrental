@@ -16,6 +16,7 @@ const teamCardSource = readFileSync(new URL('../src/components/team/TeamMemberCa
 const renteeCardSource = readFileSync(new URL('../src/components/rentees/RenteeCard.jsx', import.meta.url), 'utf8');
 const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
 const acceptInviteSource = readFileSync(new URL('../src/pages/AcceptInvite.jsx', import.meta.url), 'utf8');
+const invitationRouterSource = readFileSync(new URL('../src/api/auth/invitationRouter.js', import.meta.url), 'utf8');
 const badgeSource = readFileSync(new URL('../src/components/common/InvitationStatusBadge.jsx', import.meta.url), 'utf8');
 const routesSource = readFileSync(new URL('../src/routes.jsx', import.meta.url), 'utf8');
 
@@ -121,12 +122,29 @@ test('secure invitation redemption is not swallowed by an existing authenticated
   assert.doesNotMatch(routesSource, /path: 'accept-invite', element: <PublicRoute><AcceptInvite \/><\/PublicRoute>/);
 });
 
-test('secure invitation redemption preserves a different existing browser session', () => {
+test('secure invitation redemption preserves only a server-valid different browser session', () => {
   assert.match(acceptInviteSource, /platformClient\.auth\.getSession\(\)/);
-  assert.match(acceptInviteSource, /shouldPreserveExistingSession\(existingSession, invitation\.email\)/);
+  assert.match(acceptInviteSource, /hasServerValidatedDifferentSession\(existingSession, invitation\.email\)/);
+  assert.match(acceptInviteSource, /\/api\/platform\/auth\/context/);
+  assert.match(acceptInviteSource, /Authorization: `Bearer \$\{session\.access_token\}`/);
+  assert.match(acceptInviteSource, /establishSession: !preserveSession/);
   assert.match(acceptInviteSource, /if \(preserveSession\) \{[\s\S]*setPreservedExistingSession\(true\);[\s\S]*setSuccess\(true\);[\s\S]*return;/);
 
   const preserveBlock = acceptInviteSource.match(/if \(preserveSession\) \{[\s\S]*?\n      \}/)?.[0] || '';
-  assert.doesNotMatch(preserveBlock, /signInWithPassword/);
+  assert.doesNotMatch(preserveBlock, /saveStoredSession|clearActiveTenantId/);
   assert.match(acceptInviteSource, /Your existing signed-in account was kept active in this browser/);
+});
+
+test('fresh or stale-session invitation redemption adopts the server-issued session without a second password login', () => {
+  assert.doesNotMatch(acceptInviteSource, /signInWithPassword/);
+  assert.match(acceptInviteSource, /redeemedSession = redeemPayload\?\.data\?\.session/);
+  assert.match(acceptInviteSource, /clearActiveTenantId\(\)/);
+  assert.match(acceptInviteSource, /saveStoredSession\(redeemedSession\)/);
+  assert.match(acceptInviteSource, /window\.location\.assign\(getRoleRedirect\(role\)\)/);
+
+  assert.match(invitationRouterSource, /verifyPasswordCredential\(record, password\)/);
+  assert.match(invitationRouterSource, /updateAuthRecord\(record, \{ password \}\)/);
+  assert.match(invitationRouterSource, /issueAuthSession\(record\)/);
+  assert.match(invitationRouterSource, /setStorageSessionCookie\(res, session\)/);
+  assert.match(invitationRouterSource, /session,/);
 });
