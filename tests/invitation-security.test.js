@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 import { publicSignupRequiresInvitation } from '../src/api/auth/invitations.js';
 import { invitationStatusInternals } from '../src/api/auth/invitationStatus.js';
 import {
+  createPasswordCredential,
+  verifyPasswordCredential
+} from '../src/api/auth/index.js';
+import {
   buildEmailDeliveryLog,
   sendViaSendGrid
 } from '../src/api/email/sendGridDelivery.js';
@@ -49,6 +53,19 @@ test('only the SHA-256 hash needs to be persisted', () => {
 
 test('normalizes invitation email before persistence and comparison', () => {
   assert.equal(normalizeInvitationEmail('  Person@Example.COM '), 'person@example.com');
+});
+
+test('invitation password credential round-trips through the normal sign-in verifier', async () => {
+  const password = 'Invite-Test-Password-2026!';
+  const credential = await createPasswordCredential(password);
+  const record = {
+    passwordHash: credential.passwordHash,
+    passwordSalt: credential.passwordSalt,
+    passwordAlgorithm: credential.passwordAlgorithm
+  };
+
+  assert.equal(await verifyPasswordCredential(record, password), true);
+  assert.equal(await verifyPasswordCredential(record, 'wrong-password'), false);
 });
 
 test('default invitation expiry is 24 hours', () => {
