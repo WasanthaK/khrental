@@ -26,7 +26,7 @@ test('invitation action labels follow canonical lifecycle state', () => {
   assert.equal(getInvitationActionLabel('pending'), 'Resend Invitation');
   assert.equal(getInvitationActionLabel('expired'), 'Resend Invitation');
   assert.equal(getInvitationActionLabel('revoked'), 'Resend Invitation');
-  assert.equal(getInvitationActionLabel('setup_incomplete'), 'Resend Invitation');
+  assert.equal(getInvitationActionLabel('setup_incomplete'), 'Account Recovery Required');
   assert.equal(getInvitationActionLabel('registered'), null);
   assert.equal(isRegisteredInvitationStatus('REGISTERED'), true);
   assert.equal(isRegisteredInvitationStatus('setup_incomplete'), false);
@@ -92,10 +92,13 @@ test('invitation-specific email client uses only the observable server path', as
   }
 });
 
-test('invite button stays on secure invitation service and does not refetch user details', () => {
+test('invite button stays on secure invitation service and blocks unsafe resend of claimed incomplete accounts', () => {
   assert.doesNotMatch(inviteButtonSource, /fetchAppUser|appUserService/);
   assert.match(inviteButtonSource, /resendInvitation\(userId, false\)/);
   assert.match(inviteButtonSource, /getInvitationActionLabel/);
+  assert.match(inviteButtonSource, /\['registered', 'setup_incomplete'\]\.includes\(effectiveStatus\)/);
+  assert.match(inviteButtonSource, /if \(actionUnavailable\) return;/);
+  assert.match(inviteButtonSource, /Use account recovery instead of issuing another invitation/);
   assert.match(inviteButtonSource, /Invitation accepted by SendGrid for delivery/);
 });
 
@@ -146,7 +149,8 @@ test('fresh or stale-session invitation redemption adopts the server-issued sess
   assert.match(acceptInviteSource, /window\.location\.assign\(getRoleRedirect\(role\)\)/);
 
   assert.match(invitationRouterSource, /verifyPasswordCredential\(record, password\)/);
-  assert.match(invitationRouterSource, /updateAuthRecord\(record, \{ password \}\)/);
+  assert.match(invitationRouterSource, /invitation_registration_verified: true/);
+  assert.match(invitationRouterSource, /updateAuthRecord\(record, \{[\s\S]*metadata:/);
   assert.match(invitationRouterSource, /issueAuthSession\(record\)/);
   assert.match(invitationRouterSource, /setStorageSessionCookie\(res, session\)/);
   assert.match(invitationRouterSource, /session,/);
