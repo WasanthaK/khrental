@@ -111,7 +111,7 @@ test('shared invitation service uses explicit KH Rentals APIs without compatibil
   assert.match(invitationServiceSource, /\/api\/mssql\/app-users\/\$\{encodeURIComponent\(userId\)\}/);
 });
 
-test('canonical invitation status requires complete auth linkage before registered', () => {
+test('canonical invitation status requires verified auth access before registered', () => {
   const now = new Date('2026-09-22T00:00:00.000Z');
   const derive = invitationStatusInternals.deriveInvitationStatus;
   const user = {
@@ -124,7 +124,9 @@ test('canonical invitation status requires complete auth linkage before register
     auth_id: 'auth-user',
     app_user_id: 'app-user',
     email: 'person@example.com',
-    has_credential: 1
+    has_credential: 1,
+    metadata: JSON.stringify({ invitation_registration_verified: true }),
+    last_login_at: null
   };
 
   assert.equal(derive({ user: {}, auth: null, invitation: null, now }), 'not_invited');
@@ -133,8 +135,10 @@ test('canonical invitation status requires complete auth linkage before register
   assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-23T00:00:00.000Z', revoked_at: '2026-09-21T00:00:00.000Z' }, now }), 'revoked');
   assert.equal(derive({ user, auth, invitation: null, now }), 'registered');
 
-  // Invitation acceptance is historical evidence only. It does not prove that
-  // a usable authentication identity exists.
+  assert.equal(
+    derive({ user, auth: { ...auth, metadata: '{}', last_login_at: null }, invitation: { accepted_at: '2026-09-21T20:00:00.000Z' }, now }),
+    'setup_incomplete'
+  );
   assert.equal(
     derive({ user: { id: 'app-user', email: 'person@example.com' }, auth: null, invitation: { accepted_at: '2026-09-21T20:00:00.000Z' }, now }),
     'setup_incomplete'
@@ -151,12 +155,24 @@ test('canonical invitation status requires complete auth linkage before register
   );
 });
 
-test('canonical registration completeness requires matching identity, app-user, email and credential', () => {
+test('canonical registration completeness requires matching structure plus verified access', () => {
+  const structurallyComplete = invitationStatusInternals.isAuthRegistrationStructurallyComplete;
   const complete = invitationStatusInternals.isAuthRegistrationComplete;
   const user = { id: 'app-user', auth_id: 'auth-user', email: 'person@example.com' };
-  const auth = { id: 'auth-row', auth_id: 'auth-user', app_user_id: 'app-user', email: 'person@example.com', has_credential: 1 };
+  const auth = {
+    id: 'auth-row',
+    auth_id: 'auth-user',
+    app_user_id: 'app-user',
+    email: 'person@example.com',
+    has_credential: 1,
+    metadata: '{}',
+    last_login_at: null
+  };
 
-  assert.equal(complete({ user, auth }), true);
+  assert.equal(structurallyComplete({ user, auth }), true);
+  assert.equal(complete({ user, auth }), false);
+  assert.equal(complete({ user, auth: { ...auth, metadata: JSON.stringify({ invitation_registration_verified: true }) } }), true);
+  assert.equal(complete({ user, auth: { ...auth, last_login_at: '2026-09-24T00:00:00.000Z' } }), true);
   assert.equal(complete({ user, auth: { ...auth, has_credential: 0 } }), false);
   assert.equal(complete({ user, auth: { ...auth, app_user_id: 'different-app-user' } }), false);
   assert.equal(complete({ user, auth: { ...auth, auth_id: 'different-auth-user' } }), false);
@@ -178,6 +194,8 @@ test('successful redemption persists auth linkage and accepted timestamp before 
 test('canonical invitation status projection verifies auth linkage without exposing credential material', () => {
   assert.match(invitationStatusSource, /FROM dbo\.auth_users/);
   assert.match(invitationStatusSource, /registrationComplete/);
+  assert.match(invitationStatusSource, /invitation_registration_verified/);
+  assert.match(invitationStatusSource, /last_login_at/);
   assert.doesNotMatch(invitationStatusSource, /token_hash/);
   assert.doesNotMatch(invitationStatusSource, /SELECT[\s\S]*\btoken\b/i);
   assert.doesNotMatch(invitationStatusSource, /passwordHash|passwordSalt/);
