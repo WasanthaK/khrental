@@ -22,6 +22,7 @@ import {
 } from '../auth/index.js';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
+import { isAdminRole } from './permissionEngine.js';
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TENANT_SCOPED_TABLES = new Set([
@@ -910,7 +911,7 @@ export const createPlatformRouter = () => {
   const router = express.Router();
   const requireAuthenticated = createTenantContextMiddleware({ requireUser: true });
   const requireAdmin = (req, res, next) => {
-    if (String(req.user?.role || '').trim().toLowerCase() !== 'admin') {
+    if (!isAdminRole({ user: req.user, membership: req.membership })) {
       res.status(403).json({ error: 'Administrator access is required.', code: 'ADMIN_ACCESS_REQUIRED' });
       return;
     }
@@ -1162,7 +1163,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/storage/buckets', requireAuthenticated, async (req, res, next) => {
+  router.post('/storage/buckets', requireAuthenticated, requireAdmin, async (req, res, next) => {
     try {
       const bucketName = req.body?.bucketName || req.body?.name;
       res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
@@ -1171,7 +1172,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/buckets/:bucket', requireAuthenticated, async (req, res, next) => {
+  router.delete('/storage/buckets/:bucket', requireAuthenticated, requireAdmin, async (req, res, next) => {
     try {
       await getStorageDriver().deleteBucket(req.params.bucket);
       res.json({ data: true });

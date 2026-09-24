@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { platform as platformClient } from '../../services/platformClient';
 import { toast } from 'react-toastify';
+import { uploadTenantFile } from '../../services/storageApiService';
 import { sendDocumentForSignature, getSignatureStatus } from '../../services/eviaSignService';
 
 const EviaSignTesting = () => {
@@ -25,24 +25,20 @@ const EviaSignTesting = () => {
 
       // 1. Upload the file to get document URL
       const fileName = `test_documents/${Date.now()}_${selectedFile.name}`;
-      const { error: uploadError } = await platformClient.storage
-        .from('files')
-        .upload(fileName, selectedFile);
+      const uploadData = await uploadTenantFile({
+        bucket: 'files',
+        path: fileName,
+        file: selectedFile
+      });
+      const documentUrl = uploadData?.url;
 
-      if (uploadError) throw uploadError;
-
-      // Get the file URL
-      const { data: urlData } = platformClient.storage
-        .from('files')
-        .getPublicUrl(fileName);
-
-      if (!urlData?.publicUrl) {
+      if (!documentUrl) {
         throw new Error('Failed to get file URL');
       }
 
       // 2. Create signature request
       const result = await sendDocumentForSignature({
-        documentUrl: urlData.publicUrl,
+        documentUrl,
         title: "Test Signature Request",
         message: "This is a test signature request",
         webhookUrl: webhookUrl,

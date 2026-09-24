@@ -2,15 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeMembershipAccess } from '../src/api/mssql/membershipAdminRepository.js';
-import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
+import { isRenteeMembership, normalizeRenteeStatus } from '../src/api/mssql/renteeRepository.js';
 
 const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
 const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
+const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
+const renteeCardSource = readFileSync(new URL('../src/components/rentees/RenteeCard.jsx', import.meta.url), 'utf8');
 const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.js', import.meta.url), 'utf8');
 const inviteButtonSource = readFileSync(new URL('../src/components/common/InviteUserButton.jsx', import.meta.url), 'utf8');
 const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
 const invitationLifecycleSource = readFileSync(new URL('../src/utils/invitationLifecycle.js', import.meta.url), 'utf8');
 const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
+const renterAssignmentMigrationSource = readFileSync(
+  new URL('../migrations/20260922_01_create_rentee_property_assignments.sql', import.meta.url),
+  'utf8'
+);
 const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-db.mjs', import.meta.url), 'utf8');
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
 const dashboardLayoutSource = readFileSync(new URL('../src/components/layouts/DashboardLayout.jsx', import.meta.url), 'utf8');
@@ -32,6 +38,15 @@ test('renter directory accepts canonical tenant and legacy rentee membership rol
   assert.equal(isRenteeMembership({ role: 'tenant' }), true);
   assert.equal(isRenteeMembership({ role: 'staff' }), false);
   assert.equal(isRenteeMembership({ role: 'admin' }), false);
+});
+
+test('renter relationship status is limited to active or inactive', () => {
+  assert.equal(normalizeRenteeStatus('active'), 'active');
+  assert.equal(normalizeRenteeStatus(' INACTIVE '), 'inactive');
+  assert.throws(
+    () => normalizeRenteeStatus('deleted'),
+    (error) => error?.status === 400 && error?.code === 'RENTEE_INVALID_STATUS'
+  );
 });
 
 test('canonical staff role persists an explicit permission bundle', () => {
@@ -77,9 +92,48 @@ test('rejects unknown roles and staff bundles', () => {
   );
 });
 
-test('attaching an existing global renter identity applies the submitted profile before membership projection', () => {
-  assert.match(renteeRepositorySource, /const profileUpdates = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
-  assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profileUpdates\);/);
+test('attaching an existing global renter identity applies only global profile fields before membership projection', () => {
+  assert.match(renteeRepositorySource, /const profile = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
+  assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profile\);/);
+  const profileFieldBlock = renteeRepositorySource.match(/const RENTEE_PROFILE_FIELDS = new Set\(\[[\s\S]*?\]\);/)?.[0] || '';
+  assert.doesNotMatch(profileFieldBlock, /'status'/);
+  assert.doesNotMatch(profileFieldBlock, /'associated_property_ids'/);
+  assert.doesNotMatch(profileFieldBlock, /'associated_properties'/);
+});
+
+test('renter activation and deactivation update tenant membership instead of global app user status', () => {
+  assert.match(renteeRepositorySource, /await updateTenantMembershipById\(tenantId, membership\.id/);
+  assert.match(renteeRepositorySource, /status: nextStatus/);
+  assert.match(renteeRepositorySource, /status: requestedStatus/);
+  assert.match(renteeRepositorySource, /status: 'all'/);
+});
+
+test('renter property and unit assignments are durable and tenant scoped', () => {
+  assert.match(renteeRepositorySource, /dbo\.rentee_property_assignments/);
+  assert.match(renteeRepositorySource, /validateTenantAssignments/);
+  assert.match(renteeRepositorySource, /tenant_id = @tenantId/);
+  assert.match(renteeRepositorySource, /associated_properties/);
+  assert.match(renteeFormSource, /associated_properties: formData\.structuredAssociations/);
+  assert.doesNotMatch(renteeFormSource, /renteeAssociationCache|sessionStorage|storeRenteeAssociations|getRenteeAssociations/);
+  assert.match(renterAssignmentMigrationSource, /CREATE TABLE dbo\.rentee_property_assignments/);
+  assert.match(renterAssignmentMigrationSource, /FOREIGN KEY \(tenant_id\) REFERENCES dbo\.tenants\(id\)/);
+  assert.match(renterAssignmentMigrationSource, /FOREIGN KEY \(app_user_id\) REFERENCES dbo\.app_users\(id\) ON DELETE CASCADE/);
+  assert.match(renterAssignmentMigrationSource, /UX_rentee_property_assignments_scope/);
+});
+
+test('tenant details uses canonical renter projection and never deletes the global identity', () => {
+  assert.match(renteeDetailsSource, /const renteeData = await getRentee\(id\);/);
+  assert.match(renteeDetailsSource, /renteeData\.associated_properties \|\| \[\]/);
+  assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations|deleteAppUser/);
+  assert.doesNotMatch(renteeDetailsSource, /\bsessionStorage\s*\.\s*(getItem|setItem|removeItem|clear)\b/);
+  assert.match(renteeDetailsSource, /await updateRentee\(id, \{ status: 'inactive' \}\)/);
+});
+
+test('inactive renter cards support reactivation and suppress invitation actions', () => {
+  assert.match(renteeCardSource, /updateRentee\(id, \{ status: nextStatus \}\)/);
+  assert.match(renteeCardSource, /Deactivate Tenant/);
+  assert.match(renteeCardSource, /Reactivate Tenant/);
+  assert.match(renteeCardSource, /useInvitationStatus\(active \? id : null\)/);
 });
 
 test('renter create service returns the created renter record instead of the create metadata envelope', () => {
@@ -135,8 +189,14 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /az containerapp exec/);
   assert.match(migrationWorkflowSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
   assert.match(migrationWorkflowSource, /build-info\.json/);
-  assert.match(migrationWorkflowSource, /No firewall rule will be opened/);
-  assert.match(migrationWorkflowSource, /dedicated privileged migration executor inside the production network/);
+  assert.match(migrationWorkflowSource, /Apply migration in isolated Container Apps Job/);
+  assert.match(migrationWorkflowSource, /az containerapp job create/);
+  assert.match(migrationWorkflowSource, /az containerapp job start/);
+  assert.match(migrationWorkflowSource, /az containerapp job execution show/);
+  assert.match(migrationWorkflowSource, /az containerapp job delete/);
+  assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN=secretref:mssql-access-token/);
+  assert.match(migrationWorkflowSource, /no firewall rule or web-runtime DDL elevation is required/);
+  assert.match(migrationWorkflowSource, /20260922_01_create_rentee_property_assignments/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
   assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
   assert.match(migrationRunnerSource, /type: 'azure-active-directory-default'/);
@@ -145,11 +205,12 @@ test('production database migrations auto-plan safely while apply stays isolated
   const migrationOrder = [
     '20260920_01_add_tenancy_billing_adjustments',
     '20260920_02_create_platform_admins',
-    '20260920_03_backfill_legacy_app_user_memberships'
+    '20260920_03_backfill_legacy_app_user_memberships',
+    '20260922_01_create_rentee_property_assignments'
   ].map((id) => migrationRunnerSource.indexOf(`id: '${id}'`));
 
   assert.ok(migrationOrder.every((position) => position >= 0));
-  assert.ok(migrationOrder[0] < migrationOrder[1] && migrationOrder[1] < migrationOrder[2]);
+  assert.ok(migrationOrder.every((position, index) => index === 0 || migrationOrder[index - 1] < position));
   assert.match(migrationRunnerSource, /createHash\('sha256'\)/);
   assert.match(migrationRunnerSource, /dbo\.schema_migrations/);
   assert.match(migrationRunnerSource, /previously applied with checksum/);

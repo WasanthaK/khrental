@@ -110,7 +110,7 @@ test('team and tenant cards render one canonical invitation lifecycle', () => {
 });
 
 test('renter details and badge cannot suppress or replace canonical status', () => {
-  assert.match(renteeDetailsSource, /useInvitationStatus\(id/);
+  assert.match(renteeDetailsSource, /useInvitationStatus\([^\n]*id\)/);
   assert.match(renteeDetailsSource, /<InvitationStatusBadge status=\{invitationStatus\.status\}/);
   assert.doesNotMatch(badgeSource, /checkUserAuthStatus|userManagement|useEffect/);
   assert.match(badgeSource, /registered: 'Registered'/);

@@ -21,6 +21,7 @@ import { FiDroplet, FiZap, FiCalendar, FiUpload, FiSave } from 'react-icons/fi';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import ImageUploader from '../common/ImageUploader';
+import { uploadTenantFile } from '../../services/storageApiService';
 
 /**
  * Reusable component for submitting utility meter readings
@@ -103,30 +104,22 @@ const UtilityMeterForm = ({
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `utility_readings/${fileName}`;
       
-      // Upload to storage
-      const { data, error } = await platformClient.storage
-        .from('media')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-          onUploadProgress: (progress) => {
-            setUploadProgress(progress);
-          }
-        });
-      
-      if (error) {
-        throw error;
+      // Upload through the explicit tenant-scoped storage API.
+      const uploadData = await uploadTenantFile({
+        bucket: 'media',
+        path: filePath,
+        file
+      });
+      const photoUrl = uploadData?.url;
+
+      if (!photoUrl) {
+        throw new Error('Utility photo upload did not return a storage URL.');
       }
-      
-      // Get public URL for the file
-      const scopedFilePath = data?.scopedPath || data?.path || filePath;
-      const { data: urlData } = platformClient.storage
-        .from('media')
-        .getPublicUrl(scopedFilePath);
-      
+
+      setUploadProgress(100);
       setFormData(prev => ({
         ...prev,
-        photoUrl: urlData.publicUrl
+        photoUrl
       }));
       
       setIsUploading(false);

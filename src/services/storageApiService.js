@@ -63,8 +63,10 @@ export const buildStorageUrl = (bucket, path) => {
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
     .join('/');
+  const activeTenantId = normalizePath(getActiveTenantId());
+  const tenantQuery = activeTenantId ? `?tenantId=${encodeURIComponent(activeTenantId)}` : '';
 
-  return `${getApiBaseUrl().replace(/\/$/, '')}/storage/${safeBucket}/${safePath}`;
+  return `${getApiBaseUrl().replace(/\/$/, '')}/storage/${safeBucket}/${safePath}${tenantQuery}`;
 };
 
 export const extractStoragePath = (urlOrPath, bucket) => {
@@ -73,7 +75,8 @@ export const extractStoragePath = (urlOrPath, bucket) => {
   const markerIndex = value.indexOf(marker);
 
   if (markerIndex >= 0) {
-    return decodeURIComponent(value.slice(markerIndex + marker.length));
+    const encodedPath = value.slice(markerIndex + marker.length).split(/[?#]/, 1)[0];
+    return decodeURIComponent(encodedPath);
   }
 
   return normalizePath(value);
@@ -82,6 +85,31 @@ export const extractStoragePath = (urlOrPath, bucket) => {
 export const listStorageBuckets = async () => {
   const payload = await requestJson('/api/platform/storage/buckets');
   return payload?.data || [];
+};
+
+export const createStorageBucket = async (bucketName) => {
+  const normalizedBucketName = String(bucketName || '').trim();
+  if (!normalizedBucketName) {
+    throw new Error('Bucket name is required.');
+  }
+
+  const payload = await requestJson('/api/platform/storage/buckets', {
+    method: 'POST',
+    body: JSON.stringify({ bucketName: normalizedBucketName })
+  });
+  return payload?.data || null;
+};
+
+export const deleteStorageBucket = async (bucketName) => {
+  const normalizedBucketName = String(bucketName || '').trim();
+  if (!normalizedBucketName) {
+    throw new Error('Bucket name is required.');
+  }
+
+  const payload = await requestJson(`/api/platform/storage/buckets/${encodeURIComponent(normalizedBucketName)}`, {
+    method: 'DELETE'
+  });
+  return payload?.data ?? true;
 };
 
 export const listTenantFiles = async ({ bucket, path = '' }) => {
@@ -123,6 +151,20 @@ export const uploadTenantFile = async ({ bucket, path, file }) => {
     path: storedPath,
     url: buildStorageUrl(bucket, storedPath)
   };
+};
+
+export const downloadTenantFile = async ({ bucket, path }) => {
+  if (!bucket || !path) {
+    throw new Error('Bucket and path are required for download.');
+  }
+
+  const response = await fetch(buildStorageUrl(bucket, path), {
+    method: 'GET',
+    headers: buildRequestContextHeaders()
+  });
+
+  if (!response.ok) throw await readError(response);
+  return response.blob();
 };
 
 export const deleteTenantFiles = async ({ bucket, paths }) => {

@@ -1,6 +1,6 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-09-22  
+**Status date:** 2026-09-23  
 **Last verified behavior-changing application baseline:** `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
@@ -52,9 +52,18 @@
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
 - [ ] P0.3 implementation, automated tests, CI, provider-delivery proof and production deployment verification are complete. **Only the single final physical acceptance pass in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` remains before P0.3 can close.**
-- [ ] Password-reset flow needs a fresh end-to-end regression check.
-- [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
-- [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
+- [ ] Password-reset flow still needs physical end-to-end acceptance, but the hardening implementation is prepared off main and regression-tested.
+- [ ] Agreement signature placement/lifecycle still needs physical Evia acceptance, but the proven marker/AutoStamp implementation is prepared off main with automated placement coverage.
+- [ ] Compatibility-client storage removal is prepared off main across document, payment-proof, utility, maintenance, admin tooling, and legacy Evia storage domains; production acceptance remains blocked by P0.3.
+
+### Prepared release-hardening candidate — **NOT MERGED / NOT DEPLOYED**
+
+- Candidate branch: `phase-5-release-hardening`.
+- Integrated candidate before documentation: `55aa191468ec5f94de5e7f2217a5a22a437c2cf9`.
+- Includes P0.4 password-reset hardening, Phase 1 renter integrity, Phase 2 Evia AutoStamp placement restoration, Phase 3 document storage cleanup, Phase 4 storage-domain cleanup, compatibility-storage shim retirement, and aggregate release regression coverage.
+- All component draft branches passed their own authorization/build gates; the final integrated draft PR must still pass the complete exact-head CI gate.
+- `docs/RELEASE-HARDENING-ACCEPTANCE-STORIES.md` is the physical acceptance pack for RH-01 through RH-16.
+- This candidate does **not** change the production baseline and must not be merged/deployed before P0.3 US-INV-01 through US-INV-09 pass.
 
 ---
 
@@ -143,7 +152,7 @@ Exit criteria:
 - [ ] User-visible invitation status is unambiguous across the final physical Send/Resend/Accept/reload checks.
 - [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
-### P0.4 - Password reset regression
+### P0.4 - Password reset regression — **IMPLEMENTATION PREPARED OFF MAIN / PHYSICAL ACCEPTANCE PENDING**
 
 Scope:
 
@@ -151,11 +160,18 @@ Scope:
 - Verify the reset link does not incorrectly require an already-authenticated tenant context.
 - Verify MSSQL connectivity and redirect behavior.
 
+Prepared implementation evidence:
+
+- [x] Reset links validate the recovery token before showing the password-entry form.
+- [x] Recovery reads are non-cacheable and the anonymous reset route remains isolated from tenant/application initialization.
+- [x] Regression coverage locks atomic credential update, single-use token consumption, and prior-session revocation.
+- [ ] Physical RH-01 acceptance is still required before P0.4 can complete.
+
 Exit criteria: a clean end-to-end password reset works from a logged-out browser session.
 
 ---
 
-## Phase 1 - Tenant/rentee workflow integrity
+## Phase 1 - Tenant/rentee workflow integrity — **IMPLEMENTATION PREPARED OFF MAIN / PHYSICAL ACCEPTANCE PENDING**
 
 **Goal:** Treat Tenants as the renter/lessee workflow and Team as the staff/contractor workflow.
 
@@ -174,9 +190,16 @@ Exit criteria:
 - [ ] Tenant Admin cannot create platform-admin identities through tenant workflows.
 - [ ] Tenant and Team onboarding paths are clearly separated.
 
+Prepared implementation evidence:
+
+- [x] Canonical renter persistence/list/detail paths are tightened and regression-covered.
+- [x] Existing global identity attachment and renter property-assignment persistence are implemented on the candidate.
+- [x] Tenant-side platform-admin escalation remains blocked by authorization checks.
+- [ ] RH-02 through RH-05 physical acceptance is still required.
+
 ---
 
-## Phase 2 - Agreement generation and digital signing
+## Phase 2 - Agreement generation and digital signing — **IMPLEMENTATION PREPARED OFF MAIN / PHYSICAL ACCEPTANCE PENDING**
 
 **Goal:** Satisfy the business requirement: generate the agreement, place landlord/tenant signatures correctly, retain the signed document, and advance agreement lifecycle state.
 
@@ -188,24 +211,37 @@ Work in this order:
 4. Verify landlord signing, tenant signing, callbacks/webhooks, signed-document retrieval/storage, and agreement status transitions.
 5. Add an automated regression fixture around signature marker/location handling where feasible.
 
+Prepared implementation evidence:
+
+- [x] V2 OAuth/token behavior is preserved while the send path delegates to the previously proven type-3 AutoStamp placement implementation.
+- [x] Automated placement coverage locks the landlord/tenant marker contract.
+- [x] Existing Evia CI workflows passed on the prepared signing branch.
+- [ ] RH-06 through RH-08 physical agreement/signing acceptance is still required.
+
 Exit criteria: both signatures consistently appear in the intended agreement locations and the fully signed document is retained and linked to the agreement lifecycle.
 
 ---
 
-## Phase 3 - Document/storage domain cleanup
+## Phase 3 - Document/storage domain cleanup — **IMPLEMENTATION PREPARED OFF MAIN / PHYSICAL ACCEPTANCE PENDING**
 
 **Goal:** Continue Stage 2 compatibility-client removal without destabilizing signing.
 
-- [ ] Review `DocumentService` / agreement document storage.
-- [ ] Route agreement document storage through explicit KH Rentals storage APIs.
-- [ ] Preserve tenant-scoped R2 paths and cross-tenant protections.
-- [ ] Remove only the compatibility dependency for this domain.
+- [x] Review `DocumentService` / agreement document storage.
+- [x] Route agreement document storage through explicit KH Rentals storage APIs.
+- [x] Preserve tenant-scoped R2 paths and cross-tenant protections.
+- [x] Remove only the compatibility dependency for this domain.
+
+Prepared implementation evidence:
+
+- [x] Agreement/document storage uses the explicit tenant storage service on the candidate.
+- [x] Raw storage delivery is tenant-authorized and regression-covered.
+- [ ] RH-08 and RH-09 physical storage/signing acceptance is still required.
 
 Exit criteria: agreement/document storage no longer depends on the compatibility storage shape and signing behavior remains unchanged.
 
 ---
 
-## Phase 4 - Remaining compatibility-client removal
+## Phase 4 - Remaining compatibility-client removal — **IMPLEMENTATION PREPARED OFF MAIN / PHYSICAL ACCEPTANCE PENDING**
 
 Before changing code:
 
@@ -216,11 +252,32 @@ Before changing code:
 
 Do **not** perform a repo-wide rewrite.
 
+Prepared domains on the integrated candidate:
+
+- [x] Payment-proof storage uses explicit tenant storage.
+- [x] Utility-reading/meter media uses explicit tenant storage.
+- [x] Maintenance card no longer contains the dead compatibility URL fallback.
+- [x] Admin storage explorer/tooling uses explicit KH storage APIs; bucket mutation routes require administrator authorization.
+- [x] Legacy Evia signed-document persistence uses explicit tenant storage.
+- [x] Application consumers of `platformClient.storage` are removed and the compatibility storage shim/aliases are retired on the integrated candidate.
+- [x] Aggregate regression coverage prevents normal application code from reintroducing the compatibility storage path.
+- [ ] RH-10 through RH-14 physical acceptance is still required.
+
 ---
 
-## Phase 5 - Product regression and release hardening
+## Phase 5 - Product regression and release hardening — **INTEGRATED CANDIDATE PREPARED / CI GREEN / PHYSICAL ACCEPTANCE PENDING**
 
 After the core flows above are stable, run focused regression passes for Platform Admin, properties/units, billing/invoices/receipts, maintenance lifecycle, notifications/email, agreement cancellation/deletion, and authorization boundaries.
+
+Prepared evidence:
+
+- [x] The off-main integration branch assembled P0.4 through Phase 4 product code without product-code merge conflicts.
+- [x] Storage-domain test additions were consolidated into one aggregate regression file.
+- [x] `tests/release-hardening.test.js` is wired into `npm run test:authorization`.
+- [x] `docs/RELEASE-HARDENING-ACCEPTANCE-STORIES.md` defines RH-01 through RH-16.
+- [x] Behavior head `01cf8eaaef3761ce507a613940dab05c748ff450` passed the full `npm run test:authorization` suite, production build, Evia V2 integration tests, and Evia webhook tests on 2026-09-23; PR deployment was correctly skipped while draft.
+- [ ] RH-01 through RH-15 must pass before production acceptance.
+- [ ] RH-16 must pass after any authorized production deployment.
 
 ---
 

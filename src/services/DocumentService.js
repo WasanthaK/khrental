@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { platform as platformClient } from './platformClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import { buildStorageUrl, downloadTenantFile, listTenantFiles, uploadTenantFile } from './storageApiService';
 
 /**
  * Simple HTML to structured content parser
@@ -859,34 +860,17 @@ export const saveMergedDocument = async (content, agreementId) => {
     
     console.log('Uploading PDF to storage path:', filePath);
     
-    // Standard upload options
-    const uploadOptions = {
-      contentType: 'application/pdf',
-      upsert: true
-    };
-    
     try {
-      // Standard upload via local storage compatibility client
-      const { data, error } = await platformClient.storage
-        .from(STORAGE_BUCKETS.FILES)
-        .upload(filePath, pdfBlob, uploadOptions);
-      
-      if (error) {
-        console.error('Error saving document:', error);
-        throw error;
-      }
-      
-      console.log('PDF uploaded successfully:', data);
-      
-      // Get the public URL
-      const scopedFilePath = data?.scopedPath || data?.path || filePath;
-      const { data: urlData } = platformClient.storage
-        .from(STORAGE_BUCKETS.FILES)
-        .getPublicUrl(scopedFilePath);
-      
-      const publicUrl = urlData?.publicUrl;
-      console.log('Document public URL generated:', publicUrl);
-      
+      const uploaded = await uploadTenantFile({
+        bucket: STORAGE_BUCKETS.FILES,
+        path: filePath,
+        file: pdfBlob
+      });
+      const storedPath = uploaded?.path || filePath;
+      const publicUrl = uploaded?.url || buildStorageUrl(STORAGE_BUCKETS.FILES, storedPath);
+
+      console.log('PDF uploaded successfully:', { path: storedPath });
+      console.log('Document storage URL generated:', publicUrl);
       return publicUrl;
     } catch (error) {
       console.error('Error saving merged document:', error);
@@ -918,26 +902,21 @@ export const convertDocxToPdf = async (agreementId) => {
     console.log('Downloading DOCX from storage path:', docxPath);
     
     // List files in directory to debug any issues
-    const { data: fileData, error: fileError } = await platformClient.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .list(`${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}`);
-    
-    if (fileError) {
-      console.error('Error listing files in directory:', fileError);
-    } else {
+    try {
+      const fileData = await listTenantFiles({
+        bucket: STORAGE_BUCKETS.FILES,
+        path: `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}`
+      });
       console.log('Files available in directory:', fileData);
+    } catch (fileError) {
+      console.error('Error listing files in directory:', fileError);
     }
-    
-    // Download the DOCX file from storage
-    const { data: docxData, error: docxError } = await platformClient.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .download(docxPath);
-      
-    // Handle download errors
-    if (docxError) {
-      console.error('Error downloading DOCX file:', docxError);
-      throw new Error(`Failed to download DOCX file: ${docxError.message}`);
-    }
+
+    // Download the DOCX file from tenant-scoped storage
+    const docxData = await downloadTenantFile({
+      bucket: STORAGE_BUCKETS.FILES,
+      path: docxPath
+    });
     
     // Validate the downloaded data
     if (!docxData || docxData.size === 0) {
@@ -981,19 +960,17 @@ export const convertDocxToPdf = async (agreementId) => {
       size: 12
     });
     
-    // Add a link to the original DOCX
-    const { data: urlData } = platformClient.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .getPublicUrl(docxPath);
-      
-    if (urlData?.publicUrl) {
+    // Add a tenant-scoped link to the original DOCX
+    const docxUrl = buildStorageUrl(STORAGE_BUCKETS.FILES, docxPath);
+
+    if (docxUrl) {
       page.drawText('Original document link:', {
         x: 50,
         y: 630,
         size: 10
       });
       
-      page.drawText(urlData.publicUrl, {
+      page.drawText(docxUrl, {
         x: 50,
         y: 610,
         size: 8,
@@ -1053,26 +1030,14 @@ export const generatePdf = async (formData) => {
     // Define the PDF file path in storage
     const pdfPath = `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}/final_agreement.pdf`;
     
-    // Upload PDF to platform storage
-    const { data, error } = await platformClient.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .upload(pdfPath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-    
-    if (error) {
-      console.error('Error uploading PDF:', error);
-      throw error;
-    }
-    
-    // Get the public URL for the PDF
-    const scopedPdfPath = data?.scopedPath || data?.path || pdfPath;
-    const { data: urlData } = platformClient.storage
-      .from(STORAGE_BUCKETS.FILES)
-      .getPublicUrl(scopedPdfPath);
-    
-    const pdfUrl = urlData.publicUrl;
+    // Upload PDF through the explicit tenant-scoped storage API
+    const uploadedPdf = await uploadTenantFile({
+      bucket: STORAGE_BUCKETS.FILES,
+      path: pdfPath,
+      file: pdfBlob
+    });
+    const storedPdfPath = uploadedPdf?.path || pdfPath;
+    const pdfUrl = uploadedPdf?.url || buildStorageUrl(STORAGE_BUCKETS.FILES, storedPdfPath);
     console.log('PDF generated and uploaded successfully:', pdfUrl);
     
     return pdfUrl;
@@ -1574,32 +1539,26 @@ async function createDocument(html, fileName, agreementId) {
     const timestamp = new Date().getTime();
     const filePath = `agreements/${agreementId}/${fileName.replace(/\s+/g, '_')}_${timestamp}.pdf`;
     
-    // Upload the file to platform storage
-    const { data, error } = await platformClient.storage
-      .from('documents')
-      .upload(filePath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
+    // Upload the file through the explicit tenant-scoped storage API
+    try {
+      const uploadedDocument = await uploadTenantFile({
+        bucket: 'documents',
+        path: filePath,
+        file: pdfBlob
       });
-    
-    if (error) {
-      console.error('Error uploading document to storage:', error);
-      return { success: false, error };
+      const storedFilePath = uploadedDocument?.path || filePath;
+      const documentUrl = uploadedDocument?.url || buildStorageUrl('documents', storedFilePath);
+
+      console.log(`Document created successfully: ${documentUrl}`);
+      return {
+        success: true,
+        url: documentUrl,
+        path: storedFilePath
+      };
+    } catch (storageError) {
+      console.error('Error uploading document to storage:', storageError);
+      return { success: false, error: storageError };
     }
-    
-    // Get the public URL for the file
-    const scopedFilePath = data?.scopedPath || data?.path || filePath;
-    const { data: urlData } = platformClient.storage
-      .from('documents')
-      .getPublicUrl(scopedFilePath);
-    
-    console.log(`Document created successfully: ${urlData.publicUrl}`);
-    
-    return {
-      success: true,
-      url: urlData.publicUrl,
-      path: scopedFilePath
-    };
   } catch (error) {
     console.error('Error creating document:', error);
     return {

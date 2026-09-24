@@ -8,7 +8,8 @@ import { normalizeRenteeDirectoryRecords } from '../utils/renteeDirectory';
  * scopes app_users by their default tenant pointer and cannot reliably represent
  * a global identity that belongs to this organization through tenant_memberships.
  */
-export const fetchRenteeDirectory = async () => {
-  const users = await requestMssqlApi('/api/mssql/rentees');
+export const fetchRenteeDirectory = async ({ status = 'active' } = {}) => {
+  const params = new URLSearchParams({ status });
+  const users = await requestMssqlApi(`/api/mssql/rentees?${params.toString()}`);
   return normalizeRenteeDirectoryRecords(users);
 };
