@@ -1,0 +1,88 @@
+name: Diagnose KH Rentals Azure revision
+
+on:
+  push:
+    branches: [diagnose-p0-3-azure-revision]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: Production
+    env:
+      AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+    steps:
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Inspect revisions read-only
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -uo pipefail
+            az extension add --name containerapp --upgrade --yes
+
+            echo '=== App revision pointers ==='
+            az containerapp show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "{latest:properties.latestRevisionName,ready:properties.latestReadyRevisionName,running:properties.runningStatus,provisioning:properties.provisioningState,traffic:properties.configuration.ingress.traffic}" \
+              -o jsonc
+
+            echo '=== Recent revisions ==='
+            az containerapp revision list \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[?contains(name, '000012')].{name:name,active:properties.active,health:properties.healthState,provisioning:properties.provisioningState,running:properties.runningState,traffic:properties.trafficWeight,image:properties.template.containers[0].image,probes:properties.template.containers[0].probes}" \
+              -o jsonc
+
+            for revision in khrental-app--0000121 khrental-app--0000122; do
+              echo "=== $revision detail ==="
+              az containerapp revision show \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$revision" \
+                --query "{name:name,active:properties.active,health:properties.healthState,provisioning:properties.provisioningState,running:properties.runningState,traffic:properties.trafficWeight,replicas:properties.replicas,image:properties.template.containers[0].image,command:properties.template.containers[0].command,args:properties.template.containers[0].args,probes:properties.template.containers[0].probes}" \
+                -o jsonc || true
+
+              echo "=== $revision replicas ==="
+              az containerapp replica list \
+                --name "$AZURE_CONTAINER_APP_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --revision "$revision" \
+                -o jsonc || true
+            done
+
+            echo '=== App-level system logs ==='
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --type system \
+              --tail 100 \
+              --format text || true
+
+            echo '=== 0000122 console logs ==='
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision khrental-app--0000122 \
+              --type console \
+              --tail 100 \
+              --format text || true
+
+            echo '=== Direct revision HTTP probes ==='
+            for revision in 0000121 0000122; do
+              host="khrental-app--${revision}.proudpebble-f58b5187.southeastasia.azurecontainerapps.io"
+              echo "--- $host /api/health ---"
+              curl -sS -i --max-time 20 "https://${host}/api/health" || true
+              echo
+            done
