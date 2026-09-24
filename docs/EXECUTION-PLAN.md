@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-09-22  
-**Last verified behavior-changing application baseline:** `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`  
+**Status date:** 2026-09-24  
+**Last verified behavior-changing application baseline:** `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -37,6 +37,13 @@
 - [x] PR #105, SHA `1a7269d866c662125d0e35966e8bcae94fc68c23`, corrected stale/unknown invitation lifecycle presentation: canonical status always loads, pending state refreshes on focus/visibility and every 30 seconds, and invitation-status responses are non-cacheable.
 - [x] PR #106 finalized P0.3 invitation lifecycle/privacy hardening as behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: invitation-only observable email delivery, canonical no-cache status client, shared Send/Resend semantics, Team/Tenant lifecycle parity, unambiguous Tenant-added wording, accepted-date display, client log hardening, redemption/status regression coverage, and the final physical acceptance stories.
 - [x] Production run `35725686513` passed for SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: authorization/lifecycle tests and build passed, immutable image deployed, `khrental-app--0000116` became Ready, startup remained `/bin/sh scripts/start-container.sh`, `/api/health` reported email configured, `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`, and public `/build-info.json` matched the exact behavior SHA.
+- [x] Production acceptance on 2026-09-24 exposed that opening an invitation in an already-authenticated browser could be swallowed by the generic public-route redirect. PR #117 removed that route-level conflict and deployed behavior SHA `6d55e63b468e3fb95983cbbd7b038753e53027ca`.
+- [x] Acceptance then exposed that successful invitation setup could replace an existing Tenant Admin browser session, leaving the original admin tab unauthenticated/stale. PR #118 preserved only a valid different-user browser session and deployed behavior SHA `498557f996dcd8378c14e43b373f1af4cffce64b`.
+- [x] Console evidence then showed the invited account itself receiving `/api/platform/auth/sign-in` 401. PR #119 removed the redundant second password-login step: invitation redemption verifies the persisted credential, issues the session server-side, and only preserves an existing session after server validation. Behavior SHA `c2d353929eeec15f79a102568c2cc7aad08e5a57`, production revision `khrental-app--0000120` Ready.
+- [x] The failed physical account proved `accepted_at` is not sufficient evidence of registration. PR #121 introduced `setup_incomplete` and structural auth-link validation so accepted/partial accounts are no longer falsely projected as Registered.
+- [x] PR #122 added a manual-only Container Apps revision diagnostic/restart workflow after Azure revision activation exceeded the verifier window. No application behavior changed. Retry evidence later proved revision activation could complete after the original verifier timeout.
+- [x] PR #123 made the business rule explicit: **Registered means a structurally valid auth linkage plus verified account access**. Invitation redemption writes the non-secret `invitation_registration_verified` marker only after the submitted credential passes the same verifier used by normal sign-in; a successful real login also qualifies through `last_login_at`. Incomplete claimed accounts show **Setup Incomplete / Account Recovery Required** and cannot be unsafely re-invited.
+- [x] Production run `35985439144` passed for behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`: authorization/regression tests and production build passed; R2 write/read validation passed; revision `khrental-app--0000124` became Ready; startup remained `/bin/sh scripts/start-container.sh`; `/api/health` was healthy; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`; public `/build-info.json` matched the exact SHA; expected browser MSSQL/Evia runtime configuration was verified.
 
 ### Tenant/rentee data model
 
@@ -51,7 +58,8 @@
 ### Known unresolved or insufficiently verified areas
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
-- [ ] P0.3 implementation, automated tests, CI, provider-delivery proof and production deployment verification are complete. **Only the single final physical acceptance pass in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` remains before P0.3 can close.**
+- [ ] P0.3 implementation, automated tests, provider delivery and production deployment verification are complete through behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`. **Physical acceptance is still blocked on proving a freshly invited tenant can log out and log back in successfully and is only then shown as Registered.**
+- [ ] The damaged production test account must be classified as **Setup Incomplete / Account Recovery Required** rather than Registered if it cannot authenticate.
 - [ ] Password-reset flow needs a fresh end-to-end regression check.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -105,7 +113,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / IMPLEMENTATION DEPLOYED, FINAL PHYSICAL ACCEPTANCE PENDING**
+### P0.3 - Invitation/email observability — **ACTIVE / VERIFIED IMPLEMENTATION DEPLOYED, LOGIN-CAPABLE PHYSICAL ACCEPTANCE PENDING**
 
 Scope:
 
@@ -119,28 +127,36 @@ Implementation and verification evidence:
 
 - [x] Normal tenant/team action is explicit **Send Invitation / Resend Invitation** and registered accounts no longer expose an invitation action.
 - [x] `Save & Invite`, tenant-card send/resend and team-card send/resend use the same secure invitation authority and observable server email-delivery path.
-- [x] Canonical invitation status is projected from `dbo.user_invitations` plus authenticated-account linkage as `not_invited`, `pending`, `expired`, `revoked`, or `registered`, with safe lifecycle dates and no token material.
-- [x] Successful redemption is regression-locked to persist both `app_users.auth_id` and `user_invitations.accepted_at` before transaction commit; either accepted timestamp or auth linkage projects as `registered`.
+- [x] Canonical invitation status is projected from invitation state plus the actual authentication account. `setup_incomplete` is used when setup was attempted but the account is not proven login-capable.
+- [x] **Registered is no longer inferred from `accepted_at` or `app_users.auth_id` alone.** It requires matching `app_users`/`auth_users` linkage, usable credential structure, and either a verified invitation credential marker or successful-login timestamp.
+- [x] Successful redemption persists `app_users.auth_id` and `user_invitations.accepted_at` transactionally, then verifies the persisted credential with the normal sign-in verifier before marking invitation registration verified.
+- [x] Fresh/stale-session invitation redemption can adopt the server-issued session directly without a second password-login call; a valid different signed-in browser session may be preserved without preventing redemption.
+- [x] Incomplete claimed accounts show **Setup Incomplete / Account Recovery Required** and invitation resend is disabled to avoid overwriting a potentially shared global credential.
 - [x] Tenant cards distinguish **Tenant added** from invitation lifecycle and show created/expiry/accepted dates where applicable; Team cards use the same lifecycle semantics.
 - [x] Tenant details no longer intentionally suppress the canonical status lookup; valid accessible users should not remain **Unknown** after the lookup completes.
 - [x] Pending status refreshes quietly every 30 seconds and when the admin browser regains focus/visibility; canonical status requests and responses are explicitly non-cacheable.
 - [x] `/api/send-email` uses structured allow-listed success/failure logs and captures SendGrid `x-message-id` when present.
-- [x] Invitation delivery now uses a dedicated `/api/send-email` client with no EmailJS fallback and no recipient/subject/body console logging.
-- [x] Invitation client telemetry uses an allow-list that excludes recipient email, subject, email body, invitation token/link, reset token, password and API secrets.
+- [x] Invitation delivery uses a dedicated `/api/send-email` client with no EmailJS fallback and no recipient/subject/body console logging.
+- [x] Invitation client telemetry excludes recipient email, subject, email body, invitation token/link, reset token, password and API secrets.
 - [x] SendGrid rejection handling does not read or log the raw provider response body.
-- [x] Automated regression coverage includes lifecycle derivation, redemption persistence, canonical action labels, focus/visibility/pending refresh, no-cache status reads, provider message ID, rejection-body suppression, log-field allow-listing, Team/Tenant parity and the dedicated observable email path.
-- [x] New lifecycle regression coverage is wired into `npm run test:authorization`; final PR #106 head passed the full authorization suite and production build before merge.
-- [x] PR #103 merged as behavior SHA `6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`; production run `35673793484` verified provider-ready email configuration and exact runtime SHA.
-- [x] Controlled production invitation email reached the test mailbox on 2026-09-22 (Junk), proving provider/mailbox delivery.
-- [x] PR #105 merged as behavior SHA `1a7269d866c662125d0e35966e8bcae94fc68c23` to repair stale/Unknown lifecycle presentation.
-- [x] PR #106 merged as final P0.3 behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b` with lifecycle/privacy hardening, stronger tests and `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`.
-- [x] Production run `35725686513` passed for final behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`: `khrental-app--0000116` Ready; startup `/bin/sh scripts/start-container.sh`; `/api/health` email configured; `/api/mssql/health` returned ready after normal revision warmup; `/build-info.json` matched the exact SHA; browser runtime MSSQL configuration was correct.
-- [ ] Run the single final physical production acceptance pass defined in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` and record PASS/FAIL evidence for US-INV-01 through US-INV-09.
+- [x] Regression coverage now includes lifecycle derivation, structural auth linkage, verified registration access, credential round-trip, redemption persistence, canonical action labels, session preservation/adoption, setup-incomplete recovery behavior, focus/visibility/pending refresh, no-cache status reads, provider message ID, rejection-body suppression, log-field allow-listing, Team/Tenant parity and the dedicated observable email path.
+- [x] Controlled production invitation email reached the test mailbox, proving the provider/mailbox path.
+- [x] PRs #117, #118 and #119 corrected route/session/redemption defects found during the physical acceptance run.
+- [x] PR #121 stopped accepted/partial registrations from being falsely labelled Registered.
+- [x] PR #122 added manual Container Apps revision diagnostics after Azure activation outlasted the normal verifier; later retry evidence proved slow activation rather than an application startup crash.
+- [x] PR #123 merged behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`, requiring verified account access for Registered and making incomplete claimed accounts recovery-only.
+- [x] Production run `35985439144` certified `khrental-app--0000124` Ready for behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`; startup, health, MSSQL, public build SHA, R2 and browser runtime configuration all passed.
+- [x] US-INV-01 passed physically: plain Save Tenant persisted the renter as Not Invited, showed Send Invitation, produced no invitation dates and sent no email.
+- [x] Provider/mailbox delivery for the invitation was physically confirmed.
+- [ ] Re-run the acceptance with a brand-new never-invited tenant: complete setup in a clean browser, prove direct authenticated entry, then log out and log back in with the created password. Only then may the admin surface show Registered.
+- [ ] Verify the damaged Wasa test account is projected as Setup Incomplete / Account Recovery Required rather than Registered.
+- [ ] Complete remaining US-INV stories after the login-capable registration gate passes.
 
 Exit criteria:
 
 - [x] Production evidence shows an invitation request reached the email provider/mailbox path.
-- [ ] User-visible invitation status is unambiguous across the final physical Send/Resend/Accept/reload checks.
+- [ ] A freshly invited tenant can complete setup, log out, and log back in with the created credential.
+- [ ] User-visible invitation status is unambiguous across final Send/Resend/Accept/login/reload checks; non-login-capable accounts are never labelled Registered.
 - [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
 ### P0.4 - Password reset regression
@@ -269,15 +285,15 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: P0.3 - Invitation/email observability
-Problem/evidence: Provider observability was added, then controlled production acceptance exposed two lifecycle defects: a tenant could remain visually Pending after acceptance and the details page could show Unknown because status refresh/checking was inconsistent. Final hardening also removed legacy invitation email/logging fallbacks that could undermine observability/privacy.
-Scope: Make Send/Resend/Registered semantics canonical across Tenant and Team surfaces; refresh Pending state after external acceptance; keep details and cards on one authoritative status; preserve provider-level SendGrid evidence; prevent sensitive invitation content from client/server logs; regression-lock redemption persistence; run one final physical acceptance pack before closure.
-Out of scope: schema changes; password reset regression; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
-PRs: #103 provider observability (`6ce7d95096b2868cdf27f8d5628eb1e68b963f7e`); #105 lifecycle refresh (`1a7269d866c662125d0e35966e8bcae94fc68c23`); #106 final lifecycle/privacy hardening (`8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`).
-CI result: Final #106 head passed the complete `npm run test:authorization` gate, including the new invitation lifecycle suite, and production build. Main deployment run `35725686513` repeated authorization tests/build successfully before deployment.
-Production revision/SHA: `khrental-app--0000116` Ready; behavior SHA `8ae3a2a84e65363f48f6991c8f5bb7542c1f967b`.
-Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` reported email configured; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}` after revision warmup; public `/build-info.json` returned `{"buildSha":"8ae3a2a84e65363f48f6991c8f5bb7542c1f967b"}`; runtime browser MSSQL configuration verified.
-Result: ACTIVE — implementation, automated tests, CI, deployment verification and provider/mailbox delivery proof are complete. Only the final physical US-INV-01 through US-INV-09 acceptance pass remains.
-Next item: Execute `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`; if all stories pass, mark P0.3 COMPLETE and only then move P0.4 to ACTIVE.
+Problem/evidence: Final physical acceptance exposed that an invitation could be opened without being redeemed, a successful redemption could replace the Tenant Admin session, a redundant post-redemption sign-in could return 401, and accepted/linked-but-unusable accounts could be falsely presented as Registered. The business rule is now explicit: Registered means the tenant can actually authenticate.
+Scope: Keep one canonical invitation lifecycle across Tenant and Team; preserve observable provider delivery; verify invitation-created credentials with the normal password verifier; establish session directly from redemption; project Setup Incomplete for partial/unverified claimed accounts; prevent unsafe re-invitation of claimed credentials; physically prove a fresh tenant can complete setup and subsequently log in again.
+Out of scope: password-reset regression except where later needed to recover a damaged claimed test account; Evia/signing; DocumentService cleanup; general compatibility-client refactoring.
+PRs: #103 provider observability; #105 lifecycle refresh; #106 lifecycle/privacy hardening; #117 accept-invite routing; #118 existing-session preservation; #119 verified session issuance during redemption; #121 incomplete-registration projection; #122 manual revision diagnostics; #123 verified-registration semantics.
+CI result: PR #123 and main both passed the complete `npm run test:authorization` gate and production build. Production run `35985439144` also passed R2 validation and final runtime verification.
+Production revision/SHA: `khrental-app--0000124` Ready; behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`.
+Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`; public `/build-info.json` matched `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`; expected browser MSSQL/Evia runtime configuration verified.
+Result: ACTIVE — implementation and runtime deployment are verified, US-INV-01 and provider delivery passed, but P0.3 cannot close until a fresh invited tenant proves login-capable registration and the remaining physical acceptance stories pass.
+Next item: First verify the damaged Wasa test account displays Setup Incomplete / Account Recovery Required. Then run one brand-new invitation in a clean browser, complete setup, log out, log back in, and require Registered only after that proof. If successful, continue the remaining P0.3 acceptance stories; only then activate P0.4.
 ```
 
 ---
