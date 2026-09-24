@@ -11,6 +11,10 @@ export const getInvitationActionLabel = (status) => {
     return null;
   }
 
+  if (normalized === 'setup_incomplete') {
+    return 'Resend Invitation';
+  }
+
   if (['pending', 'expired', 'revoked', 'invited'].includes(normalized)) {
     return 'Resend Invitation';
   }
