@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { platform as platformClient } from '../services/platformClient';
+import { clearActiveTenantId, saveStoredSession } from '../services/requestContext';
 import { getApiBaseUrl } from '../utils/env';
 import { toast } from 'react-hot-toast';
 
@@ -23,6 +24,21 @@ const shouldPreserveExistingSession = (session, invitationEmail) => {
   const existingEmail = normalizeEmail(session?.user?.email);
   const invitedEmail = normalizeEmail(invitationEmail);
   return Boolean(session && existingEmail && invitedEmail && existingEmail !== invitedEmail);
+};
+
+const hasServerValidatedDifferentSession = async (session, invitationEmail) => {
+  if (!shouldPreserveExistingSession(session, invitationEmail) || !session?.access_token) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(invitationApiUrl('/api/platform/auth/context'), {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    return response.ok;
+  } catch (_error) {
+    return false;
+  }
 };
 
 const getRoleRedirect = (role) => (
@@ -112,24 +128,29 @@ const AcceptInvite = () => {
       setLoading(true);
       setError(null);
 
-      // Preserve any different account that is already signed in to this
-      // browser. Invitation redemption is server-side and must not silently
-      // replace an administrator/staff session just because the email link was
-      // opened in the same browser profile.
+      // A browser-local session is not proof of authentication. Preserve a
+      // different signed-in account only after the server confirms that its
+      // bearer token is still valid. Stale/expired sessions must not strand the
+      // invited account in an unauthenticated browser after redemption.
       const { data: existingSessionData } = await platformClient.auth.getSession();
       const existingSession = existingSessionData?.session || null;
-      const preserveSession = shouldPreserveExistingSession(existingSession, invitation.email);
+      const preserveSession = await hasServerValidatedDifferentSession(existingSession, invitation.email);
 
       const redeemResponse = await fetch(
         invitationApiUrl('/api/platform/auth/invitations/redeem'),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, password })
+          body: JSON.stringify({
+            token,
+            password,
+            establishSession: !preserveSession
+          })
         }
       );
       const redeemPayload = await readResponse(redeemResponse);
       const redeemedInvitation = redeemPayload?.data?.invitation || {};
+      const redeemedSession = redeemPayload?.data?.session || null;
 
       if (preserveSession) {
         setPreservedExistingSession(true);
@@ -138,21 +159,20 @@ const AcceptInvite = () => {
         return;
       }
 
-      // With no different browser session to protect, use the normal sign-in
-      // path so the invited user lands in the standard persisted session.
-      const { error: signInError } = await platformClient.auth.signInWithPassword({
-        email: invitation.email,
-        password
-      });
-
-      if (signInError) {
-        throw new Error('Your account was created, but automatic sign-in failed. Please sign in with your new password.');
+      if (!redeemedSession?.access_token || !redeemedSession?.user) {
+        throw new Error('Your account was created, but an authenticated session could not be established. Please contact support before retrying the invitation.');
       }
 
+      // Persist the session issued by the redemption endpoint itself. This
+      // avoids an unnecessary second password-authentication request after the
+      // server has already created and verified the credential. A full reload
+      // then initializes the normal auth client from this stored session.
+      clearActiveTenantId();
+      saveStoredSession(redeemedSession);
+
       const role = redeemedInvitation.intendedRole || invitation.intendedRole;
-      setSuccess(true);
       toast.success('Account setup completed successfully!');
-      navigate(getRoleRedirect(role), { replace: true });
+      window.location.assign(getRoleRedirect(role));
     } catch (setupError) {
       console.error('Error completing secure invitation setup:', setupError);
       setError(setupError.message || 'Unable to complete account setup.');
