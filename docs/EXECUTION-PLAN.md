@@ -66,8 +66,8 @@
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
 - [x] P0.3 core fresh-registration acceptance passed on behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`: a never-invited renter completed secure setup, entered as Rentee, logged out, logged back in normally with the same password, and the admin surface showed Registered.
-- [ ] The damaged production test account must be classified as **Setup Incomplete / Account Recovery Required** rather than Registered if it cannot authenticate.
-- [ ] Final P0.3 production log spot-check must confirm no sensitive invitation content is written to logs.
+- [ ] P0.3 physical acceptance stories still outstanding per `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`: resend supersession (US-INV-03), final durable admin reload comparison (US-INV-05), used-link single-use proof (US-INV-06), Team-member lifecycle parity (US-INV-07), production log privacy spot-check (US-INV-08), and deliberate card/details lifecycle agreement (US-INV-09).
+- [ ] The damaged production test account `+99` must be classified as **Setup Incomplete / Account Recovery Required** rather than Registered if it cannot authenticate.
 - [ ] Password-reset flow needs a fresh end-to-end regression check under the same isolated-route architecture.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -121,7 +121,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / CORE REGISTRATION ACCEPTANCE PASSED, FINAL CLEANUP PENDING**
+### P0.3 - Invitation/email observability — **ACTIVE / CORE REGISTRATION ACCEPTANCE PASSED, REMAINING PHYSICAL STORIES PENDING**
 
 Scope:
 
@@ -156,20 +156,26 @@ Implementation and verification evidence:
 - [x] PR #123 merged behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`, requiring verified account access for Registered and making incomplete claimed accounts recovery-only.
 - [x] Production run `35985439144` certified `khrental-app--0000124` Ready for behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`; startup, health, MSSQL, public build SHA, R2 and browser runtime configuration all passed.
 - [x] US-INV-01 passed physically: plain Save Tenant persisted the renter as Not Invited, showed Send Invitation, produced no invitation dates and sent no email.
-- [x] Provider/mailbox delivery for the invitation was physically confirmed.
+- [x] US-INV-02/provider delivery passed physically: controlled production invitation reached SendGrid and the controlled mailbox.
 - [x] Fresh `+100` acceptance proved the route-level architecture still allowed the legacy `WelcomeGuide` to compete with `AcceptInvite`; browser evidence was `/api/platform/auth/update-user` -> 401 while opening the invitation flow.
 - [x] Root cause is documented in `docs/AUTHENTICATION-LIFECYCLE.md`: `AcceptInvite` is the sole invitation credential owner; `WelcomeGuide` is authenticated-only and must never infer invitation state from URL tokens; `/accept-invite` and `/reset-password` are isolated from the normal app shell.
 - [x] PR #124 merged and deployed the isolated credential-flow correction. Production run `36111540458` passed automated authorization/regression tests, build, R2 validation and runtime checks; revision `khrental-app--0000127` is Ready and serves SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e` with MSSQL ready.
-- [x] Fresh `+101` physical acceptance passed: clean invitation setup, direct authenticated entry, logout, normal login with the same created password, correct Rentee workspace, and admin status **Registered**.
-- [ ] Verify the damaged Wasa test account is projected as Setup Incomplete / Account Recovery Required rather than Registered.
-- [ ] Complete the final production log spot-check for sensitive invitation content.
+- [x] US-INV-04 core acceptance passed with fresh `+101`: clean invitation setup, direct authenticated entry, logout, normal login with the same created password, correct Rentee workspace, and admin status **Registered**.
+- [ ] US-INV-03: physically prove Resend supersedes the older invitation and only the newest link can be used.
+- [ ] US-INV-05: record final admin card/details reload comparison after the already-proven durable renter re-login.
+- [ ] US-INV-06: reopen the accepted controlled invitation and prove it cannot be redeemed twice.
+- [ ] US-INV-07: execute the same canonical invitation lifecycle physically for a controlled Team member.
+- [ ] US-INV-08: complete the final production log spot-check for sensitive invitation content.
+- [ ] US-INV-09: deliberately compare card/details states for available Not Invited, Pending and Registered examples and reload both surfaces.
+- [ ] Verify the damaged `+99` account is projected as Setup Incomplete / Account Recovery Required rather than Registered if it remains unable to authenticate.
 
 Exit criteria:
 
 - [x] Production evidence shows an invitation request reached the email provider/mailbox path.
 - [x] Credential bootstrap has one owner: invitation route isolation prevents tenant/app-shell/legacy onboarding from competing with `AcceptInvite`.
 - [x] A freshly invited tenant can complete setup, log out, and log back in with the created credential.
-- [ ] User-visible invitation status is unambiguous across final Send/Resend/Accept/login/reload checks; non-login-capable accounts are never labelled Registered.
+- [ ] All required production acceptance stories in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` are marked passed.
+- [ ] Damaged `+99` is correctly projected as recovery-required if it remains non-login-capable.
 - [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
 ### P0.4 - Password reset regression
@@ -298,16 +304,16 @@ Next item: P0.3 - Invitation/email observability.
 ## Current active item
 
 ```text
-Active item: P0.3 - invitation lifecycle final cleanup
-Problem/evidence: The competing invitation/password onboarding architecture was corrected in PR #124 after +100 reproduced `/api/platform/auth/update-user` 401. Fresh +101 acceptance on 2026-09-25 then completed secure setup, entered directly, logged out, logged back in with the same password, entered the correct Rentee workspace, and the admin surface showed Registered.
-Scope: Preserve the single-owner auth architecture; classify the damaged +99 account correctly; complete the final production log privacy spot-check; do not reopen the proven +101 registration path without new evidence.
+Active item: P0.3 - invitation lifecycle final production acceptance
+Problem/evidence: The core credential-bootstrap defect is fixed and fresh +101 registration/login is proven, but the dedicated P0.3 acceptance document still contains required physical stories that have not yet been recorded as passed. The plan must follow that checklist rather than infer completion from automated coverage.
+Scope: Preserve the proven +101 registration path; execute and record the remaining physical stories US-INV-03, US-INV-05 final reload comparison, US-INV-06, US-INV-07, US-INV-08 and US-INV-09; verify the damaged +99 account projects recovery-required rather than Registered if still non-login-capable.
 Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; P0.4 password reset until P0.3 exits.
 PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124.
 CI result: PR #124 and main passed the full authorization/regression suite and production build. Production run `36111540458` also passed R2 validation and final runtime verification.
 Production revision/SHA: `khrental-app--0000127` Ready; behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`.
 Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned ready; public `/build-info.json` matched `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; fresh +101 invitation/signup/logout/login/Rentee/admin-Registered acceptance passed physically.
-Result: ACTIVE — the core P0.3 registration gate is PASSED. Remaining work is limited to +99 recovery-state classification and final sensitive-log inspection.
-Next item: Verify +99 is Setup Incomplete / Account Recovery Required and perform the production log privacy spot-check. If both pass, close P0.3 and activate P0.4 password-reset regression.
+Result: ACTIVE — core registration is proven, but P0.3 is not yet complete because several explicit physical acceptance stories remain open.
+Next item: Execute US-INV-03 resend supersession first, then US-INV-06 used-link proof while the invitation history is available; continue US-INV-05/07/08/09 and +99 recovery-state verification, updating both canonical documents after each verified result. Only then close P0.3 and activate P0.4.
 ```
 
 ---
