@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-25  
-**Last verified behavior-changing application baseline:** `cfea12e7846460f85e9a1e6cf99c6956c179a99e`  
+**Last verified behavior-changing application baseline:** `2b0d77dda30761a032b289282050191eacf8246e`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -167,7 +167,7 @@ Implementation and verification evidence:
 - [x] US-INV-07 passed physically with controlled `+103`: the Team-member flow was exercised through initial send, pending/resend, newest-invitation account setup and Team refresh, completing the required canonical lifecycle parity check.
 - [ ] US-INV-08: complete the final production log spot-check for sensitive invitation content.
 - [x] US-INV-09 passed physically: the Tenant Administrator deliberately compared and reloaded available Not Invited, Invitation Pending and Registered card/details surfaces; canonical states agreed, valid records did not remain Unknown, and Registered records exposed no Send/Resend action.
-- [ ] Damaged `+99` production check exposed a remaining defect: details currently show **Invitation Expired / Resend Invitation**. Historical accepted-invitation claim evidence must outrank a newer expired invitation so a previously claimed, non-login-capable identity projects **Setup Incomplete / Account Recovery Required** and cannot be re-invited.
+- [x] Damaged `+99` recovery projection passed after PR #125: historical accepted-invitation evidence now outranks a newer expired invitation, unsafe re-invitation is blocked, and production physically shows **Setup Incomplete / Account Recovery Required**. Run `36153613672`, SHA `2b0d77dda30761a032b289282050191eacf8246e`, revision `khrental-app--0000128` Ready.
 
 Exit criteria:
 
@@ -175,7 +175,7 @@ Exit criteria:
 - [x] Credential bootstrap has one owner: invitation route isolation prevents tenant/app-shell/legacy onboarding from competing with `AcceptInvite`.
 - [x] A freshly invited tenant can complete setup, log out, and log back in with the created credential.
 - [ ] All required production acceptance stories in `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` are marked passed.
-- [ ] Damaged `+99` is correctly projected as recovery-required if it remains non-login-capable.
+- [x] Damaged `+99` is correctly projected as recovery-required and unsafe resend is unavailable.
 - [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
 ### P0.4 - Password reset regression
@@ -305,15 +305,15 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: P0.3 - invitation lifecycle final production acceptance
-Problem/evidence: Fresh invitation registration and the explicit physical stories are largely proven, but the damaged +99 production check on 2026-09-25 exposed a security/lifecycle defect: the account currently projects **Invitation Expired / Resend Invitation** instead of recovery-required. A newer expired invitation can mask historical accepted-invitation claim evidence when auth linkage is missing.
-Scope: Preserve the proven +101 registration path; complete the remaining US-INV-08 production log privacy spot-check; verify the damaged +99 account projects recovery-required rather than Registered if still non-login-capable. US-INV-07 Team-member parity and US-INV-09 status-surface agreement are physically passed.
+Problem/evidence: Fresh invitation registration and all lifecycle/status physical stories except the production log privacy spot-check are proven. The damaged +99 defect discovered during acceptance was corrected by PR #125 and physically verified in production.
+Scope: Preserve the proven invitation/recovery behavior and complete the sole remaining P0.3 gate: US-INV-08 production log privacy spot-check.
 Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; P0.4 password reset until P0.3 exits.
-PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124.
-CI result: PR #124 and main passed the full authorization/regression suite and production build. Production run `36111540458` also passed R2 validation and final runtime verification.
-Production revision/SHA: `khrental-app--0000127` Ready; behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`.
-Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned ready; public `/build-info.json` matched `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; fresh +101 invitation/signup/logout/login/Rentee/admin-Registered acceptance passed physically.
-Result: ACTIVE — core registration is proven, but P0.3 is not yet complete because several explicit physical acceptance stories remain open.
-Next item: Fix and deploy historical-claim projection/resend blocking for +99, physically verify it becomes **Setup Incomplete / Account Recovery Required**, then complete US-INV-08 production log privacy. Only then close P0.3 and activate P0.4.
+PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124, #125.
+CI result: PR #125 and main passed verification/build/deploy. Production run `36153613672` completed successfully.
+Production revision/SHA: `khrental-app--0000128` Ready; behavior SHA `2b0d77dda30761a032b289282050191eacf8246e`.
+Runtime proof: deterministic startup; live MSSQL connectivity; public FQDN serves `2b0d77dda30761a032b289282050191eacf8246e` from Ready revision `khrental-app--0000128`; fresh registration flows remain proven; damaged +99 now physically projects recovery-only.
+Result: ACTIVE — only US-INV-08 production log privacy remains before P0.3 can close.
+Next item: Complete US-INV-08 production log privacy spot-check. If it passes, close P0.3 and activate P0.4.
 ```
 
 ---
