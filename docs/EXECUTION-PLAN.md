@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-09-25  
-**Last verified behavior-changing application baseline:** `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`  
+**Last verified behavior-changing application baseline:** `cfea12e7846460f85e9a1e6cf99c6956c179a99e`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -49,6 +49,8 @@
 - [x] Production run `35985439144` passed for behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`: authorization/regression tests and production build passed; R2 write/read validation passed; revision `khrental-app--0000124` became Ready; startup remained `/bin/sh scripts/start-container.sh`; `/api/health` was healthy; `/api/mssql/health` returned `{"ok":true,"provider":"mssql","connection":"ready"}`; public `/build-info.json` matched the exact SHA; expected browser MSSQL/Evia runtime configuration was verified.
 - [x] Azure SQL free-limit exhaustion temporarily paused production on 2026-09-25; after billing continuation was enabled, `/api/mssql/health` returned `200` / `connection: ready` and revision `khrental-app--0000126` was healthy. This infrastructure event is separate from P0.3 auth behavior.
 - [x] Fresh production acceptance with `wweerakoone+100@gmail.com` exposed a second credential owner: `WelcomeGuide` globally treated any `?token=` as invitation onboarding and called protected `/api/platform/auth/update-user`, producing 401 before the secure invitation flow owned the credential transition. This is an authentication architecture defect, not a database outage.
+- [x] PR #124 corrected the architecture: `AcceptInvite` is the sole invitation credential owner; `/accept-invite` and `/reset-password` are isolated from the authenticated app shell; `WelcomeGuide` is authenticated-only and no longer treats URL tokens as invitation state. Production run `36111540458` passed authorization/regression tests, production build, R2 validation, immutable deployment and runtime verification for behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; revision `khrental-app--0000127` became Ready, `/api/mssql/health` returned ready and the public build fingerprint matched exactly.
+- [x] Fresh physical acceptance using `wweerakoone+101@gmail.com` passed on 2026-09-25: invitation setup completed once, the app opened directly, logout succeeded, normal login with the same credential succeeded, the user entered the correct Rentee workspace, and the Tenant Admin surface refreshed to **Registered**.
 
 ### Tenant/rentee data model
 
@@ -63,8 +65,9 @@
 ### Known unresolved or insufficiently verified areas
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
-- [ ] P0.3 implementation/provider/runtime baseline is deployed through behavior SHA `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13`, but fresh `+100` acceptance exposed competing legacy onboarding. **P0.3 remains blocked until the isolated credential-flow design is merged/deployed and a fresh invited tenant proves logout + normal login with the created password.**
+- [x] P0.3 core fresh-registration acceptance passed on behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`: a never-invited renter completed secure setup, entered as Rentee, logged out, logged back in normally with the same password, and the admin surface showed Registered.
 - [ ] The damaged production test account must be classified as **Setup Incomplete / Account Recovery Required** rather than Registered if it cannot authenticate.
+- [ ] Final P0.3 production log spot-check must confirm no sensitive invitation content is written to logs.
 - [ ] Password-reset flow needs a fresh end-to-end regression check under the same isolated-route architecture.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
@@ -118,7 +121,7 @@ P0.2 production baseline: PR #102 / SHA `190e0d412d702aed6b11f2546872c167d5808ea
 
 Exit criteria: **COMPLETE — all 12 P0.2 checks passed.**
 
-### P0.3 - Invitation/email observability — **ACTIVE / AUTHENTICATION ARCHITECTURE CORRECTION IN PROGRESS**
+### P0.3 - Invitation/email observability — **ACTIVE / CORE REGISTRATION ACCEPTANCE PASSED, FINAL CLEANUP PENDING**
 
 Scope:
 
@@ -156,16 +159,16 @@ Implementation and verification evidence:
 - [x] Provider/mailbox delivery for the invitation was physically confirmed.
 - [x] Fresh `+100` acceptance proved the route-level architecture still allowed the legacy `WelcomeGuide` to compete with `AcceptInvite`; browser evidence was `/api/platform/auth/update-user` -> 401 while opening the invitation flow.
 - [x] Root cause is documented in `docs/AUTHENTICATION-LIFECYCLE.md`: `AcceptInvite` is the sole invitation credential owner; `WelcomeGuide` is authenticated-only and must never infer invitation state from URL tokens; `/accept-invite` and `/reset-password` are isolated from the normal app shell.
-- [ ] Merge/deploy the isolated credential-flow correction and prove its automated tests/build/runtime checks.
-- [ ] Re-run acceptance with a new never-invited tenant after deployment: complete setup in a clean browser, prove direct authenticated entry, then log out and log back in with the created password. Only then may the admin surface show Registered.
+- [x] PR #124 merged and deployed the isolated credential-flow correction. Production run `36111540458` passed automated authorization/regression tests, build, R2 validation and runtime checks; revision `khrental-app--0000127` is Ready and serves SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e` with MSSQL ready.
+- [x] Fresh `+101` physical acceptance passed: clean invitation setup, direct authenticated entry, logout, normal login with the same created password, correct Rentee workspace, and admin status **Registered**.
 - [ ] Verify the damaged Wasa test account is projected as Setup Incomplete / Account Recovery Required rather than Registered.
-- [ ] Complete remaining US-INV stories after the login-capable registration gate passes.
+- [ ] Complete the final production log spot-check for sensitive invitation content.
 
 Exit criteria:
 
 - [x] Production evidence shows an invitation request reached the email provider/mailbox path.
-- [ ] Credential bootstrap has one owner: invitation route isolation prevents tenant/app-shell/legacy onboarding from competing with `AcceptInvite`.
-- [ ] A freshly invited tenant can complete setup, log out, and log back in with the created credential.
+- [x] Credential bootstrap has one owner: invitation route isolation prevents tenant/app-shell/legacy onboarding from competing with `AcceptInvite`.
+- [x] A freshly invited tenant can complete setup, log out, and log back in with the created credential.
 - [ ] User-visible invitation status is unambiguous across final Send/Resend/Accept/login/reload checks; non-login-capable accounts are never labelled Registered.
 - [ ] Final production log spot-check confirms no sensitive invitation content is written to logs.
 
@@ -295,16 +298,16 @@ Next item: P0.3 - Invitation/email observability.
 ## Current active item
 
 ```text
-Active item: P0.3 - Invitation/email observability / authentication lifecycle correction
-Problem/evidence: Fresh production acceptance with wweerakoone+100@gmail.com proved the secure invitation flow still had a competing credential owner. RootLayout mounted WelcomeGuide on /accept-invite; WelcomeGuide interpreted the invitation token as a legacy temporary-password flow and called protected /api/platform/auth/update-user before the invited identity had an authenticated session, producing 401. Earlier acceptance had also exposed session replacement, redundant sign-in, and false Registered states. The business rule is now explicit: Registered means the tenant can actually authenticate.
-Scope: Make AcceptInvite the sole owner of invitation credential establishment; isolate /accept-invite and /reset-password from the authenticated app shell; preserve the safe different-user existing-session behavior; keep one canonical invitation lifecycle; verify invitation-created credentials with the normal password verifier; project Setup Incomplete for partial/unverified claimed accounts; physically prove a fresh tenant can complete setup and subsequently log in again.
-Out of scope: Evia/signing; DocumentService cleanup; general compatibility-client refactoring; broad auth rewrites not required by the verified lifecycle defect.
-PRs: #103 provider observability; #105 lifecycle refresh; #106 lifecycle/privacy hardening; #117 accept-invite routing; #118 existing-session preservation; #119 verified session issuance during redemption; #121 incomplete-registration projection; #122 manual revision diagnostics; #123 verified-registration semantics; current branch p0.3-invite-route-isolation pending PR.
-CI result: Current architecture correction is not yet merged; automated authorization/regression tests and production build must pass before PR merge.
-Production revision/SHA: Current known healthy production revision `khrental-app--0000126`; last verified behavior baseline remains `1ac6f4d2eb43f43641220a6e19b5f8cd9f312e13` until the correction is deployed.
-Runtime proof: Azure SQL is resumed and `/api/mssql/health` returned 200/ready. Browser acceptance reproduced `/api/platform/auth/update-user` 401 on the fresh +100 invitation, isolating the remaining defect to competing onboarding/session architecture rather than database availability.
-Result: ACTIVE — canonical authentication lifecycle, route isolation, single-owner rules and regression expectations are being implemented. P0.3 remains blocked until deployment and fresh login-capable physical acceptance pass.
-Next item: Pass branch tests/build, merge/deploy the credential-flow isolation correction, then use a new never-invited account for clean-browser invitation -> setup -> direct entry -> logout -> normal login -> admin Registered proof. Only after that continue remaining P0.3 acceptance and then P0.4.
+Active item: P0.3 - invitation lifecycle final cleanup
+Problem/evidence: The competing invitation/password onboarding architecture was corrected in PR #124 after +100 reproduced `/api/platform/auth/update-user` 401. Fresh +101 acceptance on 2026-09-25 then completed secure setup, entered directly, logged out, logged back in with the same password, entered the correct Rentee workspace, and the admin surface showed Registered.
+Scope: Preserve the single-owner auth architecture; classify the damaged +99 account correctly; complete the final production log privacy spot-check; do not reopen the proven +101 registration path without new evidence.
+Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; P0.4 password reset until P0.3 exits.
+PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124.
+CI result: PR #124 and main passed the full authorization/regression suite and production build. Production run `36111540458` also passed R2 validation and final runtime verification.
+Production revision/SHA: `khrental-app--0000127` Ready; behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`.
+Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned ready; public `/build-info.json` matched `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; fresh +101 invitation/signup/logout/login/Rentee/admin-Registered acceptance passed physically.
+Result: ACTIVE — the core P0.3 registration gate is PASSED. Remaining work is limited to +99 recovery-state classification and final sensitive-log inspection.
+Next item: Verify +99 is Setup Incomplete / Account Recovery Required and perform the production log privacy spot-check. If both pass, close P0.3 and activate P0.4 password-reset regression.
 ```
 
 ---
