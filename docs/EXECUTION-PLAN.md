@@ -167,7 +167,7 @@ Implementation and verification evidence:
 - [x] US-INV-07 passed physically with controlled `+103`: the Team-member flow was exercised through initial send, pending/resend, newest-invitation account setup and Team refresh, completing the required canonical lifecycle parity check.
 - [ ] US-INV-08: complete the final production log spot-check for sensitive invitation content.
 - [x] US-INV-09 passed physically: the Tenant Administrator deliberately compared and reloaded available Not Invited, Invitation Pending and Registered card/details surfaces; canonical states agreed, valid records did not remain Unknown, and Registered records exposed no Send/Resend action.
-- [ ] Verify the damaged `+99` account is projected as Setup Incomplete / Account Recovery Required rather than Registered if it remains unable to authenticate.
+- [ ] Damaged `+99` production check exposed a remaining defect: details currently show **Invitation Expired / Resend Invitation**. Historical accepted-invitation claim evidence must outrank a newer expired invitation so a previously claimed, non-login-capable identity projects **Setup Incomplete / Account Recovery Required** and cannot be re-invited.
 
 Exit criteria:
 
@@ -305,7 +305,7 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: P0.3 - invitation lifecycle final production acceptance
-Problem/evidence: The core credential-bootstrap defect is fixed and fresh +101 registration/login is proven, but the dedicated P0.3 acceptance document still contains required physical stories that have not yet been recorded as passed. The plan must follow that checklist rather than infer completion from automated coverage.
+Problem/evidence: Fresh invitation registration and the explicit physical stories are largely proven, but the damaged +99 production check on 2026-09-25 exposed a security/lifecycle defect: the account currently projects **Invitation Expired / Resend Invitation** instead of recovery-required. A newer expired invitation can mask historical accepted-invitation claim evidence when auth linkage is missing.
 Scope: Preserve the proven +101 registration path; complete the remaining US-INV-08 production log privacy spot-check; verify the damaged +99 account projects recovery-required rather than Registered if still non-login-capable. US-INV-07 Team-member parity and US-INV-09 status-surface agreement are physically passed.
 Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; P0.4 password reset until P0.3 exits.
 PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124.
@@ -313,7 +313,7 @@ CI result: PR #124 and main passed the full authorization/regression suite and p
 Production revision/SHA: `khrental-app--0000127` Ready; behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`.
 Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned ready; public `/build-info.json` matched `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; fresh +101 invitation/signup/logout/login/Rentee/admin-Registered acceptance passed physically.
 Result: ACTIVE — core registration is proven, but P0.3 is not yet complete because several explicit physical acceptance stories remain open.
-Next item: Verify the damaged +99 recovery-state projection, then complete US-INV-08 production log privacy. Update both canonical documents after each verified result; only then close P0.3 and activate P0.4.
+Next item: Fix and deploy historical-claim projection/resend blocking for +99, physically verify it becomes **Setup Incomplete / Account Recovery Required**, then complete US-INV-08 production log privacy. Only then close P0.3 and activate P0.4.
 ```
 
 ---

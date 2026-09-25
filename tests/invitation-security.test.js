@@ -132,6 +132,16 @@ test('canonical invitation status requires verified auth access before registere
   assert.equal(derive({ user: {}, auth: null, invitation: null, now }), 'not_invited');
   assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-23T00:00:00.000Z' }, now }), 'pending');
   assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-21T23:59:59.000Z' }, now }), 'expired');
+  assert.equal(
+    derive({
+      user: {},
+      auth: null,
+      invitation: { expires_at: '2026-09-21T23:59:59.000Z' },
+      hasAcceptedInvitation: true,
+      now
+    }),
+    'setup_incomplete'
+  );
   assert.equal(derive({ user: {}, auth: null, invitation: { expires_at: '2026-09-23T00:00:00.000Z', revoked_at: '2026-09-21T00:00:00.000Z' }, now }), 'revoked');
   assert.equal(derive({ user, auth, invitation: null, now }), 'registered');
 
@@ -196,6 +206,8 @@ test('canonical invitation status projection verifies auth linkage without expos
   assert.match(invitationStatusSource, /registrationComplete/);
   assert.match(invitationStatusSource, /invitation_registration_verified/);
   assert.match(invitationStatusSource, /last_login_at/);
+  assert.match(invitationStatusSource, /accepted_at IS NOT NULL/);
+  assert.match(invitationStatusSource, /hasAcceptedInvitation/);
   assert.doesNotMatch(invitationStatusSource, /token_hash/);
   assert.doesNotMatch(invitationStatusSource, /SELECT[\s\S]*\btoken\b/i);
   assert.doesNotMatch(invitationStatusSource, /passwordHash|passwordSalt/);
@@ -259,4 +271,11 @@ test('server send-email response no longer echoes recipient or subject', () => {
   assert.doesNotMatch(serverSource, /res\.json\(\{ \.\.\.result, to, subject/);
   assert.match(serverSource, /email_provider_accepted/);
   assert.match(serverSource, /providerMessageId/);
+});
+
+
+test('invitation creation refuses a historically accepted identity even if current auth linkage is missing', () => {
+  assert.match(invitationsSource, /accepted_at IS NOT NULL/);
+  assert.match(invitationsSource, /ACCOUNT_RECOVERY_REQUIRED/);
+  assert.match(invitationsSource, /previously claimed/);
 });
