@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { platform as platformClient } from '../services/platformClient';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const WelcomeGuide = () => {
@@ -12,70 +12,55 @@ const WelcomeGuide = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // Check if this is a first-time login that needs to change password
+  // This guide is only for already-authenticated accounts explicitly marked
+  // for a password change. Secure invitation redemption is owned exclusively
+  // by AcceptInvite and must never be inferred from a generic URL token.
   useEffect(() => {
-    // Check for invitation flow from the auth email
-    const params = new URLSearchParams(location.search);
-    const inviteToken = params.get('token');
-    
-    // If this is an invite flow, automatically open the welcome guide
-    if (inviteToken) {
-      setIsOpen(true);
+    if (!user) {
+      setIsOpen(false);
       return;
     }
-    
-    // Otherwise check for force_password_change in user metadata
-    if (user) {
-      console.log('Checking user metadata for password change flag:', user.user_metadata);
-      
-      // Check both possible metadata locations
-      const needsPasswordChange = 
-        (user.user_metadata?.force_password_change) || 
-        (user.app_metadata?.force_password_change);
-      
-      if (needsPasswordChange) {
-        console.log('User needs to change password - showing welcome guide');
-        setIsOpen(true);
-      }
-    }
-  }, [user, location]);
+
+    const needsPasswordChange =
+      user.user_metadata?.force_password_change ||
+      user.app_metadata?.force_password_change;
+
+    setIsOpen(Boolean(needsPasswordChange));
+  }, [user]);
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    
+
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    
+
     if (newPassword.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
       const { success, error } = await setNewPassword(newPassword);
-      
+
       if (error) {
         throw new Error(error);
       }
-      
+
       if (success) {
-        // Update the user metadata to remove force_password_change flag
         const { error: updateError } = await platformClient.auth.updateUser({
           data: { force_password_change: false }
         });
-        
+
         if (updateError) {
           console.error('Error updating user metadata:', updateError);
         }
-        
-        // Move to next step
+
         setStep(2);
       }
     } catch (err) {
@@ -91,23 +76,26 @@ const WelcomeGuide = () => {
   };
 
   const renderStep = () => {
-    switch(step) {
+    switch (step) {
       case 1:
         return (
           <div className="p-6">
             <h3 className="text-xl font-bold mb-4">Change Your Password</h3>
             <p className="mb-4">For security reasons, you need to change your temporary password.</p>
-            
+
             {error && (
               <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
                 {error}
               </div>
             )}
-            
+
             <form onSubmit={handlePasswordChange}>
               <div className="mb-4">
-                <label className="block mb-1 text-sm font-medium">New Password</label>
+                <label className="block mb-1 text-sm font-medium" htmlFor="welcome-password">
+                  New Password
+                </label>
                 <input
+                  id="welcome-password"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPasswordState(e.target.value)}
@@ -115,10 +103,13 @@ const WelcomeGuide = () => {
                   required
                 />
               </div>
-              
+
               <div className="mb-6">
-                <label className="block mb-1 text-sm font-medium">Confirm Password</label>
+                <label className="block mb-1 text-sm font-medium" htmlFor="welcome-confirm-password">
+                  Confirm Password
+                </label>
                 <input
+                  id="welcome-confirm-password"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -126,7 +117,7 @@ const WelcomeGuide = () => {
                   required
                 />
               </div>
-              
+
               <button
                 type="submit"
                 disabled={loading}
@@ -137,24 +128,24 @@ const WelcomeGuide = () => {
             </form>
           </div>
         );
-        
+
       case 2:
         return (
           <div className="p-6">
             <h3 className="text-xl font-bold mb-4">Welcome to KH Rentals!</h3>
             <p className="mb-4">Your password has been updated successfully.</p>
-            
+
             <h4 className="font-medium mt-6 mb-2">Here's what you can do next:</h4>
             <ul className="list-disc pl-5 mb-6">
               <li className="mb-2">Complete your profile information</li>
               <li className="mb-2">Explore the dashboard</li>
               <li className="mb-2">Check your notifications</li>
             </ul>
-            
+
             <button
               onClick={() => {
                 setIsOpen(false);
-                navigate('/dashboard'); // Redirect to dashboard after setup
+                navigate('/dashboard');
               }}
               className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
             >
@@ -162,7 +153,7 @@ const WelcomeGuide = () => {
             </button>
           </div>
         );
-        
+
       default:
         return null;
     }
@@ -176,7 +167,7 @@ const WelcomeGuide = () => {
         <div className="bg-blue-600 text-white py-3 px-4 rounded-t-lg flex justify-between items-center">
           <h2 className="text-lg font-bold">Welcome to KH Rentals</h2>
           {step > 1 && (
-            <button 
+            <button
               onClick={skipOnboarding}
               className="text-white text-sm hover:underline"
             >
@@ -184,11 +175,11 @@ const WelcomeGuide = () => {
             </button>
           )}
         </div>
-        
+
         {renderStep()}
       </div>
     </div>
   );
 };
 
-export default WelcomeGuide; 
+export default WelcomeGuide;
