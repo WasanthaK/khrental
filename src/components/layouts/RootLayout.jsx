@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { initializeApp } from '../../services/appInitService';
+import { isAuthFlowIsolatedPath } from '../../services/requestContext';
 import { useAuth } from '../../hooks/useAuth';
 import ScrollToTop from '../common/ScrollToTop';
 import RouteChangeHandler from '../common/RouteChangeHandler';
@@ -12,30 +13,30 @@ import WelcomeGuide from '../WelcomeGuide';
 const RootLayout = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const isPasswordRecovery = location.pathname === '/reset-password';
+  const isAuthFlowIsolated = isAuthFlowIsolatedPath(location.pathname);
   const [initStatus, setInitStatus] = useState({
     initialized: false,
     error: null,
     isStorageError: false
   });
   const [showStorageWarning, setShowStorageWarning] = useState(true);
-  
-  // Initialize app services only for normal application routes. Password
-  // recovery is deliberately isolated from storage, tenant and portal setup.
+
+  // Credential bootstrap/recovery routes are deliberately isolated from
+  // storage, tenant, navigation and authenticated onboarding initialization.
   useEffect(() => {
-    if (isPasswordRecovery || loading) return;
-    
+    if (isAuthFlowIsolated || loading) return;
+
     const initialize = async () => {
       try {
         const dismissedWarning = sessionStorage.getItem('storage_warning_dismissed') === 'true';
         const result = await initializeApp({ user });
-        
+
         setInitStatus({
           initialized: true,
           error: result.error,
           isStorageError: result.isStorageError
         });
-        
+
         if (dismissedWarning && result.isStorageError) {
           setShowStorageWarning(false);
         }
@@ -48,21 +49,21 @@ const RootLayout = () => {
         });
       }
     };
-    
+
     initialize();
-  }, [user, loading, isPasswordRecovery]);
-  
+  }, [user, loading, isAuthFlowIsolated]);
+
   const dismissStorageWarning = () => {
     setShowStorageWarning(false);
     sessionStorage.setItem('storage_warning_dismissed', 'true');
   };
 
-  // Recovery must stay independent of the authenticated application shell.
-  // In particular, do not register navigation, show tenant-specific guides, or
-  // trigger app initialization while a user is proving possession of a reset
-  // token and selecting a new password. Toast rendering remains owned by the
-  // single global Toaster in App.jsx so route/tenant remounts cannot duplicate it.
-  if (isPasswordRecovery) {
+  // Credential-establishment routes must have one owner. They render only the
+  // route component so the authenticated application shell cannot compete for
+  // password changes, tenant context or redirects. Invitation redemption may
+  // still inspect a valid existing session inside AcceptInvite solely to avoid
+  // replacing a different signed-in user's browser session.
+  if (isAuthFlowIsolated) {
     return <Outlet />;
   }
 
@@ -73,12 +74,12 @@ const RootLayout = () => {
       <ForceRefresh />
       <NavigationRegistrar />
       <WelcomeGuide />
-      
+
       <ConfirmContextProvider>
         {initStatus.error && showStorageWarning && (
           <div className={`border-l-4 p-4 fixed bottom-0 right-0 z-50 max-w-md shadow-md flex justify-between ${
-            initStatus.isStorageError 
-              ? 'bg-yellow-50 border-yellow-500 text-yellow-700' 
+            initStatus.isStorageError
+              ? 'bg-yellow-50 border-yellow-500 text-yellow-700'
               : 'bg-red-50 border-red-500 text-red-700'
           }`}>
             <div>
@@ -90,7 +91,7 @@ const RootLayout = () => {
                 </p>
               )}
             </div>
-            <button 
+            <button
               onClick={dismissStorageWarning}
               className="text-gray-400 hover:text-gray-600"
               aria-label="Dismiss"
@@ -101,7 +102,7 @@ const RootLayout = () => {
             </button>
           </div>
         )}
-        
+
         <Outlet />
       </ConfirmContextProvider>
     </>
