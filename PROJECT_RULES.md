@@ -5,6 +5,24 @@
 - NEVER introduce libraries not already in the project
 - ONLY fix SPECIFIC errors with MINIMAL changes
 - ALWAYS check if a file exists before creating it
+- SECURITY, USER EXPERIENCE, and DURABILITY are mandatory design constraints for authentication and account lifecycle work
+- READ `docs/AUTHENTICATION-LIFECYCLE.md` and `docs/EXECUTION-PLAN.md` before changing authentication, invitations, user creation, memberships, session handling, password flows, onboarding, or auth-related routing
+
+## Authentication and Account Lifecycle
+- One global `app_users` identity per email is canonical; organization access belongs in `tenant_memberships`
+- Every credential lifecycle transition MUST have exactly one UI owner and one backend authority
+- `/accept-invite` and `/reset-password` are isolated credential-flow routes and MUST NOT run the normal authenticated application shell, tenant initialization, navigation registration, storage initialization, or generic onboarding guides
+- Route isolation and anonymity are different concepts: password recovery is anonymous; invitation redemption may inspect only a server-valid existing session to preserve a different signed-in user
+- `AcceptInvite` is the sole UI owner of invited-account credential setup; `WelcomeGuide` MUST NOT infer invitation state from URL tokens
+- `WelcomeGuide` may change a password only for an already-authenticated account explicitly marked `force_password_change`
+- Invitation redemption MUST create/link auth state transactionally, verify the persisted credential with the normal sign-in verifier, and fail closed if verification cannot be proven
+- NEVER perform a redundant second password login after successful invitation redemption; use the server-issued redemption session
+- `Registered` means login-capable account access is proven, not merely `accepted_at`, `app_users.auth_id`, or the presence of an auth row
+- Partial/claimed accounts that cannot prove access MUST surface as `Setup Incomplete / Account Recovery Required`
+- NEVER resend an invitation if doing so could overwrite an existing global credential or create account-takeover risk
+- Browser-local session state is never proof of authentication; validate server-side when session validity affects a security decision
+- Invitation tokens, reset tokens, passwords, credential hashes/salts, email bodies and secrets MUST NOT be logged
+- Authentication changes require automated regression coverage plus physical browser acceptance before the active execution-plan item can close
 
 ## Document Generation
 - ALL document generation is handled by Evia Sign API, not local code
@@ -28,6 +46,8 @@
 - Changing case in import paths
 - Making assumptions about project requirements
 - Creating nested directory structures
+- Allowing legacy onboarding UI and secure invitation UI to compete for the same credential transition
+- Treating invitation acceptance or auth linkage as equivalent to verified login-capable registration
 
 ## Integration with Evia Sign
 - Use the Evia Sign API as documented in src/docs/evia-sign-api-docs.md
@@ -73,4 +93,4 @@
 - USE optional chaining (?.) for nested property access
 - COMBINE related state variables using objects
 
-REFER TO THESE RULES BEFORE MAKING ANY CHANGES 
+REFER TO THESE RULES BEFORE MAKING ANY CHANGES
