@@ -1,6 +1,7 @@
 const SESSION_STORAGE_KEY = 'khrental.local.session';
 const ACTIVE_TENANT_STORAGE_KEY = 'khrental.activeTenantId';
 const DEV_BYPASS_ROLE_KEY = 'dev_bypass_role';
+const AUTH_FLOW_ISOLATED_PATHS = new Set(['/reset-password', '/accept-invite']);
 const isBrowser = typeof window !== 'undefined';
 const fallbackStorage = new Map();
 
@@ -16,6 +17,18 @@ const normalizePathname = (pathname = '') => {
   const normalized = String(pathname || '').split('?')[0].replace(/\/+$/, '');
   return normalized || '/';
 };
+
+/**
+ * Authentication bootstrap/recovery routes must render outside the normal
+ * authenticated application shell. This prevents tenant initialization,
+ * navigation, onboarding guides and other authenticated-only behavior from
+ * competing with credential establishment.
+ *
+ * Route isolation does not imply identical session handling. Password recovery
+ * is intentionally anonymous, while secure invitation redemption may inspect a
+ * server-valid existing session solely to preserve a different signed-in user.
+ */
+export const isAuthFlowIsolatedPath = (pathname = '') => AUTH_FLOW_ISOLATED_PATHS.has(normalizePathname(pathname));
 
 /**
  * Password recovery is an anonymous credential flow. It must not inherit the
