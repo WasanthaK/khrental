@@ -77,7 +77,7 @@ The minimum evidence is:
 
 ### Setup Incomplete / Account Recovery Required
 
-Use this state when setup or claiming has begun but login-capable registration cannot be proven. Do not resend an invitation if doing so could overwrite or replace an existing global credential. Recovery must repair the existing identity instead.
+Use this state when setup or claiming has begun but login-capable registration cannot be proven. Historical accepted-invitation evidence remains claim evidence even when a later invitation is newer and expired/revoked or the current auth linkage is missing; the newest invitation row must not erase the fact that the identity was previously claimed. Do not resend an invitation if doing so could overwrite or replace an existing global credential. Recovery must repair the existing identity instead.
 
 ---
 
