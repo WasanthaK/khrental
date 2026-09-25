@@ -1,13 +1,10 @@
 name: Diagnose Container Apps revision
 
 on:
+  push:
+    branches:
+      - diagnose/sql-credit-state
   workflow_dispatch:
-    inputs:
-      restart_latest:
-        description: 'Restart the latest revision before checking it'
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -20,7 +17,7 @@ env:
 
 jobs:
   diagnose:
-    name: inspect production revision
+    name: read-only P0.3 privacy inspection
     runs-on: ubuntu-latest
     environment: Production
     timeout-minutes: 15
@@ -32,101 +29,51 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Inspect latest revision
+      - name: Inspect production logs without printing log content
         shell: bash
-        env:
-          RESTART_LATEST: ${{ inputs.restart_latest }}
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
 
-          latest_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestRevisionName -o tsv)
-          ready_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestReadyRevisionName -o tsv)
+          latest_revision=$(az containerapp show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query properties.latestRevisionName -o tsv)
+          ready_revision=$(az containerapp show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query properties.latestReadyRevisionName -o tsv)
 
           echo "Latest revision: $latest_revision"
           echo "Latest ready revision: $ready_revision"
 
-          az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight,createdTime:properties.createdTime}" \
-            -o jsonc
+          replica=$(az containerapp replica list             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --revision "$latest_revision"             --query '[0].name' -o tsv)
 
-          echo "System logs for the Container App:"
-          az containerapp logs show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --type system \
-            --tail 100 \
-            --format text || true
+          tmp=$(mktemp)
+          trap 'rm -f "$tmp"' EXIT
 
-          echo "Replica inventory for $latest_revision:"
-          az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            -o jsonc || true
+          az containerapp logs show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --revision "$latest_revision"             --replica "$replica"             --type console             --tail 300             --format text > "$tmp"
 
-          if [ "$RESTART_LATEST" = "true" ]; then
-            echo "Restarting $latest_revision..."
-            az containerapp revision restart \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision"
+          count() {
+            local pattern="$1"
+            grep -Eio "$pattern" "$tmp" | wc -l | tr -d ' '
+          }
 
-            for attempt in $(seq 1 30); do
-              state=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.runningState -o tsv)
-              health=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.healthState -o tsv)
-              echo "Post-restart state: running=$state health=$health (attempt $attempt/30)"
-              if [ "$state" = "Running" ] && { [ "$health" = "Healthy" ] || [ "$health" = "None" ]; }; then
-                break
-              fi
-              sleep 6
-            done
+          email_delivery_events=$(count '"event"[[:space:]]*:[[:space:]]*"email[^"]*"|email\.delivery|sendgrid')
+          email_addresses=$(count '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}')
+          invitation_urls=$(count 'accept-invite\?token=|/accept-invite[^[:space:]]*token=')
+          token_values=$(count '"(token|invitationToken|resetToken)"[[:space:]]*:[[:space:]]*"[^"]+"|[?&](token|reset_token)=[^&[:space:]]+')
+          password_values=$(count '"password"[[:space:]]*:[[:space:]]*"[^"]+"')
+          sendgrid_keys=$(count 'SG\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}')
+          body_markers=$(count 'Complete Your Account Setup|<!DOCTYPE html|<html|Invitation to KH Rentals')
+
+          echo "P0.3 privacy spot-check summary (log content intentionally suppressed):"
+          echo "email_delivery_event_matches=$email_delivery_events"
+          echo "email_address_matches=$email_addresses"
+          echo "invitation_url_matches=$invitation_urls"
+          echo "token_value_matches=$token_values"
+          echo "password_value_matches=$password_values"
+          echo "sendgrid_key_matches=$sendgrid_keys"
+          echo "email_body_marker_matches=$body_markers"
+
+          sensitive_total=$((email_addresses + invitation_urls + token_values + password_values + sendgrid_keys + body_markers))
+          echo "sensitive_match_total=$sensitive_total"
+
+          if [ "$sensitive_total" -ne 0 ]; then
+            echo "::error::Sensitive-content pattern detected in recent production console logs. Raw matching content was not printed."
+            exit 1
           fi
-
-          replica=$(az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query '[0].name' -o tsv 2>/dev/null || true)
-
-          if [ -n "$replica" ]; then
-            echo "Console logs for replica $replica:"
-            az containerapp logs show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision" \
-              --replica "$replica" \
-              --type console \
-              --tail 100 \
-              --format text || true
-          fi
-
-          final_state=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.runningState -o tsv)
-          final_health=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.healthState -o tsv)
-
-          echo "Final state: revision=$latest_revision running=$final_state health=$final_health"
