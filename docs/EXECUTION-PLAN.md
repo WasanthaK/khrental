@@ -161,9 +161,9 @@ Implementation and verification evidence:
 - [x] Root cause is documented in `docs/AUTHENTICATION-LIFECYCLE.md`: `AcceptInvite` is the sole invitation credential owner; `WelcomeGuide` is authenticated-only and must never infer invitation state from URL tokens; `/accept-invite` and `/reset-password` are isolated from the normal app shell.
 - [x] PR #124 merged and deployed the isolated credential-flow correction. Production run `36111540458` passed automated authorization/regression tests, build, R2 validation and runtime checks; revision `khrental-app--0000127` is Ready and serves SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e` with MSSQL ready.
 - [x] US-INV-04 core acceptance passed with fresh `+101`: clean invitation setup, direct authenticated entry, logout, normal login with the same created password, correct Rentee workspace, and admin status **Registered**.
-- [ ] US-INV-03: physically prove Resend supersedes the older invitation and only the newest link can be used.
+- [x] US-INV-03 passed physically with controlled `+102`: Resend superseded the older invitation; the older link was rejected and only the newest link remained usable.
 - [ ] US-INV-05: record final admin card/details reload comparison after the already-proven durable renter re-login.
-- [ ] US-INV-06: reopen the accepted controlled invitation and prove it cannot be redeemed twice.
+- [x] US-INV-06 passed physically with controlled `+102`: after account setup, reopening the accepted invitation was rejected as already used/unavailable and could not start account setup again.
 - [ ] US-INV-07: execute the same canonical invitation lifecycle physically for a controlled Team member.
 - [ ] US-INV-08: complete the final production log spot-check for sensitive invitation content.
 - [ ] US-INV-09: deliberately compare card/details states for available Not Invited, Pending and Registered examples and reload both surfaces.
@@ -306,14 +306,14 @@ Next item: P0.3 - Invitation/email observability.
 ```text
 Active item: P0.3 - invitation lifecycle final production acceptance
 Problem/evidence: The core credential-bootstrap defect is fixed and fresh +101 registration/login is proven, but the dedicated P0.3 acceptance document still contains required physical stories that have not yet been recorded as passed. The plan must follow that checklist rather than infer completion from automated coverage.
-Scope: Preserve the proven +101 registration path; execute and record the remaining physical stories US-INV-03, US-INV-05 final reload comparison, US-INV-06, US-INV-07, US-INV-08 and US-INV-09; verify the damaged +99 account projects recovery-required rather than Registered if still non-login-capable.
+Scope: Preserve the proven +101 registration path; execute and record the remaining physical stories US-INV-05 final reload comparison, US-INV-07, US-INV-08 and US-INV-09; verify the damaged +99 account projects recovery-required rather than Registered if still non-login-capable.
 Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; P0.4 password reset until P0.3 exits.
 PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124.
 CI result: PR #124 and main passed the full authorization/regression suite and production build. Production run `36111540458` also passed R2 validation and final runtime verification.
 Production revision/SHA: `khrental-app--0000127` Ready; behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`.
 Runtime proof: deterministic `/bin/sh scripts/start-container.sh`; `/api/health` healthy; `/api/mssql/health` returned ready; public `/build-info.json` matched `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; fresh +101 invitation/signup/logout/login/Rentee/admin-Registered acceptance passed physically.
 Result: ACTIVE — core registration is proven, but P0.3 is not yet complete because several explicit physical acceptance stories remain open.
-Next item: Execute US-INV-03 resend supersession first, then US-INV-06 used-link proof while the invitation history is available; continue US-INV-05/07/08/09 and +99 recovery-state verification, updating both canonical documents after each verified result. Only then close P0.3 and activate P0.4.
+Next item: Complete US-INV-05 final card/details reload comparison, then US-INV-07 Team lifecycle, US-INV-08 production log privacy, US-INV-09 status-surface agreement, and +99 recovery-state verification. Update both canonical documents after each verified result; only then close P0.3 and activate P0.4.
 ```
 
 ---
