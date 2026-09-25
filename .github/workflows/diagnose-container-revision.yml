@@ -41,12 +41,32 @@ jobs:
           echo "Latest revision: $latest_revision"
           echo "Latest ready revision: $ready_revision"
 
-          replica=$(az containerapp replica list             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --revision "$latest_revision"             --query '[0].name' -o tsv)
+          replica=$(az containerapp replica list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query '[0].name' -o tsv 2>/dev/null || true)
 
           tmp=$(mktemp)
           trap 'rm -f "$tmp"' EXIT
 
-          az containerapp logs show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --revision "$latest_revision"             --replica "$replica"             --type console             --tail 300             --format text > "$tmp"
+          if [ -n "$replica" ]; then
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --replica "$replica" \
+              --type console \
+              --tail 300 \
+              --format text > "$tmp"
+          else
+            az containerapp logs show \
+              --name "$AZURE_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --type console \
+              --tail 300 \
+              --format text > "$tmp"
+          fi
 
           count() {
             local pattern="$1"
