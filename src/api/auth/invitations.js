@@ -84,6 +84,26 @@ const validateTargetForInvitation = async (target) => {
     throw createInvitationError(409, 'This user already has a linked account.', 'ACCOUNT_ALREADY_CLAIMED');
   }
 
+  const acceptedInvitation = await runSingleQuery(`
+    SELECT TOP 1 accepted_at
+    FROM dbo.user_invitations
+    WHERE tenant_id = @tenantId
+      AND app_user_id = @appUserId
+      AND accepted_at IS NOT NULL
+    ORDER BY accepted_at DESC, id DESC
+  `, {
+    tenantId: target.tenant_id,
+    appUserId: target.id
+  });
+
+  if (acceptedInvitation) {
+    throw createInvitationError(
+      409,
+      'This account was previously claimed. Use account recovery instead of issuing another invitation.',
+      'ACCOUNT_RECOVERY_REQUIRED'
+    );
+  }
+
   const existingAuth = await runSingleQuery(`
     SELECT TOP 1 id
     FROM dbo.auth_users
