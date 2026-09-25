@@ -36,13 +36,13 @@ const isAuthRegistrationComplete = ({ user, auth }) => {
   );
 };
 
-const deriveInvitationStatus = ({ user, auth = null, invitation, now = new Date() }) => {
+const deriveInvitationStatus = ({ user, auth = null, invitation, hasAcceptedInvitation = false, now = new Date() }) => {
   if (isAuthRegistrationComplete({ user, auth })) return 'registered';
 
   // An accepted invitation or partial/unverified auth linkage is evidence that
   // setup was attempted, but it must never be presented as Registered until
   // account access has actually been verified by the server.
-  if (invitation?.accepted_at || user?.auth_id || auth?.id) return 'setup_incomplete';
+  if (invitation?.accepted_at || hasAcceptedInvitation || user?.auth_id || auth?.id) return 'setup_incomplete';
 
   if (!invitation) return 'not_invited';
   if (invitation.revoked_at) return 'revoked';
@@ -120,9 +120,20 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
     ORDER BY i.createdat DESC, i.id DESC
   `, { tenantId, appUserId });
 
+  const acceptedInvitation = await runSingleQuery(`
+    SELECT TOP 1
+      i.accepted_at
+    FROM dbo.user_invitations i
+    WHERE i.tenant_id = @tenantId
+      AND i.app_user_id = @appUserId
+      AND i.accepted_at IS NOT NULL
+    ORDER BY i.accepted_at DESC, i.id DESC
+  `, { tenantId, appUserId });
+
   const authStructureComplete = isAuthRegistrationStructurallyComplete({ user, auth });
   const registrationComplete = isAuthRegistrationComplete({ user, auth });
-  const status = deriveInvitationStatus({ user, auth, invitation, now });
+  const hasAcceptedInvitation = Boolean(acceptedInvitation?.accepted_at);
+  const status = deriveInvitationStatus({ user, auth, invitation, hasAcceptedInvitation, now });
 
   return {
     id: user.id,
@@ -135,7 +146,7 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
     invitationId: invitation?.id || null,
     invitedAt: invitation?.createdat || null,
     expiresAt: invitation?.expires_at || null,
-    acceptedAt: invitation?.accepted_at || null,
+    acceptedAt: invitation?.accepted_at || acceptedInvitation?.accepted_at || null,
     revokedAt: invitation?.revoked_at || null
   };
 };
