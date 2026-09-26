@@ -85,6 +85,9 @@ jobs:
               --output tsv > "$tmp"
           fi
 
+          total_log_lines=$(wc -l < "$tmp" | tr -d ' ')
+          echo "centralized_log_lines=$total_log_lines"
+
           count() {
             local pattern="$1"
             { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
