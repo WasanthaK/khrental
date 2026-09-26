@@ -70,7 +70,7 @@ jobs:
 
           count() {
             local pattern="$1"
-            grep -Eio "$pattern" "$tmp" | wc -l | tr -d ' '
+            { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
           }
 
           email_delivery_events=$(count '"event"[[:space:]]*:[[:space:]]*"email[^"]*"|email\.delivery|sendgrid')
