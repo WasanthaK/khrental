@@ -98,6 +98,22 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /Save & Invite/);
 });
 
+test('renter property and unit associations are durable server data', () => {
+  assert.match(renteeRepositorySource, /'associated_properties'/);
+  assert.match(renteeRepositorySource, /validateRenteeAssociations/);
+  assert.match(renteeRepositorySource, /FROM properties/);
+  assert.match(renteeRepositorySource, /FROM property_units/);
+  assert.match(renteeFormSource, /associated_properties: formData\.structuredAssociations/);
+  assert.match(renteeFormSource, /rentee\?\.associated_properties/);
+  assert.doesNotMatch(renteeFormSource, /renteeAssociationCache/);
+  assert.doesNotMatch(renteeFormSource, /storeRenteeAssociations/);
+});
+
+test('renter details read durable structured associations rather than browser session cache', () => {
+  assert.match(renteeDetailsSource, /renteeData\?\.associated_properties/);
+  assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations/);
+});
+
 test('renter deactivation is organization membership scoped and never deletes the global app user', () => {
   assert.match(renteeRepositorySource, /updateTenantRenteeMembershipStatus/);
   assert.match(renteeRepositorySource, /updateTenantMembershipById/);
