@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { mapAppUserToRentee } from '../services/appUserService';
 import { fetchRenteeDirectory } from '../services/renteeDirectoryService';
+import { setRenteeMembershipStatus } from '../services/renteeService';
 import RenteeCard from '../components/rentees/RenteeCard';
 
 const RenteeList = () => {
@@ -10,6 +11,7 @@ const RenteeList = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
+  const [membershipStatus, setMembershipStatus] = useState('active');
 
   const fetchRentees = useCallback(async () => {
     try {
@@ -20,7 +22,7 @@ const RenteeList = () => {
       // This must not silently collapse to an empty list when a valid session
       // is still being restored, and it tolerates older rows whose role is
       // `rentee` even if user_type was stored inconsistently.
-      const data = await fetchRenteeDirectory();
+      const data = await fetchRenteeDirectory({ status: membershipStatus });
       const transformedData = (data || []).map(mapAppUserToRentee);
       setRentees(transformedData);
     } catch (error) {
@@ -29,7 +31,7 @@ const RenteeList = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [membershipStatus]);
 
   useEffect(() => {
     fetchRentees();
@@ -50,6 +52,17 @@ const RenteeList = () => {
 
     return false;
   });
+
+  const reactivateRentee = async (id) => {
+    try {
+      setError(null);
+      await setRenteeMembershipStatus(id, 'active');
+      await fetchRentees();
+    } catch (reactivateError) {
+      console.error('Error reactivating tenant:', reactivateError);
+      setError(reactivateError.message || 'Failed to reactivate tenant');
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -89,6 +102,17 @@ const RenteeList = () => {
             </select>
           </div>
           <div>
+            <select
+              value={membershipStatus}
+              onChange={(e) => setMembershipStatus(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Tenant membership status"
+            >
+              <option value="active">Active Tenants</option>
+              <option value="inactive">Inactive Tenants</option>
+            </select>
+          </div>
+          <div>
             <button
               onClick={fetchRentees}
               className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
@@ -115,7 +139,18 @@ const RenteeList = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRentees.map((rentee) => (
-            <RenteeCard key={rentee.id} rentee={rentee} onStatusChange={fetchRentees} />
+            <div key={rentee.id}>
+              <RenteeCard rentee={rentee} onStatusChange={fetchRentees} />
+              {membershipStatus === 'inactive' && (
+                <button
+                  type="button"
+                  onClick={() => reactivateRentee(rentee.id)}
+                  className="mt-2 w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Reactivate Tenant
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
