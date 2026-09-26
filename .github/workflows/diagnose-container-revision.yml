@@ -1,4 +1,5 @@
 name: Diagnose Container Apps revision
+# rerun
 
 on:
   push:
