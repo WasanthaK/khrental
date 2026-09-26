@@ -7,7 +7,8 @@ import {
   createOrAttachTenantRentee,
   getTenantRenteeById,
   listTenantRentees,
-  updateTenantRentee
+  updateTenantRentee,
+  updateTenantRenteeMembershipStatus
 } from './renteeRepository.js';
 
 const asyncHandler = (handler) => async (req, res, next) => {
@@ -58,7 +59,8 @@ export const createRenteeRouter = () => {
     requirePermission(req, PERMISSIONS.RENTEES_READ);
     const rentees = await listTenantRentees(req.tenantId, {
       search: req.query.search,
-      pageSize: req.query.pageSize
+      pageSize: req.query.pageSize,
+      status: req.query.status || 'active'
     });
 
     res.json({ data: rentees, meta: { count: rentees.length } });
@@ -111,6 +113,20 @@ export const createRenteeRouter = () => {
       return;
     }
     res.json({ data: rentee });
+  }));
+
+  router.patch('/rentees/:id/membership-status', requireScopedTenant, asyncHandler(async (req, res) => {
+    requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
+    const result = await updateTenantRenteeMembershipStatus(
+      req.tenantId,
+      req.params.id,
+      req.body?.status
+    );
+    if (!result) {
+      res.status(404).json({ error: 'Renter not found in the active organization.', code: 'RENTEE_NOT_FOUND' });
+      return;
+    }
+    res.json({ data: result.data, meta: { membership: result.membership } });
   }));
 
   // Compatibility interception: old renter screens still request app-users URLs.

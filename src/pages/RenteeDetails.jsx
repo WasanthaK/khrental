@@ -9,7 +9,8 @@ import InviteUserButton from '../components/common/InviteUserButton';
 import PropertyCard from '../components/properties/PropertyCard';
 import AgreementCard from '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
-import { deleteAppUser, fetchAppUser, mapAppUserToRentee, getStructuredAssociations } from '../services/appUserService';
+import { mapAppUserToRentee, getStructuredAssociations } from '../services/appUserService';
+import { getRentee, setRenteeMembershipStatus } from '../services/renteeService';
 
 // Custom component for displaying agreements in RenteeDetails page
 const AgreementSummaryCard = ({ agreement, property, rentee }) => {
@@ -153,7 +154,7 @@ const RenteeDetails = () => {
   const [agreements, setAgreements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   
   // Get invitation status only when needed (not during form edits)
   const invitationStatus = useInvitationStatus(id, true);
@@ -168,10 +169,10 @@ const RenteeDetails = () => {
       try {
         setLoading(true);
         
-        // Fetch rentee details from app_users table
-        const renteeData = await fetchAppUser(id);
+        // Fetch the organization-scoped canonical renter projection.
+        const renteeData = await getRentee(id);
         
-        if (renteeData && renteeData.user_type === 'rentee') {
+        if (renteeData && renteeData.directory_role === 'rentee') {
           // Map the rentee data to the state
           const renteeInfo = {
             ...mapAppUserToRentee(renteeData),
@@ -321,26 +322,20 @@ const RenteeDetails = () => {
     fetchRenteeData();
   }, [id]);
   
-  const handleDelete = async () => {
+  const handleDeactivate = async () => {
     try {
       setLoading(true);
       
-      // Delete from app_users table
-      const result = await deleteAppUser(id);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete rentee');
-      }
-      
-      toast.success('Rentee deleted successfully');
+      await setRenteeMembershipStatus(id, 'inactive');
+      toast.success('Tenant deactivated for this organization');
       navigate('/dashboard/rentees');
     } catch (error) {
-      console.error('Error deleting rentee:', error.message);
+      console.error('Error deactivating tenant:', error.message);
       setError(error.message);
-      toast.error(`Error deleting rentee: ${error.message}`);
+      toast.error(`Error deactivating tenant: ${error.message}`);
     } finally {
       setLoading(false);
-      setShowDeleteConfirm(false);
+      setShowDeactivateConfirm(false);
     }
   };
   
@@ -388,32 +383,32 @@ const RenteeDetails = () => {
             Edit
           </Link>
           <button
-            onClick={() => setShowDeleteConfirm(true)}
+            onClick={() => setShowDeactivateConfirm(true)}
             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
           >
-            Delete
+            Deactivate
           </button>
         </div>
       </div>
       
-      {showDeleteConfirm && (
+      {showDeactivateConfirm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Confirm Deletion</h2>
-            <p className="mb-6">Are you sure you want to delete {rentee.name}? This action cannot be undone.</p>
+            <h2 className="text-xl font-semibold mb-4">Deactivate Tenant</h2>
+            <p className="mb-6">Deactivate {rentee.name} for this organization? Their global identity and history will be preserved, and the membership can be reactivated later.</p>
             <div className="flex justify-end space-x-2">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => setShowDeactivateConfirm(false)}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleDeactivate}
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
               >
-                Delete
-              </button>
+            Deactivate
+          </button>
             </div>
           </div>
         </div>

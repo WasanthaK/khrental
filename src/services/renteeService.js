@@ -23,6 +23,18 @@ export const updateRentee = async (id, payload) => {
   });
 };
 
+export const setRenteeMembershipStatus = async (id, status) => {
+  if (!id) throw new Error('Renter ID is required.');
+  if (!['active', 'inactive'].includes(String(status || '').toLowerCase())) {
+    throw new Error('Renter status must be active or inactive.');
+  }
+
+  return requestMssqlApi(`/api/mssql/rentees/${encodeURIComponent(id)}/membership-status`, {
+    method: 'PATCH',
+    body: { status: String(status).toLowerCase() }
+  });
+};
+
 export const getRenteesByProperty = async (propertyId) => {
   if (!propertyId) {
     return { data: null, error: new Error('Property ID is required') };
@@ -94,6 +106,7 @@ export default {
   getRentee,
   createRentee,
   updateRentee,
+  setRenteeMembershipStatus,
   getRenteesByProperty,
   getRenteesByUnit,
   getRenteePropertyAgreements,

@@ -6,6 +6,8 @@ import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 
 const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
 const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
+const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
+const renteeListSource = readFileSync(new URL('../src/pages/RenteeList.jsx', import.meta.url), 'utf8');
 const renteeServiceSource = readFileSync(new URL('../src/services/renteeService.js', import.meta.url), 'utf8');
 const inviteButtonSource = readFileSync(new URL('../src/components/common/InviteUserButton.jsx', import.meta.url), 'utf8');
 const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
@@ -94,6 +96,27 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /createRentee/);
   assert.match(renteeFormSource, /sendRenteeInvitation/);
   assert.match(renteeFormSource, /Save & Invite/);
+});
+
+test('renter deactivation is organization membership scoped and never deletes the global app user', () => {
+  assert.match(renteeRepositorySource, /updateTenantRenteeMembershipStatus/);
+  assert.match(renteeRepositorySource, /updateTenantMembershipById/);
+  assert.doesNotMatch(renteeDetailsSource, /deleteAppUser/);
+  assert.match(renteeDetailsSource, /setRenteeMembershipStatus\(id, 'inactive'\)/);
+  assert.match(renteeDetailsSource, /global identity and history will be preserved/);
+});
+
+test('inactive renters remain discoverable for deliberate reactivation', () => {
+  assert.match(renteeRepositorySource, /status = 'active'/);
+  assert.match(renteeRepositorySource, /'active', 'inactive', 'all'/);
+  assert.match(renteeListSource, /Inactive Tenants/);
+  assert.match(renteeListSource, /Reactivate Tenant/);
+  assert.match(renteeListSource, /setRenteeMembershipStatus\(id, 'active'\)/);
+});
+
+test('tenant details load the canonical organization-scoped renter projection', () => {
+  assert.match(renteeDetailsSource, /getRentee\(id\)/);
+  assert.doesNotMatch(renteeDetailsSource, /fetchAppUser\(id\)/);
 });
 
 test('platform administrator with tenant membership keeps tenant workspace access', () => {
