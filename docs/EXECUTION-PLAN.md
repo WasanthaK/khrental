@@ -1,6 +1,6 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-09-25  
+**Status date:** 2026-09-26  
 **Last verified behavior-changing application baseline:** `2b0d77dda30761a032b289282050191eacf8246e`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
@@ -66,9 +66,9 @@
 
 - [x] Core tenant/rentee production smoke test completed. P0.2 is complete.
 - [x] P0.3 core fresh-registration acceptance passed on behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`: a never-invited renter completed secure setup, entered as Rentee, logged out, logged back in normally with the same password, and the admin surface showed Registered.
-- [ ] P0.3 physical acceptance stories still outstanding per `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md`: resend supersession (US-INV-03), final durable admin reload comparison (US-INV-05), used-link single-use proof (US-INV-06), Team-member lifecycle parity (US-INV-07), production log privacy spot-check (US-INV-08), and deliberate card/details lifecycle agreement (US-INV-09).
-- [ ] The damaged production test account `+99` must be classified as **Setup Incomplete / Account Recovery Required** rather than Registered if it cannot authenticate.
-- [ ] Password-reset flow needs a fresh end-to-end regression check under the same isolated-route architecture.
+- [x] P0.3 physical acceptance completed with the documented US-INV-08 exact-log-correlation waiver; the waived observability item remains explicitly not claimed as PASS.
+- [x] Damaged production test account `+99` physically verified as **Setup Incomplete / Account Recovery Required** after PR #125.
+- [x] Password-reset flow passed a fresh end-to-end production regression from a logged-out/private browser on 2026-09-26.
 - [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
 
@@ -178,7 +178,7 @@ Exit criteria:
 - [x] Damaged `+99` is correctly projected as recovery-required and unsafe resend is unavailable.
 - [x] 24-hour production privacy scan found zero sensitive-pattern matches; exact delivery-event correlation is deferred under the documented US-INV-08 waiver.
 
-### P0.4 - Password reset regression — **ACTIVE**
+### P0.4 - Password reset regression — **COMPLETE**
 
 Scope:
 
@@ -187,11 +187,19 @@ Scope:
 - Verify MSSQL connectivity and redirect behavior.
 - Verify `/reset-password` remains an isolated anonymous credential route under the canonical authentication lifecycle design.
 
-Exit criteria: a clean end-to-end password reset works from a logged-out browser session.
+Verification evidence:
+- [x] Physical production regression completed 2026-09-26 from a clean logged-out/private browser.
+- [x] Reset request returned the expected non-enumerating success behavior and the recovery email arrived.
+- [x] Reset link opened the isolated `/reset-password` recovery flow without authenticated tenant context.
+- [x] New password redemption completed successfully and the user could return to normal authentication with the new credential.
+- [x] Backend redemption changes the credential, marks the token used, revokes other outstanding reset tokens, and revokes all existing auth sessions in the same SERIALIZABLE transaction.
+- [x] Existing automated coverage verifies the reset endpoints are anonymous credential endpoints and the browser recovery route is isolated independently of its token query.
+
+Exit criteria: **COMPLETE — clean end-to-end password reset passed from a logged-out production browser session on 2026-09-26.**
 
 ---
 
-## Phase 1 - Tenant/rentee workflow integrity
+## Phase 1 - Tenant/rentee workflow integrity — **ACTIVE**
 
 **Goal:** Treat Tenants as the renter/lessee workflow and Team as the staff/contractor workflow.
 
@@ -304,18 +312,15 @@ Next item: P0.3 - Invitation/email observability.
 ## Current active item
 
 ```text
-Active item: P0.4 - password reset regression
-Problem/evidence: P0.3 invitation/auth behavior is proven in production. US-INV-08 exact structured-log correlation remains deferred under an explicit operator waiver and is not claimed as PASS.
-Scope: Reproduce password reset from a logged-out browser through reset-link redemption and successful normal login; verify reset routing remains isolated from authenticated tenant context, MSSQL remains healthy, and redirects are correct.
-Out of scope: Evia/signing; DocumentService cleanup; compatibility-client refactoring; deferred Azure email-log observability.
-PRs: #103, #105, #106, #117, #118, #119, #121, #122, #123, #124, #125.
-CI result: PR #125 and main passed verification/build/deploy. Production run `36153613672` completed successfully.
-Production revision/SHA: `khrental-app--0000128` Ready; behavior SHA `2b0d77dda30761a032b289282050191eacf8246e`.
-Runtime proof: deterministic startup; live MSSQL connectivity; public FQDN serves `2b0d77dda30761a032b289282050191eacf8246e` from Ready revision `khrental-app--0000128`; fresh registration flows remain proven; damaged +99 now physically projects recovery-only.
-Result: P0.3 COMPLETE WITH DOCUMENTED WAIVER — US-INV-08 exact structured-log correlation is deferred by operator direction without being represented as passed. P0.4 is ACTIVE.
-Next item: Execute P0.4 password-reset regression from a clean logged-out/private browser session.
+Active item: Phase 1 - Tenant/rentee workflow integrity
+Problem/evidence: Phase 0 production stabilization is complete. Deployment/database readiness, core tenant smoke, invitation/auth lifecycle, and password reset have now been physically exercised in production. The remaining product risk is renter workflow integrity across create/edit/list, existing-identity attachment, lifecycle actions, role conflicts, and property/unit associations.
+Scope: Work Phase 1 in canonical order. First reconcile already-proven create/list/attach/invite/resend behavior, then physically verify the still-unproven edit and deactivate/reactivate paths before moving to role conflicts and property/unit association persistence.
+Out of scope: Agreement/Evia signing (Phase 2); document/storage cleanup; compatibility-client refactoring; deferred Azure email-log observability.
+Production baseline: behavior SHA `2b0d77dda30761a032b289282050191eacf8246e`, revision `khrental-app--0000128` Ready.
+Runtime proof: Phase 0 production acceptance completed through password-reset regression on 2026-09-26.
+Result: ACTIVE.
+Next item: Phase 1 item 1 — verify tenant create, edit, list, attach-existing-identity, invite, resend, and deactivate/reactivate behavior; reuse existing P0.2/P0.3 evidence where it already proves a subflow and test only the remaining gaps.
 ```
-
 ---
 
 ## Maintenance rule for this document
