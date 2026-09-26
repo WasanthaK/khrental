@@ -1,5 +1,5 @@
 name: Diagnose Container Apps revision
-# centralized 24h correlation
+# dual-table 24h correlation
 
 on:
   push:
@@ -51,24 +51,6 @@ jobs:
           tmp=$(mktemp)
           trap 'rm -f "$tmp"' EXIT
 
-          if [ -n "$replica" ]; then
-            az containerapp logs show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision" \
-              --replica "$replica" \
-              --type console \
-              --tail 300 \
-              --format text > "$tmp"
-          else
-            az containerapp logs show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --type console \
-              --tail 300 \
-              --format text > "$tmp"
-          fi
-
           environment_id=$(az containerapp show \
             --name "$AZURE_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -78,28 +60,13 @@ jobs:
             --ids "$environment_id" \
             --query properties.appLogsConfiguration.logAnalyticsConfiguration.customerId -o tsv)
 
-          if [ -n "$workspace_id" ]; then
-            az monitor log-analytics query \
-              --workspace "$workspace_id" \
-              --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where ContainerAppName_s == '$AZURE_CONTAINER_APP_NAME' | project Log_s" \
-              --output tsv > "$tmp"
-          fi
+          az monitor log-analytics query \
+            --workspace "$workspace_id" \
+            --analytics-query "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs | where TimeGenerated > ago(24h) | extend AppName=tostring(column_ifexists('ContainerAppName_s', column_ifexists('ContainerAppName',''))), Message=tostring(column_ifexists('Log_s', column_ifexists('Log',''))) | where AppName == '$AZURE_CONTAINER_APP_NAME' | project Message" \
+            --output tsv > "$tmp"
 
           total_log_lines=$(wc -l < "$tmp" | tr -d ' ')
           echo "centralized_log_lines=$total_log_lines"
-
-          event_tmp=$(mktemp)
-          trap 'rm -f "$tmp" "$event_tmp"' EXIT
-          az monitor log-analytics query \
-            --workspace "$workspace_id" \
-            --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where ContainerAppName_s == '$AZURE_CONTAINER_APP_NAME' | where Log_s contains 'email_provider_' or Log_s contains 'send-email' | project Log_s" \
-            --output tsv > "$event_tmp"
-          email_event_rows=$(wc -l < "$event_tmp" | tr -d ' ')
-          echo "centralized_email_event_rows=$email_event_rows"
-          if [ "$email_event_rows" -gt 0 ]; then
-            cat "$event_tmp" >> "$tmp"
-          fi
-
           count() {
             local pattern="$1"
             { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
