@@ -263,6 +263,16 @@ export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
 
   let user = await findAppUserByEmail(email);
   let created = false;
+  let membership = user ? await getTenantMembership(tenantId, user.id) : null;
+
+  // Reject an opposite-role membership before touching the shared global
+  // profile. A failed attach must have zero profile or membership side effects.
+  if (membership && !isRenteeMembership(membership)) {
+    const error = new Error('This person already belongs to the selected organization with a different portal role.');
+    error.status = 409;
+    error.code = 'RENTEE_MEMBERSHIP_ROLE_CONFLICT';
+    throw error;
+  }
 
   if (!user) {
     user = await createAppUser({
@@ -279,22 +289,15 @@ export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
     await seedLegacyDefaultMembership(user, tenantId);
 
     // Attach must behave like the business-level create operation. Apply the
-    // submitted renter profile to the reused global identity instead of merely
-    // creating a membership and returning stale/missing profile data.
+    // submitted renter profile to the reused global identity only after role
+    // compatibility has been proven for this organization.
     const profileUpdates = buildProfileUpdates({ ...payload, email });
     if (Object.keys(profileUpdates).length > 0) {
       user = await updateAppUser(user.id, profileUpdates);
     }
   }
 
-  let membership = await getTenantMembership(tenantId, user.id);
   if (membership) {
-    if (!isRenteeMembership(membership)) {
-      const error = new Error('This person already belongs to the selected organization with a different portal role.');
-      error.status = 409;
-      error.code = 'RENTEE_MEMBERSHIP_ROLE_CONFLICT';
-      throw error;
-    }
 
     if (normalizeRole(membership.status) !== 'active') {
       membership = await updateTenantMembershipById(tenantId, membership.id, {
