@@ -5,6 +5,7 @@ import { normalizeMembershipAccess } from '../src/api/mssql/membershipAdminRepos
 import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 
 const renteeRepositorySource = readFileSync(new URL('../src/api/mssql/renteeRepository.js', import.meta.url), 'utf8');
+const teamMemberRepositorySource = readFileSync(new URL('../src/api/mssql/teamMemberRepository.js', import.meta.url), 'utf8');
 const renteeFormSource = readFileSync(new URL('../src/pages/RenteeForm.jsx', import.meta.url), 'utf8');
 const renteeDetailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
 const renteeListSource = readFileSync(new URL('../src/pages/RenteeList.jsx', import.meta.url), 'utf8');
@@ -82,6 +83,20 @@ test('rejects unknown roles and staff bundles', () => {
 test('attaching an existing global renter identity applies the submitted profile before membership projection', () => {
   assert.match(renteeRepositorySource, /const profileUpdates = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
   assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profileUpdates\);/);
+});
+
+test('same-organization renter role conflicts are rejected before shared profile mutation', () => {
+  const membershipLookup = renteeRepositorySource.indexOf('let membership = user ? await getTenantMembership');
+  const conflict = renteeRepositorySource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
+  const profileWrite = renteeRepositorySource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
+  assert.ok(membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
+});
+
+test('same-organization team role conflicts are rejected before shared profile mutation', () => {
+  const membershipLookup = teamMemberRepositorySource.indexOf('let membership = user ? await getTenantMembership');
+  const conflict = teamMemberRepositorySource.indexOf("TEAM_MEMBERSHIP_ROLE_CONFLICT");
+  const profileWrite = teamMemberRepositorySource.indexOf('user = await updateAppUser(user.id, updates)');
+  assert.ok(membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
 });
 
 test('renter create service returns the created renter record instead of the create metadata envelope', () => {
