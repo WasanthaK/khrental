@@ -118,9 +118,27 @@ const seedLegacyDefaultMembership = async (user, currentTenantId) => {
   });
 };
 
-export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {}) => {
+export const listTenantRentees = async (tenantId, { search, pageSize = 250, status = 'active' } = {}) => {
   const safePageSize = Math.min(Math.max(Number(pageSize) || 250, 1), 500);
+  const normalizedStatus = normalizeRole(status);
+  if (!['active', 'inactive', 'all'].includes(normalizedStatus)) {
+    const error = new Error('Renter status filter must be active, inactive, or all.');
+    error.status = 400;
+    error.code = 'RENTEE_STATUS_FILTER_INVALID';
+    throw error;
+  }
+
   const params = { tenantId };
+  const membershipStatusClause = normalizedStatus === 'all'
+    ? ''
+    : `AND LOWER(COALESCE(tm_link.status, 'active')) = @membershipStatus`;
+  const legacyStatusClause = normalizedStatus === 'all'
+    ? ''
+    : `AND LOWER(COALESCE(au.status, 'active')) = @membershipStatus`;
+
+  if (normalizedStatus !== 'all') {
+    params.membershipStatus = normalizedStatus;
+  }
   const searchClause = search
     ? `AND (LOWER(COALESCE(au.name, '')) LIKE @search OR LOWER(COALESCE(au.email, '')) LIKE @search)`
     : '';
@@ -147,8 +165,8 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {
      WHERE (
        (
          tm_link.id IS NOT NULL
-         AND LOWER(COALESCE(tm_link.status, 'active')) = 'active'
          AND LOWER(COALESCE(tm_link.role, '')) IN ('rentee', 'tenant')
+         ${membershipStatusClause}
        )
        OR (
          tm_link.id IS NULL
@@ -157,6 +175,7 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {
            LOWER(COALESCE(au.user_type, '')) = 'rentee'
            OR LOWER(COALESCE(au.role, '')) = 'rentee'
          )
+         ${legacyStatusClause}
        )
      )
      ${searchClause}
@@ -168,7 +187,7 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250 } = {
 };
 
 export const getTenantRenteeById = async (tenantId, appUserId) => {
-  const rows = await listTenantRentees(tenantId, { pageSize: 500 });
+  const rows = await listTenantRentees(tenantId, { pageSize: 500, status: 'all' });
   return rows.find((row) => String(row.id) === String(appUserId)) || null;
 };
 
@@ -185,6 +204,52 @@ export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
 
   await updateAppUser(appUserId, updates);
   return getTenantRenteeById(tenantId, appUserId);
+};
+
+export const updateTenantRenteeMembershipStatus = async (tenantId, appUserId, status) => {
+  const normalizedStatus = normalizeRole(status);
+  if (!['active', 'inactive'].includes(normalizedStatus)) {
+    const error = new Error('Renter membership status must be active or inactive.');
+    error.status = 400;
+    error.code = 'RENTEE_MEMBERSHIP_STATUS_INVALID';
+    throw error;
+  }
+
+  const current = await getTenantRenteeById(tenantId, appUserId);
+  if (!current) {
+    return null;
+  }
+
+  let membership = await getTenantMembership(tenantId, appUserId);
+  if (membership) {
+    if (!isRenteeMembership(membership)) {
+      const error = new Error('This person belongs to the selected organization with a different portal role.');
+      error.status = 409;
+      error.code = 'RENTEE_MEMBERSHIP_ROLE_CONFLICT';
+      throw error;
+    }
+
+    membership = await updateTenantMembershipById(tenantId, membership.id, {
+      role: 'rentee',
+      status: normalizedStatus,
+      is_default: Boolean(membership.is_default)
+    });
+  } else {
+    // Compatibility for a legacy renter whose organization relationship still
+    // exists only through app_users.tenant_id. Create the canonical membership
+    // rather than mutating the global identity status.
+    membership = await createTenantMembership(tenantId, {
+      app_user_id: appUserId,
+      role: 'rentee',
+      status: normalizedStatus,
+      is_default: normalizedStatus === 'active'
+    });
+  }
+
+  return {
+    data: await getTenantRenteeById(tenantId, appUserId),
+    membership
+  };
 };
 
 export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
