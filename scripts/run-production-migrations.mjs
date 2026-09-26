@@ -5,6 +5,27 @@ import sql from 'mssql';
 
 const MIGRATIONS = [
   {
+    id: '20260926_01_add_rentee_property_unit_associations',
+    file: 'migrations/20260926_01_add_rentee_property_unit_associations.sql',
+    verify: async (pool) => {
+      const result = await pool.request().query(`
+        SELECT
+          CASE WHEN COL_LENGTH(N'dbo.app_users', N'associated_properties') IS NOT NULL THEN 1 ELSE 0 END AS column_exists,
+          CASE WHEN EXISTS (
+            SELECT 1 FROM sys.check_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.app_users')
+              AND name = N'CK_app_users_associated_properties_json'
+          ) THEN 1 ELSE 0 END AS constraint_exists,
+          COUNT_BIG(CASE WHEN associated_properties IS NOT NULL AND ISJSON(associated_properties) <> 1 THEN 1 END) AS invalid_json
+        FROM dbo.app_users;
+      `);
+      const row = result.recordset?.[0] || {};
+      if (!row.column_exists || !row.constraint_exists || Number(row.invalid_json || 0) !== 0) {
+        throw new Error('Renter property-unit association migration verification failed.');
+      }
+    }
+  },
+  {
     id: '20260920_01_add_tenancy_billing_adjustments',
     file: 'migrations/20260920_01_add_tenancy_billing_adjustments.sql',
     verify: async (pool) => {
