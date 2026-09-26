@@ -25,6 +25,7 @@ on:
         type: choice
         options:
           - all
+          - 20260926_01_add_rentee_property_unit_associations
           - 20260920_01_add_tenancy_billing_adjustments
           - 20260920_02_create_platform_admins
           - 20260920_03_backfill_legacy_app_user_memberships
