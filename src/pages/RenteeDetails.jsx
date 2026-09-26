@@ -9,7 +9,7 @@ import InviteUserButton from '../components/common/InviteUserButton';
 import PropertyCard from '../components/properties/PropertyCard';
 import AgreementCard from '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
-import { mapAppUserToRentee, getStructuredAssociations } from '../services/appUserService';
+import { mapAppUserToRentee } from '../services/appUserService';
 import { getRentee, setRenteeMembershipStatus } from '../services/renteeService';
 
 // Custom component for displaying agreements in RenteeDetails page
@@ -176,7 +176,7 @@ const RenteeDetails = () => {
           // Map the rentee data to the state
           const renteeInfo = {
             ...mapAppUserToRentee(renteeData),
-            structuredAssociations: getStructuredAssociations(renteeData.id)
+            structuredAssociations: Array.isArray(renteeData?.associated_properties) ? renteeData.associated_properties : []
           };
           
           setRentee(renteeInfo);
