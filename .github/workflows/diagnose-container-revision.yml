@@ -88,6 +88,18 @@ jobs:
           total_log_lines=$(wc -l < "$tmp" | tr -d ' ')
           echo "centralized_log_lines=$total_log_lines"
 
+          event_tmp=$(mktemp)
+          trap 'rm -f "$tmp" "$event_tmp"' EXIT
+          az monitor log-analytics query \
+            --workspace "$workspace_id" \
+            --analytics-query "ContainerAppConsoleLogs_CL | where TimeGenerated > ago(24h) | where ContainerAppName_s == '$AZURE_CONTAINER_APP_NAME' | where Log_s contains 'email_provider_' or Log_s contains 'send-email' | project Log_s" \
+            --output tsv > "$event_tmp"
+          email_event_rows=$(wc -l < "$event_tmp" | tr -d ' ')
+          echo "centralized_email_event_rows=$email_event_rows"
+          if [ "$email_event_rows" -gt 0 ]; then
+            cat "$event_tmp" >> "$tmp"
+          fi
+
           count() {
             local pattern="$1"
             { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
