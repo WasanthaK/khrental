@@ -76,8 +76,8 @@ const mapRenteeRow = (row) => {
   mapped.skills ??= [];
   mapped.availability ??= null;
   mapped.invited = Boolean(mapped.invited);
-  mapped.status ||= 'active';
-  mapped.active = mapped.active === undefined ? mapped.status === 'active' : Boolean(mapped.active);
+  mapped.status = mapped.tenant_membership_status || mapped.status || 'active';
+  mapped.active = mapped.status === 'active';
 
   // This is an organization-scoped directory projection. Membership role is
   // authoritative even when the same global identity has another role elsewhere.
