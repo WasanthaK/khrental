@@ -172,7 +172,7 @@ const RenteeDetails = () => {
         // Fetch the organization-scoped canonical renter projection.
         const renteeData = await getRentee(id);
         
-        if (renteeData && renteeData.user_type === 'rentee') {
+        if (renteeData && renteeData.directory_role === 'rentee') {
           // Map the rentee data to the state
           const renteeInfo = {
             ...mapAppUserToRentee(renteeData),
@@ -386,7 +386,7 @@ const RenteeDetails = () => {
             onClick={() => setShowDeactivateConfirm(true)}
             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
           >
-            Delete
+            Deactivate
           </button>
         </div>
       </div>
@@ -407,8 +407,8 @@ const RenteeDetails = () => {
                 onClick={handleDeactivate}
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
               >
-                Delete
-              </button>
+            Deactivate
+          </button>
             </div>
           </div>
         </div>
