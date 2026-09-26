@@ -30,69 +30,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Inspect production logs without printing log content
+      - name: Discover production Log Analytics tables without reading messages
         shell: bash
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
 
-          latest_revision=$(az containerapp show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query properties.latestRevisionName -o tsv)
-          ready_revision=$(az containerapp show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query properties.latestReadyRevisionName -o tsv)
+          latest_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestRevisionName -o tsv)
+          ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+          environment_id=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.environmentId -o tsv)
+          workspace_id=$(az containerapp env show --ids "$environment_id" --query properties.appLogsConfiguration.logAnalyticsConfiguration.customerId -o tsv)
 
           echo "Latest revision: $latest_revision"
           echo "Latest ready revision: $ready_revision"
 
-          replica=$(az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query '[0].name' -o tsv 2>/dev/null || true)
-
-          tmp=$(mktemp)
-          trap 'rm -f "$tmp"' EXIT
-
-          environment_id=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.environmentId -o tsv)
-
-          workspace_id=$(az containerapp env show \
-            --ids "$environment_id" \
-            --query properties.appLogsConfiguration.logAnalyticsConfiguration.customerId -o tsv)
-
           az monitor log-analytics query \
             --workspace "$workspace_id" \
-            --analytics-query "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs | where TimeGenerated > ago(24h) | extend AppName=tostring(column_ifexists('ContainerAppName_s', column_ifexists('ContainerAppName',''))), Message=tostring(column_ifexists('Log_s', column_ifexists('Log',''))) | where AppName == '$AZURE_CONTAINER_APP_NAME' | project Message" \
-            --output tsv > "$tmp"
-
-          total_log_lines=$(wc -l < "$tmp" | tr -d ' ')
-          echo "centralized_log_lines=$total_log_lines"
-          count() {
-            local pattern="$1"
-            { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
-          }
-
-          email_delivery_events=$(count 'email_provider_accepted|email_provider_failed|send-email')
-          email_addresses=$(count '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}')
-          invitation_urls=$(count 'accept-invite\?token=|/accept-invite[^[:space:]]*token=')
-          token_values=$(count '"(token|invitationToken|resetToken)"[[:space:]]*:[[:space:]]*"[^"]+"|[?&](token|reset_token)=[^&[:space:]]+')
-          password_values=$(count '"password"[[:space:]]*:[[:space:]]*"[^"]+"')
-          sendgrid_keys=$(count 'SG\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}')
-          body_markers=$(count 'Complete Your Account Setup|<!DOCTYPE html|<html|Invitation to KH Rentals')
-
-          echo "P0.3 privacy spot-check summary (log content intentionally suppressed):"
-          echo "email_delivery_event_matches=$email_delivery_events"
-          echo "email_address_matches=$email_addresses"
-          echo "invitation_url_matches=$invitation_urls"
-          echo "token_value_matches=$token_values"
-          echo "password_value_matches=$password_values"
-          echo "sendgrid_key_matches=$sendgrid_keys"
-          echo "email_body_marker_matches=$body_markers"
-
-          sensitive_total=$((email_addresses + invitation_urls + token_values + password_values + sendgrid_keys + body_markers))
-          echo "sensitive_match_total=$sensitive_total"
-
-          if [ "$sensitive_total" -ne 0 ]; then
-            echo "::error::Sensitive-content pattern detected in recent production console logs. Raw matching content was not printed."
-            exit 1
-          fi
+            --analytics-query "union withsource=TableName * | where TimeGenerated > ago(24h) | summarize RowCount=count() by TableName | order by RowCount desc" \
+            --output table
