@@ -1,5 +1,5 @@
 name: Diagnose Container Apps revision
-# rerun
+# fresh invitation correlation
 
 on:
   push:
@@ -74,7 +74,7 @@ jobs:
             { grep -Eio "$pattern" "$tmp" || true; } | wc -l | tr -d ' '
           }
 
-          email_delivery_events=$(count '"event"[[:space:]]*:[[:space:]]*"email[^"]*"|email\.delivery|sendgrid')
+          email_delivery_events=$(count 'email_provider_accepted|email_provider_failed|send-email')
           email_addresses=$(count '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}')
           invitation_urls=$(count 'accept-invite\?token=|/accept-invite[^[:space:]]*token=')
           token_values=$(count '"(token|invitationToken|resetToken)"[[:space:]]*:[[:space:]]*"[^"]+"|[?&](token|reset_token)=[^&[:space:]]+')
