@@ -99,6 +99,14 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /Save & Invite/);
 });
 
+test('production migration workflow fails closed on Container App plan errors', () => {
+  assert.match(migrationWorkflowSource, /exec_status=\\\$\\\{PIPESTATUS\\\[0\\\]\\\}/);
+  assert.match(migrationWorkflowSource, /Container App migration plan command failed with exit code/);
+  assert.match(migrationWorkflowSource, /syntax error\\|Production migration run failed:/);
+  assert.match(migrationWorkflowSource, /Plan completed without modifying the database\\\./);
+  assert.match(migrationWorkflowSource, /did not emit its required success marker/);
+});
+
 test('production migration provisions durable renter property-unit storage', () => {
   assert.match(renterAssociationMigrationSource, /ADD associated_properties NVARCHAR\(MAX\)/);
   assert.match(renterAssociationMigrationSource, /CK_app_users_associated_properties_json/);
