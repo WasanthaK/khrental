@@ -15,6 +15,7 @@ const invitationLifecycleSource = readFileSync(new URL('../src/utils/invitationL
 const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
 const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-db.mjs', import.meta.url), 'utf8');
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
+const renterAssociationMigrationSource = readFileSync(new URL('../migrations/20260926_01_add_rentee_property_unit_associations.sql', import.meta.url), 'utf8');
 const dashboardLayoutSource = readFileSync(new URL('../src/components/layouts/DashboardLayout.jsx', import.meta.url), 'utf8');
 
 test('canonicalizes administrator and tenant membership roles', () => {
@@ -96,6 +97,29 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
   assert.match(renteeFormSource, /createRentee/);
   assert.match(renteeFormSource, /sendRenteeInvitation/);
   assert.match(renteeFormSource, /Save & Invite/);
+});
+
+test('production migration provisions durable renter property-unit storage', () => {
+  assert.match(renterAssociationMigrationSource, /ADD associated_properties NVARCHAR\(MAX\)/);
+  assert.match(renterAssociationMigrationSource, /CK_app_users_associated_properties_json/);
+  assert.match(migrationRunnerSource, /20260926_01_add_rentee_property_unit_associations/);
+  assert.match(migrationWorkflowSource, /20260926_01_add_rentee_property_unit_associations/);
+});
+
+test('renter property and unit associations are durable server data', () => {
+  assert.match(renteeRepositorySource, /'associated_properties'/);
+  assert.match(renteeRepositorySource, /validateRenteeAssociations/);
+  assert.match(renteeRepositorySource, /FROM properties/);
+  assert.match(renteeRepositorySource, /FROM property_units/);
+  assert.match(renteeFormSource, /associated_properties: formData\.structuredAssociations/);
+  assert.match(renteeFormSource, /rentee\?\.associated_properties/);
+  assert.doesNotMatch(renteeFormSource, /renteeAssociationCache/);
+  assert.doesNotMatch(renteeFormSource, /storeRenteeAssociations/);
+});
+
+test('renter details read durable structured associations rather than browser session cache', () => {
+  assert.match(renteeDetailsSource, /renteeData\?\.associated_properties/);
+  assert.doesNotMatch(renteeDetailsSource, /getStructuredAssociations/);
 });
 
 test('renter deactivation is organization membership scoped and never deletes the global app user', () => {

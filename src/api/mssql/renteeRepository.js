@@ -7,18 +7,73 @@ import {
   updateTenantMembershipById
 } from './repositories.js';
 
-const JSON_FIELDS = new Set(['contact_details', 'associated_property_ids', 'skills', 'availability']);
+const JSON_FIELDS = new Set(['contact_details', 'associated_property_ids', 'associated_properties', 'skills', 'availability']);
 const RENTEE_PROFILE_FIELDS = new Set([
   'name',
   'email',
   'contact_details',
   'id_copy_url',
   'associated_property_ids',
+  'associated_properties',
   'national_id',
   'permanent_address',
   'profile_image_url',
   'status'
 ]);
+
+const normalizeAssociations = (value) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+
+  return value.reduce((associations, association) => {
+    const propertyId = String(association?.propertyId || association?.property_id || '').trim();
+    const unitId = String(association?.unitId || association?.unit_id || '').trim() || null;
+    if (!propertyId) return associations;
+
+    const key = `${propertyId}:${unitId || ''}`;
+    if (seen.has(key)) return associations;
+    seen.add(key);
+    associations.push({ propertyId, unitId });
+    return associations;
+  }, []);
+};
+
+const validateRenteeAssociations = async (tenantId, associations) => {
+  for (const association of associations) {
+    const property = await runSingleQuery(
+      `SELECT TOP 1 id
+       FROM properties
+       WHERE tenant_id = @tenantId
+         AND id = @propertyId`,
+      { tenantId, propertyId: association.propertyId }
+    );
+
+    if (!property) {
+      const error = new Error('One or more selected properties do not belong to the active organization.');
+      error.status = 400;
+      error.code = 'RENTEE_PROPERTY_INVALID';
+      throw error;
+    }
+
+    if (association.unitId) {
+      const unit = await runSingleQuery(
+        `SELECT TOP 1 id
+         FROM property_units
+         WHERE tenant_id = @tenantId
+           AND propertyid = @propertyId
+           AND id = @unitId`,
+        { tenantId, propertyId: association.propertyId, unitId: association.unitId }
+      );
+
+      if (!unit) {
+        const error = new Error('One or more selected units do not belong to the selected property.');
+        error.status = 400;
+        error.code = 'RENTEE_UNIT_PROPERTY_MISMATCH';
+        throw error;
+      }
+    }
+  }
+};
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
@@ -192,6 +247,14 @@ export const getTenantRenteeById = async (tenantId, appUserId) => {
 };
 
 export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
+  if (payload.associated_properties !== undefined) {
+    payload = {
+      ...payload,
+      associated_properties: normalizeAssociations(payload.associated_properties)
+    };
+    await validateRenteeAssociations(tenantId, payload.associated_properties);
+  }
+
   const current = await getTenantRenteeById(tenantId, appUserId);
   if (!current) {
     return null;
@@ -253,6 +316,14 @@ export const updateTenantRenteeMembershipStatus = async (tenantId, appUserId, st
 };
 
 export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
+  if (payload.associated_properties !== undefined) {
+    payload = {
+      ...payload,
+      associated_properties: normalizeAssociations(payload.associated_properties)
+    };
+    await validateRenteeAssociations(tenantId, payload.associated_properties);
+  }
+
   const email = normalizeEmail(payload.email || payload.contact_details?.email || payload.contactDetails?.email);
   if (!email) {
     const error = new Error('Email is required.');

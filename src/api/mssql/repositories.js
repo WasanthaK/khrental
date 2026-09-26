@@ -20,6 +20,7 @@ const APP_USER_MUTABLE_FIELDS = [
   'invited',
   'id_copy_url',
   'associated_property_ids',
+  'associated_properties',
   'national_id',
   'permanent_address',
   'profile_image_url'
@@ -34,7 +35,8 @@ const APP_USER_JSON_FIELDS = new Set([
   'contact_details',
   'skills',
   'availability',
-  'associated_property_ids'
+  'associated_property_ids',
+  'associated_properties'
 ]);
 const AGREEMENT_JSON_FIELDS = new Set([
   'terms',
