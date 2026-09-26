@@ -21,7 +21,7 @@ BEGIN
     SET associated_properties = (
         SELECT
             CONVERT(NVARCHAR(36), TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value])) AS propertyId,
-            NULL AS unitId
+            JSON_QUERY(N'null') AS unitId
         FROM OPENJSON(CASE WHEN ISJSON(associated_property_ids) = 1 THEN associated_property_ids ELSE N'[]' END) ids
         WHERE TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value]) IS NOT NULL
         FOR JSON PATH
