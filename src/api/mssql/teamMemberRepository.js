@@ -169,6 +169,16 @@ export const createOrAttachTenantTeamMember = async (tenantId, payload = {}) => 
   const bundle = normalizeBundle(payload);
   let user = await findAppUserByEmail(email);
   let created = false;
+  let membership = user ? await getTenantMembership(tenantId, user.id) : null;
+
+  // Reject an opposite-role membership before touching the shared global
+  // profile. A failed attach must have zero profile or membership side effects.
+  if (membership && normalizeValue(membership.role) !== 'staff') {
+    const error = new Error('This person already belongs to the organization with a different portal role.');
+    error.status = 409;
+    error.code = 'TEAM_MEMBERSHIP_ROLE_CONFLICT';
+    throw error;
+  }
 
   if (!user) {
     user = await createAppUser({
@@ -186,15 +196,7 @@ export const createOrAttachTenantTeamMember = async (tenantId, payload = {}) => 
     }
   }
 
-  let membership = await getTenantMembership(tenantId, user.id);
   if (membership) {
-    const currentRole = normalizeValue(membership.role);
-    if (currentRole !== 'staff') {
-      const error = new Error('This person already belongs to the organization with a different portal role.');
-      error.status = 409;
-      error.code = 'TEAM_MEMBERSHIP_ROLE_CONFLICT';
-      throw error;
-    }
 
     membership = await updateCanonicalTenantMembership(tenantId, membership.id, {
       role: 'staff',
