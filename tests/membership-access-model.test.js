@@ -87,10 +87,12 @@ test('attaching an existing global renter identity applies the submitted profile
 });
 
 test('same-organization renter role conflicts are rejected before shared profile mutation', () => {
-  const membershipLookup = renteeRepositorySource.indexOf('let membership = user ? await getTenantMembership');
-  const conflict = renteeRepositorySource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
-  const profileWrite = renteeRepositorySource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
-  assert.ok(membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
+  const createStart = renteeRepositorySource.indexOf('export const createOrAttachTenantRentee');
+  const createSource = renteeRepositorySource.slice(createStart);
+  const membershipLookup = createSource.indexOf('let membership = user ? await getTenantMembership');
+  const conflict = createSource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
+  const profileWrite = createSource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
+  assert.ok(createStart >= 0 && membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
 });
 
 test('same-organization team role conflicts are rejected before shared profile mutation', () => {
