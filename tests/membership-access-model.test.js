@@ -87,10 +87,12 @@ test('attaching an existing global renter identity applies the submitted profile
 });
 
 test('same-organization renter role conflicts are rejected before shared profile mutation', () => {
-  const membershipLookup = renteeRepositorySource.indexOf('let membership = user ? await getTenantMembership');
-  const conflict = renteeRepositorySource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
-  const profileWrite = renteeRepositorySource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
-  assert.ok(membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
+  const createStart = renteeRepositorySource.indexOf('export const createOrAttachTenantRentee');
+  const createSource = renteeRepositorySource.slice(createStart);
+  const membershipLookup = createSource.indexOf('let membership = user ? await getTenantMembership');
+  const conflict = createSource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
+  const profileWrite = createSource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
+  assert.ok(createStart >= 0 && membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
 });
 
 test('same-organization team role conflicts are rejected before shared profile mutation', () => {
@@ -116,7 +118,7 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
 
 test('production migration workflow fails closed on Container App plan errors', () => {
   assert.ok(migrationWorkflowSource.includes('--command sh'));
-  assert.ok(migrationWorkflowSource.includes("printf '%s\\\\nexit\\\\n' \"$remote_command\""));
+  assert.ok(migrationWorkflowSource.includes("{ printf '%s\\\\n' \"$remote_command\"; printf 'exit\\\\n'; }"));
   assert.ok(migrationWorkflowSource.includes('exec_status=${PIPESTATUS[1]}'));
   assert.ok(migrationWorkflowSource.includes('Container App migration plan command failed with exit code'));
   assert.ok(migrationWorkflowSource.includes("syntax error|Production migration run failed:"));
