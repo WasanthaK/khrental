@@ -353,6 +353,14 @@ const main = async () => {
         continue;
       }
 
+      const inspection = await item.migration.inspect(pool);
+      if (inspection.satisfied) {
+        await item.migration.verify(pool);
+        await recordMigration(pool, item.migration, item.checksum);
+        console.log(`Adopted satisfied untracked migration without replaying SQL: ${item.migration.id}`);
+        continue;
+      }
+
       console.log(`Applying migration: ${item.migration.id}`);
       const script = fs.readFileSync(item.filePath, 'utf8');
       await pool.request().batch(script);
