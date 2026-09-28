@@ -3,82 +3,141 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import sql from 'mssql';
 
+const inspectBillingAdjustments = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.tenancy_billing_adjustments', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.tenancy_billing_adjustments')
+          AND name = N'IX_tenancy_billing_adjustments_pending'
+      ) THEN 1 ELSE 0 END AS index_exists;
+  `);
+  const row = result.recordset?.[0] || {};
+  return {
+    satisfied: Boolean(row.table_exists && row.index_exists),
+    detail: `table=${row.table_exists ? 'present' : 'missing'}, index=${row.index_exists ? 'present' : 'missing'}`
+  };
+};
+
+const inspectPlatformAdmins = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists;
+  `);
+  const tableExists = Boolean(result.recordset?.[0]?.table_exists);
+  return {
+    satisfied: tableExists,
+    detail: `table=${tableExists ? 'present' : 'missing'}`
+  };
+};
+
+const inspectMembershipBackfill = async (pool) => {
+  const result = await pool.request().query(`
+    IF OBJECT_ID(N'dbo.app_users', N'U') IS NULL
+       OR OBJECT_ID(N'dbo.tenants', N'U') IS NULL
+       OR OBJECT_ID(N'dbo.tenant_memberships', N'U') IS NULL
+    BEGIN
+      SELECT CAST(0 AS BIT) AS prerequisites_present, CAST(NULL AS BIGINT) AS missing_memberships;
+    END
+    ELSE
+    BEGIN
+      SELECT
+        CAST(1 AS BIT) AS prerequisites_present,
+        COUNT_BIG(*) AS missing_memberships
+      FROM dbo.app_users au
+      INNER JOIN dbo.tenants t ON t.id = au.tenant_id
+      WHERE au.tenant_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.tenant_memberships tm
+          WHERE tm.tenant_id = au.tenant_id
+            AND tm.app_user_id = au.id
+        );
+    END;
+  `);
+  const row = result.recordset?.[0] || {};
+  const prerequisitesPresent = Boolean(row.prerequisites_present);
+  const missing = row.missing_memberships == null ? null : Number(row.missing_memberships);
+  return {
+    satisfied: prerequisitesPresent && missing === 0,
+    detail: prerequisitesPresent ? `missing_memberships=${missing}` : 'prerequisite tables missing'
+  };
+};
+
+const inspectRenterAssociations = async (pool) => {
+  const metadata = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN COL_LENGTH(N'dbo.app_users', N'associated_properties') IS NOT NULL THEN 1 ELSE 0 END AS column_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.app_users')
+          AND name = N'CK_app_users_associated_properties_json'
+      ) THEN 1 ELSE 0 END AS constraint_exists;
+  `);
+  const row = metadata.recordset?.[0] || {};
+  if (!row.table_exists || !row.column_exists || !row.constraint_exists) {
+    return {
+      satisfied: false,
+      detail: `table=${row.table_exists ? 'present' : 'missing'}, column=${row.column_exists ? 'present' : 'missing'}, constraint=${row.constraint_exists ? 'present' : 'missing'}`
+    };
+  }
+
+  const data = await pool.request().query(`
+    SELECT COUNT_BIG(*) AS invalid_json
+    FROM dbo.app_users
+    WHERE associated_properties IS NOT NULL
+      AND ISJSON(associated_properties) <> 1;
+  `);
+  const invalid = Number(data.recordset?.[0]?.invalid_json || 0);
+  return {
+    satisfied: invalid === 0,
+    detail: `table=present, column=present, constraint=present, invalid_json=${invalid}`
+  };
+};
+
+const assertSatisfied = async (inspection, message) => {
+  const state = await inspection;
+  if (!state.satisfied) throw new Error(`${message} (${state.detail})`);
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
     file: 'migrations/20260920_01_add_tenancy_billing_adjustments.sql',
-    verify: async (pool) => {
-      const result = await pool.request().query(`
-        SELECT
-          CASE WHEN OBJECT_ID(N'dbo.tenancy_billing_adjustments', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
-          CASE WHEN EXISTS (
-            SELECT 1 FROM sys.indexes
-            WHERE object_id = OBJECT_ID(N'dbo.tenancy_billing_adjustments')
-              AND name = N'IX_tenancy_billing_adjustments_pending'
-          ) THEN 1 ELSE 0 END AS index_exists;
-      `);
-      const row = result.recordset?.[0] || {};
-      if (!row.table_exists || !row.index_exists) {
-        throw new Error('Billing-adjustments migration verification failed.');
-      }
-    }
+    inspect: inspectBillingAdjustments,
+    verify: async (pool) => assertSatisfied(
+      inspectBillingAdjustments(pool),
+      'Billing-adjustments migration verification failed.'
+    )
   },
   {
     id: '20260920_02_create_platform_admins',
     file: 'migrations/20260920_02_create_platform_admins.sql',
-    verify: async (pool) => {
-      const result = await pool.request().query(`
-        SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists;
-      `);
-      if (!result.recordset?.[0]?.table_exists) {
-        throw new Error('Platform-admin migration verification failed.');
-      }
-    }
+    inspect: inspectPlatformAdmins,
+    verify: async (pool) => assertSatisfied(
+      inspectPlatformAdmins(pool),
+      'Platform-admin migration verification failed.'
+    )
   },
   {
     id: '20260920_03_backfill_legacy_app_user_memberships',
     file: 'migrations/20260920_03_backfill_legacy_app_user_memberships.sql',
-    verify: async (pool) => {
-      const result = await pool.request().query(`
-        SELECT COUNT_BIG(*) AS missing_memberships
-        FROM dbo.app_users au
-        INNER JOIN dbo.tenants t ON t.id = au.tenant_id
-        WHERE au.tenant_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM dbo.tenant_memberships tm
-            WHERE tm.tenant_id = au.tenant_id
-              AND tm.app_user_id = au.id
-          );
-      `);
-      const missing = Number(result.recordset?.[0]?.missing_memberships || 0);
-      if (missing !== 0) {
-        throw new Error(`Membership backfill verification failed: ${missing} legacy users remain without memberships.`);
-      }
-    }
+    inspect: inspectMembershipBackfill,
+    verify: async (pool) => assertSatisfied(
+      inspectMembershipBackfill(pool),
+      'Membership backfill verification failed.'
+    )
   },
   {
     id: '20260926_01_add_rentee_property_unit_associations',
     file: 'migrations/20260926_01_add_rentee_property_unit_associations.sql',
-    verify: async (pool) => {
-      const result = await pool.request().query(`
-        SELECT
-          CASE WHEN COL_LENGTH(N'dbo.app_users', N'associated_properties') IS NOT NULL THEN 1 ELSE 0 END AS column_exists,
-          CASE WHEN EXISTS (
-            SELECT 1 FROM sys.check_constraints
-            WHERE parent_object_id = OBJECT_ID(N'dbo.app_users')
-              AND name = N'CK_app_users_associated_properties_json'
-          ) THEN 1 ELSE 0 END AS constraint_exists,
-          COUNT_BIG(CASE WHEN associated_properties IS NOT NULL AND ISJSON(associated_properties) <> 1 THEN 1 END) AS invalid_json
-        FROM dbo.app_users;
-      `);
-      const row = result.recordset?.[0] || {};
-      if (!row.column_exists || !row.constraint_exists || Number(row.invalid_json || 0) !== 0) {
-        throw new Error('Renter property-unit association migration verification failed.');
-      }
-    }
+    inspect: inspectRenterAssociations,
+    verify: async (pool) => assertSatisfied(
+      inspectRenterAssociations(pool),
+      'Renter property-unit association migration verification failed.'
+    )
   }
-
 ];
 
 const LEDGER_TABLE = 'dbo.schema_migrations';
@@ -265,13 +324,24 @@ const main = async () => {
     console.log(`Database: ${process.env.MSSQL_SERVER}/${process.env.MSSQL_DATABASE}`);
     console.log(`Migration ledger: ${hasLedger ? 'present' : 'not yet created'}`);
 
-    for (const item of planned) {
-      console.log(`${item.appliedRow ? 'APPLIED' : 'PENDING'}  ${item.migration.id}  ${item.checksum}`);
-    }
-
     if (mode === 'plan') {
+      for (const item of planned) {
+        if (item.appliedRow) {
+          console.log(`APPLIED  ${item.migration.id}  ${item.checksum}`);
+          continue;
+        }
+
+        const inspection = await item.migration.inspect(pool);
+        const status = inspection.satisfied ? 'SATISFIED_UNTRACKED' : 'PENDING';
+        console.log(`${status}  ${item.migration.id}  ${item.checksum}  ${inspection.detail}`);
+      }
+
       console.log('Plan completed without modifying the database.');
       return;
+    }
+
+    for (const item of planned) {
+      console.log(`${item.appliedRow ? 'APPLIED' : 'PENDING'}  ${item.migration.id}  ${item.checksum}`);
     }
 
     await assertDdlPermission(pool);
