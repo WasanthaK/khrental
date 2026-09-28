@@ -238,4 +238,7 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationRunnerSource, /COL_LENGTH\(N'dbo\.app_users', N'associated_properties'\)/);
   assert.match(migrationRunnerSource, /if \(!row\.table_exists \|\| !row\.column_exists \|\| !row\.constraint_exists\)/);
   assert.match(migrationRunnerSource, /Plan completed without modifying the database\./);
+  assert.match(migrationRunnerSource, /const inspection = await item\.migration\.inspect\(pool\);/);
+  assert.match(migrationRunnerSource, /if \(inspection\.satisfied\)/);
+  assert.match(migrationRunnerSource, /Adopted satisfied untracked migration without replaying SQL/);
 });
