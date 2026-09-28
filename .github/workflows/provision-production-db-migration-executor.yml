@@ -1,0 +1,126 @@
+name: Provision production database migration executor
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PROVISION-MIGRATION-EXECUTOR exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-production-db-migration-executor
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+  AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Validate explicit provisioning confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirmation }}" != "PROVISION-MIGRATION-EXECUTOR" ]; then
+            echo "Provisioning requires confirmation text PROVISION-MIGRATION-EXECUTOR." >&2
+            exit 1
+          fi
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision isolated manual migration job
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          environment_id=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.managedEnvironmentId \
+            -o tsv)
+
+          image=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.template.containers[0].image \
+            -o tsv)
+
+          server=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].env[?name=='MSSQL_SERVER'].value | [0]" \
+            -o tsv)
+
+          database=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].env[?name=='MSSQL_DATABASE'].value | [0]" \
+            -o tsv)
+
+          for value in environment_id image server database; do
+            if [ -z "${!value:-}" ] || [ "${!value}" = "None" ]; then
+              echo "Unable to resolve required production value: $value" >&2
+              exit 1
+            fi
+          done
+
+          if az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --output none 2>/dev/null; then
+            echo "Migration job already exists; refusing implicit replacement. Review it before changing infrastructure." >&2
+            exit 1
+          fi
+
+          az containerapp job create \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --environment "$environment_id" \
+            --trigger-type Manual \
+            --replica-timeout 900 \
+            --replica-retry-limit 0 \
+            --replica-completion-count 1 \
+            --parallelism 1 \
+            --image "$image" \
+            --cpu 0.5 \
+            --memory 1Gi \
+            --mi-system-assigned \
+            --command /bin/sh \
+            --args scripts/run-production-migration-apply.sh \
+            --env-vars \
+              MSSQL_SERVER="$server" \
+              MSSQL_DATABASE="$database" \
+              MSSQL_MIGRATION_DEDICATED_EXECUTOR=true \
+              MIGRATION_THROUGH=all \
+            --output none
+
+          principal_id=$(az containerapp job identity show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query principalId \
+            -o tsv)
+
+          if [ -z "$principal_id" ]; then
+            echo "Migration job was created without a system-assigned principal ID." >&2
+            exit 1
+          fi
+
+          echo "Dedicated migration job created: $AZURE_MIGRATION_JOB_NAME"
+          echo "Managed identity principal ID: $principal_id"
+          echo "Next: grant this job identity the documented least-privilege SQL permissions before any apply run."

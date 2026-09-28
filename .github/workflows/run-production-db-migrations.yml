@@ -188,13 +188,76 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Refuse apply without direct privileged migration access
+      - name: Start dedicated production migration executor
         if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
         shell: bash
+        env:
+          AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
         run: |
-          echo "The GitHub-hosted runner does not currently have authenticated privileged production SQL access." >&2
-          echo "No firewall rule will be opened and the restricted web identity will not be granted DDL permission." >&2
-          echo "Apply requires a dedicated privileged migration executor inside the production network." >&2
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          if ! az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --output none 2>/dev/null; then
+            echo "Dedicated migration job $AZURE_MIGRATION_JOB_NAME is not provisioned. Refusing production apply." >&2
+            exit 1
+          fi
+
+          executor_marker=$(az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].env[?name=='MSSQL_MIGRATION_DEDICATED_EXECUTOR'].value | [0]" \
+            -o tsv)
+
+          if [ "$executor_marker" != "true" ]; then
+            echo "Dedicated migration job is missing its executor marker. Refusing production apply." >&2
+            exit 1
+          fi
+
+          az containerapp job update \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars MIGRATION_THROUGH="$MIGRATION_THROUGH" \
+            --output none
+
+          execution_name=$(az containerapp job start \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query name \
+            -o tsv)
+
+          if [ -z "$execution_name" ]; then
+            echo "Azure did not return a migration job execution name." >&2
+            exit 1
+          fi
+
+          echo "Started dedicated migration execution: $execution_name"
+
+          for attempt in $(seq 1 90); do
+            status=$(az containerapp job execution show \
+              --name "$AZURE_MIGRATION_JOB_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status \
+              -o tsv)
+
+            echo "Migration execution status: ${status:-unknown} (attempt $attempt/90)"
+            case "$status" in
+              Succeeded)
+                echo "Dedicated production migration execution succeeded."
+                exit 0
+                ;;
+              Failed|Stopped)
+                echo "Dedicated production migration execution ended with status $status." >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "Dedicated production migration execution did not complete within the workflow wait window." >&2
           exit 1
 
       - name: Wait for this commit to be the serving Container App revision
