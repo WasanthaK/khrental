@@ -14,6 +14,7 @@ const inviteButtonSource = readFileSync(new URL('../src/components/common/Invite
 const invitationServiceSource = readFileSync(new URL('../src/services/invitationService.js', import.meta.url), 'utf8');
 const invitationLifecycleSource = readFileSync(new URL('../src/utils/invitationLifecycle.js', import.meta.url), 'utf8');
 const migrationRunnerSource = readFileSync(new URL('../scripts/run-production-migrations.mjs', import.meta.url), 'utf8');
+const migrationPlanWrapperSource = readFileSync(new URL('../scripts/run-production-migration-plan.sh', import.meta.url), 'utf8');
 const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-db.mjs', import.meta.url), 'utf8');
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
 const renterAssociationMigrationSource = readFileSync(new URL('../migrations/20260926_01_add_rentee_property_unit_associations.sql', import.meta.url), 'utf8');
@@ -117,9 +118,9 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
 });
 
 test('production migration workflow fails closed on Container App plan errors', () => {
-  assert.ok(migrationWorkflowSource.includes('--command sh'));
-  assert.ok(migrationWorkflowSource.includes("{ printf '%s\\\\n' \"$remote_command\"; printf 'exit\\\\n'; }"));
-  assert.ok(migrationWorkflowSource.includes('exec_status=${PIPESTATUS[1]}'));
+  assert.ok(migrationWorkflowSource.includes('--command /app/scripts/run-production-migration-plan.sh'));
+  assert.ok(!migrationWorkflowSource.includes('--command sh'));
+  assert.ok(migrationWorkflowSource.includes('exec_status=${PIPESTATUS[0]}'));
   assert.ok(migrationWorkflowSource.includes('Container App migration plan command failed with exit code'));
   assert.ok(migrationWorkflowSource.includes("syntax error|Production migration run failed:"));
   assert.ok(migrationWorkflowSource.includes('Plan completed without modifying the database.'));
@@ -207,7 +208,10 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN/);
   assert.doesNotMatch(migrationWorkflowSource, /firewall-rule create/);
   assert.match(migrationWorkflowSource, /az containerapp exec/);
-  assert.match(migrationWorkflowSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
+  assert.match(migrationWorkflowSource, /--command \/app\/scripts\/run-production-migration-plan\.sh/);
+  assert.match(migrationPlanWrapperSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
+  assert.match(migrationPlanWrapperSource, /--mode=plan/);
+  assert.doesNotMatch(migrationPlanWrapperSource, /--mode=apply/);
   assert.match(migrationWorkflowSource, /build-info\.json/);
   assert.match(migrationWorkflowSource, /No firewall rule will be opened/);
   assert.match(migrationWorkflowSource, /dedicated privileged migration executor inside the production network/);

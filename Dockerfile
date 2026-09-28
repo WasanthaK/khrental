@@ -16,6 +16,8 @@ RUN npm config set fetch-retries 5 \
 
 COPY . .
 
+RUN chmod +x /app/scripts/run-production-migration-plan.sh
+
 RUN printf '{"buildSha":"%s"}\n' "$APP_BUILD_SHA" > public/build-info.json \
   && npm run build
 

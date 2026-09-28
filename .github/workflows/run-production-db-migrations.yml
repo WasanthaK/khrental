@@ -238,10 +238,9 @@ jobs:
 
           echo "Running read-only plan inside ready revision: $ready_revision"
 
-          remote_command="export MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true; node scripts/run-production-migrations.mjs --mode=plan --through=$MIGRATION_THROUGH"
           set +e
-          { printf '%s\\n' "$remote_command"; printf 'exit\\n'; } | script -q -e -c "az containerapp exec --name \"$AZURE_CONTAINER_APP_NAME\" --resource-group \"$AZURE_RESOURCE_GROUP\" --revision \"$ready_revision\" --command sh" /dev/null | tee migration-output.txt
-          exec_status=${PIPESTATUS[1]}
+          script -q -e -c "az containerapp exec --name \"$AZURE_CONTAINER_APP_NAME\" --resource-group \"$AZURE_RESOURCE_GROUP\" --revision \"$ready_revision\" --command /app/scripts/run-production-migration-plan.sh" /dev/null | tee migration-output.txt
+          exec_status=${PIPESTATUS[0]}
           set -e
 
           if [ "$exec_status" -ne 0 ]; then
