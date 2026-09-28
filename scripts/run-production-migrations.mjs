@@ -302,8 +302,12 @@ const main = async () => {
   const { mode, through } = parseArgs();
   const selected = getSelectedMigrations(through);
 
-  if (mode === 'apply' && envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY')) {
-    throw new Error('Runtime managed identity is permitted for read-only migration planning only. Production migration apply requires the dedicated privileged migration identity.');
+  if (
+    mode === 'apply'
+    && envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY')
+    && !envFlag('MSSQL_MIGRATION_DEDICATED_EXECUTOR')
+  ) {
+    throw new Error('Runtime managed identity is permitted for read-only migration planning only. Production migration apply requires the dedicated privileged migration executor.');
   }
 
   const pool = await new sql.ConnectionPool(createConnectionConfig()).connect();
