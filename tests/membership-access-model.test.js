@@ -117,9 +117,9 @@ test('tenant onboarding no longer depends on the Supabase-shaped compatibility c
 });
 
 test('production migration workflow fails closed on Container App plan errors', () => {
-  assert.ok(migrationWorkflowSource.includes('--command sh'));
-  assert.ok(migrationWorkflowSource.includes("{ printf '%s\\\\n' \"$remote_command\"; printf 'exit\\\\n'; }"));
-  assert.ok(migrationWorkflowSource.includes('exec_status=${PIPESTATUS[1]}'));
+  assert.ok(migrationWorkflowSource.includes('--command /app/scripts/run-production-migration-plan.sh'));
+  assert.ok(!migrationWorkflowSource.includes('--command sh'));
+  assert.ok(migrationWorkflowSource.includes('exec_status=${PIPESTATUS[0]}'));
   assert.ok(migrationWorkflowSource.includes('Container App migration plan command failed with exit code'));
   assert.ok(migrationWorkflowSource.includes("syntax error|Production migration run failed:"));
   assert.ok(migrationWorkflowSource.includes('Plan completed without modifying the database.'));
