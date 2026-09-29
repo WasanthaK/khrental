@@ -271,6 +271,18 @@ jobs:
 
           echo "Started dedicated migration execution: $execution_name"
 
+          show_execution_logs() {
+            echo "::group::Dedicated migration executor logs ($execution_name)"
+            az containerapp job logs show \
+              --name "$AZURE_MIGRATION_JOB_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --execution "$execution_name" \
+              --container "$container_name" \
+              --tail 200 \
+              --format text || echo "Dedicated migration executor logs were unavailable."
+            echo "::endgroup::"
+          }
+
           for attempt in $(seq 1 90); do
             status=$(az containerapp job execution show \
               --name "$AZURE_MIGRATION_JOB_NAME" \
@@ -282,10 +294,12 @@ jobs:
             echo "Migration execution status: ${status:-unknown} (attempt $attempt/90)"
             case "$status" in
               Succeeded)
+                show_execution_logs
                 echo "Dedicated production migration execution succeeded."
                 exit 0
                 ;;
               Failed|Stopped)
+                show_execution_logs
                 echo "Dedicated production migration execution ended with status $status." >&2
                 exit 1
                 ;;
