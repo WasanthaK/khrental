@@ -102,11 +102,10 @@ jobs:
             --memory 1Gi \
             --mi-system-assigned \
             --command /bin/sh \
-            --args scripts/run-production-migration-apply.sh \
+            --args scripts/run-production-migration-plan.sh \
             --env-vars \
               MSSQL_SERVER="$server" \
               MSSQL_DATABASE="$database" \
-              MSSQL_MIGRATION_DEDICATED_EXECUTOR=true \
               MIGRATION_THROUGH=all \
             --output none
 
@@ -123,4 +122,4 @@ jobs:
 
           echo "Dedicated migration job created: $AZURE_MIGRATION_JOB_NAME"
           echo "Managed identity principal ID: $principal_id"
-          echo "Next: grant this job identity the documented least-privilege SQL permissions before any apply run."
+          echo "Migration job rests in read-only plan mode. Apply requires an explicit per-execution override."

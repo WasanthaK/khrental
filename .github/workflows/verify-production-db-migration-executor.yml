@@ -1,0 +1,116 @@
+name: Verify production database migration executor
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type VERIFY-MIGRATION-EXECUTOR exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-production-db-migration-executor
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Validate explicit verification confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirmation }}" != "VERIFY-MIGRATION-EXECUTOR" ]; then
+            echo "Verification requires confirmation text VERIFY-MIGRATION-EXECUTOR." >&2
+            exit 1
+          fi
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Put executor in read-only plan mode and verify it
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          if ! az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --output none 2>/dev/null; then
+            echo "Dedicated migration job is not provisioned." >&2
+            exit 1
+          fi
+
+          az containerapp job update \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --command /bin/sh \
+            --args scripts/run-production-migration-plan.sh \
+            --remove-env-vars MSSQL_MIGRATION_DEDICATED_EXECUTOR \
+            --set-env-vars MIGRATION_THROUGH=all \
+            --output none
+
+          stored_args=$(az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].args | [0]" \
+            -o tsv)
+
+          if [ "$stored_args" != "scripts/run-production-migration-plan.sh" ]; then
+            echo "Migration job did not settle into read-only plan mode." >&2
+            exit 1
+          fi
+
+          execution_name=$(az containerapp job start \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query name \
+            -o tsv)
+
+          if [ -z "$execution_name" ]; then
+            echo "Azure did not return a verification execution name." >&2
+            exit 1
+          fi
+
+          echo "Started read-only migration executor verification: $execution_name"
+
+          for attempt in $(seq 1 90); do
+            status=$(az containerapp job execution show \
+              --name "$AZURE_MIGRATION_JOB_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status \
+              -o tsv)
+
+            echo "Verification execution status: ${status:-unknown} (attempt $attempt/90)"
+            case "$status" in
+              Succeeded)
+                echo "Dedicated migration executor read-only verification succeeded."
+                exit 0
+                ;;
+              Failed|Stopped)
+                echo "Dedicated migration executor verification ended with status $status." >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "Dedicated migration executor verification did not complete within the workflow wait window." >&2
+          exit 1
