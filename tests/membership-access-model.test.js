@@ -227,8 +227,8 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationProvisionWorkflowSource, /PROVISION-MIGRATION-EXECUTOR/);
   assert.match(migrationProvisionWorkflowSource, /--trigger-type Manual/);
   assert.match(migrationProvisionWorkflowSource, /--mi-system-assigned/);
-  assert.match(migrationProvisionWorkflowSource, /run-production-migration-plan\\.sh/);
-  assert.doesNotMatch(migrationProvisionWorkflowSource, /run-production-migration-apply\\.sh/);
+  assert.ok(migrationProvisionWorkflowSource.includes('run-production-migration-plan.sh'));
+  assert.ok(!migrationProvisionWorkflowSource.includes('run-production-migration-apply.sh'));
   assert.match(migrationWorkflowSource, /--container-name \"\$AZURE_MIGRATION_JOB_NAME\"/);
   assert.match(migrationWorkflowSource, /--args scripts\/run-production-migration-apply\\.sh/);
   assert.doesNotMatch(migrationProvisionWorkflowSource, /firewall-rule create/);
