@@ -205,21 +205,43 @@ jobs:
             exit 1
           fi
 
-          executor_marker=$(az containerapp job show \
+          stored_args=$(az containerapp job show \
             --name "$AZURE_MIGRATION_JOB_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "properties.template.containers[0].env[?name=='MSSQL_MIGRATION_DEDICATED_EXECUTOR'].value | [0]" \
+            --query "properties.template.containers[0].args | [0]" \
             -o tsv)
 
-          if [ "$executor_marker" != "true" ]; then
-            echo "Dedicated migration job is missing its executor marker. Refusing production apply." >&2
+          if [ "$stored_args" != "scripts/run-production-migration-plan.sh" ]; then
+            echo "Dedicated migration job is not resting in read-only plan mode. Refusing production apply." >&2
+            exit 1
+          fi
+
+          principal_id=$(az containerapp job identity show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query principalId \
+            -o tsv)
+
+          if [ -z "$principal_id" ] || [ "$principal_id" = "None" ]; then
+            echo "Dedicated migration job has no system-assigned managed identity. Refusing production apply." >&2
+            exit 1
+          fi
+
+          container_name=$(az containerapp job show \
+            --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.template.containers[0].name" \
+            -o tsv)
+
+          if [ -z "$container_name" ] || [ "$container_name" = "None" ]; then
+            echo "Unable to resolve the dedicated migration job container name." >&2
             exit 1
           fi
 
           execution_name=$(az containerapp job start \
             --name "$AZURE_MIGRATION_JOB_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
-            --container-name "$AZURE_MIGRATION_JOB_NAME" \
+            --container-name "$container_name" \
             --command /bin/sh \
             --args scripts/run-production-migration-apply.sh \
             --env-vars \
