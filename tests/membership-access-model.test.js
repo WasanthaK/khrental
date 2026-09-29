@@ -232,7 +232,13 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /stored_args=\$\(az containerapp job show/);
   assert.match(migrationWorkflowSource, /not resting in read-only plan mode/);
   assert.match(migrationWorkflowSource, /principal_id=\$\(az containerapp job identity show/);
-  assert.match(migrationWorkflowSource, /container_name=\$\(az containerapp job show/);
+  assert.ok(migrationWorkflowSource.includes('container_json=$(az containerapp job show'));
+  assert.ok(migrationWorkflowSource.includes("container_name=$(jq -r '.name // empty'"));
+  assert.ok(migrationWorkflowSource.includes("image=$(jq -r '.image // empty'"));
+  assert.ok(migrationWorkflowSource.includes("cpu=$(jq -r '.resources.cpu // empty'"));
+  assert.ok(migrationWorkflowSource.includes("memory=$(jq -r '.resources.memory // empty'"));
+  assert.ok(migrationWorkflowSource.includes('select(.name == "MSSQL_SERVER")'));
+  assert.ok(migrationWorkflowSource.includes('select(.name == "MSSQL_DATABASE")'));
   assert.ok(migrationWorkflowSource.includes('--container-name "$container_name"'));
   assert.ok(migrationWorkflowSource.includes('--args scripts/run-production-migration-apply.sh'));
   assert.ok(migrationWorkflowSource.includes('--image "$image"'));
