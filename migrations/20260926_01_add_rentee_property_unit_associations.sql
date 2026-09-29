@@ -10,29 +10,34 @@ BEGIN
         ADD associated_properties NVARCHAR(MAX) NULL;
 END;
 
+-- Compile statements that reference the new column only after ALTER TABLE has run.
+EXEC sys.sp_executesql N'
 UPDATE dbo.app_users
-SET associated_properties = N'[]'
+SET associated_properties = N''[]''
 WHERE associated_properties IS NULL
-   OR LTRIM(RTRIM(associated_properties)) = N'';
+   OR LTRIM(RTRIM(associated_properties)) = N'''';
+';
 
 IF COL_LENGTH(N'dbo.app_users', N'associated_property_ids') IS NOT NULL
 BEGIN
+    EXEC sys.sp_executesql N'
     UPDATE dbo.app_users
     SET associated_properties = (
         SELECT
             CONVERT(NVARCHAR(36), TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value])) AS propertyId,
-            JSON_QUERY(N'null') AS unitId
-        FROM OPENJSON(CASE WHEN ISJSON(associated_property_ids) = 1 THEN associated_property_ids ELSE N'[]' END) ids
+            JSON_QUERY(N''null'') AS unitId
+        FROM OPENJSON(CASE WHEN ISJSON(associated_property_ids) = 1 THEN associated_property_ids ELSE N''[]'' END) ids
         WHERE TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value]) IS NOT NULL
         FOR JSON PATH
     )
-    WHERE associated_properties = N'[]'
+    WHERE associated_properties = N''[]''
       AND ISJSON(associated_property_ids) = 1
       AND EXISTS (
           SELECT 1
           FROM OPENJSON(associated_property_ids) ids
           WHERE TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value]) IS NOT NULL
       );
+    ';
 END;
 
 IF NOT EXISTS (
@@ -41,9 +46,11 @@ IF NOT EXISTS (
       AND name = N'CK_app_users_associated_properties_json'
 )
 BEGIN
+    EXEC sys.sp_executesql N'
     ALTER TABLE dbo.app_users
         ADD CONSTRAINT CK_app_users_associated_properties_json
         CHECK (associated_properties IS NULL OR ISJSON(associated_properties) = 1);
+    ';
 END;
 
 COMMIT TRANSACTION;
