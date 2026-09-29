@@ -252,6 +252,11 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.ok(migrationWorkflowSource.includes('--memory "$memory"'));
   assert.ok(migrationWorkflowSource.includes('MSSQL_SERVER="$server"'));
   assert.ok(migrationWorkflowSource.includes('MSSQL_DATABASE="$database"'));
+  assert.match(migrationWorkflowSource, /Wait for this commit to be the serving Container App revision for apply/);
+  assert.ok(migrationWorkflowSource.includes('stored_image=$(jq -r'));
+  assert.ok(migrationWorkflowSource.includes('az containerapp revision show'));
+  assert.ok(migrationWorkflowSource.includes('--revision "$ready_revision"'));
+  assert.ok(migrationWorkflowSource.includes('Migration executor apply image from serving revision $ready_revision: $image'));
   assert.ok(migrationWorkflowSource.includes('az containerapp job logs show'));
   assert.ok(migrationWorkflowSource.includes('--execution "$execution_name"'));
   assert.ok(migrationWorkflowSource.includes('show_execution_logs'));

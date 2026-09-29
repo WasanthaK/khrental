@@ -188,6 +188,32 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Wait for this commit to be the serving Container App revision for apply
+        if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+
+          for attempt in $(seq 1 75); do
+            build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+              echo "Serving Container App revision now matches ${GITHUB_SHA} for migration apply."
+              exit 0
+            fi
+            echo "Waiting for Container App to serve ${GITHUB_SHA} before migration apply (attempt ${attempt}/75)..."
+            sleep 8
+          done
+
+          echo "Container App did not begin serving ${GITHUB_SHA} within the migration-apply wait window." >&2
+          exit 1
+
       - name: Start dedicated production migration executor
         if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'apply'
         shell: bash
@@ -234,18 +260,33 @@ jobs:
             -o json)
 
           container_name=$(jq -r '.name // empty' <<<"$container_json")
-          image=$(jq -r '.image // empty' <<<"$container_json")
+          stored_image=$(jq -r '.image // empty' <<<"$container_json")
           cpu=$(jq -r '.resources.cpu // empty' <<<"$container_json")
           memory=$(jq -r '.resources.memory // empty' <<<"$container_json")
           server=$(jq -r '.env[]? | select(.name == "MSSQL_SERVER") | .value // empty' <<<"$container_json")
           database=$(jq -r '.env[]? | select(.name == "MSSQL_DATABASE") | .value // empty' <<<"$container_json")
 
-          for value in container_name image cpu memory server database; do
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)
+          image=$(az containerapp revision show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$ready_revision" \
+            --query "properties.template.containers[0].image" \
+            -o tsv)
+
+          for value in container_name stored_image image cpu memory server database; do
             if [ -z "${!value:-}" ] || [ "${!value}" = "None" ]; then
               echo "Unable to resolve required dedicated migration execution value: $value" >&2
               exit 1
             fi
           done
+
+          echo "Migration executor stored image: $stored_image"
+          echo "Migration executor apply image from serving revision $ready_revision: $image"
 
           execution_name=$(az containerapp job start \
             --name "$AZURE_MIGRATION_JOB_NAME" \
