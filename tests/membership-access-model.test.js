@@ -235,6 +235,11 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /container_name=\$\(az containerapp job show/);
   assert.ok(migrationWorkflowSource.includes('--container-name "$container_name"'));
   assert.ok(migrationWorkflowSource.includes('--args scripts/run-production-migration-apply.sh'));
+  assert.ok(migrationWorkflowSource.includes('--image "$image"'));
+  assert.ok(migrationWorkflowSource.includes('--cpu "$cpu"'));
+  assert.ok(migrationWorkflowSource.includes('--memory "$memory"'));
+  assert.ok(migrationWorkflowSource.includes('MSSQL_SERVER="$server"'));
+  assert.ok(migrationWorkflowSource.includes('MSSQL_DATABASE="$database"'));
   assert.doesNotMatch(migrationProvisionWorkflowSource, /firewall-rule create/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
   assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
