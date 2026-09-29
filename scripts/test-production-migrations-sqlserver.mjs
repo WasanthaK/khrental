@@ -17,9 +17,9 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([MIGRATION_ID]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const runDocker = (args, options = {}) => execFileSync('docker', args, {
+const runDocker = (args) => execFileSync('docker', args, {
   encoding: 'utf8',
-  stdio: options.stdio || ['ignore', 'pipe', 'pipe']
+  stdio: ['ignore', 'pipe', 'pipe']
 }).trim();
 
 const assertProductionMigrationCoverage = () => {
@@ -107,17 +107,24 @@ const assertSchemaState = async (pool) => {
   assert.equal(Number(row.invalid_json), 0, 'associated_properties must contain only valid JSON or NULL');
 };
 
+const assertBackfilledAssociation = (entry, expectedPropertyId) => {
+  assert.equal(entry.propertyId, expectedPropertyId);
+  assert.ok(Object.hasOwn(entry, 'unitId'), 'backfilled association must explicitly contain unitId');
+  assert.equal(entry.unitId, null, 'legacy property-only association must backfill unitId as null');
+};
+
 const main = async () => {
   assertProductionMigrationCoverage();
 
-  const migrationPath = path.resolve(MIGRATION_FILE);
-  const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+  const migrationSql = fs.readFileSync(path.resolve(MIGRATION_FILE), 'utf8');
   assert.match(migrationSql, /ALTER TABLE dbo\.app_users[\s\S]*ADD associated_properties NVARCHAR\(MAX\)/);
+  assert.match(migrationSql, /FOR JSON PATH, INCLUDE_NULL_VALUES/);
 
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
   const databaseName = `khrental_migration_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   let containerStarted = false;
+  let publishedPort;
   let masterPool;
   let testPool;
 
@@ -132,8 +139,8 @@ const main = async () => {
     ]);
     containerStarted = true;
 
-    const port = parsePublishedPort(runDocker(['port', containerName, '1433/tcp']));
-    const connection = { server: '127.0.0.1', port, password };
+    publishedPort = parsePublishedPort(runDocker(['port', containerName, '1433/tcp']));
+    const connection = { server: '127.0.0.1', port: publishedPort, password };
     await waitForSqlServer(connection);
 
     masterPool = await connect({ ...connection, timeout: 10000 });
@@ -154,18 +161,9 @@ const main = async () => {
         id: '11111111-1111-4111-8111-111111111111',
         legacy: '["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]'
       },
-      {
-        id: '22222222-2222-4222-8222-222222222222',
-        legacy: '[]'
-      },
-      {
-        id: '33333333-3333-4333-8333-333333333333',
-        legacy: 'not-json'
-      },
-      {
-        id: '44444444-4444-4444-8444-444444444444',
-        legacy: null
-      },
+      { id: '22222222-2222-4222-8222-222222222222', legacy: '[]' },
+      { id: '33333333-3333-4333-8333-333333333333', legacy: 'not-json' },
+      { id: '44444444-4444-4444-8444-444444444444', legacy: null },
       {
         id: '55555555-5555-4555-8555-555555555555',
         legacy: '["cccccccc-cccc-4ccc-8ccc-cccccccccccc","not-a-uuid"]'
@@ -182,6 +180,7 @@ const main = async () => {
       `);
     }
 
+    // Execute the exact SQL with the same batch API used by production.
     await testPool.request().batch(migrationSql);
     await assertSchemaState(testPool);
 
@@ -192,19 +191,18 @@ const main = async () => {
     `);
     const byId = new Map(data.recordset.map((row) => [row.id.toLowerCase(), queryJson(row.associated_properties)]));
 
-    assert.deepEqual(
-      byId.get(fixtures[0].id).map((entry) => entry.propertyId),
-      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']
-    );
+    const first = byId.get(fixtures[0].id);
+    assert.equal(first.length, 2);
+    assertBackfilledAssociation(first[0], 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    assertBackfilledAssociation(first[1], 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
     assert.deepEqual(byId.get(fixtures[1].id), []);
     assert.deepEqual(byId.get(fixtures[2].id), []);
     assert.deepEqual(byId.get(fixtures[3].id), []);
-    assert.deepEqual(
-      byId.get(fixtures[4].id).map((entry) => entry.propertyId),
-      ['cccccccc-cccc-4ccc-8ccc-cccccccccccc']
-    );
+    const mixed = byId.get(fixtures[4].id);
+    assert.equal(mixed.length, 1);
+    assertBackfilledAssociation(mixed[0], 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
 
-    // Prove the exact migration is idempotent.
+    // Execute the exact migration a second time to prove idempotency.
     await testPool.request().batch(migrationSql);
     await assertSchemaState(testPool);
 
@@ -225,7 +223,7 @@ const main = async () => {
     `);
     assert.deepEqual(queryJson(repaired.recordset[0].associated_properties), []);
 
-    // Prove the installed constraint actually rejects invalid JSON.
+    // Prove the installed constraint is effective, not merely present in metadata.
     await assert.rejects(
       testPool.request().query(`
         UPDATE dbo.app_users
@@ -234,7 +232,7 @@ const main = async () => {
       `)
     );
 
-    console.log(`PASS: ${MIGRATION_ID} executed against SQL Server 2022, verified, reran idempotently, and recovered partial state.`);
+    console.log(`PASS: ${MIGRATION_ID} executed against SQL Server 2022, preserved canonical association shape, reran idempotently, and recovered partial state.`);
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}
@@ -244,7 +242,7 @@ const main = async () => {
       try {
         masterPool = await connect({
           server: '127.0.0.1',
-          port: parsePublishedPort(runDocker(['port', containerName, '1433/tcp'])),
+          port: publishedPort,
           password,
           timeout: 5000
         });
