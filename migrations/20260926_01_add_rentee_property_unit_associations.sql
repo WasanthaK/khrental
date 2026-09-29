@@ -24,7 +24,7 @@ BEGIN
     UPDATE dbo.app_users
     SET associated_properties = (
         SELECT
-            CONVERT(NVARCHAR(36), TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value])) AS propertyId,
+            LOWER(CONVERT(NVARCHAR(36), TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value]))) AS propertyId,
             CAST(NULL AS NVARCHAR(36)) AS unitId
         FROM OPENJSON(CASE WHEN ISJSON(associated_property_ids) = 1 THEN associated_property_ids ELSE N''[]'' END) ids
         WHERE TRY_CONVERT(UNIQUEIDENTIFIER, ids.[value]) IS NOT NULL
