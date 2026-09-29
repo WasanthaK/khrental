@@ -216,15 +216,15 @@ jobs:
             exit 1
           fi
 
-          az containerapp job update \
-            --name "$AZURE_MIGRATION_JOB_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --set-env-vars MIGRATION_THROUGH="$MIGRATION_THROUGH" \
-            --output none
-
           execution_name=$(az containerapp job start \
             --name "$AZURE_MIGRATION_JOB_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
+            --container-name "$AZURE_MIGRATION_JOB_NAME" \
+            --command /bin/sh \
+            --args scripts/run-production-migration-apply.sh \
+            --env-vars \
+              MSSQL_MIGRATION_DEDICATED_EXECUTOR=true \
+              MIGRATION_THROUGH="$MIGRATION_THROUGH" \
             --query name \
             -o tsv)
 
