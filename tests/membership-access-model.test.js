@@ -132,6 +132,12 @@ test('production migration workflow fails closed on Container App plan errors', 
 test('production migration provisions durable renter property-unit storage', () => {
   assert.match(renterAssociationMigrationSource, /ADD associated_properties NVARCHAR\(MAX\)/);
   assert.match(renterAssociationMigrationSource, /CK_app_users_associated_properties_json/);
+  assert.match(renterAssociationMigrationSource, /EXEC sys\.sp_executesql/);
+  assert.ok(
+    renterAssociationMigrationSource.indexOf("ALTER TABLE dbo.app_users") <
+      renterAssociationMigrationSource.indexOf("EXEC sys.sp_executesql"),
+    "new-column references must compile only after ALTER TABLE has executed"
+  );
   assert.match(migrationRunnerSource, /20260926_01_add_rentee_property_unit_associations/);
   assert.match(migrationWorkflowSource, /20260926_01_add_rentee_property_unit_associations/);
 });
