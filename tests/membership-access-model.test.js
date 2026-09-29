@@ -246,6 +246,9 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.ok(migrationWorkflowSource.includes('--memory "$memory"'));
   assert.ok(migrationWorkflowSource.includes('MSSQL_SERVER="$server"'));
   assert.ok(migrationWorkflowSource.includes('MSSQL_DATABASE="$database"'));
+  assert.ok(migrationWorkflowSource.includes('az containerapp job logs show'));
+  assert.ok(migrationWorkflowSource.includes('--execution "$execution_name"'));
+  assert.ok(migrationWorkflowSource.includes('show_execution_logs'));
   assert.doesNotMatch(migrationProvisionWorkflowSource, /firewall-rule create/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
   assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
