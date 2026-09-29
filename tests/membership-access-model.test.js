@@ -210,7 +210,7 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationWorkflowSource, /MSSQL_ACCESS_TOKEN/);
   assert.doesNotMatch(migrationWorkflowSource, /firewall-rule create/);
   assert.match(migrationWorkflowSource, /az containerapp exec/);
-  assert.match(migrationWorkflowSource, /--command \/app\/scripts\/run-production-migration-plan\.sh/);
+  assert.ok(migrationWorkflowSource.includes('--command /app/scripts/run-production-migration-plan.sh'));
   assert.match(migrationPlanWrapperSource, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
   assert.match(migrationPlanWrapperSource, /--mode=plan/);
   assert.doesNotMatch(migrationPlanWrapperSource, /--mode=apply/);
@@ -227,10 +227,14 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationProvisionWorkflowSource, /PROVISION-MIGRATION-EXECUTOR/);
   assert.match(migrationProvisionWorkflowSource, /--trigger-type Manual/);
   assert.match(migrationProvisionWorkflowSource, /--mi-system-assigned/);
-  assert.match(migrationProvisionWorkflowSource, /run-production-migration-plan\\.sh/);
-  assert.doesNotMatch(migrationProvisionWorkflowSource, /run-production-migration-apply\\.sh/);
-  assert.match(migrationWorkflowSource, /--container-name \"\$AZURE_MIGRATION_JOB_NAME\"/);
-  assert.match(migrationWorkflowSource, /--args scripts\/run-production-migration-apply\\.sh/);
+  assert.ok(migrationProvisionWorkflowSource.includes('run-production-migration-plan.sh'));
+  assert.ok(!migrationProvisionWorkflowSource.includes('run-production-migration-apply.sh'));
+  assert.match(migrationWorkflowSource, /stored_args=\$\(az containerapp job show/);
+  assert.match(migrationWorkflowSource, /not resting in read-only plan mode/);
+  assert.match(migrationWorkflowSource, /principal_id=\$\(az containerapp job identity show/);
+  assert.match(migrationWorkflowSource, /container_name=\$\(az containerapp job show/);
+  assert.ok(migrationWorkflowSource.includes('--container-name "$container_name"'));
+  assert.ok(migrationWorkflowSource.includes('--args scripts/run-production-migration-apply.sh'));
   assert.doesNotMatch(migrationProvisionWorkflowSource, /firewall-rule create/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
   assert.match(migrationProbeSource, /code === 'ETIMEOUT'/);
