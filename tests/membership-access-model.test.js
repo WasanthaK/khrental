@@ -229,7 +229,11 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationProvisionWorkflowSource, /--mi-system-assigned/);
   assert.ok(migrationProvisionWorkflowSource.includes('run-production-migration-plan.sh'));
   assert.ok(!migrationProvisionWorkflowSource.includes('run-production-migration-apply.sh'));
-  assert.match(migrationWorkflowSource, /--container-name \"\$AZURE_MIGRATION_JOB_NAME\"/);
+  assert.match(migrationWorkflowSource, /stored_args=\$\(az containerapp job show/);
+  assert.match(migrationWorkflowSource, /not resting in read-only plan mode/);
+  assert.match(migrationWorkflowSource, /principal_id=\$\(az containerapp job identity show/);
+  assert.match(migrationWorkflowSource, /container_name=\$\(az containerapp job show/);
+  assert.match(migrationWorkflowSource, /--container-name \"\$container_name\"/);
   assert.match(migrationWorkflowSource, /--args scripts\/run-production-migration-apply\\.sh/);
   assert.doesNotMatch(migrationProvisionWorkflowSource, /firewall-rule create/);
   assert.match(migrationProbeSource, /message\.includes\('failed to connect to'\)/);
