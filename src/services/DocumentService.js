@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { platform as platformClient } from './platformClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import { alignedTextX, readBlockTextAlignment } from '../utils/documentFormatting';
 
 /**
  * Simple HTML to structured content parser
@@ -50,14 +51,18 @@ const parseHtmlContent = (html) => {
           contentPieces.push({
             type: 'heading',
             text: node.textContent.trim(),
-            level: level
+            level: level,
+            alignment: readBlockTextAlignment(node)
           });
         }
         // Handle paragraphs
         else if (tagName === 'p') {
           contentPieces.push({
             type: 'paragraph',
-            text: node.textContent.trim()
+            text: node.textContent.trim(),
+            isBold: node.querySelector('strong, b') !== null,
+            isItalic: node.querySelector('i, em') !== null,
+            alignment: readBlockTextAlignment(node)
           });
         }
         // Handle unordered lists
@@ -546,9 +551,18 @@ export const saveMergedDocument = async (content, agreementId) => {
     }
     
     // Helper function to add text with wrapping
-    const addWrappedText = (text, fontSize, isHeading = false) => {
+    const addWrappedText = (text, fontSize, isHeading = false, alignment = 'left') => {
       const font = isHeading ? helveticaBold : helveticaFont;
       const maxWidth = width - (margin * 2);
+      const drawLine = (value) => {
+        const lineWidth = font.widthOfTextAtSize(value, fontSize);
+        page.drawText(value, {
+          x: alignedTextX({ alignment, margin, pageWidth: width, textWidth: lineWidth }),
+          y,
+          size: fontSize,
+          font
+        });
+      };
       
       // Ensure text is a string
       const textStr = String(text || '');
@@ -564,12 +578,7 @@ export const saveMergedDocument = async (content, agreementId) => {
           currentLine = potentialLine;
         } else {
           // Draw current line and start a new one
-          page.drawText(currentLine, {
-            x: margin,
-            y: y,
-            size: fontSize,
-            font: font
-          });
+          drawLine(currentLine);
           
           y -= lineHeight;
           currentLine = word;
@@ -584,12 +593,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       
       // Draw remaining text
       if (currentLine) {
-        page.drawText(currentLine, {
-          x: margin,
-          y: y,
-          size: fontSize,
-          font: font
-        });
+        drawLine(currentLine);
         
         y -= isHeading ? (lineHeight + headingSpacing) : (lineHeight + paragraphSpacing);
       }
@@ -607,7 +611,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       
       if (item.type === 'heading') {
         const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
-        addWrappedText(item.text, fontSize, true);
+        addWrappedText(item.text, fontSize, true, item.alignment);
       } else if (item.type === 'paragraph') {
         // Use appropriate font based on formatting
         const font = item.isBold ? helveticaBold : helveticaFont;
@@ -628,8 +632,9 @@ export const saveMergedDocument = async (content, agreementId) => {
             currentLine = potentialLine;
           } else {
             // Draw current line and start a new one
+            const lineWidth = font.widthOfTextAtSize(currentLine, fontSize);
             page.drawText(currentLine, {
-              x: margin,
+              x: alignedTextX({ alignment: item.alignment, margin, pageWidth: width, textWidth: lineWidth }),
               y: y,
               size: fontSize,
               font: font
@@ -648,8 +653,9 @@ export const saveMergedDocument = async (content, agreementId) => {
         
         // Draw remaining text
         if (currentLine) {
+          const lineWidth = font.widthOfTextAtSize(currentLine, fontSize);
           page.drawText(currentLine, {
-            x: margin,
+            x: alignedTextX({ alignment: item.alignment, margin, pageWidth: width, textWidth: lineWidth }),
             y: y,
             size: fontSize,
             font: font

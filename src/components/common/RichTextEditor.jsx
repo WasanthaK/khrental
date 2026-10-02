@@ -291,6 +291,45 @@ const MenuBar = ({ editor, agreementId }) => {
       className="border-b border-gray-200 p-2 flex flex-wrap gap-2"
       onClick={handleMenuBarClick}
     >
+      <select
+        value={
+          editor.isActive('heading', { level: 1 }) ? 'h1' :
+          editor.isActive('heading', { level: 2 }) ? 'h2' :
+          editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'
+        }
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value === 'paragraph') {
+            editor.chain().focus().setParagraph().run();
+          } else {
+            editor.chain().focus().toggleHeading({ level: Number(value.slice(1)) }).run();
+          }
+        }}
+        className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
+        title="Paragraph style"
+      >
+        <option value="paragraph">Normal</option>
+        <option value="h1">Heading 1</option>
+        <option value="h2">Heading 2</option>
+        <option value="h3">Heading 3</option>
+      </select>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().undo().run())}
+        className="p-2 rounded"
+        title="Undo"
+        disabled={!editor.can().undo()}
+      >
+        <i className="fas fa-undo"></i>
+      </button>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().redo().run())}
+        className="p-2 rounded"
+        title="Redo"
+        disabled={!editor.can().redo()}
+      >
+        <i className="fas fa-redo"></i>
+      </button>
+      <div className="w-px h-6 bg-gray-300 mx-1"></div>
       <button
         onClick={(e) => handleButtonClick(e, () => {
           // Ensure editor is focused first
@@ -424,12 +463,52 @@ const MenuBar = ({ editor, agreementId }) => {
         <i className="fas fa-columns"></i>
       </button>
       <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().addColumnAfter().run())}
+        className="p-2 rounded"
+        title="Add Column After"
+        disabled={!editor.can().addColumnAfter()}
+      >
+        <i className="fas fa-columns"></i>
+      </button>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().deleteColumn().run())}
+        className="p-2 rounded"
+        title="Delete Column"
+        disabled={!editor.can().deleteColumn()}
+      >
+        <i className="fas fa-minus"></i>
+      </button>
+      <button
         onClick={(e) => handleButtonClick(e, () => editor.chain().focus().addRowBefore().run())}
         className="p-2 rounded"
         title="Add Row Before"
         disabled={!editor.can().addRowBefore()}
       >
         <i className="fas fa-plus"></i>
+      </button>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().addRowAfter().run())}
+        className="p-2 rounded"
+        title="Add Row After"
+        disabled={!editor.can().addRowAfter()}
+      >
+        <i className="fas fa-plus-square"></i>
+      </button>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().deleteRow().run())}
+        className="p-2 rounded"
+        title="Delete Row"
+        disabled={!editor.can().deleteRow()}
+      >
+        <i className="fas fa-minus-square"></i>
+      </button>
+      <button
+        onClick={(e) => handleButtonClick(e, () => editor.chain().focus().toggleHeaderRow().run())}
+        className="p-2 rounded"
+        title="Toggle Header Row"
+        disabled={!editor.can().toggleHeaderRow()}
+      >
+        <i className="fas fa-heading"></i>
       </button>
       <button
         onClick={(e) => handleButtonClick(e, () => editor.chain().focus().deleteTable().run())}
@@ -619,6 +698,27 @@ const RichTextEditor = ({
           width: 100%;
           min-height: 400px;
           padding: 8px;
+        }
+        .ProseMirror h1 {
+          font-size: 1.75rem;
+          line-height: 2.1rem;
+          font-weight: 700;
+          margin: 1rem 0 0.6rem;
+        }
+        .ProseMirror h2 {
+          font-size: 1.4rem;
+          line-height: 1.8rem;
+          font-weight: 700;
+          margin: 0.9rem 0 0.5rem;
+        }
+        .ProseMirror h3 {
+          font-size: 1.15rem;
+          line-height: 1.55rem;
+          font-weight: 600;
+          margin: 0.75rem 0 0.4rem;
+        }
+        .ProseMirror p {
+          margin: 0.45rem 0;
         }
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
