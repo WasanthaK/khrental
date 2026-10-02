@@ -1,0 +1,56 @@
+name: Verify renter workflow on SQL Server
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/mssql/renteeRepository.js'
+      - 'src/api/mssql/repositories.js'
+      - 'src/api/mssql/query.js'
+      - 'src/api/mssql/pool.js'
+      - 'src/api/mssql/config.js'
+      - 'migrations/20260913_00_create_fresh_mssql_schema.sql'
+      - 'migrations/20260926_01_add_rentee_property_unit_associations.sql'
+      - 'scripts/test-rentee-workflow-sqlserver.mjs'
+      - '.github/workflows/verify-rentee-workflow-sqlserver.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/mssql/renteeRepository.js'
+      - 'src/api/mssql/repositories.js'
+      - 'src/api/mssql/query.js'
+      - 'src/api/mssql/pool.js'
+      - 'src/api/mssql/config.js'
+      - 'migrations/20260913_00_create_fresh_mssql_schema.sql'
+      - 'migrations/20260926_01_add_rentee_property_unit_associations.sql'
+      - 'scripts/test-rentee-workflow-sqlserver.mjs'
+      - '.github/workflows/verify-rentee-workflow-sqlserver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('khrental-rentee-proof-pr-{0}', github.event.pull_request.number) || format('khrental-rentee-proof-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  renter-workflow-proof:
+    name: Phase 1 renter workflow SQL Server proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Exercise renter workflow against disposable SQL Server 2022
+        env:
+          MSSQL_TEST_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
+        run: node scripts/test-rentee-workflow-sqlserver.mjs
