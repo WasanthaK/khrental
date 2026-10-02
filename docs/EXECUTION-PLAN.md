@@ -1,6 +1,6 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-09-26  
+**Status date:** 2026-10-02  
 **Last verified behavior-changing application baseline:** `2b0d77dda30761a032b289282050191eacf8246e`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
@@ -51,6 +51,7 @@
 - [x] Fresh production acceptance with `wweerakoone+100@gmail.com` exposed a second credential owner: `WelcomeGuide` globally treated any `?token=` as invitation onboarding and called protected `/api/platform/auth/update-user`, producing 401 before the secure invitation flow owned the credential transition. This is an authentication architecture defect, not a database outage.
 - [x] PR #124 corrected the architecture: `AcceptInvite` is the sole invitation credential owner; `/accept-invite` and `/reset-password` are isolated from the authenticated app shell; `WelcomeGuide` is authenticated-only and no longer treats URL tokens as invitation state. Production run `36111540458` passed authorization/regression tests, production build, R2 validation, immutable deployment and runtime verification for behavior SHA `cfea12e7846460f85e9a1e6cf99c6956c179a99e`; revision `khrental-app--0000127` became Ready, `/api/mssql/health` returned ready and the public build fingerprint matched exactly.
 - [x] Fresh physical acceptance using `wweerakoone+101@gmail.com` passed on 2026-09-25: invitation setup completed once, the app opened directly, logout succeeded, normal login with the same credential succeeded, the user entered the correct Rentee workspace, and the Tenant Admin surface refreshed to **Registered**.
+- [x] Phase 1 renter property/unit schema prerequisite is now applied in production. PR #142 / serving SHA `0a9e6d3d451d19aaca5a9d754903b6d12cc2ad86` added real SQL Server 2022 execution proof and corrected canonical backfill shape. Production migration run `36946616128` used the exact serving image from Ready revision `khrental-app--0000143`, applied `20260926_01_add_rentee_property_unit_associations`, verified the column/check-constraint/JSON state, recorded the migration ledger entry, and completed successfully on 2026-10-02. Business-flow persistence acceptance remains separate and must still prove create/edit/reload behavior before Phase 1 association work is closed.
 
 ### Tenant/rentee data model
 
@@ -313,13 +314,14 @@ Next item: P0.3 - Invitation/email observability.
 
 ```text
 Active item: Phase 1 - Tenant/rentee workflow integrity
-Problem/evidence: Phase 0 production stabilization is complete. Deployment/database readiness, core tenant smoke, invitation/auth lifecycle, and password reset have now been physically exercised in production. The remaining product risk is renter workflow integrity across create/edit/list, existing-identity attachment, lifecycle actions, role conflicts, and property/unit associations.
-Scope: Work Phase 1 in canonical order. First reconcile already-proven create/list/attach/invite/resend behavior, then physically verify the still-unproven edit and deactivate/reactivate paths before moving to role conflicts and property/unit association persistence.
+Problem/evidence: Phase 0 production stabilization is complete. Deployment/database readiness, core tenant smoke, invitation/auth lifecycle, and password reset have been physically exercised in production. The durable renter property/unit schema prerequisite is also now present, but the business flow still requires production acceptance proving create/edit/reload persistence and the remaining renter lifecycle/role-conflict behavior.
+Scope: Work Phase 1 in canonical order. Reuse already-proven create/list/attach/invite/resend evidence; verify the remaining edit and deactivate/reactivate gaps, explicit same-organization role conflicts, and then prove structured property/unit associations survive create, edit and reload without browser-session fallback.
 Out of scope: Agreement/Evia signing (Phase 2); document/storage cleanup; compatibility-client refactoring; deferred Azure email-log observability.
-Production baseline: behavior SHA `2b0d77dda30761a032b289282050191eacf8246e`, revision `khrental-app--0000128` Ready.
-Runtime proof: Phase 0 production acceptance completed through password-reset regression on 2026-09-26.
-Result: ACTIVE.
-Next item: Phase 1 item 1 — verify tenant create, edit, list, attach-existing-identity, invite, resend, and deactivate/reactivate behavior; reuse existing P0.2/P0.3 evidence where it already proves a subflow and test only the remaining gaps.
+Production application baseline: serving SHA `0a9e6d3d451d19aaca5a9d754903b6d12cc2ad86`, Ready revision `khrental-app--0000143`.
+Production schema proof: migration run `36946616128` completed successfully on 2026-10-02. The exact serving image applied and verified `20260926_01_add_rentee_property_unit_associations`; the three earlier ledgered migrations were skipped as already applied.
+Runtime proof: exact public serving SHA and MSSQL readiness were verified before apply; the dedicated executor then emitted `Applied and verified` followed by `Production migration run completed successfully.`
+Result: ACTIVE — schema prerequisite complete; renter business-flow acceptance remains.
+Next item: complete the remaining Phase 1 production acceptance, including edit/deactivate-reactivate/role-conflict checks and structured property/unit association create-edit-reload persistence.
 ```
 ---
 
