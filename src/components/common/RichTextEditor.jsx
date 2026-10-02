@@ -699,6 +699,27 @@ const RichTextEditor = ({
           min-height: 400px;
           padding: 8px;
         }
+        .ProseMirror h1 {
+          font-size: 1.75rem;
+          line-height: 2.1rem;
+          font-weight: 700;
+          margin: 1rem 0 0.6rem;
+        }
+        .ProseMirror h2 {
+          font-size: 1.4rem;
+          line-height: 1.8rem;
+          font-weight: 700;
+          margin: 0.9rem 0 0.5rem;
+        }
+        .ProseMirror h3 {
+          font-size: 1.15rem;
+          line-height: 1.55rem;
+          font-weight: 600;
+          margin: 0.75rem 0 0.4rem;
+        }
+        .ProseMirror p {
+          margin: 0.45rem 0;
+        }
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
           float: left;
