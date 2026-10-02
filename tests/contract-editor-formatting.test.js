@@ -40,3 +40,12 @@ test('agreement PDF generation reads editor alignment and applies aligned x posi
   assert.match(source, /alignedTextX\(\{ alignment: item\.alignment/);
   assert.match(source, /addWrappedText\(item\.text, fontSize, true, item\.alignment\)/);
 });
+
+
+test('contract template preview reuses the rich text renderer instead of a separate HTML preview layer', () => {
+  const source = fs.readFileSync(new URL('../src/pages/AgreementTemplateForm.jsx', import.meta.url), 'utf8');
+
+  assert.match(source, /<RichTextEditor\s+[\s\S]*initialContent=\{previewContent\}[\s\S]*readonly=\{true\}/);
+  assert.equal(source.includes('dangerouslySetInnerHTML={{ __html: previewContent }}'), false);
+  assert.equal(source.includes('className="preview-content'), false);
+});
