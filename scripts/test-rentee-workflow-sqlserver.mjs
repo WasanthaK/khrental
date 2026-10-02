@@ -202,6 +202,25 @@ const main = async () => {
     assert.equal(reloaded.name, 'Phase 1 Renter Edited');
     assertAssociation(reloaded.associated_properties, propertyB, unitB);
 
+    // Add Tenant must not double as an edit operation for an existing renter in
+    // the same organization. Reusing the email must fail before shared profile
+    // fields or property associations are changed.
+    await assert.rejects(
+      createOrAttachTenantRentee(tenantId, {
+        name: 'Should Never Overwrite Existing Renter',
+        email: renterEmail,
+        contact_details: { email: renterEmail, phone: '+19999999999' },
+        associated_property_ids: [propertyA],
+        associated_properties: [{ propertyId: propertyA, unitId: unitA }]
+      }),
+      (error) => error?.status === 409 && error?.code === 'RENTEE_ALREADY_EXISTS'
+    );
+
+    const afterDuplicateCreate = await getTenantRenteeById(tenantId, created.data.id);
+    assert.equal(afterDuplicateCreate.name, 'Phase 1 Renter Edited');
+    assert.equal(afterDuplicateCreate.contact_details?.phone, '+10000000000');
+    assertAssociation(afterDuplicateCreate.associated_properties, propertyB, unitB);
+
     await assert.rejects(
       updateTenantRentee(tenantId, created.data.id, {
         associated_properties: [{ propertyId: propertyA, unitId: unitB }]
@@ -296,7 +315,7 @@ const main = async () => {
     assert.equal(String(conflictState.membership_role).toLowerCase(), 'staff');
     assert.equal(Number(conflictState.identity_count), 1, 'role conflict must not create a duplicate global identity');
 
-    console.log('PASS: Phase 1 renter workflow persisted structured associations across create/edit/reconnect, rejected invalid associations without data loss, scoped deactivate/reactivate to membership, blocked platform-admin creation, and rejected same-organization role conflicts without profile mutation.');
+    console.log('PASS: Phase 1 renter workflow persisted structured associations across create/edit/reconnect, rejected duplicate same-organization renter creates without profile mutation, rejected invalid associations without data loss, scoped deactivate/reactivate to membership, blocked platform-admin creation, and rejected same-organization role conflicts without profile mutation.');
   } finally {
     if (closeMssqlPool) {
       try { await closeMssqlPool(); } catch {}
