@@ -200,7 +200,7 @@ Exit criteria: **COMPLETE — clean end-to-end password reset passed from a logg
 
 ---
 
-## Phase 1 - Tenant/rentee workflow integrity — **ACTIVE**
+## Phase 1 - Tenant/rentee workflow integrity — **COMPLETE**
 
 **Goal:** Treat Tenants as the renter/lessee workflow and Team as the staff/contractor workflow.
 
@@ -214,10 +214,10 @@ Work in this order:
 
 Exit criteria:
 
-- [ ] No renter can be saved successfully and then disappear from the current organization's Tenants directory.
-- [ ] Existing global identities attach to organizations without duplicate `app_users` rows.
-- [ ] Tenant Admin cannot create platform-admin identities through tenant workflows.
-- [ ] Tenant and Team onboarding paths are clearly separated.
+- [x] No renter can be saved successfully and then disappear from the current organization's Tenants directory.
+- [x] Existing global identities attach to organizations without duplicate `app_users` rows.
+- [x] Tenant Admin cannot create platform-admin identities through tenant workflows.
+- [x] Tenant and Team onboarding paths are clearly separated.
 
 ---
 
@@ -299,29 +299,28 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: P0.2 - Production core smoke test
-Problem/evidence: Recent renter/membership and deployment repairs required one controlled end-to-end production validation before further changes.
-Scope: Execute all 12 P0.2 checks in order and stop/fix on any failed business behavior.
-PRs involved during P0.2: #100 platform-owner access; #101 dual-role tenant workspace; #102 tenant-switch toast overlay.
-CI/deploy result: Latest behavior-changing production run 35616577333 succeeded for PR #102.
-Production proof SHA: 190e0d412d702aed6b11f2546872c167d5808ea8.
-Runtime proof: revision khrental-app--0000111 Ready; startup command /bin/sh scripts/start-container.sh; public /build-info.json matched 190e0d412d702aed6b11f2546872c167d5808ea8; /api/mssql/health returned ready; browser checks 1-10 were confirmed by the Tenant Admin.
-Result: COMPLETE — all 12 production smoke-test checks passed by 2026-09-22.
-Next item: P0.3 - Invitation/email observability.
+Active item: Phase 1 - Tenant/rentee workflow integrity
+Problem/evidence: Phase 0 was stable, but renter business-flow persistence and lifecycle behavior still required production acceptance. Physical testing then exposed two presentation/business defects: ID image not rendered inline and duplicate same-organization renter creation overwriting the existing renter profile.
+Scope: Verify create/edit/list/attach/invite/resend/deactivate/reactivate behavior; structured property/unit persistence; role boundaries; canonical renter details; and add regression coverage for discovered defects.
+PRs: #145 displayed image ID copies inline; #146 rejected duplicate same-organization renter creation before profile mutation.
+CI/deploy result: PR #146 normal verify and the dedicated SQL Server renter-workflow proof both passed. Production deployment run 36988056380 completed successfully.
+Production proof SHA: af80202afdd91507015c30ceabc0c57bb40e7f00.
+Runtime proof: Ready revision khrental-app--0000147 served the exact SHA; /api/mssql/health returned ready. Physical acceptance passed create/property-unit display, edit/save/hard-reload, and deactivate/inactive/reactivate persistence. The final duplicate-renter browser repetition after #146 was explicitly waived by the operator; the same scenario is covered by the green real SQL Server regression and is not claimed as a physical PASS.
+Result: COMPLETE — Phase 1 exit criteria satisfied with the documented operator waiver.
+Next item: Phase 2 - Agreement generation and digital signing.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 1 - Tenant/rentee workflow integrity
-Problem/evidence: Phase 0 production stabilization is complete. Deployment/database readiness, core tenant smoke, invitation/auth lifecycle, and password reset have been physically exercised in production. The durable renter property/unit schema prerequisite is also now present, but the business flow still requires production acceptance proving create/edit/reload persistence and the remaining renter lifecycle/role-conflict behavior.
-Scope: Work Phase 1 in canonical order. Reuse already-proven create/list/attach/invite/resend evidence; verify the remaining edit and deactivate/reactivate gaps, explicit same-organization role conflicts, and then prove structured property/unit associations survive create, edit and reload without browser-session fallback.
-Out of scope: Agreement/Evia signing (Phase 2); document/storage cleanup; compatibility-client refactoring; deferred Azure email-log observability.
-Production application baseline: serving SHA `0a9e6d3d451d19aaca5a9d754903b6d12cc2ad86`, Ready revision `khrental-app--0000143`.
-Production schema proof: migration run `36946616128` completed successfully on 2026-10-02. The exact serving image applied and verified `20260926_01_add_rentee_property_unit_associations`; the three earlier ledgered migrations were skipped as already applied.
-Runtime proof: exact public serving SHA and MSSQL readiness were verified before apply; the dedicated executor then emitted `Applied and verified` followed by `Production migration run completed successfully.`
-Result: ACTIVE — schema prerequisite complete; renter business-flow acceptance remains.
-Next item: complete the remaining Phase 1 production acceptance, including edit/deactivate-reactivate/role-conflict checks and structured property/unit association create-edit-reload persistence.
+Active item: Phase 2 - Agreement generation and digital signing
+Problem/evidence: Phase 1 renter workflow acceptance is complete. Production physical acceptance passed create/list, property-unit assignment, edit/save/hard-reload persistence, deactivate/inactive-directory/reactivate persistence, and renter ID image display after PR #145. Physical acceptance exposed a duplicate same-organization renter create that overwrote the existing renter profile; PR #146 corrected this by rejecting same-organization duplicate renter creation before any shared-profile mutation.
+Scope: Reproduce the current agreement signature-placement failure with a real generated agreement; compare the current Evia implementation to the previously working marker/AutoStamp behavior; choose the supported placement mechanism from evidence; then verify signing callbacks, signed-document retention and lifecycle transitions.
+Out of scope: Phase 3 document/storage cleanup; repo-wide compatibility-client refactoring; unrelated UI cleanup; deferred Azure email-log observability.
+Phase 1 production proof: PR #146 merged as `af80202afdd91507015c30ceabc0c57bb40e7f00`; deployment run `36988056380` served that exact SHA from Ready revision `khrental-app--0000147`; `/api/mssql/health` returned ready. Real SQL Server renter workflow run `36988056315` passed the duplicate-create no-mutation regression and the broader create/edit/reconnect/deactivate-reactivate/role-conflict suite.
+Phase 1 operator note: the final post-#146 duplicate-renter browser retest was not rerun. The operator explicitly chose to proceed on 2026-10-02 with the deployed exact-SHA proof plus the disposable SQL Server regression, so that one browser repetition is waived rather than claimed as a physical PASS.
+Result: ACTIVE — Phase 2 is the sole active work item.
+Next item: inspect the current agreement generation/Evia signing code and reproduce the signature-placement failure before changing implementation.
 ```
 ---
 
