@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { populateMergeFields } from '../src/utils/documentUtils.js';
+import { ensureEviaSignatureAnchors, populateMergeFields } from '../src/utils/documentUtils.js';
 
 test('agreement merge resolves property and unit shorthand fields used by KH Rentals templates', async () => {
   const template = [
@@ -57,4 +57,18 @@ test('agreement merge resolves property and unit shorthand fields used by KH Ren
   assert.match(merged, /\|2\|3\|/);
   assert.match(merged, /20,000/);
   assert.match(merged, /40,000/);
+});
+
+
+test('agreement signing anchors are guaranteed without duplicating existing markers', () => {
+  const withoutAnchors = ensureEviaSignatureAnchors('<html><body><p>Agreement terms</p></body></html>');
+  assert.match(withoutAnchors, /For Landlord:/);
+  assert.match(withoutAnchors, /For Tenant:/);
+  assert.match(withoutAnchors, /data-evia-signature-anchors="true"/);
+
+  const withAnchors = ensureEviaSignatureAnchors(
+    '<p>For Landlord: __________________</p><p>For Tenant: __________________</p>'
+  );
+  assert.equal((withAnchors.match(/For Landlord:/g) || []).length, 1);
+  assert.equal((withAnchors.match(/For Tenant:/g) || []).length, 1);
 });
