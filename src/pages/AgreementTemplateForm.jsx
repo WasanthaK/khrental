@@ -765,90 +765,15 @@ const AgreementTemplateForm = () => {
               </button>
             </div>
             <div className="p-4 sm:p-6 overflow-y-auto bg-white" style={{ maxHeight: 'calc(90vh - 80px)' }}>
-              <div 
-                className="preview-content text-sm sm:text-base"
-                dangerouslySetInnerHTML={{ __html: previewContent }}
+              <RichTextEditor
+                initialContent={previewContent}
+                readonly={true}
+                height="auto"
               />
             </div>
           </div>
         </div>
       )}
-
-      {/* Add global styles for rich text preview */}
-      <style jsx="true">{`
-        .preview-content {
-          font-family: Arial, sans-serif;
-          font-size: 14px;
-          line-height: 1.6;
-          color: #333;
-        }
-        .preview-content h1, 
-        .preview-content h2, 
-        .preview-content h3, 
-        .preview-content h4 {
-          margin-top: 1.5rem;
-          margin-bottom: 1rem;
-          font-weight: 600;
-          line-height: 1.25;
-        }
-        .preview-content h1 { font-size: 1.5rem; }
-        .preview-content h2 { font-size: 1.25rem; }
-        .preview-content h3 { font-size: 1.125rem; }
-        .preview-content p { margin-bottom: 1rem; }
-        .preview-content ul, .preview-content ol {
-          padding-left: 2rem;
-          margin-bottom: 1rem;
-        }
-        .preview-content ul { list-style-type: disc; }
-        .preview-content ol { list-style-type: decimal; }
-        .preview-content table {
-          border-collapse: collapse;
-          width: 100%;
-          margin-bottom: 1rem;
-          border: 2px solid #ddd;
-          display: block;
-          overflow-x: auto;
-          max-width: 100%;
-        }
-        .preview-content table th,
-        .preview-content table td {
-          border: 1px solid #ddd;
-          padding: 8px;
-          vertical-align: top;
-        }
-        .preview-content table th {
-          padding-top: 12px;
-          padding-bottom: 12px;
-          text-align: left;
-          background-color: #f8f9fa;
-          font-weight: bold;
-        }
-        .preview-content table tr:nth-child(even) {
-          background-color: #f9f9f9;
-        }
-        .preview-content a {
-          color: #3182ce;
-          text-decoration: underline;
-        }
-        .preview-content blockquote {
-          border-left: 4px solid #e2e8f0;
-          padding-left: 1rem;
-          font-style: italic;
-          margin-left: 0;
-          margin-right: 0;
-        }
-        .preview-content strong { font-weight: bold; }
-        .preview-content em { font-style: italic; }
-        
-        @media (max-width: 640px) {
-          .preview-content {
-            font-size: 13px;
-          }
-          .preview-content h1 { font-size: 1.25rem; }
-          .preview-content h2 { font-size: 1.125rem; }
-          .preview-content h3 { font-size: 1rem; }
-        }
-      `}</style>
     </div>
   );
 };
