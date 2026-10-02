@@ -23,7 +23,7 @@ test('V2 request payload uses the uploaded document and global webhook model', (
   assert.equal(Object.hasOwn(payload, 'CallbackTypes'), false);
 });
 
-test('V2 signatory and AutoStamp payloads preserve KH Rentals identifiers', () => {
+test('V2 signatory and required signature AutoStamp preserve the KH Rentals anchor', () => {
   const landlord = { name: 'Property Owner', email: 'owner@example.com', textMarker: 'For Landlord:' };
   const signatory = buildV2SignatoryPayload(landlord, 0);
   const stamps = buildV2StampPayloads(landlord, 0);
@@ -34,9 +34,7 @@ test('V2 signatory and AutoStamp payloads preserve KH Rentals identifiers', () =
   assert.equal(signatory.SignatoryType, 1);
   assert.equal(signatory.OTP.IsRequired, false);
   assert.deepEqual(stamps, [
-    { Identifier: 'For Landlord:', Type: 'signature' },
-    { Identifier: 'email1', Type: 'email' },
-    { Identifier: 'Date1', Type: 'date' }
+    { Identifier: 'For Landlord:', Type: 'signature' }
   ]);
 });
 
@@ -92,7 +90,7 @@ test('V2 send follows create -> signatories -> stamps -> send sequence', async (
 
   assert.equal(result.success, true);
   assert.equal(result.requestId, 'request-123');
-  assert.equal(calls.length, 10);
+  assert.equal(calls.length, 6);
   assert.match(calls[0].url, /\/api\/v2\/requests\?type=0$/);
   assert.match(calls.at(-1).url, /\/api\/v2\/requests\/request-123\/send$/);
   assert.equal(calls.at(-1).init.method, 'POST');
@@ -105,10 +103,10 @@ test('V2 send follows create -> signatories -> stamps -> send sequence', async (
   const firstSignatureStamp = JSON.parse(calls[2].init.body);
   assert.deepEqual(firstSignatureStamp, { Identifier: 'For Landlord:', Type: 'signature' });
 
-  const secondSignerBody = JSON.parse(calls[5].init.body);
+  const secondSignerBody = JSON.parse(calls[3].init.body);
   assert.equal(secondSignerBody.Email, 'tenant@example.com');
-  const secondDateStamp = JSON.parse(calls[8].init.body);
-  assert.deepEqual(secondDateStamp, { Identifier: 'Date2', Type: 'date' });
+  const secondSignatureStamp = JSON.parse(calls[4].init.body);
+  assert.deepEqual(secondSignatureStamp, { Identifier: 'For Tenant:', Type: 'signature' });
 });
 
 test('V2 send fails closed and does not send if stamp creation fails', async () => {

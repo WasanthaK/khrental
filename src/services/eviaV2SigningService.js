@@ -50,14 +50,6 @@ export const buildV2StampPayloads = (signatory, index) => ([
   {
     Identifier: signatory.textMarker || `For ${index === 0 ? 'Landlord' : 'Tenant'}:`,
     Type: 'signature'
-  },
-  {
-    Identifier: `email${index + 1}`,
-    Type: 'email'
-  },
-  {
-    Identifier: `Date${index + 1}`,
-    Type: 'date'
   }
 ]);
 

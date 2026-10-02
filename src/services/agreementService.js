@@ -28,7 +28,7 @@
 import { platform as platformClient } from './platformClient';
 import { toast } from 'react-toastify';
 import { saveMergedDocument } from './DocumentService';
-import { populateMergeFields } from '../utils/documentUtils';
+import { ensureEviaSignatureAnchors, populateMergeFields } from '../utils/documentUtils';
 import { toDatabaseFormat } from '../utils/dataUtils';
 import { fetchAppUser, updateAppUser } from './appUserService';
 import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
@@ -424,7 +424,8 @@ export const saveAgreement = async (agreement) => {
         
         // Merge the template content with the data
         console.log('Populating merge fields in template...');
-        const mergedContent = await populateMergeFields(templateContent, mergeData);
+        const populatedContent = await populateMergeFields(templateContent, mergeData);
+        const mergedContent = ensureEviaSignatureAnchors(populatedContent);
         console.log('Merged content length:', mergedContent.length);
         
         // Save the merged document

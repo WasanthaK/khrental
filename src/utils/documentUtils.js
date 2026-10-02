@@ -235,6 +235,31 @@ const validateHtmlTags = (content) => {
  * @param {Object} data - Data object containing agreement, property, unit, rentee, and terms data
  * @returns {Promise<string>} - Populated content
  */
+export const EVIA_SIGNATURE_ANCHORS = Object.freeze({
+  landlord: 'For Landlord:',
+  tenant: 'For Tenant:'
+});
+
+export const ensureEviaSignatureAnchors = (html = '') => {
+  const source = String(html || '');
+  const missing = Object.values(EVIA_SIGNATURE_ANCHORS)
+    .filter((anchor) => !source.includes(anchor));
+
+  if (missing.length === 0) return source;
+
+  const anchorMarkup = [
+    '<div data-evia-signature-anchors="true">',
+    ...missing.map((anchor) => `<p><strong>${anchor}</strong> ______________________________</p>`),
+    '</div>'
+  ].join('');
+
+  if (/<\/body>/i.test(source)) {
+    return source.replace(/<\/body>/i, `${anchorMarkup}</body>`);
+  }
+
+  return `${source}${anchorMarkup}`;
+};
+
 export const populateMergeFields = async (templateContent, data) => {
   if (!templateContent) {
     console.warn('populateMergeFields called with empty template content');
