@@ -336,6 +336,16 @@ export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
   let created = false;
   let membership = user ? await getTenantMembership(tenantId, user.id) : null;
 
+  // Create must never mutate an existing renter in the same organization.
+  // Existing same-organization renters are edited through the dedicated edit
+  // flow; reactivation uses the membership-status action.
+  if (membership && isRenteeMembership(membership)) {
+    const error = new Error('This tenant already exists in the selected organization. Open the existing tenant to edit or reactivate them.');
+    error.status = 409;
+    error.code = 'RENTEE_ALREADY_EXISTS';
+    throw error;
+  }
+
   // Reject an opposite-role membership before touching the shared global
   // profile. A failed attach must have zero profile or membership side effects.
   if (membership && !isRenteeMembership(membership)) {
