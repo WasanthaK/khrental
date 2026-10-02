@@ -179,6 +179,14 @@ test('tenant details load the canonical organization-scoped renter projection', 
   assert.doesNotMatch(renteeDetailsSource, /fetchAppUser\(id\)/);
 });
 
+test('tenant details render image ID copies inline while keeping document fallback links', () => {
+  assert.match(renteeDetailsSource, /const IdCopyDisplay =/);
+  assert.match(renteeDetailsSource, /alt="Tenant ID copy"/);
+  assert.match(renteeDetailsSource, /Open full size/);
+  assert.match(renteeDetailsSource, /View ID Copy PDF/);
+  assert.match(renteeDetailsSource, /onError=\{\(\) => setImageFailed\(true\)\}/);
+});
+
 test('platform administrator with tenant membership keeps tenant workspace access', () => {
   assert.match(dashboardLayoutSource, /const showTenantWorkspace = !platformAdminLoading && \(!isPlatformAdmin \|\| hasTenantAccess\);/);
   assert.match(dashboardLayoutSource, /if \(platformAdminLoading \|\| !isPlatformAdmin \|\| hasTenantAccess\) \{\s*return;/);

@@ -12,6 +12,53 @@ import InvoiceCard from '../components/invoices/InvoiceCard';
 import { mapAppUserToRentee } from '../services/appUserService';
 import { getRentee, setRenteeMembershipStatus } from '../services/renteeService';
 
+const IdCopyDisplay = ({ url }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [url]);
+
+  if (!url) return <span>Not uploaded</span>;
+
+  const isPdf = /\\.pdf(?:$|[?#])/i.test(String(url));
+  const linkLabel = isPdf ? 'View ID Copy PDF' : 'Open ID Copy';
+
+  if (isPdf || imageFailed) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-500 hover:text-blue-600"
+      >
+        {linkLabel}
+      </a>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="block w-fit">
+        <img
+          src={url}
+          alt="Tenant ID copy"
+          className="max-h-56 max-w-full rounded border border-gray-200 object-contain"
+          onError={() => setImageFailed(true)}
+        />
+      </a>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block text-sm text-blue-500 hover:text-blue-600"
+      >
+        Open full size
+      </a>
+    </div>
+  );
+};
+
 // Custom component for displaying agreements in RenteeDetails page
 const AgreementSummaryCard = ({ agreement, property, rentee }) => {
   const formattedStartDate = formatDate(agreement.startdate);
@@ -443,20 +490,7 @@ const RenteeDetails = () => {
               
               <div>
                 <h3 className="text-sm font-medium text-gray-500">ID Copy</h3>
-                <p className="mt-1">
-                  {rentee.idCopyUrl ? (
-                    <a
-                      href={rentee.idCopyUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 hover:text-blue-600"
-                    >
-                      View ID Copy
-                    </a>
-                  ) : (
-                    'Not uploaded'
-                  )}
-                </p>
+                <IdCopyDisplay url={rentee.idCopyUrl} />
               </div>
               
               <div>
