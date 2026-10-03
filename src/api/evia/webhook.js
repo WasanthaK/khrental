@@ -263,6 +263,47 @@ export const markAllSignatoriesCompleted = (value, completedAt) => {
   }));
 };
 
+export const updateSignatoryCompletion = (value, { email, name, eventTime }) => {
+  const normalizedRecipientEmail = normalizeEmail(email);
+  const signatories = parseJsonArray(value);
+  const timestamp = eventTime || new Date().toISOString();
+
+  if (!normalizedRecipientEmail && !name) return null;
+
+  const existingIndex = signatories.findIndex((signatory) => {
+    if (normalizedRecipientEmail && normalizeEmail(signatory?.email) === normalizedRecipientEmail) return true;
+    return name && String(signatory?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase();
+  });
+
+  const completionPatch = {
+    status: 'completed',
+    signed_at: timestamp,
+    signedAt: timestamp
+  };
+
+  if (existingIndex >= 0) {
+    return signatories.map((signatory, index) => index === existingIndex
+      ? { ...signatory, ...completionPatch }
+      : signatory);
+  }
+
+  return [
+    ...signatories,
+    {
+      name: name || normalizedRecipientEmail || 'Unknown signatory',
+      email: normalizedRecipientEmail || null,
+      ...completionPatch
+    }
+  ];
+};
+
+const isSignatoryCompletionNotification = ({ eventType, eventId }) => {
+  if (eventId === 2) return true;
+  return eventType === 'signatory.completed'
+    || eventType.includes('signatorycompleted')
+    || eventType.includes('signatory completed');
+};
+
 export const updateSignatoryEmailDelivery = (value, { email, name, deliveryStatus, eventTime, eventType }) => {
   const normalizedRecipientEmail = normalizeEmail(email);
   if (!normalizedRecipientEmail) return null;
@@ -438,6 +479,42 @@ export const processEviaWebhook = async (payload = {}) => {
   }
 
   const finalState = mapFinalAgreementState(normalized);
+  if (!finalState && isSignatoryCompletionNotification(normalized)) {
+    const completedSignatories = updateSignatoryCompletion(agreement.signatories_status, {
+      email: normalized.recipientEmail,
+      name: normalized.recipientName,
+      eventTime: normalized.eventTime
+    });
+
+    if (completedSignatories) {
+      await runQuery(`
+        UPDATE dbo.agreements
+        SET
+          signature_status = @signatureStatus,
+          signatories_status = @signatoriesStatus,
+          updatedat = SYSUTCDATETIME()
+        WHERE id = @agreementId
+          AND eviasignreference = @requestId
+      `, {
+        agreementId: agreement.id,
+        requestId: normalized.requestId,
+        signatureStatus: 'in_progress',
+        signatoriesStatus: JSON.stringify(completedSignatories)
+      });
+
+      return {
+        statusCode: 200,
+        body: {
+          received: true,
+          matched: true,
+          updated: true,
+          agreementId: agreement.id,
+          signatureStatus: 'in_progress'
+        }
+      };
+    }
+  }
+
   if (!finalState) {
     console.log('[EviaWebhook] Non-terminal Evia event processed', {
       requestId: normalized.requestId,
