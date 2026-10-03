@@ -37,7 +37,8 @@ test('agreement PDF generation reads editor alignment and applies aligned x posi
   const source = fs.readFileSync(new URL('../src/services/DocumentService.js', import.meta.url), 'utf8');
 
   assert.match(source, /alignment: readBlockTextAlignment\(node\)/);
-  assert.match(source, /alignedTextX\(\{ alignment: item\.alignment/);
+  assert.match(source, /alignedTextX\(\{[\s\S]*alignment,[\s\S]*pageWidth: width/);
+  assert.match(source, /drawRichTextBlock\(item\.runs,[\s\S]*alignment: item\.alignment/);
   assert.match(source, /addWrappedText\(item\.text, fontSize, true, item\.alignment\)/);
 });
 
