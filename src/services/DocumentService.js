@@ -23,6 +23,39 @@ const parseHtmlContent = (html) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = cleanHtml;
     
+    const extractInlineRuns = (element, inherited = {}) => {
+      const runs = [];
+
+      const visit = (node, marks) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent) {
+            runs.push({ text: node.textContent, ...marks });
+          }
+          return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+        const tagName = node.tagName.toLowerCase();
+        if (tagName === 'br') {
+          runs.push({ text: '\n', ...marks });
+          return;
+        }
+
+        const nextMarks = {
+          ...marks,
+          bold: marks.bold || tagName === 'strong' || tagName === 'b',
+          italic: marks.italic || tagName === 'em' || tagName === 'i',
+          underline: marks.underline || tagName === 'u'
+        };
+
+        Array.from(node.childNodes).forEach((child) => visit(child, nextMarks));
+      };
+
+      Array.from(element.childNodes).forEach((child) => visit(child, inherited));
+      return runs.filter((run) => run.text !== '');
+    };
+
     // Helper function to recursively process nodes
     const processNode = (node, listLevel = 0, listType = null, listCounter = 0) => {
       if (!node) return { listCounter };
@@ -48,20 +81,22 @@ const parseHtmlContent = (html) => {
         // Handle headings
         if (tagName.match(/^h[1-6]$/)) {
           const level = parseInt(tagName.replace('h', ''));
+          const runs = extractInlineRuns(node);
           contentPieces.push({
             type: 'heading',
-            text: node.textContent.trim(),
+            text: runs.map((run) => run.text).join('').trim(),
+            runs,
             level: level,
             alignment: readBlockTextAlignment(node)
           });
         }
         // Handle paragraphs
         else if (tagName === 'p') {
+          const runs = extractInlineRuns(node);
           contentPieces.push({
             type: 'paragraph',
-            text: node.textContent.trim(),
-            isBold: node.querySelector('strong, b') !== null,
-            isItalic: node.querySelector('i, em') !== null,
+            text: runs.map((run) => run.text).join('').trim(),
+            runs,
             alignment: readBlockTextAlignment(node)
           });
         }
