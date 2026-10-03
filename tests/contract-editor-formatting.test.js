@@ -49,3 +49,17 @@ test('contract template preview reuses the rich text renderer instead of a separ
   assert.equal(source.includes('dangerouslySetInnerHTML={{ __html: previewContent }}'), false);
   assert.equal(source.includes('className="preview-content'), false);
 });
+
+
+test('agreement PDF parser and renderer preserve inline rich-text runs and hard breaks', () => {
+  const source = fs.readFileSync(new URL('../src/services/DocumentService.js', import.meta.url), 'utf8');
+
+  assert.match(source, /const extractInlineRuns = \(element/);
+  assert.match(source, /tagName === 'br'/);
+  assert.match(source, /underline: marks\.underline/);
+  assert.match(source, /runs\.map\(\(run\) => run\.text\)\.join\(''\)/);
+  assert.match(source, /const drawRichTextBlock = \(runs/);
+  assert.match(source, /helveticaBoldOblique/);
+  assert.match(source, /token\.underline/);
+  assert.match(source, /drawRichTextBlock\(item\.runs/);
+});
