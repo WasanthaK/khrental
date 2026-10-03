@@ -7,6 +7,7 @@ import {
   markAllSignatoriesCompleted,
   normalizeEviaWebhookPayload,
   shouldAcknowledgeUnmappedWebhook,
+  updateSignatoryCompletion,
   updateSignatoryEmailDelivery,
   verifyEviaWebhookHmac
 } from '../src/api/evia/webhook.js';
@@ -128,4 +129,21 @@ test('verifies hex HMAC SHA-256 over the exact raw body', () => {
 test('recognizes common webhook signature header names', () => {
   assert.equal(getEviaWebhookSignature({ 'X-Evia-Signature': 'abc123' }), 'abc123');
   assert.equal(getEviaWebhookSignature({ 'x-custom-hmac': 'def456' }), 'def456');
+});
+
+test('records an individual signatory completion without marking the other signer complete', () => {
+  const completedAt = '2026-10-03T10:00:00.000Z';
+  const result = updateSignatoryCompletion(JSON.stringify([
+    { name: 'Owner', email: 'owner@example.com', type: 'landlord', status: 'pending' },
+    { name: 'Tenant', email: 'tenant@example.com', type: 'tenant', status: 'pending' }
+  ]), {
+    email: 'owner@example.com',
+    name: 'Owner',
+    eventTime: completedAt
+  });
+
+  assert.equal(result.length, 2);
+  assert.equal(result[0].status, 'completed');
+  assert.equal(result[0].signedAt, completedAt);
+  assert.equal(result[1].status, 'pending');
 });
