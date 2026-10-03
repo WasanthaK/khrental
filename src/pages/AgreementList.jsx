@@ -30,9 +30,38 @@ const AgreementList = () => {
     fetchAgreements();
   }, [activeTenantId]);
 
-  const fetchAgreements = async () => {
+  useEffect(() => {
+    const hasPendingSignature = agreements.some((agreement) => {
+      const status = String(agreement.signature_status || agreement.status || '').toLowerCase();
+      return ['pending', 'pending_signature', 'send_for_signature', 'pending_activation', 'in_progress', 'partially_signed'].includes(status);
+    });
+
+    if (!hasPendingSignature) {
+      return undefined;
+    }
+
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAgreements({ background: true });
+      }
+    };
+
+    const intervalId = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [agreements, activeTenantId]);
+
+  const fetchAgreements = async ({ background = false } = {}) => {
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
       setError(null);
 
       if (isMssqlApiEnabled()) {
@@ -80,7 +109,9 @@ const AgreementList = () => {
       setAgreements([]);
       toast.error('Failed to load agreements from the canonical database');
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   };
 
