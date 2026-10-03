@@ -23,6 +23,39 @@ const parseHtmlContent = (html) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = cleanHtml;
     
+    const extractInlineRuns = (element, inherited = {}) => {
+      const runs = [];
+
+      const visit = (node, marks) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent) {
+            runs.push({ text: node.textContent, ...marks });
+          }
+          return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+        const tagName = node.tagName.toLowerCase();
+        if (tagName === 'br') {
+          runs.push({ text: '\n', ...marks });
+          return;
+        }
+
+        const nextMarks = {
+          ...marks,
+          bold: marks.bold || tagName === 'strong' || tagName === 'b',
+          italic: marks.italic || tagName === 'em' || tagName === 'i',
+          underline: marks.underline || tagName === 'u'
+        };
+
+        Array.from(node.childNodes).forEach((child) => visit(child, nextMarks));
+      };
+
+      Array.from(element.childNodes).forEach((child) => visit(child, inherited));
+      return runs.filter((run) => run.text !== '');
+    };
+
     // Helper function to recursively process nodes
     const processNode = (node, listLevel = 0, listType = null, listCounter = 0) => {
       if (!node) return { listCounter };
@@ -48,20 +81,22 @@ const parseHtmlContent = (html) => {
         // Handle headings
         if (tagName.match(/^h[1-6]$/)) {
           const level = parseInt(tagName.replace('h', ''));
+          const runs = extractInlineRuns(node);
           contentPieces.push({
             type: 'heading',
-            text: node.textContent.trim(),
+            text: runs.map((run) => run.text).join('').trim(),
+            runs,
             level: level,
             alignment: readBlockTextAlignment(node)
           });
         }
         // Handle paragraphs
         else if (tagName === 'p') {
+          const runs = extractInlineRuns(node);
           contentPieces.push({
             type: 'paragraph',
-            text: node.textContent.trim(),
-            isBold: node.querySelector('strong, b') !== null,
-            isItalic: node.querySelector('i, em') !== null,
+            text: runs.map((run) => run.text).join('').trim(),
+            runs,
             alignment: readBlockTextAlignment(node)
           });
         }
@@ -550,6 +585,100 @@ export const saveMergedDocument = async (content, agreementId) => {
       y -= headingSpacing;
     }
     
+    const fontForRun = (run, fallbackBold = false) => {
+      const bold = Boolean(run?.bold || fallbackBold);
+      const italic = Boolean(run?.italic);
+      if (bold && italic) return helveticaBoldOblique;
+      if (bold) return helveticaBold;
+      if (italic) return helveticaOblique;
+      return helveticaFont;
+    };
+
+    const drawRichTextBlock = (runs, {
+      fontSize = 12,
+      alignment = 'left',
+      fallbackBold = false,
+      afterSpacing = paragraphSpacing
+    } = {}) => {
+      const maxWidth = width - (margin * 2);
+      const tokens = [];
+
+      for (const run of (runs || [])) {
+        const parts = String(run.text || '').split(/(\n|\s+)/);
+        for (const part of parts) {
+          if (!part) continue;
+          tokens.push({ ...run, text: part });
+        }
+      }
+
+      const lines = [];
+      let current = [];
+      let currentWidth = 0;
+
+      const pushLine = () => {
+        lines.push({ tokens: current, width: currentWidth });
+        current = [];
+        currentWidth = 0;
+      };
+
+      for (const token of tokens) {
+        if (token.text === '\n') {
+          pushLine();
+          continue;
+        }
+
+        const font = fontForRun(token, fallbackBold);
+        const tokenWidth = font.widthOfTextAtSize(token.text, fontSize);
+
+        if (current.length > 0 && currentWidth + tokenWidth > maxWidth && token.text.trim()) {
+          pushLine();
+        }
+
+        current.push({ ...token, font, width: tokenWidth });
+        currentWidth += tokenWidth;
+      }
+
+      if (current.length > 0 || lines.length === 0) pushLine();
+
+      for (const line of lines) {
+        if (y < margin) {
+          page = pdfDoc.addPage([612, 792]);
+          y = height - margin;
+        }
+
+        let x = alignedTextX({
+          alignment,
+          margin,
+          pageWidth: width,
+          textWidth: line.width
+        });
+
+        for (const token of line.tokens) {
+          page.drawText(token.text, {
+            x,
+            y,
+            size: fontSize,
+            font: token.font
+          });
+
+          if (token.underline && token.text.trim()) {
+            page.drawLine({
+              start: { x, y: y - 1.5 },
+              end: { x: x + token.width, y: y - 1.5 },
+              thickness: 0.7,
+              color: rgb(0, 0, 0)
+            });
+          }
+
+          x += token.width;
+        }
+
+        y -= lineHeight;
+      }
+
+      y -= afterSpacing;
+    };
+
     // Helper function to add text with wrapping
     const addWrappedText = (text, fontSize, isHeading = false, alignment = 'left') => {
       const font = isHeading ? helveticaBold : helveticaFont;
@@ -611,57 +740,25 @@ export const saveMergedDocument = async (content, agreementId) => {
       
       if (item.type === 'heading') {
         const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
-        addWrappedText(item.text, fontSize, true, item.alignment);
-      } else if (item.type === 'paragraph') {
-        // Use appropriate font based on formatting
-        const font = item.isBold ? helveticaBold : helveticaFont;
-        const fontSize = 12;
-        
-        // Add the paragraph text with proper wrapping
-        const maxWidth = width - (margin * 2);
-        // Ensure text is a string
-        const itemText = String(item.text || '');
-        const words = itemText.split(' ');
-        let currentLine = '';
-        
-        words.forEach(word => {
-          const potentialLine = currentLine ? `${currentLine} ${word}` : word;
-          const potentialWidth = font.widthOfTextAtSize(potentialLine, fontSize);
-          
-          if (potentialWidth <= maxWidth) {
-            currentLine = potentialLine;
-          } else {
-            // Draw current line and start a new one
-            const lineWidth = font.widthOfTextAtSize(currentLine, fontSize);
-            page.drawText(currentLine, {
-              x: alignedTextX({ alignment: item.alignment, margin, pageWidth: width, textWidth: lineWidth }),
-              y: y,
-              size: fontSize,
-              font: font
-            });
-            
-            y -= lineHeight;
-            currentLine = word;
-            
-            // Add a new page if we're near the bottom
-            if (y < margin) {
-              page = pdfDoc.addPage([612, 792]);
-              y = height - margin;
-            }
-          }
-        });
-        
-        // Draw remaining text
-        if (currentLine) {
-          const lineWidth = font.widthOfTextAtSize(currentLine, fontSize);
-          page.drawText(currentLine, {
-            x: alignedTextX({ alignment: item.alignment, margin, pageWidth: width, textWidth: lineWidth }),
-            y: y,
-            size: fontSize,
-            font: font
+        if (Array.isArray(item.runs) && item.runs.length > 0) {
+          drawRichTextBlock(item.runs, {
+            fontSize,
+            alignment: item.alignment,
+            fallbackBold: true,
+            afterSpacing: headingSpacing
           });
-          
-          y -= lineHeight + paragraphSpacing;
+        } else {
+          addWrappedText(item.text, fontSize, true, item.alignment);
+        }
+      } else if (item.type === 'paragraph') {
+        if (Array.isArray(item.runs) && item.runs.length > 0) {
+          drawRichTextBlock(item.runs, {
+            fontSize: 12,
+            alignment: item.alignment,
+            afterSpacing: paragraphSpacing
+          });
+        } else {
+          addWrappedText(item.text, 12, false, item.alignment);
         }
       } else if (item.type === 'list-item') {
         // Calculate indentation based on list level
