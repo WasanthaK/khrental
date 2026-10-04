@@ -9,6 +9,7 @@ import {
   markAgreementAsSigned
 } from '../services/agreementService';
 import { deleteCancelledAgreement } from '../services/cancelledAgreementDeleteService';
+import { captureEviaDiagnosticSnapshot } from '../services/eviaSignService';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -36,6 +37,7 @@ const AgreementDetails = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
   const [signatories, setSignatories] = useState([]);
+  const [eviaDiagnostics, setEviaDiagnostics] = useState(null);
 
   const fetchAgreementData = useCallback(async () => {
     try {
@@ -96,6 +98,22 @@ const AgreementDetails = () => {
       }
 
       setSignatories(signatoryList);
+
+      if (agreementData.eviasignreference) {
+        try {
+          const diagnosticSnapshot = await captureEviaDiagnosticSnapshot(
+            agreementData.id,
+            agreementData.eviasignreference
+          );
+          setEviaDiagnostics(diagnosticSnapshot);
+        } catch (diagnosticError) {
+          setEviaDiagnostics({
+            error: diagnosticError?.message || 'Failed to capture Evia diagnostics.'
+          });
+        }
+      } else {
+        setEviaDiagnostics(null);
+      }
     } catch (fetchError) {
       console.error('Error fetching agreement data:', fetchError.message);
       setError(fetchError.message);
@@ -260,6 +278,84 @@ const AgreementDetails = () => {
         />
       </div>
       
+      {eviaDiagnostics && (
+        <div className="mb-8 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-gray-800">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-amber-900">Temporary Evia Diagnostics</h2>
+              <p className="text-xs text-amber-800">
+                Temporary troubleshooting surface. Remove after the signature-status issue is resolved.
+              </p>
+            </div>
+          </div>
+
+          {eviaDiagnostics.error ? (
+            <div className="rounded bg-white p-3 text-red-700">
+              Diagnostic capture failed: {eviaDiagnostics.error}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded bg-white p-3">
+                  <div className="font-medium">KH Rentals database</div>
+                  <div>Status: <strong>{eviaDiagnostics.agreement?.status || 'unknown'}</strong></div>
+                  <div>Signature status: <strong>{eviaDiagnostics.agreement?.signatureStatus || 'unknown'}</strong></div>
+                  <div>Request: <strong>{eviaDiagnostics.agreement?.requestId || 'none'}</strong></div>
+                  <div className="mt-2">
+                    Stored signatories:
+                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs">
+                      {JSON.stringify(eviaDiagnostics.agreement?.storedSignatories || [], null, 2)}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="rounded bg-white p-3">
+                  <div className="font-medium">Evia provider poll</div>
+                  <div>Success: <strong>{eviaDiagnostics.providerPoll?.success ? 'yes' : 'no'}</strong></div>
+                  <div>Normalized status: <strong>{eviaDiagnostics.providerPoll?.normalizedStatus || 'unknown'}</strong></div>
+                  <div>Raw status: <strong>{eviaDiagnostics.providerPoll?.rawStatus ?? 'none'}</strong></div>
+                  {eviaDiagnostics.providerPoll?.error && (
+                    <div className="mt-1 text-red-700">Error: {eviaDiagnostics.providerPoll.error}</div>
+                  )}
+                  <div className="mt-2">
+                    Provider signatories:
+                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs">
+                      {JSON.stringify(eviaDiagnostics.providerPoll?.signatories || [], null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded bg-white p-3">
+                <div className="font-medium">Recent Evia events</div>
+                {(eviaDiagnostics.recentEvents || []).length === 0 ? (
+                  <div className="mt-1 text-gray-600">No recorded Evia events for this request.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {(eviaDiagnostics.recentEvents || []).map((event, index) => (
+                      <div key={index} className="rounded border border-gray-200 p-2">
+                        <div>
+                          {event.eventType || 'unknown event'}
+                          {event.eventId !== null && event.eventId !== undefined ? ` (EventId ${event.eventId})` : ''}
+                          {' — '}
+                          {event.processed ? 'processed' : 'not processed'}
+                        </div>
+                        <div className="text-xs text-gray-500">{event.createdAt || event.eventTime || 'time unavailable'}</div>
+                        {event.details && (
+                          <pre className="mt-1 whitespace-pre-wrap break-words text-xs">
+                            {JSON.stringify(event.details, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="mb-8 flex flex-wrap gap-3">
         <div className="flex-1"></div>
