@@ -73,6 +73,33 @@ const getActiveEviaAccessToken = async () => {
   return persistEviaAuth(refreshed, storedAuth.userEmail).authToken;
 };
 
+export async function getEviaAgreementCallbackUrl(agreementId) {
+  if (!agreementId) throw new Error('Agreement ID is required for Evia callback setup.');
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    throw new Error('Evia callback setup requires a browser origin.');
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/evia/callback-token`, {
+    method: 'POST',
+    headers: buildRequestContextHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    }),
+    body: JSON.stringify({ agreementId })
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await response.json()
+    : { error: await response.text() };
+
+  if (!response.ok || !data?.callbackToken) {
+    throw new Error(data?.error || 'Failed to create secure Evia callback URL.');
+  }
+
+  return `${window.location.origin}/api/evia/webhook?callback_token=${encodeURIComponent(data.callbackToken)}`;
+}
+
 const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
   if (!documentUrl) throw new Error('No document available for signature.');
 
@@ -294,6 +321,9 @@ export async function sendDocumentForSignature(params) {
       title: params.title,
       message: params.message,
       signatories: params.signatories,
+      callbackUrl: params.callbackUrl,
+      callbackTypes: params.callbackTypes,
+      completedDocumentsAttached: params.completedDocumentsAttached,
       accessToken
     });
   } catch (error) {
