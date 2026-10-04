@@ -11,6 +11,24 @@ const EVIA_DOCUMENT_UPLOAD_URL = 'https://evia.enadocapp.com/_apis/sign/thumbs/a
 const EVIA_REQUEST_URL = 'https://evia.enadocapp.com/_apis/sign/api/Requests';
 let eviaAuthBridgeTimer = null;
 
+const shortId = (value) => String(value || '').slice(0, 8);
+const summarizeEviaSignatories = (signatories) => (
+  Array.isArray(signatories)
+    ? signatories.map((signatory, index) => ({
+        index,
+        keys: Object.keys(signatory || {}),
+        status: signatory?.status
+          ?? signatory?.Status
+          ?? signatory?.signatoryStatus
+          ?? signatory?.SignatoryStatus
+          ?? signatory?.state
+          ?? signatory?.State
+          ?? null,
+        order: signatory?.order ?? signatory?.Order ?? null
+      }))
+    : []
+);
+
 const requestEviaToken = async (payload) => {
   const response = await fetch(`${getApiBaseUrl()}/api/evia/token`, {
     method: 'POST',
@@ -268,6 +286,10 @@ export async function getSignatureStatus(requestId) {
   try {
     if (!requestId) throw new Error('Evia request ID is required.');
     const accessToken = await getActiveEviaAccessToken();
+    console.info('[EviaDiag] status_poll_start', {
+      requestId: shortId(requestId),
+      endpointVersion: 'v1-compat'
+    });
     const response = await fetch(`${EVIA_REQUEST_URL}/${encodeURIComponent(requestId)}`, {
       method: 'GET',
       headers: {
@@ -287,14 +309,28 @@ export async function getSignatureStatus(requestId) {
 
     const rawStatus = data?.status ?? data?.Status ?? data?.requestStatus ?? data?.RequestStatus;
     const status = normalizeEviaStatus(rawStatus);
+    const signatories = data?.signatories || data?.Signatories || [];
+    console.info('[EviaDiag] status_poll_response', {
+      requestId: shortId(requestId),
+      httpStatus: response.status,
+      responseKeys: Object.keys(data || {}),
+      rawStatus,
+      normalizedStatus: status,
+      signatoryCount: Array.isArray(signatories) ? signatories.length : 0,
+      signatories: summarizeEviaSignatories(signatories)
+    });
     return {
       success: true,
       status,
       completed: status === 'completed',
       rawStatus,
-      signatories: data?.signatories || data?.Signatories || []
+      signatories
     };
   } catch (error) {
+    console.error('[EviaDiag] status_poll_failed', {
+      requestId: shortId(requestId),
+      message: error?.message || 'Failed to get signature status'
+    });
     console.error('[eviaSignService] Status lookup failed:', error);
     return {
       success: false,

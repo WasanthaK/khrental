@@ -13,6 +13,39 @@ import SignatureStatusNotification from '../ui/SignatureStatusNotification';
 import SignatureProcessDetails from '../ui/SignatureProcessDetails';
 import AgreementStatusDashboard from './AgreementStatusDashboard';
 
+const shortId = (value) => String(value || '').slice(0, 8);
+const summarizeStoredSignatories = (value) => {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed)
+      ? parsed.map((entry) => ({
+          type: entry?.type || null,
+          status: entry?.status || null,
+          hasSignedAt: Boolean(entry?.signed_at || entry?.signedAt)
+        }))
+      : [];
+  } catch (_error) {
+    return [{ parseError: true }];
+  }
+};
+
+const summarizePolledSignatories = (value) => (
+  Array.isArray(value)
+    ? value.map((entry, index) => ({
+        index,
+        status: entry?.status
+          ?? entry?.Status
+          ?? entry?.signatoryStatus
+          ?? entry?.SignatoryStatus
+          ?? entry?.state
+          ?? entry?.State
+          ?? null,
+        order: entry?.order ?? entry?.Order ?? null,
+        keys: Object.keys(entry || {})
+      }))
+    : []
+);
+
 const AgreementActions = ({ agreement, onStatusChange }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -180,6 +213,27 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       
       setSignatureStatus(result.status);
       setLastChecked(new Date().toISOString());
+
+      console.info('[EviaDiag] agreement_status_poll_observed', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(agreement.eviasignreference),
+        canonicalAgreementStatus: agreement.status || null,
+        canonicalSignatureStatus: agreement.signature_status || null,
+        storedSignatories: summarizeStoredSignatories(agreement.signatories_status),
+        polledStatus: result.status,
+        polledRawStatus: result.rawStatus ?? null,
+        polledSignatoryCount: Array.isArray(result.signatories) ? result.signatories.length : 0,
+        polledSignatories: summarizePolledSignatories(result.signatories)
+      });
+
+      if (result.status === 'in_progress') {
+        console.warn('[EviaDiag] partial_signature_not_persisted_by_polling', {
+          agreementId: shortId(agreement.id),
+          requestId: shortId(agreement.eviasignreference),
+          storedSignatories: summarizeStoredSignatories(agreement.signatories_status),
+          polledSignatories: summarizePolledSignatories(result.signatories)
+        });
+      }
       
       // If signed, download the final PDF and reconcile the canonical agreement.
       // Preserve documenturl as the original agreement generated before signing.
@@ -207,6 +261,12 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
           signatoriesStatus = [];
         }
         
+        console.info('[EviaDiag] completed_signature_reconcile_start', {
+          agreementId: shortId(agreement.id),
+          requestId: shortId(agreement.eviasignreference),
+          signatoryCount: signatoriesStatus.length
+        });
+
         await updateAgreementData(agreement.id, {
           status: STATUS.SIGNED,
           signature_status: 'completed',
@@ -219,6 +279,11 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
           updatedat: completedAt
         });
         
+        console.info('[EviaDiag] completed_signature_reconcile_ok', {
+          agreementId: shortId(agreement.id),
+          requestId: shortId(agreement.eviasignreference)
+        });
+
         if (onStatusChange) {
           onStatusChange(STATUS.SIGNED);
         }

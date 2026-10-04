@@ -19,6 +19,12 @@ const firstDefined = (...values) => values.find((value) => value !== undefined &
 const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+const shortId = (value) => String(value || '').slice(0, 8);
+const summarizeStoredSignatories = (value) => parseJsonArray(value).map((entry) => ({
+  type: entry?.type || null,
+  status: entry?.status || null,
+  hasSignedAt: Boolean(entry?.signed_at || entry?.signedAt)
+}));
 
 const parseJsonArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -288,6 +294,15 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     data.emailStatus
   ));
 
+  const subject = String(firstDefined(
+    root.Subject,
+    root.subject,
+    data.Subject,
+    data.subject,
+    nestedPayload.Subject,
+    nestedPayload.subject
+  ) || '').trim();
+
   const documents = firstDefined(root.Documents, root.documents, data.Documents, data.documents, nestedPayload.Documents, nestedPayload.documents) || [];
 
   return {
@@ -298,9 +313,84 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     eventTime,
     recipientEmail,
     recipientName,
+    subject,
     deliveryStatus,
     documents: Array.isArray(documents) ? documents : []
   };
+};
+
+const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) => {
+  const eventTime = normalized.eventTime ? new Date(normalized.eventTime) : null;
+  const safeEventTime = eventTime && !Number.isNaN(eventTime.getTime()) ? eventTime.toISOString() : null;
+  const rows = await runQuery(`
+    INSERT INTO dbo.webhook_events (
+      tenant_id,
+      event_type,
+      request_id,
+      user_name,
+      user_email,
+      subject,
+      event_id,
+      event_time,
+      raw_data,
+      processed,
+      createdat,
+      updatedat
+    )
+    OUTPUT INSERTED.id
+    VALUES (
+      @tenantId,
+      @eventType,
+      @requestId,
+      @userName,
+      @userEmail,
+      @subject,
+      @eventId,
+      @eventTime,
+      @rawData,
+      0,
+      SYSUTCDATETIME(),
+      SYSUTCDATETIME()
+    )
+  `, {
+    tenantId: agreement.tenant_id,
+    eventType: normalized.eventType || null,
+    requestId: normalized.requestId || null,
+    userName: normalized.recipientName || null,
+    userEmail: normalized.recipientEmail || null,
+    subject: normalized.subject || null,
+    eventId: normalized.eventId,
+    eventTime: safeEventTime,
+    rawData: JSON.stringify({
+      payloadKeys: Object.keys(asObject(payload)),
+      eventType: normalized.eventType || null,
+      eventId: normalized.eventId,
+      status: normalized.status || null,
+      requestId: normalized.requestId ? shortId(normalized.requestId) : null,
+      recipientPresent: Boolean(normalized.recipientEmail || normalized.recipientName),
+      deliveryStatus: normalized.deliveryStatus || null,
+      documentCount: normalized.documents.length,
+      documents: normalized.documents.map((document) => ({
+        keys: Object.keys(asObject(document)),
+        name: document?.DocumentName || document?.documentName || null,
+        hasContent: Boolean(document?.DocumentContent || document?.documentContent),
+        hasUrl: Boolean(getDocumentUrlCandidate(document))
+      }))
+    })
+  });
+
+  return rows?.[0]?.id || null;
+};
+
+const markWebhookEventProcessed = async (eventRecordId) => {
+  if (!eventRecordId) return;
+  await runQuery(`
+    UPDATE dbo.webhook_events
+    SET processed = 1,
+        processed_at = SYSUTCDATETIME(),
+        updatedat = SYSUTCDATETIME()
+    WHERE id = @eventRecordId
+  `, { eventRecordId });
 };
 
 export const markAllSignatoriesCompleted = (value, completedAt) => {
@@ -459,6 +549,18 @@ const mapFinalAgreementState = ({ eventType, eventId, status }) => {
 export const processEviaWebhook = async (payload = {}, { expectedAgreementId = null, expectedTenantId = null } = {}) => {
   const normalized = normalizeEviaWebhookPayload(payload);
 
+  console.info('[EviaDiag] webhook_normalized', {
+    requestId: shortId(normalized.requestId),
+    eventType: normalized.eventType || null,
+    eventId: normalized.eventId,
+    status: normalized.status || null,
+    recipientPresent: Boolean(normalized.recipientEmail || normalized.recipientName),
+    deliveryStatus: normalized.deliveryStatus || null,
+    documentCount: normalized.documents.length,
+    expectedAgreementId: shortId(expectedAgreementId),
+    expectedTenantBound: Boolean(expectedTenantId)
+  });
+
   // Evia's connection test and request.sent payloads can arrive without a
   // RequestId. Once HMAC verification has succeeded, acknowledge non-terminal
   // unmappable payloads without touching agreement data. Terminal events still
@@ -488,6 +590,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   const agreement = await runSingleQuery(`
     SELECT TOP 1
       id,
+      tenant_id,
       status,
       signature_status,
       signature_completed_at,
@@ -506,12 +609,31 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   });
 
   if (!agreement) {
+    console.warn('[EviaDiag] webhook_agreement_not_matched', {
+      requestId: shortId(normalized.requestId),
+      expectedAgreementId: shortId(expectedAgreementId),
+      expectedTenantBound: Boolean(expectedTenantId)
+    });
     console.warn('[EviaWebhook] No agreement matches request reference', { requestId: normalized.requestId });
     return {
       statusCode: 200,
       body: { received: true, matched: false, requestId: normalized.requestId }
     };
   }
+
+  console.info('[EviaDiag] webhook_agreement_matched', {
+    agreementId: shortId(agreement.id),
+    requestId: shortId(normalized.requestId),
+    canonicalStatus: agreement.status || null,
+    canonicalSignatureStatus: agreement.signature_status || null,
+    storedSignatories: summarizeStoredSignatories(agreement.signatories_status)
+  });
+
+  const webhookEventId = await recordVerifiedWebhookEvent({
+    agreement,
+    normalized,
+    payload
+  });
 
   const emailStatuses = updateSignatoryEmailDelivery(agreement.signatories_status, {
     email: normalized.recipientEmail,
@@ -560,6 +682,13 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
         signatoriesStatus: JSON.stringify(completedSignatories)
       });
 
+      console.info('[EviaDiag] webhook_partial_update_ok', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(normalized.requestId),
+        signatureStatus: 'in_progress',
+        storedSignatories: summarizeStoredSignatories(JSON.stringify(completedSignatories))
+      });
+      await markWebhookEventProcessed(webhookEventId);
       return {
         statusCode: 200,
         body: {
@@ -582,6 +711,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       recipientEmail: normalized.recipientEmail || null,
       emailDeliveryStatus: normalized.deliveryStatus || (normalized.eventType === 'request.sent' ? 'sent' : null)
     });
+    await markWebhookEventProcessed(webhookEventId);
     return {
       statusCode: 200,
       body: {
@@ -642,6 +772,17 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     signedDocumentUrl
   });
 
+  console.info('[EviaDiag] webhook_terminal_update_ok', {
+    agreementId: shortId(agreement.id),
+    requestId: shortId(normalized.requestId),
+    agreementStatus: finalState.agreementStatus,
+    signatureStatus: finalState.signatureStatus,
+    signedDocumentUrlReceived: Boolean(signedDocumentUrl),
+    completedSignatoryCount: completedSignatories?.length || 0
+  });
+
+  await markWebhookEventProcessed(webhookEventId);
+
   console.log('[EviaWebhook] Agreement updated from Evia event', {
     agreementId: agreement.id,
     requestId: normalized.requestId,
@@ -668,9 +809,20 @@ const handleWebhook = async (req, res, next) => {
   try {
     const verification = verifyEviaWebhookRequest(req);
     if (!verification.ok) {
+      console.warn('[EviaDiag] webhook_verification_failed', {
+        statusCode: verification.statusCode,
+        hasSignatureHeader: Boolean(getEviaWebhookSignature(req.headers)),
+        hasCallbackToken: Boolean(req.query?.callback_token || req.query?.callbackToken)
+      });
       res.status(verification.statusCode).json({ received: false, error: verification.error });
       return;
     }
+
+    console.info('[EviaDiag] webhook_verification_ok', {
+      mode: verification.mode || 'unknown',
+      agreementId: shortId(verification.agreementId),
+      tenantBound: Boolean(verification.tenantId)
+    });
 
     const result = await processEviaWebhook(req.body || {}, {
       expectedAgreementId: verification.agreementId || null,

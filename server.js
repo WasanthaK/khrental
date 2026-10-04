@@ -30,6 +30,7 @@ import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } fro
 dotenv.config();
 
 const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
+const shortId = (value) => String(value || '').slice(0, 8);
 const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
   name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'KH Rentals'
@@ -194,6 +195,12 @@ async function createServer() {
         agreementId,
         tenantId: req.tenantId,
         secret,
+        expiresInSeconds
+      });
+
+      console.info('[EviaDiag] callback_token_issued', {
+        agreementId: shortId(agreementId),
+        tenantId: shortId(req.tenantId),
         expiresInSeconds
       });
 
