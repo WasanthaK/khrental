@@ -339,6 +339,46 @@ export async function getSignatureStatus(requestId) {
   }
 }
 
+export async function captureEviaDiagnosticSnapshot(agreementId, requestId) {
+  if (!agreementId || !requestId) {
+    throw new Error('Agreement ID and Evia request ID are required for diagnostics.');
+  }
+
+  const pollResult = await getSignatureStatus(requestId);
+  const providerPoll = {
+    success: Boolean(pollResult?.success),
+    normalizedStatus: pollResult?.status || null,
+    rawStatus: ['string', 'number', 'boolean'].includes(typeof pollResult?.rawStatus)
+      ? pollResult.rawStatus
+      : null,
+    error: pollResult?.success ? null : (pollResult?.error || 'Failed to get signature status'),
+    signatories: summarizeEviaSignatories(pollResult?.signatories)
+  };
+
+  const response = await fetch(`${getApiBaseUrl()}/api/evia/diagnostics/poll`, {
+    method: 'POST',
+    headers: buildRequestContextHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    }),
+    body: JSON.stringify({
+      agreementId,
+      providerPoll
+    })
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await response.json()
+    : { error: await response.text() };
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Evia diagnostic snapshot failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
 /**
  * Send the signature request through Evia Sign API V2.
  *
