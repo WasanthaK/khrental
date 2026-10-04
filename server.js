@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
+import { runSingleQuery } from './src/api/mssql/query.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
@@ -22,7 +23,7 @@ import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
-import { createEviaWebhookRouter } from './src/api/evia/webhook.js';
+import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
 
@@ -145,6 +146,62 @@ async function createServer() {
         durationMs: Date.now() - startedAt,
         errorCode: error.code || 'EMAIL_PROVIDER_REQUEST_FAILED'
       });
+      next(error);
+    }
+  });
+
+  const resolveEviaCallbackContext = createTenantContextMiddleware({
+    requireUser: true,
+    requireTenant: true,
+    auditLabel: 'evia-callback-token',
+    auditUnsafeOnly: false
+  });
+
+  app.post('/api/evia/callback-token', requireApiSession, resolveEviaCallbackContext, async (req, res, next) => {
+    try {
+      authorizePermission(
+        { user: req.user, membership: req.membership },
+        PERMISSIONS.AGREEMENTS_MANAGE
+      );
+
+      const agreementId = String(req.body?.agreementId || '').trim();
+      if (!agreementId) {
+        res.status(400).json({ error: 'agreementId is required.', code: 'AGREEMENT_ID_REQUIRED' });
+        return;
+      }
+
+      const agreement = await runSingleQuery(
+        `SELECT TOP 1 id
+         FROM dbo.agreements
+         WHERE id = @agreementId
+           AND tenant_id = @tenantId`,
+        { agreementId, tenantId: req.tenantId }
+      );
+
+      if (!agreement) {
+        res.status(404).json({ error: 'Agreement not found for the active tenant.', code: 'AGREEMENT_NOT_FOUND' });
+        return;
+      }
+
+      const secret = process.env.EVIA_WEBHOOK_HMAC_SECRET || '';
+      if (!secret) {
+        res.status(503).json({ error: 'Evia callback verification is not configured.', code: 'EVIA_CALLBACK_VERIFICATION_REQUIRED' });
+        return;
+      }
+
+      const expiresInSeconds = 90 * 24 * 60 * 60;
+      const callbackToken = createEviaCallbackToken({
+        agreementId,
+        tenantId: req.tenantId,
+        secret,
+        expiresInSeconds
+      });
+
+      res.json({
+        callbackToken,
+        expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+      });
+    } catch (error) {
       next(error);
     }
   });
