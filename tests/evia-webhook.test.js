@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createEviaCallbackToken,
   extractSignedDocumentUrl,
   getEviaWebhookSignature,
   markAllSignatoriesCompleted,
@@ -9,6 +10,7 @@ import {
   shouldAcknowledgeUnmappedWebhook,
   updateSignatoryCompletion,
   updateSignatoryEmailDelivery,
+  verifyEviaCallbackToken,
   verifyEviaWebhookHmac
 } from '../src/api/evia/webhook.js';
 
@@ -146,4 +148,28 @@ test('records an individual signatory completion without marking the other signe
   assert.equal(result[0].status, 'completed');
   assert.equal(result[0].signedAt, completedAt);
   assert.equal(result[1].status, 'pending');
+});
+
+
+test('creates and verifies agreement-bound Evia callback tokens', () => {
+  const secret = 'test-callback-secret';
+  const now = Date.parse('2026-10-04T00:00:00Z');
+  const token = createEviaCallbackToken({
+    agreementId: 'agreement-1',
+    tenantId: 'tenant-1',
+    secret,
+    expiresInSeconds: 3600,
+    now
+  });
+
+  const result = verifyEviaCallbackToken({ token, secret, now: now + 1000 });
+  assert.equal(result.ok, true);
+  assert.equal(result.agreementId, 'agreement-1');
+  assert.equal(result.tenantId, 'tenant-1');
+
+  const expired = verifyEviaCallbackToken({ token, secret, now: now + 3601 * 1000 });
+  assert.equal(expired.ok, false);
+  assert.equal(expired.expired, true);
+
+  assert.equal(verifyEviaCallbackToken({ token: token + 'tampered', secret, now }).ok, false);
 });
