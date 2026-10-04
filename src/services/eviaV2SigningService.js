@@ -19,6 +19,8 @@ const authHeaders = (accessToken) => ({
   'Content-Type': 'application/json'
 });
 
+const shortId = (value) => String(value || '').slice(0, 8);
+
 export const buildV2CreateRequestPayload = ({
   documentToken,
   title,
@@ -82,6 +84,13 @@ export async function createAndSendV2SignatureRequest({
     throw new Error('At least one Evia signatory is required.');
   }
 
+  console.info('[EviaDiag] v2_create_request_start', {
+    callbackConfigured: Boolean(callbackUrl),
+    callbackTypes: Array.isArray(callbackTypes) ? callbackTypes : [],
+    completedDocumentsAttached: completedDocumentsAttached !== false,
+    signatoryCount: signatories.length
+  });
+
   const createResponse = await fetchImpl(`${EVIA_SIGN_V2_BASE_URL}/requests?type=0`, {
     method: 'POST',
     headers: authHeaders(accessToken),
@@ -97,6 +106,10 @@ export async function createAndSendV2SignatureRequest({
   const created = await parseJsonResponse(createResponse, 'Evia V2 request creation');
   const requestId = created.requestId || created.RequestId;
   if (!requestId) throw new Error('Evia V2 request creation returned no requestId.');
+  console.info('[EviaDiag] v2_create_request_ok', {
+    requestId: shortId(requestId),
+    responseKeys: Object.keys(created || {})
+  });
 
   for (let index = 0; index < signatories.length; index += 1) {
     const signatory = signatories[index];
@@ -111,6 +124,12 @@ export async function createAndSendV2SignatureRequest({
     const added = await parseJsonResponse(signatoryResponse, 'Evia V2 signatory creation');
     const signatoryId = added.signatoryId || added.SignatoryId;
     if (!signatoryId) throw new Error('Evia V2 signatory creation returned no signatoryId.');
+    console.info('[EviaDiag] v2_signatory_created', {
+      requestId: shortId(requestId),
+      signatoryIndex: index,
+      signatoryId: shortId(signatoryId),
+      responseKeys: Object.keys(added || {})
+    });
 
     const stampPayloads = buildV2StampPayloads(signatory, index);
     for (const stamp of stampPayloads) {
@@ -137,6 +156,10 @@ export async function createAndSendV2SignatureRequest({
     }
   );
   const sent = await parseJsonResponse(sendResponse, 'Evia V2 request send');
+  console.info('[EviaDiag] v2_send_ok', {
+    requestId: shortId(sent.requestId || sent.RequestId || requestId),
+    responseKeys: Object.keys(sent || {})
+  });
 
   return {
     success: true,
