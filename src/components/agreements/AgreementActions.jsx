@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { platform as platformClient } from '../../services/platformClient';
-import { sendDocumentForSignature, getSignatureStatus, downloadSignedDocument } from '../../services/eviaSignService';
+import { downloadSignedDocument, getEviaAgreementCallbackUrl, getSignatureStatus, sendDocumentForSignature } from '../../services/eviaSignService';
 import { STATUS } from '../../contexts/AgreementFormContext';
 import { fetchAppUser } from '../../services/appUserService';
 import { updateAgreementData } from '../../services/agreementService';
@@ -250,8 +250,8 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
                          window.location.hostname !== '127.0.0.1';
                          
       if (isProduction) {
-        webhookUrl = window.location.origin + '/api/evia/webhook';
-        console.log('Using internal webhook URL:', webhookUrl);
+        webhookUrl = await getEviaAgreementCallbackUrl(agreement.id);
+        console.log('Using secure agreement-bound Evia webhook URL');
       } else {
         console.log('Running in development environment - webhook notifications disabled');
       }
