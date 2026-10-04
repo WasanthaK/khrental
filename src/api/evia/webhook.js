@@ -288,6 +288,15 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     data.emailStatus
   ));
 
+  const subject = String(firstDefined(
+    root.Subject,
+    root.subject,
+    data.Subject,
+    data.subject,
+    nestedPayload.Subject,
+    nestedPayload.subject
+  ) || '').trim();
+
   const documents = firstDefined(root.Documents, root.documents, data.Documents, data.documents, nestedPayload.Documents, nestedPayload.documents) || [];
 
   return {
@@ -298,9 +307,69 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     eventTime,
     recipientEmail,
     recipientName,
+    subject,
     deliveryStatus,
     documents: Array.isArray(documents) ? documents : []
   };
+};
+
+const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) => {
+  const eventTime = normalized.eventTime ? new Date(normalized.eventTime) : null;
+  const safeEventTime = eventTime && !Number.isNaN(eventTime.getTime()) ? eventTime.toISOString() : null;
+  const rows = await runQuery(`
+    INSERT INTO dbo.webhook_events (
+      tenant_id,
+      event_type,
+      request_id,
+      user_name,
+      user_email,
+      subject,
+      event_id,
+      event_time,
+      raw_data,
+      processed,
+      createdat,
+      updatedat
+    )
+    OUTPUT INSERTED.id
+    VALUES (
+      @tenantId,
+      @eventType,
+      @requestId,
+      @userName,
+      @userEmail,
+      @subject,
+      @eventId,
+      @eventTime,
+      @rawData,
+      0,
+      SYSUTCDATETIME(),
+      SYSUTCDATETIME()
+    )
+  `, {
+    tenantId: agreement.tenant_id,
+    eventType: normalized.eventType || null,
+    requestId: normalized.requestId || null,
+    userName: normalized.recipientName || null,
+    userEmail: normalized.recipientEmail || null,
+    subject: normalized.subject || null,
+    eventId: normalized.eventId,
+    eventTime: safeEventTime,
+    rawData: JSON.stringify(payload || {})
+  });
+
+  return rows?.[0]?.id || null;
+};
+
+const markWebhookEventProcessed = async (eventRecordId) => {
+  if (!eventRecordId) return;
+  await runQuery(`
+    UPDATE dbo.webhook_events
+    SET processed = 1,
+        processed_at = SYSUTCDATETIME(),
+        updatedat = SYSUTCDATETIME()
+    WHERE id = @eventRecordId
+  `, { eventRecordId });
 };
 
 export const markAllSignatoriesCompleted = (value, completedAt) => {
@@ -488,6 +557,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   const agreement = await runSingleQuery(`
     SELECT TOP 1
       id,
+      tenant_id,
       status,
       signature_status,
       signature_completed_at,
@@ -512,6 +582,12 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       body: { received: true, matched: false, requestId: normalized.requestId }
     };
   }
+
+  const webhookEventId = await recordVerifiedWebhookEvent({
+    agreement,
+    normalized,
+    payload
+  });
 
   const emailStatuses = updateSignatoryEmailDelivery(agreement.signatories_status, {
     email: normalized.recipientEmail,
@@ -560,6 +636,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
         signatoriesStatus: JSON.stringify(completedSignatories)
       });
 
+      await markWebhookEventProcessed(webhookEventId);
       return {
         statusCode: 200,
         body: {
@@ -582,6 +659,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       recipientEmail: normalized.recipientEmail || null,
       emailDeliveryStatus: normalized.deliveryStatus || (normalized.eventType === 'request.sent' ? 'sent' : null)
     });
+    await markWebhookEventProcessed(webhookEventId);
     return {
       statusCode: 200,
       body: {
@@ -641,6 +719,8 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     completedSignatories: completedSignatories ? JSON.stringify(completedSignatories) : null,
     signedDocumentUrl
   });
+
+  await markWebhookEventProcessed(webhookEventId);
 
   console.log('[EviaWebhook] Agreement updated from Evia event', {
     agreementId: agreement.id,
