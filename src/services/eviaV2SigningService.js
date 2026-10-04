@@ -19,10 +19,22 @@ const authHeaders = (accessToken) => ({
   'Content-Type': 'application/json'
 });
 
-export const buildV2CreateRequestPayload = ({ documentToken, title, message }) => ({
+export const buildV2CreateRequestPayload = ({
+  documentToken,
+  title,
+  message,
+  callbackUrl,
+  callbackTypes,
+  completedDocumentsAttached
+}) => ({
   Title: title || 'Rental Agreement',
   Message: message || 'Please sign this document',
   Documents: [documentToken],
+  ...(callbackUrl ? {
+    CallbackUrl: callbackUrl,
+    CallbackTypes: Array.isArray(callbackTypes) && callbackTypes.length > 0 ? callbackTypes : [0],
+    CompletedDocumentsAttached: completedDocumentsAttached !== false
+  } : {}),
   AuditDetails: {
     AuthorType: 1,
     AuthorIPAddress: '',
@@ -58,6 +70,9 @@ export async function createAndSendV2SignatureRequest({
   title,
   message,
   signatories,
+  callbackUrl,
+  callbackTypes,
+  completedDocumentsAttached,
   accessToken,
   fetchImpl = fetch
 }) {
@@ -70,7 +85,14 @@ export async function createAndSendV2SignatureRequest({
   const createResponse = await fetchImpl(`${EVIA_SIGN_V2_BASE_URL}/requests?type=0`, {
     method: 'POST',
     headers: authHeaders(accessToken),
-    body: JSON.stringify(buildV2CreateRequestPayload({ documentToken, title, message }))
+    body: JSON.stringify(buildV2CreateRequestPayload({
+      documentToken,
+      title,
+      message,
+      callbackUrl,
+      callbackTypes,
+      completedDocumentsAttached
+    }))
   });
   const created = await parseJsonResponse(createResponse, 'Evia V2 request creation');
   const requestId = created.requestId || created.RequestId;
