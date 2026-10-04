@@ -18,3 +18,15 @@ test('MSSQL mode does not rely on the legacy realtime subscription', () => {
 
   assert.match(source, /if \(isMssqlApiEnabled\(\)\) \{[\s\S]*return undefined;/);
 });
+
+
+test('agreement form send flow uses secure agreement-bound Evia callback', () => {
+  const source = fs.readFileSync(new URL('../src/components/agreements/AgreementFormContainer.jsx', import.meta.url), 'utf8');
+
+  assert.match(source, /getEviaAgreementCallbackUrl/);
+  assert.match(source, /callbackUrl = await getEviaAgreementCallbackUrl\(agreement\.id\)/);
+  assert.match(source, /callbackUrl,/);
+  assert.match(source, /callbackTypes: \[0\]/);
+  assert.doesNotMatch(source, /VITE_EVIA_WEBHOOK_URL/);
+  assert.doesNotMatch(source, /webhookUrl,/);
+});
