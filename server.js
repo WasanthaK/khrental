@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
-import { runSingleQuery } from './src/api/mssql/query.js';
+import { runQuery, runSingleQuery } from './src/api/mssql/query.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
@@ -31,6 +31,55 @@ dotenv.config();
 
 const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
 const shortId = (value) => String(value || '').slice(0, 8);
+const safeDiagnosticText = (value, maxLength = 250) => {
+  if (value === undefined || value === null || value === '') return null;
+  return String(value).slice(0, maxLength);
+};
+const parseDiagnosticJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
+const summarizeStoredEviaSignatories = (value) => parseDiagnosticJsonArray(value).map((entry, index) => ({
+  index,
+  type: safeDiagnosticText(entry?.type || entry?.identifier || entry?.role, 80),
+  status: safeDiagnosticText(entry?.status, 80),
+  hasSignedAt: Boolean(entry?.signed_at || entry?.signedAt)
+}));
+const sanitizeProviderPoll = (value = {}) => ({
+  success: Boolean(value?.success),
+  normalizedStatus: safeDiagnosticText(value?.normalizedStatus, 100),
+  rawStatus: ['string', 'number', 'boolean'].includes(typeof value?.rawStatus)
+    ? safeDiagnosticText(value.rawStatus, 100)
+    : null,
+  error: safeDiagnosticText(value?.error, 250),
+  signatories: Array.isArray(value?.signatories)
+    ? value.signatories.slice(0, 10).map((entry, index) => ({
+        index: Number.isInteger(entry?.index) ? entry.index : index,
+        status: safeDiagnosticText(entry?.status, 100),
+        order: Number.isFinite(Number(entry?.order)) ? Number(entry.order) : null,
+        keys: Array.isArray(entry?.keys)
+          ? entry.keys.slice(0, 20).map((key) => safeDiagnosticText(key, 80)).filter(Boolean)
+          : []
+      }))
+    : []
+});
+const parseDiagnosticObject = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (_error) {
+    return null;
+  }
+};
 const getDefaultEmailSender = ({ from, fromName } = {}) => ({
   email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
   name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'KH Rentals'
@@ -207,6 +256,128 @@ async function createServer() {
       res.json({
         callbackToken,
         expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const resolveEviaDiagnosticContext = createTenantContextMiddleware({
+    requireUser: true,
+    requireTenant: true,
+    auditLabel: 'evia-diagnostics',
+    auditUnsafeOnly: false
+  });
+
+  app.post('/api/evia/diagnostics/poll', requireApiSession, resolveEviaDiagnosticContext, async (req, res, next) => {
+    try {
+      authorizePermission(
+        { user: req.user, membership: req.membership },
+        PERMISSIONS.AGREEMENTS_MANAGE
+      );
+
+      const agreementId = String(req.body?.agreementId || '').trim();
+      if (!agreementId) {
+        res.status(400).json({ error: 'agreementId is required.', code: 'AGREEMENT_ID_REQUIRED' });
+        return;
+      }
+
+      const agreement = await runSingleQuery(
+        `SELECT TOP 1
+           id,
+           tenant_id,
+           status,
+           signature_status,
+           signatories_status,
+           eviasignreference,
+           signature_completed_at,
+           updatedat
+         FROM dbo.agreements
+         WHERE id = @agreementId
+           AND tenant_id = @tenantId`,
+        { agreementId, tenantId: req.tenantId }
+      );
+
+      if (!agreement) {
+        res.status(404).json({ error: 'Agreement not found for the active tenant.', code: 'AGREEMENT_NOT_FOUND' });
+        return;
+      }
+
+      const providerPoll = sanitizeProviderPoll(req.body?.providerPoll || {});
+      const requestId = String(agreement.eviasignreference || '').trim();
+
+      if (requestId) {
+        await runQuery(
+          `INSERT INTO dbo.webhook_events (
+             tenant_id,
+             event_type,
+             request_id,
+             subject,
+             raw_data,
+             processed,
+             processed_at,
+             createdat,
+             updatedat
+           )
+           VALUES (
+             @tenantId,
+             @eventType,
+             @requestId,
+             @subject,
+             @rawData,
+             1,
+             SYSUTCDATETIME(),
+             SYSUTCDATETIME(),
+             SYSUTCDATETIME()
+           )`,
+          {
+            tenantId: req.tenantId,
+            eventType: 'client_status_poll',
+            requestId,
+            subject: 'Temporary Evia diagnostic poll',
+            rawData: JSON.stringify(providerPoll)
+          }
+        );
+      }
+
+      const recentEvents = requestId
+        ? await runQuery(
+            `SELECT TOP 20
+               event_type,
+               event_id,
+               event_time,
+               processed,
+               processed_at,
+               createdat,
+               raw_data
+             FROM dbo.webhook_events
+             WHERE tenant_id = @tenantId
+               AND request_id = @requestId
+             ORDER BY createdat DESC`,
+            { tenantId: req.tenantId, requestId }
+          )
+        : [];
+
+      res.json({
+        agreement: {
+          id: shortId(agreement.id),
+          requestId: shortId(requestId),
+          status: agreement.status || null,
+          signatureStatus: agreement.signature_status || null,
+          signatureCompletedAt: agreement.signature_completed_at || null,
+          updatedAt: agreement.updatedat || null,
+          storedSignatories: summarizeStoredEviaSignatories(agreement.signatories_status)
+        },
+        providerPoll,
+        recentEvents: recentEvents.map((event) => ({
+          eventType: event.event_type || null,
+          eventId: event.event_id ?? null,
+          eventTime: event.event_time || null,
+          processed: Boolean(event.processed),
+          processedAt: event.processed_at || null,
+          createdAt: event.createdat || null,
+          details: parseDiagnosticObject(event.raw_data)
+        }))
       });
     } catch (error) {
       next(error);
