@@ -11,16 +11,20 @@ test('V2 request payload uses the uploaded document and global webhook model', (
   const payload = buildV2CreateRequestPayload({
     documentToken: 'doc-token',
     title: 'Rental Agreement - A1',
-    message: 'Please sign'
+    message: 'Please sign',
+    callbackUrl: 'https://example.com/api/evia/webhook?callback_token=abc',
+    callbackTypes: [0],
+    completedDocumentsAttached: true
   });
 
   assert.deepEqual(payload.Documents, ['doc-token']);
   assert.equal(payload.Title, 'Rental Agreement - A1');
   assert.equal(payload.Message, 'Please sign');
+  assert.equal(payload.CallbackUrl, 'https://example.com/api/evia/webhook?callback_token=abc');
+  assert.deepEqual(payload.CallbackTypes, [0]);
+  assert.equal(payload.CompletedDocumentsAttached, true);
   assert.equal(payload.AuditDetails.AuthorType, 1);
   assert.deepEqual(payload.Connections, []);
-  assert.equal(Object.hasOwn(payload, 'CallbackUrl'), false);
-  assert.equal(Object.hasOwn(payload, 'CallbackTypes'), false);
 });
 
 test('V2 signatory and required signature AutoStamp preserve the KH Rentals anchor', () => {
@@ -84,6 +88,9 @@ test('V2 send follows create -> signatories -> stamps -> send sequence', async (
       { name: 'Property Owner', email: 'owner@example.com', textMarker: 'For Landlord:' },
       { name: 'Tenant', email: 'tenant@example.com', textMarker: 'For Tenant:' }
     ],
+    callbackUrl: 'https://example.com/api/evia/webhook?callback_token=abc',
+    callbackTypes: [0],
+    completedDocumentsAttached: true,
     accessToken: 'access-token',
     fetchImpl
   });
@@ -97,6 +104,9 @@ test('V2 send follows create -> signatories -> stamps -> send sequence', async (
 
   const createBody = JSON.parse(calls[0].init.body);
   assert.deepEqual(createBody.Documents, ['doc-token']);
+  assert.equal(createBody.CallbackUrl, 'https://example.com/api/evia/webhook?callback_token=abc');
+  assert.deepEqual(createBody.CallbackTypes, [0]);
+  assert.equal(createBody.CompletedDocumentsAttached, true);
 
   const firstSignerBody = JSON.parse(calls[1].init.body);
   assert.equal(firstSignerBody.SignatoryType, 1);
