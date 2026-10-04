@@ -18,3 +18,18 @@ test('MSSQL mode does not rely on the legacy realtime subscription', () => {
 
   assert.match(source, /if \(isMssqlApiEnabled\(\)\) \{[\s\S]*return undefined;/);
 });
+
+
+test('agreement details captures temporary Evia diagnostics without relying on production console output', () => {
+  const detailsSource = fs.readFileSync(new URL('../src/pages/AgreementDetails.jsx', import.meta.url), 'utf8');
+  const serviceSource = fs.readFileSync(new URL('../src/services/eviaSignService.js', import.meta.url), 'utf8');
+  const serverSource = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+
+  assert.match(detailsSource, /captureEviaDiagnosticSnapshot/);
+  assert.match(detailsSource, /Temporary Evia Diagnostics/);
+  assert.match(serviceSource, /\/api\/evia\/diagnostics\/poll/);
+  assert.match(serverSource, /app\.post\('\/api\/evia\/diagnostics\/poll'/);
+  assert.match(serverSource, /eventType: 'client_status_poll'/);
+  assert.match(serverSource, /PERMISSIONS\.AGREEMENTS_MANAGE/);
+  assert.doesNotMatch(serverSource, /providerPoll[\s\S]{0,500}(?:authToken|accessToken|callbackToken)/);
+});
