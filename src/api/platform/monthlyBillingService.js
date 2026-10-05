@@ -191,6 +191,18 @@ export const generateMonthlyInvoicesForTenant = async ({
           billingPeriod: normalizedBillingPeriod
         });
 
+        const fixedUtilityRows = await queryTransaction(
+          transaction,
+          `SELECT id, utilitytype, fixedamount
+           FROM utility_configs
+           WHERE tenant_id = @tenantId
+             AND propertyid = @propertyId
+             AND LOWER(COALESCE(billingtype, '')) = 'fixed'
+             AND fixedamount > 0
+           ORDER BY utilitytype`,
+          { tenantId, propertyId: agreement.propertyid }
+        );
+
         const componentRows = [];
         const legacyComponents = {
           rent: 0,
@@ -246,6 +258,27 @@ export const generateMonthlyInvoicesForTenant = async ({
             metadata: {
               readingDate: reading.readingdate,
               meterIdentifier: reading.meteridentifier || null
+            }
+          });
+        }
+
+        for (const config of fixedUtilityRows) {
+          const amount = toMoney(config.fixedamount);
+          if (amount <= 0) continue;
+          const rawType = String(config.utilitytype || '').trim().toLowerCase();
+          const componentType = rawType === 'electricity' || rawType === 'water' ? rawType : 'utility';
+          if (rawType === 'electricity') legacyComponents.electricity += amount;
+          if (rawType === 'water') legacyComponents.water += amount;
+          componentRows.push({
+            componentType,
+            description: `Fixed ${config.utilitytype || 'utility'} charge for ${normalizedBillingPeriod}`,
+            amount,
+            sourceType: 'utility_config',
+            sourceId: config.id,
+            metadata: {
+              billingPeriod: normalizedBillingPeriod,
+              propertyId: agreement.propertyid,
+              billingType: 'fixed'
             }
           });
         }
@@ -381,6 +414,7 @@ export const generateMonthlyInvoicesForTenant = async ({
               billingPeriod: normalizedBillingPeriod,
               componentCount: componentRows.length,
               adjustmentCount: adjustmentRows.length,
+              fixedUtilityCount: fixedUtilityRows.length,
               totalAmount,
               source
             })
@@ -395,7 +429,8 @@ export const generateMonthlyInvoicesForTenant = async ({
           renteeId: agreement.renteeid,
           totalAmount,
           componentCount: componentRows.length,
-          adjustmentCount: adjustmentRows.length
+          adjustmentCount: adjustmentRows.length,
+          fixedUtilityCount: fixedUtilityRows.length
         });
       } catch (error) {
         await transaction.rollback().catch(() => {});
