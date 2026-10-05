@@ -5,6 +5,7 @@ import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriang
 import SignatureProgressTracker from '../ui/SignatureProgressTracker';
 import AgreementDocument from './AgreementDocument';
 import { toast } from 'react-hot-toast';
+import { reconcileEviaSignedDocument } from '../../services/eviaSignService';
 
 /**
  * AgreementSummaryCard - Displays a summary of an agreement with signature status
@@ -14,6 +15,8 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const [cancelReason, setCancelReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [resolvedSignedDocumentUrl, setResolvedSignedDocumentUrl] = useState(null);
+  const [isResolvingSignedDocument, setIsResolvingSignedDocument] = useState(false);
   
   const startDate = agreement.startdate ? formatDate(agreement.startdate) : 'Not set';
   const endDate = agreement.enddate ? formatDate(agreement.enddate) : 'Not set';
@@ -28,8 +31,19 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const signatureStatus = agreement.signature_status || '';
   const agreementState = agreement.status || '';
   const status = getStatus();
-  const signedDocumentUrl = agreement.signed_document_url || agreement.signatureurl || agreement.pdfurl || agreement.documenturl;
-  const hasViewableDocument = !!signedDocumentUrl;
+  const isSignatureComplete = ['signed', 'completed', 'active'].includes(String(agreementState).toLowerCase())
+    || ['signed', 'completed', 'signing_complete'].includes(String(signatureStatus).toLowerCase());
+  const storedSignedDocumentUrl = [
+    agreement.signed_document_url,
+    agreement.signeddocumenturl,
+    agreement.signature_pdf_url
+  ].find((value) => String(value || '').includes('/storage/')) || null;
+  const signedDocumentUrl = resolvedSignedDocumentUrl || storedSignedDocumentUrl;
+  const documentUrlToView = isSignatureComplete
+    ? signedDocumentUrl
+    : (signedDocumentUrl || agreement.pdfurl || agreement.documenturl);
+  const canReconcileSignedDocument = isSignatureComplete && Boolean(agreement.eviasignreference);
+  const hasViewableDocument = Boolean(documentUrlToView || canReconcileSignedDocument);
   const signatoriesData = signatories.length > 0 ? signatories : [];
   const hasAnySignatures = signatoriesData.some(sig => sig.completed) || signatureStatus.startsWith('signed_by_');
   const disableViewButton = false;
@@ -159,9 +173,29 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
     setIsSubmitting(false);
   };
 
-  const handleViewDocument = (e) => {
+  const handleViewDocument = async (e) => {
     e.preventDefault();
-    setShowDocumentViewer(true);
+
+    if (documentUrlToView) {
+      setShowDocumentViewer(true);
+      return;
+    }
+
+    if (!canReconcileSignedDocument) {
+      toast.error('No document is available for this agreement.');
+      return;
+    }
+
+    try {
+      setIsResolvingSignedDocument(true);
+      const result = await reconcileEviaSignedDocument(agreement.id);
+      setResolvedSignedDocumentUrl(result.signedDocumentUrl);
+      setShowDocumentViewer(true);
+    } catch (error) {
+      toast.error(error?.message || 'Failed to retrieve the signed agreement.');
+    } finally {
+      setIsResolvingSignedDocument(false);
+    }
   };
 
   const closeDocumentViewer = () => {
@@ -308,7 +342,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
               className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center"
             >
               <FiEye className="mr-1 h-3 w-3" />
-              View Document
+              {isResolvingSignedDocument ? 'Retrieving Signed Document…' : 'View Document'}
             </button>
           )}
           
@@ -366,9 +400,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         </div>
       )}
 
-      {showDocumentViewer && signedDocumentUrl && (
+      {showDocumentViewer && documentUrlToView && (
         <AgreementDocument 
-          documentUrl={signedDocumentUrl} 
+          documentUrl={documentUrlToView} 
           onClose={closeDocumentViewer} 
         />
       )}
