@@ -231,6 +231,23 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     eventData.delivery_id
   ) || '').trim();
 
+  const eventIdValue = firstDefined(
+    root.EventId,
+    root.eventId,
+    root.event_id,
+    data.EventId,
+    data.eventId,
+    data.event_id,
+    nestedPayload.EventId,
+    nestedPayload.eventId,
+    nestedPayload.event_id
+  );
+  const numericEventId = eventIdValue === undefined || eventIdValue === null || eventIdValue === ''
+    ? null
+    : Number(eventIdValue);
+  const eventId = Number.isFinite(numericEventId) ? numericEventId : null;
+  const eventIdText = eventId === null ? String(eventIdValue || '').trim().toLowerCase() : '';
+
   const eventType = String(firstDefined(
     root.event,
     root.Event,
@@ -240,11 +257,9 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     data.event,
     data.eventType,
     nestedPayload.event,
-    nestedPayload.eventType
+    nestedPayload.eventType,
+    eventIdText
   ) || '').trim().toLowerCase();
-
-  const eventIdValue = firstDefined(root.EventId, root.eventId, root.event_id, data.EventId, data.eventId);
-  const eventId = eventIdValue === undefined || eventIdValue === null || eventIdValue === '' ? null : Number(eventIdValue);
   const status = normalizeStatus(firstDefined(
     root.Status,
     root.status,
@@ -262,12 +277,18 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     root.event_time,
     root.CompletedAt,
     root.completedAt,
+    root.timestamp,
+    root.Timestamp,
     data.EventTime,
     data.eventTime,
     data.completedAt,
+    data.timestamp,
+    data.Timestamp,
     nestedPayload.EventTime,
     nestedPayload.eventTime,
-    nestedPayload.completedAt
+    nestedPayload.completedAt,
+    nestedPayload.timestamp,
+    nestedPayload.Timestamp
   ) || null;
 
   const recipientEmail = normalizeEmail(firstDefined(
@@ -572,7 +593,13 @@ export const extractSignedDocumentUrl = (payload = {}) => {
 
 const isCompletionNotification = ({ eventType, eventId, status }) => {
   if (eventId === 3) return true;
-  if (eventType === 'request.completed' || eventType.includes('requestcompleted') || eventType.includes('request completed')) return true;
+  if (
+    eventType === 'request.completed'
+    || eventType === 'signing_completed'
+    || eventType.includes('requestcompleted')
+    || eventType.includes('request completed')
+    || eventType.includes('signing completed')
+  ) return true;
   return COMPLETED_STATUSES.has(status);
 };
 
