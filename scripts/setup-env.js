@@ -25,6 +25,7 @@ VITE_EMAIL_FROM_NAME=KH Rentals
 # Evia Sign Configuration
 VITE_EVIA_SIGN_CLIENT_ID=
 EVIA_SIGN_CLIENT_SECRET=
+EVIA_SIGN_API_KEY=
 `;
 
 // Create readline interface
@@ -86,11 +87,16 @@ async function setupEnv() {
   if (eviaClientSecret) {
     envContent = envContent.replace(/EVIA_SIGN_CLIENT_SECRET=.*/, `EVIA_SIGN_CLIENT_SECRET=${eviaClientSecret}`);
   }
+
+  const eviaApiKey = await question('Enter your Evia Sign integration API key (server only, optional): ');
+  if (eviaApiKey) {
+    envContent = envContent.replace(/EVIA_SIGN_API_KEY=.*/, `EVIA_SIGN_API_KEY=${eviaApiKey}`);
+  }
   
   // Write the .env file
   fs.writeFileSync(envPath, envContent);
   console.log('.env file has been created successfully!');
-  console.log('\nNOTE: Keep TWILIO_SENDGRID_API_KEY, SENDGRID_API_KEY, and EVIA_SIGN_CLIENT_SECRET on the server only.');
+  console.log('\nNOTE: Keep TWILIO_SENDGRID_API_KEY, SENDGRID_API_KEY, EVIA_SIGN_CLIENT_SECRET, and EVIA_SIGN_API_KEY on the server only.');
   console.log('\nTo start the development server with these settings, run:');
   console.log('npm run dev:with-proxy');
   
