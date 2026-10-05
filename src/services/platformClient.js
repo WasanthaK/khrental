@@ -180,6 +180,66 @@ export const getInvoiceAccount = async (invoiceId) => {
   }
 };
 
+export const updateInvoiceDraft = async (invoiceId, updates = {}) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/draft`, {
+      method: 'PATCH',
+      body: updates
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const addInvoiceDraftComponent = async (invoiceId, component = {}) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/draft/components`, {
+      method: 'POST',
+      body: component
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const updateInvoiceDraftComponent = async (invoiceId, componentId, updates = {}) => {
+  try {
+    const payload = await billingRequest(
+      `/invoices/${encodeURIComponent(invoiceId)}/draft/components/${encodeURIComponent(componentId)}`,
+      { method: 'PATCH', body: updates }
+    );
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const removeInvoiceDraftComponent = async (invoiceId, componentId) => {
+  try {
+    const payload = await billingRequest(
+      `/invoices/${encodeURIComponent(invoiceId)}/draft/components/${encodeURIComponent(componentId)}`,
+      { method: 'DELETE' }
+    );
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const issueInvoiceDraft = async (invoiceId) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/issue`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const submitInvoicePaymentProof = async (invoiceId, payment = {}) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/payment-proof`, {
