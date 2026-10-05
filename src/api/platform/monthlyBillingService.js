@@ -99,8 +99,23 @@ export const generateMonthlyInvoicesForTenant = async ({
 
       if (automaticRunDate) {
         const runDate = automaticRunDate instanceof Date ? automaticRunDate : new Date(automaticRunDate);
+        const agreementStart = agreement.startdate ? new Date(agreement.startdate) : null;
         const billingDay = resolveAgreementBillingDay(agreement);
-        if (Number.isNaN(runDate.getTime()) || runDate.getUTCDate() < billingDay) {
+
+        if (
+          Number.isNaN(runDate.getTime())
+          || (agreementStart && !Number.isNaN(agreementStart.getTime()) && runDate < agreementStart)
+        ) {
+          results.skipped.push({
+            agreementId: agreement.id,
+            propertyId: agreement.propertyid,
+            reason: 'before_tenancy_start',
+            billingDay
+          });
+          continue;
+        }
+
+        if (runDate.getUTCDate() < billingDay) {
           results.skipped.push({
             agreementId: agreement.id,
             propertyId: agreement.propertyid,
