@@ -13,6 +13,8 @@ import {
   calculateOutstandingBalance,
   getInvoiceStatusAfterVerification,
   canSubmitPaymentProof,
+  calculateProratedMonthlyRent,
+  resolveAgreementBillingDay,
   resolveAgreementMonthlyRent
 } from '../src/api/platform/billingLifecycle.js';
 import {
@@ -109,11 +111,45 @@ test('billing does not derive contractual rent from unrelated property pricing',
   }), 0);
 });
 
-test('automatic billing uses the current UTC month and waits until configured billing day', () => {
+test('automatic billing uses the current UTC month and starts checks from day five', () => {
   const now = new Date('2026-10-05T10:00:00.000Z');
   assert.equal(getAutomaticBillingPeriod(now), '2026-10');
-  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 1 }), true);
+  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 5 }), true);
   assert.equal(shouldRunAutomaticBilling({ now, billingDay: 6 }), false);
+});
+
+test('tenancy billing day defaults to five and honors renter-selected day 5 through 28', () => {
+  assert.equal(resolveAgreementBillingDay({ terms: null }), 5);
+  assert.equal(resolveAgreementBillingDay({ terms: { billingDay: 12 } }), 12);
+  assert.equal(resolveAgreementBillingDay({ terms: JSON.stringify({ billingDay: 28 }) }), 28);
+  assert.equal(resolveAgreementBillingDay({ terms: { billingDay: 2 } }), 5);
+});
+
+test('mid-month rent is prorated using actual occupied calendar days', () => {
+  const result = calculateProratedMonthlyRent({
+    monthlyRent: 3100,
+    agreementStart: '2026-10-15T00:00:00.000Z',
+    periodStart: '2026-10-01T00:00:00.000Z',
+    periodEnd: '2026-11-01T00:00:00.000Z'
+  });
+
+  assert.equal(result.daysInMonth, 31);
+  assert.equal(result.occupiedDays, 17);
+  assert.equal(result.amount, 1700);
+  assert.equal(result.prorated, true);
+});
+
+test('full-month rent remains unchanged when tenancy covers the whole month', () => {
+  const result = calculateProratedMonthlyRent({
+    monthlyRent: 20000,
+    agreementStart: '2026-01-01T00:00:00.000Z',
+    periodStart: '2026-10-01T00:00:00.000Z',
+    periodEnd: '2026-11-01T00:00:00.000Z'
+  });
+
+  assert.equal(result.amount, 20000);
+  assert.equal(result.occupiedDays, 31);
+  assert.equal(result.prorated, false);
 });
 
 test('manual and automatic monthly billing share one generator service', () => {
@@ -127,6 +163,20 @@ test('automatic billing records a system source without impersonating a staff us
   assert.match(monthlyBillingSchedulerSource, /actorUserId:\s*null/);
   assert.match(monthlyBillingSchedulerSource, /source:\s*'automatic_scheduler'/);
   assert.match(monthlyBillingServiceSource, /source/);
+});
+
+test('automatic billing applies per-tenancy billing day and does not generate before tenancy start', () => {
+  assert.match(monthlyBillingServiceSource, /resolveAgreementBillingDay/);
+  assert.match(monthlyBillingServiceSource, /before_tenancy_billing_day/);
+  assert.match(monthlyBillingServiceSource, /before_tenancy_start/);
+  assert.match(monthlyBillingSchedulerSource, /automaticRunDate:\s*now/);
+});
+
+test('monthly billing uses current-month rent and carries approved prior-period utilities forward', () => {
+  assert.match(monthlyBillingServiceSource, /readingdate < @periodStart/);
+  assert.doesNotMatch(monthlyBillingServiceSource, /readingdate >= @periodStart/);
+  assert.match(monthlyBillingServiceSource, /prior service period/);
+  assert.match(monthlyBillingServiceSource, /calculateProratedMonthlyRent/);
 });
 
 test('draft invoices are not eligible for payment proof', () => {
