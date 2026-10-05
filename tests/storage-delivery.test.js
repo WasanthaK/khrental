@@ -87,6 +87,8 @@ test('direct storage delivery requires the tenant encoded in the object path', (
   assert.match(serverSource, /TENANT_STORAGE_PATH_REQUIRED/);
   assert.match(serverSource, /tenantIdFromPath/);
   assert.match(serverSource, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
+  assert.doesNotMatch(serverSource, /req\.query\s*=/);
+  assert.match(serverSource, /req\.headers\['x-tenant-id'\]\s*=\s*tenantIdFromPath/);
 });
 
 
