@@ -19,7 +19,7 @@ const toAmount = (value) => {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
 };
 
-const parseAgreementTerms = (terms) => {
+export const parseAgreementTerms = (terms) => {
   if (!terms) return {};
   if (typeof terms === 'object') return terms;
 
@@ -38,6 +38,95 @@ export const resolveAgreementMonthlyRent = (agreement = {}) => {
   const terms = parseAgreementTerms(agreement.terms);
   const contractualRent = toAmount(terms.monthlyRent ?? terms.monthlyrent);
   return contractualRent > 0 ? contractualRent : 0;
+};
+
+export const DEFAULT_TENANCY_BILLING_DAY = 5;
+export const MIN_TENANCY_BILLING_DAY = 5;
+export const MAX_TENANCY_BILLING_DAY = 28;
+
+export const normalizeTenancyBillingDay = (
+  value,
+  fallback = DEFAULT_TENANCY_BILLING_DAY
+) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (
+    Number.isInteger(parsed)
+    && parsed >= MIN_TENANCY_BILLING_DAY
+    && parsed <= MAX_TENANCY_BILLING_DAY
+  ) {
+    return parsed;
+  }
+  return fallback;
+};
+
+export const resolveAgreementBillingDay = (agreement = {}) => {
+  const terms = parseAgreementTerms(agreement.terms);
+  return normalizeTenancyBillingDay(
+    terms.billingDay ?? terms.billingday,
+    DEFAULT_TENANCY_BILLING_DAY
+  );
+};
+
+const utcDayStart = (value) => {
+  const date = toDate(value);
+  if (!date) return null;
+  return new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  ));
+};
+
+export const calculateProratedMonthlyRent = ({
+  monthlyRent,
+  agreementStart = null,
+  agreementEnd = null,
+  periodStart,
+  periodEnd
+} = {}) => {
+  const fullRent = toAmount(monthlyRent);
+  const billingStart = utcDayStart(periodStart);
+  const billingEnd = utcDayStart(periodEnd);
+  if (fullRent <= 0 || !billingStart || !billingEnd || billingEnd <= billingStart) {
+    return {
+      amount: 0,
+      fullMonthlyRent: fullRent,
+      occupiedDays: 0,
+      daysInMonth: 0,
+      prorated: false
+    };
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const daysInMonth = Math.round((billingEnd - billingStart) / dayMs);
+  const agreementStartDay = utcDayStart(agreementStart);
+  const agreementEndDay = utcDayStart(agreementEnd);
+
+  const occupiedStart = agreementStartDay && agreementStartDay > billingStart
+    ? agreementStartDay
+    : billingStart;
+  const agreementEndExclusive = agreementEndDay
+    ? new Date(agreementEndDay.getTime() + dayMs)
+    : billingEnd;
+  const occupiedEnd = agreementEndExclusive < billingEnd
+    ? agreementEndExclusive
+    : billingEnd;
+
+  const occupiedDays = Math.max(
+    0,
+    Math.round((occupiedEnd - occupiedStart) / dayMs)
+  );
+  const amount = occupiedDays <= 0
+    ? 0
+    : toAmount(fullRent * (occupiedDays / daysInMonth));
+
+  return {
+    amount,
+    fullMonthlyRent: fullRent,
+    occupiedDays,
+    daysInMonth,
+    prorated: occupiedDays > 0 && occupiedDays < daysInMonth
+  };
 };
 
 const toDate = (value) => {

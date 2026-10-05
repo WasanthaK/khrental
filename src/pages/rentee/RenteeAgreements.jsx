@@ -7,8 +7,24 @@ import AgreementActions from '../../components/agreements/AgreementActions';
 import { findAppUserByAuthId } from '../../services/appUserService';
 import { getTenancyExit, respondToTenancyNotice } from '../../services/tenancyExitService';
 import { fetchProperty } from '../../services/agreementService';
+import { updateMyTenancyBillingDay } from '../../services/platformClient';
 
 const noticeLabel = (noticeType) => noticeType === 'renewal_offer' ? 'Renewal offer' : 'Termination notice';
+
+const getAgreementBillingDay = (agreement) => {
+  const fallback = 5;
+  let terms = agreement?.terms;
+  if (typeof terms === 'string') {
+    try {
+      terms = JSON.parse(terms);
+    } catch (_error) {
+      terms = {};
+    }
+  }
+  const value = Number.parseInt(String(terms?.billingDay ?? ''), 10);
+  return Number.isInteger(value) && value >= 5 && value <= 28 ? value : fallback;
+};
+
 
 const NoticeCard = ({ notice, working, onRespond }) => (
   <div className="mt-4 border border-blue-200 bg-blue-50 rounded-md p-3">
@@ -44,6 +60,8 @@ const RenteeAgreements = () => {
   const [exitData, setExitData] = useState({});
   const [loading, setLoading] = useState(true);
   const [workingNoticeId, setWorkingNoticeId] = useState(null);
+  const [workingBillingAgreementId, setWorkingBillingAgreementId] = useState(null);
+  const [billingDays, setBillingDays] = useState({});
   const [error, setError] = useState(null);
   const { user, activeTenantId } = useAuth();
 
@@ -116,6 +134,9 @@ const RenteeAgreements = () => {
         }));
 
         setAgreements(mappedAgreements);
+        setBillingDays(Object.fromEntries(
+          mappedAgreements.map((agreement) => [agreement.id, getAgreementBillingDay(agreement)])
+        ));
 
         const projections = await Promise.all(mappedAgreements.map(async (agreement) => {
           const result = await getTenancyExit(agreement.id);
@@ -134,6 +155,30 @@ const RenteeAgreements = () => {
       fetchAgreements();
     }
   }, [user?.id, user?.isDevelopmentBypass, activeTenantId]);
+
+  const handleBillingDaySave = async (agreement) => {
+    const billingDay = Number.parseInt(String(billingDays[agreement.id] ?? 5), 10);
+    setWorkingBillingAgreementId(agreement.id);
+    const result = await updateMyTenancyBillingDay(agreement.id, billingDay);
+    if (result.error) {
+      toast.error(result.error.message || 'Billing day could not be updated');
+    } else {
+      toast.success(`Billing day updated to day ${billingDay}`);
+      setAgreements((current) => current.map((entry) => {
+        if (entry.id !== agreement.id) return entry;
+        let terms = entry.terms;
+        if (typeof terms === 'string') {
+          try {
+            terms = JSON.parse(terms);
+          } catch (_error) {
+            terms = {};
+          }
+        }
+        return { ...entry, terms: { ...(terms || {}), billingDay } };
+      }));
+    }
+    setWorkingBillingAgreementId(null);
+  };
 
   const handleNoticeResponse = async (notice, response) => {
     setWorkingNoticeId(notice.id);
@@ -215,6 +260,39 @@ const RenteeAgreements = () => {
                   </span>
                 </p>
               </div>
+
+              {agreement.status === 'active' && (
+                <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-3">
+                  <label className="block text-sm font-medium text-blue-950">
+                    Monthly invoice generation day
+                  </label>
+                  <p className="mt-1 text-xs text-blue-800">
+                    Choose day 5–28 for this property. This applies to future monthly invoice drafts.
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <select
+                      value={billingDays[agreement.id] ?? getAgreementBillingDay(agreement)}
+                      onChange={(event) => setBillingDays((current) => ({
+                        ...current,
+                        [agreement.id]: Number(event.target.value)
+                      }))}
+                      className="rounded-md border px-3 py-2 text-sm"
+                    >
+                      {Array.from({ length: 24 }, (_, index) => index + 5).map((day) => (
+                        <option key={day} value={day}>Day {day}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={workingBillingAgreementId === agreement.id}
+                      onClick={() => handleBillingDaySave(agreement)}
+                      className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {workingBillingAgreementId === agreement.id ? 'Saving…' : 'Save billing day'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {notices.map((notice) => (
                 <NoticeCard

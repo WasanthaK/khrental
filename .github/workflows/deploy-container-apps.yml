@@ -158,7 +158,7 @@ jobs:
                 VITE_USE_MSSQL_API=true \
                 PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
                 AUTO_MONTHLY_BILLING_ENABLED=true \
-                AUTO_MONTHLY_BILLING_DAY=1 \
+                AUTO_MONTHLY_BILLING_DAY=5 \
                 AUTO_MONTHLY_BILLING_DUE_DAYS=14 \
               --output none
 

@@ -459,7 +459,7 @@ async function createServer() {
     && String(process.env.AUTO_MONTHLY_BILLING_ENABLED || '').toLowerCase() === 'true';
   const billingScheduler = startAutomaticMonthlyBillingScheduler({
     enabled: automaticBillingEnabled,
-    billingDay: process.env.AUTO_MONTHLY_BILLING_DAY || 1,
+    billingDay: process.env.AUTO_MONTHLY_BILLING_DAY || 5,
     dueDays: process.env.AUTO_MONTHLY_BILLING_DUE_DAYS || 14,
     intervalMs: process.env.AUTO_MONTHLY_BILLING_INTERVAL_MS || (60 * 60 * 1000),
     startupDelayMs: process.env.AUTO_MONTHLY_BILLING_STARTUP_DELAY_MS || 30_000

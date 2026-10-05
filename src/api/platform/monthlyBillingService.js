@@ -1,5 +1,10 @@
 import { getMssqlPool, sql } from '../mssql/pool.js';
-import { agreementOverlapsBillingPeriod, resolveAgreementMonthlyRent } from './billingLifecycle.js';
+import {
+  agreementOverlapsBillingPeriod,
+  calculateProratedMonthlyRent,
+  resolveAgreementBillingDay,
+  resolveAgreementMonthlyRent
+} from './billingLifecycle.js';
 import {
   attachBillingAdjustmentsToInvoice,
   loadApprovedBillingAdjustments
@@ -58,6 +63,7 @@ export const generateMonthlyInvoicesForTenant = async ({
   actorUserId = null,
   notes = null,
   source = 'manual',
+  automaticRunDate = null,
   authorizeProperty = () => {}
 } = {}) => {
   if (!tenantId) {
@@ -90,6 +96,35 @@ export const generateMonthlyInvoicesForTenant = async ({
   for (const agreement of agreements) {
     try {
       await authorizeProperty(agreement.propertyid, agreement);
+
+      if (automaticRunDate) {
+        const runDate = automaticRunDate instanceof Date ? automaticRunDate : new Date(automaticRunDate);
+        const agreementStart = agreement.startdate ? new Date(agreement.startdate) : null;
+        const billingDay = resolveAgreementBillingDay(agreement);
+
+        if (
+          Number.isNaN(runDate.getTime())
+          || (agreementStart && !Number.isNaN(agreementStart.getTime()) && runDate < agreementStart)
+        ) {
+          results.skipped.push({
+            agreementId: agreement.id,
+            propertyId: agreement.propertyid,
+            reason: 'before_tenancy_start',
+            billingDay
+          });
+          continue;
+        }
+
+        if (runDate.getUTCDate() < billingDay) {
+          results.skipped.push({
+            agreementId: agreement.id,
+            propertyId: agreement.propertyid,
+            reason: 'before_tenancy_billing_day',
+            billingDay
+          });
+          continue;
+        }
+      }
 
       if (!agreementOverlapsBillingPeriod({
         agreementStart: agreement.startdate,
@@ -136,8 +171,7 @@ export const generateMonthlyInvoicesForTenant = async ({
              AND propertyid = @propertyId
              AND invoice_id IS NULL
              AND billing_status = 'pending_invoice'
-             AND readingdate >= @periodStart
-             AND readingdate < @periodEnd
+             AND readingdate < @periodStart
              AND (@agreementStart IS NULL OR readingdate >= @agreementStart)
              AND (@agreementEnd IS NULL OR readingdate <= @agreementEnd)
            ORDER BY readingdate, createdat`,
@@ -146,7 +180,6 @@ export const generateMonthlyInvoicesForTenant = async ({
             renteeId: agreement.renteeid,
             propertyId: agreement.propertyid,
             periodStart: start,
-            periodEnd: end,
             agreementStart: agreement.startdate || null,
             agreementEnd: agreement.enddate || null
           }
@@ -169,16 +202,31 @@ export const generateMonthlyInvoicesForTenant = async ({
           other: 0
         };
 
-        const rentAmount = toMoney(resolveAgreementMonthlyRent(agreement));
+        const rent = calculateProratedMonthlyRent({
+          monthlyRent: resolveAgreementMonthlyRent(agreement),
+          agreementStart: agreement.startdate,
+          agreementEnd: agreement.enddate,
+          periodStart: start,
+          periodEnd: end
+        });
+        const rentAmount = toMoney(rent.amount);
         if (rentAmount > 0) {
           legacyComponents.rent = rentAmount;
           componentRows.push({
             componentType: 'rent',
-            description: `Rent for ${normalizedBillingPeriod}`,
+            description: rent.prorated
+              ? `Prorated rent for ${normalizedBillingPeriod} (${rent.occupiedDays}/${rent.daysInMonth} days)`
+              : `Rent for ${normalizedBillingPeriod}`,
             amount: rentAmount,
             sourceType: 'agreement',
             sourceId: agreement.id,
-            metadata: { billingPeriod: normalizedBillingPeriod }
+            metadata: {
+              billingPeriod: normalizedBillingPeriod,
+              fullMonthlyRent: rent.fullMonthlyRent,
+              occupiedDays: rent.occupiedDays,
+              daysInMonth: rent.daysInMonth,
+              prorated: rent.prorated
+            }
           });
         }
 
@@ -191,7 +239,7 @@ export const generateMonthlyInvoicesForTenant = async ({
           if (rawType === 'water') legacyComponents.water += amount;
           componentRows.push({
             componentType,
-            description: `${reading.utilitytype || 'Utility'} charge for ${normalizedBillingPeriod}`,
+            description: `${reading.utilitytype || 'Utility'} charge from prior service period`,
             amount,
             sourceType: 'utility_reading',
             sourceId: reading.id,
@@ -293,8 +341,7 @@ export const generateMonthlyInvoicesForTenant = async ({
                AND propertyid = @propertyId
                AND invoice_id IS NULL
                AND billing_status = 'pending_invoice'
-               AND readingdate >= @periodStart
-               AND readingdate < @periodEnd
+               AND readingdate < @periodStart
                AND (@agreementStart IS NULL OR readingdate >= @agreementStart)
                AND (@agreementEnd IS NULL OR readingdate <= @agreementEnd)`,
             {
@@ -303,7 +350,6 @@ export const generateMonthlyInvoicesForTenant = async ({
               renteeId: agreement.renteeid,
               propertyId: agreement.propertyid,
               periodStart: start,
-              periodEnd: end,
               agreementStart: agreement.startdate || null,
               agreementEnd: agreement.enddate || null
             }
