@@ -28,6 +28,11 @@ const serverSource = readFileSync(
   'utf8'
 );
 
+const eviaLegacySource = readFileSync(
+  new URL('../src/services/eviaSignServiceLegacy.js', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -82,4 +87,11 @@ test('direct storage delivery requires the tenant encoded in the object path', (
   assert.match(serverSource, /TENANT_STORAGE_PATH_REQUIRED/);
   assert.match(serverSource, /tenantIdFromPath/);
   assert.match(serverSource, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
+});
+
+
+test('active Evia signed-document fallback no longer uses compatibility storage', () => {
+  assert.doesNotMatch(eviaLegacySource, /platformClient\.storage/);
+  assert.match(eviaLegacySource, /uploadTenantFile/);
+  assert.match(eviaLegacySource, /documentUrl:\s*uploadedDocument\.url/);
 });
