@@ -339,7 +339,8 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           {hasViewableDocument && (
             <button
               onClick={handleViewDocument}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center"
+              disabled={isResolvingSignedDocument}
+              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center disabled:opacity-60 disabled:cursor-wait"
             >
               <FiEye className="mr-1 h-3 w-3" />
               {isResolvingSignedDocument ? 'Retrieving Signed Document…' : 'View Document'}
