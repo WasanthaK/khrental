@@ -72,6 +72,17 @@ const SignatureProgressTracker = ({
         label: `${completed} of ${total} Signed`,
         message: `Signed by ${signerName}`
       };
+    } else if (completed > 0) {
+      return {
+        icon: FiUserCheck,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-100',
+        borderColor: 'border-blue-500',
+        label: `${completed} of ${total} Signed`,
+        message: completed === total
+          ? 'All recorded signatories have signed. Waiting for request completion.'
+          : 'The document is partially signed.'
+      };
     } else if (signature_status === 'send_for_signature' || status === 'pending_signature' || status === 'pending' || status === 'pending_activation') {
       return {
         icon: FiClock,

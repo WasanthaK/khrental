@@ -30,3 +30,15 @@ test('agreement form send flow uses secure agreement-bound Evia callback', () =>
   assert.doesNotMatch(source, /VITE_EVIA_WEBHOOK_URL/);
   assert.doesNotMatch(source, /webhookUrl,/);
 });
+
+
+test('signature progress counter prefers recorded completed signers over pending agreement status', () => {
+  const source = fs.readFileSync(new URL('../src/components/ui/SignatureProgressTracker.jsx', import.meta.url), 'utf8');
+
+  const completedBranch = source.indexOf('} else if (completed > 0) {');
+  const pendingBranch = source.indexOf("status === 'pending'");
+  assert.ok(completedBranch >= 0, 'completed signer branch is present');
+  assert.ok(pendingBranch >= 0, 'pending status branch is present');
+  assert.ok(completedBranch < pendingBranch, 'completed signer count is evaluated before pending status');
+  assert.match(source, /label: `\$\{completed\} of \$\{total\} Signed`/);
+});
