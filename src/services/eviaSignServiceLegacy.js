@@ -2,6 +2,7 @@ import { platform as platformClient } from './platformClient';
 import axios from 'axios';
 import { formatFileSize } from '../utils/helpers';
 import { ENV, getApiBaseUrl } from '../utils/env';
+import { uploadTenantFile } from './storageApiService';
 
 // Evia Sign API configuration
 const EVIA_SIGN_API_BASE_URL = 'https://evia.enadocapp.com/_apis';
@@ -751,35 +752,24 @@ export async function downloadSignedDocument(requestId) {
     
     console.log(`[eviaSignService] Uploading signed document to storage: ${filePath}`);
     
-    const { data: uploadData, error: uploadError } = await platformClient.storage
-      .from('files')
-      .upload(filePath, blob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-      
-    if (uploadError) {
-      console.error('[eviaSignService] Error uploading signed document to storage:', uploadError);
-      throw uploadError;
+    const uploadedDocument = await uploadTenantFile({
+      bucket: 'files',
+      path: filePath,
+      file: blob
+    });
+
+    if (!uploadedDocument?.url) {
+      throw new Error('Failed to get storage URL for signed document');
     }
-    
-    console.log('[eviaSignService] Signed document uploaded successfully:', uploadData);
-    
-    // Get the public URL
-    const scopedFilePath = uploadData?.scopedPath || uploadData?.path || filePath;
-    const { data: urlData } = platformClient.storage
-      .from('files')
-      .getPublicUrl(scopedFilePath);
-      
-    if (!urlData || !urlData.publicUrl) {
-      throw new Error('Failed to get public URL for signed document');
-    }
-    
-    console.log('[eviaSignService] Signed document available at:', urlData.publicUrl);
-    
-    return { 
-      success: true, 
-      documentUrl: urlData.publicUrl,
+
+    console.log('[eviaSignService] Signed document uploaded successfully:', {
+      path: uploadedDocument.path || filePath
+    });
+    console.log('[eviaSignService] Signed document available at:', uploadedDocument.url);
+
+    return {
+      success: true,
+      documentUrl: uploadedDocument.url,
       fileName: fileName
     };
   } catch (error) {
