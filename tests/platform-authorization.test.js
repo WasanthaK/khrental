@@ -67,7 +67,8 @@ test('adds the current user as an unavoidable tenant ownership filter', () => {
 
   assert.deepEqual(result.filters, [
     { column: 'renteeid', operator: 'eq', value: 'tenant-2' },
-    { column: 'renteeid', operator: 'eq', value: 'tenant-1' }
+    { column: 'renteeid', operator: 'eq', value: 'tenant-1' },
+    { column: 'status', operator: 'neq', value: 'draft' }
   ]);
 });
 
