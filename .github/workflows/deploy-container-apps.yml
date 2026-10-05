@@ -82,6 +82,7 @@ jobs:
         env:
           EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
           EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
+          EVIA_API_KEY: ${{ secrets.EVIA_SIGN_API_KEY }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -96,11 +97,18 @@ jobs:
               exit 1
             fi
 
+            if [ -z "${EVIA_API_KEY:-}" ]; then
+              echo "EVIA_SIGN_API_KEY is not configured in the GitHub Production environment." >&2
+              exit 1
+            fi
+
             az extension add --name containerapp --upgrade --yes
             az containerapp secret set \
               --name "$AZURE_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --secrets evia-sign-client-secret="$EVIA_CLIENT_SECRET" \
+              --secrets \
+                evia-sign-client-secret="$EVIA_CLIENT_SECRET" \
+                evia-sign-api-key="$EVIA_API_KEY" \
               --output none
 
             az containerapp update \
@@ -110,6 +118,7 @@ jobs:
                 EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
                 VITE_EVIA_SIGN_CLIENT_ID="$EVIA_CLIENT_ID" \
                 EVIA_SIGN_CLIENT_SECRET=secretref:evia-sign-client-secret \
+                EVIA_SIGN_API_KEY=secretref:evia-sign-api-key \
               --output none
 
       - name: Configure server-side email delivery
