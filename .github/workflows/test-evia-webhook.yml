@@ -14,6 +14,7 @@ on:
     paths:
       - 'src/api/evia/**'
       - 'tests/evia-webhook.test.js'
+      - 'tests/evia-completed-documents.test.js'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
 
