@@ -37,11 +37,16 @@ test('retrieves completed signed agreement and audit trail into tenant-scoped st
     calls.push({ url: String(url), options });
 
     if (String(url).endsWith('/oauth/exchange')) {
+      assert.equal(String(url), 'https://evia.enadocapp.com/api/v2/oauth/exchange');
       assert.equal(options.headers['X-Api-Key'], 'integration-key');
       return jsonResponse({ access_token: 'bearer-token', expires_in: 1800 });
     }
 
     if (String(url).includes('/requests/request-123/documents')) {
+      assert.equal(
+        String(url),
+        'https://evia.enadocapp.com/_apis/sign/api/v2/requests/request-123/documents'
+      );
       assert.equal(options.headers.Authorization, 'Bearer bearer-token');
       return jsonResponse([
         { documentName: 'Rental Agreement.pdf', downloadUrl: signedDownloadUrl },
