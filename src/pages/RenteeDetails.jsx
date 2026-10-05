@@ -11,6 +11,7 @@ import AgreementCard from '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
 import { mapAppUserToRentee } from '../services/appUserService';
 import { getRentee, setRenteeMembershipStatus } from '../services/renteeService';
+import { fetchProperty } from '../services/agreementService';
 
 const IdCopyDisplay = ({ url }) => {
   const [imageFailed, setImageFailed] = useState(false);
@@ -353,7 +354,23 @@ const RenteeDetails = () => {
             console.error('Error fetching agreements:', agreementsError);
             throw agreementsError;
           } else {
-            setAgreements(agreementsData || []);
+            const agreementsWithProperties = await Promise.all((agreementsData || []).map(async (agreement) => {
+              if (agreement.properties || !agreement.propertyid) {
+                return agreement;
+              }
+
+              const resolvedProperty = await fetchProperty(agreement.propertyid).catch((propertyError) => {
+                console.warn('Could not resolve agreement property:', propertyError?.message || propertyError);
+                return null;
+              });
+
+              return {
+                ...agreement,
+                properties: resolvedProperty
+              };
+            }));
+
+            setAgreements(agreementsWithProperties);
           }
         } else {
           throw new Error('Rentee not found');
