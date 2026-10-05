@@ -61,6 +61,14 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
   
   // Track if we should show the send button - only in review status
   const showSendButton = agreement.status === 'review' && agreement.documenturl;
+  const isSignatureComplete = ['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
+    || ['signed', 'completed', 'signing_complete'].includes(String(agreement.signature_status || '').toLowerCase());
+  const retainedSignedDocumentUrl = [
+    agreement.signed_document_url,
+    agreement.signeddocumenturl,
+    agreement.signature_pdf_url
+  ].find((value) => String(value || '').includes('/storage/')) || null;
+  const viewDocumentUrl = isSignatureComplete ? retainedSignedDocumentUrl : agreement.documenturl;
   
   // Track if we should disable the send button
   const disableSendButton = loading || hasSentForSignature || 
