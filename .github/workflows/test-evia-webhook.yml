@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/api/evia/**'
       - 'tests/evia-webhook.test.js'
+      - 'tests/evia-completed-documents.test.js'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
   push:
@@ -29,4 +30,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-webhook.test.js
+      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js
