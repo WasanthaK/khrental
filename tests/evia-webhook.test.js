@@ -17,11 +17,13 @@ import {
 test('normalizes Evia V2 request.completed payloads', () => {
   const result = normalizeEviaWebhookPayload({
     event: 'request.completed',
+    deliveryId: 'delivery-123',
     RequestId: 'cdc41fd5-44c0-4000-8000-000000000001',
     Status: 'Completed'
   });
 
   assert.equal(result.requestId, 'cdc41fd5-44c0-4000-8000-000000000001');
+  assert.equal(result.deliveryId, 'delivery-123');
   assert.equal(result.eventType, 'request.completed');
   assert.equal(result.status, 'completed');
 });
