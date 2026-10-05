@@ -8,6 +8,12 @@ import {
   getActivationBlockingReasons,
   isAgreementSignatureComplete
 } from './tenancyActivation.js';
+import {
+  MAX_TENANCY_BILLING_DAY,
+  MIN_TENANCY_BILLING_DAY,
+  normalizeTenancyBillingDay,
+  resolveAgreementBillingDay
+} from './billingLifecycle.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -308,6 +314,7 @@ export const createTenancyOnboardingRouter = () => {
            a.enddate,
            a.rentamount,
            a.depositamount,
+           a.terms,
            a.activated_at,
            p.id AS property_id,
            p.name AS property_name,
@@ -333,6 +340,93 @@ export const createTenancyOnboardingRouter = () => {
       );
 
       res.json({ data: { tenancies: rows }, error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/:agreementId/billing-day', async (req, res, next) => {
+    try {
+      if (!isTenantRole({ user: req.user, membership: req.membership })) {
+        throw createRequestError(403, 'Tenant portal access is required.', 'TENANT_PORTAL_REQUIRED');
+      }
+
+      const agreement = await loadAgreementContext(req.tenantId, req.params.agreementId);
+      if (
+        String(agreement.renteeid || '') !== String(req.user.id || '')
+        || String(agreement.status || '').toLowerCase() !== 'active'
+      ) {
+        throw createRequestError(404, 'Active tenancy agreement not found.', 'ACTIVE_AGREEMENT_NOT_FOUND');
+      }
+
+      const requestedBillingDay = Number.parseInt(String(req.body?.billingDay ?? ''), 10);
+      if (
+        !Number.isInteger(requestedBillingDay)
+        || requestedBillingDay < MIN_TENANCY_BILLING_DAY
+        || requestedBillingDay > MAX_TENANCY_BILLING_DAY
+      ) {
+        throw createRequestError(
+          400,
+          `billingDay must be between ${MIN_TENANCY_BILLING_DAY} and ${MAX_TENANCY_BILLING_DAY}.`,
+          'INVALID_BILLING_DAY'
+        );
+      }
+
+      const previousBillingDay = resolveAgreementBillingDay(agreement);
+      const billingDay = normalizeTenancyBillingDay(requestedBillingDay);
+
+      const updated = await runSingleQuery(
+        `UPDATE agreements
+         SET terms = JSON_MODIFY(
+               CASE WHEN ISJSON(terms) = 1 THEN terms ELSE N'{}' END,
+               '$.billingDay',
+               @billingDay
+             ),
+             updatedat = SYSUTCDATETIME()
+         OUTPUT INSERTED.*
+         WHERE tenant_id = @tenantId
+           AND id = @agreementId
+           AND renteeid = @renteeId
+           AND status = 'active'`,
+        {
+          tenantId: req.tenantId,
+          agreementId: agreement.id,
+          renteeId: req.user.id,
+          billingDay
+        }
+      );
+
+      if (!updated) {
+        throw createRequestError(409, 'The tenancy changed before the billing day could be updated.', 'TENANCY_STATE_CHANGED');
+      }
+
+      await runQuery(
+        `INSERT INTO tenancy_lifecycle_events (
+           tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata
+         ) VALUES (
+           @tenantId, @agreementId, 'billing_day_changed', 'active', 'active', @actorUserId, @metadata
+         )`,
+        {
+          tenantId: req.tenantId,
+          agreementId: agreement.id,
+          actorUserId: req.user.id,
+          metadata: JSON.stringify({
+            propertyId: agreement.propertyid,
+            previousBillingDay,
+            billingDay,
+            source: 'tenant_portal'
+          })
+        }
+      );
+
+      res.json({
+        data: {
+          agreementId: agreement.id,
+          propertyId: agreement.propertyid,
+          billingDay
+        },
+        error: null
+      });
     } catch (error) {
       next(error);
     }
