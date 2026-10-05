@@ -100,6 +100,9 @@ const assertInvoiceAccess = (req, invoice, manage = false) => {
     if (String(invoice.renteeid || '') !== String(req.user?.id || '')) {
       throw createRequestError(403, 'This invoice does not belong to the current tenant account.', 'RESOURCE_ACCESS_DENIED');
     }
+    if (String(invoice.status || '').toLowerCase() === 'draft') {
+      throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+    }
     return;
   }
 
