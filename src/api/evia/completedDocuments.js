@@ -187,10 +187,82 @@ const buildStoredDocumentUrl = (bucket, relativePath) => {
   return `/storage/${encodeURIComponent(bucket)}/${encodedPath}`;
 };
 
+const decodeWebhookDocumentContent = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const encoded = raw
+    .replace(/^data:[^;]+;base64,/i, '')
+    .replace(/\s+/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw createHttpError('Evia webhook document content is not valid base64.', 400, 'EVIA_WEBHOOK_DOCUMENT_INVALID');
+  }
+
+  const body = Buffer.from(encoded, 'base64');
+  if (body.length === 0) {
+    throw createHttpError('Evia webhook document content is empty.', 400, 'EVIA_WEBHOOK_DOCUMENT_EMPTY');
+  }
+  if (body.length > MAX_COMPLETED_DOCUMENT_BYTES) {
+    throw createHttpError('Evia webhook document exceeds the supported 50 MB limit.', 413, 'EVIA_WEBHOOK_DOCUMENT_TOO_LARGE');
+  }
+
+  return body;
+};
+
+export const storeEviaWebhookCompletedDocuments = async ({
+  documents,
+  tenantId,
+  agreementId,
+  storageDriver = getStorageDriver()
+}) => {
+  const safeTenantId = safeStorageSegment(tenantId, 'tenant ID');
+  const safeAgreementId = safeStorageSegment(agreementId, 'agreement ID');
+  const sourceDocuments = Array.isArray(documents) ? documents : [];
+  const storedDocuments = [];
+
+  for (let index = 0; index < sourceDocuments.length; index += 1) {
+    const document = sourceDocuments[index] || {};
+    const body = decodeWebhookDocumentContent(document.DocumentContent || document.documentContent);
+    if (!body) continue;
+
+    const documentName = sanitizeCompletedDocumentName(
+      document.DocumentName || document.documentName,
+      `signed_document_${index + 1}.pdf`
+    );
+    const relativePath = normalizeStoragePath(
+      `tenants/${safeTenantId}/agreements/${safeAgreementId}/signed/${documentName}`
+    );
+    const contentType = String(document.ContentType || document.contentType || 'application/pdf');
+
+    await storageDriver.upload('documents', relativePath, body, contentType);
+
+    storedDocuments.push({
+      documentName,
+      relativePath,
+      url: buildStoredDocumentUrl('documents', relativePath),
+      auditTrail: documentName.toLowerCase() === 'audit_trail.pdf'
+    });
+  }
+
+  const signedDocument = storedDocuments.find((document) => !document.auditTrail) || null;
+  const auditTrail = storedDocuments.find((document) => document.auditTrail) || null;
+
+  return {
+    signedDocumentUrl: signedDocument?.url || null,
+    signedDocumentName: signedDocument?.documentName || null,
+    auditTrailUrl: auditTrail?.url || null,
+    storedDocuments
+  };
+};
+
 export const retrieveAndStoreEviaCompletedDocuments = async ({
   requestId,
   tenantId,
   agreementId,
+  accessToken = '',
   apiKey = process.env.EVIA_SIGN_API_KEY || '',
   fetchImpl = fetch,
   storageDriver = getStorageDriver(),
@@ -203,13 +275,16 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
     throw new Error('Evia request ID is required to retrieve completed documents.');
   }
 
-  let tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
+  const suppliedAccessToken = String(accessToken || '').trim();
+  let tokenState = suppliedAccessToken
+    ? { accessToken: suppliedAccessToken, expiresIn: null, source: 'oauth' }
+    : await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
 
   const withTokenRefresh = async (operation) => {
     try {
       return await operation(tokenState.accessToken);
     } catch (error) {
-      if (Number(error?.status) !== 401) throw error;
+      if (Number(error?.status) !== 401 || suppliedAccessToken) throw error;
       tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
       return operation(tokenState.accessToken);
     }
