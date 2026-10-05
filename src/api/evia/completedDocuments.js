@@ -39,8 +39,8 @@ const safeStorageSegment = (value, label) => {
 };
 
 export const sanitizeCompletedDocumentName = (value, fallback = 'signed_agreement.pdf') => {
-  const normalized = String(value || fallback)
-    .replace(/[\\/]+/g, '_')
+  const leafName = String(value || fallback).split(/[\\/]+/).filter(Boolean).pop() || fallback;
+  const normalized = leafName
     .replace(/[^A-Za-z0-9._-]+/g, '_')
     .replace(/^\.+/, '')
     .slice(0, 180);
