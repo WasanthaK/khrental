@@ -409,7 +409,9 @@ async function createServer() {
         res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
         return;
       }
-      req.query = { ...req.query, tenantId: tenantIdFromPath };
+      // Express 5 exposes req.query as a getter, so do not mutate it here.
+      // The tenant encoded in the storage object path is authoritative for delivery.
+      req.headers['x-tenant-id'] = tenantIdFromPath;
       next();
     },
     createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
