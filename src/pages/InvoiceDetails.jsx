@@ -6,6 +6,7 @@ import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
 import { getInvoiceAccount } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
+import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const todayValue = () => new Date().toISOString().slice(0, 10);
@@ -64,6 +65,7 @@ const InvoiceDetails = () => {
   const receipts = account?.receipts || [];
   const components = account?.components || [];
   const outstandingBalance = Number(account?.outstandingBalance) || 0;
+  const isDraft = String(invoice?.status || '').toLowerCase() === 'draft';
   const pendingPayment = payments.find((payment) => String(payment.status).toLowerCase() === 'pending') || null;
   const paymentProofUrl = pendingPayment?.proofurl || invoice?.paymentproofurl || null;
 
@@ -168,6 +170,7 @@ const InvoiceDetails = () => {
 
   const getStatusBadgeColor = (status) => {
     switch (String(status || '').toLowerCase()) {
+      case 'draft': return 'bg-blue-100 text-blue-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'verification_pending': return 'bg-blue-100 text-blue-800';
       case 'overdue': return 'bg-red-100 text-red-800';
@@ -211,6 +214,16 @@ const InvoiceDetails = () => {
         <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Status</div><span className={`mt-1 inline-block rounded-full px-2 py-1 text-sm font-medium ${getStatusBadgeColor(invoice.status)}`}>{String(invoice.status || '').replaceAll('_', ' ')}</span></div>
       </div>
 
+      {isDraft && canManageInvoices && (
+        <InvoiceDraftEditor
+          invoice={invoice}
+          components={components}
+          onChanged={loadAccount}
+          setError={setError}
+          setNotice={setNotice}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="rounded-lg border bg-white p-5 lg:col-span-2">
           <h2 className="text-lg font-semibold mb-4">Invoice</h2>
@@ -245,13 +258,13 @@ const InvoiceDetails = () => {
         <aside className="rounded-lg border bg-white p-5">
           <h2 className="text-lg font-semibold mb-4">Actions</h2>
           <div className="space-y-2">
-            {canManagePayments && pendingPayment && (
+            {!isDraft && canManagePayments && pendingPayment && (
               <button type="button" onClick={() => setShowPaymentVerification(true)} className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Verify pending payment</button>
             )}
-            {canManagePayments && outstandingBalance > 0 && !pendingPayment && (
+            {!isDraft && canManagePayments && outstandingBalance > 0 && !pendingPayment && (
               <button type="button" onClick={() => setShowManualPayment(true)} className="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Record manual payment</button>
             )}
-            {canManageInvoices && outstandingBalance > 0 && (
+            {!isDraft && canManageInvoices && outstandingBalance > 0 && (
               <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">{working ? 'Sending…' : 'Send payment reminder'}</button>
             )}
             <button type="button" onClick={handleDownloadInvoice} className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Download account summary</button>
