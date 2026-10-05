@@ -191,17 +191,23 @@ export const generateMonthlyInvoicesForTenant = async ({
           billingPeriod: normalizedBillingPeriod
         });
 
-        const fixedUtilityRows = await queryTransaction(
-          transaction,
-          `SELECT id, utilitytype, fixedamount
-           FROM utility_configs
-           WHERE tenant_id = @tenantId
-             AND propertyid = @propertyId
-             AND LOWER(COALESCE(billingtype, '')) = 'fixed'
-             AND fixedamount > 0
-           ORDER BY utilitytype`,
-          { tenantId, propertyId: agreement.propertyid }
-        );
+        let fixedUtilityRows = [];
+        try {
+          fixedUtilityRows = await queryTransaction(
+            transaction,
+            `SELECT id, utilitytype, fixedamount
+             FROM utility_configs
+             WHERE tenant_id = @tenantId
+               AND propertyid = @propertyId
+               AND LOWER(COALESCE(billingtype, '')) = 'fixed'
+               AND fixedamount > 0
+             ORDER BY utilitytype`,
+            { tenantId, propertyId: agreement.propertyid }
+          );
+        } catch (error) {
+          if (error?.number !== 207) throw error;
+          fixedUtilityRows = [];
+        }
 
         const componentRows = [];
         const legacyComponents = {
