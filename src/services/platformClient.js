@@ -162,6 +162,18 @@ export const activateTenancy = async (agreementId) => {
   }
 };
 
+export const updateMyTenancyBillingDay = async (agreementId, billingDay) => {
+  try {
+    const payload = await tenancyRequest(`/${encodeURIComponent(agreementId)}/billing-day`, {
+      method: 'PATCH',
+      body: { billingDay }
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const getMyTenancySummary = async () => {
   try {
     const payload = await tenancyRequest('/me/summary');
