@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import AgreementActions from '../../components/agreements/AgreementActions';
 import { findAppUserByAuthId } from '../../services/appUserService';
 import { getTenancyExit, respondToTenancyNotice } from '../../services/tenancyExitService';
+import { fetchProperty } from '../../services/agreementService';
 
 const noticeLabel = (noticeType) => noticeType === 'renewal_offer' ? 'Renewal offer' : 'Termination notice';
 
@@ -99,10 +100,19 @@ const RenteeAgreements = () => {
           throw agreementsError;
         }
 
-        const mappedAgreements = (agreementsData || []).map((agreement) => ({
-          ...agreement,
-          property: agreement.property,
-          rentee: appUserData
+        const mappedAgreements = await Promise.all((agreementsData || []).map(async (agreement) => {
+          const resolvedProperty = agreement.property || (agreement.propertyid
+            ? await fetchProperty(agreement.propertyid).catch((propertyError) => {
+                console.warn('Could not resolve agreement property:', propertyError?.message || propertyError);
+                return null;
+              })
+            : null);
+
+          return {
+            ...agreement,
+            property: resolvedProperty,
+            rentee: appUserData
+          };
         }));
 
         setAgreements(mappedAgreements);
