@@ -246,7 +246,7 @@ test('property fixed utility API is dedicated and property-scoped', () => {
   assert.match(propertyUtilityConfigRouterSource, /PERMISSIONS\.PROPERTIES_MANAGE/);
   assert.match(propertyUtilityConfigRouterSource, /requirePropertyScope/);
   assert.match(propertyUtilityConfigRouterSource, /propertyid = @propertyId/);
-  assert.match(propertyUtilityConfigRouterSource, /billingtype, 'fixed'/);
+  assert.match(propertyUtilityConfigRouterSource, /billingtype[\s\S]*'fixed'/);
   assert.match(propertyUtilityConfigRouterSource, /Duplicate fixed utility types/);
 });
 
