@@ -32,6 +32,7 @@ import { ensureEviaSignatureAnchors, populateMergeFields } from '../utils/docume
 import { toDatabaseFormat } from '../utils/dataUtils';
 import { fetchAppUser, updateAppUser } from './appUserService';
 import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
+import { uploadTenantFile } from './storageApiService';
 
 const isSchemaUnavailableError = (error) => {
   const message = String(error?.message || error || '').toLowerCase();
@@ -1075,29 +1076,19 @@ export const handleEviaSignWebhook = async (webhookPayload) => {
         // If completed document is attached, save it
         if (Documents && Documents.length > 0) {
           const signedDoc = Documents[0];
-          // Save the signed document to storage
-          const { data: uploadData, error: uploadError } = await platformClient.storage
-            .from('files')
-            .upload(
-              `agreements/${agreement.id}/signed_agreement.pdf`,
-              Buffer.from(signedDoc.DocumentContent, 'base64'),
-              {
-                contentType: 'application/pdf',
-                upsert: true
-              }
-            );
+          try {
+            const signedPath = `agreements/${agreement.id}/signed_agreement.pdf`;
+            const uploadedDocument = await uploadTenantFile({
+              bucket: 'files',
+              path: signedPath,
+              file: Buffer.from(signedDoc.DocumentContent, 'base64')
+            });
+            const signedDocumentUrl = uploadedDocument?.url;
 
-          if (uploadError) {
+            updateData.signed_document_url = signedDocumentUrl;
+            updateData.pdfurl = signedDocumentUrl; // For backward compatibility
+          } catch (uploadError) {
             console.error('Error uploading signed document:', uploadError);
-          } else {
-            // Get the public URL
-            const scopedFilePath = uploadData?.scopedPath || uploadData?.path || `agreements/${agreement.id}/signed_agreement.pdf`;
-            const { data: { publicUrl } } = platformClient.storage
-              .from('files')
-              .getPublicUrl(scopedFilePath);
-
-            updateData.signed_document_url = publicUrl;
-            updateData.pdfurl = publicUrl; // For backward compatibility
           }
         }
         break;
