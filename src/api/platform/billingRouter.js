@@ -142,13 +142,20 @@ const recalculateDraftInvoice = async (transaction, tenantId, invoiceId) => {
     { tenantId, invoiceId }
   );
   const totalAmount = Math.round(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0) * 100) / 100;
+  const legacyKeyByType = {
+    rent: 'rent',
+    electricity: 'electricity',
+    water: 'water',
+    arrears: 'pastDues',
+    tax: 'taxes',
+    adjustment: 'adjustments',
+    other: 'other',
+    utility: 'other'
+  };
   const legacyComponents = rows.reduce((components, row) => {
     const type = String(row.component_type || '').toLowerCase();
-    if (Object.prototype.hasOwnProperty.call(components, type)) {
-      components[type] += Number(row.amount || 0);
-    } else {
-      components.other += Number(row.amount || 0);
-    }
+    const legacyKey = legacyKeyByType[type] || 'other';
+    components[legacyKey] += Number(row.amount || 0);
     return components;
   }, { rent: 0, electricity: 0, water: 0, pastDues: 0, taxes: 0, adjustments: 0, other: 0 });
 
