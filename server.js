@@ -403,7 +403,7 @@ async function createServer() {
   app.use(
     '/storage/:bucket',
     (req, res, next) => {
-      const parts = String(req.path || '').replace(/^\\/+|\\/+$/g, '').split('/').filter(Boolean);
+      const parts = String(req.path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
       const tenantIdFromPath = parts[0] === 'tenants' ? parts[1] : null;
       if (!tenantIdFromPath) {
         res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
