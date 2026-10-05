@@ -8,7 +8,8 @@ import {
   calculateVerifiedPaymentTotal,
   calculateOutstandingBalance,
   getInvoiceStatusAfterVerification,
-  canSubmitPaymentProof
+  canSubmitPaymentProof,
+  resolveAgreementMonthlyRent
 } from '../src/api/platform/billingLifecycle.js';
 import {
   guardBillingMssqlCompatibility,
@@ -45,6 +46,33 @@ const createMockResponse = () => {
   };
   return response;
 };
+
+test('contractual rent falls back to agreement terms when persisted rentamount is missing', () => {
+  assert.equal(resolveAgreementMonthlyRent({
+    rentamount: null,
+    terms: { monthlyRent: 20000 }
+  }), 20000);
+
+  assert.equal(resolveAgreementMonthlyRent({
+    rentamount: null,
+    terms: JSON.stringify({ monthlyRent: '20000.50' })
+  }), 20000.5);
+});
+
+test('persisted agreement rentamount remains authoritative when present', () => {
+  assert.equal(resolveAgreementMonthlyRent({
+    rentamount: 18500,
+    terms: { monthlyRent: 20000 }
+  }), 18500);
+});
+
+test('billing does not derive contractual rent from unrelated property pricing', () => {
+  assert.equal(resolveAgreementMonthlyRent({
+    rentamount: null,
+    terms: {},
+    property: { rentalvalues: { rent: 25000 } }
+  }), 0);
+});
 
 test('billing period must overlap the agreement term', () => {
   const periodStart = '2026-09-01T00:00:00.000Z';

@@ -3,7 +3,7 @@ import { getMssqlPool, sql } from '../mssql/pool.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole } from './permissionEngine.js';
-import { agreementOverlapsBillingPeriod } from './billingLifecycle.js';
+import { agreementOverlapsBillingPeriod, resolveAgreementMonthlyRent } from './billingLifecycle.js';
 import {
   attachBillingAdjustmentsToInvoice,
   loadApprovedBillingAdjustments
@@ -90,7 +90,7 @@ export const createMonthlyBillingRouter = () => {
         propertyId: requestedPropertyId
       });
       const agreementResult = await agreementRequest.query(
-        `SELECT a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount,
+        `SELECT a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount, a.terms,
                 a.startdate, a.enddate, p.name AS property_name
          FROM agreements a
          INNER JOIN properties p ON p.id = a.propertyid AND p.tenant_id = a.tenant_id
@@ -182,7 +182,7 @@ export const createMonthlyBillingRouter = () => {
               other: 0
             };
 
-            const rentAmount = toMoney(agreement.rentamount);
+            const rentAmount = toMoney(resolveAgreementMonthlyRent(agreement));
             if (rentAmount > 0) {
               legacyComponents.rent = rentAmount;
               componentRows.push({
