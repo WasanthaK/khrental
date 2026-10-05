@@ -1,6 +1,7 @@
 import express from 'express';
 import { getMssqlConfigStatus, isMssqlConfigured } from './config.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
+import { isTenantRole } from '../platform/permissionEngine.js';
 import {
   createAppUser,
   createAgreement,
@@ -498,13 +499,20 @@ export const createMssqlRouter = () => {
       ...getPagination(req)
     });
 
-    res.json({ data: invoices });
+    const visibleInvoices = isTenantRole({ user: req.user, membership: req.membership })
+      ? invoices.filter((invoice) => String(invoice.status || '').toLowerCase() !== 'draft')
+      : invoices;
+
+    res.json({ data: visibleInvoices });
   }));
 
   router.get('/invoices/:id', asyncHandler(async (req, res) => {
     const invoice = await getInvoiceById(req.params.id, req.tenantId);
 
-    if (!invoice) {
+    if (!invoice || (
+      isTenantRole({ user: req.user, membership: req.membership })
+      && String(invoice.status || '').toLowerCase() === 'draft'
+    )) {
       res.status(404).json({ error: 'Invoice not found.' });
       return;
     }
