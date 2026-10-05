@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-10-02  
-**Last verified behavior-changing application baseline:** `2b0d77dda30761a032b289282050191eacf8246e`  
+**Status date:** 2026-10-05  
+**Last verified behavior-changing application baseline:** `c66ff3d51684645e6e482291a025fa47aecef2c9`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -70,7 +70,7 @@
 - [x] P0.3 physical acceptance completed with the documented US-INV-08 exact-log-correlation waiver; the waived observability item remains explicitly not claimed as PASS.
 - [x] Damaged production test account `+99` physically verified as **Setup Incomplete / Account Recovery Required** after PR #125.
 - [x] Password-reset flow passed a fresh end-to-end production regression from a logged-out/private browser on 2026-09-26.
-- [ ] Agreement signature placement/lifecycle needs focused review against the business requirement; the previously working marker/AutoStamp behavior must be compared with the current Evia path.
+- [x] Agreement generation/signing lifecycle is production-accepted through PRs #153, #156-#160: secure agreement-bound callbacks, partial-signature progress, completed signed-document recovery/retention, and signed-document viewing were physically verified on 2026-10-05.
 - [ ] Remaining compatibility-client usage has not yet been migrated domain-by-domain.
 
 ---
@@ -221,7 +221,7 @@ Exit criteria:
 
 ---
 
-## Phase 2 - Agreement generation and digital signing
+## Phase 2 - Agreement generation and digital signing — **COMPLETE**
 
 **Goal:** Satisfy the business requirement: generate the agreement, place landlord/tenant signatures correctly, retain the signed document, and advance agreement lifecycle state.
 
@@ -234,6 +234,17 @@ Work in this order:
 5. Add an automated regression fixture around signature marker/location handling where feasible.
 
 Exit criteria: both signatures consistently appear in the intended agreement locations and the fully signed document is retained and linked to the agreement lifecycle.
+
+Production acceptance:
+- [x] Secure agreement-bound Evia callback path restored and verified.
+- [x] Individual signer completion is persisted and the progress counter reflects completed signers.
+- [x] Fully signed agreement transitions to the completed/signed lifecycle state.
+- [x] Completed signed PDF is recoverable and retained in KH Rentals tenant-scoped storage.
+- [x] Production browser physically opened the retained signed document after PR #160 on 2026-10-05.
+- [x] Deployment run `37280211507` served exact SHA `c66ff3d51684645e6e482291a025fa47aecef2c9` from Ready revision `khrental-app--0000161`; MSSQL health returned ready.
+- [x] Evia webhook and Evia V2 integration workflows were green on the same merge SHA.
+
+Result: **COMPLETE — Phase 2 exit criteria satisfied.**
 
 ---
 
@@ -299,28 +310,27 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 1 - Tenant/rentee workflow integrity
-Problem/evidence: Phase 0 was stable, but renter business-flow persistence and lifecycle behavior still required production acceptance. Physical testing then exposed two presentation/business defects: ID image not rendered inline and duplicate same-organization renter creation overwriting the existing renter profile.
-Scope: Verify create/edit/list/attach/invite/resend/deactivate/reactivate behavior; structured property/unit persistence; role boundaries; canonical renter details; and add regression coverage for discovered defects.
-PRs: #145 displayed image ID copies inline; #146 rejected duplicate same-organization renter creation before profile mutation.
-CI/deploy result: PR #146 normal verify and the dedicated SQL Server renter-workflow proof both passed. Production deployment run 36988056380 completed successfully.
-Production proof SHA: af80202afdd91507015c30ceabc0c57bb40e7f00.
-Runtime proof: Ready revision khrental-app--0000147 served the exact SHA; /api/mssql/health returned ready. Physical acceptance passed create/property-unit display, edit/save/hard-reload, and deactivate/inactive/reactivate persistence. The final duplicate-renter browser repetition after #146 was explicitly waived by the operator; the same scenario is covered by the green real SQL Server regression and is not claimed as a physical PASS.
-Result: COMPLETE — Phase 1 exit criteria satisfied with the documented operator waiver.
-Next item: Phase 2 - Agreement generation and digital signing.
+Active item: Phase 2 - Agreement generation and digital signing
+Problem/evidence: Production signing needed to satisfy the business flow end-to-end: correct signer placement/lifecycle, authenticated callbacks, reliable partial-signature progress, durable retention of the fully signed agreement, and viewing the signed artifact rather than the original unsigned document.
+Scope: Preserve the evidence-backed Evia signing path; secure agreement-bound callbacks; persist signer progress; retrieve/retain completed signed documents in tenant-scoped KH Rentals storage; and keep agreement lifecycle state authoritative and retry-safe.
+PRs: #153 restored secure Evia V2 completion callbacks; #156 corrected the agreement send flow to use an agreement-bound callback; #157 fixed partial-signature progress counting; #158 added completed-document retention/reconciliation; #159 corrected the integration exchange URL; #160 switched recovery to the proven Evia OAuth session and retained webhook-attached completed documents.
+CI/deploy result: Evia webhook and Evia V2 integration workflows passed on merge SHA c66ff3d51684645e6e482291a025fa47aecef2c9. Production deployment run 37280211507 completed successfully.
+Production proof SHA: c66ff3d51684645e6e482291a025fa47aecef2c9.
+Runtime proof: Ready revision khrental-app--0000161 served the exact SHA; /api/mssql/health returned ready; public build fingerprint matched exactly. Production browser verification on 2026-10-05 confirmed the completed signed agreement can be opened from KH Rentals after reconciliation.
+Result: COMPLETE — Phase 2 exit criteria satisfied.
+Next item: Phase 3 - Document/storage domain cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 2 - Agreement generation and digital signing
-Problem/evidence: Phase 1 renter workflow acceptance is complete. Production physical acceptance passed create/list, property-unit assignment, edit/save/hard-reload persistence, deactivate/inactive-directory/reactivate persistence, and renter ID image display after PR #145. Physical acceptance exposed a duplicate same-organization renter create that overwrote the existing renter profile; PR #146 corrected this by rejecting same-organization duplicate renter creation before any shared-profile mutation.
-Scope: Reproduce the current agreement signature-placement failure with a real generated agreement; compare the current Evia implementation to the previously working marker/AutoStamp behavior; choose the supported placement mechanism from evidence; then verify signing callbacks, signed-document retention and lifecycle transitions.
-Out of scope: Phase 3 document/storage cleanup; repo-wide compatibility-client refactoring; unrelated UI cleanup; deferred Azure email-log observability.
-Phase 1 production proof: PR #146 merged as `af80202afdd91507015c30ceabc0c57bb40e7f00`; deployment run `36988056380` served that exact SHA from Ready revision `khrental-app--0000147`; `/api/mssql/health` returned ready. Real SQL Server renter workflow run `36988056315` passed the duplicate-create no-mutation regression and the broader create/edit/reconnect/deactivate-reactivate/role-conflict suite.
-Phase 1 operator note: the final post-#146 duplicate-renter browser retest was not rerun. The operator explicitly chose to proceed on 2026-10-02 with the deployed exact-SHA proof plus the disposable SQL Server regression, so that one browser repetition is waived rather than claimed as a physical PASS.
-Result: ACTIVE — Phase 2 is the sole active work item.
-Next item: inspect the current agreement generation/Evia signing code and reproduce the signature-placement failure before changing implementation.
+Active item: Phase 3 - Document/storage domain cleanup
+Problem/evidence: Phase 2 signing is production-accepted on SHA c66ff3d51684645e6e482291a025fa47aecef2c9. The remaining task is to remove agreement/document storage dependence on the compatibility storage client without changing the now-proven signing behavior. Historical draft PR #110 targets this domain but is based on a substantially older branch and is reference material only, not a merge candidate.
+Scope: Review current DocumentService and agreement document storage on main; identify remaining platformClient.storage calls in this domain; route only those operations through explicit KH Rentals tenant-scoped storage APIs; preserve R2 paths, authenticated delivery and cross-tenant protections; add contract-preserving regression tests.
+Out of scope: Evia signing protocol changes; signed-document lifecycle changes; repo-wide platformClient removal; unrelated storage domains; UI cleanup.
+Phase 2 production proof: PR #160 merged as `c66ff3d51684645e6e482291a025fa47aecef2c9`; deployment run `37280211507` served that exact SHA from Ready revision `khrental-app--0000161`; `/api/mssql/health` returned ready and the production browser opened the retained signed agreement successfully.
+Result: ACTIVE — Phase 3 is the sole active work item.
+Next item: inspect current DocumentService, storageApiService, storage delivery authorization and agreementService on the proven baseline before making a bounded storage-only change.
 ```
 ---
 

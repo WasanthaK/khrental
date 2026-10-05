@@ -125,6 +125,20 @@ export const uploadTenantFile = async ({ bucket, path, file }) => {
   };
 };
 
+export const downloadTenantFile = async ({ bucket, path }) => {
+  if (!bucket || !path) {
+    throw new Error('Bucket and path are required for download.');
+  }
+
+  const response = await fetch(buildStorageUrl(bucket, path), {
+    method: 'GET',
+    headers: buildRequestContextHeaders()
+  });
+
+  if (!response.ok) throw await readError(response);
+  return response.blob();
+};
+
 export const deleteTenantFiles = async ({ bucket, paths }) => {
   const normalizedPaths = (Array.isArray(paths) ? paths : [])
     .map((path) => normalizePath(path))
