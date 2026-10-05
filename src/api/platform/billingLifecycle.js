@@ -6,6 +6,7 @@ export const PAYMENT_STATUS = Object.freeze({
 });
 
 export const INVOICE_STATUS = Object.freeze({
+  DRAFT: 'draft',
   PENDING: 'pending',
   VERIFICATION_PENDING: 'verification_pending',
   PAID: 'paid',
@@ -96,5 +97,5 @@ export const getInvoiceStatusAfterVerification = ({ invoiceAmount, payments = []
 export const canSubmitPaymentProof = ({ invoiceStatus, outstandingBalance, hasPendingPayment }) => {
   if (hasPendingPayment) return false;
   if (toAmount(outstandingBalance) <= 0) return false;
-  return ![INVOICE_STATUS.PAID].includes(String(invoiceStatus || '').toLowerCase());
+  return ![INVOICE_STATUS.DRAFT, INVOICE_STATUS.PAID].includes(String(invoiceStatus || '').toLowerCase());
 };
