@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   retrieveAndStoreEviaCompletedDocuments,
   sanitizeCompletedDocumentName,
+  storeEviaWebhookCompletedDocuments,
   validateEviaDownloadUrl
 } from '../src/api/evia/completedDocuments.js';
 
@@ -103,6 +104,82 @@ test('retrieves completed signed agreement and audit trail into tenant-scoped st
     result.auditTrailUrl,
     '/storage/documents/tenants/tenant-abc/agreements/agreement-xyz/signed/audit_trail.pdf'
   );
+});
+
+test('uses a supplied Evia OAuth token without API-key exchange', async () => {
+  const calls = [];
+  const signedDownloadUrl = 'https://evia.enadocapp.com/_apis/sign/api/v2/documents/oauth-token/download';
+  const fetchImpl = async (url, options = {}) => {
+    const target = String(url);
+    calls.push({ target, options });
+
+    assert.equal(target.endsWith('/oauth/exchange'), false);
+
+    if (target.includes('/requests/request-oauth/documents')) {
+      assert.equal(options.headers.Authorization, 'Bearer existing-oauth-token');
+      return jsonResponse([{ documentName: 'signed.pdf', downloadUrl: signedDownloadUrl }]);
+    }
+
+    if (target === signedDownloadUrl) {
+      assert.equal(options.headers.Authorization, 'Bearer existing-oauth-token');
+      return binaryResponse('signed-pdf');
+    }
+
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  };
+
+  const uploads = [];
+  const storageDriver = {
+    upload: async (bucket, relativePath, body) => {
+      uploads.push({ bucket, relativePath, body: Buffer.from(body) });
+      return { path: relativePath };
+    }
+  };
+
+  const result = await retrieveAndStoreEviaCompletedDocuments({
+    requestId: 'request-oauth',
+    tenantId: 'tenant-abc',
+    agreementId: 'agreement-xyz',
+    accessToken: 'existing-oauth-token',
+    fetchImpl,
+    storageDriver
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(uploads.length, 1);
+  assert.match(result.signedDocumentUrl, /signed\.pdf$/);
+});
+
+test('stores completed documents attached to a verified webhook', async () => {
+  const uploads = [];
+  const storageDriver = {
+    upload: async (bucket, relativePath, body, contentType) => {
+      uploads.push({ bucket, relativePath, body: Buffer.from(body), contentType });
+      return { path: relativePath };
+    }
+  };
+
+  const result = await storeEviaWebhookCompletedDocuments({
+    tenantId: 'tenant-abc',
+    agreementId: 'agreement-xyz',
+    documents: [
+      {
+        DocumentName: 'Rental Agreement.pdf',
+        DocumentContent: Buffer.from('signed-pdf').toString('base64')
+      },
+      {
+        DocumentName: 'audit_trail.pdf',
+        DocumentContent: Buffer.from('audit-pdf').toString('base64')
+      }
+    ],
+    storageDriver
+  });
+
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0].body.toString(), 'signed-pdf');
+  assert.equal(uploads[1].body.toString(), 'audit-pdf');
+  assert.match(result.signedDocumentUrl, /Rental_Agreement\.pdf$/);
+  assert.match(result.auditTrailUrl, /audit_trail\.pdf$/);
 });
 
 test('refreshes the short-lived Evia token once after a 401', async () => {
