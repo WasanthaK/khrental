@@ -94,6 +94,7 @@ const getActiveEviaAccessToken = async () => {
 export async function reconcileEviaSignedDocument(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required to retrieve the signed document.');
 
+  const accessToken = await getActiveEviaAccessToken();
   const response = await fetch(
     `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/signed-document`,
     {
@@ -102,7 +103,7 @@ export async function reconcileEviaSignedDocument(agreementId) {
         'Content-Type': 'application/json',
         Accept: 'application/json'
       }),
-      body: '{}'
+      body: JSON.stringify({ accessToken })
     }
   );
 
