@@ -46,12 +46,15 @@ test('signature progress counter prefers recorded completed signers over pending
 
 test('completed agreement view reconciles and opens retained signed document instead of unsigned original', () => {
   const cardSource = fs.readFileSync(new URL('../src/components/agreements/AgreementSummaryCard.jsx', import.meta.url), 'utf8');
+  const actionsSource = fs.readFileSync(new URL('../src/components/agreements/AgreementActions.jsx', import.meta.url), 'utf8');
   const serviceSource = fs.readFileSync(new URL('../src/services/eviaSignService.js', import.meta.url), 'utf8');
   const serverSource = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 
   assert.match(cardSource, /reconcileEviaSignedDocument/);
   assert.match(cardSource, /const documentUrlToView = isSignatureComplete[\s\S]*\? signedDocumentUrl[\s\S]*: \(signedDocumentUrl \|\| agreement\.pdfurl \|\| agreement\.documenturl\)/);
   assert.match(cardSource, /await reconcileEviaSignedDocument\(agreement\.id\)/);
+  assert.match(actionsSource, /const viewDocumentUrl = isSignatureComplete \? retainedSignedDocumentUrl : agreement\.documenturl/);
+  assert.doesNotMatch(actionsSource, /window\.open\(agreement\.documenturl/);
   assert.match(serviceSource, /\/api\/evia\/agreements\/\$\{encodeURIComponent\(agreementId\)\}\/signed-document/);
   assert.match(serverSource, /app\.post\('\/api\/evia\/agreements\/:agreementId\/signed-document'/);
   assert.match(serverSource, /PERMISSIONS\.AGREEMENTS_MANAGE/);
