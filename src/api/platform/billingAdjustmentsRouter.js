@@ -3,7 +3,7 @@ import { getMssqlPool, sql } from '../mssql/pool.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole } from './permissionEngine.js';
-import { agreementOverlapsBillingPeriod } from './billingLifecycle.js';
+import { agreementOverlapsBillingPeriod, resolveAgreementMonthlyRent } from './billingLifecycle.js';
 import {
   isBillingAdjustmentAmountAllowed,
   isBillingAdjustmentTypeAllowed,
@@ -77,7 +77,7 @@ const hasAdjustmentSchema = async (executor) => {
 
 const loadAgreement = async (pool, tenantId, agreementId) => runSingle(
   pool,
-  `SELECT TOP 1 a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount,
+  `SELECT TOP 1 a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount, a.terms,
           a.startdate, a.enddate, a.status,
           p.name AS property_name, au.name AS rentee_name
    FROM agreements a
@@ -147,7 +147,7 @@ export const createBillingAdjustmentsRouter = () => {
 
       const agreements = await runQuery(
         pool,
-        `SELECT a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount,
+        `SELECT a.id, a.renteeid, a.propertyid, a.unitid, a.rentamount, a.terms,
                 a.startdate, a.enddate,
                 p.name AS property_name, au.name AS rentee_name,
                 CASE WHEN EXISTS (
@@ -166,12 +166,17 @@ export const createBillingAdjustmentsRouter = () => {
         { tenantId: req.tenantId, propertyId, billingPeriod }
       );
 
-      const tenancies = agreements.filter((agreement) => agreementOverlapsBillingPeriod({
-        agreementStart: agreement.startdate,
-        agreementEnd: agreement.enddate,
-        periodStart: start,
-        periodEnd: end
-      }));
+      const tenancies = agreements
+        .filter((agreement) => agreementOverlapsBillingPeriod({
+          agreementStart: agreement.startdate,
+          agreementEnd: agreement.enddate,
+          periodStart: start,
+          periodEnd: end
+        }))
+        .map((agreement) => ({
+          ...agreement,
+          rentamount: resolveAgreementMonthlyRent(agreement)
+        }));
 
       const schemaAvailable = await hasAdjustmentSchema(pool);
       let adjustments = [];
