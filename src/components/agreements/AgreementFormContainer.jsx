@@ -170,10 +170,17 @@ const AgreementFormContainer = () => {
         throw new Error('Generated agreement document URL is invalid');
       }
 
-      const { sendDocumentForSignature } = await import('../../services/eviaSignService');
-      const webhookUrl = import.meta.env.VITE_EVIA_WEBHOOK_URL || null;
-      if (!webhookUrl) {
-        console.warn('No Evia webhook URL configured. Status updates will require manual refresh.');
+      const {
+        getEviaAgreementCallbackUrl,
+        sendDocumentForSignature
+      } = await import('../../services/eviaSignService');
+
+      let callbackUrl = null;
+      const isProduction = window.location.hostname !== 'localhost'
+        && window.location.hostname !== '127.0.0.1';
+
+      if (isProduction) {
+        callbackUrl = await getEviaAgreementCallbackUrl(agreement.id);
       }
 
       const signatureResult = await sendDocumentForSignature({
@@ -181,8 +188,11 @@ const AgreementFormContainer = () => {
         title: signatureData.title || 'Rental Agreement',
         message: signatureData.message || 'Please sign this rental agreement',
         signatories: signatureData.signatories,
-        webhookUrl,
-        completedDocumentsAttached: true,
+        ...(callbackUrl && {
+          callbackUrl,
+          callbackTypes: [0],
+          completedDocumentsAttached: true
+        }),
         agreementId: agreement.id
       });
 
