@@ -172,6 +172,12 @@ const assertDraftInvoice = (invoice) => {
   }
 };
 
+const assertInvoiceIssued = (invoice) => {
+  if (String(invoice?.status || '').toLowerCase() === 'draft') {
+    throw createRequestError(409, 'Draft invoices must be issued before payment or reminders.', 'INVOICE_NOT_ISSUED');
+  }
+};
+
 const validDraftComponentTypes = new Set(['rent', 'electricity', 'water', 'utility', 'arrears', 'tax', 'adjustment', 'other']);
 
 const makeReceiptNumber = () => {
@@ -857,6 +863,7 @@ export const createBillingRouter = () => {
       requirePaymentManage(req);
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -970,6 +977,7 @@ export const createBillingRouter = () => {
       requireInvoiceManage(req);
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
       if (String(invoice.status).toLowerCase() === 'paid') {
         throw createRequestError(409, 'A reminder is not required for a paid invoice.', 'INVOICE_ALREADY_PAID');
       }
