@@ -177,7 +177,7 @@ export const checkOverdueInvoices = async () => {
     if (error) throw error;
 
     const overdueInvoices = (data || []).filter((invoice) => {
-      if (invoice.status === INVOICE_STATUS.PAID) return false;
+      if ([INVOICE_STATUS.DRAFT, INVOICE_STATUS.PAID].includes(invoice.status)) return false;
       if (!invoice.duedate) return false;
       const dueDate = new Date(invoice.duedate);
       return !Number.isNaN(dueDate.getTime()) && dueDate < today;

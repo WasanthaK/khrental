@@ -5,6 +5,7 @@ import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
+import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billingReminderEmail.js';
 import {
   PAYMENT_STATUS,
   calculateOutstandingBalance,
@@ -99,6 +100,9 @@ const assertInvoiceAccess = (req, invoice, manage = false) => {
     if (String(invoice.renteeid || '') !== String(req.user?.id || '')) {
       throw createRequestError(403, 'This invoice does not belong to the current tenant account.', 'RESOURCE_ACCESS_DENIED');
     }
+    if (String(invoice.status || '').toLowerCase() === 'draft') {
+      throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+    }
     return;
   }
 
@@ -121,6 +125,67 @@ const buildAccountProjection = async (req, invoice) => {
   const outstandingBalance = calculateOutstandingBalance(invoice.totalamount, payments);
   return { invoice, components, payments, receipts, outstandingBalance };
 };
+
+const loadInvoiceComponents = async (tenantId, invoiceId) => runQuery(
+  `SELECT * FROM invoice_components
+   WHERE tenant_id = @tenantId AND invoice_id = @invoiceId
+   ORDER BY createdat, component_type`,
+  { tenantId, invoiceId }
+);
+
+const recalculateDraftInvoice = async (transaction, tenantId, invoiceId) => {
+  const rows = await queryTransaction(
+    transaction,
+    `SELECT component_type, amount
+     FROM invoice_components
+     WHERE tenant_id = @tenantId AND invoice_id = @invoiceId`,
+    { tenantId, invoiceId }
+  );
+  const totalAmount = Math.round(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0) * 100) / 100;
+  const legacyKeyByType = {
+    rent: 'rent',
+    electricity: 'electricity',
+    water: 'water',
+    arrears: 'pastDues',
+    tax: 'taxes',
+    adjustment: 'adjustments',
+    other: 'other',
+    utility: 'other'
+  };
+  const legacyComponents = rows.reduce((components, row) => {
+    const type = String(row.component_type || '').toLowerCase();
+    const legacyKey = legacyKeyByType[type] || 'other';
+    components[legacyKey] += Number(row.amount || 0);
+    return components;
+  }, { rent: 0, electricity: 0, water: 0, pastDues: 0, taxes: 0, adjustments: 0, other: 0 });
+
+  const updated = await singleTransaction(
+    transaction,
+    `UPDATE invoices
+     SET totalamount = @totalAmount,
+         components = @components,
+         updatedat = SYSUTCDATETIME()
+     OUTPUT INSERTED.*
+     WHERE tenant_id = @tenantId AND id = @invoiceId AND status = 'draft'`,
+    { tenantId, invoiceId, totalAmount, components: JSON.stringify(legacyComponents) }
+  );
+
+  return updated;
+};
+
+const assertDraftInvoice = (invoice) => {
+  if (String(invoice?.status || '').toLowerCase() !== 'draft') {
+    throw createRequestError(409, 'Only draft invoices can be edited before issue.', 'INVOICE_NOT_DRAFT');
+  }
+};
+
+const assertInvoiceIssued = (invoice) => {
+  if (String(invoice?.status || '').toLowerCase() === 'draft') {
+    throw createRequestError(409, 'Draft invoices must be issued before payment or reminders.', 'INVOICE_NOT_ISSUED');
+  }
+};
+
+const validDraftComponentTypes = new Set(['rent', 'electricity', 'water', 'utility', 'arrears', 'tax', 'adjustment', 'other']);
 
 const makeReceiptNumber = () => {
   const date = new Date();
@@ -210,6 +275,347 @@ export const createBillingRouter = () => {
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       assertInvoiceAccess(req, invoice, false);
       res.json({ data: await buildAccountProjection(req, invoice), error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/invoices/:invoiceId/draft', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertDraftInvoice(invoice);
+
+      const dueDate = req.body?.dueDate === undefined ? invoice.duedate : req.body?.dueDate;
+      const notes = req.body?.notes === undefined ? invoice.notes : String(req.body?.notes || '').trim() || null;
+
+      const updated = await runSingleQuery(
+        `UPDATE invoices
+         SET duedate = @dueDate,
+             notes = @notes,
+             updatedat = SYSUTCDATETIME()
+         OUTPUT INSERTED.*
+         WHERE tenant_id = @tenantId AND id = @invoiceId AND status = 'draft'`,
+        {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          dueDate: dueDate || null,
+          notes
+        }
+      );
+
+      if (!updated) throw createRequestError(409, 'Invoice changed before the draft could be updated.', 'INVOICE_STATE_CHANGED');
+      res.json({ data: updated, error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/invoices/:invoiceId/draft/components', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertDraftInvoice(invoice);
+
+      const componentType = String(req.body?.componentType || 'other').trim().toLowerCase();
+      const description = String(req.body?.description || '').trim();
+      const amount = Number(req.body?.amount);
+
+      if (!validDraftComponentTypes.has(componentType)) {
+        throw createRequestError(400, 'Invalid invoice component type.', 'INVALID_COMPONENT_TYPE');
+      }
+      if (!description) {
+        throw createRequestError(400, 'A description is required.', 'COMPONENT_DESCRIPTION_REQUIRED');
+      }
+      if (!Number.isFinite(amount) || amount === 0) {
+        throw createRequestError(400, 'Amount must be a non-zero number.', 'INVALID_COMPONENT_AMOUNT');
+      }
+      if (componentType !== 'adjustment' && amount < 0) {
+        throw createRequestError(400, 'Only adjustment lines may be negative.', 'INVALID_COMPONENT_AMOUNT');
+      }
+
+      const pool = await getMssqlPool();
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const lockedInvoice = await singleTransaction(
+          transaction,
+          `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND id = @invoiceId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id }
+        );
+        assertDraftInvoice(lockedInvoice);
+
+        const component = await singleTransaction(
+          transaction,
+          `INSERT INTO invoice_components (
+             tenant_id, invoice_id, component_type, description, amount,
+             source_type, source_id, metadata
+           ) OUTPUT INSERTED.*
+           VALUES (
+             @tenantId, @invoiceId, @componentType, @description, @amount,
+             'manual_draft', NULL, @metadata
+           )`,
+          {
+            tenantId: req.tenantId,
+            invoiceId: invoice.id,
+            componentType,
+            description,
+            amount,
+            metadata: JSON.stringify({ addedBy: req.user.id, source: 'draft_review' })
+          }
+        );
+
+        const updatedInvoice = await recalculateDraftInvoice(transaction, req.tenantId, invoice.id);
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          eventType: 'invoice_draft_component_added',
+          fromStatus: 'draft',
+          toStatus: 'draft',
+          actorUserId: req.user.id,
+          metadata: { componentId: component.id, componentType, amount, description }
+        });
+
+        await transaction.commit();
+        res.status(201).json({ data: { invoice: updatedInvoice, component }, error: null });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/invoices/:invoiceId/draft/components/:componentId', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertDraftInvoice(invoice);
+
+      const pool = await getMssqlPool();
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const component = await singleTransaction(
+          transaction,
+          `SELECT TOP 1 * FROM invoice_components WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id, componentId: req.params.componentId }
+        );
+        if (!component) throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');
+
+        const description = req.body?.description === undefined
+          ? component.description
+          : String(req.body.description || '').trim();
+        const amount = req.body?.amount === undefined ? Number(component.amount) : Number(req.body.amount);
+
+        if (!description) throw createRequestError(400, 'A description is required.', 'COMPONENT_DESCRIPTION_REQUIRED');
+        if (!Number.isFinite(amount) || amount === 0) throw createRequestError(400, 'Amount must be a non-zero number.', 'INVALID_COMPONENT_AMOUNT');
+        if (String(component.component_type).toLowerCase() !== 'adjustment' && amount < 0) {
+          throw createRequestError(400, 'Only adjustment lines may be negative.', 'INVALID_COMPONENT_AMOUNT');
+        }
+
+        const updatedComponent = await singleTransaction(
+          transaction,
+          `UPDATE invoice_components
+           SET description = @description,
+               amount = @amount
+           OUTPUT INSERTED.*
+           WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
+          {
+            tenantId: req.tenantId,
+            invoiceId: invoice.id,
+            componentId: component.id,
+            description,
+            amount
+          }
+        );
+
+        const updatedInvoice = await recalculateDraftInvoice(transaction, req.tenantId, invoice.id);
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          eventType: 'invoice_draft_component_updated',
+          fromStatus: 'draft',
+          toStatus: 'draft',
+          actorUserId: req.user.id,
+          metadata: {
+            componentId: component.id,
+            sourceType: component.source_type || null,
+            previousAmount: Number(component.amount),
+            amount,
+            description
+          }
+        });
+
+        await transaction.commit();
+        res.json({ data: { invoice: updatedInvoice, component: updatedComponent }, error: null });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/invoices/:invoiceId/draft/components/:componentId', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertDraftInvoice(invoice);
+
+      const pool = await getMssqlPool();
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const component = await singleTransaction(
+          transaction,
+          `SELECT TOP 1 * FROM invoice_components WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id, componentId: req.params.componentId }
+        );
+        if (!component) throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');
+
+        if (String(component.source_type || '').toLowerCase() === 'utility_reading' && component.source_id) {
+          await queryTransaction(
+            transaction,
+            `UPDATE utility_readings
+             SET invoice_id = NULL,
+                 billing_status = 'pending_invoice',
+                 invoiced_date = NULL,
+                 updatedat = SYSUTCDATETIME()
+             WHERE tenant_id = @tenantId AND id = @sourceId AND invoice_id = @invoiceId`,
+            { tenantId: req.tenantId, sourceId: component.source_id, invoiceId: invoice.id }
+          );
+        }
+
+        if (String(component.source_type || '').toLowerCase() === 'tenancy_billing_adjustment' && component.source_id) {
+          await queryTransaction(
+            transaction,
+            `UPDATE tenancy_billing_adjustments
+             SET invoice_id = NULL
+             WHERE tenant_id = @tenantId AND id = @sourceId AND invoice_id = @invoiceId`,
+            { tenantId: req.tenantId, sourceId: component.source_id, invoiceId: invoice.id }
+          );
+        }
+
+        await queryTransaction(
+          transaction,
+          `DELETE FROM invoice_components
+           WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id, componentId: component.id }
+        );
+
+        const updatedInvoice = await recalculateDraftInvoice(transaction, req.tenantId, invoice.id);
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          eventType: 'invoice_draft_component_removed',
+          fromStatus: 'draft',
+          toStatus: 'draft',
+          actorUserId: req.user.id,
+          metadata: {
+            componentId: component.id,
+            sourceType: component.source_type || null,
+            sourceId: component.source_id || null,
+            amount: Number(component.amount)
+          }
+        });
+
+        await transaction.commit();
+        res.json({ data: { invoice: updatedInvoice, removedComponentId: component.id }, error: null });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/invoices/:invoiceId/issue', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertDraftInvoice(invoice);
+
+      const components = await loadInvoiceComponents(req.tenantId, invoice.id);
+      const totalAmount = Math.round(components.reduce((sum, component) => sum + Number(component.amount || 0), 0) * 100) / 100;
+      if (!components.length || totalAmount <= 0) {
+        throw createRequestError(409, 'A draft invoice must contain a positive billable total before issue.', 'EMPTY_DRAFT_INVOICE');
+      }
+      if (!invoice.rentee_email) {
+        throw createRequestError(409, 'The tenant email is required before an invoice can be issued.', 'INVOICE_RECIPIENT_EMAIL_REQUIRED');
+      }
+
+      const portalUrl = getBillingReminderPortalUrl();
+      const subject = `KH Rentals invoice for ${invoice.billingperiod || 'your tenancy'}`;
+      const text = [
+        `Your KH Rentals invoice for ${invoice.billingperiod || 'the current billing period'} is ready.`,
+        `Amount due: ${totalAmount.toFixed(2)}.`,
+        invoice.duedate ? `Due date: ${new Date(invoice.duedate).toLocaleDateString('en-GB')}.` : null,
+        portalUrl ? `View your invoice: ${portalUrl}` : null
+      ].filter(Boolean).join('\n');
+
+      await sendBillingReminderEmail({
+        to: invoice.rentee_email,
+        subject,
+        text,
+        html: portalUrl
+          ? `<p>Your KH Rentals invoice for <strong>${invoice.billingperiod || 'the current billing period'}</strong> is ready.</p><p>Amount due: <strong>${totalAmount.toFixed(2)}</strong>.</p><p><a href="${portalUrl}">View your invoice</a></p>`
+          : undefined
+      });
+
+      const pool = await getMssqlPool();
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const lockedInvoice = await singleTransaction(
+          transaction,
+          `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
+           WHERE tenant_id = @tenantId AND id = @invoiceId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id }
+        );
+        assertDraftInvoice(lockedInvoice);
+
+        const issued = await singleTransaction(
+          transaction,
+          `UPDATE invoices
+           SET status = 'pending',
+               totalamount = @totalAmount,
+               issued_at = SYSUTCDATETIME(),
+               issued_by = @issuedBy,
+               updatedat = SYSUTCDATETIME()
+           OUTPUT INSERTED.*
+           WHERE tenant_id = @tenantId AND id = @invoiceId AND status = 'draft'`,
+          { tenantId: req.tenantId, invoiceId: invoice.id, totalAmount, issuedBy: req.user.id }
+        );
+        if (!issued) throw createRequestError(409, 'Invoice changed before it could be issued.', 'INVOICE_STATE_CHANGED');
+
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          eventType: 'invoice_issued',
+          fromStatus: 'draft',
+          toStatus: 'pending',
+          actorUserId: req.user.id,
+          metadata: { componentCount: components.length, totalAmount, recipient: invoice.rentee_email }
+        });
+
+        await transaction.commit();
+        res.json({ data: { invoice: issued, delivery: { accepted: true, to: invoice.rentee_email } }, error: null });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
     } catch (error) {
       next(error);
     }
@@ -464,6 +870,7 @@ export const createBillingRouter = () => {
       requirePaymentManage(req);
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -577,6 +984,7 @@ export const createBillingRouter = () => {
       requireInvoiceManage(req);
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
       if (String(invoice.status).toLowerCase() === 'paid') {
         throw createRequestError(409, 'A reminder is not required for a paid invoice.', 'INVOICE_ALREADY_PAID');
       }

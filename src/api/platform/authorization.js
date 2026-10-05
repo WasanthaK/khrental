@@ -282,10 +282,13 @@ const authorizeTenantQuery = ({ action, table, filters, payload, user, membershi
       throw createAuthorizationError('Tenant access to this resource is not allowed.', 'RESOURCE_ACCESS_DENIED');
     }
     requirePermission(subject, selectScope.permission);
+    const scopedFilters = selectScope.column ? addOwnerFilter(filters, selectScope.column, userId) : filters;
     return {
       action,
       table,
-      filters: selectScope.column ? addOwnerFilter(filters, selectScope.column, userId) : filters,
+      filters: table === 'invoices'
+        ? [...scopedFilters, { column: 'status', operator: 'neq', value: 'draft' }]
+        : scopedFilters,
       payload,
       resourceScope: selectScope.relation ? { kind: selectScope.relation, userId } : null
     };

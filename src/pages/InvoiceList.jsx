@@ -166,6 +166,7 @@ const InvoiceList = () => {
               onChange={(event) => setFilter(event.target.value)}
             >
               <option value="all">All Statuses</option>
+              <option value={INVOICE_STATUS.DRAFT}>Draft - Review Required</option>
               <option value={INVOICE_STATUS.PENDING}>Pending</option>
               <option value={INVOICE_STATUS.VERIFICATION_PENDING}>Verification Pending</option>
               <option value={INVOICE_STATUS.PAID}>Paid</option>

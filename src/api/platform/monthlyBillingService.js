@@ -239,9 +239,9 @@ export const generateMonthlyInvoicesForTenant = async ({
            ) OUTPUT INSERTED.*
            VALUES (
              @tenantId, @renteeId, @propertyId, @agreementId, @billingPeriod,
-             @components, @totalAmount, 'pending',
+             @components, @totalAmount, 'draft',
              COALESCE(@dueDate, DATEADD(day, 14, SYSUTCDATETIME())),
-             SYSUTCDATETIME(), @issuedBy, @notes
+             NULL, NULL, @notes
            )`,
           {
             tenantId,
@@ -324,7 +324,7 @@ export const generateMonthlyInvoicesForTenant = async ({
           `INSERT INTO billing_lifecycle_events (
              tenant_id, invoice_id, event_type, to_status, actor_user_id, metadata
            ) VALUES (
-             @tenantId, @invoiceId, 'invoice_issued', 'pending', @actorUserId, @metadata
+             @tenantId, @invoiceId, 'invoice_drafted', 'draft', @actorUserId, @metadata
            )`,
           {
             tenantId,
