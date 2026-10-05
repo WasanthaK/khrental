@@ -2,7 +2,7 @@ import { runQuery } from '../mssql/query.js';
 import { generateMonthlyInvoicesForTenant } from './monthlyBillingService.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 60 * 1000;
-const DEFAULT_BILLING_DAY = 1;
+const DEFAULT_BILLING_DAY = 5;
 
 const toPositiveInteger = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -52,8 +52,9 @@ export const runAutomaticMonthlyBilling = async ({
         billingPeriod,
         dueDate: dueDate.toISOString(),
         actorUserId: null,
-        notes: 'Automatically generated monthly tenancy invoice.',
-        source: 'automatic_scheduler'
+        notes: 'Automatically generated monthly tenancy invoice draft.',
+        source: 'automatic_scheduler',
+        automaticRunDate: now
       });
 
       tenantResults.push({
