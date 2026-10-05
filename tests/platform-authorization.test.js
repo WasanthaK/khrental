@@ -36,6 +36,27 @@ test('denies business-table access to an unlinked authenticated account', () => 
   );
 });
 
+test('tenant invoice reads exclude internal draft invoices', () => {
+  const result = authorizePlatformQuery({
+    user: tenant,
+    membership: activeMembership('rentee'),
+    action: 'select',
+    table: 'invoices',
+    filters: []
+  });
+
+  assert.ok(result.filters.some((filter) => (
+    filter.column === 'renteeid'
+    && filter.operator === 'eq'
+    && String(filter.value) === String(tenant.id)
+  )));
+  assert.ok(result.filters.some((filter) => (
+    filter.column === 'status'
+    && filter.operator === 'neq'
+    && filter.value === 'draft'
+  )));
+});
+
 test('adds the current user as an unavoidable tenant ownership filter', () => {
   const result = authorizePlatformQuery({
     user: tenant,
