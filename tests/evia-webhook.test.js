@@ -17,13 +17,31 @@ import {
 test('normalizes Evia V2 request.completed payloads', () => {
   const result = normalizeEviaWebhookPayload({
     event: 'request.completed',
+    deliveryId: 'delivery-123',
     RequestId: 'cdc41fd5-44c0-4000-8000-000000000001',
     Status: 'Completed'
   });
 
   assert.equal(result.requestId, 'cdc41fd5-44c0-4000-8000-000000000001');
+  assert.equal(result.deliveryId, 'delivery-123');
   assert.equal(result.eventType, 'request.completed');
   assert.equal(result.status, 'completed');
+});
+
+test('normalizes documented completed-document webhook fields', () => {
+  const result = normalizeEviaWebhookPayload({
+    deliveryId: 'delivery-456',
+    eventId: 'signing_completed',
+    requestId: 'request-456',
+    timestamp: '2026-09-04T10:00:00Z'
+  });
+
+  assert.equal(result.requestId, 'request-456');
+  assert.equal(result.deliveryId, 'delivery-456');
+  assert.equal(result.eventId, null);
+  assert.equal(result.eventType, 'signing_completed');
+  assert.equal(result.eventTime, '2026-09-04T10:00:00Z');
+  assert.equal(shouldAcknowledgeUnmappedWebhook(result), false);
 });
 
 test('normalizes request.sent recipient and explicit delivery status', () => {

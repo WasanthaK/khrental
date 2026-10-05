@@ -91,6 +91,33 @@ const getActiveEviaAccessToken = async () => {
   return persistEviaAuth(refreshed, storedAuth.userEmail).authToken;
 };
 
+export async function reconcileEviaSignedDocument(agreementId) {
+  if (!agreementId) throw new Error('Agreement ID is required to retrieve the signed document.');
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/signed-document`,
+    {
+      method: 'POST',
+      headers: buildRequestContextHeaders({
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      }),
+      body: '{}'
+    }
+  );
+
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await response.json()
+    : { error: await response.text() };
+
+  if (!response.ok || !data?.signedDocumentUrl) {
+    throw new Error(data?.error || 'Failed to retrieve the completed signed agreement.');
+  }
+
+  return data;
+}
+
 export async function getEviaAgreementCallbackUrl(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required for Evia callback setup.');
   if (typeof window === 'undefined' || !window.location?.origin) {

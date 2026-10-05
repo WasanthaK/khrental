@@ -61,6 +61,14 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
   
   // Track if we should show the send button - only in review status
   const showSendButton = agreement.status === 'review' && agreement.documenturl;
+  const isSignatureComplete = ['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
+    || ['signed', 'completed', 'signing_complete'].includes(String(agreement.signature_status || '').toLowerCase());
+  const retainedSignedDocumentUrl = [
+    agreement.signed_document_url,
+    agreement.signeddocumenturl,
+    agreement.signature_pdf_url
+  ].find((value) => String(value || '').includes('/storage/')) || null;
+  const viewDocumentUrl = isSignatureComplete ? retainedSignedDocumentUrl : agreement.documenturl;
   
   // Track if we should disable the send button
   const disableSendButton = loading || hasSentForSignature || 
@@ -394,8 +402,10 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
   };
 
   const handleViewDocument = () => {
-    if (agreement.documenturl) {
-      window.open(agreement.documenturl, '_blank');
+    if (viewDocumentUrl) {
+      window.open(viewDocumentUrl, '_blank', 'noopener,noreferrer');
+    } else if (isSignatureComplete) {
+      toast.error('Signed document is still being retained. Please try again shortly.');
     } else {
       toast.error('No document available');
     }
@@ -457,7 +467,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
     <div className="flex flex-col space-y-3">
       <div className="flex flex-wrap gap-2 items-center justify-end">
         {/* View Document Button */}
-        {agreement.documenturl && (
+        {viewDocumentUrl && (
           <Button
             size="sm"
             intent="secondary"

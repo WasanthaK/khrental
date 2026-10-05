@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
+import { retrieveAndStoreEviaCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'recalled']);
@@ -215,6 +216,38 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     eventData.request_id
   ) || '').trim();
 
+  const deliveryId = String(firstDefined(
+    root.deliveryId,
+    root.DeliveryId,
+    root.delivery_id,
+    data.deliveryId,
+    data.DeliveryId,
+    data.delivery_id,
+    nestedPayload.deliveryId,
+    nestedPayload.DeliveryId,
+    nestedPayload.delivery_id,
+    eventData.deliveryId,
+    eventData.DeliveryId,
+    eventData.delivery_id
+  ) || '').trim();
+
+  const eventIdValue = firstDefined(
+    root.EventId,
+    root.eventId,
+    root.event_id,
+    data.EventId,
+    data.eventId,
+    data.event_id,
+    nestedPayload.EventId,
+    nestedPayload.eventId,
+    nestedPayload.event_id
+  );
+  const numericEventId = eventIdValue === undefined || eventIdValue === null || eventIdValue === ''
+    ? null
+    : Number(eventIdValue);
+  const eventId = Number.isFinite(numericEventId) ? numericEventId : null;
+  const eventIdText = eventId === null ? String(eventIdValue || '').trim().toLowerCase() : '';
+
   const eventType = String(firstDefined(
     root.event,
     root.Event,
@@ -224,11 +257,9 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     data.event,
     data.eventType,
     nestedPayload.event,
-    nestedPayload.eventType
+    nestedPayload.eventType,
+    eventIdText
   ) || '').trim().toLowerCase();
-
-  const eventIdValue = firstDefined(root.EventId, root.eventId, root.event_id, data.EventId, data.eventId);
-  const eventId = eventIdValue === undefined || eventIdValue === null || eventIdValue === '' ? null : Number(eventIdValue);
   const status = normalizeStatus(firstDefined(
     root.Status,
     root.status,
@@ -246,12 +277,18 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     root.event_time,
     root.CompletedAt,
     root.completedAt,
+    root.timestamp,
+    root.Timestamp,
     data.EventTime,
     data.eventTime,
     data.completedAt,
+    data.timestamp,
+    data.Timestamp,
     nestedPayload.EventTime,
     nestedPayload.eventTime,
-    nestedPayload.completedAt
+    nestedPayload.completedAt,
+    nestedPayload.timestamp,
+    nestedPayload.Timestamp
   ) || null;
 
   const recipientEmail = normalizeEmail(firstDefined(
@@ -307,6 +344,7 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
 
   return {
     requestId,
+    deliveryId,
     eventType,
     eventId: Number.isFinite(eventId) ? eventId : null,
     status,
@@ -367,6 +405,7 @@ const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) =>
       eventId: normalized.eventId,
       status: normalized.status || null,
       requestId: normalized.requestId ? shortId(normalized.requestId) : null,
+      deliveryId: normalized.deliveryId || null,
       recipientPresent: Boolean(normalized.recipientEmail || normalized.recipientName),
       deliveryStatus: normalized.deliveryStatus || null,
       documentCount: normalized.documents.length,
@@ -391,6 +430,38 @@ const markWebhookEventProcessed = async (eventRecordId) => {
         updatedat = SYSUTCDATETIME()
     WHERE id = @eventRecordId
   `, { eventRecordId });
+};
+
+
+const hasProcessedWebhookDelivery = async ({ requestId, deliveryId, currentEventId }) => {
+  if (!requestId || !deliveryId) return false;
+
+  const existing = await runSingleQuery(`
+    SELECT TOP 1 id
+    FROM dbo.webhook_events
+    WHERE request_id = @requestId
+      AND processed = 1
+      AND id <> @currentEventId
+      AND ISJSON(raw_data) = 1
+      AND JSON_VALUE(raw_data, '$.deliveryId') = @deliveryId
+    ORDER BY createdat DESC
+  `, {
+    requestId,
+    deliveryId,
+    currentEventId
+  });
+
+  return Boolean(existing?.id);
+};
+
+const getStoredSignedDocumentUrl = (agreement = {}) => {
+  const candidates = [
+    agreement.signed_document_url,
+    agreement.signeddocumenturl,
+    agreement.signature_pdf_url
+  ].filter(Boolean);
+
+  return candidates.find((value) => String(value).startsWith('/storage/documents/tenants/')) || null;
 };
 
 export const markAllSignatoriesCompleted = (value, completedAt) => {
@@ -522,7 +593,13 @@ export const extractSignedDocumentUrl = (payload = {}) => {
 
 const isCompletionNotification = ({ eventType, eventId, status }) => {
   if (eventId === 3) return true;
-  if (eventType === 'request.completed' || eventType.includes('requestcompleted') || eventType.includes('request completed')) return true;
+  if (
+    eventType === 'request.completed'
+    || eventType === 'signing_completed'
+    || eventType.includes('requestcompleted')
+    || eventType.includes('request completed')
+    || eventType.includes('signing completed')
+  ) return true;
   return COMPLETED_STATUSES.has(status);
 };
 
@@ -725,7 +802,42 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
 
   const completedAt = normalized.eventTime ? new Date(normalized.eventTime) : new Date();
   const safeCompletedAt = Number.isNaN(completedAt.getTime()) ? new Date() : completedAt;
-  const signedDocumentUrl = extractSignedDocumentUrl(payload);
+  let signedDocumentUrl = getStoredSignedDocumentUrl(agreement);
+  let auditTrailStored = false;
+  let duplicateDelivery = false;
+
+  if (finalState.signatureStatus === 'completed') {
+    duplicateDelivery = await hasProcessedWebhookDelivery({
+      requestId: normalized.requestId,
+      deliveryId: normalized.deliveryId,
+      currentEventId: webhookEventId
+    });
+
+    if (!signedDocumentUrl) {
+      const retainedDocuments = await retrieveAndStoreEviaCompletedDocuments({
+        requestId: normalized.requestId,
+        tenantId: agreement.tenant_id,
+        agreementId: agreement.id
+      });
+
+      signedDocumentUrl = retainedDocuments.signedDocumentUrl;
+      auditTrailStored = Boolean(retainedDocuments.auditTrailUrl);
+
+      console.info('[EviaDiag] completed_documents_retained', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(normalized.requestId),
+        deliveryIdPresent: Boolean(normalized.deliveryId),
+        duplicateDelivery,
+        signedDocumentStored: Boolean(signedDocumentUrl),
+        auditTrailStored
+      });
+    }
+  }
+
+  if (!signedDocumentUrl) {
+    signedDocumentUrl = extractSignedDocumentUrl(payload);
+  }
+
   const completedSignatories = finalState.signatureStatus === 'completed'
     ? markAllSignatoriesCompleted(agreement.signatories_status, safeCompletedAt.toISOString())
     : null;
@@ -778,6 +890,9 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     agreementStatus: finalState.agreementStatus,
     signatureStatus: finalState.signatureStatus,
     signedDocumentUrlReceived: Boolean(signedDocumentUrl),
+    signedDocumentStoredLocally: Boolean(getStoredSignedDocumentUrl({ signed_document_url: signedDocumentUrl })),
+    auditTrailStored,
+    duplicateDelivery,
     completedSignatoryCount: completedSignatories?.length || 0
   });
 
