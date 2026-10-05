@@ -19,9 +19,11 @@ BEGIN TRY
           AND name = N'FK_utility_configs_property'
     )
     BEGIN
-        ALTER TABLE dbo.utility_configs
-            ADD CONSTRAINT FK_utility_configs_property
-            FOREIGN KEY (propertyid) REFERENCES dbo.properties(id);
+        EXEC(N'
+            ALTER TABLE dbo.utility_configs
+                ADD CONSTRAINT FK_utility_configs_property
+                FOREIGN KEY (propertyid) REFERENCES dbo.properties(id);
+        ');
     END;
 
     IF NOT EXISTS (
@@ -31,8 +33,10 @@ BEGIN TRY
           AND name = N'IX_utility_configs_propertyid'
     )
     BEGIN
-        CREATE INDEX IX_utility_configs_propertyid
-            ON dbo.utility_configs(propertyid);
+        EXEC(N'
+            CREATE INDEX IX_utility_configs_propertyid
+                ON dbo.utility_configs(propertyid);
+        ');
     END;
 
     IF NOT EXISTS (
@@ -42,9 +46,11 @@ BEGIN TRY
           AND name = N'UX_utility_configs_property_rule'
     )
     BEGIN
-        CREATE UNIQUE INDEX UX_utility_configs_property_rule
-            ON dbo.utility_configs(tenant_id, propertyid, utilitytype, billingtype)
-            WHERE propertyid IS NOT NULL;
+        EXEC(N'
+            CREATE UNIQUE INDEX UX_utility_configs_property_rule
+                ON dbo.utility_configs(tenant_id, propertyid, utilitytype, billingtype)
+                WHERE propertyid IS NOT NULL;
+        ');
     END;
 
     COMMIT TRANSACTION;
