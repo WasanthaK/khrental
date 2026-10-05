@@ -44,6 +44,31 @@ const billingRequest = (path = '', options = {}) => (
   scopedRequest('/api/billing', path, options)
 );
 
+const propertyRequest = (path = '', options = {}) => (
+  scopedRequest('/api/properties', path, options)
+);
+
+export const getPropertyFixedUtilities = async (propertyId) => {
+  try {
+    const payload = await propertyRequest(`/${encodeURIComponent(propertyId)}/fixed-utilities`);
+    return { data: payload?.data || { configs: [] }, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+export const savePropertyFixedUtilities = async (propertyId, configs = []) => {
+  try {
+    const payload = await propertyRequest(`/${encodeURIComponent(propertyId)}/fixed-utilities`, {
+      method: 'PUT',
+      body: { configs }
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const listPropertyAssignments = async ({ staffUserId, propertyId, status } = {}) => {
   try {
     const params = new URLSearchParams();

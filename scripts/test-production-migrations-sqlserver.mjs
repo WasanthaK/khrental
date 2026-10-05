@@ -8,12 +8,17 @@ import sql from 'mssql';
 const SQL_SERVER_IMAGE = process.env.MSSQL_TEST_IMAGE || 'mcr.microsoft.com/mssql/server:2022-latest';
 const MIGRATION_ID = '20260926_01_add_rentee_property_unit_associations';
 const MIGRATION_FILE = `migrations/${MIGRATION_ID}.sql`;
+const PROPERTY_UTILITY_MIGRATION_ID = '20261005_01_add_property_utility_configs';
+const PROPERTY_UTILITY_MIGRATION_FILE = `migrations/${PROPERTY_UTILITY_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
   '20260920_03_backfill_legacy_app_user_memberships'
 ]);
-const INTEGRATION_TESTED_MIGRATION_IDS = new Set([MIGRATION_ID]);
+const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
+  MIGRATION_ID,
+  PROPERTY_UTILITY_MIGRATION_ID
+]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -119,6 +124,13 @@ const main = async () => {
   const migrationSql = fs.readFileSync(path.resolve(MIGRATION_FILE), 'utf8');
   assert.match(migrationSql, /ALTER TABLE dbo\.app_users[\s\S]*ADD associated_properties NVARCHAR\(MAX\)/);
   assert.match(migrationSql, /FOR JSON PATH, INCLUDE_NULL_VALUES/);
+  const propertyUtilityMigrationSql = fs.readFileSync(
+    path.resolve(PROPERTY_UTILITY_MIGRATION_FILE),
+    'utf8'
+  );
+  assert.match(propertyUtilityMigrationSql, /ADD propertyid UNIQUEIDENTIFIER NULL/);
+  assert.match(propertyUtilityMigrationSql, /FK_utility_configs_property/);
+  assert.match(propertyUtilityMigrationSql, /UX_utility_configs_property_rule/);
 
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
@@ -233,6 +245,94 @@ const main = async () => {
     );
 
     console.log(`PASS: ${MIGRATION_ID} executed against SQL Server 2022, preserved canonical association shape, reran idempotently, and recovered partial state.`);
+
+    await testPool.request().batch(`
+      CREATE TABLE dbo.properties (
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_properties_utility_migration_proof PRIMARY KEY
+      );
+
+      CREATE TABLE dbo.utility_configs (
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_utility_configs_migration_proof PRIMARY KEY DEFAULT NEWID(),
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        utilitytype NVARCHAR(100) NOT NULL,
+        billingtype NVARCHAR(100) NULL,
+        rate DECIMAL(18, 4) NULL,
+        fixedamount DECIMAL(18, 2) NULL,
+        createdat DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME(),
+        updatedat DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME()
+      );
+    `);
+
+    await testPool.request().batch(propertyUtilityMigrationSql);
+
+    const utilityMetadata = await testPool.request().query(`
+      SELECT
+        CASE WHEN COL_LENGTH(N'dbo.utility_configs', N'propertyid') IS NOT NULL THEN 1 ELSE 0 END AS column_exists,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM sys.foreign_keys
+          WHERE parent_object_id = OBJECT_ID(N'dbo.utility_configs')
+            AND name = N'FK_utility_configs_property'
+        ) THEN 1 ELSE 0 END AS fk_exists,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM sys.indexes
+          WHERE object_id = OBJECT_ID(N'dbo.utility_configs')
+            AND name = N'IX_utility_configs_propertyid'
+        ) THEN 1 ELSE 0 END AS property_index_exists,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM sys.indexes
+          WHERE object_id = OBJECT_ID(N'dbo.utility_configs')
+            AND name = N'UX_utility_configs_property_rule'
+        ) THEN 1 ELSE 0 END AS unique_index_exists;
+    `);
+    const utilityState = utilityMetadata.recordset[0];
+    assert.equal(Number(utilityState.column_exists), 1, 'utility_configs.propertyid must exist');
+    assert.equal(Number(utilityState.fk_exists), 1, 'utility_configs property FK must exist');
+    assert.equal(Number(utilityState.property_index_exists), 1, 'utility_configs property index must exist');
+    assert.equal(Number(utilityState.unique_index_exists), 1, 'utility_configs property uniqueness rule must exist');
+
+    const propertyId = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+    const tenantId = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
+    await testPool.request().query(`
+      INSERT INTO dbo.properties (id) VALUES ('${propertyId}');
+      INSERT INTO dbo.utility_configs (
+        tenant_id, propertyid, utilitytype, billingtype, fixedamount
+      ) VALUES (
+        '${tenantId}', '${propertyId}', N'water', N'fixed', 800.00
+      );
+    `);
+
+    await assert.rejects(
+      testPool.request().query(`
+        INSERT INTO dbo.utility_configs (
+          tenant_id, propertyid, utilitytype, billingtype, fixedamount
+        ) VALUES (
+          '${tenantId}', '${propertyId}', N'water', N'fixed', 900.00
+        );
+      `)
+    );
+
+    await assert.rejects(
+      testPool.request().query(`
+        INSERT INTO dbo.utility_configs (
+          tenant_id, propertyid, utilitytype, billingtype, fixedamount
+        ) VALUES (
+          '${tenantId}', 'cccccccc-3333-4333-8333-cccccccccccc', N'garbage', N'fixed', 500.00
+        );
+      `)
+    );
+
+    await testPool.request().batch(propertyUtilityMigrationSql);
+    const afterRerun = await testPool.request().query(`
+      SELECT COUNT_BIG(*) AS matching_rows
+      FROM dbo.utility_configs
+      WHERE tenant_id = '${tenantId}'
+        AND propertyid = '${propertyId}'
+        AND utilitytype = N'water'
+        AND billingtype = N'fixed';
+    `);
+    assert.equal(Number(afterRerun.recordset[0].matching_rows), 1);
+
+    console.log(`PASS: ${PROPERTY_UTILITY_MIGRATION_ID} executed against SQL Server 2022, enforced property scope and uniqueness, and reran idempotently.`);
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}

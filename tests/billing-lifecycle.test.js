@@ -82,6 +82,26 @@ const deployWorkflowSource = readFileSync(
   'utf8'
 );
 
+const propertyUtilityConfigRouterSource = readFileSync(
+  new URL('../src/api/platform/propertyUtilityConfigRouter.js', import.meta.url),
+  'utf8'
+);
+
+const propertyFormSource = readFileSync(
+  new URL('../src/pages/PropertyForm.jsx', import.meta.url),
+  'utf8'
+);
+
+const propertyUtilityMigrationSource = readFileSync(
+  new URL('../migrations/20261005_01_add_property_utility_configs.sql', import.meta.url),
+  'utf8'
+);
+
+const productionMigrationRunnerSource = readFileSync(
+  new URL('../scripts/run-production-migrations.mjs', import.meta.url),
+  'utf8'
+);
+
 
 const createMockResponse = () => {
   const response = {
@@ -212,6 +232,42 @@ test('renter agreement UI allows a per-property billing day from 5 through 28', 
 test('production automatic billing earliest check is day five', () => {
   assert.match(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=5/);
   assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=1/);
+});
+
+test('property fixed utility migration adds property scope and uniqueness', () => {
+  assert.match(propertyUtilityMigrationSource, /ADD propertyid UNIQUEIDENTIFIER NULL/);
+  assert.match(propertyUtilityMigrationSource, /FK_utility_configs_property/);
+  assert.match(propertyUtilityMigrationSource, /UX_utility_configs_property_rule/);
+  assert.match(productionMigrationRunnerSource, /20261005_01_add_property_utility_configs/);
+  assert.match(productionMigrationRunnerSource, /inspectPropertyUtilityConfigs/);
+});
+
+test('property fixed utility API is dedicated and property-scoped', () => {
+  assert.match(propertyUtilityConfigRouterSource, /PERMISSIONS\.PROPERTIES_MANAGE/);
+  assert.match(propertyUtilityConfigRouterSource, /requirePropertyScope/);
+  assert.match(propertyUtilityConfigRouterSource, /propertyid = @propertyId/);
+  assert.match(propertyUtilityConfigRouterSource, /billingtype[\s\S]*'fixed'/);
+  assert.match(propertyUtilityConfigRouterSource, /Duplicate fixed utility types/);
+});
+
+test('monthly billing adds only property-scoped fixed utility configs as auditable components', () => {
+  assert.match(monthlyBillingServiceSource, /FROM utility_configs/);
+  assert.match(monthlyBillingServiceSource, /propertyid = @propertyId/);
+  assert.match(monthlyBillingServiceSource, /sourceType: 'utility_config'/);
+  assert.match(monthlyBillingServiceSource, /Fixed \$\{config\.utilitytype \|\| 'utility'\} charge/);
+  assert.match(monthlyBillingServiceSource, /fixedUtilityCount/);
+});
+
+test('ordinary monthly billing survives the migration window before propertyid exists', () => {
+  assert.match(monthlyBillingServiceSource, /error\?\.number !== 207/);
+  assert.match(monthlyBillingServiceSource, /fixedUtilityRows = \[\]/);
+});
+
+test('property form manages recurring fixed utilities only for existing properties', () => {
+  assert.match(propertyFormSource, /Recurring Fixed Utilities/);
+  assert.match(propertyFormSource, /Add fixed utility/);
+  assert.match(propertyFormSource, /savePropertyFixedUtilities/);
+  assert.match(propertyFormSource, /\{isEditMode && \(/);
 });
 
 test('draft invoices are not eligible for payment proof', () => {

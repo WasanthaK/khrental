@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchData, insertData, updateData } from '../services/platformClient';
+import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
 import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import { generateTempId } from '../utils/helpers';
 import { PROPERTY_TYPES } from '../utils/constants';
@@ -61,6 +61,7 @@ const PropertyForm = () => {
   // Form state
   const [formData, setFormData] = useState(initialFormData);
   const [propertyCoordinates, setPropertyCoordinates] = useState(null);
+  const [fixedUtilities, setFixedUtilities] = useState([]);
   
   // UI state
   const [loading, setLoading] = useState(false);
@@ -130,6 +131,17 @@ const PropertyForm = () => {
               water_rate: property.water_rate || '',
             });
 
+            const fixedUtilityResult = await getPropertyFixedUtilities(id);
+            if (fixedUtilityResult.error) {
+              console.warn('Could not load property fixed utilities:', fixedUtilityResult.error.message);
+              setFixedUtilities([]);
+            } else {
+              setFixedUtilities((fixedUtilityResult.data?.configs || []).map((config) => ({
+                utilityType: config.utilitytype || '',
+                fixedAmount: String(config.fixedamount ?? '')
+              })));
+            }
+
             if (property.coordinates && typeof property.coordinates === 'object') {
               setPropertyCoordinates(property.coordinates);
             } else if (typeof property.coordinates === 'string') {
@@ -193,6 +205,20 @@ const PropertyForm = () => {
     }));
   };
   
+  const addFixedUtility = () => {
+    setFixedUtilities((current) => [...current, { utilityType: '', fixedAmount: '' }]);
+  };
+
+  const updateFixedUtility = (index, field, value) => {
+    setFixedUtilities((current) => current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, [field]: value } : item
+    )));
+  };
+
+  const removeFixedUtility = (index) => {
+    setFixedUtilities((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   // Handle status change
   const handleStatusChange = (status) => {
     setFormData(prev => ({
@@ -729,6 +755,20 @@ const PropertyForm = () => {
         return;
       }
 
+      if (id) {
+        const normalizedFixedUtilities = fixedUtilities
+          .map((item) => ({
+            utilityType: String(item.utilityType || '').trim(),
+            fixedAmount: Number(item.fixedAmount)
+          }))
+          .filter((item) => item.utilityType && Number.isFinite(item.fixedAmount) && item.fixedAmount > 0);
+
+        const fixedUtilityResult = await savePropertyFixedUtilities(id, normalizedFixedUtilities);
+        if (fixedUtilityResult.error) {
+          throw fixedUtilityResult.error;
+        }
+      }
+
       toast.success(`Property ${id ? 'updated' : 'created'} successfully!`);
       navigate('/dashboard/properties');
     } catch (err) {
@@ -952,6 +992,64 @@ const PropertyForm = () => {
                 These rates will be used for utility billing calculations.
               </p>
             </div>
+
+            {isEditMode && (
+              <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-md font-medium text-blue-950">Recurring Fixed Utilities</h3>
+                    <p className="mt-1 text-sm text-blue-800">
+                      Add property-specific monthly charges such as fixed water, garbage, or shared services.
+                      They are added to each monthly draft for this property.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addFixedUtility}
+                    className="rounded-md border border-blue-300 bg-white px-3 py-2 text-sm text-blue-700"
+                  >
+                    Add fixed utility
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {fixedUtilities.length === 0 && (
+                    <p className="text-sm text-blue-700">No recurring fixed utilities configured.</p>
+                  )}
+                  {fixedUtilities.map((item, index) => (
+                    <div key={index} className="grid grid-cols-1 gap-3 rounded-md border bg-white p-3 sm:grid-cols-[1fr_180px_auto]">
+                      <FormInput
+                        label="Utility type"
+                        id={`fixed_utility_type_${index}`}
+                        name={`fixed_utility_type_${index}`}
+                        value={item.utilityType}
+                        onChange={(event) => updateFixedUtility(index, 'utilityType', event.target.value)}
+                        placeholder="e.g., water"
+                      />
+                      <FormInput
+                        label="Monthly amount"
+                        id={`fixed_utility_amount_${index}`}
+                        name={`fixed_utility_amount_${index}`}
+                        type="number"
+                        step="0.01"
+                        value={item.fixedAmount}
+                        onChange={(event) => updateFixedUtility(index, 'fixedAmount', event.target.value)}
+                        placeholder="0.00"
+                      />
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => removeFixedUtility(index)}
+                          className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">

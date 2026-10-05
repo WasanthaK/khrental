@@ -390,12 +390,18 @@ BEGIN TRY
             billingtype NVARCHAR(100) NULL,
             rate DECIMAL(18, 4) NULL,
             fixedamount DECIMAL(18, 2) NULL,
+            propertyid UNIQUEIDENTIFIER NULL,
             createdat DATETIMEOFFSET NOT NULL CONSTRAINT DF_utility_configs_createdat DEFAULT SYSUTCDATETIME(),
             updatedat DATETIMEOFFSET NOT NULL CONSTRAINT DF_utility_configs_updatedat DEFAULT SYSUTCDATETIME(),
-            CONSTRAINT FK_utility_configs_tenant FOREIGN KEY (tenant_id) REFERENCES dbo.tenants(id)
+            CONSTRAINT FK_utility_configs_tenant FOREIGN KEY (tenant_id) REFERENCES dbo.tenants(id),
+            CONSTRAINT FK_utility_configs_property FOREIGN KEY (propertyid) REFERENCES dbo.properties(id)
         );
 
         CREATE INDEX IX_utility_configs_tenant_id ON dbo.utility_configs(tenant_id);
+        CREATE INDEX IX_utility_configs_propertyid ON dbo.utility_configs(propertyid);
+        CREATE UNIQUE INDEX UX_utility_configs_property_rule
+            ON dbo.utility_configs(tenant_id, propertyid, utilitytype, billingtype)
+            WHERE propertyid IS NOT NULL;
     END;
 
     IF OBJECT_ID(N'dbo.utility_readings', N'U') IS NULL
