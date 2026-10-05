@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
-import { retrieveAndStoreEviaCompletedDocuments } from './completedDocuments.js';
+import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'recalled']);
@@ -813,9 +813,9 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       currentEventId: webhookEventId
     });
 
-    if (!signedDocumentUrl) {
-      const retainedDocuments = await retrieveAndStoreEviaCompletedDocuments({
-        requestId: normalized.requestId,
+    if (!signedDocumentUrl && normalized.documents.length > 0) {
+      const retainedDocuments = await storeEviaWebhookCompletedDocuments({
+        documents: normalized.documents,
         tenantId: agreement.tenant_id,
         agreementId: agreement.id
       });
@@ -823,14 +823,44 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       signedDocumentUrl = retainedDocuments.signedDocumentUrl;
       auditTrailStored = Boolean(retainedDocuments.auditTrailUrl);
 
-      console.info('[EviaDiag] completed_documents_retained', {
+      console.info('[EviaDiag] completed_documents_retained_from_webhook', {
         agreementId: shortId(agreement.id),
         requestId: shortId(normalized.requestId),
         deliveryIdPresent: Boolean(normalized.deliveryId),
         duplicateDelivery,
         signedDocumentStored: Boolean(signedDocumentUrl),
-        auditTrailStored
+        auditTrailStored,
+        documentCount: retainedDocuments.storedDocuments.length
       });
+    }
+
+    if (!signedDocumentUrl) {
+      try {
+        const retainedDocuments = await retrieveAndStoreEviaCompletedDocuments({
+          requestId: normalized.requestId,
+          tenantId: agreement.tenant_id,
+          agreementId: agreement.id
+        });
+
+        signedDocumentUrl = retainedDocuments.signedDocumentUrl;
+        auditTrailStored = Boolean(retainedDocuments.auditTrailUrl);
+
+        console.info('[EviaDiag] completed_documents_retained_by_retrieval', {
+          agreementId: shortId(agreement.id),
+          requestId: shortId(normalized.requestId),
+          deliveryIdPresent: Boolean(normalized.deliveryId),
+          duplicateDelivery,
+          signedDocumentStored: Boolean(signedDocumentUrl),
+          auditTrailStored
+        });
+      } catch (error) {
+        console.warn('[EviaDiag] completed_document_retrieval_deferred', {
+          agreementId: shortId(agreement.id),
+          requestId: shortId(normalized.requestId),
+          code: error?.code || null,
+          status: Number(error?.status) || null
+        });
+      }
     }
   }
 
