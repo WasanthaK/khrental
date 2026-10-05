@@ -50,6 +50,21 @@ const monthlyBillingSchedulerSource = readFileSync(
   'utf8'
 );
 
+const billingRouterSource = readFileSync(
+  new URL('../src/api/platform/billingRouter.js', import.meta.url),
+  'utf8'
+);
+
+const mssqlRouterSource = readFileSync(
+  new URL('../src/api/mssql/router.js', import.meta.url),
+  'utf8'
+);
+
+const invoiceDraftEditorSource = readFileSync(
+  new URL('../src/components/invoices/InvoiceDraftEditor.jsx', import.meta.url),
+  'utf8'
+);
+
 
 const createMockResponse = () => {
   const response = {
@@ -112,6 +127,53 @@ test('automatic billing records a system source without impersonating a staff us
   assert.match(monthlyBillingSchedulerSource, /actorUserId:\s*null/);
   assert.match(monthlyBillingSchedulerSource, /source:\s*'automatic_scheduler'/);
   assert.match(monthlyBillingServiceSource, /source/);
+});
+
+test('draft invoices are not eligible for payment proof', () => {
+  assert.equal(canSubmitPaymentProof({
+    invoiceStatus: INVOICE_STATUS.DRAFT,
+    outstandingBalance: 1000,
+    hasPendingPayment: false
+  }), false);
+});
+
+test('monthly invoice generation creates an internal draft before issue', () => {
+  assert.match(monthlyBillingServiceSource, /'draft'/);
+  assert.match(monthlyBillingServiceSource, /invoice_drafted/);
+  assert.match(monthlyBillingServiceSource, /NULL, NULL, @notes/);
+});
+
+test('draft invoice lifecycle supports review edits and explicit issue', () => {
+  assert.match(billingRouterSource, /\/draft\/components/);
+  assert.match(billingRouterSource, /invoice_draft_component_added/);
+  assert.match(billingRouterSource, /invoice_draft_component_updated/);
+  assert.match(billingRouterSource, /invoice_draft_component_removed/);
+  assert.match(billingRouterSource, /\/invoices\/:invoiceId\/issue/);
+  assert.match(billingRouterSource, /eventType: 'invoice_issued'/);
+  assert.match(billingRouterSource, /INVOICE_NOT_ISSUED/);
+});
+
+test('removing sourced utility lines from a draft returns them to pending invoice state', () => {
+  assert.match(billingRouterSource, /billing_status = 'pending_invoice'/);
+  assert.match(billingRouterSource, /invoice_id = NULL/);
+  assert.match(billingRouterSource, /source_type.*utility_reading/s);
+});
+
+test('renter-facing MSSQL invoice reads hide draft invoices', () => {
+  assert.match(mssqlRouterSource, /isTenantRole/);
+  assert.match(mssqlRouterSource, /status \|\| ''\)\.toLowerCase\(\) !== 'draft'/);
+  assert.match(mssqlRouterSource, /Invoice not found/);
+});
+
+test('staff invoice UI exposes draft line review before issue', () => {
+  assert.match(invoiceDraftEditorSource, /Add another item or correction/);
+  assert.match(invoiceDraftEditorSource, /Issue & Send Invoice/);
+  assert.match(invoiceDraftEditorSource, /updateInvoiceDraftComponent/);
+  assert.match(invoiceDraftEditorSource, /removeInvoiceDraftComponent/);
+});
+
+test('draft invoices are excluded from overdue processing', () => {
+  assert.match(paymentServiceSource, /INVOICE_STATUS\.DRAFT/);
 });
 
 test('billing period must overlap the agreement term', () => {
