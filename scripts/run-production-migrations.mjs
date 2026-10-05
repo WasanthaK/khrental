@@ -64,6 +64,29 @@ const inspectMembershipBackfill = async (pool) => {
   };
 };
 
+const inspectPropertyUtilityConfigs = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.utility_configs', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN COL_LENGTH(N'dbo.utility_configs', N'propertyid') IS NOT NULL THEN 1 ELSE 0 END AS column_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.foreign_keys
+        WHERE parent_object_id = OBJECT_ID(N'dbo.utility_configs')
+          AND name = N'FK_utility_configs_property'
+      ) THEN 1 ELSE 0 END AS fk_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.utility_configs')
+          AND name = N'UX_utility_configs_property_rule'
+      ) THEN 1 ELSE 0 END AS unique_index_exists;
+  `);
+  const row = result.recordset?.[0] || {};
+  return {
+    satisfied: Boolean(row.table_exists && row.column_exists && row.fk_exists && row.unique_index_exists),
+    detail: `table=${row.table_exists ? 'present' : 'missing'}, column=${row.column_exists ? 'present' : 'missing'}, fk=${row.fk_exists ? 'present' : 'missing'}, unique_index=${row.unique_index_exists ? 'present' : 'missing'}`
+  };
+};
+
 const inspectRenterAssociations = async (pool) => {
   const metadata = await pool.request().query(`
     SELECT
@@ -136,6 +159,15 @@ const MIGRATIONS = [
     verify: async (pool) => assertSatisfied(
       inspectRenterAssociations(pool),
       'Renter property-unit association migration verification failed.'
+    )
+  },
+  {
+    id: '20261005_01_add_property_utility_configs',
+    file: 'migrations/20261005_01_add_property_utility_configs.sql',
+    inspect: inspectPropertyUtilityConfigs,
+    verify: async (pool) => assertSatisfied(
+      inspectPropertyUtilityConfigs(pool),
+      'Property utility-config migration verification failed.'
     )
   }
 ];
