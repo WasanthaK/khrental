@@ -157,6 +157,9 @@ jobs:
                 EMAIL_FROM_NAME="$EMAIL_FROM_NAME" \
                 VITE_USE_MSSQL_API=true \
                 PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
+                AUTO_MONTHLY_BILLING_ENABLED=true \
+                AUTO_MONTHLY_BILLING_DAY=1 \
+                AUTO_MONTHLY_BILLING_DUE_DAYS=14 \
               --output none
 
       - name: Set up Node for R2 validation
