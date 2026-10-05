@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  getAutomaticBillingPeriod,
+  shouldRunAutomaticBilling
+} from '../src/api/platform/monthlyBillingScheduler.js';
+import {
   PAYMENT_STATUS,
   INVOICE_STATUS,
   agreementOverlapsBillingPeriod,
@@ -30,6 +34,22 @@ const paymentServiceSource = readFileSync(
   new URL('../src/services/paymentService.js', import.meta.url),
   'utf8'
 );
+
+const monthlyBillingRouterSource = readFileSync(
+  new URL('../src/api/platform/monthlyBillingRouter.js', import.meta.url),
+  'utf8'
+);
+
+const monthlyBillingServiceSource = readFileSync(
+  new URL('../src/api/platform/monthlyBillingService.js', import.meta.url),
+  'utf8'
+);
+
+const monthlyBillingSchedulerSource = readFileSync(
+  new URL('../src/api/platform/monthlyBillingScheduler.js', import.meta.url),
+  'utf8'
+);
+
 
 const createMockResponse = () => {
   const response = {
@@ -72,6 +92,26 @@ test('billing does not derive contractual rent from unrelated property pricing',
     terms: {},
     property: { rentalvalues: { rent: 25000 } }
   }), 0);
+});
+
+test('automatic billing uses the current UTC month and waits until configured billing day', () => {
+  const now = new Date('2026-10-05T10:00:00.000Z');
+  assert.equal(getAutomaticBillingPeriod(now), '2026-10');
+  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 1 }), true);
+  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 6 }), false);
+});
+
+test('manual and automatic monthly billing share one generator service', () => {
+  assert.match(monthlyBillingRouterSource, /generateMonthlyInvoicesForTenant/);
+  assert.doesNotMatch(monthlyBillingRouterSource, /INSERT INTO invoices/);
+  assert.match(monthlyBillingSchedulerSource, /generateMonthlyInvoicesForTenant/);
+  assert.match(monthlyBillingServiceSource, /UX_invoices|already_exists|WITH \(UPDLOCK, HOLDLOCK\)/);
+});
+
+test('automatic billing records a system source without impersonating a staff user', () => {
+  assert.match(monthlyBillingSchedulerSource, /actorUserId:\s*null/);
+  assert.match(monthlyBillingSchedulerSource, /source:\s*'automatic_scheduler'/);
+  assert.match(monthlyBillingServiceSource, /source/);
 });
 
 test('billing period must overlap the agreement term', () => {
