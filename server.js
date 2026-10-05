@@ -10,6 +10,7 @@ import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssi
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
 import { createBillingRouter } from './src/api/platform/billingRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
+import { startAutomaticMonthlyBillingScheduler } from './src/api/platform/monthlyBillingScheduler.js';
 import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
 import { createTenancyExitRouter } from './src/api/platform/tenancyExitRouter.js';
@@ -454,8 +455,19 @@ async function createServer() {
     console.log('[Server] MSSQL status:', getMssqlConfigStatus());
   });
 
+  const automaticBillingEnabled = isProduction
+    && String(process.env.AUTO_MONTHLY_BILLING_ENABLED || '').toLowerCase() === 'true';
+  const billingScheduler = startAutomaticMonthlyBillingScheduler({
+    enabled: automaticBillingEnabled,
+    billingDay: process.env.AUTO_MONTHLY_BILLING_DAY || 1,
+    dueDays: process.env.AUTO_MONTHLY_BILLING_DUE_DAYS || 14,
+    intervalMs: process.env.AUTO_MONTHLY_BILLING_INTERVAL_MS || (60 * 60 * 1000),
+    startupDelayMs: process.env.AUTO_MONTHLY_BILLING_STARTUP_DELAY_MS || 30_000
+  });
+
   const shutdown = async () => {
     console.log('\n[Server] Shutting down...');
+    billingScheduler.stop();
     server.close();
     await closeMssqlPool().catch((error) => console.error('[Server] Error closing MSSQL pool:', error));
     process.exit(0);
