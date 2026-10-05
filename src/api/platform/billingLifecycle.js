@@ -18,6 +18,27 @@ const toAmount = (value) => {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
 };
 
+const parseAgreementTerms = (terms) => {
+  if (!terms) return {};
+  if (typeof terms === 'object') return terms;
+
+  try {
+    const parsed = JSON.parse(String(terms));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+};
+
+export const resolveAgreementMonthlyRent = (agreement = {}) => {
+  const persistedRent = toAmount(agreement.rentamount);
+  if (persistedRent > 0) return persistedRent;
+
+  const terms = parseAgreementTerms(agreement.terms);
+  const contractualRent = toAmount(terms.monthlyRent ?? terms.monthlyrent);
+  return contractualRent > 0 ? contractualRent : 0;
+};
+
 const toDate = (value) => {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
