@@ -449,6 +449,9 @@ export const createBillingAdjustmentsRouter = () => {
         throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
       }
       requirePropertyScope(req, invoice.propertyid);
+      if (String(invoice.status || '').toLowerCase() === 'draft') {
+        throw createRequestError(409, 'Draft invoices must be issued before reminders are sent.', 'INVOICE_NOT_ISSUED');
+      }
 
       const outstandingBalance = Math.max(
         0,
