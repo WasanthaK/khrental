@@ -67,6 +67,21 @@ const invoiceDraftEditorSource = readFileSync(
   'utf8'
 );
 
+const tenancyOnboardingSource = readFileSync(
+  new URL('../src/api/platform/tenancyOnboardingRouter.js', import.meta.url),
+  'utf8'
+);
+
+const renteeAgreementsSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeAgreements.jsx', import.meta.url),
+  'utf8'
+);
+
+const deployWorkflowSource = readFileSync(
+  new URL('../.github/workflows/deploy-container-apps.yml', import.meta.url),
+  'utf8'
+);
+
 
 const createMockResponse = () => {
   const response = {
@@ -177,6 +192,26 @@ test('monthly billing uses current-month rent and carries approved prior-period 
   assert.doesNotMatch(monthlyBillingServiceSource, /readingdate >= @periodStart/);
   assert.match(monthlyBillingServiceSource, /prior service period/);
   assert.match(monthlyBillingServiceSource, /calculateProratedMonthlyRent/);
+});
+
+test('renter billing day changes are narrowly scoped to own active tenancy', () => {
+  assert.match(tenancyOnboardingSource, /router\.patch\('\/:agreementId\/billing-day'/);
+  assert.match(tenancyOnboardingSource, /ACTIVE_AGREEMENT_NOT_FOUND/);
+  assert.match(tenancyOnboardingSource, /renteeid = @renteeId/);
+  assert.match(tenancyOnboardingSource, /billing_day_changed/);
+  assert.match(tenancyOnboardingSource, /source: 'tenant_portal'/);
+});
+
+test('renter agreement UI allows a per-property billing day from 5 through 28', () => {
+  assert.match(renteeAgreementsSource, /Monthly invoice generation day/);
+  assert.match(renteeAgreementsSource, /Choose day 5–28 for this property/);
+  assert.match(renteeAgreementsSource, /updateMyTenancyBillingDay/);
+  assert.match(renteeAgreementsSource, /Array\.from\(\{ length: 24 \}/);
+});
+
+test('production automatic billing earliest check is day five', () => {
+  assert.match(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=5/);
+  assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=1/);
 });
 
 test('draft invoices are not eligible for payment proof', () => {
