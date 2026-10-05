@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
-import { runSingleQuery } from './src/api/mssql/query.js';
+import { runQuery, runSingleQuery } from './src/api/mssql/query.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
@@ -25,6 +25,7 @@ import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
+import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
 
 dotenv.config();
@@ -207,6 +208,116 @@ async function createServer() {
       res.json({
         callbackToken,
         expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const resolveEviaSignedDocumentContext = createTenantContextMiddleware({
+    requireUser: true,
+    requireTenant: true,
+    auditLabel: 'evia-signed-document',
+    auditUnsafeOnly: false
+  });
+
+  app.post('/api/evia/agreements/:agreementId/signed-document', requireApiSession, resolveEviaSignedDocumentContext, async (req, res, next) => {
+    try {
+      authorizePermission(
+        { user: req.user, membership: req.membership },
+        PERMISSIONS.AGREEMENTS_MANAGE
+      );
+
+      const agreementId = String(req.params?.agreementId || '').trim();
+      if (!agreementId) {
+        res.status(400).json({ error: 'agreementId is required.', code: 'AGREEMENT_ID_REQUIRED' });
+        return;
+      }
+
+      const agreement = await runSingleQuery(
+        `SELECT TOP 1
+           id,
+           tenant_id,
+           status,
+           signature_status,
+           eviasignreference,
+           signed_document_url,
+           signeddocumenturl,
+           signature_pdf_url
+         FROM dbo.agreements
+         WHERE id = @agreementId
+           AND tenant_id = @tenantId`,
+        { agreementId, tenantId: req.tenantId }
+      );
+
+      if (!agreement) {
+        res.status(404).json({ error: 'Agreement not found for the active tenant.', code: 'AGREEMENT_NOT_FOUND' });
+        return;
+      }
+
+      const terminalStatus = ['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
+        || ['signed', 'completed', 'signing_complete'].includes(String(agreement.signature_status || '').toLowerCase());
+
+      if (!terminalStatus) {
+        res.status(409).json({ error: 'The agreement is not fully signed yet.', code: 'AGREEMENT_SIGNATURE_NOT_COMPLETE' });
+        return;
+      }
+
+      const existingSignedDocumentUrl = [
+        agreement.signed_document_url,
+        agreement.signeddocumenturl,
+        agreement.signature_pdf_url
+      ].find((value) => String(value || '').startsWith('/storage/documents/tenants/')) || null;
+
+      if (existingSignedDocumentUrl) {
+        res.json({
+          signedDocumentUrl: existingSignedDocumentUrl,
+          stored: true,
+          reconciled: false
+        });
+        return;
+      }
+
+      const requestId = String(agreement.eviasignreference || '').trim();
+      if (!requestId) {
+        res.status(409).json({ error: 'The agreement has no Evia request reference.', code: 'EVIA_REQUEST_REFERENCE_MISSING' });
+        return;
+      }
+
+      const retained = await retrieveAndStoreEviaCompletedDocuments({
+        requestId,
+        tenantId: agreement.tenant_id,
+        agreementId: agreement.id
+      });
+
+      await runQuery(`
+        UPDATE dbo.agreements
+        SET signed_document_url = @signedDocumentUrl,
+            signeddocumenturl = @signedDocumentUrl,
+            signature_pdf_url = @signedDocumentUrl,
+            updatedat = SYSUTCDATETIME()
+        WHERE id = @agreementId
+          AND tenant_id = @tenantId
+          AND eviasignreference = @requestId
+      `, {
+        signedDocumentUrl: retained.signedDocumentUrl,
+        agreementId: agreement.id,
+        tenantId: agreement.tenant_id,
+        requestId
+      });
+
+      console.info('[EviaDiag] signed_document_reconciled', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(requestId),
+        signedDocumentStored: Boolean(retained.signedDocumentUrl),
+        auditTrailStored: Boolean(retained.auditTrailUrl)
+      });
+
+      res.json({
+        signedDocumentUrl: retained.signedDocumentUrl,
+        auditTrailStored: Boolean(retained.auditTrailUrl),
+        stored: true,
+        reconciled: true
       });
     } catch (error) {
       next(error);
