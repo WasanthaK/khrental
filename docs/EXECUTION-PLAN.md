@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
 **Status date:** 2026-10-05  
-**Last verified behavior-changing application baseline:** `c66ff3d51684645e6e482291a025fa47aecef2c9`  
+**Last verified behavior-changing application baseline:** `6f345bd78a23f67612d17301ca406a86d42cf7e9`  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -248,27 +248,51 @@ Result: **COMPLETE — Phase 2 exit criteria satisfied.**
 
 ---
 
-## Phase 3 - Document/storage domain cleanup
+## Phase 3 - Document/storage domain cleanup — **COMPLETE**
 
 **Goal:** Continue Stage 2 compatibility-client removal without destabilizing signing.
 
-- [ ] Review `DocumentService` / agreement document storage.
-- [ ] Route agreement document storage through explicit KH Rentals storage APIs.
-- [ ] Preserve tenant-scoped R2 paths and cross-tenant protections.
-- [ ] Remove only the compatibility dependency for this domain.
+- [x] Review `DocumentService` / agreement document storage.
+- [x] Route agreement document storage through explicit KH Rentals storage APIs.
+- [x] Preserve tenant-scoped R2 paths and cross-tenant protections.
+- [x] Remove only the compatibility dependency for this domain.
 
 Exit criteria: agreement/document storage no longer depends on the compatibility storage shape and signing behavior remains unchanged.
 
+Production acceptance:
+- [x] PR #161 migrated `DocumentService` agreement/document upload/list/download and the legacy agreement attached-signed-document write to explicit tenant-scoped storage APIs.
+- [x] PR #161 bound direct `/storage/:bucket/...` delivery to the tenant encoded in the object path and active membership.
+- [x] PR #162 corrected the storage-route regex startup defect and added `node --check server.js` to the deployment verifier.
+- [x] Production browser acceptance confirmed both a normal agreement document and the retained signed agreement open successfully through the tenant-bound storage route.
+- [x] PR #163 migrated the remaining active `downloadSignedDocument()` fallback in `eviaSignServiceLegacy.js` off `platformClient.storage` without changing Evia retrieval/status/OAuth behavior.
+- [x] Production deployment run `37289196435` served exact SHA `6f345bd78a23f67612d17301ca406a86d42cf7e9` from Ready revision `khrental-app--0000164`; MSSQL health returned ready and the public build fingerprint matched exactly.
+- [x] Final source inventory shows no remaining `platformClient.storage` usage in `DocumentService.js`, `agreementService.js` or the active Evia signed-document fallback.
+
+Result: **COMPLETE — Phase 3 exit criteria satisfied.**
+
 ---
 
-## Phase 4 - Remaining compatibility-client removal
+## Phase 4 - Remaining compatibility-client removal — **ACTIVE**
 
 Before changing code:
 
-- Inventory remaining `platformClient` / `platformClientCore` consumers.
-- Group them by business domain.
-- Prioritize domains by production importance.
-- Migrate exactly one domain per PR with contract-preserving regression tests.
+- [x] Inventory remaining `platformClient` / `platformClientCore` consumers.
+- [x] Group the remaining storage compatibility consumers by business domain.
+- [x] Prioritize the first domain by production importance.
+- [ ] Migrate exactly one domain per PR with contract-preserving regression tests.
+
+Current inventory groups:
+- Billing/payment proof storage: `src/services/paymentService.js`.
+- Utilities/meter evidence: `UtilityReadingForm.jsx`, `UtilityMeterForm.jsx`.
+- Maintenance media URL resolution: `MaintenanceRequestCard.jsx`.
+- Admin/storage tooling and bucket management: `AdminPanel.jsx`, `BucketExplorer.jsx`, `bucketExplorer.js`, `appInitService.js`, storage setup scripts.
+- Diagnostic-only Evia upload tools: `EviaSignTesting.jsx`, `SignatureTestingTools.jsx`.
+- Shared compatibility façade: `platformClientCore.js`.
+- Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
+
+First active domain: **billing/payment proof storage**.
+
+Reason for priority: payment proof is customer-facing financial evidence in an active billing workflow, while the compatibility dependency is isolated to the proof upload/URL step in `paymentService.js`. The dedicated billing APIs already own payment verification, receipt creation and ledger authority, so this slice can change storage only without altering financial state transitions.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -310,27 +334,27 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 2 - Agreement generation and digital signing
-Problem/evidence: Production signing needed to satisfy the business flow end-to-end: correct signer placement/lifecycle, authenticated callbacks, reliable partial-signature progress, durable retention of the fully signed agreement, and viewing the signed artifact rather than the original unsigned document.
-Scope: Preserve the evidence-backed Evia signing path; secure agreement-bound callbacks; persist signer progress; retrieve/retain completed signed documents in tenant-scoped KH Rentals storage; and keep agreement lifecycle state authoritative and retry-safe.
-PRs: #153 restored secure Evia V2 completion callbacks; #156 corrected the agreement send flow to use an agreement-bound callback; #157 fixed partial-signature progress counting; #158 added completed-document retention/reconciliation; #159 corrected the integration exchange URL; #160 switched recovery to the proven Evia OAuth session and retained webhook-attached completed documents.
-CI/deploy result: Evia webhook and Evia V2 integration workflows passed on merge SHA c66ff3d51684645e6e482291a025fa47aecef2c9. Production deployment run 37280211507 completed successfully.
-Production proof SHA: c66ff3d51684645e6e482291a025fa47aecef2c9.
-Runtime proof: Ready revision khrental-app--0000161 served the exact SHA; /api/mssql/health returned ready; public build fingerprint matched exactly. Production browser verification on 2026-10-05 confirmed the completed signed agreement can be opened from KH Rentals after reconciliation.
-Result: COMPLETE — Phase 2 exit criteria satisfied.
-Next item: Phase 3 - Document/storage domain cleanup.
+Active item: Phase 3 - Document/storage domain cleanup
+Problem/evidence: Agreement generation/signing was production-accepted, but agreement/document storage still depended on compatibility storage calls and direct storage delivery was session-authenticated without binding the encoded tenant path to active membership.
+Scope: Migrate only agreement/document storage operations to the explicit tenant-scoped storage API; preserve R2 tenant paths, direct-delivery authorization, PDF rendering, Evia signing protocol and agreement lifecycle semantics.
+PRs: #161 migrated DocumentService/agreement storage and tenant-bound delivery; #162 fixed the route-regex startup defect and added a server syntax CI gate; #163 migrated the remaining active Evia signed-document fallback storage write.
+CI/deploy result: PR #163 exact-head build/deploy validation passed. Post-merge production run 37289196435 completed successfully.
+Production proof SHA: 6f345bd78a23f67612d17301ca406a86d42cf7e9.
+Runtime proof: Ready revision khrental-app--0000164 served the exact SHA; /api/mssql/health returned ready; the public build fingerprint matched exactly. Prior production browser acceptance within this phase confirmed both a normal agreement document and retained signed agreement open successfully through the tenant-bound storage route. The final #163 change preserved the Evia download/status/OAuth contract and changed only the fallback storage write/URL generation.
+Result: COMPLETE — Phase 3 exit criteria satisfied.
+Next item: Phase 4 - billing/payment proof storage compatibility removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 3 - Document/storage domain cleanup
-Problem/evidence: Phase 2 signing is production-accepted on SHA c66ff3d51684645e6e482291a025fa47aecef2c9. The remaining task is to remove agreement/document storage dependence on the compatibility storage client without changing the now-proven signing behavior. Historical draft PR #110 targets this domain but is based on a substantially older branch and is reference material only, not a merge candidate.
-Scope: Review current DocumentService and agreement document storage on main; identify remaining platformClient.storage calls in this domain; route only those operations through explicit KH Rentals tenant-scoped storage APIs; preserve R2 paths, authenticated delivery and cross-tenant protections; add contract-preserving regression tests.
-Out of scope: Evia signing protocol changes; signed-document lifecycle changes; repo-wide platformClient removal; unrelated storage domains; UI cleanup.
-Phase 2 production proof: PR #160 merged as `c66ff3d51684645e6e482291a025fa47aecef2c9`; deployment run `37280211507` served that exact SHA from Ready revision `khrental-app--0000161`; `/api/mssql/health` returned ready and the production browser opened the retained signed agreement successfully.
-Result: ACTIVE — Phase 3 is the sole active work item.
-Next item: inspect current DocumentService, storageApiService, storage delivery authorization and agreementService on the proven baseline before making a bounded storage-only change.
+Active item: Phase 4 - Billing/payment proof storage compatibility removal
+Problem/evidence: The final Phase 3 document/signing storage dependencies are removed. The remaining compatibility inventory includes billing, utilities, maintenance media, admin/storage tooling, diagnostic tools and shared compatibility helpers. paymentService.js still uploads renter payment proof and derives its stored URL through platformClient.storage.
+Scope: Migrate only payment-proof upload/URL generation to the explicit tenant-scoped storage API; preserve the dedicated billing APIs as the sole authority for payment submission, verification, receipt creation, balances and ledger state; add contract-preserving regression coverage.
+Out of scope: Invoice/payment lifecycle redesign; receipt generation changes; utility/maintenance storage; admin bucket tooling; repo-wide platformClient removal; schema changes.
+Phase 3 production proof: PR #163 merged as `6f345bd78a23f67612d17301ca406a86d42cf7e9`; deployment run `37289196435` served that exact SHA from Ready revision `khrental-app--0000164`; `/api/mssql/health` returned ready and the public build fingerprint matched exactly.
+Result: ACTIVE — billing/payment proof storage is the sole active Phase 4 domain.
+Next item: inspect paymentService payment-proof upload callers and existing billing authorization/tests, then replace only its compatibility storage dependency.
 ```
 ---
 
