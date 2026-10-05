@@ -13,6 +13,7 @@ export const USER_ROLES = {
 
 // Invoice status
 export const INVOICE_STATUS = {
+  DRAFT: 'draft',
   PENDING: 'pending',
   VERIFICATION_PENDING: 'verification_pending',
   PAID: 'paid',
