@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   PAYMENT_STATUS,
   INVOICE_STATUS,
@@ -23,6 +24,11 @@ import {
   getBillingReminderPortalUrl,
   sendBillingReminderEmail
 } from '../src/api/platform/billingReminderEmail.js';
+
+const paymentServiceSource = readFileSync(
+  new URL('../src/services/paymentService.js', import.meta.url),
+  'utf8'
+);
 
 const createMockResponse = () => {
   const response = {
@@ -277,4 +283,12 @@ test('billing reminder delivery fails clearly when server email is not configure
     if (previousSendGridKey === undefined) delete process.env.SENDGRID_API_KEY;
     else process.env.SENDGRID_API_KEY = previousSendGridKey;
   }
+});
+
+
+test('payment proof storage uses tenant API while billing authority remains server-side', () => {
+  assert.doesNotMatch(paymentServiceSource, /platformClient\.storage/);
+  assert.match(paymentServiceSource, /uploadTenantFile/);
+  assert.match(paymentServiceSource, /submitInvoicePaymentProof/);
+  assert.match(paymentServiceSource, /proofUrl/);
 });
