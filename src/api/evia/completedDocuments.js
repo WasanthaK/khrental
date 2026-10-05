@@ -1,6 +1,7 @@
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 
-export const EVIA_V2_API_BASE_URL = 'https://evia.enadocapp.com/_apis/sign/api/v2';
+export const EVIA_DOCUMENT_API_BASE_URL = 'https://evia.enadocapp.com/_apis/sign/api/v2';
+export const EVIA_INTEGRATION_API_BASE_URL = 'https://evia.enadocapp.com/api/v2';
 const EVIA_DOWNLOAD_HOST = 'evia.enadocapp.com';
 const MAX_COMPLETED_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
@@ -70,7 +71,7 @@ export const validateEviaDownloadUrl = (value) => {
 export const exchangeEviaIntegrationApiKey = async ({
   apiKey,
   fetchImpl = fetch,
-  baseUrl = EVIA_V2_API_BASE_URL
+  baseUrl = EVIA_INTEGRATION_API_BASE_URL
 }) => {
   if (!apiKey) {
     const error = new Error('Evia integration API key is not configured.');
@@ -104,7 +105,7 @@ export const listEviaCompletedDocuments = async ({
   requestId,
   accessToken,
   fetchImpl = fetch,
-  baseUrl = EVIA_V2_API_BASE_URL
+  baseUrl = EVIA_DOCUMENT_API_BASE_URL
 }) => {
   if (!requestId || !accessToken) {
     throw new Error('requestId and accessToken are required to list completed Evia documents.');
@@ -193,7 +194,8 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
   apiKey = process.env.EVIA_SIGN_API_KEY || '',
   fetchImpl = fetch,
   storageDriver = getStorageDriver(),
-  baseUrl = EVIA_V2_API_BASE_URL
+  documentBaseUrl = EVIA_DOCUMENT_API_BASE_URL,
+  integrationBaseUrl = EVIA_INTEGRATION_API_BASE_URL
 }) => {
   const safeTenantId = safeStorageSegment(tenantId, 'tenant ID');
   const safeAgreementId = safeStorageSegment(agreementId, 'agreement ID');
@@ -201,14 +203,14 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
     throw new Error('Evia request ID is required to retrieve completed documents.');
   }
 
-  let tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl });
+  let tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
 
   const withTokenRefresh = async (operation) => {
     try {
       return await operation(tokenState.accessToken);
     } catch (error) {
       if (Number(error?.status) !== 401) throw error;
-      tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl });
+      tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
       return operation(tokenState.accessToken);
     }
   };
@@ -217,7 +219,7 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
     requestId,
     accessToken,
     fetchImpl,
-    baseUrl
+    baseUrl: documentBaseUrl
   }));
 
   const storedDocuments = [];
