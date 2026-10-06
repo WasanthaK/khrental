@@ -13,6 +13,11 @@ const propertyContextSource = readFileSync(
   'utf8'
 );
 
+const renteeUtilitiesSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeUtilities.jsx', import.meta.url),
+  'utf8'
+);
+
 const platformRouterSource = readFileSync(
   new URL('../src/api/platform/router.js', import.meta.url),
   'utf8'
@@ -37,6 +42,12 @@ test('rentee utility form bootstraps from canonical auth profile and active tena
   assert.doesNotMatch(utilityReadingFormSource, /findAppUserByAuthId/);
   assert.doesNotMatch(utilityReadingFormSource, /\/api\/mssql\/app-users/);
   assert.doesNotMatch(utilityReadingFormSource, /\/api\/mssql\/properties/);
+});
+
+test('rentee utilities overview uses the authenticated profile id without legacy app-user lookup', () => {
+  assert.match(renteeUtilitiesSource, /user\?\.profileId/);
+  assert.doesNotMatch(renteeUtilitiesSource, /findAppUserByAuthId/);
+  assert.doesNotMatch(renteeUtilitiesSource, /\/api\/mssql\/app-users/);
 });
 
 test('tenant portal does not initialize the broad workspace property directory', () => {
