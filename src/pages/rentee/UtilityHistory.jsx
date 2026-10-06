@@ -4,11 +4,10 @@ import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { formatCurrency } from '../../utils/helpers';
 import { calculateUtilityAmount } from '../../services/utilityBillingService';
-import { findAppUserByAuthId } from '../../services/appUserService';
 import { useAuth } from '../../hooks/useAuth';
 
 const UtilityHistory = () => {
-  const { activeTenantId } = useAuth();
+  const { user: authUser, activeTenantId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [readings, setReadings] = useState([]);
   const [selectedReading, setSelectedReading] = useState(null);
@@ -26,29 +25,21 @@ const UtilityHistory = () => {
         setProperty(null);
         setReadings([]);
 
-        // Get current user
-        const { data: { user }, error: userError } = await platformClient.auth.getUser();
-        if (userError) throw userError;
-        setUser(user);
-
-        // Get user's property
-        const appUserResult = await findAppUserByAuthId(user.id);
-
-        if (!appUserResult.success) throw new Error(appUserResult.error || 'Failed to load user data');
-        const appUser = appUserResult.data;
-
-        setUser({ ...user, appUserId: appUser?.id });
-
-        if (appUser?.associated_property_ids?.length > 0) {
-          const { data: propertyData, error: propertyError } = await platformClient
-            .from('properties')
-            .select('*')
-            .eq('id', appUser.associated_property_ids[0])
-            .single();
-
-          if (propertyError) throw propertyError;
-          setProperty(propertyData);
+        const appUserId = authUser?.profileId || authUser?.appUserId || null;
+        if (!appUserId) {
+          throw new Error('Failed to load user data');
         }
+
+        setUser({ ...authUser, appUserId });
+
+        const { data: propertyData, error: propertyError } = await platformClient
+          .from('properties')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+
+        if (propertyError) throw propertyError;
+        setProperty(propertyData || null);
       } catch (error) {
         console.error('Error fetching user data:', error);
         toast.error('Failed to load user data');
@@ -56,7 +47,7 @@ const UtilityHistory = () => {
     };
 
     fetchUserAndProperty();
-  }, [activeTenantId]);
+  }, [activeTenantId, authUser?.id, authUser?.profileId]);
 
   useEffect(() => {
     if (user && property) {
