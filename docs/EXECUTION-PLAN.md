@@ -291,11 +291,13 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **utilities/meter evidence storage**.
+Current active domain: **maintenance media compatibility cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
-Utilities are next because both renter and shared meter-reading forms still use `platformClient.storage` only for photo upload/URL derivation. This slice changes storage only; utility reading persistence and authorization remain unchanged.
+Utilities/meter evidence storage is complete: PR #180 migrated both utility photo upload surfaces to `uploadTenantFile()`, preserved utility reading persistence/authorization, and deployed successfully as merge SHA `43f64575aa84c0016e8cc5fdeba677cd0d1d1b10` from Ready revision `khrental-app--0000183` with MSSQL ready and matching public build fingerprint.
+
+Maintenance media is next. `MaintenanceRequestCard.jsx` still carries an unused `platformClient.storage` URL helper even though rendered maintenance images already use persisted `image_url` values directly and maintenance upload paths already use the shared file service. This slice removes only that dead compatibility path and adds a regression guard; no maintenance lifecycle or upload behavior changes.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -337,25 +339,25 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Billing/payment proof storage compatibility removal
-Problem/evidence: paymentService.js still used platformClient.storage for renter payment-proof upload/URL generation even though billing mutation authority was already isolated behind dedicated lifecycle APIs.
-Scope: Migrate only payment-proof upload/URL generation to the explicit tenant-scoped storage API; preserve payment submission, verification, receipt, balance and ledger authority.
-PR: #165.
-CI result: PR head run 37294491584 passed; post-merge production run 37294802032 passed.
-Production revision/SHA: Ready revision khrental-app--0000166 served merge SHA da3527422631aab89312af3ffd6aebb9cf4f9e01 with MSSQL ready and matching public build fingerprint.
-Result: COMPLETE — payment proof storage no longer uses platformClient.storage.
-Next item: Phase 4 - utilities/meter evidence storage compatibility removal.
+Active item: Phase 4 - Utilities/meter evidence storage compatibility removal
+Problem/evidence: UtilityReadingForm.jsx and UtilityMeterForm.jsx still used platformClient.storage to upload meter photos and derive stored URLs.
+Scope: Migrate only utility photo upload/URL generation to uploadTenantFile(); preserve utility_readings persistence, renter ownership enforcement, property verification, and existing UI behavior.
+PR: #180.
+CI result: PR head run 37488039758 passed; post-merge production run 37504705469 passed.
+Production revision/SHA: Ready revision khrental-app--0000183 served merge SHA 43f64575aa84c0016e8cc5fdeba677cd0d1d1b10 with MSSQL ready and matching public build fingerprint.
+Result: COMPLETE — utility meter photo storage no longer uses platformClient.storage.
+Next item: Phase 4 - maintenance media compatibility cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Utilities/meter evidence storage compatibility removal
-Problem/evidence: UtilityReadingForm.jsx and UtilityMeterForm.jsx still use platformClient.storage to upload meter photos and derive stored URLs.
-Scope: Migrate only utility photo upload/URL generation to uploadTenantFile(); preserve utility_readings persistence, renter ownership enforcement, property verification, and existing UI behavior; add regression coverage.
-Out of scope: Utility billing redesign; utility schema changes; maintenance media; admin bucket tooling; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-utilities-meter-storage contains the bounded implementation and regression update pending PR review/CI.
-Next item: open PR, review CI, then perform production acceptance only after explicit merge/deploy authorization.
+Active item: Phase 4 - Maintenance media compatibility cleanup
+Problem/evidence: MaintenanceRequestCard.jsx still imports platformClient.storage for an unused URL helper while rendered images already use persisted maintenance_request_images.image_url values directly; maintenance upload paths already use shared fileService helpers.
+Scope: Remove only the dead compatibility storage imports/helper from MaintenanceRequestCard.jsx and add regression coverage proving cards render persisted URLs while maintenance uploads remain on shared fileService.
+Out of scope: Maintenance lifecycle/state changes; upload semantics; schema changes; admin/storage tooling; repo-wide platformClient removal.
+Result: ACTIVE — fresh branch phase-4-maintenance-media-storage-refresh contains the bounded cleanup and regression update pending PR review/CI.
+Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
 
