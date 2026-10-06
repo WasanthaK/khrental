@@ -60,3 +60,18 @@ test('completed agreement view reconciles and opens retained signed document ins
   assert.match(serverSource, /PERMISSIONS\.AGREEMENTS_MANAGE/);
   assert.match(serverSource, /retrieveAndStoreEviaCompletedDocuments/);
 });
+
+
+test('renter agreement view disables Evia signature management while preserving admin default', () => {
+  const actionsSource = fs.readFileSync(new URL('../src/components/agreements/AgreementActions.jsx', import.meta.url), 'utf8');
+  const renterSource = fs.readFileSync(new URL('../src/pages/rentee/RenteeAgreements.jsx', import.meta.url), 'utf8');
+  const dashboardSource = fs.readFileSync(new URL('../src/components/agreements/AgreementStatusDashboard.jsx', import.meta.url), 'utf8');
+
+  assert.match(actionsSource, /signatureManagementEnabled = true/);
+  assert.match(actionsSource, /signatureManagementEnabled && agreement\.eviasignreference/);
+  assert.match(actionsSource, /signatureManagementEnabled && showSendButton/);
+  assert.match(actionsSource, /showSignatureReference=\{signatureManagementEnabled\}/);
+  assert.match(renterSource, /signatureManagementEnabled=\{false\}/);
+  assert.match(dashboardSource, /showSignatureReference = true/);
+  assert.match(dashboardSource, /showSignatureReference && agreement\.eviasignreference/);
+});
