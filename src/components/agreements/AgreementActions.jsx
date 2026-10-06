@@ -46,7 +46,7 @@ const summarizePolledSignatories = (value) => (
     : []
 );
 
-const AgreementActions = ({ agreement, onStatusChange }) => {
+const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnabled = true }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [signatureStatus, setSignatureStatus] = useState(null);
@@ -76,17 +76,17 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
 
   useEffect(() => {
     // Check signature status when component mounts or reference changes
-    if (agreement.eviasignreference) {
+    if (signatureManagementEnabled && agreement.eviasignreference) {
       checkSignatureStatus();
     }
-  }, [agreement.eviasignreference]);
+  }, [agreement.eviasignreference, signatureManagementEnabled]);
   
   // Set up automatic status checking every 2 minutes if we have a reference
   useEffect(() => {
     let intervalId = null;
     
     // We'll use polling as a fallback if we have a reference and status isn't completed
-    if (agreement.eviasignreference && 
+    if (signatureManagementEnabled && agreement.eviasignreference && 
         (agreement.status !== STATUS.SIGNED && 
          signatureStatus !== 'completed')) {
       
@@ -104,7 +104,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         clearInterval(intervalId);
       }
     };
-  }, [agreement.eviasignreference, agreement.status, signatureStatus]);
+  }, [agreement.eviasignreference, agreement.status, signatureStatus, signatureManagementEnabled]);
   
   // Update previous status when current status changes
   useEffect(() => {
@@ -479,7 +479,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         )}
 
         {/* Send for Signature Button - only shown in review status */}
-        {showSendButton && (
+        {signatureManagementEnabled && showSendButton && (
           <Button
             size="sm"
             intent="primary"
@@ -493,7 +493,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         )}
         
         {/* Check Status Button - only shown when there's a signature in progress */}
-        {agreement.eviasignreference && (
+        {signatureManagementEnabled && agreement.eviasignreference && (
           <Button
             size="sm"
             intent="secondary"
@@ -541,7 +541,7 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
       )}
       
       {/* Dev Tools - only show in development mode or for admin roles */}
-      {(process.env.NODE_ENV === 'development' || agreement.status === 'pending_signature') && 
+      {signatureManagementEnabled && (process.env.NODE_ENV === 'development' || agreement.status === 'pending_signature') && 
         agreement.eviasignreference && (
         <div className="mt-4 text-xs">
           <details className="p-2 border rounded border-gray-200">
@@ -573,13 +573,17 @@ const AgreementActions = ({ agreement, onStatusChange }) => {
         </div>
       )}
 
-      {error && (
+      {signatureManagementEnabled && error && (
         <div className="mt-2 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
           {error}
         </div>
       )}
 
-      <AgreementStatusDashboard agreement={agreement} signatureStatus={signatureStatus} />
+      <AgreementStatusDashboard
+        agreement={agreement}
+        signatureStatus={signatureStatus}
+        showSignatureReference={signatureManagementEnabled}
+      />
     </div>
   );
 };
