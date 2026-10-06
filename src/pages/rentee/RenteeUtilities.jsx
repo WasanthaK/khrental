@@ -6,7 +6,6 @@ import { UTILITY_TYPES } from '../../utils/constants';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import { calculateUtilityAmount } from '../../services/utilityBillingService';
-import { findAppUserByAuthId } from '../../services/appUserService';
 
 const RenteeUtilities = () => {
   const { user, activeTenantId } = useAuth();
@@ -29,16 +28,8 @@ const RenteeUtilities = () => {
       setLoading(true);
       setError(null);
 
-      // First get the app_user details for the current auth user
-      const appUserResult = await findAppUserByAuthId(user.id);
-
-      if (!appUserResult.success) {
-        throw new Error(appUserResult.error || 'User profile not found');
-      }
-
-      const appUserData = appUserResult.data;
-
-      if (!appUserData) {
+      const appUserId = user?.profileId || user?.appUserId || null;
+      if (!appUserId) {
         throw new Error('User profile not found');
       }
 
@@ -54,7 +45,7 @@ const RenteeUtilities = () => {
             water_rate
           )
         `)
-        .eq('renteeid', appUserData.id)
+        .eq('renteeid', appUserId)
         .order('readingdate', { ascending: false })
         .limit(5);
 
@@ -69,7 +60,7 @@ const RenteeUtilities = () => {
         const { data: invoiceData, error: invoiceError } = await platformClient
           .from('invoices')
           .select('*')
-          .eq('renteeid', appUserData.id)
+          .eq('renteeid', appUserId)
           .order('createdat', { ascending: false })
           .limit(10);
           
