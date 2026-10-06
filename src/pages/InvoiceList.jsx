@@ -3,9 +3,7 @@ import { Link } from 'react-router-dom';
 import InvoiceCard from '../components/invoices/InvoiceCard';
 import { INVOICE_STATUS } from '../utils/constants';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { fetchAppUsers } from '../services/appUserService';
-import { listProperties } from '../services/agreementService';
-import { listInvoices } from '../services/invoiceService';
+import { platform as platformClient } from '../services/platformClient';
 import { useAuth } from '../hooks/useAuth';
 
 const InvoiceList = () => {
@@ -15,6 +13,7 @@ const InvoiceList = () => {
     membership: membership || user?.membership || null
   }), [user, membership]);
   const canManageInvoices = hasPermission(subject, PERMISSIONS.INVOICES_MANAGE);
+  const canManagePayments = hasPermission(subject, PERMISSIONS.PAYMENTS_MANAGE);
 
   const [invoices, setInvoices] = useState([]);
   const [properties, setProperties] = useState([]);
@@ -32,17 +31,43 @@ const InvoiceList = () => {
         setLoading(true);
         setError(null);
 
-        const { data: invoicesData, error: invoicesError } = await listInvoices({ pageSize: 1000 });
+        const { data: invoicesData, error: invoicesError } = await platformClient
+          .from('invoices')
+          .select(`
+            *,
+            properties!propertyid (
+              id,
+              name,
+              address
+            ),
+            app_users!renteeid (
+              id,
+              name,
+              email
+            )
+          `)
+          .order('createdat', { ascending: false });
+
         if (invoicesError) {
           throw invoicesError;
         }
-        setInvoices(invoicesData || []);
 
-        const propertiesData = await listProperties();
-        setProperties(propertiesData || []);
+        const visibleInvoices = invoicesData || [];
+        setInvoices(visibleInvoices);
 
-        const appUsersData = await fetchAppUsers('rentee');
-        setRentees(appUsersData || []);
+        const propertyById = new Map();
+        const renteeById = new Map();
+        visibleInvoices.forEach((invoice) => {
+          if (invoice?.properties?.id) {
+            propertyById.set(invoice.properties.id, invoice.properties);
+          }
+          if (invoice?.app_users?.id) {
+            renteeById.set(invoice.app_users.id, invoice.app_users);
+          }
+        });
+
+        setProperties([...propertyById.values()]);
+        setRentees([...renteeById.values()]);
       } catch (fetchError) {
         console.error('Error fetching invoices:', fetchError.message);
         setError(fetchError.message);
@@ -219,6 +244,7 @@ const InvoiceList = () => {
                 invoice={invoice}
                 property={property}
                 rentee={rentee}
+                showStatusActions={canManagePayments}
               />
             );
           })}

@@ -84,7 +84,7 @@ const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatus
 
             {showStatusActions && status === 'pending' && (
               <Link
-                to={`/dashboard/invoices/${id}/payment`}
+                to={`/dashboard/invoices/${id}`}
                 className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
               >
                 Record Payment
@@ -93,7 +93,7 @@ const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatus
 
             {showStatusActions && status === 'verification_pending' && (
               <Link
-                to={`/dashboard/invoices/${id}/verify`}
+                to={`/dashboard/invoices/${id}`}
                 className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
               >
                 Verify Payment

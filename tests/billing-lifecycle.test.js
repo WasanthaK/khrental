@@ -82,6 +82,26 @@ const deployWorkflowSource = readFileSync(
   'utf8'
 );
 
+const invoiceListSource = readFileSync(
+  new URL('../src/pages/InvoiceList.jsx', import.meta.url),
+  'utf8'
+);
+
+const invoiceCardSource = readFileSync(
+  new URL('../src/components/invoices/InvoiceCard.jsx', import.meta.url),
+  'utf8'
+);
+
+const invoiceDetailsSource = readFileSync(
+  new URL('../src/pages/InvoiceDetails.jsx', import.meta.url),
+  'utf8'
+);
+
+const routesSource = readFileSync(
+  new URL('../src/routes.jsx', import.meta.url),
+  'utf8'
+);
+
 const propertyUtilityConfigRouterSource = readFileSync(
   new URL('../src/api/platform/propertyUtilityConfigRouter.js', import.meta.url),
   'utf8'
@@ -268,6 +288,29 @@ test('property form manages recurring fixed utilities only for existing properti
   assert.match(propertyFormSource, /Add fixed utility/);
   assert.match(propertyFormSource, /savePropertyFixedUtilities/);
   assert.match(propertyFormSource, /\{isEditMode && \(/);
+});
+
+test('staff invoice list uses central scoped queries and gates payment actions by permission', () => {
+  assert.match(invoiceListSource, /platformClient\s*\.from\('invoices'\)/);
+  assert.match(invoiceListSource, /PERMISSIONS\.PAYMENTS_MANAGE/);
+  assert.match(invoiceListSource, /showStatusActions=\{canManagePayments\}/);
+  assert.doesNotMatch(invoiceListSource, /listInvoices/);
+  assert.doesNotMatch(invoiceListSource, /listProperties/);
+  assert.doesNotMatch(invoiceListSource, /fetchAppUsers/);
+});
+
+test('invoice payment actions route to the existing invoice details page', () => {
+  assert.doesNotMatch(invoiceCardSource, /\/dashboard\/invoices\/\$\{id\}\/verify/);
+  assert.doesNotMatch(invoiceCardSource, /\/dashboard\/invoices\/\$\{id\}\/payment/);
+  assert.match(invoiceCardSource, /to=\{\`\/dashboard\/invoices\/\$\{id\}\`\}/);
+  assert.match(routesSource, /path: ':id'[\s\S]*InvoiceDetails/);
+});
+
+test('invoice details exposes pending-payment verification only to payment managers', () => {
+  assert.match(invoiceDetailsSource, /PERMISSIONS\.PAYMENTS_MANAGE/);
+  assert.match(invoiceDetailsSource, /canManagePayments && pendingPayment/);
+  assert.match(invoiceDetailsSource, /PaymentVerification/);
+  assert.match(invoiceDetailsSource, /getInvoiceAccount/);
 });
 
 test('draft invoices are not eligible for payment proof', () => {
