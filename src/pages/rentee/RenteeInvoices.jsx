@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { INVOICE_STATUS } from '../../utils/constants';
-import { findAppUserByAuthId } from '../../services/appUserService';
-import { listProperties } from '../../services/agreementService';
-import { listInvoices } from '../../services/invoiceService';
-import { getInvoiceAccount } from '../../services/platformClient';
+import { getInvoiceAccount, platform as platformClient } from '../../services/platformClient';
 import InvoiceCard from '../../components/invoices/InvoiceCard';
 import PaymentProofUpload from '../../components/invoices/PaymentProofUpload';
 
@@ -36,23 +33,37 @@ const RenteeInvoices = () => {
     const fetchRenteeInvoices = async () => {
       try {
         setLoading(true);
-        const renteeResult = await findAppUserByAuthId(user.id);
-        if (!renteeResult.success || !renteeResult.data) {
-          throw new Error(renteeResult.error || 'No tenant profile found for your account. Please contact support.');
+
+        const appUserId = user?.profileId || user?.appUserId || null;
+        if (!appUserId) {
+          throw new Error('No tenant profile found for your account. Please contact support.');
         }
 
-        const { data: invoicesData, error: invoicesError } = await listInvoices({
-          renteeId: renteeResult.data.id,
-          pageSize: 1000
-        });
+        const { data: invoicesData, error: invoicesError } = await platformClient
+          .from('invoices')
+          .select(`
+            *,
+            properties!propertyid (
+              id,
+              name,
+              address
+            )
+          `)
+          .eq('renteeid', appUserId)
+          .order('createdat', { ascending: false });
+
         if (invoicesError) throw invoicesError;
 
-        setInvoices(invoicesData || []);
-        if (invoicesData?.length) {
-          const propertyIds = new Set(invoicesData.map((invoice) => invoice.propertyid).filter(Boolean));
-          const propertyData = await listProperties();
-          setProperties((propertyData || []).filter((property) => propertyIds.has(property.id)));
-        }
+        const visibleInvoices = invoicesData || [];
+        setInvoices(visibleInvoices);
+
+        const propertyById = new Map();
+        visibleInvoices.forEach((invoice) => {
+          if (invoice?.properties?.id) {
+            propertyById.set(invoice.properties.id, invoice.properties);
+          }
+        });
+        setProperties([...propertyById.values()]);
         dataFetched.current = true;
       } catch (fetchError) {
         setError(fetchError.message);
@@ -62,7 +73,7 @@ const RenteeInvoices = () => {
     };
 
     fetchRenteeInvoices();
-  }, [user?.id, activeTenantId]);
+  }, [user?.id, user?.profileId, activeTenantId]);
 
   const filteredInvoices = invoices.filter((invoice) => {
     const propertyName = properties.find((property) => property.id === invoice.propertyid)?.name || '';
