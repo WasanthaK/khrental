@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { MAINTENANCE_STATUS } from '../../utils/constants';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { findAppUserByAuthId } from '../../services/appUserService';
 
 // Components
 import MaintenanceRequestCard from '../../components/maintenance/MaintenanceRequestCard';
@@ -34,31 +33,14 @@ const RenteeMaintenance = () => {
       setLoading(true);
       setError(null);
       
-      console.log('Getting app_users ID for auth user:', userData.id);
-
-      // First get the app_users record
-      const userResult = await findAppUserByAuthId(userData.id);
-
-      if (!userResult.success) {
-        console.error('Error fetching app_user:', userResult.error);
-        throw new Error('Failed to get user information');
-      }
-
-      const appUser = userResult.data;
-
-      if (!appUser) {
+      const appUserId = userData?.profileId || userData?.appUserId || null;
+      if (!appUserId) {
         if (userData?.isDevelopmentBypass) {
-          console.warn('No app_user found for development bypass auth user. Returning an empty maintenance list.');
           setMaintenanceRequests([]);
           return;
         }
-
-        console.error('No app_user found for auth_id:', userData.id);
         throw new Error('User not found');
       }
-
-      console.log('Found app_user:', appUser);
-      console.log('Attempting to fetch maintenance requests for app_user:', appUser.id);
 
       // Fetch the maintenance requests using the app_users ID
       const { data, error: fetchError } = await platformClient
@@ -94,7 +76,7 @@ const RenteeMaintenance = () => {
             email
           )
         `)
-        .eq('renteeid', appUser.id)
+        .eq('renteeid', appUserId)
         .order('createdat', { ascending: false });
 
       if (fetchError) {
@@ -120,7 +102,7 @@ const RenteeMaintenance = () => {
       setError(null);
       fetchMaintenanceRequests();
     }
-  }, [userData?.id, activeTenantId]);
+  }, [userData?.id, userData?.profileId, activeTenantId]);
   
   // Handle form submission success
   const handleSubmitSuccess = () => {
