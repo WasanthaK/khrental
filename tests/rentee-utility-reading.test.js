@@ -18,6 +18,16 @@ const renteeUtilitiesSource = readFileSync(
   'utf8'
 );
 
+const renteeInvoicesSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url),
+  'utf8'
+);
+
+const paymentProofUploadSource = readFileSync(
+  new URL('../src/components/invoices/PaymentProofUpload.jsx', import.meta.url),
+  'utf8'
+);
+
 const platformRouterSource = readFileSync(
   new URL('../src/api/platform/router.js', import.meta.url),
   'utf8'
@@ -48,6 +58,25 @@ test('rentee utilities overview uses the authenticated profile id without legacy
   assert.match(renteeUtilitiesSource, /user\?\.profileId/);
   assert.doesNotMatch(renteeUtilitiesSource, /findAppUserByAuthId/);
   assert.doesNotMatch(renteeUtilitiesSource, /\/api\/mssql\/app-users/);
+});
+
+test('rentee invoices use central owner-scoped reads without legacy MSSQL directories', () => {
+  assert.match(renteeInvoicesSource, /platformClient\s*\.from\('invoices'\)/);
+  assert.match(renteeInvoicesSource, /user\?\.profileId/);
+  assert.match(renteeInvoicesSource, /properties!propertyid/);
+  assert.doesNotMatch(renteeInvoicesSource, /findAppUserByAuthId/);
+  assert.doesNotMatch(renteeInvoicesSource, /listInvoices/);
+  assert.doesNotMatch(renteeInvoicesSource, /listProperties/);
+  assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/app-users/);
+  assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/invoices/);
+  assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/properties/);
+});
+
+test('payment proof required validation is controlled by React state rather than hidden native input', () => {
+  assert.match(paymentProofUploadSource, /if \(!paymentProof\)/);
+  assert.match(paymentProofUploadSource, /disabled=\{loading \|\| !paymentProof \|\| !paymentDetails\.amount\}/);
+  assert.doesNotMatch(paymentProofUploadSource, /accept="image\/\*,application\/pdf"\s*required/);
+  assert.match(paymentProofUploadSource, /label="Payment Proof \*"/);
 });
 
 test('tenant portal does not initialize the broad workspace property directory', () => {
