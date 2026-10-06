@@ -4,7 +4,7 @@ import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriang
 /**
  * AgreementStatusDashboard - Displays detailed status information for an agreement
  */
-const AgreementStatusDashboard = ({ agreement, rentee, property }) => {
+const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureReference = true }) => {
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) {
@@ -145,7 +145,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property }) => {
             </div>
           )}
           
-          {agreement.eviasignreference && (
+          {showSignatureReference && agreement.eviasignreference && (
             <div>
               <p className="text-sm text-gray-500 mb-1">Signature Reference</p>
               <p className="font-mono text-xs bg-gray-100 p-1 rounded">{agreement.eviasignreference}</p>
