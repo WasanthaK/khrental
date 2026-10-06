@@ -64,6 +64,36 @@ const inspectMembershipBackfill = async (pool) => {
   };
 };
 
+const inspectAuthStoreRuntimeColumns = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.auth_users', N'U') IS NOT NULL THEN 1 ELSE 0 END AS auth_users_exists,
+      CASE WHEN OBJECT_ID(N'dbo.auth_sessions', N'U') IS NOT NULL THEN 1 ELSE 0 END AS auth_sessions_exists,
+      CASE WHEN COL_LENGTH(N'dbo.auth_users', N'last_login_at') IS NOT NULL THEN 1 ELSE 0 END AS last_login_exists,
+      CASE WHEN COL_LENGTH(N'dbo.auth_users', N'updatedat') IS NOT NULL THEN 1 ELSE 0 END AS auth_updated_exists,
+      CASE WHEN COL_LENGTH(N'dbo.auth_sessions', N'last_seen_at') IS NOT NULL THEN 1 ELSE 0 END AS last_seen_exists,
+      CASE WHEN COL_LENGTH(N'dbo.auth_sessions', N'revoked_at') IS NOT NULL THEN 1 ELSE 0 END AS revoked_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.auth_sessions')
+          AND name = N'IX_auth_sessions_active'
+      ) THEN 1 ELSE 0 END AS active_index_exists;
+  `);
+  const row = result.recordset?.[0] || {};
+  return {
+    satisfied: Boolean(
+      row.auth_users_exists
+      && row.auth_sessions_exists
+      && row.last_login_exists
+      && row.auth_updated_exists
+      && row.last_seen_exists
+      && row.revoked_exists
+      && row.active_index_exists
+    ),
+    detail: `auth_users=${row.auth_users_exists ? 'present' : 'missing'}, auth_sessions=${row.auth_sessions_exists ? 'present' : 'missing'}, last_login_at=${row.last_login_exists ? 'present' : 'missing'}, updatedat=${row.auth_updated_exists ? 'present' : 'missing'}, last_seen_at=${row.last_seen_exists ? 'present' : 'missing'}, revoked_at=${row.revoked_exists ? 'present' : 'missing'}, active_index=${row.active_index_exists ? 'present' : 'missing'}`
+  };
+};
+
 const inspectPropertyUtilityConfigs = async (pool) => {
   const result = await pool.request().query(`
     SELECT
@@ -168,6 +198,15 @@ const MIGRATIONS = [
     verify: async (pool) => assertSatisfied(
       inspectPropertyUtilityConfigs(pool),
       'Property utility-config migration verification failed.'
+    )
+  },
+  {
+    id: '20261006_01_repair_auth_store_runtime_columns',
+    file: 'migrations/20261006_01_repair_auth_store_runtime_columns.sql',
+    inspect: inspectAuthStoreRuntimeColumns,
+    verify: async (pool) => assertSatisfied(
+      inspectAuthStoreRuntimeColumns(pool),
+      'Auth-store compatibility migration verification failed.'
     )
   }
 ];
