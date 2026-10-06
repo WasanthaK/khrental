@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { getMyTenancySummary, platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { useAuth } from '../../hooks/useAuth';
+import { uploadTenantFile } from '../../services/storageApiService';
 
 const UtilityReadingForm = () => {
   const { activeTenantId, user: authUser } = useAuth();
@@ -157,23 +158,19 @@ const UtilityReadingForm = () => {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `utility-readings/${userId}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await platformClient.storage
-        .from('images')
-        .upload(filePath, file);
+      const uploadedPhoto = await uploadTenantFile({
+        bucket: 'images',
+        path: filePath,
+        file
+      });
 
-      if (uploadError) {
-        throw uploadError;
+      if (!uploadedPhoto?.url) {
+        throw new Error('Failed to get storage URL for utility reading photo');
       }
-
-      // Get the public URL
-      const scopedFilePath = uploadData?.scopedPath || uploadData?.path || filePath;
-      const { data: { publicUrl } } = platformClient.storage
-        .from('images')
-        .getPublicUrl(scopedFilePath);
 
       setFormData(prev => ({
         ...prev,
-        photoUrl: publicUrl
+        photoUrl: uploadedPhoto.url
       }));
 
       toast.success('Photo uploaded successfully');
