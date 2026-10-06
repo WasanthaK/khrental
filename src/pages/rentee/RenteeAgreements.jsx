@@ -315,7 +315,7 @@ const RenteeAgreements = () => {
               ))}
 
               <div className="mt-4">
-                <AgreementActions agreement={agreement} />
+                <AgreementActions agreement={agreement} signatureManagementEnabled={false} />
               </div>
             </div>
           );
