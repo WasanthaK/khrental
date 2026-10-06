@@ -19,9 +19,9 @@ test('admin renter agreement cards resolve property by propertyid when relation 
   assert.match(renteeDetailsSource, /properties:\s*resolvedProperty/);
 });
 
-test('renter agreement cards resolve property by propertyid when relation projection is missing', () => {
-  assert.match(renteeAgreementsSource, /fetchProperty/);
-  assert.match(renteeAgreementsSource, /agreement\.property \|\| \(agreement\.propertyid/);
-  assert.match(renteeAgreementsSource, /fetchProperty\(agreement\.propertyid\)/);
-  assert.match(renteeAgreementsSource, /property:\s*resolvedProperty/);
+test('renter agreement cards resolve property through the central scoped relation without legacy fallback', () => {
+  assert.match(renteeAgreementsSource, /properties!propertyid/);
+  assert.match(renteeAgreementsSource, /property:\s*agreement\.properties \|\| null/);
+  assert.doesNotMatch(renteeAgreementsSource, /fetchProperty/);
+  assert.doesNotMatch(renteeAgreementsSource, /\/api\/mssql\/properties/);
 });
