@@ -5,6 +5,8 @@ import { requestMssqlApi } from '../services/mssqlApiClient';
 import { toast } from 'react-hot-toast';
 import { navigateToUnauthorized } from '../utils/navigationHelpers';
 import { isMssqlApiEnabled } from '../utils/env';
+import { getEffectivePortalType } from '../utils/accessPolicy';
+import { PORTAL_TYPES } from '../utils/accessModel';
 
 const MAX_RECENT_PROPERTIES = 5;
 const RETRY_DELAY = 3000; // 3 seconds
@@ -40,7 +42,7 @@ export function useProperty() {
 
 // Provider component
 function PropertyProvider({ children }) {
-  const { loading: authLoading, isAuthenticated, hasTenantAccess } = useAuth();
+  const { loading: authLoading, isAuthenticated, hasTenantAccess, user, membership } = useAuth();
   const [properties, setProperties] = useState([]);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,7 @@ function PropertyProvider({ children }) {
   const [isReady, setIsReady] = useState(false);
   const initAttempted = useRef(false);
   const retryCount = useRef(0);
+  const isTenantPortal = getEffectivePortalType({ user, membership }) === PORTAL_TYPES.TENANT;
 
   // Load properties on mount
   useEffect(() => {
@@ -58,7 +61,7 @@ function PropertyProvider({ children }) {
       return;
     }
 
-    if (!isAuthenticated || !hasTenantAccess) {
+    if (!isAuthenticated || !hasTenantAccess || isTenantPortal) {
       initAttempted.current = false;
       retryCount.current = 0;
       setProperties([]);
@@ -75,7 +78,7 @@ function PropertyProvider({ children }) {
       initAttempted.current = true;
       initializeContext();
     }
-  }, [authLoading, isAuthenticated, hasTenantAccess]);
+  }, [authLoading, isAuthenticated, hasTenantAccess, isTenantPortal]);
 
   // Main initialization function with retry logic
   const initializeContext = async () => {
