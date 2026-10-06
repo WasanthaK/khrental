@@ -4,7 +4,6 @@ import { getMyTenancySummary, platform as platformClient } from '../../services/
 import { useAuth } from '../../hooks/useAuth';
 import { isDevBypassEnabled } from '../../utils/env';
 import { formatCurrency, formatDate } from '../../utils/helpers';
-import { findAppUserByAuthId } from '../../services/appUserService';
 
 const DEV_BYPASS_ENABLED = isDevBypassEnabled();
 
@@ -59,20 +58,15 @@ const RenteePortal = () => {
           return;
         }
 
-        const renteeLookup = await findAppUserByAuthId(user.id);
-        if (!renteeLookup.success) {
-          throw new Error(renteeLookup.error || 'Failed to load tenant profile');
-        }
-
-        const profile = renteeLookup.data;
-        if (!profile || profile.user_type !== 'rentee') {
-          throw new Error('User is not a tenant');
+        const appUserId = user?.profileId || user?.appUserId || null;
+        if (!appUserId) {
+          throw new Error('Tenant profile is not linked to this account');
         }
 
         setRenteeData({
-          id: profile.id,
-          name: profile.name,
-          email: profile.email
+          id: appUserId,
+          name: user?.name || user?.email,
+          email: user?.email
         });
 
         const tenancyResult = await getMyTenancySummary();
@@ -84,7 +78,7 @@ const RenteePortal = () => {
         const { data: invoicesData, error: invoicesError } = await platformClient
           .from('invoices')
           .select('*')
-          .eq('renteeid', profile.id)
+          .eq('renteeid', appUserId)
           .order('createdat', { ascending: false });
 
         if (invoicesError) {
@@ -95,7 +89,7 @@ const RenteePortal = () => {
         const { data: agreementsData, error: agreementsError } = await platformClient
           .from('agreements')
           .select('*')
-          .eq('renteeid', profile.id)
+          .eq('renteeid', appUserId)
           .order('createdat', { ascending: false });
 
         if (agreementsError) {
@@ -111,7 +105,7 @@ const RenteePortal = () => {
     };
 
     fetchRenteeData();
-  }, [user?.id, activeTenantId]);
+  }, [user?.id, user?.profileId, activeTenantId]);
 
   if (loading) {
     return (
