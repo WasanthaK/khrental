@@ -4,9 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import AgreementActions from '../../components/agreements/AgreementActions';
-import { findAppUserByAuthId } from '../../services/appUserService';
 import { getTenancyExit, respondToTenancyNotice } from '../../services/tenancyExitService';
-import { fetchProperty } from '../../services/agreementService';
 import { updateMyTenancyBillingDay } from '../../services/platformClient';
 
 const noticeLabel = (noticeType) => noticeType === 'renewal_offer' ? 'Renewal offer' : 'Termination notice';
@@ -78,31 +76,27 @@ const RenteeAgreements = () => {
         setLoading(true);
         setError(null);
 
-        const appUserResult = await findAppUserByAuthId(user.id);
-
-        if (!appUserResult.success) {
-          console.error('Error fetching user:', appUserResult.error);
-          throw new Error('Could not fetch user details');
-        }
-
-        const appUserData = appUserResult.data;
-
-        if (!appUserData) {
+        const appUserId = user?.profileId || user?.appUserId || null;
+        if (!appUserId) {
           if (user?.isDevelopmentBypass) {
-            console.warn('No app_user found for development bypass auth user. Returning an empty agreement list.');
             setAgreements([]);
             setExitData({});
             return;
           }
-
           throw new Error('User profile not found');
         }
+
+        const appUserData = {
+          id: appUserId,
+          name: user?.name || user?.email,
+          email: user?.email
+        };
 
         const { data: agreementsData, error: agreementsError } = await platformClient
           .from('agreements')
           .select(`
             *,
-            property:propertyid (
+            properties!propertyid (
               id,
               name,
               address,
@@ -110,7 +104,7 @@ const RenteeAgreements = () => {
               images
             )
           `)
-          .eq('renteeid', appUserData.id)
+          .eq('renteeid', appUserId)
           .order('createdat', { ascending: false });
 
         if (agreementsError) {
@@ -118,19 +112,10 @@ const RenteeAgreements = () => {
           throw agreementsError;
         }
 
-        const mappedAgreements = await Promise.all((agreementsData || []).map(async (agreement) => {
-          const resolvedProperty = agreement.property || (agreement.propertyid
-            ? await fetchProperty(agreement.propertyid).catch((propertyError) => {
-                console.warn('Could not resolve agreement property:', propertyError?.message || propertyError);
-                return null;
-              })
-            : null);
-
-          return {
-            ...agreement,
-            property: resolvedProperty,
-            rentee: appUserData
-          };
+        const mappedAgreements = (agreementsData || []).map((agreement) => ({
+          ...agreement,
+          property: agreement.properties || null,
+          rentee: appUserData
         }));
 
         setAgreements(mappedAgreements);
@@ -154,7 +139,7 @@ const RenteeAgreements = () => {
     if (user?.id) {
       fetchAgreements();
     }
-  }, [user?.id, user?.isDevelopmentBypass, activeTenantId]);
+  }, [user?.id, user?.profileId, user?.isDevelopmentBypass, activeTenantId]);
 
   const handleBillingDaySave = async (agreement) => {
     const billingDay = Number.parseInt(String(billingDays[agreement.id] ?? 5), 10);
