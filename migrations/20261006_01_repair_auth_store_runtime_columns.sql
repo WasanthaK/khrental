@@ -17,7 +17,11 @@ BEGIN TRY
   IF COL_LENGTH(N'dbo.auth_users', N'updatedat') IS NULL
   BEGIN
     ALTER TABLE dbo.auth_users ADD updatedat DATETIME2 NULL;
-    UPDATE dbo.auth_users SET updatedat = SYSUTCDATETIME() WHERE updatedat IS NULL;
+    EXEC(N'
+      UPDATE dbo.auth_users
+      SET updatedat = SYSUTCDATETIME()
+      WHERE updatedat IS NULL;
+    ');
   END;
 
   IF COL_LENGTH(N'dbo.auth_sessions', N'last_seen_at') IS NULL
