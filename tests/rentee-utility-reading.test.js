@@ -8,6 +8,11 @@ const utilityReadingFormSource = readFileSync(
   'utf8'
 );
 
+const utilityMeterFormSource = readFileSync(
+  new URL('../src/components/utilities/UtilityMeterForm.jsx', import.meta.url),
+  'utf8'
+);
+
 const propertyContextSource = readFileSync(
   new URL('../src/contexts/PropertyContext.jsx', import.meta.url),
   'utf8'
@@ -164,4 +169,15 @@ test('rentee utility insert remains owner-bound and property-verified', () => {
   assert.match(platformRouterSource, /table === 'maintenance_requests' \|\| table === 'utility_readings'/);
   assert.match(platformRouterSource, /AND renteeid = @userId/);
   assert.match(platformRouterSource, /AND propertyid = @propertyId/);
+});
+
+
+test('utility meter photo storage uses tenant API without changing reading persistence authority', () => {
+  for (const source of [utilityReadingFormSource, utilityMeterFormSource]) {
+    assert.match(source, /uploadTenantFile/);
+    assert.doesNotMatch(source, /platformClient\.storage/);
+  }
+
+  assert.match(utilityReadingFormSource, /\.from\('utility_readings'\)/);
+  assert.match(utilityMeterFormSource, /\.from\('utility_readings'\)/);
 });
