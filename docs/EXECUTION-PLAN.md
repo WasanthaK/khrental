@@ -279,7 +279,8 @@ Before changing code:
 - [x] Inventory remaining `platformClient` / `platformClientCore` consumers.
 - [x] Group the remaining storage compatibility consumers by business domain.
 - [x] Prioritize the first domain by production importance.
-- [ ] Migrate exactly one domain per PR with contract-preserving regression tests.
+- [x] Billing/payment proof storage migrated in PR #165 with contract-preserving regression coverage.
+- [ ] Continue remaining domains one bounded PR at a time.
 
 Current inventory groups:
 - Billing/payment proof storage: `src/services/paymentService.js`.
@@ -290,9 +291,11 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-First active domain: **billing/payment proof storage**.
+Current active domain: **utilities/meter evidence storage**.
 
-Reason for priority: payment proof is customer-facing financial evidence in an active billing workflow, while the compatibility dependency is isolated to the proof upload/URL step in `paymentService.js`. The dedicated billing APIs already own payment verification, receipt creation and ledger authority, so this slice can change storage only without altering financial state transitions.
+Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
+
+Utilities are next because both renter and shared meter-reading forms still use `platformClient.storage` only for photo upload/URL derivation. This slice changes storage only; utility reading persistence and authorization remain unchanged.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -334,27 +337,25 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 3 - Document/storage domain cleanup
-Problem/evidence: Agreement generation/signing was production-accepted, but agreement/document storage still depended on compatibility storage calls and direct storage delivery was session-authenticated without binding the encoded tenant path to active membership.
-Scope: Migrate only agreement/document storage operations to the explicit tenant-scoped storage API; preserve R2 tenant paths, direct-delivery authorization, PDF rendering, Evia signing protocol and agreement lifecycle semantics.
-PRs: #161 migrated DocumentService/agreement storage and tenant-bound delivery; #162 fixed the route-regex startup defect and added a server syntax CI gate; #163 migrated the remaining active Evia signed-document fallback storage write.
-CI/deploy result: PR #163 exact-head build/deploy validation passed. Post-merge production run 37289196435 completed successfully.
-Production proof SHA: 6f345bd78a23f67612d17301ca406a86d42cf7e9.
-Runtime proof: Ready revision khrental-app--0000164 served the exact SHA; /api/mssql/health returned ready; the public build fingerprint matched exactly. Prior production browser acceptance within this phase confirmed both a normal agreement document and retained signed agreement open successfully through the tenant-bound storage route. The final #163 change preserved the Evia download/status/OAuth contract and changed only the fallback storage write/URL generation.
-Result: COMPLETE — Phase 3 exit criteria satisfied.
-Next item: Phase 4 - billing/payment proof storage compatibility removal.
+Active item: Phase 4 - Billing/payment proof storage compatibility removal
+Problem/evidence: paymentService.js still used platformClient.storage for renter payment-proof upload/URL generation even though billing mutation authority was already isolated behind dedicated lifecycle APIs.
+Scope: Migrate only payment-proof upload/URL generation to the explicit tenant-scoped storage API; preserve payment submission, verification, receipt, balance and ledger authority.
+PR: #165.
+CI result: PR head run 37294491584 passed; post-merge production run 37294802032 passed.
+Production revision/SHA: Ready revision khrental-app--0000166 served merge SHA da3527422631aab89312af3ffd6aebb9cf4f9e01 with MSSQL ready and matching public build fingerprint.
+Result: COMPLETE — payment proof storage no longer uses platformClient.storage.
+Next item: Phase 4 - utilities/meter evidence storage compatibility removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Billing/payment proof storage compatibility removal
-Problem/evidence: The final Phase 3 document/signing storage dependencies are removed. The remaining compatibility inventory includes billing, utilities, maintenance media, admin/storage tooling, diagnostic tools and shared compatibility helpers. paymentService.js still uploads renter payment proof and derives its stored URL through platformClient.storage.
-Scope: Migrate only payment-proof upload/URL generation to the explicit tenant-scoped storage API; preserve the dedicated billing APIs as the sole authority for payment submission, verification, receipt creation, balances and ledger state; add contract-preserving regression coverage.
-Out of scope: Invoice/payment lifecycle redesign; receipt generation changes; utility/maintenance storage; admin bucket tooling; repo-wide platformClient removal; schema changes.
-Phase 3 production proof: PR #163 merged as `6f345bd78a23f67612d17301ca406a86d42cf7e9`; deployment run `37289196435` served that exact SHA from Ready revision `khrental-app--0000164`; `/api/mssql/health` returned ready and the public build fingerprint matched exactly.
-Result: ACTIVE — billing/payment proof storage is the sole active Phase 4 domain.
-Next item: inspect paymentService payment-proof upload callers and existing billing authorization/tests, then replace only its compatibility storage dependency.
+Active item: Phase 4 - Utilities/meter evidence storage compatibility removal
+Problem/evidence: UtilityReadingForm.jsx and UtilityMeterForm.jsx still use platformClient.storage to upload meter photos and derive stored URLs.
+Scope: Migrate only utility photo upload/URL generation to uploadTenantFile(); preserve utility_readings persistence, renter ownership enforcement, property verification, and existing UI behavior; add regression coverage.
+Out of scope: Utility billing redesign; utility schema changes; maintenance media; admin bucket tooling; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-utilities-meter-storage contains the bounded implementation and regression update pending PR review/CI.
+Next item: open PR, review CI, then perform production acceptance only after explicit merge/deploy authorization.
 ```
 ---
 
