@@ -112,9 +112,35 @@ const RenteeAgreements = () => {
           throw agreementsError;
         }
 
-        const mappedAgreements = (agreementsData || []).map((agreement) => ({
+        const agreements = agreementsData || [];
+        const missingPropertyIds = [...new Set(
+          agreements
+            .filter((agreement) => !agreement.properties && agreement.propertyid)
+            .map((agreement) => String(agreement.propertyid))
+        )];
+
+        let propertyById = new Map();
+        if (missingPropertyIds.length > 0) {
+          const { data: propertyData, error: propertyError } = await platformClient
+            .from('properties')
+            .select('id, name, address, propertytype, images')
+            .in('id', missingPropertyIds);
+
+          if (propertyError) {
+            console.warn('Could not resolve renter agreement properties through central scope:', propertyError.message);
+          } else {
+            propertyById = new Map(
+              (propertyData || []).map((property) => [String(property.id).toLowerCase(), property])
+            );
+          }
+        }
+
+        const mappedAgreements = agreements.map((agreement) => ({
           ...agreement,
-          property: agreement.properties || null,
+          property: agreement.properties
+            || (agreement.propertyid
+              ? propertyById.get(String(agreement.propertyid).toLowerCase()) || null
+              : null),
           rentee: appUserData
         }));
 
