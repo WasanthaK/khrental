@@ -6,7 +6,6 @@ import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import { addMaintenanceComment, cancelMaintenanceRequest } from '../../services/maintenanceService';
-import { findAppUserByAuthId } from '../../services/appUserService';
 
 // Components
 import CommentSection from '../../components/maintenance/CommentSection';
@@ -34,12 +33,8 @@ const RenteeMaintenanceDetails = () => {
         setLoading(true);
         setError(null);
         
-        // Get the app_users ID first
-        const userResult = await findAppUserByAuthId(userData.id);
-
-        if (!userResult.success) throw new Error(userResult.error || 'User not found');
-        const appUser = userResult.data;
-        if (!appUser) throw new Error('User not found');
+        const appUserId = userData?.profileId || userData?.appUserId || null;
+        if (!appUserId) throw new Error('User not found');
         
         // Fetch maintenance request with all related data
         const { data: requestData, error: requestError } = await platformClient
@@ -73,7 +68,7 @@ const RenteeMaintenanceDetails = () => {
             )
           `)
           .eq('id', id)
-          .eq('renteeid', appUser.id)
+          .eq('renteeid', appUserId)
           .single();
         
         if (requestError) throw requestError;
@@ -94,7 +89,7 @@ const RenteeMaintenanceDetails = () => {
     if (id && userData?.id) {
       fetchRequestData();
     }
-  }, [id, userData?.id, activeTenantId]);
+  }, [id, userData?.id, userData?.profileId, activeTenantId]);
   
   // Handle request cancellation
   const handleCancelRequest = async () => {
