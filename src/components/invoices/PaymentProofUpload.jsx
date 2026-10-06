@@ -167,11 +167,10 @@ const PaymentProofUpload = ({ invoiceId, outstandingBalance, onSuccess, onError 
         </div>
 
         <FileUpload
-          label="Payment Proof"
+          label="Payment Proof *"
           id="paymentProof"
           onChange={handleFileUpload}
           accept="image/*,application/pdf"
-          required
           existingFiles={paymentProof ? [paymentProof] : []}
           onRemove={() => setPaymentProof(null)}
         />
