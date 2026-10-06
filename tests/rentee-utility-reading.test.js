@@ -28,6 +28,31 @@ const paymentProofUploadSource = readFileSync(
   'utf8'
 );
 
+const renteePortalSource = readFileSync(
+  new URL('../src/pages/rentee/RenteePortal.jsx', import.meta.url),
+  'utf8'
+);
+
+const renteeAgreementsSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeAgreements.jsx', import.meta.url),
+  'utf8'
+);
+
+const utilityHistorySource = readFileSync(
+  new URL('../src/pages/rentee/UtilityHistory.jsx', import.meta.url),
+  'utf8'
+);
+
+const renteeMaintenanceSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeMaintenance.jsx', import.meta.url),
+  'utf8'
+);
+
+const renteeMaintenanceDetailsSource = readFileSync(
+  new URL('../src/pages/rentee/RenteeMaintenanceDetails.jsx', import.meta.url),
+  'utf8'
+);
+
 const platformRouterSource = readFileSync(
   new URL('../src/api/platform/router.js', import.meta.url),
   'utf8'
@@ -77,6 +102,25 @@ test('payment proof required validation is controlled by React state rather than
   assert.match(paymentProofUploadSource, /disabled=\{loading \|\| !paymentProof \|\| !paymentDetails\.amount\}/);
   assert.doesNotMatch(paymentProofUploadSource, /accept="image\/\*,application\/pdf"\s*required/);
   assert.match(paymentProofUploadSource, /label="Payment Proof \*"/);
+});
+
+test('remaining renter portal screens do not use legacy app-user lookup routes', () => {
+  for (const source of [
+    renteePortalSource,
+    renteeAgreementsSource,
+    utilityHistorySource,
+    renteeMaintenanceSource,
+    renteeMaintenanceDetailsSource
+  ]) {
+    assert.doesNotMatch(source, /findAppUserByAuthId/);
+    assert.doesNotMatch(source, /\/api\/mssql\/app-users/);
+  }
+});
+
+test('renter agreements resolve property data through the central relation only', () => {
+  assert.match(renteeAgreementsSource, /properties!propertyid/);
+  assert.doesNotMatch(renteeAgreementsSource, /fetchProperty/);
+  assert.doesNotMatch(renteeAgreementsSource, /\/api\/mssql\/properties/);
 });
 
 test('tenant portal does not initialize the broad workspace property directory', () => {
