@@ -10,6 +10,8 @@ const MIGRATION_ID = '20260926_01_add_rentee_property_unit_associations';
 const MIGRATION_FILE = `migrations/${MIGRATION_ID}.sql`;
 const PROPERTY_UTILITY_MIGRATION_ID = '20261005_01_add_property_utility_configs';
 const PROPERTY_UTILITY_MIGRATION_FILE = `migrations/${PROPERTY_UTILITY_MIGRATION_ID}.sql`;
+const AUTH_STORE_MIGRATION_ID = '20261006_01_repair_auth_store_runtime_columns';
+const AUTH_STORE_MIGRATION_FILE = `migrations/${AUTH_STORE_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
@@ -17,7 +19,8 @@ const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
 ]);
 const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   MIGRATION_ID,
-  PROPERTY_UTILITY_MIGRATION_ID
+  PROPERTY_UTILITY_MIGRATION_ID,
+  AUTH_STORE_MIGRATION_ID
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -131,6 +134,13 @@ const main = async () => {
   assert.match(propertyUtilityMigrationSql, /ADD propertyid UNIQUEIDENTIFIER NULL/);
   assert.match(propertyUtilityMigrationSql, /FK_utility_configs_property/);
   assert.match(propertyUtilityMigrationSql, /UX_utility_configs_property_rule/);
+  const authStoreMigrationSql = fs.readFileSync(
+    path.resolve(AUTH_STORE_MIGRATION_FILE),
+    'utf8'
+  );
+  assert.match(authStoreMigrationSql, /ADD last_login_at DATETIME2 NULL/);
+  assert.match(authStoreMigrationSql, /ADD revoked_at DATETIME2 NULL/);
+  assert.match(authStoreMigrationSql, /IX_auth_sessions_active/);
 
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
@@ -333,6 +343,86 @@ const main = async () => {
     assert.equal(Number(afterRerun.recordset[0].matching_rows), 1);
 
     console.log(`PASS: ${PROPERTY_UTILITY_MIGRATION_ID} executed against SQL Server 2022, enforced property scope and uniqueness, and reran idempotently.`);
+
+    await testPool.request().batch(`
+      CREATE TABLE dbo.auth_users (
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_auth_users_runtime_migration_proof PRIMARY KEY DEFAULT NEWID(),
+        auth_id UNIQUEIDENTIFIER NOT NULL,
+        app_user_id UNIQUEIDENTIFIER NULL,
+        email NVARCHAR(320) NOT NULL,
+        password_hash NVARCHAR(256) NOT NULL,
+        password_salt NVARCHAR(128) NULL,
+        password_algorithm NVARCHAR(32) NULL,
+        role NVARCHAR(64) NULL,
+        metadata NVARCHAR(MAX) NULL,
+        createdat DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      );
+
+      CREATE TABLE dbo.auth_sessions (
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_auth_sessions_runtime_migration_proof PRIMARY KEY DEFAULT NEWID(),
+        auth_user_id UNIQUEIDENTIFIER NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        expires_at DATETIME2 NOT NULL,
+        createdat DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      );
+    `);
+
+    await testPool.request().batch(authStoreMigrationSql);
+
+    const authMetadata = await testPool.request().query(`
+      SELECT
+        CASE WHEN COL_LENGTH(N'dbo.auth_users', N'last_login_at') IS NOT NULL THEN 1 ELSE 0 END AS last_login_exists,
+        CASE WHEN COL_LENGTH(N'dbo.auth_users', N'updatedat') IS NOT NULL THEN 1 ELSE 0 END AS updated_exists,
+        CASE WHEN COL_LENGTH(N'dbo.auth_sessions', N'last_seen_at') IS NOT NULL THEN 1 ELSE 0 END AS last_seen_exists,
+        CASE WHEN COL_LENGTH(N'dbo.auth_sessions', N'revoked_at') IS NOT NULL THEN 1 ELSE 0 END AS revoked_exists,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM sys.indexes
+          WHERE object_id = OBJECT_ID(N'dbo.auth_sessions')
+            AND name = N'IX_auth_sessions_active'
+        ) THEN 1 ELSE 0 END AS active_index_exists;
+    `);
+    const authState = authMetadata.recordset[0];
+    assert.equal(Number(authState.last_login_exists), 1, 'auth_users.last_login_at must exist');
+    assert.equal(Number(authState.updated_exists), 1, 'auth_users.updatedat must exist');
+    assert.equal(Number(authState.last_seen_exists), 1, 'auth_sessions.last_seen_at must exist');
+    assert.equal(Number(authState.revoked_exists), 1, 'auth_sessions.revoked_at must exist');
+    assert.equal(Number(authState.active_index_exists), 1, 'auth_sessions active index must exist');
+
+    const authUserId = 'dddddddd-4444-4444-8444-dddddddddddd';
+    await testPool.request().query(`
+      INSERT INTO dbo.auth_users (
+        id, auth_id, email, password_hash, createdat, updatedat, last_login_at
+      ) VALUES (
+        '${authUserId}',
+        'eeeeeeee-5555-4555-8555-eeeeeeeeeeee',
+        N'auth-proof@example.com',
+        N'deadbeef',
+        SYSUTCDATETIME(),
+        SYSUTCDATETIME(),
+        SYSUTCDATETIME()
+      );
+
+      INSERT INTO dbo.auth_sessions (
+        auth_user_id, token_hash, expires_at, revoked_at
+      ) VALUES (
+        '${authUserId}',
+        REPLICATE('a', 64),
+        DATEADD(day, 1, SYSUTCDATETIME()),
+        SYSUTCDATETIME()
+      );
+    `);
+
+    await testPool.request().batch(authStoreMigrationSql);
+
+    const authRows = await testPool.request().query(`
+      SELECT
+        (SELECT COUNT_BIG(*) FROM dbo.auth_users WHERE id = '${authUserId}' AND last_login_at IS NOT NULL) AS login_rows,
+        (SELECT COUNT_BIG(*) FROM dbo.auth_sessions WHERE auth_user_id = '${authUserId}' AND revoked_at IS NOT NULL) AS revoked_rows;
+    `);
+    assert.equal(Number(authRows.recordset[0].login_rows), 1);
+    assert.equal(Number(authRows.recordset[0].revoked_rows), 1);
+
+    console.log(`PASS: ${AUTH_STORE_MIGRATION_ID} repaired stale auth runtime columns/indexes and reran idempotently on SQL Server 2022.`);
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}
