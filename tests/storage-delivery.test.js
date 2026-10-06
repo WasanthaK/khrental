@@ -33,6 +33,16 @@ const eviaLegacySource = readFileSync(
   'utf8'
 );
 
+const maintenanceRequestCardSource = readFileSync(
+  new URL('../src/components/maintenance/MaintenanceRequestCard.jsx', import.meta.url),
+  'utf8'
+);
+
+const maintenanceServiceLegacySource = readFileSync(
+  new URL('../src/services/maintenanceServiceLegacy.js', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -96,4 +106,13 @@ test('active Evia signed-document fallback no longer uses compatibility storage'
   assert.doesNotMatch(eviaLegacySource, /platformClient\.storage/);
   assert.match(eviaLegacySource, /uploadTenantFile/);
   assert.match(eviaLegacySource, /documentUrl:\s*uploadedDocument\.url/);
+});
+
+
+test('maintenance images keep one storage authority and cards use persisted URLs', () => {
+  assert.doesNotMatch(maintenanceRequestCardSource, /platformClient\.storage/);
+  assert.match(maintenanceRequestCardSource, /src=\{image\.image_url\}/);
+  assert.doesNotMatch(maintenanceServiceLegacySource, /platformClient\.storage/);
+  assert.match(maintenanceServiceLegacySource, /saveImage\(file/);
+  assert.match(maintenanceServiceLegacySource, /saveFile\(image\.file/);
 });
