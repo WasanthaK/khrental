@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { platform as platformClient } from '../../services/platformClient';
+import { getMyTenancySummary, platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
-import { findAppUserByAuthId } from '../../services/appUserService';
 import { useAuth } from '../../hooks/useAuth';
 
 const UtilityReadingForm = () => {
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, user: authUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -37,43 +36,44 @@ const UtilityReadingForm = () => {
           readingDate: new Date().toISOString().split('T')[0]
         }));
 
-        // Get current user
-        const { data: { user }, error: userError } = await platformClient.auth.getUser();
-        if (userError) {
-          throw userError;
-        }
-        setUser(user);
-
-        // Get app_user record using auth_id
-        const appUserResult = await findAppUserByAuthId(user.id);
-
-        if (!appUserResult.success) {
-          throw new Error(appUserResult.error || 'User profile not found');
-        }
-        const appUser = appUserResult.data;
-        
-        if (!appUser) {
+        const appUserId = authUser?.profileId || authUser?.appUserId || null;
+        if (!appUserId) {
           throw new Error('User profile not found');
         }
 
-        // Set the app_user id for later use in form submission
         setUser({
-          ...user,
-          appUserId: appUser.id
+          ...authUser,
+          appUserId
         });
 
-        if (appUser?.associated_property_ids?.length > 0) {
-          const { data: propertyData, error: propertyError } = await platformClient
-            .from('properties')
-            .select('id, name, address, electricity_rate, water_rate')
-            .eq('id', appUser.associated_property_ids[0])
-            .single();
-
-          if (propertyError) {
-            throw propertyError;
-          }
-          setProperty(propertyData);
+        const tenancyResult = await getMyTenancySummary();
+        if (tenancyResult.error) {
+          throw tenancyResult.error;
         }
+
+        const activeTenancy = tenancyResult.data?.tenancies?.[0] || null;
+        if (!activeTenancy?.property_id) {
+          setProperty(null);
+          return;
+        }
+
+        const { data: propertyData, error: propertyError } = await platformClient
+          .from('properties')
+          .select('id, name, address, electricity_rate, water_rate')
+          .eq('id', activeTenancy.property_id)
+          .single();
+
+        if (propertyError) {
+          throw propertyError;
+        }
+
+        setProperty(propertyData || {
+          id: activeTenancy.property_id,
+          name: activeTenancy.property_name,
+          address: activeTenancy.property_address,
+          electricity_rate: null,
+          water_rate: null
+        });
       } catch (error) {
         console.error('Error fetching user data:', error);
         toast.error('Failed to load user data');
@@ -81,7 +81,7 @@ const UtilityReadingForm = () => {
     };
 
     fetchUserAndProperty();
-  }, [activeTenantId]);
+  }, [activeTenantId, authUser?.id, authUser?.profileId]);
 
   useEffect(() => {
     const fetchLastReading = async () => {
