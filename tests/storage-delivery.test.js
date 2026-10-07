@@ -63,6 +63,11 @@ const bucketExplorerServiceSource = readFileSync(
   'utf8'
 );
 
+const adminPanelSource = readFileSync(
+  new URL('../src/pages/AdminPanel.jsx', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -166,4 +171,12 @@ test('bucket explorer service uses explicit tenant storage APIs', () => {
   assert.match(bucketExplorerServiceSource, /uploadTenantFile/);
   assert.match(bucketExplorerServiceSource, /deleteTenantFiles/);
   assert.match(bucketExplorerServiceSource, /buildStorageUrl/);
+});
+
+
+test('admin storage test uses explicit tenant storage APIs while preserving auth gating', () => {
+  assert.doesNotMatch(adminPanelSource, /platformClient\.storage/);
+  assert.match(adminPanelSource, /platformClient\.auth\.getSession/);
+  assert.match(adminPanelSource, /uploadTenantFile/);
+  assert.match(adminPanelSource, /listTenantFiles/);
 });
