@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **BucketExplorer UI storage cleanup**.
+Current active domain: **legacy storage setup script removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -307,7 +307,9 @@ Bucket explorer service storage cleanup is complete: PR #184 migrated `src/servi
 
 Admin panel storage test cleanup is complete: PR #185 migrated the isolated AdminPanel upload/list diagnostic path to explicit tenant storage APIs, preserved its auth/session gate, and deployed successfully as merge SHA `3c8a08153c32e42eb1d3c735a7cca9ddc84562c5` from Ready revision `khrental-app--0000188` with the exact public build SHA verified.
 
-BucketExplorer UI storage cleanup is next. `src/components/BucketExplorer.jsx` still uses `platformClient.storage` for bucket listing/creation plus tenant file list/upload/delete/public URL operations. The legacy compatibility client already ignores the UI's public/file-size bucket options, so this slice migrates only the storage calls while preserving auth gating, policy diagnostics, and current UI behavior.
+BucketExplorer UI storage cleanup is complete: PR #186 migrated `src/components/BucketExplorer.jsx` to explicit storage APIs while preserving auth/session gating and the existing `storage.policies` diagnostic query, and deployed successfully as merge SHA `5a104a92b4e1adf3bd5bc96097954954a8708d60` from Ready revision `khrental-app--0000189` with the exact public build SHA verified.
+
+Legacy storage setup script removal is next. `src/scripts/setup_storage_buckets.js` is not imported, not exposed through `package.json`, and is the only remaining non-façade `platformClient.storage` consumer. Its bucket-update/configuration options are unsupported/no-op under the current compatibility client, so this slice removes the dead script instead of inventing unsupported bucket-policy behavior.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -349,24 +351,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Admin panel storage test cleanup
-Problem/evidence: src/pages/AdminPanel.jsx was an isolated diagnostic page and still used platformClient.storage for a test file upload and list-readback.
-Scope: Migrate only the AdminPanel test upload/list calls to uploadTenantFile()/listTenantFiles(); preserve the existing platformClient.auth session gate and UI behavior; add regression coverage.
-PR: #185.
-CI result: PR head run 37577320698 passed; post-merge production run 37577448911 passed.
-Production revision/SHA: Ready revision khrental-app--0000188 served merge SHA 3c8a08153c32e42eb1d3c735a7cca9ddc84562c5 with matching public build fingerprint.
-Result: COMPLETE — AdminPanel storage test no longer uses platformClient.storage.
-Next item: Phase 4 - BucketExplorer UI storage cleanup.
+Active item: Phase 4 - BucketExplorer UI storage cleanup
+Problem/evidence: src/components/BucketExplorer.jsx still used platformClient.storage for bucket listing/creation plus tenant file list/upload/delete/public URL operations.
+Scope: Migrate only BucketExplorer.jsx storage calls to explicit storageApiService functions; preserve platformClient.auth session gating, the storage.policies diagnostic query, and current UI behavior.
+PR: #186.
+CI result: PR head run 37579364132 passed; post-merge production run 37580777080 passed.
+Production revision/SHA: Ready revision khrental-app--0000189 served merge SHA 5a104a92b4e1adf3bd5bc96097954954a8708d60 with matching public build fingerprint.
+Result: COMPLETE — BucketExplorer UI no longer uses platformClient.storage.
+Next item: Phase 4 - legacy storage setup script removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - BucketExplorer UI storage cleanup
-Problem/evidence: src/components/BucketExplorer.jsx still uses platformClient.storage for bucket listing/creation plus tenant file list/upload/delete/public URL operations.
-Scope: Migrate only BucketExplorer.jsx storage calls to explicit storageApiService functions; preserve platformClient.auth session gating, the storage.policies diagnostic query, and current UI behavior. Legacy public/file-size bucket options are already ignored by the compatibility client, so no working bucket-configuration behavior is removed.
-Out of scope: setup_storage_buckets.js; bucket configuration semantics beyond current behavior; shared compatibility façade; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-bucket-explorer-ui-storage contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - Legacy storage setup script removal
+Problem/evidence: src/scripts/setup_storage_buckets.js is not imported, not exposed through package.json, and is the only remaining non-façade platformClient.storage consumer. Its public/allowedMimeTypes/fileSizeLimit update semantics are unsupported/no-op under the current compatibility layer.
+Scope: Delete the dead legacy setup script and add a regression guard that it remains absent.
+Out of scope: platformClientCore.js shared compatibility façade; runtime bucket configuration; STORAGE_BUCKETS environment semantics; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-remove-legacy-storage-setup-script contains the bounded deletion and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
