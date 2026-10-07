@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **bucket explorer service storage cleanup**.
+Current active domain: **admin panel storage test cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -303,7 +303,9 @@ Evia diagnostic upload storage cleanup is complete: PR #182 migrated both diagno
 
 Application storage initialization cleanup is complete: PR #183 migrated the active `RootLayout -> appInitService.initializeApp()` storage path to explicit bucket/list/upload APIs, preserved the existing auth/session gate and non-fatal startup warning behavior, and deployed successfully as merge SHA `198f7e57082a465b1bb737bd485c38ab4707c155` from Ready revision `khrental-app--0000186` with the exact public build SHA verified.
 
-Bucket explorer service storage cleanup is next. `src/services/bucketExplorer.js` is used only by explicit storage tooling (`bucket-test` / `list-buckets`) and still uses `platformClient.storage` for bucket listing plus tenant file list/upload/delete/URL generation. This slice changes only that service and leaves `BucketExplorer.jsx`, `AdminPanel.jsx`, setup scripts, and bucket configuration semantics untouched.
+Bucket explorer service storage cleanup is complete: PR #184 migrated `src/services/bucketExplorer.js` to explicit tenant storage APIs, preserved allowed-folder validation and tooling return shapes, and deployed successfully as merge SHA `0b7c691666d4e95d7d8c440a00400b0fa57a5b6c` from Ready revision `khrental-app--0000187` with the exact public build SHA verified.
+
+Admin panel storage test cleanup is next. `src/pages/AdminPanel.jsx` is an isolated diagnostic surface and still uses `platformClient.storage` only for a test file upload plus list-readback. This slice changes only those storage calls while preserving its existing auth/session gate.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -345,24 +347,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Application storage initialization cleanup
-Problem/evidence: RootLayout actively called appInitService.initializeApp(), and appInitService still used platformClient.storage to ensure logical buckets and tenant folders during authenticated startup.
-Scope: Move only bucket existence/create plus tenant-folder list/.keep upload operations to explicit storage APIs; preserve platformClient.auth session gating, STORAGE_BUCKETS/BUCKET_FOLDERS semantics, and non-fatal startup warning behavior; add regression coverage.
-PR: #183.
-CI result: PR head run 37571375670 passed; post-merge production run 37571555576 passed.
-Production revision/SHA: Ready revision khrental-app--0000186 served merge SHA 198f7e57082a465b1bb737bd485c38ab4707c155 with matching public build fingerprint.
-Result: COMPLETE — active app storage initialization no longer uses platformClient.storage.
-Next item: Phase 4 - bucket explorer service storage cleanup.
+Active item: Phase 4 - Bucket explorer service storage cleanup
+Problem/evidence: src/services/bucketExplorer.js was used only by explicit storage tooling and still used platformClient.storage for bucket listing plus tenant file list/upload/delete/public URL generation.
+Scope: Migrate only bucketExplorer.js storage calls to explicit storageApiService functions; preserve existing allowed-folder validation and return shapes; add regression coverage.
+PR: #184.
+CI result: PR head run 37574887830 passed; post-merge production run 37575934638 passed.
+Production revision/SHA: Ready revision khrental-app--0000187 served merge SHA 0b7c691666d4e95d7d8c440a00400b0fa57a5b6c with matching public build fingerprint.
+Result: COMPLETE — bucket explorer service no longer uses platformClient.storage.
+Next item: Phase 4 - admin panel storage test cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Bucket explorer service storage cleanup
-Problem/evidence: src/services/bucketExplorer.js is used only by explicit storage tooling and still uses platformClient.storage for bucket listing plus tenant file list/upload/delete/public URL generation.
-Scope: Migrate only bucketExplorer.js storage calls to explicit storageApiService functions; preserve existing allowed-folder validation and return shapes; add regression coverage.
-Out of scope: BucketExplorer.jsx UI; AdminPanel.jsx; setup_storage_buckets.js; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-bucket-explorer-service-storage contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - Admin panel storage test cleanup
+Problem/evidence: src/pages/AdminPanel.jsx is an isolated diagnostic page and still uses platformClient.storage for a test file upload and list-readback.
+Scope: Migrate only the AdminPanel test upload/list calls to uploadTenantFile()/listTenantFiles(); preserve the existing platformClient.auth session gate and UI behavior; add regression coverage.
+Out of scope: BucketExplorer.jsx UI; setup_storage_buckets.js; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-admin-panel-storage-test contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
