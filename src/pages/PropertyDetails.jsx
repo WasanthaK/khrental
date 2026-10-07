@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 import { deleteFile } from '../services/fileService';
 import { fetchAppUsers } from '../services/appUserService';
 import { getTenantPropertyById } from '../services/propertyDirectoryService';
+import { listAgreementsByProperty } from '../services/agreementService';
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
@@ -341,16 +342,9 @@ const PropertyDetails = () => {
             setRentees([]);
           }
           
-          // Fetch agreements for this property
-          const { data: agreementsData, error: agreementsError } = await fetchData('agreements', {
-            filters: [{ column: 'propertyid', operator: 'eq', value: id }],
-          });
-          
-          if (agreementsError) {
-            throw agreementsError;
-          }
-          
-          setAgreements(agreementsData || []);
+          // Fetch agreements for this property through the explicit tenant-scoped agreement API.
+          const agreementsData = await listAgreementsByProperty(id);
+          setAgreements(agreementsData);
           
           // Fetch maintenance requests for this property
           const { data: maintenanceData, error: maintenanceError } = await fetchData('maintenance_requests', {
