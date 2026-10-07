@@ -1,4 +1,5 @@
 import { platform as platformClient } from '../services/platformClient';
+import { listTenantFiles, uploadTenantFile } from '../services/storageApiService';
 
 const AdminPanel = () => {
   async function testStorageUpload() {
@@ -17,32 +18,22 @@ const AdminPanel = () => {
       const fileName = `agreements/test-file-${new Date().toISOString()}.txt`;
 
       // Upload the file
-      const { data, error } = await platformClient.storage
-        .from('files')
-        .upload(fileName, blob, {
-          cacheControl: '3600',
-          upsert: false
-        });
+      const uploadedFile = await uploadTenantFile({
+        bucket: 'files',
+        path: fileName,
+        file: blob
+      });
 
-      if (error) {
-        console.error('Error uploading file:', error);
-        alert(`Upload failed: ${error.message}`);
-        return;
-      }
-
-      console.log('File uploaded successfully:', data);
+      console.log('File uploaded successfully:', uploadedFile);
       alert('Test file uploaded successfully!');
 
       // Test reading the file back
-      const { data: files, error: listError } = await platformClient.storage
-        .from('files')
-        .list('agreements');
+      const files = await listTenantFiles({
+        bucket: 'files',
+        path: 'agreements'
+      });
 
-      if (listError) {
-        console.error('Error listing files:', listError);
-      } else {
-        console.log('Files in agreements folder:', files);
-      }
+      console.log('Files in agreements folder:', files);
 
     } catch (error) {
       console.error('Upload process failed:', error);
