@@ -1,4 +1,10 @@
-import { platform as platformClient } from './platformClient';
+import {
+  buildStorageUrl,
+  deleteTenantFiles,
+  listStorageBuckets,
+  listTenantFiles,
+  uploadTenantFile
+} from './storageApiService';
 
 // Define the allowed folders for each bucket
 const BUCKET_FOLDERS = {
@@ -13,13 +19,8 @@ const BUCKET_FOLDERS = {
 export const listAllBuckets = async () => {
   console.log('listAllBuckets: Starting to fetch buckets...');
   try {
-    const { data: buckets, error } = await platformClient.storage.listBuckets();
-    console.log('listAllBuckets: Storage API response:', { buckets, error });
-    
-    if (error) {
-      console.error('listAllBuckets: Error from storage API:', error);
-      throw error;
-    }
+    const buckets = await listStorageBuckets();
+    console.log('listAllBuckets: Storage API response:', { buckets });
     
     // Return all buckets instead of filtering
     console.log('listAllBuckets: Returning buckets:', buckets || []);
@@ -40,13 +41,8 @@ export const listBucketContents = async (bucketName, folderPath = '') => {
   console.log('listBucketContents: Starting to fetch contents for bucket:', bucketName, 'path:', folderPath);
   try {
     // Validate bucket exists
-    const { data: buckets, error: bucketError } = await platformClient.storage.listBuckets();
-    console.log('listBucketContents: Bucket validation result:', { buckets, error: bucketError });
-    
-    if (bucketError) {
-      console.error('listBucketContents: Error validating bucket:', bucketError);
-      throw bucketError;
-    }
+    const buckets = await listStorageBuckets();
+    console.log('listBucketContents: Bucket validation result:', { buckets });
     
     const bucketExists = buckets?.some(b => b.name === bucketName);
     if (!bucketExists) {
@@ -59,28 +55,21 @@ export const listBucketContents = async (bucketName, folderPath = '') => {
       console.warn('listBucketContents: Warning - Accessing non-standard folder:', { bucketName, folderPath });
     }
     
-    const { data: files, error } = await platformClient.storage
-      .from(bucketName)
-      .list(folderPath);
+    const files = await listTenantFiles({
+      bucket: bucketName,
+      path: folderPath
+    });
       
-    console.log('listBucketContents: Files list result:', { files, error });
-    
-    if (error) {
-      console.error('listBucketContents: Error listing files:', error);
-      throw error;
-    }
+    console.log('listBucketContents: Files list result:', { files });
     
     // Get public URLs for files
     const publicUrls = {};
     for (const file of files || []) {
       if (file.id !== null) { // Skip folders
-        const { data } = platformClient.storage
-          .from(bucketName)
-          .getPublicUrl(folderPath ? `${folderPath}/${file.name}` : file.name);
-          
-        if (data?.publicUrl) {
-          publicUrls[file.name] = data.publicUrl;
-        }
+        publicUrls[file.name] = buildStorageUrl(
+          bucketName,
+          folderPath ? `${folderPath}/${file.name}` : file.name
+        );
       }
     }
     
@@ -100,11 +89,7 @@ export const listBucketContents = async (bucketName, folderPath = '') => {
 export const listAllFilesInBucket = async (bucketName) => {
   try {
     // Validate bucket exists
-    const { data: buckets, error: bucketError } = await platformClient.storage.listBuckets();
-    
-    if (bucketError) {
-      throw bucketError;
-    }
+    const buckets = await listStorageBuckets();
     
     const bucketExists = buckets?.some(b => b.name === bucketName);
     if (!bucketExists) {
@@ -131,13 +116,10 @@ export const listAllFilesInBucket = async (bucketName) => {
 };
 
 const listFilesRecursively = async (bucketName, path, accumulator) => {
-  const { data: contents, error } = await platformClient.storage
-    .from(bucketName)
-    .list(path);
-    
-  if (error) {
-    throw error;
-  }
+  const contents = await listTenantFiles({
+    bucket: bucketName,
+    path
+  });
   
   for (const item of contents || []) {
     if (item.id === null) { // It's a folder
@@ -183,23 +165,15 @@ export const uploadFileToBucket = async (file, bucketName, folderPath = '', cust
     const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
     
     // Upload file
-    const { error: uploadError } = await platformClient.storage
-      .from(bucketName)
-      .upload(filePath, file);
-    
-    if (uploadError) {
-      console.error('Error uploading file:', uploadError);
-      return { path: null, publicUrl: null, error: uploadError.message };
-    }
-    
-    // Get public URL
-    const { data: urlData } = platformClient.storage
-      .from(bucketName)
-      .getPublicUrl(filePath);
+    const uploadedFile = await uploadTenantFile({
+      bucket: bucketName,
+      path: filePath,
+      file
+    });
     
     return {
       path: filePath,
-      publicUrl: urlData?.publicUrl || null,
+      publicUrl: uploadedFile?.url || null,
       error: null
     };
   } catch (error) {
@@ -226,14 +200,10 @@ export const deleteFileFromBucket = async (bucketName, filePath) => {
       throw new Error(`Invalid folder for bucket ${bucketName}: ${folder}`);
     }
     
-    const { error } = await platformClient.storage
-      .from(bucketName)
-      .remove([filePath]);
-    
-    if (error) {
-      console.error('Error deleting file:', error);
-      return { success: false, error: error.message };
-    }
+    await deleteTenantFiles({
+      bucket: bucketName,
+      paths: [filePath]
+    });
     
     return { success: true, error: null };
   } catch (error) {
