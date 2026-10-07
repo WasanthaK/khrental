@@ -256,6 +256,10 @@ const PropertyDetails = () => {
           if (organized.length > 0) {
             setActiveCategory(organized[0].category);
           }
+
+          // Fetch agreements once through the explicit tenant-scoped API and reuse them below.
+          const agreementsData = await listAgreementsByProperty(id);
+          setAgreements(agreementsData);
           
           // Fetch all rentees associated with this property using the dedicated service
           console.log('Fetching rentees for property ID:', id);
@@ -271,21 +275,16 @@ const PropertyDetails = () => {
             } else {
               console.log('No rentees found with associated property IDs, checking agreements...');
               
-              // Also check agreements to find rentees linked to this property
-              const { data: agreementRentees, error: agreementError } = await platformClient
-                .from('agreements')
-                .select('renteeid')
-                .eq('propertyid', id)
-                .in('status', ['active', 'pending', 'review', 'signed']);
+              // Reuse the explicit property-scoped agreement list to find linked rentees.
+              const agreementRentees = (agreementsData || []).filter((agreement) =>
+                ['active', 'pending', 'review', 'signed'].includes(String(agreement.status || '').toLowerCase())
+              );
                 
-              if (agreementError) {
-                console.error('Error checking agreements:', agreementError);
-                setRentees([]);
-              } else if (agreementRentees && agreementRentees.length > 0) {
+              if (agreementRentees.length > 0) {
                 console.log('Found rentees via agreements:', agreementRentees.length);
                 
                 // Get unique rentee IDs from agreements
-                const renteeIds = [...new Set(agreementRentees.map(a => a.renteeid))];
+                const renteeIds = [...new Set(agreementRentees.map(a => a.renteeid).filter(Boolean))];
                 
                 // Fetch the actual rentee records
                 const fullRentees = renteeIds.map((renteeId) => renteesById.get(renteeId)).filter(Boolean);
@@ -340,10 +339,6 @@ const PropertyDetails = () => {
             console.error('Exception fetching rentees:', err);
             setRentees([]);
           }
-          
-          // Fetch agreements for this property through the explicit tenant-scoped agreement API.
-          const agreementsData = await listAgreementsByProperty(id);
-          setAgreements(agreementsData);
           
         } else {
           throw new Error('Property not found');
