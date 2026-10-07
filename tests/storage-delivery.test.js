@@ -53,6 +53,11 @@ const signatureTestingToolsSource = readFileSync(
   'utf8'
 );
 
+const appInitServiceSource = readFileSync(
+  new URL('../src/services/appInitService.js', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -136,4 +141,14 @@ test('Evia diagnostic tools use tenant storage API without changing signature in
 
   assert.match(eviaSignTestingSource, /sendDocumentForSignature/);
   assert.match(signatureTestingToolsSource, /platformClient\.functions\.invoke\('send-to-evia-sign'/);
+});
+
+
+test('app storage initialization uses explicit storage APIs while preserving auth gating', () => {
+  assert.doesNotMatch(appInitServiceSource, /platformClient\.storage/);
+  assert.match(appInitServiceSource, /platformClient\.auth\.getSession/);
+  assert.match(appInitServiceSource, /listStorageBuckets/);
+  assert.match(appInitServiceSource, /createStorageBucket/);
+  assert.match(appInitServiceSource, /listTenantFiles/);
+  assert.match(appInitServiceSource, /uploadTenantFile/);
 });

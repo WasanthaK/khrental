@@ -84,6 +84,19 @@ export const listStorageBuckets = async () => {
   return payload?.data || [];
 };
 
+export const createStorageBucket = async (bucketName) => {
+  if (!bucketName) {
+    throw new Error('Bucket name is required.');
+  }
+
+  const payload = await requestJson('/api/platform/storage/buckets', {
+    method: 'POST',
+    body: JSON.stringify({ bucketName })
+  });
+
+  return payload?.data || null;
+};
+
 export const listTenantFiles = async ({ bucket, path = '' }) => {
   if (!bucket) {
     throw new Error('Bucket is required to list storage files.');

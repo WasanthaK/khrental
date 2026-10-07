@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **Evia diagnostic upload storage cleanup**.
+Current active domain: **application storage initialization cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -299,7 +299,9 @@ Utilities/meter evidence storage is complete: PR #180 migrated both utility phot
 
 Maintenance media compatibility cleanup is complete: PR #181 removed the dead `platformClient.storage` URL path from `MaintenanceRequestCard.jsx`, preserved persisted `image_url` rendering and shared file-service uploads, and deployed successfully as merge SHA `66cf755c60e86f2e3fa6e29522b0bb859b265d43` from Ready revision `khrental-app--0000184` with the exact public build SHA verified.
 
-Evia diagnostic upload tools are next. `EviaSignTesting.jsx` and `SignatureTestingTools.jsx` still use `platformClient.storage` only to upload diagnostic PDFs and derive URLs. This slice changes only diagnostic storage access and preserves the existing Evia invocation/status paths.
+Evia diagnostic upload storage cleanup is complete: PR #182 migrated both diagnostic PDF upload surfaces to `uploadTenantFile()`, preserved existing Evia invocation/status paths, and deployed successfully as merge SHA `d1fb36e0636176e1e6aec8ee257cd8113e0d67a4` from Ready revision `khrental-app--0000185` with the exact public build SHA verified.
+
+Application storage initialization is next because `RootLayout` actively calls `appInitService.initializeApp()`, and that service still uses `platformClient.storage` to ensure logical buckets and tenant folders. This slice moves only those storage operations to explicit APIs while preserving the existing authenticated-session gate and non-fatal startup warning behavior.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -341,24 +343,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Maintenance media compatibility cleanup
-Problem/evidence: MaintenanceRequestCard.jsx retained an unused platformClient.storage URL helper even though maintenance images already rendered persisted maintenance_request_images.image_url values and uploads already used shared fileService helpers.
-Scope: Remove only the dead compatibility storage imports/helper and add regression coverage; preserve maintenance lifecycle/state and upload behavior.
-PR: #181.
-CI result: PR head run 37506245814 passed; post-merge production run 37557901609 passed.
-Production revision/SHA: Ready revision khrental-app--0000184 served merge SHA 66cf755c60e86f2e3fa6e29522b0bb859b265d43 with matching public build fingerprint.
-Result: COMPLETE — maintenance card no longer carries the dead compatibility storage path.
-Next item: Phase 4 - Evia diagnostic upload storage cleanup.
+Active item: Phase 4 - Evia diagnostic upload storage cleanup
+Problem/evidence: EviaSignTesting.jsx and SignatureTestingTools.jsx still used platformClient.storage to upload diagnostic PDFs and derive stored URLs.
+Scope: Migrate only diagnostic PDF upload/URL generation to uploadTenantFile(); preserve existing Evia invocation/status paths and add regression coverage.
+PR: #182.
+CI result: PR head run 37569843990 passed; post-merge production run 37570132619 passed.
+Production revision/SHA: Ready revision khrental-app--0000185 served merge SHA d1fb36e0636176e1e6aec8ee257cd8113e0d67a4 with matching public build fingerprint.
+Result: COMPLETE — Evia diagnostic upload tools no longer use platformClient.storage.
+Next item: Phase 4 - application storage initialization cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Evia diagnostic upload storage cleanup
-Problem/evidence: EviaSignTesting.jsx and SignatureTestingTools.jsx still use platformClient.storage to upload diagnostic PDFs and derive stored URLs.
-Scope: Migrate only diagnostic PDF upload/URL generation to uploadTenantFile(); preserve the existing sendDocumentForSignature / platformClient.functions.invoke Evia test paths and status checks; add regression coverage.
-Out of scope: Production agreement signing; Evia protocol/version changes; webhook behavior; agreement lifecycle; admin bucket tooling; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-evia-diagnostic-storage contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - Application storage initialization cleanup
+Problem/evidence: RootLayout actively calls appInitService.initializeApp(), and appInitService still uses platformClient.storage to ensure logical buckets and tenant folders during authenticated startup.
+Scope: Move only bucket existence/create plus tenant-folder list/.keep upload operations to explicit storage APIs; preserve platformClient.auth session gating, STORAGE_BUCKETS/BUCKET_FOLDERS semantics, and non-fatal startup warning behavior; add regression coverage.
+Out of scope: BucketExplorer/AdminPanel diagnostic UI; storage setup scripts; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-app-storage-initialization contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
