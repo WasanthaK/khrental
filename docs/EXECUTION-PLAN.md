@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **application storage initialization cleanup**.
+Current active domain: **bucket explorer service storage cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -301,7 +301,9 @@ Maintenance media compatibility cleanup is complete: PR #181 removed the dead `p
 
 Evia diagnostic upload storage cleanup is complete: PR #182 migrated both diagnostic PDF upload surfaces to `uploadTenantFile()`, preserved existing Evia invocation/status paths, and deployed successfully as merge SHA `d1fb36e0636176e1e6aec8ee257cd8113e0d67a4` from Ready revision `khrental-app--0000185` with the exact public build SHA verified.
 
-Application storage initialization is next because `RootLayout` actively calls `appInitService.initializeApp()`, and that service still uses `platformClient.storage` to ensure logical buckets and tenant folders. This slice moves only those storage operations to explicit APIs while preserving the existing authenticated-session gate and non-fatal startup warning behavior.
+Application storage initialization cleanup is complete: PR #183 migrated the active `RootLayout -> appInitService.initializeApp()` storage path to explicit bucket/list/upload APIs, preserved the existing auth/session gate and non-fatal startup warning behavior, and deployed successfully as merge SHA `198f7e57082a465b1bb737bd485c38ab4707c155` from Ready revision `khrental-app--0000186` with the exact public build SHA verified.
+
+Bucket explorer service storage cleanup is next. `src/services/bucketExplorer.js` is used only by explicit storage tooling (`bucket-test` / `list-buckets`) and still uses `platformClient.storage` for bucket listing plus tenant file list/upload/delete/URL generation. This slice changes only that service and leaves `BucketExplorer.jsx`, `AdminPanel.jsx`, setup scripts, and bucket configuration semantics untouched.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -343,24 +345,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Evia diagnostic upload storage cleanup
-Problem/evidence: EviaSignTesting.jsx and SignatureTestingTools.jsx still used platformClient.storage to upload diagnostic PDFs and derive stored URLs.
-Scope: Migrate only diagnostic PDF upload/URL generation to uploadTenantFile(); preserve existing Evia invocation/status paths and add regression coverage.
-PR: #182.
-CI result: PR head run 37569843990 passed; post-merge production run 37570132619 passed.
-Production revision/SHA: Ready revision khrental-app--0000185 served merge SHA d1fb36e0636176e1e6aec8ee257cd8113e0d67a4 with matching public build fingerprint.
-Result: COMPLETE — Evia diagnostic upload tools no longer use platformClient.storage.
-Next item: Phase 4 - application storage initialization cleanup.
+Active item: Phase 4 - Application storage initialization cleanup
+Problem/evidence: RootLayout actively called appInitService.initializeApp(), and appInitService still used platformClient.storage to ensure logical buckets and tenant folders during authenticated startup.
+Scope: Move only bucket existence/create plus tenant-folder list/.keep upload operations to explicit storage APIs; preserve platformClient.auth session gating, STORAGE_BUCKETS/BUCKET_FOLDERS semantics, and non-fatal startup warning behavior; add regression coverage.
+PR: #183.
+CI result: PR head run 37571375670 passed; post-merge production run 37571555576 passed.
+Production revision/SHA: Ready revision khrental-app--0000186 served merge SHA 198f7e57082a465b1bb737bd485c38ab4707c155 with matching public build fingerprint.
+Result: COMPLETE — active app storage initialization no longer uses platformClient.storage.
+Next item: Phase 4 - bucket explorer service storage cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Application storage initialization cleanup
-Problem/evidence: RootLayout actively calls appInitService.initializeApp(), and appInitService still uses platformClient.storage to ensure logical buckets and tenant folders during authenticated startup.
-Scope: Move only bucket existence/create plus tenant-folder list/.keep upload operations to explicit storage APIs; preserve platformClient.auth session gating, STORAGE_BUCKETS/BUCKET_FOLDERS semantics, and non-fatal startup warning behavior; add regression coverage.
-Out of scope: BucketExplorer/AdminPanel diagnostic UI; storage setup scripts; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-app-storage-initialization contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - Bucket explorer service storage cleanup
+Problem/evidence: src/services/bucketExplorer.js is used only by explicit storage tooling and still uses platformClient.storage for bucket listing plus tenant file list/upload/delete/public URL generation.
+Scope: Migrate only bucketExplorer.js storage calls to explicit storageApiService functions; preserve existing allowed-folder validation and return shapes; add regression coverage.
+Out of scope: BucketExplorer.jsx UI; AdminPanel.jsx; setup_storage_buckets.js; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-bucket-explorer-service-storage contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
