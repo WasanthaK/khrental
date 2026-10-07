@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { normalizeStoragePath } from '../src/api/storage/index.js';
 
 const fileServiceSource = readFileSync(
@@ -197,4 +197,12 @@ test('BucketExplorer UI uses explicit storage APIs while preserving auth and pol
   assert.match(bucketExplorerUiSource, /uploadTenantFile/);
   assert.match(bucketExplorerUiSource, /deleteTenantFiles/);
   assert.match(bucketExplorerUiSource, /buildStorageUrl/);
+});
+
+
+test('legacy compatibility storage setup script stays removed', () => {
+  assert.equal(
+    existsSync(new URL('../src/scripts/setup_storage_buckets.js', import.meta.url)),
+    false
+  );
 });
