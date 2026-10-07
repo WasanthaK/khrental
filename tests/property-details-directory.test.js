@@ -18,9 +18,15 @@ test('PropertyDetails primary record uses the explicit tenant property detail re
   assert.match(propertyDirectoryServiceSource, /\/api\/mssql\/properties\/\$\{encodeURIComponent\(propertyId\)\}/);
 });
 
-test('PropertyDetails keeps unrelated compatibility paths outside this bounded slice', () => {
-  assert.match(propertyDetailsSource, /fetchData\('agreements'/);
+test('PropertyDetails displayed agreements use the explicit tenant-scoped agreement API', () => {
+  assert.match(propertyDetailsSource, /listAgreementsByProperty\(id\)/);
+  assert.doesNotMatch(propertyDetailsSource, /fetchData\('agreements'/);
+});
+
+test('PropertyDetails keeps broader compatibility paths outside this bounded slice', () => {
   assert.match(propertyDetailsSource, /fetchData\('maintenance_requests'/);
   assert.match(propertyDetailsSource, /updateData\('properties'/);
   assert.match(propertyDetailsSource, /deleteData\('properties'/);
+  assert.match(propertyDetailsSource, /platformClient\s*\.from\('agreements'\)/);
+  assert.match(propertyDetailsSource, /platformClient\s*\.from\('property_units'\)/);
 });

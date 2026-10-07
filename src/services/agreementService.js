@@ -105,6 +105,18 @@ const fetchPropertyUnitRecord = async (unitId) => {
   return data;
 };
 
+export const listAgreementsByProperty = async (propertyId) => {
+  if (!propertyId) {
+    return [];
+  }
+
+  const agreements = await requestMssqlApi(
+    `/api/mssql/agreements?propertyId=${encodeURIComponent(propertyId)}&pageSize=500`
+  );
+
+  return Array.isArray(agreements) ? agreements : [];
+};
+
 export const fetchAgreement = async (agreementId) => {
   if (isMssqlApiEnabled()) {
     try {
