@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **PropertyList compatibility read removal**.
+Current active domain: **PropertyDetails primary compatibility read removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -315,7 +315,9 @@ Shared storage compatibility façade removal is complete: PR #188 removed the de
 
 PropertyContext compatibility fallback removal is complete: PR #189 moved `src/contexts/PropertyContext.jsx` fully onto `propertyDirectoryService.listTenantProperties()` and deployed successfully as merge SHA `4fb78cebecdcc73738d0bb822afb7f22a196d6f0` from Ready revision `khrental-app--0000192` with the exact public build SHA verified.
 
-PropertyList compatibility read removal is next. `src/pages/PropertyList.jsx` is read-only and currently uses only `fetchData('properties')`; the exact explicit tenant property directory service already exists, so this slice replaces only that read while preserving tenant refresh, search/filter behavior, loading/error UX, and navigation.
+PropertyList compatibility read removal is complete: PR #190 moved `src/pages/PropertyList.jsx` onto `propertyDirectoryService.listTenantProperties()` and deployed successfully as merge SHA `3def32ae7f62aed0d2326b7bf227142fe1c99468` from Ready revision `khrental-app--0000193` with the exact public build SHA verified.
+
+PropertyDetails primary compatibility read removal is next. `src/pages/PropertyDetails.jsx` still loads its primary property record through `fetchData('properties')`, while the backend already exposes tenant-scoped `/api/mssql/properties/:id`. This slice adds an explicit `getTenantPropertyById()` service read and replaces only that primary record fetch; agreements, maintenance, image update, and delete paths remain unchanged.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -357,24 +359,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - PropertyContext compatibility fallback removal
-Problem/evidence: PropertyContext still had platformClient.from('properties') and compatibility auth/session fallback despite an existing explicit tenant property directory.
-Scope: Reuse propertyDirectoryService.listTenantProperties() for both property loading and accessible-property IDs while preserving tenant-portal gating, retry behavior, selection state, recent-properties storage, and UI behavior.
-PR: #189.
-CI result: PR head run 37596343516 passed; post-merge production run 37597932347 passed.
-Production revision/SHA: Ready revision khrental-app--0000192 served merge SHA 4fb78cebecdcc73738d0bb822afb7f22a196d6f0 with matching public build fingerprint.
-Result: COMPLETE — PropertyContext compatibility fallback removed from production.
-Next item: Phase 4 - PropertyList compatibility read removal.
+Active item: Phase 4 - PropertyList compatibility read removal
+Problem/evidence: src/pages/PropertyList.jsx was read-only but still used fetchData('properties') despite an existing explicit tenant property directory.
+Scope: Replace only the PropertyList compatibility read with listTenantProperties(); preserve active-tenant refresh, search/filter behavior, loading/error UX, PropertyCard rendering, and navigation.
+PR: #190.
+CI result: PR head run 37600640175 passed; post-merge production run 37601198340 passed.
+Production revision/SHA: Ready revision khrental-app--0000193 served merge SHA 3def32ae7f62aed0d2326b7bf227142fe1c99468 with matching public build fingerprint.
+Result: COMPLETE — PropertyList compatibility read removed from production.
+Next item: Phase 4 - PropertyDetails primary compatibility read removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - PropertyList compatibility read removal
-Problem/evidence: src/pages/PropertyList.jsx is read-only and uses only fetchData('properties') even though propertyDirectoryService.listTenantProperties() already provides the canonical explicit tenant-scoped read.
-Scope: Replace only the PropertyList compatibility read with listTenantProperties(); preserve active-tenant refresh, search/filter behavior, loading/error UX, PropertyCard rendering, and navigation.
-Out of scope: PropertyDetails; PropertyForm; property-unit CRUD; other property screens; maintenance/team/camera/notification compatibility; shared non-storage platform client removal.
-Result: ACTIVE — branch phase-4-property-list-explicit-directory contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - PropertyDetails primary compatibility read removal
+Problem/evidence: src/pages/PropertyDetails.jsx still loads its primary property record through fetchData('properties') even though the tenant-scoped /api/mssql/properties/:id endpoint already exists.
+Scope: Add propertyDirectoryService.getTenantPropertyById() and replace only the primary property record read; preserve terms normalization, image organization, renter resolution, agreements, maintenance requests, property image-reference updates, delete behavior, and UI behavior.
+Out of scope: PropertyDetails agreements/maintenance compatibility reads; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
+Result: ACTIVE — branch phase-4-property-details-primary-read contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
