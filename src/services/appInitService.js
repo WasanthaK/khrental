@@ -1,49 +1,43 @@
 import { getPlatformClient } from './platformClient';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
+import {
+  createStorageBucket,
+  listStorageBuckets,
+  listTenantFiles,
+  uploadTenantFile
+} from './storageApiService';
 
 const platformClient = getPlatformClient();
 
 let storageInitialized = false;
 
 const ensureBucket = async (bucketName) => {
-  const { data: bucket, error: getBucketError } = await platformClient.storage.getBucket(bucketName);
+  const buckets = await listStorageBuckets();
+  const bucket = buckets.find((entry) => entry.name === bucketName || entry.id === bucketName);
 
   if (bucket) {
     return true;
   }
 
-  if (getBucketError && !String(getBucketError.message || '').toLowerCase().includes('not found')) {
-    throw getBucketError;
-  }
-
-  const { error: createError } = await platformClient.storage.createBucket(bucketName);
-  if (createError) {
-    throw createError;
-  }
-
+  await createStorageBucket(bucketName);
   return true;
 };
 
 const ensureFolder = async (bucketName, folderPath) => {
-  const { data, error } = await platformClient.storage
-    .from(bucketName)
-    .list(folderPath);
+  const files = await listTenantFiles({
+    bucket: bucketName,
+    path: folderPath
+  });
 
-  if (error) {
-    throw error;
-  }
-
-  if (Array.isArray(data) && data.length > 0) {
+  if (Array.isArray(files) && files.length > 0) {
     return;
   }
 
-  const { error: uploadError } = await platformClient.storage
-    .from(bucketName)
-    .upload(`${folderPath}/.keep`, new Blob([''], { type: 'text/plain' }));
-
-  if (uploadError && !String(uploadError.message || '').toLowerCase().includes('already exists')) {
-    throw uploadError;
-  }
+  await uploadTenantFile({
+    bucket: bucketName,
+    path: `${folderPath}/.keep`,
+    file: new Blob([''], { type: 'text/plain' })
+  });
 };
 
 /**
