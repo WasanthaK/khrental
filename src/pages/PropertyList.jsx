@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchData } from '../services/platformClient';
+import { listTenantProperties } from '../services/propertyDirectoryService';
 import PropertyCard from '../components/properties/PropertyCard';
 import { useAuth } from '../hooks/useAuth';
 
@@ -17,13 +17,8 @@ const PropertyList = () => {
       try {
         setLoading(true);
         setError(null);
-        const { data, error } = await fetchData('properties');
-        
-        if (error) {
-          throw error;
-        }
-        
-        setProperties(data || []);
+        const properties = await listTenantProperties();
+        setProperties(properties);
       } catch (error) {
         console.error('Error fetching properties:', error.message);
         setError(error.message);
