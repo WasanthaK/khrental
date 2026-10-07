@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **PropertyDetails primary compatibility read removal**.
+Current active domain: **PropertyDetails agreements compatibility read removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -317,7 +317,9 @@ PropertyContext compatibility fallback removal is complete: PR #189 moved `src/c
 
 PropertyList compatibility read removal is complete: PR #190 moved `src/pages/PropertyList.jsx` onto `propertyDirectoryService.listTenantProperties()` and deployed successfully as merge SHA `3def32ae7f62aed0d2326b7bf227142fe1c99468` from Ready revision `khrental-app--0000193` with the exact public build SHA verified.
 
-PropertyDetails primary compatibility read removal is next. `src/pages/PropertyDetails.jsx` still loads its primary property record through `fetchData('properties')`, while the backend already exposes tenant-scoped `/api/mssql/properties/:id`. This slice adds an explicit `getTenantPropertyById()` service read and replaces only that primary record fetch; agreements, maintenance, image update, and delete paths remain unchanged.
+PropertyDetails primary compatibility read removal is complete: PR #191 added `propertyDirectoryService.getTenantPropertyById()` and moved the primary property record read onto `/api/mssql/properties/:id`, deploying successfully as merge SHA `d463ad9f705b0865eb073d6f9c9ae078f1a634ac` from Ready revision `khrental-app--0000194` with the exact public build SHA verified.
+
+PropertyDetails agreements compatibility read removal is next. The page still loads the displayed agreements list with `fetchData('agreements')`, while `/api/mssql/agreements` already supports a tenant-scoped `propertyId` filter. This slice adds an explicit `listAgreementsByProperty()` service read and replaces only that displayed agreements list; renter-resolution fallback queries, maintenance reads, image updates, and property delete remain unchanged.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -359,24 +361,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - PropertyList compatibility read removal
-Problem/evidence: src/pages/PropertyList.jsx was read-only but still used fetchData('properties') despite an existing explicit tenant property directory.
-Scope: Replace only the PropertyList compatibility read with listTenantProperties(); preserve active-tenant refresh, search/filter behavior, loading/error UX, PropertyCard rendering, and navigation.
-PR: #190.
-CI result: PR head run 37600640175 passed; post-merge production run 37601198340 passed.
-Production revision/SHA: Ready revision khrental-app--0000193 served merge SHA 3def32ae7f62aed0d2326b7bf227142fe1c99468 with matching public build fingerprint.
-Result: COMPLETE — PropertyList compatibility read removed from production.
-Next item: Phase 4 - PropertyDetails primary compatibility read removal.
+Active item: Phase 4 - PropertyDetails primary compatibility read removal
+Problem/evidence: src/pages/PropertyDetails.jsx loaded its primary property record through fetchData('properties') even though the tenant-scoped /api/mssql/properties/:id endpoint already existed.
+Scope: Add propertyDirectoryService.getTenantPropertyById() and replace only the primary property record read; preserve terms normalization, image organization, renter resolution, agreements, maintenance requests, property image-reference updates, delete behavior, and UI behavior.
+PR: #191.
+CI result: PR head run 37604831085 passed; post-merge production run 37606056581 passed.
+Production revision/SHA: Ready revision khrental-app--0000194 served merge SHA d463ad9f705b0865eb073d6f9c9ae078f1a634ac with matching public build fingerprint.
+Result: COMPLETE — PropertyDetails primary compatibility read removed from production.
+Next item: Phase 4 - PropertyDetails agreements compatibility read removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - PropertyDetails primary compatibility read removal
-Problem/evidence: src/pages/PropertyDetails.jsx still loads its primary property record through fetchData('properties') even though the tenant-scoped /api/mssql/properties/:id endpoint already exists.
-Scope: Add propertyDirectoryService.getTenantPropertyById() and replace only the primary property record read; preserve terms normalization, image organization, renter resolution, agreements, maintenance requests, property image-reference updates, delete behavior, and UI behavior.
-Out of scope: PropertyDetails agreements/maintenance compatibility reads; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
-Result: ACTIVE — branch phase-4-property-details-primary-read contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - PropertyDetails agreements compatibility read removal
+Problem/evidence: src/pages/PropertyDetails.jsx still loads the displayed agreements list through fetchData('agreements') even though /api/mssql/agreements supports a tenant-scoped propertyId filter.
+Scope: Add agreementService.listAgreementsByProperty() and replace only the displayed agreements list; preserve renter-resolution fallbacks, maintenance requests, property image-reference updates, property delete behavior, and UI behavior.
+Out of scope: PropertyDetails renter-resolution compatibility queries; PropertyDetails maintenance read; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
+Result: ACTIVE — branch phase-4-property-details-agreements-read contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
