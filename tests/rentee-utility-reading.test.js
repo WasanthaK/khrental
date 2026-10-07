@@ -134,6 +134,14 @@ test('tenant portal does not initialize the broad workspace property directory',
   assert.match(propertyContextSource, /!isAuthenticated \|\| !hasTenantAccess \|\| isTenantPortal/);
 });
 
+test('PropertyContext uses the explicit tenant property directory without compatibility fallback', () => {
+  assert.match(propertyContextSource, /listTenantProperties/);
+  assert.doesNotMatch(propertyContextSource, /platformClient/);
+  assert.doesNotMatch(propertyContextSource, /requestMssqlApi/);
+  assert.doesNotMatch(propertyContextSource, /isMssqlApiEnabled/);
+  assert.doesNotMatch(propertyContextSource, /local compatibility layer/);
+});
+
 test('legacy MSSQL business directories remain blocked for non-admin renter sessions', () => {
   assert.match(serverSource, /CENTRAL_AUTHORIZATION_REQUIRED/);
   assert.match(serverSource, /This legacy MSSQL business route is restricted to administrators/);
