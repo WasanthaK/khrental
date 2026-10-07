@@ -58,6 +58,11 @@ const appInitServiceSource = readFileSync(
   'utf8'
 );
 
+const bucketExplorerServiceSource = readFileSync(
+  new URL('../src/services/bucketExplorer.js', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -151,4 +156,14 @@ test('app storage initialization uses explicit storage APIs while preserving aut
   assert.match(appInitServiceSource, /createStorageBucket/);
   assert.match(appInitServiceSource, /listTenantFiles/);
   assert.match(appInitServiceSource, /uploadTenantFile/);
+});
+
+
+test('bucket explorer service uses explicit tenant storage APIs', () => {
+  assert.doesNotMatch(bucketExplorerServiceSource, /platformClient\.storage/);
+  assert.match(bucketExplorerServiceSource, /listStorageBuckets/);
+  assert.match(bucketExplorerServiceSource, /listTenantFiles/);
+  assert.match(bucketExplorerServiceSource, /uploadTenantFile/);
+  assert.match(bucketExplorerServiceSource, /deleteTenantFiles/);
+  assert.match(bucketExplorerServiceSource, /buildStorageUrl/);
 });
