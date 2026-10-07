@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **shared storage compatibility façade removal**.
+Current active domain: **PropertyContext compatibility fallback removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -311,7 +311,9 @@ BucketExplorer UI storage cleanup is complete: PR #186 migrated `src/components/
 
 Legacy storage setup script removal is complete: PR #187 removed the unwired `src/scripts/setup_storage_buckets.js` compatibility-era script and deployed successfully as merge SHA `12fcd7ad1f5ccc638e37012f3549e651f65acb1c` from Ready revision `khrental-app--0000190` with the exact public build SHA verified.
 
-Shared storage compatibility façade removal is next. Fresh source inventory shows `platformClient.storage` now exists only inside `src/services/platformClientCore.js`; the named storage compatibility helpers are only re-exported by `platformClient.js` and have no active callers. This slice removes only the dead storage façade/exports while preserving auth, query-builder, tenant-context, RPC, and all non-storage compatibility behavior.
+Shared storage compatibility façade removal is complete: PR #188 removed the dead storage client block and obsolete storage exports/re-exports while preserving auth, query-builder, tenant-context and RPC compatibility, and deployed successfully as merge SHA `b04ea94a2c8ac3c899b1312c0c1235b8298383b7` from Ready revision `khrental-app--0000191` with the exact public build SHA verified.
+
+PropertyContext compatibility fallback removal is next. `src/contexts/PropertyContext.jsx` already prefers the dedicated tenant-scoped MSSQL property directory but still falls back to `platformClient.from('properties')` and compatibility auth/session reads. The repository already has `propertyDirectoryService.listTenantProperties()` backed by `/api/mssql/properties`, so this slice removes only the fallback path and reuses that existing service boundary.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -353,24 +355,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Legacy storage setup script removal
-Problem/evidence: src/scripts/setup_storage_buckets.js was not imported, not exposed through package.json, and was the only remaining non-façade platformClient.storage consumer. Its public/allowedMimeTypes/fileSizeLimit update semantics were unsupported/no-op under the compatibility layer.
-Scope: Delete the dead legacy setup script and add a regression guard that it remains absent.
-PR: #187.
-CI result: PR head run 37582669765 passed; post-merge production run 37584522779 passed.
-Production revision/SHA: Ready revision khrental-app--0000190 served merge SHA 12fcd7ad1f5ccc638e37012f3549e651f65acb1c with matching public build fingerprint.
-Result: COMPLETE — dead legacy storage setup script removed.
-Next item: Phase 4 - shared storage compatibility façade removal.
+Active item: Phase 4 - Shared storage compatibility façade removal
+Problem/evidence: Fresh source inventory showed platformClient.storage only inside src/services/platformClientCore.js and no active callers of the named storage compatibility exports.
+Scope: Remove only the dead storage client block, platformClient.storage property, and obsolete storage helper exports/re-exports while preserving auth, query-builder, tenant-context, RPC, and non-storage compatibility behavior.
+PR: #188.
+CI result: PR head run 37589445245 passed; post-merge production run 37589864545 passed.
+Production revision/SHA: Ready revision khrental-app--0000191 served merge SHA b04ea94a2c8ac3c899b1312c0c1235b8298383b7 with matching public build fingerprint.
+Result: COMPLETE — storage compatibility façade removed from production.
+Next item: Phase 4 - PropertyContext compatibility fallback removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Shared storage compatibility façade removal
-Problem/evidence: Fresh source inventory shows platformClient.storage now exists only inside src/services/platformClientCore.js. Its named storage compatibility exports are only re-exported by platformClient.js and have no active callers.
-Scope: Remove only the dead storage client block, platformClient.storage property, and obsolete storage helper exports/re-exports. Preserve auth, query-builder, tenant-context, RPC, and all non-storage compatibility behavior.
-Out of scope: non-storage platformClient migration; auth compatibility; query compatibility; RPC compatibility; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-remove-storage-compatibility-facade contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - PropertyContext compatibility fallback removal
+Problem/evidence: src/contexts/PropertyContext.jsx already uses the tenant-scoped MSSQL property directory when enabled, but still falls back to platformClient.from('properties') and compatibility auth/session access.
+Scope: Reuse propertyDirectoryService.listTenantProperties() for both property loading and accessible-property IDs; preserve auth/tenant-portal gating, retry behavior, selection state, recent-properties local storage, and UI behavior.
+Out of scope: PropertyForm/PropertyDetails CRUD migration; other property screens; maintenance/team/camera/notification compatibility; shared non-storage platform client removal.
+Result: ACTIVE — branch phase-4-property-context-explicit-directory contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
