@@ -252,181 +252,6 @@ class QueryBuilder {
   }
 }
 
-const buildPublicUrl = (bucket, filePath) => {
-  const baseUrl = getApiBaseUrl().replace(/\/$/, '');
-  return `${baseUrl}/storage/${bucket}/${String(filePath || '').replace(/^\/+/, '')}`;
-};
-
-const STORAGE_TENANT_ROOT = 'tenants';
-
-const normalizeStoragePath = (filePath = '') => String(filePath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-const isTenantScopedPath = (filePath = '') => normalizeStoragePath(filePath).startsWith(`${STORAGE_TENANT_ROOT}/`);
-
-const getTenantStoragePrefix = () => {
-  const activeTenantId = getActiveTenantId();
-  const normalizedTenantId = normalizeStoragePath(activeTenantId);
-  return normalizedTenantId ? `${STORAGE_TENANT_ROOT}/${normalizedTenantId}` : '';
-};
-
-const scopeStoragePath = (filePath, { requireTenant = false } = {}) => {
-  const normalizedPath = normalizeStoragePath(filePath);
-  const tenantPrefix = getTenantStoragePrefix();
-
-  if (!tenantPrefix) {
-    if (isTenantScopedPath(normalizedPath)) {
-      return normalizedPath;
-    }
-
-    // When the browser has no locally stored active tenant yet, allow the request
-    // to continue and let the backend tenant context apply the correct tenant scope.
-    return normalizedPath;
-  }
-
-  if (!normalizedPath) {
-    return tenantPrefix;
-  }
-
-  if (normalizedPath === tenantPrefix || normalizedPath.startsWith(`${tenantPrefix}/`)) {
-    return normalizedPath;
-  }
-
-  if (normalizedPath.startsWith(`${STORAGE_TENANT_ROOT}/`)) {
-    throw new Error('Cross-tenant storage paths are not allowed.');
-  }
-
-  return `${tenantPrefix}/${normalizedPath}`;
-};
-
-const storageClient = {
-  async listBuckets() {
-    try {
-      const payload = await apiRequest('/api/platform/storage/buckets');
-      return { data: payload?.data || [], error: null };
-    } catch (error) {
-      return { data: null, error };
-    }
-  },
-
-  async getBucket(bucketName) {
-    try {
-      const payload = await apiRequest('/api/platform/storage/buckets');
-      const bucket = (payload?.data || []).find((entry) => entry.name === bucketName || entry.id === bucketName) || null;
-      return { data: bucket, error: bucket ? null : new Error(`Bucket ${bucketName} not found`) };
-    } catch (error) {
-      return { data: null, error };
-    }
-  },
-
-  async createBucket(bucketName, _options = {}) {
-    try {
-      const payload = await apiRequest('/api/platform/storage/buckets', {
-        method: 'POST',
-        body: { bucketName }
-      });
-      return { data: payload?.data || null, error: null };
-    } catch (error) {
-      return { data: null, error };
-    }
-  },
-
-  async updateBucket(bucketName, _options = {}) {
-    try {
-      const { data, error } = await this.getBucket(bucketName);
-
-      if (error && !data) {
-        return { data: null, error };
-      }
-
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error };
-    }
-  },
-
-  async deleteBucket(bucketName) {
-    try {
-      const payload = await apiRequest(`/api/platform/storage/buckets/${encodeURIComponent(bucketName)}`, {
-        method: 'DELETE'
-      });
-      return { data: payload?.data || null, error: null };
-    } catch (error) {
-      return { data: null, error };
-    }
-  },
-
-  from(bucket) {
-    return {
-      async upload(filePath, file) {
-        try {
-          const scopedPath = scopeStoragePath(filePath, { requireTenant: true });
-          const arrayBuffer = file instanceof Blob ? await file.arrayBuffer() : file;
-          const payload = await apiRequest(`/api/platform/storage/upload?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(scopedPath)}`, {
-            method: 'POST',
-            raw: true,
-            body: arrayBuffer,
-            headers: {
-              'Content-Type': file?.type || 'application/octet-stream'
-            }
-          });
-          return {
-            data: payload?.data
-              ? {
-                  ...payload.data,
-                  originalPath: normalizeStoragePath(filePath),
-                  scopedPath: payload.data.path || scopedPath
-                }
-              : null,
-            error: null
-          };
-        } catch (error) {
-          return { data: null, error };
-        }
-      },
-
-      async list(folderPath = '') {
-        try {
-          const scopedPath = scopeStoragePath(folderPath);
-          const payload = await apiRequest(`/api/platform/storage/list?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(scopedPath)}`);
-          return { data: payload?.data || [], error: null };
-        } catch (error) {
-          return { data: null, error };
-        }
-      },
-
-      async download(filePath) {
-        try {
-          const scopedPath = scopeStoragePath(filePath);
-          const response = await fetch(buildPublicUrl(bucket, scopedPath));
-          if (!response.ok) {
-            throw new Error(`Failed to download ${filePath}`);
-          }
-          return { data: await response.blob(), error: null };
-        } catch (error) {
-          return { data: null, error };
-        }
-      },
-
-      getPublicUrl(filePath) {
-        const scopedPath = scopeStoragePath(filePath);
-        return { data: { publicUrl: buildPublicUrl(bucket, scopedPath), path: scopedPath } };
-      },
-
-      async remove(paths = []) {
-        try {
-          const scopedPaths = paths.map((item) => scopeStoragePath(item, { requireTenant: true }));
-          const payload = await apiRequest('/api/platform/storage/objects', {
-            method: 'DELETE',
-            body: { bucket, paths: scopedPaths }
-          });
-          return { data: payload?.data || [], error: null };
-        } catch (error) {
-          return { data: null, error };
-        }
-      }
-    };
-  }
-};
-
 const authClient = {
   async getSession() {
     return { data: { session: currentSession }, error: null };
@@ -584,7 +409,6 @@ export const getPlatformClient = () => {
   if (!platformClientInstance) {
     platformClientInstance = {
       from: (table) => new QueryBuilder(table),
-      storage: storageClient,
       auth: authClient,
       rpc
     };
@@ -751,17 +575,8 @@ export const updateData = async (table, id, data) => {
 };
 
 export const deleteData = async (table, id) => platformClient.from(table).delete().eq('id', id);
-export const uploadFile = async (bucket, path, file) => platformClient.storage.from(bucket).upload(path, file);
-export const getFileUrl = (bucket, path) => platformClient.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-export const deleteFile = async (bucket, path) => platformClient.storage.from(bucket).remove([path]);
-export const getPublicUrl = getFileUrl;
-export const storage = storageClient;
 export const auth = authClient;
 export { rpc };
-export const listBuckets = async () => storageClient.listBuckets();
-export const getBucket = async (bucketName) => storageClient.getBucket(bucketName);
-export const updateBucket = async (bucketName, options = {}) => storageClient.updateBucket(bucketName, options);
-export const createStorageBucket = async (bucketName, options = {}) => storageClient.createBucket(bucketName, options);
 export const selectData = fetchData;
 export const upsertData = async (table, data) => platformClient.from(table).upsert(toDatabaseFormat(data)).select('*');
 export const query = async (tableOrOptions, columns = null, filters = null) => fetchData(tableOrOptions, columns, filters);
