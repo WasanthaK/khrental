@@ -23,6 +23,15 @@ test('PropertyDetails displayed agreements use the explicit tenant-scoped agreem
   assert.doesNotMatch(propertyDetailsSource, /fetchData\('agreements'/);
 });
 
+test('PropertyDetails renter fallback reuses the explicit property agreement list', () => {
+  assert.match(propertyDetailsSource, /const agreementRentees = \(agreementsData \|\| \[\]\)\.filter/);
+  assert.match(propertyDetailsSource, /\['active', 'pending', 'review', 'signed'\]\.includes/);
+  assert.equal(
+    (propertyDetailsSource.match(/platformClient\s*\.from\('agreements'\)/g) || []).length,
+    1
+  );
+});
+
 test('PropertyDetails removes the unused maintenance compatibility read', () => {
   assert.doesNotMatch(propertyDetailsSource, /maintenance_requests/);
   assert.doesNotMatch(propertyDetailsSource, /maintenanceRequests/);
