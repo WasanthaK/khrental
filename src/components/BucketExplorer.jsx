@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { platform as platformClient } from '../services/platformClient';
+import {
+  buildStorageUrl,
+  createStorageBucket,
+  deleteTenantFiles,
+  listStorageBuckets,
+  listTenantFiles,
+  uploadTenantFile
+} from '../services/storageApiService';
 import { useAuth } from '../hooks/useAuth';
 
 const BucketExplorer = () => {
@@ -48,11 +56,7 @@ const BucketExplorer = () => {
         throw new Error('No auth session found');
       }
 
-      const { data: buckets, error } = await platformClient.storage.listBuckets();
-      
-      if (error) {
-        throw error;
-      }
+      const buckets = await listStorageBuckets();
 
       console.log('Loaded buckets:', buckets);
       setBuckets(buckets || []);
@@ -76,15 +80,9 @@ const BucketExplorer = () => {
       setLoading(true);
       setError(null);
 
-      // Create the bucket
-      const { data: bucket, error: createError } = await platformClient.storage.createBucket(newBucketName, {
-        public: isPublic,
-        fileSizeLimit: fileSizeLimit * 1024 * 1024, // Convert MB to bytes
-      });
-
-      if (createError) {
-        throw createError;
-      }
+      // Create the bucket. The legacy compatibility client ignored the
+      // public/file-size options as well, so this preserves current behavior.
+      const bucket = await createStorageBucket(newBucketName);
 
       console.log('Created bucket:', bucket);
       
@@ -119,13 +117,10 @@ const BucketExplorer = () => {
         throw new Error('No auth session found');
       }
 
-      const { data: files, error } = await platformClient.storage
-        .from(bucketName)
-        .list();
-      
-      if (error) {
-        throw error;
-      }
+      const files = await listTenantFiles({
+        bucket: bucketName,
+        path: ''
+      });
 
       // Filter out .keep files used for folder structure
       const filteredFiles = files?.filter(file => !file.name.endsWith('.keep')) || [];
@@ -140,12 +135,7 @@ const BucketExplorer = () => {
     }
   };
 
-  const getFileUrl = (bucketName, fileName) => {
-    const { data } = platformClient.storage
-      .from(bucketName)
-      .getPublicUrl(fileName);
-    return data?.publicUrl;
-  };
+  const getFileUrl = (bucketName, fileName) => buildStorageUrl(bucketName, fileName);
 
   const runStorageTests = async () => {
     if (!selectedBucket) {
@@ -166,18 +156,10 @@ const BucketExplorer = () => {
         status: 'running'
       });
       
-      const { data: bucketData, error: bucketError } = await platformClient.storage
-        .from(selectedBucket)
-        .list();
-      
-      if (bucketError) {
-        results[results.length - 1] = {
-          name: 'Bucket Permissions',
-          status: 'failed',
-          error: bucketError.message
-        };
-        throw bucketError;
-      }
+      await listTenantFiles({
+        bucket: selectedBucket,
+        path: ''
+      });
       
       results[results.length - 1] = {
         name: 'Bucket Permissions',
@@ -201,18 +183,11 @@ const BucketExplorer = () => {
       }
 
       const fileName = `test-${Date.now()}-${testFile.name}`;
-      const { data: uploadData, error: uploadError } = await platformClient.storage
-        .from(selectedBucket)
-        .upload(fileName, testFile);
-
-      if (uploadError) {
-        results[results.length - 1] = {
-          name: 'File Upload',
-          status: 'failed',
-          error: uploadError.message
-        };
-        throw uploadError;
-      }
+      await uploadTenantFile({
+        bucket: selectedBucket,
+        path: fileName,
+        file: testFile
+      });
 
       results[results.length - 1] = {
         name: 'File Upload',
@@ -226,11 +201,9 @@ const BucketExplorer = () => {
         status: 'running'
       });
 
-      const { data: urlData } = platformClient.storage
-        .from(selectedBucket)
-        .getPublicUrl(fileName);
+      const publicUrl = buildStorageUrl(selectedBucket, fileName);
 
-      if (!urlData?.publicUrl) {
+      if (!publicUrl) {
         results[results.length - 1] = {
           name: 'Public URL Access',
           status: 'failed',
@@ -251,18 +224,10 @@ const BucketExplorer = () => {
         status: 'running'
       });
 
-      const { error: deleteError } = await platformClient.storage
-        .from(selectedBucket)
-        .remove([fileName]);
-
-      if (deleteError) {
-        results[results.length - 1] = {
-          name: 'File Deletion',
-          status: 'failed',
-          error: deleteError.message
-        };
-        throw deleteError;
-      }
+      await deleteTenantFiles({
+        bucket: selectedBucket,
+        paths: [fileName]
+      });
 
       results[results.length - 1] = {
         name: 'File Deletion',
@@ -489,11 +454,10 @@ const BucketExplorer = () => {
                               onClick={async () => {
                                 if (window.confirm('Are you sure you want to delete this file?')) {
                                   try {
-                                    const { error } = await platformClient.storage
-                                      .from(selectedBucket)
-                                      .remove([file.name]);
-                                    
-                                    if (error) throw error;
+                                    await deleteTenantFiles({
+                                      bucket: selectedBucket,
+                                      paths: [file.name]
+                                    });
                                     loadFiles(selectedBucket);
                                   } catch (err) {
                                     console.error('Error deleting file:', err);
