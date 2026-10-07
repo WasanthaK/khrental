@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **PropertyDetails agreements compatibility read removal**.
+Current active domain: **PropertyDetails dead maintenance compatibility read removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -319,7 +319,9 @@ PropertyList compatibility read removal is complete: PR #190 moved `src/pages/Pr
 
 PropertyDetails primary compatibility read removal is complete: PR #191 added `propertyDirectoryService.getTenantPropertyById()` and moved the primary property record read onto `/api/mssql/properties/:id`, deploying successfully as merge SHA `d463ad9f705b0865eb073d6f9c9ae078f1a634ac` from Ready revision `khrental-app--0000194` with the exact public build SHA verified.
 
-PropertyDetails agreements compatibility read removal is next. The page still loads the displayed agreements list with `fetchData('agreements')`, while `/api/mssql/agreements` already supports a tenant-scoped `propertyId` filter. This slice adds an explicit `listAgreementsByProperty()` service read and replaces only that displayed agreements list; renter-resolution fallback queries, maintenance reads, image updates, and property delete remain unchanged.
+PropertyDetails agreements compatibility read removal is complete: PR #192 added `agreementService.listAgreementsByProperty()` and moved the displayed agreements list onto tenant-scoped `/api/mssql/agreements?propertyId=...`, deploying successfully as merge SHA `490d7e55b92374e6d85dd84c6a1c14fb8c2091c9` from Ready revision `khrental-app--0000195` with the exact public build SHA verified.
+
+PropertyDetails dead maintenance compatibility read removal is next. `src/pages/PropertyDetails.jsx` still performs a `fetchData('maintenance_requests')` query, but the resulting state is never rendered or consumed anywhere in the page. This slice removes only that dead compatibility read and its unused state; no new maintenance API or authority change is introduced.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -361,24 +363,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - PropertyDetails primary compatibility read removal
-Problem/evidence: src/pages/PropertyDetails.jsx loaded its primary property record through fetchData('properties') even though the tenant-scoped /api/mssql/properties/:id endpoint already existed.
-Scope: Add propertyDirectoryService.getTenantPropertyById() and replace only the primary property record read; preserve terms normalization, image organization, renter resolution, agreements, maintenance requests, property image-reference updates, delete behavior, and UI behavior.
-PR: #191.
-CI result: PR head run 37604831085 passed; post-merge production run 37606056581 passed.
-Production revision/SHA: Ready revision khrental-app--0000194 served merge SHA d463ad9f705b0865eb073d6f9c9ae078f1a634ac with matching public build fingerprint.
-Result: COMPLETE — PropertyDetails primary compatibility read removed from production.
-Next item: Phase 4 - PropertyDetails agreements compatibility read removal.
+Active item: Phase 4 - PropertyDetails agreements compatibility read removal
+Problem/evidence: src/pages/PropertyDetails.jsx loaded its displayed agreements list through fetchData('agreements') even though /api/mssql/agreements supported a tenant-scoped propertyId filter.
+Scope: Add agreementService.listAgreementsByProperty() and replace only the displayed agreements list; preserve renter-resolution fallbacks, maintenance requests, property image-reference updates, property delete behavior, and UI behavior.
+PR: #192.
+CI result: PR head run 37608432205 passed; post-merge production run 37611758648 passed.
+Production revision/SHA: Ready revision khrental-app--0000195 served merge SHA 490d7e55b92374e6d85dd84c6a1c14fb8c2091c9 with matching public build fingerprint.
+Result: COMPLETE — PropertyDetails displayed agreements compatibility read removed from production.
+Next item: Phase 4 - PropertyDetails dead maintenance compatibility read removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - PropertyDetails agreements compatibility read removal
-Problem/evidence: src/pages/PropertyDetails.jsx still loads the displayed agreements list through fetchData('agreements') even though /api/mssql/agreements supports a tenant-scoped propertyId filter.
-Scope: Add agreementService.listAgreementsByProperty() and replace only the displayed agreements list; preserve renter-resolution fallbacks, maintenance requests, property image-reference updates, property delete behavior, and UI behavior.
-Out of scope: PropertyDetails renter-resolution compatibility queries; PropertyDetails maintenance read; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
-Result: ACTIVE — branch phase-4-property-details-agreements-read contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - PropertyDetails dead maintenance compatibility read removal
+Problem/evidence: src/pages/PropertyDetails.jsx still queries maintenance_requests through fetchData(), but the resulting maintenanceRequests state is never rendered or otherwise consumed by the page.
+Scope: Remove only the dead maintenance_requests compatibility read, the unused maintenanceRequests state, and the now-unused fetchData import; preserve all visible PropertyDetails behavior, renter-resolution fallbacks, image-reference update, property delete, and navigation.
+Out of scope: MaintenanceList/MaintenanceDetails lifecycle migration; PropertyDetails renter-resolution compatibility queries; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
+Result: ACTIVE — branch phase-4-property-details-dead-maintenance-read contains the bounded dead-read removal and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---

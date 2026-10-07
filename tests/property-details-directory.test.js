@@ -23,8 +23,14 @@ test('PropertyDetails displayed agreements use the explicit tenant-scoped agreem
   assert.doesNotMatch(propertyDetailsSource, /fetchData\('agreements'/);
 });
 
+test('PropertyDetails removes the unused maintenance compatibility read', () => {
+  assert.doesNotMatch(propertyDetailsSource, /maintenance_requests/);
+  assert.doesNotMatch(propertyDetailsSource, /maintenanceRequests/);
+  assert.doesNotMatch(propertyDetailsSource, /setMaintenanceRequests/);
+  assert.doesNotMatch(propertyDetailsSource, /fetchData/);
+});
+
 test('PropertyDetails keeps broader compatibility paths outside this bounded slice', () => {
-  assert.match(propertyDetailsSource, /fetchData\('maintenance_requests'/);
   assert.match(propertyDetailsSource, /updateData\('properties'/);
   assert.match(propertyDetailsSource, /deleteData\('properties'/);
   assert.match(propertyDetailsSource, /platformClient\s*\.from\('agreements'\)/);

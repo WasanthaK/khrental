@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchData, deleteData, updateData } from '../services/platformClient';
+import { deleteData, updateData } from '../services/platformClient';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { DEFAULT_IMAGE } from '../utils/constants';
 import { platform as platformClient } from '../services/platformClient';
@@ -27,7 +27,6 @@ const PropertyDetails = () => {
   const [activeCategory, setActiveCategory] = useState('exterior');
   const [organizedImages, setOrganizedImages] = useState([]);
   const [agreements, setAgreements] = useState([]);
-  const [maintenanceRequests, setMaintenanceRequests] = useState([]);
 
   const propertyCoordinates = property?.coordinates && typeof property.coordinates === 'object'
     ? property.coordinates
@@ -346,16 +345,6 @@ const PropertyDetails = () => {
           const agreementsData = await listAgreementsByProperty(id);
           setAgreements(agreementsData);
           
-          // Fetch maintenance requests for this property
-          const { data: maintenanceData, error: maintenanceError } = await fetchData('maintenance_requests', {
-            filters: [{ column: 'propertyid', operator: 'eq', value: id }],
-          });
-          
-          if (maintenanceError) {
-            throw maintenanceError;
-          }
-          
-          setMaintenanceRequests(maintenanceData || []);
         } else {
           throw new Error('Property not found');
         }
