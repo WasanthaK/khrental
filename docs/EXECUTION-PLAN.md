@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **admin panel storage test cleanup**.
+Current active domain: **BucketExplorer UI storage cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -305,7 +305,9 @@ Application storage initialization cleanup is complete: PR #183 migrated the act
 
 Bucket explorer service storage cleanup is complete: PR #184 migrated `src/services/bucketExplorer.js` to explicit tenant storage APIs, preserved allowed-folder validation and tooling return shapes, and deployed successfully as merge SHA `0b7c691666d4e95d7d8c440a00400b0fa57a5b6c` from Ready revision `khrental-app--0000187` with the exact public build SHA verified.
 
-Admin panel storage test cleanup is next. `src/pages/AdminPanel.jsx` is an isolated diagnostic surface and still uses `platformClient.storage` only for a test file upload plus list-readback. This slice changes only those storage calls while preserving its existing auth/session gate.
+Admin panel storage test cleanup is complete: PR #185 migrated the isolated AdminPanel upload/list diagnostic path to explicit tenant storage APIs, preserved its auth/session gate, and deployed successfully as merge SHA `3c8a08153c32e42eb1d3c735a7cca9ddc84562c5` from Ready revision `khrental-app--0000188` with the exact public build SHA verified.
+
+BucketExplorer UI storage cleanup is next. `src/components/BucketExplorer.jsx` still uses `platformClient.storage` for bucket listing/creation plus tenant file list/upload/delete/public URL operations. The legacy compatibility client already ignores the UI's public/file-size bucket options, so this slice migrates only the storage calls while preserving auth gating, policy diagnostics, and current UI behavior.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -347,24 +349,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Bucket explorer service storage cleanup
-Problem/evidence: src/services/bucketExplorer.js was used only by explicit storage tooling and still used platformClient.storage for bucket listing plus tenant file list/upload/delete/public URL generation.
-Scope: Migrate only bucketExplorer.js storage calls to explicit storageApiService functions; preserve existing allowed-folder validation and return shapes; add regression coverage.
-PR: #184.
-CI result: PR head run 37574887830 passed; post-merge production run 37575934638 passed.
-Production revision/SHA: Ready revision khrental-app--0000187 served merge SHA 0b7c691666d4e95d7d8c440a00400b0fa57a5b6c with matching public build fingerprint.
-Result: COMPLETE — bucket explorer service no longer uses platformClient.storage.
-Next item: Phase 4 - admin panel storage test cleanup.
+Active item: Phase 4 - Admin panel storage test cleanup
+Problem/evidence: src/pages/AdminPanel.jsx was an isolated diagnostic page and still used platformClient.storage for a test file upload and list-readback.
+Scope: Migrate only the AdminPanel test upload/list calls to uploadTenantFile()/listTenantFiles(); preserve the existing platformClient.auth session gate and UI behavior; add regression coverage.
+PR: #185.
+CI result: PR head run 37577320698 passed; post-merge production run 37577448911 passed.
+Production revision/SHA: Ready revision khrental-app--0000188 served merge SHA 3c8a08153c32e42eb1d3c735a7cca9ddc84562c5 with matching public build fingerprint.
+Result: COMPLETE — AdminPanel storage test no longer uses platformClient.storage.
+Next item: Phase 4 - BucketExplorer UI storage cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Admin panel storage test cleanup
-Problem/evidence: src/pages/AdminPanel.jsx is an isolated diagnostic page and still uses platformClient.storage for a test file upload and list-readback.
-Scope: Migrate only the AdminPanel test upload/list calls to uploadTenantFile()/listTenantFiles(); preserve the existing platformClient.auth session gate and UI behavior; add regression coverage.
-Out of scope: BucketExplorer.jsx UI; setup_storage_buckets.js; bucket configuration semantics; shared compatibility façade; repo-wide platformClient removal.
-Result: ACTIVE — branch phase-4-admin-panel-storage-test contains the bounded implementation and regression update pending PR review/CI.
+Active item: Phase 4 - BucketExplorer UI storage cleanup
+Problem/evidence: src/components/BucketExplorer.jsx still uses platformClient.storage for bucket listing/creation plus tenant file list/upload/delete/public URL operations.
+Scope: Migrate only BucketExplorer.jsx storage calls to explicit storageApiService functions; preserve platformClient.auth session gating, the storage.policies diagnostic query, and current UI behavior. Legacy public/file-size bucket options are already ignored by the compatibility client, so no working bucket-configuration behavior is removed.
+Out of scope: setup_storage_buckets.js; bucket configuration semantics beyond current behavior; shared compatibility façade; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-bucket-explorer-ui-storage contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---

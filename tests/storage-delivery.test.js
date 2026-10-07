@@ -68,6 +68,11 @@ const adminPanelSource = readFileSync(
   'utf8'
 );
 
+const bucketExplorerUiSource = readFileSync(
+  new URL('../src/components/BucketExplorer.jsx', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -179,4 +184,17 @@ test('admin storage test uses explicit tenant storage APIs while preserving auth
   assert.match(adminPanelSource, /platformClient\.auth\.getSession/);
   assert.match(adminPanelSource, /uploadTenantFile/);
   assert.match(adminPanelSource, /listTenantFiles/);
+});
+
+
+test('BucketExplorer UI uses explicit storage APIs while preserving auth and policy diagnostics', () => {
+  assert.doesNotMatch(bucketExplorerUiSource, /platformClient\.storage/);
+  assert.match(bucketExplorerUiSource, /platformClient\.auth\.getSession/);
+  assert.match(bucketExplorerUiSource, /platformClient\s*\.from\('storage\.policies'\)/);
+  assert.match(bucketExplorerUiSource, /listStorageBuckets/);
+  assert.match(bucketExplorerUiSource, /createStorageBucket/);
+  assert.match(bucketExplorerUiSource, /listTenantFiles/);
+  assert.match(bucketExplorerUiSource, /uploadTenantFile/);
+  assert.match(bucketExplorerUiSource, /deleteTenantFiles/);
+  assert.match(bucketExplorerUiSource, /buildStorageUrl/);
 });
