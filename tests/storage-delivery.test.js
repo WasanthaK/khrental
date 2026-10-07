@@ -13,6 +13,16 @@ const storageApiServiceSource = readFileSync(
   'utf8'
 );
 
+const platformClientCoreSource = readFileSync(
+  new URL('../src/services/platformClientCore.js', import.meta.url),
+  'utf8'
+);
+
+const platformClientSource = readFileSync(
+  new URL('../src/services/platformClient.js', import.meta.url),
+  'utf8'
+);
+
 const documentServiceSource = readFileSync(
   new URL('../src/services/DocumentService.js', import.meta.url),
   'utf8'
@@ -205,4 +215,26 @@ test('legacy compatibility storage setup script stays removed', () => {
     existsSync(new URL('../src/scripts/setup_storage_buckets.js', import.meta.url)),
     false
   );
+});
+
+
+test('shared platform compatibility client no longer exposes storage façade', () => {
+  assert.doesNotMatch(platformClientCoreSource, /platformClient\.storage/);
+  assert.doesNotMatch(platformClientCoreSource, /storage:\s*storageClient/);
+  assert.doesNotMatch(platformClientCoreSource, /export const storage =/);
+  assert.doesNotMatch(platformClientCoreSource, /export const uploadFile =/);
+  assert.doesNotMatch(platformClientCoreSource, /export const getFileUrl =/);
+  assert.doesNotMatch(platformClientCoreSource, /export const deleteFile =/);
+  assert.doesNotMatch(platformClientCoreSource, /export const listBuckets =/);
+  assert.doesNotMatch(platformClientCoreSource, /export const createStorageBucket =/);
+
+  assert.doesNotMatch(platformClientSource, /\buploadFile,\s*$/m);
+  assert.doesNotMatch(platformClientSource, /\bgetFileUrl,\s*$/m);
+  assert.doesNotMatch(platformClientSource, /\bdeleteFile,\s*$/m);
+  assert.doesNotMatch(platformClientSource, /\blistBuckets,\s*$/m);
+  assert.doesNotMatch(platformClientSource, /\bcreateStorageBucket,\s*$/m);
+
+  assert.match(platformClientCoreSource, /from:\s*\(table\) => new QueryBuilder\(table\)/);
+  assert.match(platformClientCoreSource, /auth:\s*authClient/);
+  assert.match(platformClientCoreSource, /rpc/);
 });
