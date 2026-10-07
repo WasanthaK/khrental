@@ -5,6 +5,14 @@ export const listTenantProperties = async () => {
   return Array.isArray(properties) ? properties : [];
 };
 
+export const getTenantPropertyById = async (propertyId) => {
+  if (!propertyId) {
+    return null;
+  }
+
+  return requestMssqlApi(`/api/mssql/properties/${encodeURIComponent(propertyId)}`);
+};
+
 export const listTenantPropertyUnits = async (propertyId) => {
   if (!propertyId) {
     return [];

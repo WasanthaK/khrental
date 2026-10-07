@@ -8,6 +8,7 @@ import { getRenteesByProperty } from '../services/renteeService';
 import { toast } from 'react-hot-toast';
 import { deleteFile } from '../services/fileService';
 import { fetchAppUsers } from '../services/appUserService';
+import { getTenantPropertyById } from '../services/propertyDirectoryService';
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
@@ -199,22 +200,16 @@ const PropertyDetails = () => {
       try {
         setLoading(true);
         
-        // Fetch property details
-        const { data: propertyData, error: propertyError } = await fetchData('properties', {
-          filters: [{ column: 'id', operator: 'eq', value: id }],
-        });
+        // Fetch the primary property record through the explicit tenant directory.
+        const propertyData = await getTenantPropertyById(id);
         
-        if (propertyError) {
-          throw propertyError;
-        }
-        
-        if (propertyData && propertyData.length > 0) {
+        if (propertyData) {
           // Inspect the raw property data before any processing
-          console.log('Raw property data from DB:', propertyData[0]);
-          console.log('Terms type:', typeof propertyData[0].terms);
+          console.log('Raw property data from DB:', propertyData);
+          console.log('Terms type:', typeof propertyData.terms);
           
           // Add more robust terms handling
-          let processedProperty = { ...propertyData[0] };
+          let processedProperty = { ...propertyData };
           
           // Handle terms properly - if it's a string, parse it
           if (typeof processedProperty.terms === 'string') {
