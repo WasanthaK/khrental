@@ -43,6 +43,16 @@ const maintenanceServiceLegacySource = readFileSync(
   'utf8'
 );
 
+const eviaSignTestingSource = readFileSync(
+  new URL('../src/components/admin/EviaSignTesting.jsx', import.meta.url),
+  'utf8'
+);
+
+const signatureTestingToolsSource = readFileSync(
+  new URL('../src/components/admin/SignatureTestingTools.jsx', import.meta.url),
+  'utf8'
+);
+
 test('normalizeStoragePath preserves nested tenant object paths', () => {
   assert.equal(
     normalizeStoragePath('/tenants/FEEC0269-D580-49C3-A982-5B3ECBBB1A09/properties/1789547843116_j94ui11e.jpg'),
@@ -115,4 +125,15 @@ test('maintenance images keep one storage authority and cards use persisted URLs
   assert.doesNotMatch(maintenanceServiceLegacySource, /platformClient\.storage/);
   assert.match(maintenanceServiceLegacySource, /saveImage\(file/);
   assert.match(maintenanceServiceLegacySource, /saveFile\(image\.file/);
+});
+
+
+test('Evia diagnostic tools use tenant storage API without changing signature invocation authority', () => {
+  for (const source of [eviaSignTestingSource, signatureTestingToolsSource]) {
+    assert.match(source, /uploadTenantFile/);
+    assert.doesNotMatch(source, /platformClient\.storage/);
+  }
+
+  assert.match(eviaSignTestingSource, /sendDocumentForSignature/);
+  assert.match(signatureTestingToolsSource, /platformClient\.functions\.invoke\('send-to-evia-sign'/);
 });

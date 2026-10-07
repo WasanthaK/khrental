@@ -291,13 +291,15 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **maintenance media compatibility cleanup**.
+Current active domain: **Evia diagnostic upload storage cleanup**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
 Utilities/meter evidence storage is complete: PR #180 migrated both utility photo upload surfaces to `uploadTenantFile()`, preserved utility reading persistence/authorization, and deployed successfully as merge SHA `43f64575aa84c0016e8cc5fdeba677cd0d1d1b10` from Ready revision `khrental-app--0000183` with MSSQL ready and matching public build fingerprint.
 
-Maintenance media is next. `MaintenanceRequestCard.jsx` still carries an unused `platformClient.storage` URL helper even though rendered maintenance images already use persisted `image_url` values directly and maintenance upload paths already use the shared file service. This slice removes only that dead compatibility path and adds a regression guard; no maintenance lifecycle or upload behavior changes.
+Maintenance media compatibility cleanup is complete: PR #181 removed the dead `platformClient.storage` URL path from `MaintenanceRequestCard.jsx`, preserved persisted `image_url` rendering and shared file-service uploads, and deployed successfully as merge SHA `66cf755c60e86f2e3fa6e29522b0bb859b265d43` from Ready revision `khrental-app--0000184` with the exact public build SHA verified.
+
+Evia diagnostic upload tools are next. `EviaSignTesting.jsx` and `SignatureTestingTools.jsx` still use `platformClient.storage` only to upload diagnostic PDFs and derive URLs. This slice changes only diagnostic storage access and preserves the existing Evia invocation/status paths.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -339,24 +341,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - Utilities/meter evidence storage compatibility removal
-Problem/evidence: UtilityReadingForm.jsx and UtilityMeterForm.jsx still used platformClient.storage to upload meter photos and derive stored URLs.
-Scope: Migrate only utility photo upload/URL generation to uploadTenantFile(); preserve utility_readings persistence, renter ownership enforcement, property verification, and existing UI behavior.
-PR: #180.
-CI result: PR head run 37488039758 passed; post-merge production run 37504705469 passed.
-Production revision/SHA: Ready revision khrental-app--0000183 served merge SHA 43f64575aa84c0016e8cc5fdeba677cd0d1d1b10 with MSSQL ready and matching public build fingerprint.
-Result: COMPLETE — utility meter photo storage no longer uses platformClient.storage.
-Next item: Phase 4 - maintenance media compatibility cleanup.
+Active item: Phase 4 - Maintenance media compatibility cleanup
+Problem/evidence: MaintenanceRequestCard.jsx retained an unused platformClient.storage URL helper even though maintenance images already rendered persisted maintenance_request_images.image_url values and uploads already used shared fileService helpers.
+Scope: Remove only the dead compatibility storage imports/helper and add regression coverage; preserve maintenance lifecycle/state and upload behavior.
+PR: #181.
+CI result: PR head run 37506245814 passed; post-merge production run 37557901609 passed.
+Production revision/SHA: Ready revision khrental-app--0000184 served merge SHA 66cf755c60e86f2e3fa6e29522b0bb859b265d43 with matching public build fingerprint.
+Result: COMPLETE — maintenance card no longer carries the dead compatibility storage path.
+Next item: Phase 4 - Evia diagnostic upload storage cleanup.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - Maintenance media compatibility cleanup
-Problem/evidence: MaintenanceRequestCard.jsx still imports platformClient.storage for an unused URL helper while rendered images already use persisted maintenance_request_images.image_url values directly; maintenance upload paths already use shared fileService helpers.
-Scope: Remove only the dead compatibility storage imports/helper from MaintenanceRequestCard.jsx and add regression coverage proving cards render persisted URLs while maintenance uploads remain on shared fileService.
-Out of scope: Maintenance lifecycle/state changes; upload semantics; schema changes; admin/storage tooling; repo-wide platformClient removal.
-Result: ACTIVE — fresh branch phase-4-maintenance-media-storage-refresh contains the bounded cleanup and regression update pending PR review/CI.
+Active item: Phase 4 - Evia diagnostic upload storage cleanup
+Problem/evidence: EviaSignTesting.jsx and SignatureTestingTools.jsx still use platformClient.storage to upload diagnostic PDFs and derive stored URLs.
+Scope: Migrate only diagnostic PDF upload/URL generation to uploadTenantFile(); preserve the existing sendDocumentForSignature / platformClient.functions.invoke Evia test paths and status checks; add regression coverage.
+Out of scope: Production agreement signing; Evia protocol/version changes; webhook behavior; agreement lifecycle; admin bucket tooling; repo-wide platformClient removal.
+Result: ACTIVE — branch phase-4-evia-diagnostic-storage contains the bounded implementation and regression update pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
