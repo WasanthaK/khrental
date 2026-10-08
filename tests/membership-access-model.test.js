@@ -312,3 +312,11 @@ test('legacy database migration compatibility utility stays removed', () => {
     false
   );
 });
+
+
+test('legacy generic data fetcher compatibility utility stays removed', () => {
+  assert.equal(
+    existsSync(new URL('../src/utils/dataFetcher.js', import.meta.url)),
+    false
+  );
+});
