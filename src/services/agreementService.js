@@ -60,20 +60,6 @@ const toNullableNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const fetchAgreementRecord = async (agreementId) => {
-  const { data, error } = await platformClient
-    .from('agreements')
-    .select('*')
-    .eq('id', agreementId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-};
-
 const fetchPropertyRecord = async (propertyId) => {
   const { data, error } = await platformClient
     .from('properties')
@@ -144,15 +130,7 @@ export const listAgreementsByUnitIds = async (unitIds, statuses = []) => {
 };
 
 export const fetchAgreement = async (agreementId) => {
-  if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/agreements/${agreementId}`);
-    } catch (mssqlError) {
-      console.error('Error loading agreement from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
-  }
-
-  return fetchAgreementRecord(agreementId);
+  return requestMssqlApi(`/api/mssql/agreements/${agreementId}`);
 };
 
 export const updateAgreementData = async (agreementId, updates) => {
