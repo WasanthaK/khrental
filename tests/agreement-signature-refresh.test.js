@@ -84,3 +84,9 @@ test('renter agreement view disables Evia signature management while preserving 
   assert.match(dashboardSource, /showSignatureReference = true/);
   assert.match(dashboardSource, /showSignatureReference && agreement\.eviasignreference/);
 });
+
+
+test('unused agreement compatibility hook stays removed', () => {
+  const hookUrl = new URL('../src/hooks/useAgreement.js', import.meta.url);
+  assert.equal(fs.existsSync(hookUrl), false);
+});

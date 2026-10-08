@@ -369,25 +369,25 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Production stabilization interruption - PropertyList MSSQL result-shape normalization
-Problem/evidence: After the explicit property-directory migration, /dashboard/properties could render the route error boundary as "404 Page Not Found" because MSSQL-backed property rows expose JSON-backed NVARCHAR fields and nullable text directly while PropertyList/PropertyCard expect parsed arrays/objects and safe strings.
-Scope: Normalize property images/amenities/rentalvalues at propertyDirectoryService for list and detail reads, make PropertyList search null-safe, and add focused regression guards. No route, auth, permission, migration, or database-write changes.
-PR: #198.
-CI result: PR head run 37741608516 (#565) passed; post-merge production run 37744896809 (#566) passed.
-Production revision/SHA: Ready revision khrental-app--0000200 served merge SHA 267230c6d946f87efa0b46d1afe6680009d73ab7 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — production Properties page recovered and manually confirmed working after deployment.
-Next item: Resume Phase 4 - AgreementList compatibility read fallback removal.
+Active item: Phase 4 - AgreementList compatibility read fallback removal
+Problem/evidence: AgreementList retained a disabled-MSSQL platformClient.from('agreements') fallback even though the canonical production path was already the tenant-scoped /api/mssql/agreements endpoint.
+Scope: Remove only the feature-flag branch and compatibility fallback so AgreementList always uses the canonical tenant-scoped MSSQL agreement list; preserve refresh, filtering, cancellation, deletion, sorting-control state, and UI behavior.
+PR: #197.
+CI result: refreshed PR head run 37749390373 (#568) passed; agreement-deletion PR run 37749390389 (#24) passed; post-merge production run 37750497482 (#569) passed; post-merge agreement-deletion run 37750497481 (#25) passed.
+Production revision/SHA: Ready revision khrental-app--0000201 served merge SHA 0d2c5962a97631c7deb115988ea4acd763024762 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — AgreementList compatibility read fallback removed from production.
+Next item: Phase 4 - remove dead useAgreement compatibility hook.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - AgreementList compatibility read fallback removal
-Problem/evidence: AgreementList already uses /api/mssql/agreements as the canonical production path, but still retains a disabled-MSSQL platformClient.from('agreements') fallback with joined property/unit/rentee/template data.
-Scope: Remove only the feature-flag branch and compatibility fallback so AgreementList always uses the canonical tenant-scoped MSSQL agreement list; preserve existing refresh, filtering, cancellation, deletion, sorting-control state, and UI behavior.
-Out of scope: AgreementList sorting behavior changes; agreement write paths; PropertyDetails image/delete writes; RenteeDetails property/unit reads; other domains.
-Result: ACTIVE — PR #197 contains the bounded fallback removal and regression guard; refresh against current main after production hotfix #198, then review fresh CI.
-Next item: refresh PR #197 against current main, review fresh CI, then merge/deploy only with explicit authorization.
+Active item: Phase 4 - remove dead useAgreement compatibility hook
+Problem/evidence: src/hooks/useAgreement.js contains a platformClient agreement fallback and MSSQL feature-flag branch, but repository-wide reference checks show no runtime imports or consumers; only historical documentation references the file.
+Scope: Delete only the unused hook and add a regression guard that the file remains absent.
+Out of scope: agreementService compatibility fallbacks; agreement write paths; PropertyDetails writes; property-unit reads/writes; auth flows; other domains.
+Result: ACTIVE — branch phase-4-remove-dead-use-agreement-hook removes the unused hook and adds a regression guard pending PR review/CI.
+Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
 
