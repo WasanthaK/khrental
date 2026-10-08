@@ -32,10 +32,11 @@ const PropertyList = () => {
 
   // Filter and search properties
   const filteredProperties = properties.filter(property => {
+    const normalizedSearchTerm = searchTerm.toLowerCase();
     const matchesSearch = 
-      property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      String(property?.name || '').toLowerCase().includes(normalizedSearchTerm) ||
+      String(property?.address || '').toLowerCase().includes(normalizedSearchTerm) ||
+      String(property?.description || '').toLowerCase().includes(normalizedSearchTerm);
     
     if (filter === 'all') return matchesSearch;
     
