@@ -127,29 +127,6 @@ export const listInvoices = async (options = {}) => {
   }
 };
 
-export const fetchInvoice = async (invoiceId) => {
-  if (isMssqlApiEnabled()) {
-    try {
-      const data = await requestMssqlApi(`/api/mssql/invoices/${invoiceId}`);
-      return normalizeInvoiceRecord(data);
-    } catch (mssqlError) {
-      console.error('Error loading invoice from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
-  }
-
-  const { data, error } = await platformClient
-    .from('invoices')
-    .select('*')
-    .eq('id', invoiceId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return normalizeInvoiceRecord(data);
-};
-
 export const createInvoiceRecord = async (invoiceData = {}) => {
   if (isMssqlApiEnabled()) {
     try {

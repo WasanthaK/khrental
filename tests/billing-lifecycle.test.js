@@ -87,6 +87,11 @@ const invoiceListSource = readFileSync(
   'utf8'
 );
 
+const invoiceServiceSource = readFileSync(
+  new URL('../src/services/invoiceService.js', import.meta.url),
+  'utf8'
+);
+
 const invoiceCardSource = readFileSync(
   new URL('../src/components/invoices/InvoiceCard.jsx', import.meta.url),
   'utf8'
@@ -605,4 +610,10 @@ test('payment proof storage uses tenant API while billing authority remains serv
   assert.match(paymentServiceSource, /uploadTenantFile/);
   assert.match(paymentServiceSource, /submitInvoicePaymentProof/);
   assert.match(paymentServiceSource, /proofUrl/);
+});
+
+
+test('unused invoice detail compatibility read stays removed', () => {
+  assert.doesNotMatch(invoiceServiceSource, /export const fetchInvoice\s*=/);
+  assert.doesNotMatch(invoiceServiceSource, /Error loading invoice from MSSQL, falling back to the local compatibility layer/);
 });
