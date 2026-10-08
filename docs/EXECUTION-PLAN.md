@@ -327,24 +327,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - remove dead legacy Evia agreement webhook handler
-Problem/evidence: agreementService.handleEviaSignWebhook() directly read/wrote agreements through platformClient, but strict repository-wide reference checks found no imports or runtime callers; the active Evia webhook is implemented separately under the API layer.
-Scope: Delete only the unused legacy handler, remove its now-unused storage upload import, and add regression coverage.
-PR: #203.
-CI result: final PR head run 37789372533 (#579) passed; post-merge production run 37790137172 (#580) passed.
-Production revision/SHA: Ready revision khrental-app--0000206 served merge SHA 3885ea2bc3476af76f9497f037695f506fb5bf97 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — dead legacy Evia agreement webhook handler removed from production.
-Next item: Phase 4 - remove dead agreement document-generation wrapper.
+Active item: Phase 4 - remove dead agreement document-generation wrapper
+Problem/evidence: agreementService.handleDocumentGeneration() duplicated the active saveAgreement() document-generation path and had no repository caller, while the private getMergeDataForAgreement() helper remained live inside saveAgreement().
+Scope: Delete only the unused exported wrapper and add a regression guard that it stays removed.
+PR: #204.
+CI result: PR head run 37792914844 (#581) passed; post-merge production run 37793593177 (#582) passed.
+Production revision/SHA: Ready revision khrental-app--0000207 served merge SHA 5690bc39c07c63603df9f88d8dee17288073f051 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — dead agreement document-generation wrapper removed from production.
+Next item: Phase 4 - remove dead legacy app_users database setup compatibility utility.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead agreement document-generation wrapper
-Problem/evidence: agreementService.handleDocumentGeneration() duplicates the active saveAgreement() document-generation path and has no repository caller, while its private getMergeDataForAgreement() helper remains live inside saveAgreement().
-Scope: Delete only the unused exported wrapper and add a regression guard that it stays removed.
-Out of scope: saveAgreement(); getMergeDataForAgreement(); DocumentService; agreement workflow service; active document merge/signing behavior; auth and other domains.
-Result: ACTIVE — branch phase-4-remove-dead-document-generation-wrapper contains the bounded dead-code cleanup and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead legacy app_users database setup compatibility utility
+Problem/evidence: src/utils/dbSetup.js contains compatibility-backed table setup/test helpers using platformClient, but repository-wide searches show the file and every exported helper are definition-only with no runtime/import consumers.
+Scope: Delete only src/utils/dbSetup.js and add a regression guard that the legacy utility remains absent.
+Out of scope: active MSSQL migration runner; production migration workflow; databaseUtils; dbMigration; auth lifecycle; live app-user APIs; production schema changes.
+Result: ACTIVE — branch phase-4-remove-dead-db-setup-compatibility contains the bounded dead-file cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
