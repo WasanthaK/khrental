@@ -3,13 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { deleteData, updateData } from '../services/platformClient';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { DEFAULT_IMAGE } from '../utils/constants';
-import { platform as platformClient } from '../services/platformClient';
 import { getRenteesByProperty } from '../services/renteeService';
 import { toast } from 'react-hot-toast';
 import { deleteFile } from '../services/fileService';
 import { fetchAppUsers } from '../services/appUserService';
 import { getTenantPropertyById, listTenantPropertyUnits } from '../services/propertyDirectoryService';
-import { listAgreementsByProperty } from '../services/agreementService';
+import { listAgreementsByProperty, listAgreementsByUnitIds } from '../services/agreementService';
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
@@ -300,16 +299,12 @@ const PropertyDetails = () => {
                   // Property has units, check for agreements on these units
                   const unitIds = propertyUnits.map(unit => unit.id);
                   
-                  const { data: unitAgreements, error: unitAgreementsError } = await platformClient
-                    .from('agreements')
-                    .select('renteeid')
-                    .in('unitid', unitIds)
-                    .in('status', ['active', 'pending', 'review', 'signed']);
+                  const unitAgreements = await listAgreementsByUnitIds(
+                    unitIds,
+                    ['active', 'pending', 'review', 'signed']
+                  );
                     
-                  if (unitAgreementsError) {
-                    console.error('Error checking unit agreements:', unitAgreementsError);
-                    setRentees([]);
-                  } else if (unitAgreements && unitAgreements.length > 0) {
+                  if (unitAgreements && unitAgreements.length > 0) {
                     console.log('Found rentees via unit agreements:', unitAgreements.length);
                     
                     // Get unique rentee IDs from unit agreements
