@@ -13,6 +13,15 @@ test('agreement list refreshes pending signature cards without SignalR', () => {
   assert.match(source, /in_progress/);
 });
 
+test('agreement list always uses the canonical tenant-scoped MSSQL read', () => {
+  const source = fs.readFileSync(new URL('../src/pages/AgreementList.jsx', import.meta.url), 'utf8');
+
+  assert.match(source, /requestMssqlApi\('\/api\/mssql\/agreements\?pageSize=500'\)/);
+  assert.doesNotMatch(source, /platformClient/);
+  assert.doesNotMatch(source, /isMssqlApiEnabled/);
+  assert.doesNotMatch(source, /\.from\('agreements'\)/);
+});
+
 test('MSSQL mode does not rely on the legacy realtime subscription', () => {
   const source = fs.readFileSync(new URL('../src/components/agreements/AgreementActions.jsx', import.meta.url), 'utf8');
 
