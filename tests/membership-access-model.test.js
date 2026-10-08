@@ -304,3 +304,11 @@ test('legacy app_users database setup compatibility utility stays removed', () =
     false
   );
 });
+
+
+test('legacy database migration compatibility utility stays removed', () => {
+  assert.equal(
+    existsSync(new URL('../src/utils/dbMigration.js', import.meta.url)),
+    false
+  );
+});
