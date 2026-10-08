@@ -107,3 +107,12 @@ test('unused expired agreement compatibility updater stays removed', () => {
   assert.doesNotMatch(source, /export const checkAndUpdateExpiredAgreements\s*=/);
   assert.doesNotMatch(source, /Error finding expired agreements in MSSQL, falling back to the local compatibility layer/);
 });
+
+
+test('unused legacy Evia agreement webhook handler stays removed', () => {
+  const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /export const handleEviaSignWebhook\s*=/);
+  assert.doesNotMatch(source, /\.eq\('eviasignreference', RequestId\)/);
+  assert.doesNotMatch(source, /uploadTenantFile/);
+});
