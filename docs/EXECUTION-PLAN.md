@@ -369,24 +369,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - remove dead useAgreement compatibility hook
-Problem/evidence: src/hooks/useAgreement.js retained a platformClient agreement fallback and MSSQL feature-flag branch, but repository-wide reference checks found no runtime imports or consumers; only historical documentation referenced the file.
-Scope: Delete only the unused hook and add a regression guard that the file remains absent.
-PR: #199.
-CI result: PR head run 37752222410 (#570) passed; post-merge production run 37752619269 (#571) passed.
-Production revision/SHA: Ready revision khrental-app--0000202 served merge SHA ddfd4aaa1f7fc08ef2a0ac3a4f8ef5b7253f3c62 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — unused agreement compatibility hook removed from production.
-Next item: Phase 4 - agreement detail read compatibility fallback removal.
+Active item: Phase 4 - agreement detail read compatibility fallback removal
+Problem/evidence: agreementService.fetchAgreement() still feature-flagged the canonical /api/mssql/agreements/:id read and fell back to platformClient.from('agreements') when MSSQL was disabled or the explicit request failed.
+Scope: Remove only the agreement detail read fallback/helper so fetchAgreement() always uses the tenant-scoped MSSQL endpoint and fails closed on API errors.
+PR: #200.
+CI result: PR head run 37754175782 (#572) passed; post-merge production run 37754514019 (#573) passed.
+Production revision/SHA: Ready revision khrental-app--0000203 served merge SHA 25bb828f581227bcc04ea51e76352ae0edda3f77 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — agreement detail compatibility read fallback removed from production.
+Next item: Phase 4 - remove dead invoice detail compatibility read.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - agreement detail read compatibility fallback removal
-Problem/evidence: agreementService.fetchAgreement() still feature-flags the canonical /api/mssql/agreements/:id read and falls back to platformClient.from('agreements') when MSSQL is disabled or the explicit request fails.
-Scope: Remove only the agreement detail read fallback/helper so fetchAgreement() always uses the tenant-scoped MSSQL endpoint and fails closed on API errors.
-Out of scope: agreement writes; property/property-unit fallbacks; agreement template operations; auth flows; other domains.
-Result: ACTIVE — branch phase-4-agreement-detail-read contains the bounded read migration and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead invoice detail compatibility read
+Problem/evidence: invoiceService.fetchInvoice() contains an MSSQL feature-flag branch and platformClient.from('invoices') fallback, but strict repository-wide reference checks found no imports or runtime call sites for that export.
+Scope: Delete only the unused fetchInvoice export and add a regression guard that it stays removed.
+Out of scope: active invoice list behavior; payment flows; invoice create/update paths; auth flows; other domains.
+Result: ACTIVE — branch phase-4-remove-dead-invoice-detail-read contains the bounded dead-code cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
