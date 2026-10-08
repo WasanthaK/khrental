@@ -90,3 +90,12 @@ test('unused agreement compatibility hook stays removed', () => {
   const hookUrl = new URL('../src/hooks/useAgreement.js', import.meta.url);
   assert.equal(fs.existsSync(hookUrl), false);
 });
+
+
+test('agreement detail read uses canonical MSSQL API without compatibility fallback', () => {
+  const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
+
+  assert.match(source, /export const fetchAgreement = async \(agreementId\) => \{[\s\S]*return requestMssqlApi\(\`\/api\/mssql\/agreements\/\$\{agreementId\}\`\);[\s\S]*\};/);
+  assert.doesNotMatch(source, /const fetchAgreementRecord = async/);
+  assert.doesNotMatch(source, /Error loading agreement from MSSQL, falling back to the local compatibility layer/);
+});
