@@ -636,6 +636,8 @@ export const createMssqlRouter = () => {
         propertyId: req.query.propertyId,
         renteeId: req.query.renteeId,
         status: req.query.status,
+        unitIds: req.query.unitIds,
+        statuses: req.query.statuses,
         ...getPagination(req)
       });
 
