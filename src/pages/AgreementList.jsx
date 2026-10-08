@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { platform as platformClient } from '../services/platformClient';
 import { toast } from 'react-hot-toast';
 import AgreementSummaryCard from '../components/agreements/AgreementSummaryCard';
-import { isMssqlApiEnabled } from '../utils/env';
 import { cancelAgreement } from '../services/agreementService';
 import { requestMssqlApi } from '../services/mssqlApiClient';
 import { useAuth } from '../hooks/useAuth';
@@ -64,44 +62,7 @@ const AgreementList = () => {
       }
       setError(null);
 
-      if (isMssqlApiEnabled()) {
-        const data = await fetchAgreementsFromMssql();
-        setAgreements(data || []);
-        return;
-      }
-
-      const { data, error } = await platformClient
-        .from('agreements')
-        .select(`
-          *,
-          properties:propertyid(
-            id,
-            name,
-            address,
-            images,
-            propertytype
-          ),
-          property_units:unitid(
-            id,
-            unitnumber,
-            floor
-          ),
-          rentee:renteeid(
-            id,
-            name,
-            email,
-            contact_details
-          ),
-          template:templateid(
-            id,
-            name
-          )
-        `)
-        .order(sortBy, { ascending: sortOrder === 'asc' });
-
-      if (error) {
-        throw error;
-      }
+      const data = await fetchAgreementsFromMssql();
       setAgreements(data || []);
     } catch (fetchError) {
       console.error('Error fetching agreements:', fetchError);
