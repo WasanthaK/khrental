@@ -124,7 +124,7 @@ test('agreement document storage uses explicit tenant-scoped APIs only', () => {
   assert.match(documentServiceSource, /buildStorageUrl/);
 
   assert.doesNotMatch(agreementServiceSource, /platformClient\.storage/);
-  assert.match(agreementServiceSource, /uploadTenantFile/);
+  assert.doesNotMatch(agreementServiceSource, /uploadTenantFile/);
 });
 
 test('storage API provides authenticated tenant-scoped download support', () => {
