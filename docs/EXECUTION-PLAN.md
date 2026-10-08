@@ -277,57 +277,15 @@ Result: **COMPLETE — Phase 3 exit criteria satisfied.**
 Before changing code:
 
 - [x] Inventory remaining `platformClient` / `platformClientCore` consumers.
-- [x] Group the remaining storage compatibility consumers by business domain.
-- [x] Prioritize the first domain by production importance.
-- [x] Billing/payment proof storage migrated in PR #165 with contract-preserving regression coverage.
-- [ ] Continue remaining domains one bounded PR at a time.
+- [x] Group completed storage compatibility consumers by business domain.
+- [x] Remove storage compatibility façade and the major PropertyDetails/AgreementList read fallbacks in bounded production-verified slices.
+- [ ] Continue remaining non-storage compatibility paths one bounded PR at a time, preserving authority and behavior.
 
-Current inventory groups:
-- Billing/payment proof storage: `src/services/paymentService.js`.
-- Utilities/meter evidence: `UtilityReadingForm.jsx`, `UtilityMeterForm.jsx`.
-- Maintenance media URL resolution: `MaintenanceRequestCard.jsx`.
-- Admin/storage tooling and bucket management: `AdminPanel.jsx`, `BucketExplorer.jsx`, `bucketExplorer.js`, `appInitService.js`, storage setup scripts.
-- Diagnostic-only Evia upload tools: `EviaSignTesting.jsx`, `SignatureTestingTools.jsx`.
-- Shared compatibility façade: `platformClientCore.js`.
-- Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
+Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **AgreementList compatibility read fallback removal**.
+Current active domain: **dead agreement document-generation wrapper removal**.
 
-Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
-
-Utilities/meter evidence storage is complete: PR #180 migrated both utility photo upload surfaces to `uploadTenantFile()`, preserved utility reading persistence/authorization, and deployed successfully as merge SHA `43f64575aa84c0016e8cc5fdeba677cd0d1d1b10` from Ready revision `khrental-app--0000183` with MSSQL ready and matching public build fingerprint.
-
-Maintenance media compatibility cleanup is complete: PR #181 removed the dead `platformClient.storage` URL path from `MaintenanceRequestCard.jsx`, preserved persisted `image_url` rendering and shared file-service uploads, and deployed successfully as merge SHA `66cf755c60e86f2e3fa6e29522b0bb859b265d43` from Ready revision `khrental-app--0000184` with the exact public build SHA verified.
-
-Evia diagnostic upload storage cleanup is complete: PR #182 migrated both diagnostic PDF upload surfaces to `uploadTenantFile()`, preserved existing Evia invocation/status paths, and deployed successfully as merge SHA `d1fb36e0636176e1e6aec8ee257cd8113e0d67a4` from Ready revision `khrental-app--0000185` with the exact public build SHA verified.
-
-Application storage initialization cleanup is complete: PR #183 migrated the active `RootLayout -> appInitService.initializeApp()` storage path to explicit bucket/list/upload APIs, preserved the existing auth/session gate and non-fatal startup warning behavior, and deployed successfully as merge SHA `198f7e57082a465b1bb737bd485c38ab4707c155` from Ready revision `khrental-app--0000186` with the exact public build SHA verified.
-
-Bucket explorer service storage cleanup is complete: PR #184 migrated `src/services/bucketExplorer.js` to explicit tenant storage APIs, preserved allowed-folder validation and tooling return shapes, and deployed successfully as merge SHA `0b7c691666d4e95d7d8c440a00400b0fa57a5b6c` from Ready revision `khrental-app--0000187` with the exact public build SHA verified.
-
-Admin panel storage test cleanup is complete: PR #185 migrated the isolated AdminPanel upload/list diagnostic path to explicit tenant storage APIs, preserved its auth/session gate, and deployed successfully as merge SHA `3c8a08153c32e42eb1d3c735a7cca9ddc84562c5` from Ready revision `khrental-app--0000188` with the exact public build SHA verified.
-
-BucketExplorer UI storage cleanup is complete: PR #186 migrated `src/components/BucketExplorer.jsx` to explicit storage APIs while preserving auth/session gating and the existing `storage.policies` diagnostic query, and deployed successfully as merge SHA `5a104a92b4e1adf3bd5bc96097954954a8708d60` from Ready revision `khrental-app--0000189` with the exact public build SHA verified.
-
-Legacy storage setup script removal is complete: PR #187 removed the unwired `src/scripts/setup_storage_buckets.js` compatibility-era script and deployed successfully as merge SHA `12fcd7ad1f5ccc638e37012f3549e651f65acb1c` from Ready revision `khrental-app--0000190` with the exact public build SHA verified.
-
-Shared storage compatibility façade removal is complete: PR #188 removed the dead storage client block and obsolete storage exports/re-exports while preserving auth, query-builder, tenant-context and RPC compatibility, and deployed successfully as merge SHA `b04ea94a2c8ac3c899b1312c0c1235b8298383b7` from Ready revision `khrental-app--0000191` with the exact public build SHA verified.
-
-PropertyContext compatibility fallback removal is complete: PR #189 moved `src/contexts/PropertyContext.jsx` fully onto `propertyDirectoryService.listTenantProperties()` and deployed successfully as merge SHA `4fb78cebecdcc73738d0bb822afb7f22a196d6f0` from Ready revision `khrental-app--0000192` with the exact public build SHA verified.
-
-PropertyList compatibility read removal is complete: PR #190 moved `src/pages/PropertyList.jsx` onto `propertyDirectoryService.listTenantProperties()` and deployed successfully as merge SHA `3def32ae7f62aed0d2326b7bf227142fe1c99468` from Ready revision `khrental-app--0000193` with the exact public build SHA verified.
-
-PropertyDetails primary compatibility read removal is complete: PR #191 added `propertyDirectoryService.getTenantPropertyById()` and moved the primary property record read onto `/api/mssql/properties/:id`, deploying successfully as merge SHA `d463ad9f705b0865eb073d6f9c9ae078f1a634ac` from Ready revision `khrental-app--0000194` with the exact public build SHA verified.
-
-PropertyDetails agreements compatibility read removal is complete: PR #192 added `agreementService.listAgreementsByProperty()` and moved the displayed agreements list onto tenant-scoped `/api/mssql/agreements?propertyId=...`, deploying successfully as merge SHA `490d7e55b92374e6d85dd84c6a1c14fb8c2091c9` from Ready revision `khrental-app--0000195` with the exact public build SHA verified.
-
-PropertyDetails dead maintenance compatibility read removal is complete: PR #193 removed the unused `fetchData('maintenance_requests')` query and dead state, deploying successfully as merge SHA `af08930b47a98032e7c418cb2de1acc7e1d01567` from Ready revision `khrental-app--0000196` with the exact public build SHA verified.
-
-PropertyDetails renter agreement fallback compatibility removal is complete: PR #194 reused the existing explicit `listAgreementsByProperty(id)` result for the first renter fallback, preserving the active/pending/review/signed filter and deploying successfully as merge SHA `00e6a463244033764843a84b05e4feeec93380a8` from Ready revision `khrental-app--0000197` with the exact public build SHA verified.
-
-PropertyDetails property-unit fallback compatibility removal is complete: PR #195 replaced the remaining `platformClient.from('property_units')` fallback with `propertyDirectoryService.listTenantPropertyUnits(id)`, deploying successfully as merge SHA `d64c233d5e4ac8142bf4e0e0090386337f499872` from Ready revision `khrental-app--0000198` with the exact public build SHA verified.
-
-PropertyDetails unit-agreement fallback compatibility removal is next. The final query-builder compatibility read in `PropertyDetails` still selects agreements by unit IDs and active/pending/review/signed status. This slice adds equivalent narrowing filters to the existing tenant-scoped MSSQL agreement list contract and replaces only that final compatibility read.
+Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -369,24 +327,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - remove dead expired agreement compatibility updater
-Problem/evidence: agreementService.checkAndUpdateExpiredAgreements() contained compatibility-backed agreement reads and writes, but strict repository-wide reference checks found no imports, workflow calls, or runtime references outside its own definition.
-Scope: Delete only the unused updater and add a regression guard that the export and fallback string remain absent.
-PR: #202.
-CI result: PR head run 37782478805 (#576) passed; post-merge production run 37783550075 (#577) passed.
-Production revision/SHA: Ready revision khrental-app--0000205 served merge SHA ae983e1a9f23605c742f8c82b1453ede740d7ded with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — dead expired agreement compatibility updater removed from production.
-Next item: Phase 4 - remove dead legacy Evia agreement webhook handler.
+Active item: Phase 4 - remove dead legacy Evia agreement webhook handler
+Problem/evidence: agreementService.handleEviaSignWebhook() directly read/wrote agreements through platformClient, but strict repository-wide reference checks found no imports or runtime callers; the active Evia webhook is implemented separately under the API layer.
+Scope: Delete only the unused legacy handler, remove its now-unused storage upload import, and add regression coverage.
+PR: #203.
+CI result: final PR head run 37789372533 (#579) passed; post-merge production run 37790137172 (#580) passed.
+Production revision/SHA: Ready revision khrental-app--0000206 served merge SHA 3885ea2bc3476af76f9497f037695f506fb5bf97 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — dead legacy Evia agreement webhook handler removed from production.
+Next item: Phase 4 - remove dead agreement document-generation wrapper.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead legacy Evia agreement webhook handler
-Problem/evidence: agreementService.handleEviaSignWebhook() directly reads/writes agreements through platformClient, but strict repository-wide reference checks found no imports or runtime callers; the active Evia webhook is implemented separately under the API layer.
-Scope: Delete only the unused legacy handler, remove its now-unused storage upload import, and add a regression guard that the legacy handler stays absent.
-Out of scope: active Evia webhook routes/services; active agreement reads/writes; signature authority; auth flows; other domains.
-Result: ACTIVE — branch phase-4-remove-dead-evia-webhook-handler contains the bounded dead-code cleanup and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead agreement document-generation wrapper
+Problem/evidence: agreementService.handleDocumentGeneration() duplicates the active saveAgreement() document-generation path and has no repository caller, while its private getMergeDataForAgreement() helper remains live inside saveAgreement().
+Scope: Delete only the unused exported wrapper and add a regression guard that it stays removed.
+Out of scope: saveAgreement(); getMergeDataForAgreement(); DocumentService; agreement workflow service; active document merge/signing behavior; auth and other domains.
+Result: ACTIVE — branch phase-4-remove-dead-document-generation-wrapper contains the bounded dead-code cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---

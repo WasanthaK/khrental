@@ -620,57 +620,6 @@ async function getMergeDataForAgreement(agreement) {
 }
 
 /**
- * Handle document generation for an agreement
- * @param {string} agreementId - ID of the agreement
- * @param {string} templateContent - Content of the template
- * @returns {Promise<boolean>} - Success status
- */
-export const handleDocumentGeneration = async (agreementId, templateContent) => {
-  console.log("Generating document for:", agreementId);
-  try {
-    if (!agreementId) {
-      throw new Error("Agreement ID is required");
-    }
-    
-    if (!templateContent) {
-      throw new Error("Template content is required");
-    }
-    
-    // Get the agreement data
-    const agreement = await fetchAgreement(agreementId);
-    
-    // Get merge data for the agreement
-    const mergeData = await getMergeDataForAgreement(agreement);
-    
-    // Merge the template content with the data
-    console.log('Populating merge fields in template...');
-    const mergedContent = await populateMergeFields(templateContent, mergeData);
-    console.log('Merged content length:', mergedContent.length);
-    
-    // Debug info for content inspection
-    console.log('HTML formatting analysis:', {
-      hasParagraphs: mergedContent.includes('<p'),
-      hasBold: mergedContent.includes('<strong') || mergedContent.includes('<b'),
-      hasItalic: mergedContent.includes('<em') || mergedContent.includes('<i'),
-      hasLists: mergedContent.includes('<ul') || mergedContent.includes('<ol')
-    });
-    
-    // Save the merged document
-    const docUrl = await saveMergedDocument(mergedContent, agreement);
-    
-    // Update the agreement with the new document URL
-    await updateAgreementData(agreementId, { documenturl: docUrl });
-    
-    toast.success("Document generated successfully");
-    return true;
-  } catch (error) {
-    console.error("Error generating document:", error);
-    toast.error("Document generation failed: " + error.message);
-    return false;
-  }
-};
-
-/**
  * Fetches a template by ID
  * @param {string} templateId - ID of the template to fetch
  * @returns {Promise<Object|null>} - The template data or null if not found
