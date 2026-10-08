@@ -369,24 +369,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - agreement detail read compatibility fallback removal
-Problem/evidence: agreementService.fetchAgreement() still feature-flagged the canonical /api/mssql/agreements/:id read and fell back to platformClient.from('agreements') when MSSQL was disabled or the explicit request failed.
-Scope: Remove only the agreement detail read fallback/helper so fetchAgreement() always uses the tenant-scoped MSSQL endpoint and fails closed on API errors.
-PR: #200.
-CI result: PR head run 37754175782 (#572) passed; post-merge production run 37754514019 (#573) passed.
-Production revision/SHA: Ready revision khrental-app--0000203 served merge SHA 25bb828f581227bcc04ea51e76352ae0edda3f77 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — agreement detail compatibility read fallback removed from production.
-Next item: Phase 4 - remove dead invoice detail compatibility read.
+Active item: Phase 4 - remove dead invoice detail compatibility read
+Problem/evidence: invoiceService.fetchInvoice() contained an MSSQL feature-flag branch and platformClient.from('invoices') fallback, but strict repository-wide reference checks found no imports or runtime call sites for that export.
+Scope: Delete only the unused fetchInvoice export and add a regression guard that it stays removed.
+PR: #201.
+CI result: PR head run 37756850867 (#574) passed; post-merge production run 37757545218 (#575) passed.
+Production revision/SHA: Ready revision khrental-app--0000204 served merge SHA 40f54b1cfcc9df518beea4dd2cdd72c42cea3cd8 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — dead invoice detail compatibility read removed from production.
+Next item: Phase 4 - remove dead expired agreement compatibility updater.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead invoice detail compatibility read
-Problem/evidence: invoiceService.fetchInvoice() contains an MSSQL feature-flag branch and platformClient.from('invoices') fallback, but strict repository-wide reference checks found no imports or runtime call sites for that export.
-Scope: Delete only the unused fetchInvoice export and add a regression guard that it stays removed.
-Out of scope: active invoice list behavior; payment flows; invoice create/update paths; auth flows; other domains.
-Result: ACTIVE — branch phase-4-remove-dead-invoice-detail-read contains the bounded dead-code cleanup and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead expired agreement compatibility updater
+Problem/evidence: agreementService.checkAndUpdateExpiredAgreements() contains compatibility-backed agreement reads and writes, but strict repository-wide reference checks found no imports, workflow calls, or runtime references outside its own definition.
+Scope: Delete only the unused updater and add a regression guard that the export and fallback string remain absent.
+Out of scope: active agreement reads/writes; scheduled billing; agreement template operations; auth flows; other domains.
+Result: ACTIVE — branch phase-4-remove-dead-expired-agreement-updater contains the bounded dead-code cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---

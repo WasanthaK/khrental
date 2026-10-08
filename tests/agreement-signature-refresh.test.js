@@ -99,3 +99,11 @@ test('agreement detail read uses canonical MSSQL API without compatibility fallb
   assert.doesNotMatch(source, /const fetchAgreementRecord = async/);
   assert.doesNotMatch(source, /Error loading agreement from MSSQL, falling back to the local compatibility layer/);
 });
+
+
+test('unused expired agreement compatibility updater stays removed', () => {
+  const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /export const checkAndUpdateExpiredAgreements\s*=/);
+  assert.doesNotMatch(source, /Error finding expired agreements in MSSQL, falling back to the local compatibility layer/);
+});
