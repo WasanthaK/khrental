@@ -369,14 +369,14 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - PropertyDetails unit-agreement fallback compatibility removal
-Problem/evidence: PropertyDetails still performed its final query-builder compatibility read through platformClient.from('agreements') to find active/pending/review/signed agreements for the property's unit IDs.
-Scope: Add parameterized unitIds/statuses narrowing filters to the existing tenant-scoped MSSQL agreement list, add agreementService.listAgreementsByUnitIds(), replace only the unit-agreement fallback read, and remove the now-unused platformClient query-builder alias import.
-PR: #196.
-CI result: PR head run 37738286436 passed; SQL Server renter-workflow PR run 37738286481 passed; post-merge production run 37738654241 passed; post-merge SQL Server renter-workflow run 37738654246 passed.
-Production revision/SHA: Ready revision khrental-app--0000199 served merge SHA c56f346d67c786843cc9e855344f5f9fca4dbc3b with matching public build fingerprint.
-Result: COMPLETE — final query-builder read removed from PropertyDetails in production.
-Next item: Phase 4 - AgreementList compatibility read fallback removal.
+Active item: Production stabilization interruption - PropertyList MSSQL result-shape normalization
+Problem/evidence: After the explicit property-directory migration, /dashboard/properties could render the route error boundary as "404 Page Not Found" because MSSQL-backed property rows expose JSON-backed NVARCHAR fields and nullable text directly while PropertyList/PropertyCard expect parsed arrays/objects and safe strings.
+Scope: Normalize property images/amenities/rentalvalues at propertyDirectoryService for list and detail reads, make PropertyList search null-safe, and add focused regression guards. No route, auth, permission, migration, or database-write changes.
+PR: #198.
+CI result: PR head run 37741608516 (#565) passed; post-merge production run 37744896809 (#566) passed.
+Production revision/SHA: Ready revision khrental-app--0000200 served merge SHA 267230c6d946f87efa0b46d1afe6680009d73ab7 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — production Properties page recovered and manually confirmed working after deployment.
+Next item: Resume Phase 4 - AgreementList compatibility read fallback removal.
 ```
 
 ## Current active item
@@ -386,8 +386,8 @@ Active item: Phase 4 - AgreementList compatibility read fallback removal
 Problem/evidence: AgreementList already uses /api/mssql/agreements as the canonical production path, but still retains a disabled-MSSQL platformClient.from('agreements') fallback with joined property/unit/rentee/template data.
 Scope: Remove only the feature-flag branch and compatibility fallback so AgreementList always uses the canonical tenant-scoped MSSQL agreement list; preserve existing refresh, filtering, cancellation, deletion, sorting-control state, and UI behavior.
 Out of scope: AgreementList sorting behavior changes; agreement write paths; PropertyDetails image/delete writes; RenteeDetails property/unit reads; other domains.
-Result: ACTIVE — branch phase-4-agreement-list-compatibility-read contains the bounded fallback removal and regression guard pending PR review/CI.
-Next item: open PR, review CI, then merge/deploy only with explicit authorization.
+Result: ACTIVE — PR #197 contains the bounded fallback removal and regression guard; refresh against current main after production hotfix #198, then review fresh CI.
+Next item: refresh PR #197 against current main, review fresh CI, then merge/deploy only with explicit authorization.
 ```
 ---
 
