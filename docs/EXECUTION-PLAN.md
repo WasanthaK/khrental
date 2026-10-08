@@ -369,24 +369,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - AgreementList compatibility read fallback removal
-Problem/evidence: AgreementList retained a disabled-MSSQL platformClient.from('agreements') fallback even though the canonical production path was already the tenant-scoped /api/mssql/agreements endpoint.
-Scope: Remove only the feature-flag branch and compatibility fallback so AgreementList always uses the canonical tenant-scoped MSSQL agreement list; preserve refresh, filtering, cancellation, deletion, sorting-control state, and UI behavior.
-PR: #197.
-CI result: refreshed PR head run 37749390373 (#568) passed; agreement-deletion PR run 37749390389 (#24) passed; post-merge production run 37750497482 (#569) passed; post-merge agreement-deletion run 37750497481 (#25) passed.
-Production revision/SHA: Ready revision khrental-app--0000201 served merge SHA 0d2c5962a97631c7deb115988ea4acd763024762 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — AgreementList compatibility read fallback removed from production.
-Next item: Phase 4 - remove dead useAgreement compatibility hook.
+Active item: Phase 4 - remove dead useAgreement compatibility hook
+Problem/evidence: src/hooks/useAgreement.js retained a platformClient agreement fallback and MSSQL feature-flag branch, but repository-wide reference checks found no runtime imports or consumers; only historical documentation referenced the file.
+Scope: Delete only the unused hook and add a regression guard that the file remains absent.
+PR: #199.
+CI result: PR head run 37752222410 (#570) passed; post-merge production run 37752619269 (#571) passed.
+Production revision/SHA: Ready revision khrental-app--0000202 served merge SHA ddfd4aaa1f7fc08ef2a0ac3a4f8ef5b7253f3c62 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — unused agreement compatibility hook removed from production.
+Next item: Phase 4 - agreement detail read compatibility fallback removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead useAgreement compatibility hook
-Problem/evidence: src/hooks/useAgreement.js contains a platformClient agreement fallback and MSSQL feature-flag branch, but repository-wide reference checks show no runtime imports or consumers; only historical documentation references the file.
-Scope: Delete only the unused hook and add a regression guard that the file remains absent.
-Out of scope: agreementService compatibility fallbacks; agreement write paths; PropertyDetails writes; property-unit reads/writes; auth flows; other domains.
-Result: ACTIVE — branch phase-4-remove-dead-use-agreement-hook removes the unused hook and adds a regression guard pending PR review/CI.
+Active item: Phase 4 - agreement detail read compatibility fallback removal
+Problem/evidence: agreementService.fetchAgreement() still feature-flags the canonical /api/mssql/agreements/:id read and falls back to platformClient.from('agreements') when MSSQL is disabled or the explicit request fails.
+Scope: Remove only the agreement detail read fallback/helper so fetchAgreement() always uses the tenant-scoped MSSQL endpoint and fails closed on API errors.
+Out of scope: agreement writes; property/property-unit fallbacks; agreement template operations; auth flows; other domains.
+Result: ACTIVE — branch phase-4-agreement-detail-read contains the bounded read migration and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
