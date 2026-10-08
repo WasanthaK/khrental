@@ -1738,9 +1738,12 @@ export const updateInvoice = async (id, payload = {}, tenantId) => {
   return mapInvoiceRow(rows[0] || null);
 };
 
-export const listAgreements = async ({ tenantId, propertyId, renteeId, status, page = 1, pageSize = DEFAULT_PAGE_SIZE } = {}) => {
+export const listAgreements = async ({ tenantId, propertyId, renteeId, status, unitIds, statuses, page = 1, pageSize = DEFAULT_PAGE_SIZE } = {}) => {
   const filters = [];
   const params = {};
+  const normalizeList = (value) => (
+    Array.isArray(value) ? value : String(value || '').split(',')
+  ).map((item) => String(item || '').trim()).filter(Boolean);
 
   applyTenantFilter({ filters, params, tenantId, column: 'a.tenant_id' });
 
@@ -1754,9 +1757,29 @@ export const listAgreements = async ({ tenantId, propertyId, renteeId, status, p
     params.renteeId = renteeId;
   }
 
+  const normalizedUnitIds = normalizeList(unitIds);
+  if (normalizedUnitIds.length > 0) {
+    const placeholders = normalizedUnitIds.map((unitId, index) => {
+      const key = `unitId${index}`;
+      params[key] = unitId;
+      return `@${key}`;
+    });
+    filters.push(`a.unitid IN (${placeholders.join(', ')})`);
+  }
+
   if (status) {
     filters.push('a.status = @status');
     params.status = status;
+  } else {
+    const normalizedStatuses = normalizeList(statuses);
+    if (normalizedStatuses.length > 0) {
+      const placeholders = normalizedStatuses.map((statusValue, index) => {
+        const key = `statusValue${index}`;
+        params[key] = statusValue;
+        return `@${key}`;
+      });
+      filters.push(`a.status IN (${placeholders.join(', ')})`);
+    }
   }
 
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';

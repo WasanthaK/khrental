@@ -117,6 +117,32 @@ export const listAgreementsByProperty = async (propertyId) => {
   return Array.isArray(agreements) ? agreements : [];
 };
 
+export const listAgreementsByUnitIds = async (unitIds, statuses = []) => {
+  const normalizedUnitIds = Array.isArray(unitIds)
+    ? unitIds.map((unitId) => String(unitId || '').trim()).filter(Boolean)
+    : [];
+
+  if (normalizedUnitIds.length === 0) {
+    return [];
+  }
+
+  const params = new URLSearchParams({
+    unitIds: normalizedUnitIds.join(','),
+    pageSize: '500'
+  });
+
+  const normalizedStatuses = Array.isArray(statuses)
+    ? statuses.map((status) => String(status || '').trim()).filter(Boolean)
+    : [];
+
+  if (normalizedStatuses.length > 0) {
+    params.set('statuses', normalizedStatuses.join(','));
+  }
+
+  const agreements = await requestMssqlApi(`/api/mssql/agreements?${params.toString()}`);
+  return Array.isArray(agreements) ? agreements : [];
+};
+
 export const fetchAgreement = async (agreementId) => {
   if (isMssqlApiEnabled()) {
     try {
