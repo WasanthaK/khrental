@@ -8,7 +8,7 @@ import { getRenteesByProperty } from '../services/renteeService';
 import { toast } from 'react-hot-toast';
 import { deleteFile } from '../services/fileService';
 import { fetchAppUsers } from '../services/appUserService';
-import { getTenantPropertyById } from '../services/propertyDirectoryService';
+import { getTenantPropertyById, listTenantPropertyUnits } from '../services/propertyDirectoryService';
 import { listAgreementsByProperty } from '../services/agreementService';
 
 // Components
@@ -293,16 +293,10 @@ const PropertyDetails = () => {
               } else {
                 console.log('No rentees found in agreements, checking units...');
                 
-                // Check if property has units, then check for agreements on those units
-                const { data: propertyUnits, error: unitsError } = await platformClient
-                  .from('property_units')
-                  .select('id')
-                  .eq('propertyid', id);
+                // Check if property has units through the explicit tenant-scoped property directory.
+                const propertyUnits = await listTenantPropertyUnits(id);
                   
-                if (unitsError) {
-                  console.error('Error checking property units:', unitsError);
-                  setRentees([]);
-                } else if (propertyUnits && propertyUnits.length > 0) {
+                if (propertyUnits && propertyUnits.length > 0) {
                   // Property has units, check for agreements on these units
                   const unitIds = propertyUnits.map(unit => unit.id);
                   
