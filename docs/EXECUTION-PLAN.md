@@ -369,24 +369,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - remove dead invoice detail compatibility read
-Problem/evidence: invoiceService.fetchInvoice() contained an MSSQL feature-flag branch and platformClient.from('invoices') fallback, but strict repository-wide reference checks found no imports or runtime call sites for that export.
-Scope: Delete only the unused fetchInvoice export and add a regression guard that it stays removed.
-PR: #201.
-CI result: PR head run 37756850867 (#574) passed; post-merge production run 37757545218 (#575) passed.
-Production revision/SHA: Ready revision khrental-app--0000204 served merge SHA 40f54b1cfcc9df518beea4dd2cdd72c42cea3cd8 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — dead invoice detail compatibility read removed from production.
-Next item: Phase 4 - remove dead expired agreement compatibility updater.
+Active item: Phase 4 - remove dead expired agreement compatibility updater
+Problem/evidence: agreementService.checkAndUpdateExpiredAgreements() contained compatibility-backed agreement reads and writes, but strict repository-wide reference checks found no imports, workflow calls, or runtime references outside its own definition.
+Scope: Delete only the unused updater and add a regression guard that the export and fallback string remain absent.
+PR: #202.
+CI result: PR head run 37782478805 (#576) passed; post-merge production run 37783550075 (#577) passed.
+Production revision/SHA: Ready revision khrental-app--0000205 served merge SHA ae983e1a9f23605c742f8c82b1453ede740d7ded with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — dead expired agreement compatibility updater removed from production.
+Next item: Phase 4 - remove dead legacy Evia agreement webhook handler.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead expired agreement compatibility updater
-Problem/evidence: agreementService.checkAndUpdateExpiredAgreements() contains compatibility-backed agreement reads and writes, but strict repository-wide reference checks found no imports, workflow calls, or runtime references outside its own definition.
-Scope: Delete only the unused updater and add a regression guard that the export and fallback string remain absent.
-Out of scope: active agreement reads/writes; scheduled billing; agreement template operations; auth flows; other domains.
-Result: ACTIVE — branch phase-4-remove-dead-expired-agreement-updater contains the bounded dead-code cleanup and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead legacy Evia agreement webhook handler
+Problem/evidence: agreementService.handleEviaSignWebhook() directly reads/writes agreements through platformClient, but strict repository-wide reference checks found no imports or runtime callers; the active Evia webhook is implemented separately under the API layer.
+Scope: Delete only the unused legacy handler, remove its now-unused storage upload import, and add a regression guard that the legacy handler stays absent.
+Out of scope: active Evia webhook routes/services; active agreement reads/writes; signature authority; auth flows; other domains.
+Result: ACTIVE — branch phase-4-remove-dead-evia-webhook-handler contains the bounded dead-code cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
