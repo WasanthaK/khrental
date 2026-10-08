@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ensureEviaSignatureAnchors, populateMergeFields } from '../src/utils/documentUtils.js';
 
 test('agreement merge resolves property and unit shorthand fields used by KH Rentals templates', async () => {
@@ -71,4 +72,11 @@ test('agreement signing anchors are guaranteed without duplicating existing mark
   );
   assert.equal((withAnchors.match(/For Landlord:/g) || []).length, 1);
   assert.equal((withAnchors.match(/For Tenant:/g) || []).length, 1);
+});
+
+
+test('unused agreement document generation wrapper stays removed', () => {
+  const source = readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /export const handleDocumentGeneration\s*=/);
 });
