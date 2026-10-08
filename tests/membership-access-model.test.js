@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { normalizeMembershipAccess } from '../src/api/mssql/membershipAdminRepository.js';
 import { isRenteeMembership } from '../src/api/mssql/renteeRepository.js';
 
@@ -296,4 +296,11 @@ test('production database migrations auto-plan safely while apply stays isolated
   assert.match(migrationRunnerSource, /const inspection = await item\.migration\.inspect\(pool\);/);
   assert.match(migrationRunnerSource, /if \(inspection\.satisfied\)/);
   assert.match(migrationRunnerSource, /Adopted satisfied untracked migration without replaying SQL/);
+});
+
+test('legacy app_users database setup compatibility utility stays removed', () => {
+  assert.equal(
+    existsSync(new URL('../src/utils/dbSetup.js', import.meta.url)),
+    false
+  );
 });
