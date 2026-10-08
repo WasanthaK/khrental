@@ -291,7 +291,7 @@ Current inventory groups:
 - Shared compatibility façade: `platformClientCore.js`.
 - Additional non-storage `platformClient` consumers remain and will be grouped/reviewed as later bounded domains.
 
-Current active domain: **PropertyDetails property-unit fallback compatibility removal**.
+Current active domain: **PropertyDetails unit-agreement fallback compatibility removal**.
 
 Billing/payment proof storage is complete: PR #165 replaced `paymentService.js` compatibility storage calls with `uploadTenantFile()`, preserved dedicated billing lifecycle authority, added regression coverage, and deployed successfully as merge SHA `da3527422631aab89312af3ffd6aebb9cf4f9e01` from Ready revision `khrental-app--0000166`.
 
@@ -325,7 +325,9 @@ PropertyDetails dead maintenance compatibility read removal is complete: PR #193
 
 PropertyDetails renter agreement fallback compatibility removal is complete: PR #194 reused the existing explicit `listAgreementsByProperty(id)` result for the first renter fallback, preserving the active/pending/review/signed filter and deploying successfully as merge SHA `00e6a463244033764843a84b05e4feeec93380a8` from Ready revision `khrental-app--0000197` with the exact public build SHA verified.
 
-PropertyDetails property-unit fallback compatibility removal is next. The remaining renter fallback still reads `property_units` directly through `platformClient`, even though `propertyDirectoryService.listTenantPropertyUnits(propertyId)` already provides the tenant-scoped explicit directory read. This slice replaces only that unit lookup and leaves the unit-agreement compatibility query untouched.
+PropertyDetails property-unit fallback compatibility removal is complete: PR #195 replaced the remaining `platformClient.from('property_units')` fallback with `propertyDirectoryService.listTenantPropertyUnits(id)`, deploying successfully as merge SHA `d64c233d5e4ac8142bf4e0e0090386337f499872` from Ready revision `khrental-app--0000198` with the exact public build SHA verified.
+
+PropertyDetails unit-agreement fallback compatibility removal is next. The final query-builder compatibility read in `PropertyDetails` still selects agreements by unit IDs and active/pending/review/signed status. This slice adds equivalent narrowing filters to the existing tenant-scoped MSSQL agreement list contract and replaces only that final compatibility read.
 
 Do **not** perform a repo-wide rewrite.
 
@@ -367,24 +369,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - PropertyDetails renter agreement fallback compatibility removal
-Problem/evidence: PropertyDetails already fetched the property-scoped agreement list via listAgreementsByProperty(id), but its renter fallback still performed a second direct platformClient.from('agreements') read for the same property and active/pending/review/signed statuses.
-Scope: Fetch the explicit property agreement list once, reuse it for the displayed agreements and first renter fallback, preserve the same status filter, and leave the property-unit/unit-agreement fallback untouched.
-PR: #194.
-CI result: PR head run 37616292158 passed; post-merge production run 37616810258 passed.
-Production revision/SHA: Ready revision khrental-app--0000197 served merge SHA 00e6a463244033764843a84b05e4feeec93380a8 with matching public build fingerprint.
-Result: COMPLETE — first PropertyDetails renter agreement compatibility fallback removed from production.
-Next item: Phase 4 - PropertyDetails property-unit fallback compatibility removal.
+Active item: Phase 4 - PropertyDetails property-unit fallback compatibility removal
+Problem/evidence: PropertyDetails renter resolution loaded property_units through platformClient.from('property_units') even though propertyDirectoryService.listTenantPropertyUnits(propertyId) already provided the explicit tenant-scoped directory read.
+Scope: Replace only the property-unit fallback read with listTenantPropertyUnits(id); preserve the existing empty/error behavior, unit ID extraction, unit-agreement compatibility query, image-reference update, property delete, and UI behavior.
+PR: #195.
+CI result: PR head run 37736128217 passed; post-merge production run 37736540274 passed.
+Production revision/SHA: Ready revision khrental-app--0000198 served merge SHA d64c233d5e4ac8142bf4e0e0090386337f499872 with matching public build fingerprint.
+Result: COMPLETE — PropertyDetails property-unit fallback compatibility read removed from production.
+Next item: Phase 4 - PropertyDetails unit-agreement fallback compatibility removal.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - PropertyDetails property-unit fallback compatibility removal
-Problem/evidence: PropertyDetails renter resolution still loads property_units through platformClient.from('property_units') even though propertyDirectoryService.listTenantPropertyUnits(propertyId) already provides the explicit tenant-scoped directory read.
-Scope: Replace only the property-unit fallback read with listTenantPropertyUnits(id); preserve the existing empty/error behavior, unit ID extraction, unit-agreement compatibility query, image-reference update, property delete, and UI behavior.
-Out of scope: PropertyDetails unit-agreement compatibility read; PropertyDetails image update/delete writes; PropertyForm; property-unit CRUD; other domains.
-Result: ACTIVE — branch phase-4-property-details-unit-fallback-read contains the bounded compatibility-read removal and regression update pending PR review/CI.
+Active item: Phase 4 - PropertyDetails unit-agreement fallback compatibility removal
+Problem/evidence: PropertyDetails still performs its final query-builder compatibility read through platformClient.from('agreements') to find active/pending/review/signed agreements for the property's unit IDs.
+Scope: Add parameterized unitIds/statuses narrowing filters to the existing tenant-scoped MSSQL agreement list, add agreementService.listAgreementsByUnitIds(), replace only the unit-agreement fallback read, and remove the now-unused platformClient query-builder alias import.
+Out of scope: PropertyDetails image-reference update write; PropertyDetails property delete write; route-permission redesign; PropertyForm; property-unit CRUD; other domains.
+Result: ACTIVE — branch phase-4-property-details-unit-agreement-read contains the bounded compatibility-read removal and regression updates pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
