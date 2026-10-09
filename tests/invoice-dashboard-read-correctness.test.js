@@ -27,8 +27,15 @@ test('pending readings dashboard counts from scoped pending reading set, not N+1
   assert.match(pending, /\.eq\('billing_status', 'pending_invoice'\)/);
   assert.match(pending, /\.is\('invoice_id', null\)/);
   assert.match(pending, /for \(const reading of propertiesData\)/);
-  assert.match(pending, /counts\[reading\.property_id\] = \(counts\[reading\.property_id\] \|\| 0\) \+ 1/);
+  assert.match(pending, /counts\[reading\.propertyid\] = \(counts\[reading\.propertyid\] \|\| 0\) \+ 1/);
   assert.match(pending, /pendingReadingsCount: counts\[property\.id\] \|\| 0/);
+  assert.match(pending, /\.select\('id, propertyid'\)/);
+  assert.match(pending, /\.order\('id', \{ ascending: true \}\)/);
+  assert.match(pending, /\.range\(page \* pageSize, \(page \+ 1\) \* pageSize - 1\)/);
+  assert.match(pending, /if \(data\.length < pageSize\) break/);
+  assert.match(pending, /pagination limit/);
+  assert.match(pending, /if \(!Array\.isArray\(data\)\)/);
+  assert.doesNotMatch(pending, /\.select\('property_id'\)/);
   assert.doesNotMatch(pending, /countError/);
   assert.equal((pending.match(/\.from\('utility_readings'\)/g) || []).length, 1);
 });
@@ -39,4 +46,14 @@ test('dashboard read changes do not modify invoice mutation guards', () => {
   assert.match(guard, /guardBillingMssqlCompatibility/);
   assert.match(invoiceService, /export const createInvoiceRecord[\s\S]*?throw billingLifecycleRequired\(\)/);
   assert.match(invoiceService, /export const updateInvoiceRecord[\s\S]*?throw billingLifecycleRequired\(\)/);
+});
+
+test('dashboard clears stale pending data and surfaces utility query failures', () => {
+  const dashboard = readFileSync(new URL('../src/pages/InvoiceManagementDashboard.jsx', import.meta.url), 'utf8');
+  const pendingLoader = dashboard.slice(
+    dashboard.indexOf('const loadPropertiesWithReadings = async'),
+    dashboard.indexOf('const handleFilterChange', dashboard.indexOf('const loadPropertiesWithReadings = async'))
+  );
+  assert.match(pendingLoader, /setPropertiesWithReadings\(\[\]\)/);
+  assert.match(pendingLoader, /setError\(err\?\.message/);
 });

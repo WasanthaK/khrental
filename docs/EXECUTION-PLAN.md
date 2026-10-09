@@ -484,6 +484,22 @@ Result: ACTIVE — branch phase-4-invoice-dashboard-read-correctness, awaiting e
 Next: confirm dashboard accuracy and tenant isolation; migrate utility reading data retrieval through an explicit scoped API contract in a separate bounded slice.
 ```
 
+## Phase 4 pending utility-reading dashboard pagination — PR #222
+
+```text
+PR #221: invoice summary pagination/completeness and consistent pending-reading counts.
+CI #616 (run 37938380079) passed; merge SHA 161f8d8a7dbbc5fc1f363e2517ba8cd3942b7fa6.
+Production: operator confirmed green; independent exact Azure Ready revision, serving build SHA, MSSQL and browser tenant-fixture proof remain outstanding.
+Result: MERGED — production attestation pending.
+
+Active item: tenant-scoped pending utility-reading dashboard query correctness.
+Problem/evidence: getPropertiesWithPendingReadings used nonexistent MSSQL utility_readings.property_id rather than propertyid; fetched an unpaginated list that could silently undercount. Dashboard catch logged errors without clearing stale pending data.
+Scope: use the existing central platform query with tenant/property authorization, canonical propertyid, stable id-ordered pagination and bounded error handling; aggregate same authorized reading set; surface errors and clear stale UI data; expand CI regression checks.
+Out of scope: new authority, dedicated utility-reading endpoints, invoice/payment writes, billing calculation changes, schema/DDL, auth changes.
+Result: ACTIVE — branch phase-4-pending-readings-tenant-scoped-pagination awaiting CI/review.
+Next: check exact-head CI, merge if green, verify deployment. Then audit remaining utility invoice generation/reporting read parity and browser tenant isolation with executable integration tests.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
