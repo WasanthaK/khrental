@@ -47,3 +47,13 @@ test('dashboard read changes do not modify invoice mutation guards', () => {
   assert.match(invoiceService, /export const createInvoiceRecord[\s\S]*?throw billingLifecycleRequired\(\)/);
   assert.match(invoiceService, /export const updateInvoiceRecord[\s\S]*?throw billingLifecycleRequired\(\)/);
 });
+
+test('dashboard clears stale pending data and surfaces utility query failures', () => {
+  const dashboard = readFileSync(new URL('../src/pages/InvoiceManagementDashboard.jsx', import.meta.url), 'utf8');
+  const pendingLoader = dashboard.slice(
+    dashboard.indexOf('const loadPropertiesWithReadings = async'),
+    dashboard.indexOf('const handleFilterChange', dashboard.indexOf('const loadPropertiesWithReadings = async'))
+  );
+  assert.match(pendingLoader, /setPropertiesWithReadings\(\[\]\)/);
+  assert.match(pendingLoader, /setError\(err\?\.message/);
+});
