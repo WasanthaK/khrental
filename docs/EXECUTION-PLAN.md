@@ -466,6 +466,24 @@ Result: ACTIVE — branch phase-4-invoice-fail-closed-batch, exact-head CI and r
 Next: verify authorized invoice creation and payment work through /api/billing; then inventory each remaining read path for bounded contract migration. Production Azure Ready revision, exact serving SHA and MSSQL health remain separate release acceptance gates.
 ```
 
+## Phase 4 invoice dashboard read-correctness batch
+
+```text
+PR #220: fail closed on invoice API failures and reject prohibited legacy invoice writes.
+PR-head CI: workflow #614 (run 37916828117) succeeded.
+Merge SHA: 4daeb053f871ae66fa5c6d46efac4ab1c5a53230.
+Production: independent exact Ready revision, public serving SHA and MSSQL health not yet established.
+Result: MERGED — production evidence pending.
+
+Current active item: invoice dashboard summary completeness and pending-count consistency.
+Evidence: getInvoiceSummaryByProperty formerly fetched only the first 1000 invoices per property and treated that truncated page as a complete financial total; getPropertiesWithPendingReadings reran one separate count query per property, showing zero if one failed.
+Scope: page invoice summaries to completion through existing authorized listInvoices contract, propagate page errors rather than render partial totals, and count pending readings from the initial authorized result set. Add CI regression guards.
+Limitations: utility_readings compatibility query remains and might itself require pagination or endpoint parity; this batch does not prove >1000 pending readings can be returned by the underlying compatibility API. Exact tenant and end-to-end browser behavior require further acceptance.
+Out of scope: invoice creation, money/status mutations, tenant authorization policy, MSSQL schema or migration, utility calculations.
+Result: ACTIVE — branch phase-4-invoice-dashboard-read-correctness, awaiting exact-head CI and review.
+Next: confirm dashboard accuracy and tenant isolation; migrate utility reading data retrieval through an explicit scoped API contract in a separate bounded slice.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
