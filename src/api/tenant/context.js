@@ -280,9 +280,14 @@ const listAssignedRenteeIdsForProperties = async ({ tenantId, propertyIds }) => 
   }
 };
 
+// SQL Server uniqueidentifier values and incoming UUID headers may differ in casing.
+// Compare canonical UUID text while still requiring an actual active membership.
+const sameTenantId = (left, right) => Boolean(left && right)
+  && String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
+
 const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
   if (requestedTenantId) {
-    const requestedMembership = memberships.find((entry) => entry.tenant_id === requestedTenantId);
+    const requestedMembership = memberships.find((entry) => sameTenantId(entry.tenant_id, requestedTenantId));
 
     if (requestedMembership) {
       return {
@@ -302,7 +307,7 @@ const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
       );
     }
 
-    if (user?.tenant_id === requestedTenantId) {
+    if (sameTenantId(user?.tenant_id, requestedTenantId)) {
       return {
         tenantId: requestedTenantId,
         membership: null,
@@ -329,7 +334,7 @@ const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
   }
 
   if (user?.tenant_id) {
-    const userTenantMembership = memberships.find((entry) => entry.tenant_id === user.tenant_id);
+    const userTenantMembership = memberships.find((entry) => sameTenantId(entry.tenant_id, user.tenant_id));
     if (userTenantMembership) {
       return {
         tenantId: userTenantMembership.tenant_id,
