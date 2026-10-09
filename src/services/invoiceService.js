@@ -610,23 +610,36 @@ export async function getInvoiceSummaryByProperty(propertyIds, options = {}) {
  */
 export async function getPropertiesWithPendingReadings() {
   try {
-    // First get properties with pending readings
-    const { data: propertiesData, error: propertiesError } = await platformClient
-      .from('utility_readings')
-      .select('property_id')
-      .eq('billing_status', 'pending_invoice')
-      .is('invoice_id', null);
-    
-    if (propertiesError) {
-      throw new Error(formatErrorMessage(propertiesError));
+    // The MSSQL utility_readings schema uses propertyid (not property_id).
+    // Fetch all authorized pending rows in stable pages; the central platform
+    // query enforces tenant and property scope for each request.
+    const pageSize = 500;
+    const propertiesData = [];
+    for (let page = 0; page < 1000; page += 1) {
+      const { data, error } = await platformClient
+        .from('utility_readings')
+        .select('id, propertyid')
+        .eq('billing_status', 'pending_invoice')
+        .is('invoice_id', null)
+        .order('id', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (error) throw new Error(formatErrorMessage(error));
+      if (!Array.isArray(data)) {
+        throw new Error('Pending utility readings returned an invalid response.');
+      }
+      propertiesData.push(...data);
+      if (data.length < pageSize) break;
+      if (page === 999) {
+        throw new Error('Pending utility readings exceeded the supported pagination limit.');
+      }
     }
-    
-    if (!propertiesData || propertiesData.length === 0) {
+
+    if (propertiesData.length === 0) {
       return { data: [], error: null };
     }
-    
-    // Get unique property IDs
-    const propertyIds = [...new Set(propertiesData.map(reading => reading.property_id))];
+
+    const propertyIds = [...new Set(propertiesData.map(reading => reading.propertyid).filter(Boolean))];
+    if (propertyIds.length === 0) return { data: [], error: null };
     
     // Get property details
     const { data: properties, error: propDetailsError } = await platformClient
@@ -642,8 +655,8 @@ export async function getPropertiesWithPendingReadings() {
     // properties. Avoid separate per-property queries and misleading zero counts.
     const counts = {};
     for (const reading of propertiesData) {
-      if (reading.property_id) {
-        counts[reading.property_id] = (counts[reading.property_id] || 0) + 1;
+      if (reading.propertyid) {
+        counts[reading.propertyid] = (counts[reading.propertyid] || 0) + 1;
       }
     }
 
