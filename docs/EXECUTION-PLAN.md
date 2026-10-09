@@ -433,6 +433,23 @@ Result: ACTIVE — phase-4-remove-orphan-property-migration-wrapper, awaiting CI
 Next: require exact-head CI, authorized merge, and independent production acceptance evidence.
 ```
 
+## Phase 4 invoice contract-parity audit — PR #219
+
+```text
+PR #218: removed orphan property-association migration wrapper; underlying script and registered commands preserved.
+PR-head CI: workflow #610 (run 37912429093) passed.
+Merge SHA: 0c75021d8759defdc323663bfe501bae1b9df6a9.
+Production: operator reported green; independent Azure Ready serving revision, exact SHA and MSSQL/runtime proof pending.
+Result: MERGED — production attestation outstanding.
+
+Active item: Phase 4 - invoice MSSQL/compatibility contract inventory before live-code changes.
+Evidence: src/services/invoiceService.js contains MSSQL-first invoice list/create/update and generic fallbacks. server.js mounts billing mutation guards rejecting generic and MSSQL compatibility writes; paymentService still references legacy create/update helpers. Dashboard and utility-reading compatibility reads have consumers.
+Scope: docs/PHASE4-INVOICE-CONTRACT-PARITY.md documents callers, guard semantics, read parity requirements, tenant authorization, write protection, atomicity/idempotency and test-first next slice.
+Out of scope: runtime changes, invoice/payment state mutations, schema/DDL, authentication, live agreement/property operations.
+Result: ACTIVE — documentation PR #219 pending exact-head CI/review.
+Next item: bounded invoice mutation fail-closed contract tests and consumer audit, preserving governed billing lifecycle.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
