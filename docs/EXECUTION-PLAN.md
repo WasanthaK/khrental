@@ -283,7 +283,7 @@ Before changing code:
 
 Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **obsolete timestamp RPC repair-script removal (Phase 4 bounded slice; PR pending)**.
+Current active domain: **obsolete PostgreSQL database setup RPC script removal (Phase 4 bounded slice)**.
 
 Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 
@@ -349,18 +349,27 @@ Production deployment: operator reported green; independent Azure Ready revision
 Result: MERGED — formal production acceptance evidence pending.
 ```
 
+## ## Recently merged Phase 4 item — PR #211
+
+```text
+PR #211: removed obsolete src/scripts/updateTimestamps.js legacy PostgreSQL exec_sql RPC repair script, preserving active MSSQL timestamp/migration tooling.
+PR-head CI: workflow #596 (run 37886032242) successful.
+Merge SHA: fd3fd0cafc7d223a932aab6c1eeb79cf7b87591a.
+Production deployment: operator reported green; independent exact serving SHA, Azure Ready revision and MSSQL/runtime proof remain pending.
+Result: MERGED — formal production acceptance evidence pending.
+```
+
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove obsolete PostgreSQL timestamp RPC repair script.
-Problem/evidence: src/scripts/updateTimestamps.js invokes legacy exec_sql RPC, queries public-schema tables, uses NOW(), and has no indexed repository consumer. package.json exposes no command for this script. This is separate from the active MSSQL migration runner.
-Scope: delete only src/scripts/updateTimestamps.js; add regression test asserting absence while preserving current MSSQL migration and existing timestamp commands.
-Out of scope: src/db/runMigration.js, src/db/executeSql.js, standardizeTimestampColumns.js, fixPropertyTimestamps.js, production schema/backfill, auth, billing, property writes.
-PR: pending CI and review.
-Result: ACTIVE — branch phase-4-remove-obsolete-timestamp-rpc-script.
-Next item: exact-head CI, review and authorized merge, then production Ready revision/serving SHA/MSSQL health verification.
+Active item: Phase 4 - remove obsolete PostgreSQL database setup RPC script.
+Problem/evidence: src/scripts/setupDatabase.js uses legacy exec_sql RPC and PostgreSQL public schema, has no package script and no indexed repository caller; MSSQL migration tooling is separate.
+Scope: delete only src/scripts/setupDatabase.js; add a CI regression guard preserving MSSQL migration entry points.
+Out of scope: active migrations, schema DDL, auth, billing, active agreement/property/maintenance operations, and timestamp commands.
+Result: ACTIVE — branch phase-4-remove-obsolete-postgres-setup-script. PR pending CI/review.
+Next item: require exact-head CI success, authorized merge, and production Ready/serving SHA/MSSQL proof before production-complete status.
 ```
----
+
 
 ## Maintenance rule for this document
 
