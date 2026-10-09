@@ -320,3 +320,11 @@ test('legacy generic data fetcher compatibility utility stays removed', () => {
     false
   );
 });
+
+
+test('database utils SQL RPC compatibility surface stays removed', () => {
+  const source = readFileSync(new URL('../src/utils/databaseUtils.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /export async function executeSql\s*\(/);
+  assert.doesNotMatch(source, /platformClient/);
+  assert.doesNotMatch(source, /export default\s*\{/);
+});

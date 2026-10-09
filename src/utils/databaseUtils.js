@@ -2,26 +2,6 @@
  * Utility functions for database operations
  */
 
-import { platformClient } from '../services/platformClient';
-
-export async function executeSql(sql) {
-  try {
-    const { data, error } = await platformClient.rpc('exec_sql', { sql });
-    if (error) {
-      throw error;
-    }
-    return data;
-  } catch (error) {
-    console.error('Error executing SQL:', error);
-    throw error;
-  }
-}
-
-export default {
-  platformClient,
-  executeSql
-};
-
 /**
  * Converts camelCase to lowercase without underscores
  * @param {string} str - The string to convert
