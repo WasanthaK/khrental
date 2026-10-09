@@ -400,6 +400,22 @@ Legacy `src/db/runMigration.js` uses `exec_sql` RPC, `src/db/executeSql.js` uses
 
 See `docs/PHASE4-MIGRATION-AUTHORITY.md` for the entrypoint classification and next inspect-only route/caller census. No production SQL writes are authorized by this plan update.
 
+## Phase 4 SQL entrypoint caller audit and bounded orphan cleanup
+
+```text
+PR #216: migration-authority review and canonical control-plane decision.
+PR-head CI: workflow #606, run 37908391425, passed.
+Merge SHA: 7f758aa4786e86138ae1c8ab9d75ec5d4f995b2b.
+Result: MERGED — docs-only; no production schema execution.
+
+Current active item: remove orphaned browser-side legacy PostgreSQL SqlMigration component.
+Evidence: indexed repository code search for SqlMigration found only src/components/admin/SqlMigration.jsx; no imports, route or navigation consumers were found. UI component includes PostgreSQL CREATE FUNCTION DDL and exec_sql RPC logic.
+Scope: delete only src/components/admin/SqlMigration.jsx, add CI regression guard preserving governed production migrations and existing npm migration commands.
+Out of scope: src/db/runMigration.js (explicit npm migrate command with existing regression guards), src/db/executeSql.js, managed production migrations, active application functionality, SQL grants/DDL.
+Result: ACTIVE — phase-4-remove-orphan-browser-sql-migration pending CI/review.
+Next: validate exact-head CI, safely merge, verify deployment, then inventory remaining legacy SQL scripts before any further deletion.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
