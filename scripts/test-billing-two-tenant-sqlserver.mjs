@@ -218,6 +218,14 @@ async function main() {
     assert.equal(authContext.status, 200, JSON.stringify(authContext));
     assert.equal(guid(authContext.payload.data.tenantId), a.tenantId);
 
+    // SQL Server returns uppercase UUID strings in some drivers, while
+    // clients may send lowercase or uppercase tenant selection headers.
+    const upperContext = await call('/api/platform/auth/context', {
+      token: tokenA, tenantId: a.tenantId.toUpperCase()
+    });
+    assert.equal(upperContext.status, 200, JSON.stringify(upperContext));
+    assert.equal(guid(upperContext.payload.data.tenantId), a.tenantId);
+
     const forcedTenant = await call('/api/platform/auth/context', {
       token: tokenA, tenantId: b.tenantId
     });
