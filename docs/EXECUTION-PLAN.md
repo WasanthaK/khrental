@@ -573,6 +573,24 @@ successful payment flows, production browser session, public build fingerprint.
 Next: credentialed isolated-browser fixture and Azure production attestation.
 ```
 
+## Phase 4 authenticated renter browser proof — PR #227
+
+```text
+PR #226: anonymous browser billing-route protection; CI #629 and browser acceptance #1 green.
+Merge SHA: 5e4b22783d9ddbfff21b4ad098be78b1f2d1886a.
+Production deployment reported GREEN by operator; independent serving Azure revision/SHA and production MSSQL health outstanding.
+
+Active item: extend the disposable SQL Server billing/HTTP acceptance to mount the real
+Vite React application behind the existing authenticated fixture API on localhost.
+Use two independent real bearer sessions, start headless Chromium for each and validate
+that renter utility history is accessible without login/unauthorized redirect or
+cross-tenant property labels. No production traffic, browser credentials, or dev bypass.
+This supplements existing real SQL invoice generation and HTTP cross-tenant assertions.
+Result: ACTIVE — PR #227 requires SQL browser acceptance and regular build CI green.
+Remaining: authenticated full invoice/UI arithmetic, tenant switching (multi-membership),
+payment UI and production Azure/MSSQL attestations.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
