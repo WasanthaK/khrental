@@ -5,6 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sql from 'mssql';
 import express from 'express';
+import puppeteer from 'puppeteer';
+import { createServer as createViteServer } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // Mandatory disposable Docker SQL Server; never use a preexisting/production endpoint.
 const docker = args => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -83,7 +86,7 @@ async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
   const database = 'billingproof_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex');
-  let started = false, master, pool, closeMssqlPool, httpServer;
+  let started = false, master, pool, closeMssqlPool, httpServer, browser, vite;
   try {
     docker(['run', '-d', '--name', name, '-e', 'ACCEPT_EULA=Y',
       '-e', 'MSSQL_PID=Developer', '-e', 'MSSQL_SA_PASSWORD=' + password,
@@ -190,6 +193,15 @@ async function main() {
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
+    // Serve the real React application through Vite middleware on the same
+    // loopback origin as the fixture API; no dev-bypass headers or production.
+    delete process.env.VITE_ENABLE_DEV_BYPASS;
+    vite = await createViteServer({
+      plugins: [react()],
+      server: { middlewareMode: true, hmr: false },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
     app.use((err, req, res, next) => {
       res.status(Number(err?.status) || 500).json({
         error: err.message, code: err.code || null
@@ -277,8 +289,43 @@ async function main() {
     assert.equal(ownB.payload.data.length, 1);
     assert.equal(guid(ownB.payload.data[0].id), b.readingId);
 
+
+    browser = await puppeteer.launch({
+      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const browserVisit = async (item, token, route) => {
+      const page = await browser.newPage();
+      try {
+        await page.evaluateOnNewDocument((sessionToken, tenantId, profileId) => {
+          localStorage.removeItem('dev_bypass_role');
+          localStorage.setItem('khrental.activeTenantId', tenantId);
+          localStorage.setItem('khrental.local.session', JSON.stringify({
+            access_token: sessionToken,
+            user: { id: profileId, email: 'browser-fixture@example.invalid', role: 'rentee' }
+          }));
+        }, token, item.tenantId, item.renteeId);
+        await page.goto(origin + route, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForFunction(() => (
+          !document.body.innerText.includes('Loading application...')
+          && document.body.innerText.trim().length > 0
+        ), { timeout: 30000 });
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const state = await page.evaluate(() => ({
+          path: window.location.pathname, text: document.body.innerText.slice(0, 12000)
+        }));
+        assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login');
+        assert.notEqual(state.path, '/unauthorized', 'valid rentee session must reach its portal');
+        assert.ok(state.path.startsWith('/rentee/'), 'tenant portal route must be preserved');
+        assert.doesNotMatch(state.text, /Tenant B Property|Tenant A Property/,
+          'rentee-facing browser must not leak other tenant property labels');
+      } finally { await page.close(); }
+    };
+    await browserVisit(a, tokenA, '/rentee/utilities/history');
+    await browserVisit(b, tokenB, '/rentee/utilities/history');
     console.log('PASS: disposable two-tenant SQL Server invoice isolation, rent/utility totals, lifecycle events, correct reading linkage and duplicate prevention');
   } finally {
+    if (browser) await browser.close().catch(() => {});
+    if (vite) await vite.close().catch(() => {});
     if (httpServer) await new Promise(resolve => httpServer.close(resolve));
     if (closeMssqlPool) await closeMssqlPool().catch(() => {});
     if (pool) await pool.close().catch(() => {});
