@@ -324,28 +324,31 @@ Result:
 Next item:
 ```
 
-## Most recently completed item
+## Recently merged items — production evidence reconciliation
 
 ```text
-Active item: Phase 4 - remove dead generic data fetcher compatibility utility
-Problem/evidence: src/utils/dataFetcher.js was a generic platformClient-backed fetch helper with no repository path references; its sole exported fetchData helper had no consumer through this module, while active code uses other domain-specific data access paths.
-Scope: Delete only src/utils/dataFetcher.js and add a regression guard that the legacy utility remains absent.
-PR: #207.
-CI result: PR head run 37821891853 (#587) passed; post-merge production run 37822344878 (#588) passed.
-Production revision/SHA: Ready revision khrental-app--0000210 served merge SHA ca9613d0814db273e52941dd2e3cefe3d86a5b87 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — dead generic data fetcher compatibility utility removed from production.
-Next item: Phase 4 - remove dead databaseUtils SQL RPC compatibility surface.
+PR #208: remove dead databaseUtils SQL RPC compatibility surface.
+Merge SHA: 10673672531621b6273bac3938e96ab9e82d0c66.
+CI/deployment: production workflow #590 reported green by operator; exact Azure Ready serving revision, public build SHA, and MSSQL/runtime evidence not independently captured in this audit.
+Result: MERGED — production acceptance evidence pending.
+
+PR #209: remove unused generic databaseService compatibility facade.
+PR-head CI: workflow #591, run 37882986704, verify job successful; deploy skipped on PR.
+Merge SHA: 14f57e3fb0d7681d65a6badd5a6760ba6475f143.
+Production deployment: operator reported green; exact Azure Ready serving revision, public build SHA, and MSSQL/runtime evidence not independently captured.
+Result: MERGED — production acceptance evidence pending.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead databaseUtils SQL RPC compatibility surface
-Problem/evidence: src/utils/databaseUtils.js had a platformClient-backed executeSql() RPC helper plus default compatibility export, but repository-wide searches found no executeSql consumer and no default import; live named format-conversion exports remain in active use.
-Scope: Remove only the unused platformClient import, executeSql() helper, and default export object from src/utils/databaseUtils.js; preserve all live named conversion helpers; add a regression guard.
-Out of scope: src/db/executeSql.js; src/db/runMigration.js; named database conversion helpers; active domain services; auth; billing; maintenance; property writes; production schema changes.
-Result: ACTIVE — branch phase-4-remove-dead-database-utils-rpc-compatibility contains the bounded compatibility-surface cleanup and regression guard pending PR review/CI.
-Next item: open PR, review CI, then merge/deploy only with explicit authorization.
+Active item: Phase 4 - remove dead platform-backed fetchData export in src/utils/dataUtils.js.
+Problem/evidence: repository import search shows the live agreementService uses toDatabaseFormat from this module, but no repository consumer imports its generic fetchData export. The unused fetchData still references platformClient.
+Scope: remove only the unused platformClient import and fetchData function; keep fromDatabaseFormat and toDatabaseFormat logic intact; add regression coverage.
+Out of scope: active agreement generation/conversion, src/utils/databaseUtils.js, property/invoice/maintenance writes, auth, MSSQL migration paths, production schema.
+PR: pending review and CI.
+Result: ACTIVE — branch phase-4-remove-unused-datautils-fetch.
+Next item: review PR, require green exact-head CI, merge with authorization, verify exact deployed serving SHA and live MSSQL health, then select one additional bounded compatibility slice.
 ```
 ---
 
