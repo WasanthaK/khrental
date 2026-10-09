@@ -290,10 +290,16 @@ async function main() {
     assert.equal(guid(ownB.payload.data[0].id), b.readingId);
 
 
+    // Billing generator intentionally drafts invoices; the renter invoice list
+    // intentionally hides drafts. Promote only disposable fixture rows to the
+    // legacy visible "pending" state to test the actual renter-facing display.
+    await query(pool,
+      "UPDATE invoices SET status = 'pending' WHERE id IN (@invoiceA, @invoiceB)",
+      { invoiceA, invoiceB });
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const browserVisit = async (item, token, route) => {
+    const browserVisit = async (item, token, route, { visibleInvoice = false } = {}) => {
       const page = await browser.newPage();
       try {
         await page.evaluateOnNewDocument((sessionToken, tenantId, profileId) => {
@@ -316,12 +322,24 @@ async function main() {
         assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login');
         assert.notEqual(state.path, '/unauthorized', 'valid rentee session must reach its portal');
         assert.ok(state.path.startsWith('/rentee/'), 'tenant portal route must be preserved');
-        assert.doesNotMatch(state.text, /Tenant B Property|Tenant A Property/,
-          'rentee-facing browser must not leak other tenant property labels');
+        const ownProperty = item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property';
+        const foreignProperty = item.tenantId === a.tenantId ? 'Tenant B Property' : 'Tenant A Property';
+        assert.doesNotMatch(state.text, new RegExp(foreignProperty),
+          'rentee-facing browser must not leak another tenant property');
+        if (visibleInvoice) {
+          assert.match(state.text, /My Invoices/, 'actual renter invoice screen must load');
+          assert.match(state.text, new RegExp(ownProperty), 'own property must be visible on invoice');
+          assert.match(state.text, new RegExp(item.expected.toLocaleString('en-US')),
+            'the tenant-specific invoice total must be visible');
+          assert.doesNotMatch(state.text, /No invoices found\./,
+            'visible test invoice must not be silently omitted');
+        }
       } finally { await page.close(); }
     };
     await browserVisit(a, tokenA, '/rentee/utilities/history');
     await browserVisit(b, tokenB, '/rentee/utilities/history');
+    await browserVisit(a, tokenA, '/rentee/invoices', { visibleInvoice: true });
+    await browserVisit(b, tokenB, '/rentee/invoices', { visibleInvoice: true });
     console.log('PASS: disposable two-tenant SQL Server invoice isolation, rent/utility totals, lifecycle events, correct reading linkage and duplicate prevention');
   } finally {
     if (browser) await browser.close().catch(() => {});
