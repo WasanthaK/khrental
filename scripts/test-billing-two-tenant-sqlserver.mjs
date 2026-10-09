@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import sql from 'mssql';
+import express from 'express';
 
 // Mandatory disposable Docker SQL Server; never use a preexisting/production endpoint.
 const docker = args => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -36,6 +37,9 @@ async function fixture(pool, label, rent, water) {
     "INSERT INTO app_users (tenant_id, name, email, role, user_type) OUTPUT INSERTED.id VALUES (@tenantId, @name, @email, 'rentee', 'rentee')",
     { tenantId, name: label + ' Rentee', email: 'sqlbilling-' + suffix + '@example.invalid' });
   const renteeId = guid(rentee.id);
+  await query(pool,
+    "INSERT INTO tenant_memberships (tenant_id, app_user_id, role, status, is_default) VALUES (@tenantId, @renteeId, 'rentee', 'active', 1)",
+    { tenantId, renteeId });
   const agreement = await first(pool,
     "INSERT INTO agreements (tenant_id, renteeid, propertyid, status, rentamount, startdate) OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'active', @rent, '2026-01-01')",
     { tenantId, renteeId, propertyId, rent });
@@ -79,7 +83,7 @@ async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
   const database = 'billingproof_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex');
-  let started = false, master, pool, closeMssqlPool;
+  let started = false, master, pool, closeMssqlPool, httpServer;
   try {
     docker(['run', '-d', '--name', name, '-e', 'ACCEPT_EULA=Y',
       '-e', 'MSSQL_PID=Developer', '-e', 'MSSQL_SA_PASSWORD=' + password,
@@ -100,6 +104,7 @@ async function main() {
     pool = await connect({ port, password, database });
     for (const filename of [
       '20260913_00_create_fresh_mssql_schema.sql',
+      '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
       '20260920_01_add_tenancy_billing_adjustments.sql',
       '20261005_01_add_property_utility_configs.sql'
@@ -159,8 +164,122 @@ async function main() {
     assert.equal((await query(pool,
       'SELECT id FROM utility_readings WHERE tenant_id = @tenantId AND invoice_id = @invoiceId',
       { tenantId: a.tenantId, invoiceId: invoiceB })).length, 0);
+
+    // Exercise real bearer sessions and actual HTTP routing over loopback,
+    // never development identity headers or externally configured SQL.
+    const { createAuthRecord, issueAuthSession, createSessionAuthMiddleware } =
+      await import('../src/api/auth/index.js');
+    const { createPlatformRouter } = await import('../src/api/platform/router.js');
+    const { createMssqlRouter } = await import('../src/api/mssql/router.js');
+    const { guardBillingMssqlCompatibility } =
+      await import('../src/api/platform/billingMutationGuard.js');
+    const auth = async item => {
+      const record = await createAuthRecord({
+        authId: crypto.randomUUID(),
+        appUserId: item.renteeId,
+        email: 'auth-' + crypto.randomUUID() + '@example.invalid',
+        role: 'rentee',
+        password: crypto.randomBytes(24).toString('base64url')
+      });
+      return (await issueAuthSession(record)).accessToken;
+    };
+    const tokenA = await auth(a);
+    const tokenB = await auth(b);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createSessionAuthMiddleware());
+    app.use('/api/platform', createPlatformRouter());
+    app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
+    app.use((err, req, res, next) => {
+      res.status(Number(err?.status) || 500).json({
+        error: err.message, code: err.code || null
+      });
+    });
+    httpServer = await new Promise((resolve, reject) => {
+      const server = app.listen(0, '127.0.0.1', () => resolve(server));
+      server.once('error', reject);
+    });
+    const origin = 'http://127.0.0.1:' + httpServer.address().port;
+    const call = async (path, { token, tenantId, method = 'GET', body } = {}) => {
+      const response = await fetch(origin + path, {
+        method,
+        headers: {
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...(body ? { 'Content-Type': 'application/json' } : {})
+        },
+        ...(body ? { body: JSON.stringify(body) } : {})
+      });
+      return { status: response.status, payload: await response.json() };
+    };
+    const authContext = await call('/api/platform/auth/context', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(authContext.status, 200, JSON.stringify(authContext));
+    assert.equal(guid(authContext.payload.data.tenantId), a.tenantId);
+
+    // SQL Server returns uppercase UUID strings in some drivers, while
+    // clients may send lowercase or uppercase tenant selection headers.
+    const upperContext = await call('/api/platform/auth/context', {
+      token: tokenA, tenantId: a.tenantId.toUpperCase()
+    });
+    assert.equal(upperContext.status, 200, JSON.stringify(upperContext));
+    assert.equal(guid(upperContext.payload.data.tenantId), a.tenantId);
+
+    const forcedTenant = await call('/api/platform/auth/context', {
+      token: tokenA, tenantId: b.tenantId
+    });
+    assert.equal(forcedTenant.status, 403);
+    assert.equal(forcedTenant.payload.code, 'TENANT_ACCESS_DENIED');
+
+    const unauthenticated = await call('/api/platform/query', {
+      method: 'POST', tenantId: a.tenantId,
+      body: { action: 'select', table: 'utility_readings' }
+    });
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(unauthenticated.payload.code, 'AUTH_CONTEXT_REQUIRED');
+
+    const pendingA = await call('/api/platform/query', {
+      method: 'POST', token: tokenA, tenantId: a.tenantId,
+      body: { action: 'select', table: 'utility_readings',
+        filters: [{ column: 'propertyid', operator: 'eq', value: b.propertyId }] }
+    });
+    assert.equal(pendingA.status, 200, JSON.stringify(pendingA));
+    assert.deepEqual(pendingA.payload.data, [], 'cross-property reading query must not expose B');
+
+    const ownA = await call('/api/platform/query', {
+      method: 'POST', token: tokenA, tenantId: a.tenantId,
+      body: { action: 'select', table: 'utility_readings',
+        filters: [{ column: 'id', operator: 'eq', value: a.readingId }] }
+    });
+    assert.equal(ownA.status, 200, JSON.stringify(ownA));
+    assert.equal(ownA.payload.data.length, 1, 'A may read own reading');
+    assert.equal(guid(ownA.payload.data[0].id), a.readingId);
+
+    const foreignInvoice = await call('/api/mssql/invoices/' + invoiceB, {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(foreignInvoice.status, 404);
+
+    const blockedWrite = await call('/api/mssql/invoices/' + invoiceA, {
+      token: tokenA, tenantId: a.tenantId, method: 'PUT',
+      body: { status: 'paid' }
+    });
+    assert.equal(blockedWrite.status, 409);
+    assert.equal(blockedWrite.payload.code, 'BILLING_LIFECYCLE_REQUIRED');
+
+    const ownB = await call('/api/platform/query', {
+      method: 'POST', token: tokenB, tenantId: b.tenantId,
+      body: { action: 'select', table: 'utility_readings',
+        filters: [{ column: 'id', operator: 'eq', value: b.readingId }] }
+    });
+    assert.equal(ownB.status, 200, JSON.stringify(ownB));
+    assert.equal(ownB.payload.data.length, 1);
+    assert.equal(guid(ownB.payload.data[0].id), b.readingId);
+
     console.log('PASS: disposable two-tenant SQL Server invoice isolation, rent/utility totals, lifecycle events, correct reading linkage and duplicate prevention');
   } finally {
+    if (httpServer) await new Promise(resolve => httpServer.close(resolve));
     if (closeMssqlPool) await closeMssqlPool().catch(() => {});
     if (pool) await pool.close().catch(() => {});
     if (master) await master.close().catch(() => {});
