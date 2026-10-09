@@ -283,7 +283,7 @@ Before changing code:
 
 Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **dead agreement document-generation wrapper removal**.
+Current active domain: **obsolete timestamp RPC repair-script removal (Phase 4 bounded slice; PR pending)**.
 
 Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 
@@ -339,16 +339,26 @@ Production deployment: operator reported green; exact Azure Ready serving revisi
 Result: MERGED — production acceptance evidence pending.
 ```
 
+## Recently merged Phase 4 slice
+
+```text
+PR #210: removed unused platform-backed fetchData export from src/utils/dataUtils.js; preserved active conversion helpers.
+Exact PR-head CI: workflow #593 (run 37884803418), verify job successful; PR deploy skipped.
+Merge SHA: 4f84a1fe0275b81dd219b7ce1b0037d19b5e0aaa.
+Production deployment: operator reported green; independent Azure Ready revision, exact public serving SHA, and MSSQL/runtime evidence not captured.
+Result: MERGED — formal production acceptance evidence pending.
+```
+
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead platform-backed fetchData export in src/utils/dataUtils.js.
-Problem/evidence: repository import search shows the live agreementService uses toDatabaseFormat from this module, but no repository consumer imports its generic fetchData export. The unused fetchData still references platformClient.
-Scope: remove only the unused platformClient import and fetchData function; keep fromDatabaseFormat and toDatabaseFormat logic intact; add regression coverage.
-Out of scope: active agreement generation/conversion, src/utils/databaseUtils.js, property/invoice/maintenance writes, auth, MSSQL migration paths, production schema.
-PR: pending review and CI.
-Result: ACTIVE — branch phase-4-remove-unused-datautils-fetch.
-Next item: review PR, require green exact-head CI, merge with authorization, verify exact deployed serving SHA and live MSSQL health, then select one additional bounded compatibility slice.
+Active item: Phase 4 - remove obsolete PostgreSQL timestamp RPC repair script.
+Problem/evidence: src/scripts/updateTimestamps.js invokes legacy exec_sql RPC, queries public-schema tables, uses NOW(), and has no indexed repository consumer. package.json exposes no command for this script. This is separate from the active MSSQL migration runner.
+Scope: delete only src/scripts/updateTimestamps.js; add regression test asserting absence while preserving current MSSQL migration and existing timestamp commands.
+Out of scope: src/db/runMigration.js, src/db/executeSql.js, standardizeTimestampColumns.js, fixPropertyTimestamps.js, production schema/backfill, auth, billing, property writes.
+PR: pending CI and review.
+Result: ACTIVE — branch phase-4-remove-obsolete-timestamp-rpc-script.
+Next item: exact-head CI, review and authorized merge, then production Ready revision/serving SHA/MSSQL health verification.
 ```
 ---
 
