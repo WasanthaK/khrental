@@ -591,6 +591,25 @@ Remaining: authenticated full invoice/UI arithmetic, tenant switching (multi-mem
 payment UI and production Azure/MSSQL attestations.
 ```
 
+## Phase 4 renter invoice browser data acceptance — PR #228
+
+```text
+PR #227: authenticated renter utility-history browser against disposable SQL.
+Standard CI #631 (run 37958320315) and SQL+browser #6 (run 37958320378) green.
+Merge SHA 23f911bec1f411a6e3e8c4ecffd6eea1b8d99e61.
+Production revision/serving SHA and MSSQL health independently unverified.
+
+Active: extend two-tenant SQL-backed authenticated browser checks to /rentee/invoices.
+Monthly generation correctly produces draft invoices; after verifying draft lifecycle,
+the disposable fixture alone sets its two invoices to renter-visible pending state.
+Check actual My Invoices page, each tenant's property label and numeric amount,
+and absence of other tenant's property label. Preserve SQL and HTTP isolation checks.
+No production billing mutation, schema migration or test credential outside Docker fixture.
+Result: PR #228 requires standard CI and real disposable SQL+browser acceptance.
+Remaining: account/payment interaction and actual multi-membership tenant switching,
+Azure external build SHA, Ready revision and production MSSQL runtime attestation.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
