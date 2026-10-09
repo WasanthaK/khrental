@@ -500,6 +500,22 @@ Result: ACTIVE — branch phase-4-pending-readings-tenant-scoped-pagination awai
 Next: check exact-head CI, merge if green, verify deployment. Then audit remaining utility invoice generation/reporting read parity and browser tenant isolation with executable integration tests.
 ```
 
+## Phase 4 utility-billing isolation contract tests — PR #223
+
+```text
+PR #222: corrected pending utility-reading propertyid schema, stable pagination and dashboard error handling.
+PR-head CI: workflow #618 (run 37943041249) passed.
+Merge SHA: f5a99a3166e367dc7361f72c037634d47df37eca.
+Production: operator confirmed deployment green; Azure Ready revision, exact serving SHA, MSSQL and cross-tenant integration tests remain independently unverified.
+Result: MERGED — formal production acceptance evidence pending.
+
+Active item: utility-reading and monthly-billing tenant-isolation contract tests.
+Scope: add runnable authorization tests verifying a rentee's utility-reading owner filter, rejection of unauthorized utility-reading updates, invoice/payment lifecycle mutation guards, and invariant contracts for tenant-scoped pending-reading pagination and monthly billing locking/linkage. Register in test:authorization.
+Out of scope: live billing mutation/API behavior, database schema and grants, migrations, claim of end-to-end MSSQL multi-tenant acceptance.
+Result: ACTIVE — branch phase-4-utility-billing-isolation-contract-tests pending CI.
+Next: execute these tests, review CI, then add database-backed tenant A/tenant B integration proof in separate gated slice before retiring other live utility compatibility.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
