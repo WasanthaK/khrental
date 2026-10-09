@@ -1,0 +1,30 @@
+name: Browser protected billing smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/test-browser-billing-unauthenticated.mjs'
+      - 'src/routes.jsx'
+      - 'src/components/common/ProtectedRoute.jsx'
+      - 'src/pages/InvoiceManagementDashboard.jsx'
+      - 'src/pages/rentee/**'
+      - '.github/workflows/test-browser-protected-billing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:browser:billing-unauthenticated

@@ -554,6 +554,25 @@ Result: ACTIVE — branch phase-4-authenticated-http-tenant-isolation, pending d
 Next: gated CI verification, merge if successful, production attestation and browser-level tenant isolation.
 ```
 
+## Phase 4 browser-protected billing boundary — PR #226
+
+```text
+PR #225: authenticated HTTP tenant-isolation and UUID normalization accepted.
+PR-head CI #627 (37952454218), SQL Server + HTTP #5 (37952454277) passed.
+Merge SHA: 4c28dae031d7824ea027d2b7173659c56eb021d3.
+Production deployment reported GREEN by operator; independent Azure Ready revision,
+exact external serving SHA and production MSSQL health remain outstanding.
+
+Active browser slice: built frontend Puppeteer headless smoke, no credentials.
+Verify protected admin invoice/utility and renter invoice/utility routes redirect
+unauthenticated users to login/unauthorized, without rendering billing controls.
+Run in dedicated GitHub-hosted CI; no production data or browser accounts.
+Result: ACTIVE, PR #226 pending browser CI.
+Not covered: authenticated two-tenant browser navigation, billing UI totals,
+successful payment flows, production browser session, public build fingerprint.
+Next: credentialed isolated-browser fixture and Azure production attestation.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
