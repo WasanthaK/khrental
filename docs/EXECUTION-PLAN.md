@@ -283,7 +283,7 @@ Before changing code:
 
 Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **unused config platform-client forwarding shim removal (Phase 4 bounded slice)**.
+Current active domain: **closure-readiness review and live compatibility contract inventory**.
 
 Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 
@@ -371,18 +371,28 @@ Production: operator reported green; independent Azure Ready/serving SHA/MSSQL r
 Result: MERGED — production evidence pending.
 ```
 
+## Current ## Recently merged Phase 4 item — PR #214
+
+```text
+PR #214: removed unused src/config/platformClient.js forwarding shim while preserving active platformClient service and script-local shim.
+PR-head CI: workflow #602 (run 37894412141) passed.
+Merge SHA: 662f274445194ef7d37568bf4b90ee2904b2581b.
+Production deployment: operator reported green; independent latest Azure Ready revision, exact public serving SHA and MSSQL/runtime proof remain outstanding.
+Result: MERGED — formal production acceptance evidence pending.
+```
+
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove unused src/config/platformClient.js forwarding shim.
-Problem/evidence: indexed repository search finds no import of src/config/platformClient; its former caller in the removed notifications-recreation script is gone. src/scripts/platformClient.js still has legacy callers and is preserved.
-Scope: remove only src/config/platformClient.js; add regression guard and register it in CI; keep live src/services/platformClient.js and script-local shim.
-Out of scope: active auth, notifications, invoice, maintenance, property writes, MSSQL migration/runtime tooling, production schema.
-Result: ACTIVE — branch phase-4-remove-unused-config-platform-client; CI/PR review pending.
-Next: exact-head CI and review, then merge authorization and separate production acceptance.
+Active item: Phase 4 - closure-readiness audit and remaining compatibility operation/authority inventory.
+Problem/evidence: Dead wrappers and scripts were removed in PRs #208–#214, but live invoice, agreement/template, app-user/auth, utilities/maintenance, notifications, and privileged migration tooling still include platformClient compatibility operations. src/db/runMigration.js still calls exec_sql RPC while src/db/executeSql.js uses direct MSSQL.
+Scope: docs/PHASE4-CLOSURE-READINESS.md records completed merge evidence, unresolved production attestations, remaining live compatibility domains, Phase 4 closure gates and a contract-first next slice.
+Out of scope: runtime code deletion, production DB migrations or DDL, auth, billing, property and document writes.
+Result: ACTIVE — review documentation PR pending CI/merge. Phase 4 NOT ready to close.
+Next item: inventory and decide migration-executor authority/exec_sql callers before any further live compatibility removal; obtain exact-SHA Azure/MSSQL release evidence or a documented waiver.
 ```
 
-## Maintenance rule for this document
+nce rule for this document
 
 After each merged production change:
 
