@@ -516,6 +516,28 @@ Result: ACTIVE — branch phase-4-utility-billing-isolation-contract-tests pendi
 Next: execute these tests, review CI, then add database-backed tenant A/tenant B integration proof in separate gated slice before retiring other live utility compatibility.
 ```
 
+## Phase 4 two-tenant SQL Server billing acceptance — PR #224
+
+```text
+PR #223: utility-reading, invoice mutation and monthly billing isolation contract regressions.
+CI #620 (run 37947974509) green; merge SHA f36e5c9d9d5a5d48968de1b4ce224388e23bfe67.
+Result: MERGED — independent production Ready revision/SHA/MSSQL attestations outstanding.
+
+Active item: disposable database-backed two-tenant monthly billing acceptance.
+Scope: isolated Docker SQL Server database with two distinct tenants, rentees, properties,
+active agreements and pending utility readings; run the REAL generateMonthlyInvoicesForTenant
+code, verify one draft invoice per agreement/period, rent/utility totals, linked reading,
+invoice components and lifecycle event. Assert tenant A cannot consume tenant B's readings
+or create B invoices, wrong-tenant invoice retrieval is absent, repeat runs skip duplicates.
+Run as a separate GitHub-hosted CI job on relevant PR paths and manually via
+npm run test:billing:sqlserver. Disposable Docker fixture only; cleanup even on failure.
+No production database credentials or DDL authority invoked.
+Result: ACTIVE — branch phase-4-billing-two-tenant-sqlserver-acceptance, awaiting CI.
+Remaining: full multi-tenant HTTP authorization and browser E2E, payment lifecycle integration,
+Azure Ready revision/serving SHA and MSSQL runtime attestation. Do not mark Phase 4 closed
+on source or fixture proof alone.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

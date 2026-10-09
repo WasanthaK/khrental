@@ -1,0 +1,31 @@
+name: Disposable two-tenant SQL Server billing acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'src/api/platform/monthlyBillingService.js'
+      - 'src/api/platform/billingLifecycle.js'
+      - 'src/api/mssql/repositories.js'
+      - 'migrations/**'
+      - '.github/workflows/test-billing-two-tenant-sqlserver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-tenant-sqlserver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --check scripts/test-billing-two-tenant-sqlserver.mjs
+      - name: Execute disposable SQL Server billing acceptance
+        run: npm run test:billing:sqlserver
