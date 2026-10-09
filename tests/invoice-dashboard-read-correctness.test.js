@@ -27,7 +27,7 @@ test('pending readings dashboard counts from scoped pending reading set, not N+1
   assert.match(pending, /\.eq\('billing_status', 'pending_invoice'\)/);
   assert.match(pending, /\.is\('invoice_id', null\)/);
   assert.match(pending, /for \(const reading of propertiesData\)/);
-  assert.match(pending, /counts\[reading\.property_id\] = \(counts\[reading\.property_id\] \|\| 0\) \+ 1/);
+  assert.match(pending, /counts\[reading\.propertyid\] = \(counts\[reading\.propertyid\] \|\| 0\) \+ 1/);
   assert.match(pending, /pendingReadingsCount: counts\[property\.id\] \|\| 0/);
   assert.match(pending, /\.select\('id, propertyid'\)/);
   assert.match(pending, /\.order\('id', \{ ascending: true \}\)/);
