@@ -388,11 +388,19 @@ Active item: Phase 4 - closure-readiness audit and remaining compatibility opera
 Problem/evidence: Dead wrappers and scripts were removed in PRs #208–#214, but live invoice, agreement/template, app-user/auth, utilities/maintenance, notifications, and privileged migration tooling still include platformClient compatibility operations. src/db/runMigration.js still calls exec_sql RPC while src/db/executeSql.js uses direct MSSQL.
 Scope: docs/PHASE4-CLOSURE-READINESS.md records completed merge evidence, unresolved production attestations, remaining live compatibility domains, Phase 4 closure gates and a contract-first next slice.
 Out of scope: runtime code deletion, production DB migrations or DDL, auth, billing, property and document writes.
-Result: ACTIVE — review documentation PR pending CI/merge. Phase 4 NOT ready to close.
+Result: PR #215 merged (SHA 523bedb51c862518cdd024ebe128bd717de5767e); Phase 4 NOT ready to close.
 Next item: inventory and decide migration-executor authority/exec_sql callers before any further live compatibility removal; obtain exact-SHA Azure/MSSQL release evidence or a documented waiver.
 ```
 
-nce rule for this document
+## Phase 4 migration authority clarification
+
+The governed production schema-write path already exists: `.github/workflows/run-production-db-migrations.yml`, `scripts/run-production-migrations.mjs`, and the dedicated `khrental-db-migrator` job, as specified in `docs/PRODUCTION-MIGRATION-EXECUTOR.md`. This documents the authority model, **not** proof that the privileged job is provisioned or able to apply.
+
+Legacy `src/db/runMigration.js` uses `exec_sql` RPC, `src/db/executeSql.js` uses direct MSSQL batch execution, and `src/components/admin/SqlMigration.jsx` contains browser-side PostgreSQL DDL. They must not substitute for the governed production migration workflow.
+
+See `docs/PHASE4-MIGRATION-AUTHORITY.md` for the entrypoint classification and next inspect-only route/caller census. No production SQL writes are authorized by this plan update.
+
+## Maintenance rule for this document
 
 After each merged production change:
 
