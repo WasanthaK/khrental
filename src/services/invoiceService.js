@@ -64,7 +64,10 @@ export const listInvoices = async (options = {}) => {
 
       return { data: invoices, error: null };
     } catch (mssqlError) {
-      console.error('Error loading invoices from MSSQL, falling back to the local compatibility layer:', mssqlError);
+      console.error('Error loading invoices from MSSQL:', mssqlError);
+      // Never retry under a different transport after an authoritative API failure.
+      // In particular, an authorization or tenant-scope error must remain denied.
+      return { data: null, error: mssqlError };
     }
   }
 
@@ -127,62 +130,22 @@ export const listInvoices = async (options = {}) => {
   }
 };
 
-export const createInvoiceRecord = async (invoiceData = {}) => {
-  if (isMssqlApiEnabled()) {
-    try {
-      const data = await requestMssqlApi('/api/mssql/invoices', {
-        method: 'POST',
-        body: invoiceData
-      });
-
-      return normalizeInvoiceRecord(data);
-    } catch (mssqlError) {
-      console.error('Error creating invoice in MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
-  }
-
-  const { data, error } = await platformClient
-    .from('invoices')
-    .insert(invoiceData)
-    .select('*')
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return normalizeInvoiceRecord(data);
+// Invoice and payment mutations are owned by the dedicated billing lifecycle API.
+// Do not retry a rejected MSSQL request through the generic platform client:
+// that could turn a denied or ambiguous request into an unintended write.
+const billingLifecycleRequired = () => {
+  const error = new Error('Invoice mutations must use the dedicated billing lifecycle API.');
+  error.status = 409;
+  error.code = 'BILLING_LIFECYCLE_REQUIRED';
+  return error;
 };
 
-export const updateInvoiceRecord = async (invoiceId, updates = {}) => {
-  if (isMssqlApiEnabled()) {
-    try {
-      const data = await requestMssqlApi(`/api/mssql/invoices/${invoiceId}`, {
-        method: 'PUT',
-        body: updates
-      });
+export const createInvoiceRecord = async (_invoiceData = {}) => {
+  throw billingLifecycleRequired();
+};
 
-      return normalizeInvoiceRecord(data);
-    } catch (mssqlError) {
-      console.error('Error updating invoice in MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
-  }
-
-  const { data, error } = await platformClient
-    .from('invoices')
-    .update({
-      ...updates,
-      updatedat: updates.updatedat || new Date().toISOString()
-    })
-    .eq('id', invoiceId)
-    .select('*')
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return normalizeInvoiceRecord(data);
+export const updateInvoiceRecord = async (_invoiceId, _updates = {}) => {
+  throw billingLifecycleRequired();
 };
 
 /**
