@@ -450,6 +450,22 @@ Result: ACTIVE — documentation PR #219 pending exact-head CI/review.
 Next item: bounded invoice mutation fail-closed contract tests and consumer audit, preserving governed billing lifecycle.
 ```
 
+## Phase 4 invoice failure isolation — coordinated runtime batch
+
+```text
+PR #219: invoice MSSQL/compatibility contract review, documentation only.
+PR-head CI: workflow #612 (run 37916538295) successful.
+Merge SHA: 17b32f229514ce5ac2dc7d09c27cce8b3f0dd0e5.
+Result: MERGED — documentation, no production database changes.
+
+Active item: invoice fail-closed compatibility changes.
+Problem: invoiceService.listInvoices silently retried on the generic platform transport after an MSSQL failure, even authorization/tenant errors. createInvoiceRecord and updateInvoiceRecord retried prohibited invoice writes after MSSQL errors, conflicting with dedicated billing lifecycle API guards.
+Scope: on MSSQL list error return the original {data:null,error}; block legacy create/update exports with a 409 BILLING_LIFECYCLE_REQUIRED contract; preserve read compatibility when MSSQL mode is disabled and preserve dedicated billing/payment endpoints. Add CI tests for the contract and server-side mutation guards.
+Out of scope: utility readings, dashboard data joins, invoice monetary calculations, agreement/billing schema, MSSQL writes and production migrations. Remaining compatibility read paths require explicit MSSQL parity and tenant-scoped tests.
+Result: ACTIVE — branch phase-4-invoice-fail-closed-batch, exact-head CI and review pending.
+Next: verify authorized invoice creation and payment work through /api/billing; then inventory each remaining read path for bounded contract migration. Production Azure Ready revision, exact serving SHA and MSSQL health remain separate release acceptance gates.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
