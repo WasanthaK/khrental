@@ -540,19 +540,33 @@ export async function getInvoiceSummaryByProperty(propertyIds, options = {}) {
 
     const invoiceGroups = await Promise.all(
       propertyIds.map(async (propertyId) => {
-        const { data, error } = await listInvoices({
-          propertyId,
-          status: options.status && options.status !== 'all' ? options.status : undefined,
-          fromDate: options.fromDate,
-          toDate: options.toDate,
-          pageSize: 1000
-        });
-
-        if (error) {
-          throw error;
+        // Read every page so the dashboard never silently undercounts large properties.
+        // Fail closed on a page error or an unexpected response, instead of showing
+        // partial financial totals as though the query completed.
+        const pageSize = 500;
+        const invoices = [];
+        let page = 1;
+        for (;;) {
+          const { data, error } = await listInvoices({
+            propertyId,
+            status: options.status && options.status !== 'all' ? options.status : undefined,
+            fromDate: options.fromDate,
+            toDate: options.toDate,
+            page,
+            pageSize
+          });
+          if (error) throw error;
+          if (!Array.isArray(data)) {
+            throw new Error('Invoice list returned an invalid response.');
+          }
+          invoices.push(...data);
+          if (data.length < pageSize) break;
+          page += 1;
+          if (page > 1000) {
+            throw new Error('Invoice summary exceeded the supported pagination limit.');
+          }
         }
-
-        return { propertyId, invoices: data || [] };
+        return { propertyId, invoices };
       })
     );
     
@@ -624,25 +638,15 @@ export async function getPropertiesWithPendingReadings() {
       throw new Error(formatErrorMessage(propDetailsError));
     }
     
-    // Get count of pending readings for each property
+    // Count from the same authorized pending-reading result set used to discover
+    // properties. Avoid separate per-property queries and misleading zero counts.
     const counts = {};
-    
-    for (const property of properties) {
-      const { count, error: countError } = await platformClient
-        .from('utility_readings')
-        .select('id', { count: 'exact', head: false })
-        .eq('property_id', property.id)
-        .eq('billing_status', 'pending_invoice')
-        .is('invoice_id', null);
-      
-      if (countError) {
-        console.error(`Error getting reading count for property ${property.id}:`, countError);
-        counts[property.id] = 0;
-      } else {
-        counts[property.id] = count;
+    for (const reading of propertiesData) {
+      if (reading.property_id) {
+        counts[reading.property_id] = (counts[reading.property_id] || 0) + 1;
       }
     }
-    
+
     // Combine property data with counts
     const result = properties.map(property => ({
       ...property,
