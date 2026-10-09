@@ -548,7 +548,8 @@ Production: operator reported GREEN; independent Azure Ready serving revision, e
 
 Active item: authenticated HTTP-level tenant isolation on the existing disposable SQL Server fixture.
 Scope: add real bearer sessions mapped to tenant-member rentees; run Express session, tenant context, platform query and MSSQL invoice routes on loopback. Validate valid tenant selection; foreign requested tenant rejected; anonymous query denied; forbidden cross-property reading returns empty; own reading accessible; cross-tenant invoice 404; direct invoice PUT 409 BILLING_LIFECYCLE_REQUIRED. Keep real SQL fixtures and lifecycle assertions intact. Include required permission bundle migration.
-Out of scope: production credentials, altering live routes, browser E2E, payment status changes, Azure deployment attestation.
+CI discovery: first HTTP SQL Server run #2 (37951992553) failed on legitimate same-tenant selection (403 TENANT_ACCESS_DENIED) because SQL Server UUID case differed from the client UUID header. Corrective scope: normalize UUID string casing solely for membership/legacy-tenant comparisons in src/api/tenant/context.js, preserving active membership verification and foreign-tenant denial; add uppercase-header regression in the disposable HTTP suite. No authorization widening beyond UUID textual equivalence.
+Out of scope: production credentials, browser E2E, payment status changes, Azure deployment attestation.
 Result: ACTIVE — branch phase-4-authenticated-http-tenant-isolation, pending disposable SQL and standard CI.
 Next: gated CI verification, merge if successful, production attestation and browser-level tenant isolation.
 ```
