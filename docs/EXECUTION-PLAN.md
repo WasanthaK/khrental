@@ -327,24 +327,24 @@ Next item:
 ## Most recently completed item
 
 ```text
-Active item: Phase 4 - remove dead legacy database migration compatibility utility
-Problem/evidence: src/utils/dbMigration.js contained definition-only compatibility-backed migration helpers that generated obsolete PostgreSQL-style instructions; repository-wide searches found no imports or package entry point, while live migration commands use src/db/runMigration.js and src/db/executeSql.js.
-Scope: Delete only src/utils/dbMigration.js and add a regression guard that the legacy utility remains absent.
-PR: #206.
-CI result: PR head run 37811279499 (#585) passed; post-merge production run 37818989595 (#586) passed.
-Production revision/SHA: Ready revision khrental-app--0000209 served merge SHA 7fb94e5b99018d75b36ed2e69d1001701a71b988 with matching public build fingerprint and live MSSQL health.
-Result: COMPLETE — dead legacy database migration compatibility utility removed from production.
-Next item: Phase 4 - remove dead generic data fetcher compatibility utility.
+Active item: Phase 4 - remove dead generic data fetcher compatibility utility
+Problem/evidence: src/utils/dataFetcher.js was a generic platformClient-backed fetch helper with no repository path references; its sole exported fetchData helper had no consumer through this module, while active code uses other domain-specific data access paths.
+Scope: Delete only src/utils/dataFetcher.js and add a regression guard that the legacy utility remains absent.
+PR: #207.
+CI result: PR head run 37821891853 (#587) passed; post-merge production run 37822344878 (#588) passed.
+Production revision/SHA: Ready revision khrental-app--0000210 served merge SHA ca9613d0814db273e52941dd2e3cefe3d86a5b87 with matching public build fingerprint and live MSSQL health.
+Result: COMPLETE — dead generic data fetcher compatibility utility removed from production.
+Next item: Phase 4 - remove dead databaseUtils SQL RPC compatibility surface.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove dead generic data fetcher compatibility utility
-Problem/evidence: src/utils/dataFetcher.js is a generic platformClient-backed fetch helper with no repository path references; its sole exported fetchData helper has no consumer through this module, while active code uses other domain-specific data access paths.
-Scope: Delete only src/utils/dataFetcher.js and add a regression guard that the legacy utility remains absent.
-Out of scope: src/utils/dataUtils.js; src/utils/databaseUtils.js; active domain services; auth; billing; maintenance; property writes; migration tooling.
-Result: ACTIVE — branch phase-4-remove-dead-data-fetcher-compatibility contains the bounded dead-file cleanup and regression guard pending PR review/CI.
+Active item: Phase 4 - remove dead databaseUtils SQL RPC compatibility surface
+Problem/evidence: src/utils/databaseUtils.js had a platformClient-backed executeSql() RPC helper plus default compatibility export, but repository-wide searches found no executeSql consumer and no default import; live named format-conversion exports remain in active use.
+Scope: Remove only the unused platformClient import, executeSql() helper, and default export object from src/utils/databaseUtils.js; preserve all live named conversion helpers; add a regression guard.
+Out of scope: src/db/executeSql.js; src/db/runMigration.js; named database conversion helpers; active domain services; auth; billing; maintenance; property writes; production schema changes.
+Result: ACTIVE — branch phase-4-remove-dead-database-utils-rpc-compatibility contains the bounded compatibility-surface cleanup and regression guard pending PR review/CI.
 Next item: open PR, review CI, then merge/deploy only with explicit authorization.
 ```
 ---
