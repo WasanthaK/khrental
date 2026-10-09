@@ -40,9 +40,9 @@ try {
   for (const route of [
     '/dashboard/invoices',
     '/dashboard/utilities',
-    '/tenant/invoices',
-    '/tenant/utilities',
-    '/tenant/utilities/history'
+    '/rentee/invoices',
+    '/rentee/utilities',
+    '/rentee/utilities/history'
   ]) {
     await visit(page, route);
   }
