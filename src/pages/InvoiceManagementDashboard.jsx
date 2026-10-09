@@ -82,6 +82,8 @@ const InvoiceManagementDashboard = () => {
       setPropertiesWithReadings(data || []);
     } catch (err) {
       console.error('Error loading properties with readings:', err);
+      setPropertiesWithReadings([]);
+      setError(err?.message || 'Unable to load pending utility readings.');
     }
   };
   
