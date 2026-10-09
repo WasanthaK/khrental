@@ -416,6 +416,23 @@ Result: ACTIVE — phase-4-remove-orphan-browser-sql-migration pending CI/review
 Next: validate exact-head CI, safely merge, verify deployment, then inventory remaining legacy SQL scripts before any further deletion.
 ```
 
+## Phase 4 legacy SQL command audit — PR #218
+
+```text
+PR #217: removed orphaned browser SQL migration component.
+CI: workflow #608 (run 37910489699) succeeded.
+Merge SHA: f6e5ae2f2fad524fc913fb29611008ef7e410c89.
+Production: operator reported green; independent Ready revision, serving SHA and MSSQL health not available.
+Result: MERGED — formal production attestation pending.
+
+Current active item: retire an unreferenced property-association migration launcher.
+Evidence: src/scripts/run_migration.js only imports src/scripts/migrate_property_associations.js and has no indexed repository import or npm script. The underlying migration script remains directly documented by src/README_PROPERTY_ASSOCIATIONS.md. External manual invocation cannot be ruled out by repository search.
+Scope: delete only src/scripts/run_migration.js, add CI guard; preserve underlying migration and every registered SQL command.
+Out of scope: governed production migration workflow, DDL, credentials, billing, auth, or runtime code.
+Result: ACTIVE — phase-4-remove-orphan-property-migration-wrapper, awaiting CI and review.
+Next: require exact-head CI, authorized merge, and independent production acceptance evidence.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
