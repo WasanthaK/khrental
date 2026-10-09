@@ -283,7 +283,7 @@ Before changing code:
 
 Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **obsolete PostgreSQL database setup RPC script removal (Phase 4 bounded slice)**.
+Current active domain: **obsolete notifications-table recreation RPC script removal (Phase 4 bounded slice)**.
 
 Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 
@@ -349,7 +349,7 @@ Production deployment: operator reported green; independent Azure Ready revision
 Result: MERGED — formal production acceptance evidence pending.
 ```
 
-## ## Recently merged Phase 4 item — PR #211
+## Recently merged Phase 4 item — PR #211
 
 ```text
 PR #211: removed obsolete src/scripts/updateTimestamps.js legacy PostgreSQL exec_sql RPC repair script, preserving active MSSQL timestamp/migration tooling.
@@ -357,18 +357,28 @@ PR-head CI: workflow #596 (run 37886032242) successful.
 Merge SHA: fd3fd0cafc7d223a932aab6c1eeb79cf7b87591a.
 Production deployment: operator reported green; independent exact serving SHA, Azure Ready revision and MSSQL/runtime proof remain pending.
 Result: MERGED — formal production acceptance evidence pending.
+## Recently merged Phase 4 item — PR #212
+
+```text
+PR #212: removed obsolete src/scripts/setupDatabase.js PostgreSQL exec_sql setup script; preserved active MSSQL migration tooling.
+PR-head CI: workflow #598 (run 37887222838) passed.
+Merge SHA: 10e9aa57eef1b64d6bbce44178bee2d519d0de9d.
+Production deployment: operator reported green; independent Azure Ready revision, serving SHA, and MSSQL/runtime evidence still pending.
+Result: MERGED — formal production acceptance evidence pending.
 ```
 
 ## Current active item
 
 ```text
-Active item: Phase 4 - remove obsolete PostgreSQL database setup RPC script.
-Problem/evidence: src/scripts/setupDatabase.js uses legacy exec_sql RPC and PostgreSQL public schema, has no package script and no indexed repository caller; MSSQL migration tooling is separate.
-Scope: delete only src/scripts/setupDatabase.js; add a CI regression guard preserving MSSQL migration entry points.
-Out of scope: active migrations, schema DDL, auth, billing, active agreement/property/maintenance operations, and timestamp commands.
-Result: ACTIVE — branch phase-4-remove-obsolete-postgres-setup-script. PR pending CI/review.
-Next item: require exact-head CI success, authorized merge, and production Ready/serving SHA/MSSQL proof before production-complete status.
+Active item: Phase 4 - remove obsolete PostgreSQL notifications-table recreation RPC script.
+Problem/evidence: src/scripts/recreateNotificationsTable.js directly invokes exec_sql RPC and destructive PostgreSQL DROP TABLE CASCADE / PLpgSQL recreation steps. Repository code search found no external caller and package.json has no script command for it.
+Scope: delete only src/scripts/recreateNotificationsTable.js; add a CI regression guard preserving live notificationService and active MSSQL migration entry points.
+Out of scope: notification routes and delivery behavior, production notifications schema/data, src/services/notificationService.js, MSSQL migrations, authentication, billing, property writes and agreement signing.
+Result: ACTIVE — branch phase-4-remove-obsolete-notifications-recreate-rpc, awaiting CI and PR review.
+Next item: exact-head CI, authorized merge, then production Ready revision/serving SHA/MSSQL runtime verification.
 ```
+
+``
 
 
 ## Maintenance rule for this document
