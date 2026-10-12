@@ -37,7 +37,7 @@ const withLeaseTransaction = async (identity, operation) => {
       DECLARE @result INT;
       EXEC @result = sys.sp_getapplock
         @Resource = @resource, @LockMode = 'Exclusive',
-        @LockOwner = 'Transaction', @LockTimeout = 0;
+        @LockOwner = 'Transaction', @LockTimeout = 10000;
       SELECT @result AS result;
     `);
     const lockCode = Number(lockResult.recordset?.[0]?.result);
