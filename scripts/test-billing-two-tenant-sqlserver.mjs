@@ -123,6 +123,94 @@ async function verifyManualSigningAgainstDisposableSql(pool, a, b) {
   console.log('PASS: tenant-isolated manual signing state, Evia protection, rollback, replay and concurrency');
 }
 
+async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
+  const { processEviaWebhook } = await import('../src/api/evia/webhook.js');
+  const requestId = 'disposable-evia-request-' + crypto.randomBytes(6).toString('hex');
+  const deliveryId = 'delivery-' + crypto.randomBytes(5).toString('hex');
+  const signatories = JSON.stringify([
+    { name: 'Test Renter', email: a.email, status: 'pending', type: 'tenant' }
+  ]);
+  const pending = await first(pool,
+    `INSERT INTO agreements (tenant_id, renteeid, propertyid, status,
+                             signature_status, eviasignreference, signatories_status)
+      OUTPUT INSERTED.id
+      VALUES (@tenantId, @renteeId, @propertyId,
+              'pending_signature', 'pending', @requestId, @signatories)`,
+    { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId,
+      requestId, signatories });
+  const pendingId = guid(pending.id);
+  const payload = {
+    event: 'request.sent', RequestId: requestId, deliveryId,
+    Email: a.email, Name: 'Test Renter', EmailDeliveryStatus: 'Delivered'
+  };
+  const call = () => processEviaWebhook(payload, {
+    expectedAgreementId: pendingId, expectedTenantId: a.tenantId
+  });
+  const firstDelivery = await call();
+  assert.equal(firstDelivery.statusCode, 200);
+  assert.equal(firstDelivery.body.matched, true);
+  assert.equal(firstDelivery.body.updated, true);
+  const events = async () => query(pool,
+    'SELECT id, processed FROM webhook_events WHERE tenant_id = @tenantId AND request_id = @requestId',
+    { tenantId: a.tenantId, requestId });
+  assert.equal((await events()).length, 1);
+  const snapshot = async () => first(pool,
+    'SELECT status, signature_status, signatories_status, updatedat FROM agreements WHERE id = @id',
+    { id: pendingId });
+  const before = await snapshot();
+  const repeated = await call();
+  assert.equal(repeated.statusCode, 200);
+  assert.equal(repeated.body.duplicate, true);
+  assert.equal(repeated.body.updated, false);
+  assert.equal((await events()).length, 1, 'processed delivery must not create another event');
+  assert.deepEqual(await snapshot(), before,
+    'processed request.sent must not mutate signatory email status or timestamp again');
+  const foreign = await processEviaWebhook(payload, {
+    expectedAgreementId: pendingId, expectedTenantId: b.tenantId
+  });
+  assert.equal(foreign.statusCode, 200);
+  assert.equal(foreign.body.matched, false);
+  assert.equal((await events()).length, 1);
+
+  // A previously completed callback that already retained its local signed
+  // document must be acknowledged without rewriting completion timestamps.
+  const completedId = 'disposable-evia-completed-' + crypto.randomBytes(5).toString('hex');
+  const completed = await first(pool,
+    `INSERT INTO agreements (tenant_id, renteeid, propertyid, status,
+                             signature_status, eviasignreference, signed_document_url,
+                             signeddate, signature_completed_at)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId,
+            'signed', 'completed', @requestId, @signedUrl, '2026-10-01', '2026-10-01')`,
+    { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId,
+      requestId: completedId, signedUrl: '/storage/documents/tenants/test/agreement/signed.pdf' });
+  const signedId = guid(completed.id);
+  const completedDeliveryId = 'completed-' + crypto.randomBytes(5).toString('hex');
+  await query(pool,
+    `INSERT INTO webhook_events (tenant_id, event_type, request_id, raw_data, processed)
+       VALUES (@tenantId, 'request.completed', @requestId, @rawData, 1)`,
+    { tenantId: a.tenantId, requestId: completedId,
+      rawData: JSON.stringify({ deliveryId: completedDeliveryId }) });
+  const completedBefore = await first(pool,
+    'SELECT status, signature_status, signeddate, signature_completed_at, updatedat, signed_document_url FROM agreements WHERE id = @id',
+    { id: signedId });
+  const repeatedCompletion = await processEviaWebhook({
+    event: 'request.completed', Status: 'Completed', RequestId: completedId,
+    deliveryId: completedDeliveryId
+  }, { expectedAgreementId: signedId, expectedTenantId: a.tenantId });
+  assert.equal(repeatedCompletion.statusCode, 200);
+  assert.equal(repeatedCompletion.body.duplicate, true);
+  assert.equal(repeatedCompletion.body.updated, false);
+  const completedAfter = await first(pool,
+    'SELECT status, signature_status, signeddate, signature_completed_at, updatedat, signed_document_url FROM agreements WHERE id = @id',
+    { id: signedId });
+  assert.deepEqual(completedAfter, completedBefore);
+  const completedEvents = await query(pool,
+    'SELECT id FROM webhook_events WHERE tenant_id = @tenantId AND request_id = @requestId',
+    { tenantId: a.tenantId, requestId: completedId });
+  assert.equal(completedEvents.length, 1);
+  console.log('PASS: Evia verified processed-delivery idempotency and tenant-scoped callback isolation');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -300,6 +388,7 @@ async function main() {
       { tenantId: a.tenantId, invoiceId: invoiceB })).length, 0);
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
+    await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
