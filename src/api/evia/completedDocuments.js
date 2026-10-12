@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 
 export const EVIA_DOCUMENT_API_BASE_URL = 'https://evia.enadocapp.com/_apis/sign/api/v2';
@@ -37,6 +38,35 @@ const safeStorageSegment = (value, label) => {
     throw error;
   }
   return normalized;
+};
+
+// For the future short-transaction lease protocol, each worker must stage
+// immutable objects under its own random attempt identifier. Do not use an
+// Evia delivery ID as a stage ID; legacy callbacks may omit it.
+export const createEviaArchiveAttemptId = () => randomUUID();
+
+export const buildEviaCompletedDocumentPath = ({
+  tenantId, agreementId, documentName, archiveAttemptId = null
+}) => {
+  const safeTenantId = safeStorageSegment(tenantId, 'tenant ID');
+  const safeAgreementId = safeStorageSegment(agreementId, 'agreement ID');
+  const safeName = sanitizeCompletedDocumentName(documentName);
+  if (archiveAttemptId === null || archiveAttemptId === undefined) {
+    // Preserve the production-referenced path until a fenced promotion
+    // protocol has been tested and explicitly enabled.
+    return normalizeStoragePath(
+      `tenants/${safeTenantId}/agreements/${safeAgreementId}/signed/${safeName}`
+    );
+  }
+  const attempt = String(archiveAttemptId);
+  if (!/^[A-Za-z0-9_-]{12,96}$/.test(attempt)) {
+    const error = new Error('Invalid signed-document archive attempt ID.');
+    error.code = 'EVIA_ARCHIVE_ATTEMPT_ID_INVALID';
+    throw error;
+  }
+  return normalizeStoragePath(
+    `tenants/${safeTenantId}/agreements/${safeAgreementId}/signed/staged/${attempt}/${safeName}`
+  );
 };
 
 export const sanitizeCompletedDocumentName = (value, fallback = 'signed_agreement.pdf') => {
@@ -216,6 +246,7 @@ export const storeEviaWebhookCompletedDocuments = async ({
   documents,
   tenantId,
   agreementId,
+  archiveAttemptId = null,
   storageDriver = getStorageDriver()
 }) => {
   const safeTenantId = safeStorageSegment(tenantId, 'tenant ID');
@@ -232,9 +263,12 @@ export const storeEviaWebhookCompletedDocuments = async ({
       document.DocumentName || document.documentName,
       `signed_document_${index + 1}.pdf`
     );
-    const relativePath = normalizeStoragePath(
-      `tenants/${safeTenantId}/agreements/${safeAgreementId}/signed/${documentName}`
-    );
+    const relativePath = buildEviaCompletedDocumentPath({
+      tenantId: safeTenantId,
+      agreementId: safeAgreementId,
+      documentName,
+      archiveAttemptId
+    });
     const contentType = String(document.ContentType || document.contentType || 'application/pdf');
 
     await storageDriver.upload('documents', relativePath, body, contentType);
@@ -262,6 +296,7 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
   requestId,
   tenantId,
   agreementId,
+  archiveAttemptId = null,
   accessToken = '',
   apiKey = process.env.EVIA_SIGN_API_KEY || '',
   fetchImpl = fetch,
@@ -305,9 +340,12 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
       fetchImpl
     }));
 
-    const relativePath = normalizeStoragePath(
-      `tenants/${safeTenantId}/agreements/${safeAgreementId}/signed/${document.documentName}`
-    );
+    const relativePath = buildEviaCompletedDocumentPath({
+      tenantId: safeTenantId,
+      agreementId: safeAgreementId,
+      documentName: document.documentName,
+      archiveAttemptId
+    });
 
     await storageDriver.upload('documents', relativePath, downloaded.body, downloaded.contentType);
 

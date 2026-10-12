@@ -9,7 +9,9 @@ import {
   retrieveAndStoreEviaCompletedDocuments,
   sanitizeCompletedDocumentName,
   storeEviaWebhookCompletedDocuments,
-  validateEviaDownloadUrl
+  validateEviaDownloadUrl,
+  createEviaArchiveAttemptId,
+  buildEviaCompletedDocumentPath
 } from '../src/api/evia/completedDocuments.js';
 
 const jsonResponse = (payload, status = 200) => ({
@@ -364,4 +366,91 @@ test('webhook uses archive capacity before SQL lock and returns retryable 503 on
   assert.match(section, /EVIA_ARCHIVE_IN_PROGRESS/);
   assert.match(section, /DATEADD\(MINUTE, -16, SYSUTCDATETIME\(\)\)/);
   assert.match(section, /statusCode: 503/);
+});
+
+test('immutable Evia stage tokens isolate the same PDF name across independent worker attempts', async () => {
+  const storedPaths = [];
+  const storageDriver = {
+    upload: async (bucket, path) => {
+      assert.equal(bucket, 'documents');
+      storedPaths.push(path);
+      return { path };
+    }
+  };
+  const firstAttempt = createEviaArchiveAttemptId();
+  const secondAttempt = createEviaArchiveAttemptId();
+  assert.notEqual(firstAttempt, secondAttempt);
+  assert.match(firstAttempt, /^[0-9a-f-]{36}$/i);
+
+  const documents = [
+    { DocumentName: 'Agreement.pdf', DocumentContent: Buffer.from('signed').toString('base64') },
+    { DocumentName: 'audit_trail.pdf', DocumentContent: Buffer.from('audit').toString('base64') }
+  ];
+  const inputs = {
+    documents, tenantId: 'tenant-A', agreementId: 'agreement-1', storageDriver
+  };
+  const a = await storeEviaWebhookCompletedDocuments({ ...inputs, archiveAttemptId: firstAttempt });
+  const b = await storeEviaWebhookCompletedDocuments({ ...inputs, archiveAttemptId: secondAttempt });
+  assert.equal(storedPaths.length, 4);
+  assert.equal(new Set(storedPaths).size, 4, 'no cross-attempt file overwrite is possible');
+  assert.equal(a.signedDocumentUrl.includes('/signed/staged/' + firstAttempt + '/'), true);
+  assert.equal(b.signedDocumentUrl.includes('/signed/staged/' + secondAttempt + '/'), true);
+  assert.equal(a.auditTrailUrl.includes('/signed/staged/' + firstAttempt + '/'), true);
+  assert.equal(b.auditTrailUrl.includes('/signed/staged/' + secondAttempt + '/'), true);
+  assert.ok(a.signedDocumentUrl.endsWith('/Agreement.pdf'));
+  assert.ok(b.signedDocumentUrl.endsWith('/Agreement.pdf'));
+  assert.notEqual(a.signedDocumentUrl, b.signedDocumentUrl);
+});
+
+test('API-retrieved Evia PDF also uses attempt-scoped immutable path when opted in', async () => {
+  const downloads = 'https://evia.enadocapp.com/_apis/sign/api/v2/documents/test/download';
+  const writes = [];
+  const driver = {
+    upload: async (bucket, path) => {
+      writes.push({ bucket, path });
+      return { path };
+    }
+  };
+  const fetchImpl = async url => {
+    if (String(url).endsWith('/requests/request-1/documents')) {
+      return jsonResponse([{ DocumentName: 'Lease.pdf', DownloadUrl: downloads }]);
+    }
+    if (String(url) === downloads) return binaryResponse('signed-by-evia');
+    throw new Error('unexpected fetch: ' + url);
+  };
+  const archiveAttemptId = createEviaArchiveAttemptId();
+  const result = await retrieveAndStoreEviaCompletedDocuments({
+    tenantId: 'tenant-A', agreementId: 'agreement-1',
+    requestId: 'request-1', accessToken: 'test-token',
+    archiveAttemptId, fetchImpl, storageDriver: driver
+  });
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].path, new RegExp('/signed/staged/' + archiveAttemptId + '/Lease\\.pdf$'));
+  assert.equal(result.signedDocumentUrl.includes('/signed/staged/' + archiveAttemptId + '/'), true);
+});
+
+test('archive attempt IDs are validated and legacy paths remain exactly unchanged', () => {
+  const common = { tenantId: 'tenant-A', agreementId: 'agreement-1', documentName: 'Lease.pdf' };
+  assert.equal(
+    buildEviaCompletedDocumentPath(common),
+    'tenants/tenant-A/agreements/agreement-1/signed/Lease.pdf'
+  );
+  for (const archiveAttemptId of ['../other', 'abc', 'A'.repeat(97), 'a/b', '', null]) {
+    if (archiveAttemptId === null) {
+      assert.equal(buildEviaCompletedDocumentPath({ ...common, archiveAttemptId }),
+        'tenants/tenant-A/agreements/agreement-1/signed/Lease.pdf');
+    } else {
+      assert.throws(() => buildEviaCompletedDocumentPath({ ...common, archiveAttemptId }),
+        error => error?.code === 'EVIA_ARCHIVE_ATTEMPT_ID_INVALID');
+    }
+  }
+  assert.throws(() => buildEviaCompletedDocumentPath({
+    ...common, tenantId: '../tenant', archiveAttemptId: createEviaArchiveAttemptId()
+  }), error => error?.code === 'EVIA_SIGNED_DOCUMENT_STORAGE_ID_INVALID');
+});
+
+test('live Evia webhook does not opt into staged paths without fenced SQL lease promotion', () => {
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(webhook, /archiveAttemptId:\s*createEviaArchiveAttemptId/);
+  assert.match(webhook, /withEviaAgreementArchiveLock\(/);
 });
