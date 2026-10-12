@@ -4,6 +4,7 @@ import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { sql } from '../mssql/pool.js';
 import { claimEviaWebhookDelivery } from './deliveryClaim.js';
 import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from './terminalPolicy.js';
+import { withEviaAgreementArchiveLock } from './archiveLock.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
@@ -892,9 +893,13 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     };
   }
 
+  // Only completed deliveries with no retained local PDF need cross-delivery
+  // archival serialization. Keep the transaction-owned SQL application lock
+  // until the final state/URL update has completed.
+  const completeTerminal = async (liveArchiveAgreement = null) => {
   const completedAt = normalized.eventTime ? new Date(normalized.eventTime) : new Date();
   const safeCompletedAt = Number.isNaN(completedAt.getTime()) ? new Date() : completedAt;
-  let signedDocumentUrl = getStoredSignedDocumentUrl(agreement);
+  let signedDocumentUrl = getStoredSignedDocumentUrl(liveArchiveAgreement || agreement);
   let auditTrailStored = false;
   const duplicateDelivery = claim.alreadyProcessed;
 
@@ -1057,6 +1062,56 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       signedDocumentUrlReceived: Boolean(signedDocumentUrl)
     }
   };
+  };
+
+  if (finalState.signatureStatus === 'completed' && !getStoredSignedDocumentUrl(agreement)) {
+    try {
+      return await withEviaAgreementArchiveLock({
+        tenantId: agreement.tenant_id,
+        agreementId: agreement.id,
+        requestId: normalized.requestId,
+        execute: async (latest) => {
+          // Recheck while holding the agreement lock. Another delivery may
+          // already have finished and retained the signed PDF.
+          const currentState = evaluateEviaTerminalDelivery({
+            agreement: latest,
+            nextState: finalState,
+            hasRetainedSignedDocument: Boolean(getStoredSignedDocumentUrl(latest))
+          });
+          if (currentState.action === 'ignore'
+              || (String(latest.status || '').toLowerCase() === 'signed'
+                  && String(latest.signature_status || '').toLowerCase() === 'completed'
+                  && getStoredSignedDocumentUrl(latest))) {
+            await markWebhookEventProcessed(webhookEventId);
+            return { statusCode: 200, body: {
+              received: true, matched: true, updated: false,
+              agreementId: agreement.id, reason: 'evia_archive_already_resolved'
+            }};
+          }
+          return completeTerminal(latest);
+        }
+      });
+    } catch (error) {
+      if (error?.code === 'EVIA_ARCHIVE_IN_PROGRESS') {
+        // Leave the delivery retryable without forcing the next attempt to
+        // wait for the 15-minute abandoned-delivery claim lease.
+        if (webhookEventId) {
+          await runQuery(`
+            UPDATE dbo.webhook_events
+            SET updatedat = DATEADD(MINUTE, -16, SYSUTCDATETIME())
+            WHERE id = @eventId AND tenant_id = @tenantId AND processed = 0
+          `, { eventId: webhookEventId, tenantId: agreement.tenant_id });
+        }
+        return { statusCode: 503, body: {
+          received: false, matched: true, updated: false, retryable: true,
+          code: 'EVIA_ARCHIVE_IN_PROGRESS'
+        }};
+      }
+      throw error;
+    }
+  }
+
+  return completeTerminal();
 };
 
 const handleWebhook = async (req, res, next) => {

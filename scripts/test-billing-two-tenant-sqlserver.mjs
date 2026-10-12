@@ -374,6 +374,85 @@ async function verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b) {
   console.log('PASS: Evia terminal-state monotonicity, rejected/cancelled delay, signer replay and tenant isolation');
 }
 
+async function verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b) {
+  const { withEviaAgreementArchiveLock } = await import('../src/api/evia/archiveLock.js');
+  const ref = 'archive-' + crypto.randomBytes(8).toString('hex');
+  const row = await first(pool, `
+    INSERT INTO dbo.agreements (tenant_id, renteeid, propertyid,
+                                status, signature_status, eviasignreference)
+    OUTPUT INSERTED.id
+    VALUES (@tenantId, @renteeId, @propertyId,
+            'pending_signature', 'in_progress', @reference)
+  `, { tenantId: a.tenantId, renteeId: a.renteeId,
+    propertyId: a.propertyId, reference: ref });
+  const agreementId = guid(row.id);
+  const storedUrl = '/storage/documents/tenants/test/agreements/archive/signed.pdf';
+  let onEntered;
+  const entered = new Promise(resolve => { onEntered = resolve; });
+  let releaseFirst;
+  const blockFirst = new Promise(resolve => { releaseFirst = resolve; });
+  const lock = (tenantId, execute) => withEviaAgreementArchiveLock({
+    tenantId, agreementId, requestId: ref, execute
+  });
+
+  const firstArchive = lock(a.tenantId, async latest => {
+    assert.equal(guid(latest.id), agreementId);
+    assert.equal(latest.signed_document_url, null);
+    onEntered();
+    await blockFirst;
+    await query(pool, `
+      UPDATE dbo.agreements
+      SET signed_document_url = @storedUrl, signature_status = 'completed',
+          status = 'signed'
+      WHERE id = @agreementId AND tenant_id = @tenantId
+    `, { storedUrl, agreementId, tenantId: a.tenantId });
+    return 'stored';
+  });
+  await entered;
+  try {
+    await assert.rejects(lock(a.tenantId, async () => {
+      throw new Error('second archive should never enter');
+    }), error => error?.code === 'EVIA_ARCHIVE_IN_PROGRESS' && error?.status === 503);
+    const unchanged = await first(pool,
+      'SELECT signed_document_url FROM dbo.agreements WHERE id = @agreementId',
+      { agreementId });
+    assert.equal(unchanged.signed_document_url, null);
+  } finally {
+    releaseFirst();
+  }
+  assert.equal(await firstArchive, 'stored');
+
+  let archiveCalls = 0;
+  const secondDelivery = await lock(a.tenantId, async latest => {
+    // Real webhook processor rechecks this URL and does not upload again.
+    assert.equal(latest.signed_document_url, storedUrl);
+    return { duplicate: true };
+  });
+  assert.equal(secondDelivery.duplicate, true);
+  assert.equal(archiveCalls, 0);
+
+  await assert.rejects(lock(b.tenantId, async () => {
+    throw new Error('foreign tenant must never enter');
+  }), error => error?.code === 'EVIA_ARCHIVE_AGREEMENT_NOT_FOUND');
+  const failedRef = 'archive-failure-' + crypto.randomBytes(5).toString('hex');
+  const another = await first(pool, `
+    INSERT INTO dbo.agreements (tenant_id, renteeid, propertyid,
+                                status, signature_status, eviasignreference)
+    OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId,
+                               'pending_signature', 'pending', @reference)
+  `, { tenantId: a.tenantId, renteeId: a.renteeId,
+    propertyId: a.propertyId, reference: failedRef });
+  const anotherId = guid(another.id);
+  const failure = new Error('disposable archive upload failed');
+  const failLock = execute => withEviaAgreementArchiveLock({
+    tenantId: a.tenantId, agreementId: anotherId, requestId: failedRef, execute
+  });
+  await assert.rejects(failLock(async () => { throw failure; }), err => err === failure);
+  assert.equal(await failLock(async () => 'recovered'), 'recovered',
+    'failed archive releases the SQL application lock for a retry');
+  console.log('PASS: Evia agreement-scoped archival lock serializes different deliveries and recovers after failures');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -554,6 +633,7 @@ async function main() {
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
     await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
     await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
+    await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.

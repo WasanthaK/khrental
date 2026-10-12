@@ -1020,6 +1020,46 @@ Evia webhook tests, and real disposable SQL Server acceptance.
 Production Azure Ready/public SHA/MSSQL verification is separate.
 ```
 
+## Phase 4 cross-delivery Evia signed-document archive coordination
+
+```text
+PR #240 terminal-order policy: exact-head Evia webhook test run 38256428300,
+build/authorization run 38256428016 and disposable two-tenant SQL run
+38256428035 all GREEN. Merge SHA 73edebb0c6df27b7daf06ffa46bb226cc12fe819.
+Production workflow 38256654156 SUCCESS: Azure revision 0000243 Ready,
+public SHA 73edebb0c6df27b7daf06ffa46bb226cc12fe819 exact,
+MSSQL live connection Ready; Evia security run 38256654188 GREEN.
+
+ACTIVE bounded slice: when two Evia completion deliveries with DIFFERENT
+deliveryIds reference the same tenant-bound agreement without an archived
+signed document, obtain a SQL Server transaction-owned exclusive
+application lock keyed by tenantId+agreementId BEFORE external Evia document
+retrieval or storage. Re-read the tenant/request-scoped current agreement
+while the lock is held. Keep the lock through the final guarded completion
+SQL update and processed-webhook event update; second worker must not
+archive again if the first has retained the local signed PDF.
+If busy, return retryable 503, without acknowledging a completed delivery,
+and expire this worker's own pending delivery claim for prompt retry.
+A failed/aborted archive always releases the SQL lock by transaction
+rollback; no schema DDL, extra privileges, role changes, production SQL
+or live callbacks are involved in acceptance.
+
+PROOF: dedicated source contract tests and disposable SQL Server proof
+of two same-agreement different-delivery concurrent closures, one winner,
+retryable 503 contender, fresh agreement URL visible on subsequent retry,
+foreign-tenant/request denial and lock release after exceptions.
+Remaining risks: SQL application transaction/connection held during external
+document download/upload; long-running archive can consume connection pool
+capacity. Distinct delivery IDs still have independent webhook event rows.
+Out-of-order callback state is separately guarded by PR #240 and remains
+subject to conditional SQL updates. The 15-minute delivery lease and
+legacy callback without deliveryId are unchanged. Production monitoring
+of connection-pool pressure and retry counts is a follow-up.
+Exact-head CI build/authorization, Evia tests and disposable SQL+browser
+must be green before merge; production release verification remains separate.
+Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

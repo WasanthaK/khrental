@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   retrieveAndStoreEviaCompletedDocuments,
   sanitizeCompletedDocumentName,
@@ -250,4 +251,30 @@ test('sanitizes completed document names before storage', () => {
     sanitizeCompletedDocumentName('../../Rental Agreement (final).pdf'),
     'Rental_Agreement_final_.pdf'
   );
+});
+
+test('different Evia delivery IDs must serialize one agreement signed-document archive', () => {
+  const claim = readFileSync(new URL('../src/api/evia/archiveLock.js', import.meta.url), 'utf8');
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  assert.match(claim, /JSON\.stringify\(\[String\(tenantId\)\.toLowerCase\(\), String\(agreementId\)\.toLowerCase\(\)\]\)/);
+  assert.match(claim, /sys\.sp_getapplock/);
+  assert.match(claim, /@LockMode = 'Exclusive'/);
+  assert.match(claim, /@LockOwner = 'Transaction'/);
+  assert.match(claim, /@LockTimeout = 0/);
+  assert.match(claim, /eviasignreference = @requestId/);
+  assert.match(claim, /tenant_id = @tenantId/);
+  assert.match(claim, /await execute\(latest\)/);
+  assert.match(claim, /await transaction\.commit\(\)/);
+  assert.match(claim, /await transaction\.rollback\(\)/);
+
+  const terminal = webhook.slice(webhook.indexOf('const completeTerminal = '));
+  assert.match(terminal, /withEviaAgreementArchiveLock\(/);
+  assert.match(terminal, /getStoredSignedDocumentUrl\(latest\)/);
+  assert.match(terminal, /return completeTerminal\(latest\)/);
+  assert.match(terminal, /EVIA_ARCHIVE_IN_PROGRESS/);
+  assert.match(terminal, /statusCode: 503/);
+  // Callback intentionally encompasses the final state/URL SQL UPDATE, not
+  // just the external document fetch, so the next delivery sees saved state.
+  assert.ok(terminal.indexOf('const terminalUpdated = await runQuery(') <
+    terminal.indexOf('withEviaAgreementArchiveLock('));
 });
