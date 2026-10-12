@@ -268,3 +268,37 @@ and disposable two-tenant SQL Server callback-claim-to-immutable-storage
 integration, a busy claim response followed by retry, signed and audit-trail
 publication, idempotent replay, stable timestamps and wrong-tenant denial.
 The existing production webhook remains the default runtime path.
+
+## Expired-owner storage race proof and conservative orphan inventory
+
+A dedicated disposable two-tenant SQL Server test reproduces the actual
+failure sequence: a verified delivery worker A claims a fenced lease, then
+its mocked external upload stalls with **no SQL connection held**. SQL Server
+advances the lease record beyond expiry (in disposable tests only). Worker B
+takes over with a different UUID, stages the signed PDF and audit trail into
+different immutable keys and atomically publishes its signed PDF/lease and
+verified delivery event. A is released after B's commit, may finish writing
+its own stale objects, but its final SQL renewal **must fail fenced**.
+The authoritative agreement PDF, signed/completion timestamps, audit URL,
+and winning bytes remain unchanged. A subsequent authenticated scoped
+delivery acknowledgment safely processes the original event without
+re-signing or re-uploading. Tenant isolation remains enforced.
+
+The minimal `stagedOrphanReview.js` is a **read-only review helper**, not
+a deletion implementation. For a storage-listed candidate it requires a
+strict per-tenant, per-agreement, per-attempt immutable path, a valid matching
+agreement and lease snapshot, absence from authoritative signed document
+and winning audit references, absence of an active matching lease, and a
+minimum **30-day observation grace period** before marking
+`manual_review_candidate`. Returned `mayDelete` is **always false**;
+invalid/missing input is protected. It performs no SQL mutation, object
+listing, unlink or storage deletion. A historically overwritten lease row
+cannot prove an older object is safe to delete; matching a review candidate
+is only a queue for further operator investigation.
+
+**Still blocked before canary activation:** a durable append-only history
+for abandoned attempts, validated audit-trail access/disclosure behavior,
+safe crash recovery for incomplete upload pairs and post-commit response
+loss on the actual authenticated HTTP route, and full scoped storage purge
+authorization (if cleanup is ever enabled). Do not set canary environment
+variables or run deletes as a result of the review helper.
