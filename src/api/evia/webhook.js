@@ -5,6 +5,7 @@ import { sql } from '../mssql/pool.js';
 import { claimEviaWebhookDelivery } from './deliveryClaim.js';
 import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from './terminalPolicy.js';
 import { withEviaAgreementArchiveLock } from './archiveLock.js';
+import { withEviaArchiveCapacity } from './archiveCapacity.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
@@ -1066,7 +1067,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
 
   if (finalState.signatureStatus === 'completed' && !getStoredSignedDocumentUrl(agreement)) {
     try {
-      return await withEviaAgreementArchiveLock({
+      return await withEviaArchiveCapacity({ execute: () => withEviaAgreementArchiveLock({
         tenantId: agreement.tenant_id,
         agreementId: agreement.id,
         requestId: normalized.requestId,
@@ -1090,9 +1091,9 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
           }
           return completeTerminal(latest);
         }
-      });
+      }) });
     } catch (error) {
-      if (error?.code === 'EVIA_ARCHIVE_IN_PROGRESS') {
+      if (['EVIA_ARCHIVE_IN_PROGRESS', 'EVIA_ARCHIVE_CAPACITY_EXCEEDED'].includes(error?.code)) {
         // Leave the delivery retryable without forcing the next attempt to
         // wait for the 15-minute abandoned-delivery claim lease.
         if (webhookEventId) {
@@ -1104,7 +1105,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
         }
         return { statusCode: 503, body: {
           received: false, matched: true, updated: false, retryable: true,
-          code: 'EVIA_ARCHIVE_IN_PROGRESS'
+          code: error.code
         }};
       }
       throw error;
