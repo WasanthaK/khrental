@@ -133,7 +133,14 @@ const AuthProvider = ({ children }) => {
         return normalizeTenantState(userRecord);
       }
 
-      return normalizeTenantState(userRecord, tenantContext);
+      // app_users is a global identity while tenant_memberships owns organization
+      // access. The legacy app_users.tenant_id may differ from the selected
+      // membership, so tenant-scoped profile queries can legitimately return
+      // no row. Only the authenticated server context may restore profileId.
+      return normalizeTenantState({
+        ...userRecord,
+        profileId: userRecord?.profileId || tenantContext?.user?.id || null
+      }, tenantContext);
     } catch (_error) {
       return normalizeTenantState(userRecord);
     }

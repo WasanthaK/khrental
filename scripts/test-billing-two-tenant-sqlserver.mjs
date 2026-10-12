@@ -487,6 +487,186 @@ async function main() {
     await browserVisit(b, tokenB, '/rentee/invoices', { visibleInvoice: true });
     assert.deepEqual(await readOnlySnapshot(), beforeAccountReads,
       'account and receipt views must not mutate invoice/payment/receipt/lifecycle data');
+
+    // One global app_users identity with active memberships in both A and B.
+    // Keep the original independent renter sessions above as a separate guard.
+    const sharedEmail = 'shared-renter-' + crypto.randomBytes(6).toString('hex') + '@example.invalid';
+    const sharedRecord = await first(pool,
+      "INSERT INTO app_users (tenant_id, name, email, role, user_type) OUTPUT INSERTED.id VALUES (@tenantId, 'Shared Test Renter', @email, 'rentee', 'rentee')",
+      { tenantId: a.tenantId, email: sharedEmail });
+    const sharedId = guid(sharedRecord.id);
+    const shared = { renteeId: sharedId, tenantId: a.tenantId, email: sharedEmail };
+    const scopedShared = [];
+    for (const [item, suffix, total, verified] of [
+      [a, 'A', 1300, 300],
+      [b, 'B', 2500, 700]
+    ]) {
+      await query(pool,
+        "INSERT INTO tenant_memberships (tenant_id, app_user_id, role, status, is_default) VALUES (@tenantId, @renteeId, 'rentee', 'active', @default)",
+        { tenantId: item.tenantId, renteeId: sharedId, default: suffix === 'A' ? 1 : 0 });
+      const agreement = await first(pool,
+        "INSERT INTO agreements (tenant_id, renteeid, propertyid, status, rentamount, startdate) OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'active', @amount, '2026-01-01')",
+        { tenantId: item.tenantId, renteeId: sharedId, propertyId: item.propertyId, amount: total });
+      const invoice = await first(pool,
+        "INSERT INTO invoices (tenant_id, renteeid, propertyid, agreementid, status, totalamount, billingperiod) OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, @agreementId, 'pending', @amount, '2026-09')",
+        { tenantId: item.tenantId, renteeId: sharedId, propertyId: item.propertyId,
+          agreementId: agreement.id, amount: total });
+      const invoiceId = guid(invoice.id);
+      await query(pool,
+        "INSERT INTO invoice_components (tenant_id, invoice_id, component_type, description, amount) VALUES (@tenantId, @invoiceId, 'rent', 'Disposable fixture rent', @amount)",
+        { tenantId: item.tenantId, invoiceId, amount: total });
+      const record = { tenantId: item.tenantId, renteeId: sharedId,
+        propertyId: item.propertyId, expected: total, invoiceId,
+        propertyName: suffix === 'A' ? 'Tenant A Property' : 'Tenant B Property' };
+      await seedAccountHistory(pool, record, invoiceId, 'SWITCH-' + suffix, verified, 50);
+      scopedShared.push(record);
+    }
+    const [sharedA, sharedB] = scopedShared;
+    const sharedToken = await auth(shared);
+    assert.equal(shared.authId !== null, true);
+
+    const distinctGlobalUsers = await query(pool, 'SELECT id, email FROM app_users WHERE email = @email',
+      { email: sharedEmail });
+    assert.equal(distinctGlobalUsers.length, 1, 'switching must preserve a single global app_users identity');
+    assert.equal(guid(distinctGlobalUsers[0].id), sharedId);
+    const sharedMemberships = await query(pool,
+      "SELECT tenant_id FROM tenant_memberships WHERE app_user_id = @renteeId AND status = 'active'",
+      { renteeId: sharedId });
+    assert.deepEqual(
+      new Set(sharedMemberships.map(row => guid(row.tenant_id))),
+      new Set([a.tenantId, b.tenantId]),
+      'same global user must have two active tenant memberships'
+    );
+    const nonMemberTenant = await first(pool,
+      "INSERT INTO tenants (name, slug, status, [plan]) OUTPUT INSERTED.id VALUES ('Unentitled Fixture Tenant', @slug, 'active', 'test')",
+      { slug: 'unentitled-' + crypto.randomBytes(5).toString('hex') });
+    const deniedSelection = await call('/api/platform/auth/context', {
+      token: sharedToken, tenantId: guid(nonMemberTenant.id)
+    });
+    assert.equal(deniedSelection.status, 403);
+    assert.equal(deniedSelection.payload.code, 'TENANT_ACCESS_DENIED');
+
+    // One bearer token remains valid across authorized selections but all data
+    // access must be scoped by the requested and verified active membership.
+    for (const [own, foreign] of [[sharedA, sharedB], [sharedB, sharedA], [sharedA, sharedB]]) {
+      const context = await call('/api/platform/auth/context', {
+        token: sharedToken, tenantId: own.tenantId
+      });
+      assert.equal(context.status, 200, JSON.stringify(context));
+      assert.equal(guid(context.payload.data.user.id), sharedId);
+      assert.equal(guid(context.payload.data.tenantId), own.tenantId);
+      assert.equal(context.payload.data.memberships.length, 2);
+      const projection = await call('/api/platform/query', {
+        token: sharedToken, tenantId: own.tenantId, method: 'POST',
+        body: {
+          action: 'select', table: 'invoices',
+          select: '*, properties!propertyid(id, name, address)',
+          filters: [{ column: 'renteeid', operator: 'eq', value: sharedId }]
+        }
+      });
+      assert.equal(projection.status, 200, JSON.stringify(projection));
+      assert.equal(projection.payload.data.length, 1, 'only the selected tenant invoice is visible');
+      assert.equal(guid(projection.payload.data[0].id), own.invoiceId);
+      assert.equal(projection.payload.data[0].properties?.name, own.propertyName);
+      const ownAccount = await call('/api/billing/invoices/' + own.invoiceId + '/account', {
+        token: sharedToken, tenantId: own.tenantId
+      });
+      assert.equal(ownAccount.status, 200, JSON.stringify(ownAccount));
+      assert.equal(Number(ownAccount.payload.data.outstandingBalance), own.outstanding);
+      assert.equal(ownAccount.payload.data.receipts[0].receipt_number, own.receiptNumber);
+      const hiddenAccount = await call('/api/billing/invoices/' + foreign.invoiceId + '/account', {
+        token: sharedToken, tenantId: own.tenantId
+      });
+      assert.equal(hiddenAccount.status, 404, 'shared identity does not bypass tenant invoice scope');
+    }
+
+    const beforeTenantSwitch = await readOnlySnapshot();
+    const switchPage = await browser.newPage();
+    try {
+      await switchPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
+        localStorage.removeItem('dev_bypass_role');
+        localStorage.setItem('khrental.activeTenantId', tenantId);
+        localStorage.setItem('khrental.local.session', JSON.stringify({
+          access_token: token,
+          user: { id: authId, email, role: 'rentee' }
+        }));
+      }, sharedToken, a.tenantId, shared.authId, sharedEmail);
+      await switchPage.goto(origin + '/rentee/invoices',
+        { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+      const assertScopedBrowser = async (own, foreign) => {
+        await switchPage.waitForFunction(
+          ({ property, other }) => {
+            const body = document.body.innerText;
+            return body.includes('My Invoices') && body.includes(property)
+              && !body.includes(other) && !body.includes('Loading your invoices...');
+          },
+          { timeout: 30000 },
+          { property: own.propertyName, other: foreign.propertyName }
+        );
+        const beforeClick = await switchPage.evaluate(() => ({
+          path: location.pathname, content: document.body.innerText,
+          activeTenant: localStorage.getItem('khrental.activeTenantId'),
+          sessionId: JSON.parse(localStorage.getItem('khrental.local.session') || '{}')?.user?.id
+        }));
+        assert.equal(beforeClick.path, '/rentee/invoices');
+        assert.equal(guid(beforeClick.activeTenant), own.tenantId);
+        assert.equal(guid(beforeClick.sessionId), shared.authId,
+          'tenant switching must never replace the global auth identity');
+        assert.match(beforeClick.content, new RegExp(own.expected.toLocaleString('en-US')));
+        assert.doesNotMatch(beforeClick.content, new RegExp(foreign.propertyName));
+        await switchPage.evaluate(() => {
+          const button = [...document.querySelectorAll('button')]
+            .find(entry => entry.textContent.trim() === 'Account & Receipts');
+          if (!button) throw new Error('Missing read-only account button');
+          button.click();
+        });
+        await switchPage.waitForFunction(
+          receipt => document.body.innerText.includes(receipt),
+          { timeout: 30000 }, own.receiptNumber
+        );
+        const opened = await switchPage.evaluate(() => document.body.innerText);
+        assert.match(opened, /Invoice Account/);
+        assert.match(opened, new RegExp(own.receiptNumber));
+        assert.match(opened, new RegExp(own.outstanding.toLocaleString('en-US')));
+        assert.doesNotMatch(opened, new RegExp(foreign.receiptNumber));
+        await switchPage.evaluate(() => {
+          const closeButton = [...document.querySelectorAll('button')]
+            .find(entry => entry.textContent.trim() === 'Close');
+          if (!closeButton) throw new Error('Cannot close account read-only view');
+          closeButton.click();
+        });
+        await switchPage.waitForFunction(
+          () => !document.body.innerText.includes('Invoice Account'),
+          { timeout: 15000 }
+        );
+      };
+      await assertScopedBrowser(sharedA, sharedB);
+
+      // Interact with the actual React tenant selector rather than editing
+      // localStorage or bypassing the application's switchTenant() flow.
+      for (const [next, foreign] of [[sharedB, sharedA], [sharedA, sharedB]]) {
+        await switchPage.waitForFunction(
+          ({ first, second }) => [...document.querySelectorAll('header select')].some(select => (
+            [...select.options].some(option => option.value.toLowerCase() === first)
+            && [...select.options].some(option => option.value.toLowerCase() === second)
+          )),
+          { timeout: 30000 }, { first: a.tenantId, second: b.tenantId }
+        );
+        const optionValue = await switchPage.evaluate(wanted => {
+          const selector = document.querySelector('header.hidden select');
+          return [...selector.options].find(option => option.value.toLowerCase() === wanted)?.value || null;
+        }, next.tenantId);
+        assert.ok(optionValue, 'authorized tenant must be selectable');
+        await switchPage.select('header.hidden select', optionValue);
+        await assertScopedBrowser(next, foreign);
+      }
+    } finally {
+      await switchPage.close();
+    }
+    assert.deepEqual(await readOnlySnapshot(), beforeTenantSwitch,
+      'actual A-B-A tenant switches and account reads must not write billing data');
+
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
     if (browser) await browser.close().catch(() => {});
