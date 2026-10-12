@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { parseFencedEviaAuditTrailPath, authorizeFencedEviaAuditTrailRead } from '../src/api/evia/auditTrailAccess.js';
 import { reviewEviaStagedObject, EVIA_STAGE_REVIEW_MIN_AGE_MS } from '../src/api/evia/stagedOrphanReview.js';
 import { completeStoredEviaSignatories } from '../src/api/evia/archivedSignatories.js';
 import {
@@ -812,4 +813,88 @@ test('Evia orphan review fails closed for invalid URLs, unscoped records and abs
   const source = readFileSync(new URL('../src/api/evia/stagedOrphanReview.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /\.delete\(|\.remove\(|\.unlink\(|DELETE FROM/i,
     'review module must never create storage or SQL delete authority');
+});
+
+test('published staged Evia audit is restricted to tenant admin and exact lease-backed audit URL', async () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  const path = 'tenants/' + tenantId + '/agreements/' + agreementId +
+    '/signed/staged/' + attemptId + '/audit_trail.pdf';
+  const url = '/storage/documents/' + path;
+  const pdfUrl = '/storage/documents/tenants/' + tenantId + '/agreements/' +
+    agreementId + '/signed/staged/' + attemptId + '/Signed.pdf';
+  const published = {
+    id: agreementId, tenant_id: tenantId, status: 'signed', signature_status: 'completed',
+    signed_document_url: pdfUrl, lease_processed: true,
+    lease_raw_data: JSON.stringify({ agreementId, attemptId, state: 'completed',
+      signedDocumentUrl: pdfUrl, auditTrailUrl: url })
+  };
+  assert.deepEqual(parseFencedEviaAuditTrailPath('documents', path), {
+    tenantId, agreementId, attemptId, url
+  });
+  assert.equal(parseFencedEviaAuditTrailPath('images', path), null);
+  assert.equal(parseFencedEviaAuditTrailPath('documents', path.replace('audit_trail.pdf', 'Signed.pdf')), null);
+  assert.equal(parseFencedEviaAuditTrailPath('documents', path.replace(attemptId, '..')), null);
+  const admin = { id: 'admin-1', role: 'admin' };
+  const membership = { role: 'admin', status: 'active', tenant_id: tenantId };
+  const subject = { bucket: 'documents', path, tenantId, user: admin, membership };
+  let reads = 0;
+  const loadPublishedArchive = async () => { reads++; return published; };
+  assert.deepEqual(await authorizeFencedEviaAuditTrailRead({
+    ...subject, loadPublishedArchive
+  }), { applies: true, allowed: true });
+  assert.equal(reads, 1);
+  for (const changes of [
+    { tenantId: '44444444-4444-4444-8444-444444444444' },
+    { user: null },
+    { user: { id: 'rentee-1', role: 'rentee' }, membership: { role: 'rentee', tenant_id: tenantId } },
+    { user: { id: 'staff-1', role: 'staff' }, membership: { role: 'staff', permission_bundle: 'property_operations', tenant_id: tenantId } }
+  ]) {
+    const result = await authorizeFencedEviaAuditTrailRead({
+      ...subject, ...changes,
+      loadPublishedArchive: async () => { throw new Error('unauthorized subject must not query SQL'); }
+    });
+    assert.equal(result.allowed, false);
+    assert.equal(result.applies, true);
+  }
+  for (const record of [
+    null, { ...published, lease_processed: false },
+    { ...published, status: 'cancelled' },
+    { ...published, signed_document_url: '/storage/documents/wrong.pdf' },
+    { ...published, lease_raw_data: JSON.stringify({ agreementId, attemptId, state: 'staging', auditTrailUrl: url, signedDocumentUrl: pdfUrl }) },
+    { ...published, lease_raw_data: JSON.stringify({ agreementId, attemptId: '55555555-5555-4555-8555-555555555555', state: 'completed', auditTrailUrl: url, signedDocumentUrl: pdfUrl }) },
+    { ...published, lease_raw_data: JSON.stringify({ agreementId, attemptId, state: 'completed', signedDocumentUrl: pdfUrl, auditTrailUrl: url.replace('audit_trail.pdf', 'other.pdf') }) },
+    { ...published, lease_raw_data: '{bad json' }
+  ]) {
+    const result = await authorizeFencedEviaAuditTrailRead({
+      ...subject, loadPublishedArchive: async () => record
+    });
+    assert.equal(result.allowed, false, 'unpublished or unbound audit bytes must never be disclosed');
+  }
+});
+
+test('fenced audit route executes permission and publication checks before reading object bytes', () => {
+  const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  const start = server.indexOf("app.use('/storage', createSessionAuthMiddleware");
+  const end = server.indexOf('createStorageDeliveryHandler()', start);
+  const route = server.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(route, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
+  assert.match(route, /authorizeFencedEviaAuditTrailRead\(/);
+  assert.match(route, /EVIA_AUDIT_TRAIL_ACCESS_DENIED/);
+  assert.ok(route.indexOf('authorizeFencedEviaAuditTrailRead(') <
+    route.indexOf('createStorageDeliveryHandler(') || route.includes('createTenantContextMiddleware'));
+});
+
+test('fenced lease attempt and publication journal is append-only and excluded from provider delivery IDs', () => {
+  const source = readFileSync(new URL('../src/api/evia/archiveLease.js', import.meta.url), 'utf8');
+  assert.match(source, /EVIA_ARCHIVE_ATTEMPT_EVENT = 'evia.archive.attempt.v1'/);
+  assert.match(source, /EVIA_ARCHIVE_PUBLICATION_EVENT = 'evia.archive.publication.v1'/);
+  assert.match(source, /const appendArchiveLedgerEvent = /);
+  assert.match(source, /INSERT INTO dbo.webhook_events \(tenant_id, request_id, event_type, raw_data, processed, processed_at\)/);
+  assert.match(source, /priorAttemptId: lease\?\.attemptId \|\| null/);
+  assert.match(source, /appendArchiveLedgerEvent\(/);
+  assert.match(source, /event_type NOT IN \(@reservedType, @reservedAttempt, @reservedPublication\)/);
+  assert.ok(source.indexOf('const appendArchiveLedgerEvent') < source.indexOf('export const acquireEviaArchiveLease'));
 });
