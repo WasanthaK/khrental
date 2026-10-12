@@ -636,6 +636,30 @@ Follow with actual multi-membership tenant switching and production
 Azure/MSSQL attestation in separately gated slices.
 ```
 
+## Phase 4 renter account/receipt read acceptance — PR #229
+
+```text
+PR #229: added disposable SQL Server + authenticated Chromium tests for
+renter invoice account, verified and pending payments, outstanding balances,
+receipt visibility, foreign-invoice denial, anonymous denial and read-only
+browser interaction. No production payment mutations.
+Exact PR-head b2b8e1d416d6bed5c7734ae0e863b12980a5c8a1:
+build/authorization CI run 38222696044 GREEN;
+disposable SQL+browser acceptance run 38222696018 GREEN.
+Merge SHA: e9288cef802f4b82db57f93a2c635eab7320a40d.
+Result: MERGED — production Ready revision/public exact serving SHA/MSSQL
+health still require independent verification.
+
+ACTIVE next item: authenticated multi-membership tenant switching in
+disposable SQL/browser acceptance. Use one global app user with two
+active tenant memberships and separate tenant-owned invoices/properties.
+Prove switch A -> B -> A changes scoped browser invoice and account/receipt
+data, preserves single global identity, rejects unentitled tenant selection,
+and prevents stale cross-tenant data in a mounted browser session.
+No production account changes, migrations, writes or privilege widening.
+Follow with production release attestation and Phase 4 closure review.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
