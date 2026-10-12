@@ -211,6 +211,84 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
   console.log('PASS: Evia verified processed-delivery idempotency and tenant-scoped callback isolation');
 }
 
+async function verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b) {
+  const { claimEviaWebhookDelivery } = await import('../src/api/evia/deliveryClaim.js');
+  const requestId = 'claim-' + crypto.randomBytes(8).toString('hex');
+  const deliveryId = 'race-' + crypto.randomBytes(8).toString('hex');
+  let inserts = 0;
+  const insertEvent = (item, request, delivery) => async transaction => {
+    assert.ok(transaction, 'claims with deliveryId must insert inside a SQL transaction');
+    inserts++;
+    const sqlRequest = new sql.Request(transaction);
+    sqlRequest.input('tenantId', item.tenantId);
+    sqlRequest.input('requestId', request);
+    sqlRequest.input('rawData', JSON.stringify({ deliveryId: delivery }));
+    const inserted = await sqlRequest.query(`
+      INSERT INTO dbo.webhook_events
+        (tenant_id, request_id, event_type, raw_data, processed)
+      OUTPUT INSERTED.id
+      VALUES (@tenantId, @requestId, 'request.sent', @rawData, 0)
+    `);
+    return inserted.recordset[0].id;
+  };
+  const claim = (tenant, req, delivery, recover = false) =>
+    claimEviaWebhookDelivery({
+      tenantId: tenant.tenantId, requestId: req, deliveryId: delivery,
+      allowProcessedRecovery: recover, insertEvent: insertEvent(tenant, req, delivery)
+    });
+  const [firstClaim, otherClaim] = await Promise.all([
+    claim(a, requestId, deliveryId),
+    claim(a, requestId, deliveryId)
+  ]);
+  const claims = [firstClaim, otherClaim];
+  assert.equal(claims.filter(x => Boolean(x.eventId)).length, 1,
+    'concurrent claims must create only one processing owner');
+  assert.equal(claims.filter(x => x.inFlight).length, 1,
+    'concurrent duplicate must be retryable, not acknowledged as done');
+  assert.equal(inserts, 1, 'only one event insert is permitted');
+  const winner = claims.find(x => x.eventId);
+  const ownEvents = () => query(pool,
+    `SELECT id, processed FROM dbo.webhook_events
+     WHERE tenant_id = @tenantId AND request_id = @requestId`,
+    { tenantId: a.tenantId, requestId });
+  assert.equal((await ownEvents()).length, 1);
+  await query(pool,
+    'UPDATE dbo.webhook_events SET processed = 1 WHERE id = @eventId',
+    { eventId: winner.eventId });
+  const processedDuplicate = await claim(a, requestId, deliveryId);
+  assert.equal(processedDuplicate.duplicate, true);
+  assert.equal(processedDuplicate.eventId, null);
+  assert.equal((await ownEvents()).length, 1);
+
+  // Same request+delivery value belongs to each tenant independently.
+  const foreignClaim = await claim(b, requestId, deliveryId);
+  assert.ok(foreignClaim.eventId);
+  assert.notEqual(guid(foreignClaim.eventId), guid(winner.eventId));
+  assert.equal((await ownEvents()).length, 1, 'foreign-tenant event must remain invisible');
+
+  // Unprocessed events are only reclaimable after the bounded lease expires.
+  const recoveryDelivery = 'recover-' + crypto.randomBytes(6).toString('hex');
+  const abandoned = await claim(a, requestId, recoveryDelivery);
+  assert.ok(abandoned.eventId);
+  const pending = await claim(a, requestId, recoveryDelivery);
+  assert.equal(pending.inFlight, true);
+  await query(pool, `
+    UPDATE dbo.webhook_events
+    SET updatedat = DATEADD(MINUTE, -20, SYSUTCDATETIME())
+    WHERE id = @id AND processed = 0
+  `, { id: abandoned.eventId });
+  const reclaimed = await claim(a, requestId, recoveryDelivery);
+  assert.equal(reclaimed.reclaimed, true);
+  assert.equal(guid(reclaimed.eventId), guid(abandoned.eventId));
+  const latest = await query(pool,
+    `SELECT id FROM dbo.webhook_events
+     WHERE tenant_id = @tenantId AND request_id = @requestId
+     AND JSON_VALUE(raw_data, '$.deliveryId') = @deliveryId`,
+    { tenantId: a.tenantId, requestId, deliveryId: recoveryDelivery });
+  assert.equal(latest.length, 1, 'stale retry must reuse the same event row');
+  console.log('PASS: concurrent Evia SQL claims, retry lease, stale recovery and tenant isolation');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -389,6 +467,7 @@ async function main() {
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
+    await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.

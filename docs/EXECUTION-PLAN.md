@@ -934,6 +934,48 @@ replay, external Evia requests, migrations, SQL modifications or document
 writes are executed for acceptance.
 ```
 
+## Phase 4 concurrent Evia delivery claim — bounded follow-on
+
+```text
+PR #238: sequential processed webhook delivery replays were guarded
+before event insertion and signatory/terminal state mutations, preserving
+signed-document recovery. Exact PR-head webhook suite 38238773743,
+build/authorization 38238773538, and isolated two-tenant SQL Server
+38238773516 all GREEN; merge SHA f86731f89c0774f808569c521842748232a83e37.
+Production release 38238945271 SUCCESS: Azure revision 0000241 Ready,
+public exact SHA f86731f89c0774f808569c521842748232a83e37 and live MSSQL
+connection Ready. Evia webhook security setup 38238945145 SUCCESS.
+
+ACTIVE bounded follow-on: concurrent callbacks with the same
+tenant_id/request_id/deliveryId must acquire one atomic SQL Server
+application-lock-protected event claim before any signatory/status/document
+side effects. A second in-flight delivery receives retryable 503, not
+a false processed acknowledgement. Successful processing marks the claimed
+existing webhook event processed, so later replays are read-only.
+An abandoned unprocessed event may be reclaimed only after a 15-minute
+lease; the claim is renewed atomically without appending another event.
+Use the existing webhook_events table and transactional sp_getapplock;
+no migration or release-time DDL required. Missing deliveryId events
+retain legacy processing semantics, explicitly OUTSIDE this guarantee.
+Processed completion missing an archived signed document retains a
+recoverable retry path, including guarding concurrent recovery attempts.
+
+PROOF: dedicated webhook unit/source contracts and disposable Docker SQL
+Server two-tenant concurrent Promise.all claims, single event insertion,
+retryable in-flight state, processed replay, stale-event takeover and
+cross-tenant independence. Production callbacks/agreements and external
+Evia documents are not modified by acceptance.
+
+LIMITATION: bounded leases do not prevent concurrent effects if an active
+worker exceeds the lease without renewing it. This slice does not alter
+out-of-order terminal authority, signed-document archival idempotency, or
+legacy deliveries missing a deliveryId. Those need separate production-safe
+proofs and policy review before Phase 4 closure.
+CI exact-head build/authorization, dedicated Evia suite and SQL+browser
+acceptance must be green before merge; then Azure Ready/public SHA/live
+MSSQL attestation must pass. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

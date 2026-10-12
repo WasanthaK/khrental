@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
+import { sql } from '../mssql/pool.js';
+import { claimEviaWebhookDelivery } from './deliveryClaim.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
@@ -357,10 +359,10 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
   };
 };
 
-const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) => {
+const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload, transaction = null }) => {
   const eventTime = normalized.eventTime ? new Date(normalized.eventTime) : null;
   const safeEventTime = eventTime && !Number.isNaN(eventTime.getTime()) ? eventTime.toISOString() : null;
-  const rows = await runQuery(`
+  const statement = `
     INSERT INTO dbo.webhook_events (
       tenant_id,
       event_type,
@@ -390,7 +392,8 @@ const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) =>
       SYSUTCDATETIME(),
       SYSUTCDATETIME()
     )
-  `, {
+  `;
+  const params = {
     tenantId: agreement.tenant_id,
     eventType: normalized.eventType || null,
     requestId: normalized.requestId || null,
@@ -416,8 +419,15 @@ const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload }) =>
         hasUrl: Boolean(getDocumentUrlCandidate(document))
       }))
     })
-  });
+  };
 
+  if (transaction) {
+    const request = new sql.Request(transaction);
+    Object.entries(params).forEach(([name, value]) => request.input(name, value));
+    const result = await request.query(statement);
+    return result.recordset?.[0]?.id || null;
+  }
+  const rows = await runQuery(statement, params);
   return rows?.[0]?.id || null;
 };
 
@@ -739,11 +749,32 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     };
   }
 
-  const webhookEventId = await recordVerifiedWebhookEvent({
-    agreement,
-    normalized,
-    payload
+  const claim = await claimEviaWebhookDelivery({
+    tenantId: agreement.tenant_id,
+    requestId: normalized.requestId,
+    deliveryId: normalized.deliveryId,
+    allowProcessedRecovery: alreadyProcessed,
+    insertEvent: transaction => recordVerifiedWebhookEvent({
+      agreement, normalized, payload, transaction
+    })
   });
+
+  if (claim.duplicate) {
+    return {
+      statusCode: 200,
+      body: { received: true, matched: true, updated: false, duplicate: true, agreementId: agreement.id }
+    };
+  }
+  if (claim.inFlight) {
+    // Do not acknowledge in-flight work as successfully processed: Evia must
+    // retry after a short delay, or after the abandoned claim lease expires.
+    return {
+      statusCode: 503,
+      body: { received: false, matched: true, updated: false, retryable: true,
+        code: 'EVIA_DELIVERY_IN_PROGRESS' }
+    };
+  }
+  const webhookEventId = claim.eventId;
 
   const emailStatuses = updateSignatoryEmailDelivery(agreement.signatories_status, {
     email: normalized.recipientEmail,
@@ -837,7 +868,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   const safeCompletedAt = Number.isNaN(completedAt.getTime()) ? new Date() : completedAt;
   let signedDocumentUrl = getStoredSignedDocumentUrl(agreement);
   let auditTrailStored = false;
-  const duplicateDelivery = alreadyProcessed;
+  const duplicateDelivery = claim.alreadyProcessed;
 
   if (finalState.signatureStatus === 'completed') {
 
