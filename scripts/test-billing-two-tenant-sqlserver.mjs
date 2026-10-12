@@ -222,13 +222,13 @@ async function verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b) {
     const sqlRequest = new sql.Request(transaction);
     sqlRequest.input('tenantId', item.tenantId);
     sqlRequest.input('requestId', request);
-    sqlRequest.input('deliveryId', delivery);
+    sqlRequest.input('rawData', JSON.stringify({ deliveryId: delivery }));
     const inserted = await sqlRequest.query(`
       INSERT INTO dbo.webhook_events
         (tenant_id, request_id, event_type, raw_data, processed)
       OUTPUT INSERTED.id
-      VALUES (@tenantId, @requestId, 'request.sent', @deliveryId, 0)
-    `.replace('@deliveryId, 0', "CONCAT('{\"deliveryId\":\"', @deliveryId, '\"}'), 0"));
+      VALUES (@tenantId, @requestId, 'request.sent', @rawData, 0)
+    `);
     return inserted.recordset[0].id;
   };
   const claim = (tenant, req, delivery, recover = false) =>
