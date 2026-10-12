@@ -134,14 +134,12 @@ export const fetchAgreement = async (agreementId) => {
 
 export const updateAgreementData = async (agreementId, updates) => {
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
-        method: 'PUT',
-        body: updates
-      });
-    } catch (mssqlError) {
-      console.error('Error updating agreement in MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
+    // An authoritative write may have succeeded before a transport failure.
+    // Never repeat the same update through a generic compatibility mutation.
+    return requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
+      method: 'PUT',
+      body: updates
+    });
   }
 
   const { data, error } = await platformClient
