@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  withEviaArchiveCapacity, getEviaArchiveCapacityLimit,
+  getEviaArchiveCapacityStatus
+} from '../src/api/evia/archiveCapacity.js';
+import {
   retrieveAndStoreEviaCompletedDocuments,
   sanitizeCompletedDocumentName,
   storeEviaWebhookCompletedDocuments,
@@ -277,4 +281,87 @@ test('different Evia delivery IDs must serialize one agreement signed-document a
   // just the external document fetch, so the next delivery sees saved state.
   assert.ok(terminal.indexOf('const terminalUpdated = await runQuery(') <
     terminal.indexOf('withEviaAgreementArchiveLock('));
+});
+
+test('archive admission leaves query capacity available in the configured MSSQL pool', () => {
+  assert.equal(getEviaArchiveCapacityLimit({ MSSQL_POOL_MAX: '10' }), 2);
+  assert.equal(getEviaArchiveCapacityLimit({ MSSQL_POOL_MAX: '3' }), 1);
+  assert.equal(getEviaArchiveCapacityLimit({ MSSQL_POOL_MAX: '2' }), 1);
+  assert.equal(getEviaArchiveCapacityLimit({
+    MSSQL_POOL_MAX: '12', EVIA_ARCHIVE_MAX_CONCURRENT: '4'
+  }), 4);
+  assert.equal(getEviaArchiveCapacityLimit({
+    MSSQL_POOL_MAX: '4', EVIA_ARCHIVE_MAX_CONCURRENT: '500'
+  }), 2);
+  assert.equal(getEviaArchiveCapacityLimit({
+    MSSQL_POOL_MAX: '4', EVIA_ARCHIVE_MAX_CONCURRENT: 'invalid'
+  }), 2);
+});
+
+test('parallel PDF archives reject excess work before acquiring SQL connections and release slots', async () => {
+  let entered = 0;
+  let release;
+  const blocked = new Promise(resolve => { release = resolve; });
+  let enteredResolve;
+  const bothEntered = new Promise(resolve => { enteredResolve = resolve; });
+  const events = [];
+  const logger = {
+    info: (event, details) => events.push({ event, details }),
+    warn: (event, details) => events.push({ event, details })
+  };
+  const execute = async () => {
+    entered += 1;
+    if (entered === 2) enteredResolve();
+    await blocked;
+    return 'archived';
+  };
+
+  const first = withEviaArchiveCapacity({ execute, maxConcurrent: 2, logger });
+  const second = withEviaArchiveCapacity({ execute, maxConcurrent: 2, logger });
+  await bothEntered;
+  try {
+    assert.equal(getEviaArchiveCapacityStatus().active, 2);
+    await assert.rejects(
+      withEviaArchiveCapacity({
+        maxConcurrent: 2, logger,
+        execute: async () => { throw new Error('Over-capacity operation entered'); }
+      }),
+      err => err.code === 'EVIA_ARCHIVE_CAPACITY_EXCEEDED' && err.status === 503
+    );
+    assert.equal(entered, 2);
+    assert.equal(events.filter(e => e.event.includes('capacity_rejected')).length, 1);
+  } finally {
+    release();
+  }
+  assert.deepEqual(await Promise.all([first, second]), ['archived', 'archived']);
+  assert.equal(getEviaArchiveCapacityStatus().active, 0);
+  const next = await withEviaArchiveCapacity({
+    maxConcurrent: 2, logger, execute: async () => 'retry-accepted'
+  });
+  assert.equal(next, 'retry-accepted');
+  assert.equal(getEviaArchiveCapacityStatus().active, 0);
+});
+
+test('failed and timed-out archive operations release slots without success claims', async () => {
+  const failure = new Error('archive upload rejected');
+  const logger = { info() {}, warn() {} };
+  await assert.rejects(
+    withEviaArchiveCapacity({ maxConcurrent: 1, logger, execute: async () => { throw failure; } }),
+    err => err === failure
+  );
+  assert.equal(getEviaArchiveCapacityStatus().active, 0);
+  await assert.rejects(
+    withEviaArchiveCapacity({ maxConcurrent: 0, logger, execute: async () => {} }),
+    /positive integer/
+  );
+});
+
+test('webhook uses archive capacity before SQL lock and returns retryable 503 on saturation', () => {
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  const section = webhook.slice(webhook.indexOf('if (finalState.signatureStatus === \'completed\' && !getStoredSignedDocumentUrl(agreement))'));
+  assert.match(section, /withEviaArchiveCapacity\(\{ execute: \(\) => withEviaAgreementArchiveLock\(/);
+  assert.match(section, /EVIA_ARCHIVE_CAPACITY_EXCEEDED/);
+  assert.match(section, /EVIA_ARCHIVE_IN_PROGRESS/);
+  assert.match(section, /DATEADD\(MINUTE, -16, SYSUTCDATETIME\(\)\)/);
+  assert.match(section, /statusCode: 503/);
 });

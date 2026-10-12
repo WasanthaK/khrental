@@ -1060,6 +1060,52 @@ must be green before merge; production release verification remains separate.
 Phase 4 remains OPEN.
 ```
 
+## Phase 4 Evia archive capacity and pool backpressure — active bounded slice
+
+```text
+PR #241: agreement-scoped SQL application lock coordinates signed-document
+archive of distinct delivery IDs through the final agreement URL/status
+update. Exact-head build/authorization run 38293584003 GREEN, dedicated
+Evia suite run 38293584029 GREEN, disposable two-tenant SQL Server run
+38293584201 GREEN; merged SHA 1e7baa0d5917ea037cb40855299d7564d43a2986.
+Production workflow 38293781215 SUCCESS: Azure latest revision 0000244
+Ready, public exact build SHA 1e7baa0d5917ea037cb40855299d7564d43a2986,
+live MSSQL health connection ready. Evia security 38293781229 SUCCESS.
+
+ACTIVE bounded follow-on: admission-limit simultaneous Evia PDF archiving
+operations per application replica BEFORE holding a SQL transaction-owned
+agreement archival lock across slow external PDF operations. Default limit
+2; EVIA_ARCHIVE_MAX_CONCURRENT permits an explicit positive-integer tuning
+value, capped to configured MSSQL_POOL_MAX - 2 where pool capacity permits,
+so concurrent billing, authorization and callback SQL reads retain room.
+Saturation returns HTTP 503 (EVIA_ARCHIVE_CAPACITY_EXCEEDED), does not
+attempt SQL lock acquisition, and makes this delivery's unprocessed
+webhook-event claim immediately retryable just like existing lock contention.
+Finally clauses release admission slots after success or failure; duration,
+capacity rejection, and >=30-second slow archives are logged without user
+data. Cross-replica transaction-owned SQL locking remains authoritative.
+
+ACCEPTANCE: dedicated Evia tests cover limit configuration, concurrent
+admissions, 503 under pressure, success/failure slot release, and webhook
+retry policy. Disposable SQL Server acceptance checks a held archive and
+over-capacity denial cannot exhaust an additional pool connection, that
+other SQL queries can still proceed, and that a retry works after release.
+No DB DDL, live webhook injection, credential change, billing mutation or
+production signed-document operation in these tests.
+
+LIMITATIONS / NEXT: admission control is per Node replica rather than a
+global distributed queue. The SQL transaction still remains open during
+external PDF retrieval and R2 upload; it must not be timed out independently
+of the ongoing upload because that would lose fencing. Investigate durable
+short-transaction archive leases and immutable staged paths in a future
+separate design slice, plus connection pool/load soak evidence. A fixed
+15-minute per-delivery retry lease, legacy payloads lacking deliveryId,
+and document retention/recovery authority remain separately governed.
+Require exact-head build/authorization, Evia and SQL acceptance green
+before merge, then production Azure Ready/public exact SHA/MSSQL proof.
+Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

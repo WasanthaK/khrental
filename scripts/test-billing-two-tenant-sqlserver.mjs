@@ -450,6 +450,45 @@ async function verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b) {
   await assert.rejects(failLock(async () => { throw failure; }), err => err === failure);
   assert.equal(await failLock(async () => 'recovered'), 'recovered',
     'failed archive releases the SQL application lock for a retry');
+  const { withEviaArchiveCapacity, getEviaArchiveCapacityStatus } =
+    await import('../src/api/evia/archiveCapacity.js');
+  const quiet = { info() {}, warn() {} };
+  let signalEntered;
+  const enteredCapacity = new Promise(resolve => { signalEntered = resolve; });
+  let releaseCapacity;
+  const blockingArchive = new Promise(resolve => { releaseCapacity = resolve; });
+  const occupying = withEviaArchiveCapacity({
+    maxConcurrent: 1, logger: quiet,
+    execute: () => lock(a.tenantId, async () => {
+      signalEntered();
+      await blockingArchive;
+      return 'first archive complete';
+    })
+  });
+  await enteredCapacity;
+  try {
+    assert.equal(getEviaArchiveCapacityStatus().active, 1);
+    await assert.rejects(
+      withEviaArchiveCapacity({
+        maxConcurrent: 1, logger: quiet,
+        execute: () => lock(a.tenantId, async () => {
+          throw new Error('Over-capacity request reached the MSSQL transaction');
+        })
+      }),
+      err => err?.code === 'EVIA_ARCHIVE_CAPACITY_EXCEEDED' && err?.status === 503
+    );
+    // The rejected admission has not occupied an additional pool connection.
+    assert.equal((await first(pool, 'SELECT 1 AS available')).available, 1);
+  } finally {
+    releaseCapacity();
+  }
+  assert.equal(await occupying, 'first archive complete');
+  assert.equal(getEviaArchiveCapacityStatus().active, 0);
+  assert.equal(await withEviaArchiveCapacity({
+    maxConcurrent: 1, logger: quiet,
+    execute: () => lock(a.tenantId, async () => 'retry allowed')
+  }), 'retry allowed');
+  assert.equal(getEviaArchiveCapacityStatus().active, 0);
   console.log('PASS: Evia agreement-scoped archival lock serializes different deliveries and recovers after failures');
 }
 
