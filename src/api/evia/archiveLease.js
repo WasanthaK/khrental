@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { getMssqlPool, sql } from '../mssql/pool.js';
+import { completeStoredEviaSignatories } from './archivedSignatories.js';
 
 // PREPARATION ONLY. The live webhook still uses archiveLock.js.
 // A reserved webhook_events row is an existing-schema durable lease journal.
@@ -51,7 +52,7 @@ const withLeaseTransaction = async (identity, operation) => {
     agreementRequest.input('requestId', requestId);
     const scoped = await agreementRequest.query(`
       SELECT TOP 1 id, status, signature_status, signed_document_url,
-             signeddocumenturl, signature_pdf_url
+             signeddocumenturl, signature_pdf_url, signatories_status
       FROM dbo.agreements
       WHERE id = @agreementId AND tenant_id = @tenantId
         AND eviasignreference = @requestId
@@ -197,8 +198,74 @@ export const renewEviaArchiveLease = async ({ attemptId, ...identity }) =>
     return { status: 'renewed', attemptId };
   });
 
+const completedEventTypes = new Set([
+  'request.completed', 'signing_completed', 'requestcompleted',
+  'request completed', 'signing completed'
+]);
+const completedEventStatuses = new Set(['completed', 'complete', 'signed', 'signing_complete']);
+
+const loadVerifiedCompletionDelivery = async ({
+  transaction, tenantId, requestId, deliveryEventId, requireUnprocessed = false
+}) => {
+  if (!validGuid(deliveryEventId)) {
+    throw err('EVIA_ARCHIVE_DELIVERY_ID_INVALID', 'Verified delivery event ID must be a UUID.', 400);
+  }
+  const request = new sql.Request(transaction);
+  request.input('tenantId', tenantId);
+  request.input('requestId', requestId);
+  request.input('deliveryEventId', deliveryEventId);
+  request.input('reservedType', EVIA_ARCHIVE_LEASE_EVENT);
+  const result = await request.query(`
+    SELECT TOP 1 id, processed, event_type, event_id, raw_data
+    FROM dbo.webhook_events WITH (UPDLOCK, HOLDLOCK)
+    WHERE id = @deliveryEventId
+      AND tenant_id = @tenantId AND request_id = @requestId
+      AND (event_type IS NULL OR event_type <> @reservedType)
+  `);
+  const event = result.recordset?.[0];
+  if (!event) {
+    throw err('EVIA_ARCHIVE_DELIVERY_NOT_FOUND', 'Completion delivery is not tenant/request scoped.', 404);
+  }
+  let metadata = {};
+  try { metadata = JSON.parse(event.raw_data || '{}'); } catch {
+    throw err('EVIA_ARCHIVE_DELIVERY_NOT_COMPLETED', 'Malformed completion delivery metadata.');
+  }
+  const status = String(metadata?.status || '').trim().toLowerCase();
+  const type = String(event.event_type || '').trim().toLowerCase();
+  if (!(completedEventTypes.has(type) || Number(event.event_id) === 3
+      || completedEventStatuses.has(status))) {
+    throw err('EVIA_ARCHIVE_DELIVERY_NOT_COMPLETED', 'Only verified completion events can publish.');
+  }
+  if (requireUnprocessed && event.processed) {
+    throw err('EVIA_ARCHIVE_DELIVERY_PROCESSED', 'Completion delivery was already processed.');
+  }
+  return event;
+};
+
+const markCompletedDeliveryInTransaction = async ({
+  transaction, tenantId, requestId, deliveryEventId
+}) => {
+  const request = new sql.Request(transaction);
+  request.input('tenantId', tenantId);
+  request.input('requestId', requestId);
+  request.input('deliveryEventId', deliveryEventId);
+  const result = await request.query(`
+    UPDATE dbo.webhook_events
+    SET processed = 1, processed_at = SYSUTCDATETIME(),
+        updatedat = SYSUTCDATETIME()
+    OUTPUT INSERTED.id
+    WHERE id = @deliveryEventId AND tenant_id = @tenantId
+      AND request_id = @requestId AND processed = 0
+  `);
+  if (result.recordset?.length !== 1) {
+    throw err('EVIA_ARCHIVE_DELIVERY_ACCOUNTING_FAILED',
+      'Verified completion delivery could not be marked processed.');
+  }
+};
+
 export const finalizeEviaArchiveLease = async ({
-  attemptId, signedDocumentUrl, auditTrailUrl = null, ...identity
+  attemptId, signedDocumentUrl, auditTrailUrl = null, verifiedDeliveryEventId = null,
+  ...identity
 }) => withLeaseTransaction(identity, async ({
   transaction, lease, agreement, tenantId, agreementId, requestId
 }) => {
@@ -215,12 +282,22 @@ export const finalizeEviaArchiveLease = async ({
   if (signedLocalUrl(agreement)) {
     throw err('EVIA_ARCHIVE_ALREADY_PUBLISHED', 'Another signed document is already authoritative.');
   }
+  if (verifiedDeliveryEventId !== null) {
+    await loadVerifiedCompletionDelivery({
+      transaction, tenantId, requestId, deliveryEventId: verifiedDeliveryEventId,
+      requireUnprocessed: true
+    });
+  }
+  const signatories = completeStoredEviaSignatories(
+    agreement.signatories_status, new Date().toISOString()
+  );
 
   const update = new sql.Request(transaction);
   update.input('tenantId', tenantId);
   update.input('agreementId', agreementId);
   update.input('requestId', requestId);
   update.input('signedDocumentUrl', signedDocumentUrl);
+  update.input('completedSignatories', signatories);
   const winner = await update.query(`
     DECLARE @updated TABLE (id UNIQUEIDENTIFIER NOT NULL);
     UPDATE dbo.agreements
@@ -230,6 +307,7 @@ export const finalizeEviaArchiveLease = async ({
         status = 'signed', signature_status = 'completed',
         signeddate = COALESCE(signeddate, SYSUTCDATETIME()),
         signature_completed_at = COALESCE(signature_completed_at, SYSUTCDATETIME()),
+        signatories_status = COALESCE(@completedSignatories, signatories_status),
         updatedat = SYSUTCDATETIME()
     OUTPUT INSERTED.id INTO @updated(id)
     WHERE id = @agreementId AND tenant_id = @tenantId
@@ -260,5 +338,38 @@ export const finalizeEviaArchiveLease = async ({
   if (saved.recordset?.length !== 1) {
     throw err('EVIA_ARCHIVE_LEASE_FENCED', 'Archive lease completion was lost.');
   }
+  // The provider delivery audit and its authoritative PDF pointer commit
+  // together. A lost HTTP 200 cannot leave publication without an audit row.
+  if (verifiedDeliveryEventId !== null) {
+    await markCompletedDeliveryInTransaction({
+      transaction, tenantId, requestId, deliveryEventId: verifiedDeliveryEventId
+    });
+  }
   return { status: 'published', attemptId, signedDocumentUrl, auditTrailUrl };
+});
+
+// Post-commit transport failure recovery: an authenticated webhook may
+// deliver a new event row after an earlier worker has already published.
+// Acknowledge only the tenant/request-bound completion row while the signed
+// agreement and its processed archive lease prove a committed publication.
+// This operation never modifies the agreement or its completion timestamps.
+export const acknowledgePublishedEviaArchiveDelivery = async ({
+  verifiedDeliveryEventId, ...identity
+}) => withLeaseTransaction(identity, async ({
+  transaction, tenantId, requestId, agreement, lease
+}) => {
+  const event = await loadVerifiedCompletionDelivery({
+    transaction, tenantId, requestId, deliveryEventId: verifiedDeliveryEventId
+  });
+  if (String(agreement.status).toLowerCase() !== 'signed'
+      || String(agreement.signature_status).toLowerCase() !== 'completed'
+      || !signedLocalUrl(agreement) || !lease?.processed) {
+    throw err('EVIA_ARCHIVE_PUBLICATION_NOT_PROVEN',
+      'A completed, retained, lease-finalized Evia archive is required.');
+  }
+  if (event.processed) return { status: 'already_processed', signedDocumentUrl: signedLocalUrl(agreement) };
+  await markCompletedDeliveryInTransaction({
+    transaction, tenantId, requestId, deliveryEventId: verifiedDeliveryEventId
+  });
+  return { status: 'acknowledged', signedDocumentUrl: signedLocalUrl(agreement) };
 });

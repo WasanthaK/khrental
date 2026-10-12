@@ -180,3 +180,47 @@ another observes busy, SQL remains queryable, the winner alone publishes a
 staged PDF and audit pair, and replay and foreign-tenant calls are
 non-mutating. These are pre-production integration proofs, not authorization
 to flip runtime transport.
+
+## Dormant verified delivery accounting and lost-HTTP-ack recovery
+
+The fenced SQL publication operation can now optionally accept a
+`verifiedDeliveryEventId` created by the **already-authenticated** provider
+callback path. In the same transaction that publishes the winning immutable
+signed document URL and completes the reserved archive lease, it:
+- Verifies the delivery row belongs to the exact tenant and Evia request,
+  is not a reserved lease row, and actually represents completion.
+- Marks the source delivery processed (with processed timestamp).
+- Marks *stored agreement signatories* completed, preserving existing signed
+  dates and email-delivery fields rather than trusting webhook-input signer
+  fields; malformed stored JSON fails closed.
+- Preserves the existing signed agreement date and signature completion date
+  through COALESCE and refuses conflicting terminal-state updates.
+
+`acknowledgePublishedEviaArchiveDelivery` is a separate *read-only for the
+agreement* recovery path for verified completion events delivered again
+after a successful SQL commit but a lost HTTP response. It requires the
+agreement already be signed/completed with locally retained signed URL,
+and the archive lease itself be processed. It atomically acknowledges a
+new scoped completion delivery or returns `already_processed` for a repeated
+one without touching agreement timestamps or documents. Missing/foreign
+tenant, wrong request, non-completion, and reserved-lease event IDs are
+rejected; no false completion acknowledgment is allowed for a pending PDF.
+
+The dormant coordinator passes an optional verified delivery event ID
+through finalization and calls this recovery operation only when archive
+lease acquisition returns complete. **Nothing in the live webhook imports
+these new APIs.** These entry points do not establish independent Evia HMAC
+or callback-token authentication; they may be used in a future runtime
+path only after the existing verified handler has created its scoped
+delivery event and proved the correct Evia request and agreement.
+
+The real isolated Docker SQL Server acceptance includes both delivery
+and lease events, signer metadata, negative foreign tenant/request and
+non-completion cases, atomic publication, acknowledged retry after a
+lost response, immutable agreement timestamps on replay, and refusal
+to acknowledge an archive that was never published.
+
+Still pending before a live switch: integrate the real authenticated
+webhook transition, validate active archive recovery if callback processing
+fails before SQL publication, audit-trail exposure policy, safe orphan
+staged-object cleanup, and tested process-death/lease-expiry behavior.
