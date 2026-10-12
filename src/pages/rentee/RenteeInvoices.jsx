@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { INVOICE_STATUS } from '../../utils/constants';
-import { getInvoiceAccount, platform as platformClient } from '../../services/platformClient';
+import { getInvoiceAccount, listRenteeInvoices } from '../../services/platformClient';
 import InvoiceCard from '../../components/invoices/InvoiceCard';
 import PaymentProofUpload from '../../components/invoices/PaymentProofUpload';
 
@@ -34,16 +34,9 @@ const RenteeInvoices = () => {
       try {
         setLoading(true);
 
-        const appUserId = user?.profileId || user?.appUserId || null;
-        if (!appUserId) {
-          throw new Error('No tenant profile found for your account. Please contact support.');
-        }
-
-        const { data: invoicesData, error: invoicesError } = await platformClient
-          .from('invoices')
-          .select('*, properties!propertyid(id, name, address)')
-          .eq('renteeid', appUserId)
-          .order('createdat', { ascending: false });
+        // The billing endpoint owns the active-tenant and renter identity
+        // boundary; this UI neither supplies a user ID nor uses generic SQL.
+        const { data: invoicesData, error: invoicesError } = await listRenteeInvoices();
 
         if (invoicesError) throw invoicesError;
 

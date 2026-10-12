@@ -270,6 +270,42 @@ export const createBillingRouter = () => {
     auditLabel: 'billing-lifecycle'
   }));
 
+  // Renter invoice list is a dedicated read-only, membership-scoped billing
+  // projection. The caller cannot supply a rentee ID or a different tenant ID.
+  router.get('/rentee/invoices', async (req, res, next) => {
+    try {
+      if (!isTenantRole({ user: req.user, membership: req.membership })) {
+        throw createRequestError(403, 'Renter access is required.', 'RENTEE_ACCESS_REQUIRED');
+      }
+
+      const rows = await runQuery(
+        `SELECT i.*, p.id AS joined_property_id,
+                p.name AS joined_property_name, p.address AS joined_property_address
+         FROM invoices i
+         LEFT JOIN properties p ON p.id = i.propertyid AND p.tenant_id = i.tenant_id
+         WHERE i.tenant_id = @tenantId AND i.renteeid = @renteeId
+           AND LOWER(i.status) <> 'draft'
+         ORDER BY i.createdat DESC, i.id DESC`,
+        { tenantId: req.tenantId, renteeId: req.user.id }
+      );
+
+      res.json({
+        data: rows.map((row) => {
+          const { joined_property_id, joined_property_name, joined_property_address, ...invoice } = row;
+          return {
+            ...invoice,
+            properties: joined_property_id
+              ? { id: joined_property_id, name: joined_property_name, address: joined_property_address }
+              : null
+          };
+        }),
+        error: null
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/invoices/:invoiceId/account', async (req, res, next) => {
     try {
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);

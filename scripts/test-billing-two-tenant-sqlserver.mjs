@@ -335,6 +335,21 @@ async function main() {
     assert.equal(guid(ownB.payload.data[0].id), b.readingId);
 
 
+    // Only the new dedicated billing reader determines renter ownership, and
+    // draft invoices remain invisible until issued, even to their owner.
+    for (const item of [a, b]) {
+      const token = item.tenantId === a.tenantId ? tokenA : tokenB;
+      const draftList = await call('/api/billing/rentee/invoices', {
+        token, tenantId: item.tenantId
+      });
+      assert.equal(draftList.status, 200, JSON.stringify(draftList));
+      assert.deepEqual(draftList.payload.data, [], 'draft invoices must remain hidden');
+    }
+    const anonymousList = await call('/api/billing/rentee/invoices', {
+      tenantId: a.tenantId
+    });
+    assert.equal(anonymousList.status, 401, 'anonymous renter invoice list must be denied');
+
     // Billing generator intentionally drafts invoices; the renter invoice list
     // intentionally hides drafts. Promote only disposable fixture rows to the
     // legacy visible "pending" state to test the actual renter-facing display.
@@ -360,7 +375,23 @@ async function main() {
     assert.equal(beforeAccountReads.receiptCount, 2);
     assert.equal(beforeAccountReads.eventCount, 2);
 
-    // Verify the same authorized projection used by the React invoice screen.
+    // Dedicated authenticated list has the same property projection shape
+    // required by InvoiceCard and must never accept an arbitrary renter ID.
+    for (const [item, token, foreign] of [[a, tokenA, b], [b, tokenB, a]]) {
+      const own = await call('/api/billing/rentee/invoices?renteeId=' +
+        encodeURIComponent(foreign.renteeId), {
+        token, tenantId: item.tenantId
+      });
+      assert.equal(own.status, 200, JSON.stringify(own));
+      assert.equal(own.payload.data.length, 1);
+      assert.equal(guid(own.payload.data[0].renteeid), item.renteeId,
+        'caller-provided renteeId must not override authenticated identity');
+      assert.equal(Number(own.payload.data[0].totalamount), item.expected);
+      assert.equal(own.payload.data[0].properties?.name,
+        item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property');
+    }
+
+    // Verify legacy compatibility query parity before it can be retired globally.
     // This differentiates missing API data from a browser/profile rendering defect.
     for (const item of [a, b]) {
       const ownToken = item.tenantId === a.tenantId ? tokenA : tokenB;
@@ -568,6 +599,15 @@ async function main() {
       assert.equal(projection.payload.data.length, 1, 'only the selected tenant invoice is visible');
       assert.equal(guid(projection.payload.data[0].id), own.invoiceId);
       assert.equal(projection.payload.data[0].properties?.name, own.propertyName);
+      const explicitList = await call(
+        '/api/billing/rentee/invoices?renteeId=' + encodeURIComponent(foreign.renteeId),
+        { token: sharedToken, tenantId: own.tenantId }
+      );
+      assert.equal(explicitList.status, 200, JSON.stringify(explicitList));
+      assert.equal(explicitList.payload.data.length, 1,
+        'one authenticated global identity must see only the selected organization');
+      assert.equal(guid(explicitList.payload.data[0].id), own.invoiceId);
+      assert.equal(explicitList.payload.data[0].properties?.name, own.propertyName);
       const ownAccount = await call('/api/billing/invoices/' + own.invoiceId + '/account', {
         token: sharedToken, tenantId: own.tenantId
       });

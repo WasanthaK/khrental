@@ -28,6 +28,15 @@ const renteeInvoicesSource = readFileSync(
   'utf8'
 );
 
+const billingRouterSource = readFileSync(
+  new URL('../src/api/platform/billingRouter.js', import.meta.url),
+  'utf8'
+);
+const billingClientSource = readFileSync(
+  new URL('../src/services/platformClient.js', import.meta.url),
+  'utf8'
+);
+
 const paymentProofUploadSource = readFileSync(
   new URL('../src/components/invoices/PaymentProofUpload.jsx', import.meta.url),
   'utf8'
@@ -90,16 +99,27 @@ test('rentee utilities overview uses the authenticated profile id without legacy
   assert.doesNotMatch(renteeUtilitiesSource, /\/api\/mssql\/app-users/);
 });
 
-test('rentee invoices use central owner-scoped reads without legacy MSSQL directories', () => {
-  assert.match(renteeInvoicesSource, /platformClient\s*\.from\('invoices'\)/);
-  assert.match(renteeInvoicesSource, /user\?\.profileId/);
-  assert.match(renteeInvoicesSource, /properties!propertyid/);
+test('rentee invoice UI reads only the authenticated dedicated billing list', () => {
+  assert.match(renteeInvoicesSource, /await listRenteeInvoices\(\)/);
+  assert.match(renteeInvoicesSource, /getInvoiceAccount/);
+  assert.doesNotMatch(renteeInvoicesSource, /\.from\('invoices'\)/);
   assert.doesNotMatch(renteeInvoicesSource, /findAppUserByAuthId/);
-  assert.doesNotMatch(renteeInvoicesSource, /listInvoices/);
   assert.doesNotMatch(renteeInvoicesSource, /listProperties/);
   assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/app-users/);
   assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/invoices/);
   assert.doesNotMatch(renteeInvoicesSource, /\/api\/mssql\/properties/);
+  assert.match(billingClientSource, /billingRequest\('\/rentee\/invoices'\)/);
+
+  const start = billingRouterSource.indexOf("router.get('/rentee/invoices'");
+  const end = billingRouterSource.indexOf("router.get('/invoices/:invoiceId/account'", start);
+  assert.ok(start >= 0 && end > start, 'dedicated renter list must precede invoice-id route');
+  const route = billingRouterSource.slice(start, end);
+  assert.match(route, /isTenantRole\(\{ user: req\.user, membership: req\.membership \}\)/);
+  assert.match(route, /i\.tenant_id = @tenantId AND i\.renteeid = @renteeId/);
+  assert.match(route, /LOWER\(i\.status\) <> 'draft'/);
+  assert.match(route, /p\.tenant_id = i\.tenant_id/);
+  assert.match(route, /tenantId: req\.tenantId, renteeId: req\.user\.id/);
+  assert.doesNotMatch(route, /req\.query\.renteeId|req\.body\.renteeId|req\.query\.tenantId/);
 });
 
 test('payment proof required validation is controlled by React state rather than hidden native input', () => {

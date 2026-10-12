@@ -208,6 +208,17 @@ export const getMyTenancySummary = async () => {
   }
 };
 
+// The billing service derives both the active tenant and global renter identity
+// from the authenticated server context; neither is caller-controlled here.
+export const listRenteeInvoices = async () => {
+  try {
+    const payload = await billingRequest('/rentee/invoices');
+    return { data: payload?.data || [], error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const getInvoiceAccount = async (invoiceId) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/account`);
