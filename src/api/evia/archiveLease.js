@@ -120,9 +120,12 @@ export const validateEviaStagedArchiveUrl = ({
   tenantId, agreementId, attemptId, url
 }) => {
   const prefix = `/storage/documents/tenants/${tenantId}/agreements/${agreementId}/signed/staged/${attemptId}/`;
+  const filename = typeof url === 'string' && url.startsWith(prefix)
+    ? url.slice(prefix.length) : '';
   if (!validGuid(tenantId) || !validGuid(agreementId) || !validGuid(attemptId)
     || typeof url !== 'string' || !url.startsWith(prefix)
-    || !/^[A-Za-z0-9._-]+$/.test(url.slice(prefix.length))) {
+    || !filename || filename === '.' || filename === '..' || filename.length > 180
+    || !/^[A-Za-z0-9._-]+$/.test(filename)) {
     throw err('EVIA_ARCHIVE_STAGE_URL_INVALID',
       'Signed-document URL must point to the current immutable archive attempt.', 400);
   }
