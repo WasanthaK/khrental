@@ -224,3 +224,47 @@ Still pending before a live switch: integrate the real authenticated
 webhook transition, validate active archive recovery if callback processing
 fails before SQL publication, audit-trail exposure policy, safe orphan
 staged-object cleanup, and tested process-death/lease-expiry behavior.
+
+## Default-off authenticated webhook canary routing
+
+The live verified webhook processor now contains an **explicit, default-off**
+canary branch for the prepared fenced archive coordinator. This is a release
+safety gate, NOT blanket activation:
+
+- `EVIA_FENCED_ARCHIVE_MODE=canary` must be set server-side; any missing
+  or other value uses the legacy transaction-owned archive lock.
+- The `EVIA_FENCED_ARCHIVE_CANARY_TENANTS` and
+  `EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS` server-side comma-separated
+  UUID allowlists must both match the resolved agreement exactly.
+- Authentication must have completed in the existing Evia router **and**
+  the callback-token verification must bind an explicit tenant and agreement.
+  HMAC-only unscoped request matching does not enter the canary, even if
+  its payload contains matching IDs.
+- Only terminal completion events with a provider `deliveryId`, no
+  recipient-specific email/name fields, and no previously retained signed
+  local document are candidates. Cancelled, rejected, failed, stale partial,
+  missing delivery ID and existing signed-document callbacks stay legacy.
+- After a tenant/request-bound provider event claim, the canary uses
+  local archive capacity admission, durable fenced SQL lease acquisition,
+  immutable per-attempt staging and ownership renewal. It requires BOTH
+  the local signed PDF and local audit-trail URL before publication. The
+  verified delivery event, completed signers, signed PDF pointer and
+  reserved lease event are committed together. Busy/failure always yields
+  retryable HTTP 503 and immediately ages this delivery's **unprocessed**
+  event claim to allow the provider to retry. A completed result returns
+  HTTP 200 only after the committed publication/recovery is proven.
+
+**Operations requirement:** Do NOT set these canary environment variables
+in Azure or any other production environment in this slice. The gate stays
+OFF. Actual activation requires a separately reviewed operator approval,
+end-to-end signed callback-token proof, storage crash/expiry race acceptance,
+audit-trail access policy and an orphan staged-object retention/cleanup
+contract. No new schema migration is required, but the prepared archived
+staging objects may be orphaned by failed attempts if the gate is enabled
+before a cleanup policy exists.
+
+Regression proofs include default-off/allowlist/token binding unit tests
+and disposable two-tenant SQL Server callback-claim-to-immutable-storage
+integration, a busy claim response followed by retry, signed and audit-trail
+publication, idempotent replay, stable timestamps and wrong-tenant denial.
+The existing production webhook remains the default runtime path.
