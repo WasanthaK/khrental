@@ -511,6 +511,181 @@ async function verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b) {
   console.log('PASS: Evia agreement-scoped archival lock serializes different deliveries and recovers after failures');
 }
 
+async function verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b) {
+  const {
+    acquireEviaArchiveLease, renewEviaArchiveLease, finalizeEviaArchiveLease,
+    EVIA_ARCHIVE_LEASE_EVENT
+  } = await import('../src/api/evia/archiveLease.js');
+  const {
+    buildEviaCompletedDocumentPath
+  } = await import('../src/api/evia/completedDocuments.js');
+  const insertAgreement = async (item, requestId) => {
+    const row = await first(pool, `
+      INSERT INTO dbo.agreements
+        (tenant_id, renteeid, propertyid, eviasignreference, status, signature_status)
+      OUTPUT INSERTED.id
+      VALUES (@tenantId, @renteeId, @propertyId, @requestId,
+              'pending_signature', 'in_progress')
+    `, { tenantId: item.tenantId, renteeId: item.renteeId,
+      propertyId: item.propertyId, requestId });
+    return guid(row.id);
+  };
+  const requestId = 'lease-' + crypto.randomBytes(7).toString('hex');
+  const agreementId = await insertAgreement(a, requestId);
+  const identity = { tenantId: a.tenantId, agreementId, requestId };
+  const eviaEvents = () => query(pool, `
+    SELECT id, processed, raw_data, updatedat
+    FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND event_type = @eventType
+      AND request_id = @requestId
+  `, { tenantId: a.tenantId, eventType: EVIA_ARCHIVE_LEASE_EVENT, requestId });
+  const stage = (attemptId, name = 'Signed.pdf') => (
+    '/storage/documents/' + buildEviaCompletedDocumentPath({
+      tenantId: a.tenantId, agreementId, archiveAttemptId: attemptId, documentName: name
+    })
+  );
+
+  // Two different delivery workers race for the same durable agreement
+  // owner. SQL transactions are short and release before mocked uploading.
+  const [firstClaim, rivalClaim] = await Promise.all([
+    acquireEviaArchiveLease(identity), acquireEviaArchiveLease(identity)
+  ]);
+  const claims = [firstClaim, rivalClaim];
+  const winner = claims.find(x => x.status === 'acquired');
+  assert.ok(winner && winner.attemptId);
+  assert.equal(claims.filter(x => x.status === 'busy').length, 1);
+  assert.equal((await eviaEvents()).length, 1);
+  assert.equal((await first(pool, 'SELECT 1 AS available')).available, 1,
+    'after claim, an unrelated SQL query must not wait for external PDF storage');
+
+  const wrongTenant = { ...identity, tenantId: b.tenantId };
+  await assert.rejects(acquireEviaArchiveLease(wrongTenant),
+    error => error?.code === 'EVIA_ARCHIVE_LEASE_AGREEMENT_NOT_FOUND');
+  await assert.rejects(renewEviaArchiveLease({
+    ...wrongTenant, attemptId: winner.attemptId
+  }), error => error?.code === 'EVIA_ARCHIVE_LEASE_AGREEMENT_NOT_FOUND');
+
+  const renewed = await renewEviaArchiveLease({ ...identity, attemptId: winner.attemptId });
+  assert.equal(renewed.status, 'renewed');
+  // Simulate worker A becoming unresponsive past the lease; worker B now
+  // takes ownership without inserting a second record.
+  const event = (await eviaEvents())[0];
+  await query(pool, `
+    UPDATE dbo.webhook_events
+    SET updatedat = DATEADD(MINUTE, -18, SYSUTCDATETIME())
+    WHERE id = @id
+  `, { id: event.id });
+  const successor = await acquireEviaArchiveLease(identity);
+  assert.equal(successor.status, 'acquired');
+  assert.notEqual(successor.attemptId, winner.attemptId);
+  assert.equal((await eviaEvents()).length, 1);
+
+  const stagedFiles = new Map();
+  stagedFiles.set(stage(winner.attemptId), Buffer.from('old attempt pdf'));
+  stagedFiles.set(stage(successor.attemptId), Buffer.from('winning pdf'));
+  assert.notEqual(stage(winner.attemptId), stage(successor.attemptId));
+  const losingContents = stagedFiles.get(stage(winner.attemptId)).toString();
+  await assert.rejects(
+    renewEviaArchiveLease({ ...identity, attemptId: winner.attemptId }),
+    error => error?.code === 'EVIA_ARCHIVE_LEASE_FENCED'
+  );
+  await assert.rejects(
+    finalizeEviaArchiveLease({
+      ...identity, attemptId: winner.attemptId,
+      signedDocumentUrl: stage(winner.attemptId)
+    }), error => error?.code === 'EVIA_ARCHIVE_LEASE_FENCED'
+  );
+  assert.equal((await first(pool,
+    'SELECT signed_document_url FROM dbo.agreements WHERE id = @id',
+    { id: agreementId })).signed_document_url, null);
+  await assert.rejects(
+    finalizeEviaArchiveLease({
+      ...identity, attemptId: successor.attemptId,
+      signedDocumentUrl: stage(winner.attemptId)
+    }), error => error?.code === 'EVIA_ARCHIVE_STAGE_URL_INVALID'
+  );
+
+  const published = await finalizeEviaArchiveLease({
+    ...identity, attemptId: successor.attemptId,
+    signedDocumentUrl: stage(successor.attemptId),
+    auditTrailUrl: stage(successor.attemptId, 'audit_trail.pdf')
+  });
+  assert.equal(published.status, 'published');
+  const completed = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signeddate,
+           signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id`, { id: agreementId });
+  assert.equal(completed.status, 'signed');
+  assert.equal(completed.signature_status, 'completed');
+  assert.equal(completed.signed_document_url, stage(successor.attemptId));
+  assert.ok(completed.signeddate && completed.signature_completed_at);
+  assert.equal(losingContents, 'old attempt pdf',
+    'winning attempt must never overwrite the losing attempt staged content');
+  assert.equal(stagedFiles.get(stage(successor.attemptId)).toString(), 'winning pdf');
+  assert.equal((await eviaEvents()).length, 1);
+  assert.equal((await eviaEvents())[0].processed, true);
+  assert.equal((await acquireEviaArchiveLease(identity)).status, 'complete');
+  await assert.rejects(
+    finalizeEviaArchiveLease({
+      ...identity, attemptId: winner.attemptId,
+      signedDocumentUrl: stage(winner.attemptId)
+    }), error => error?.code === 'EVIA_ARCHIVE_LEASE_FENCED'
+  );
+  const replay = await first(pool, `
+    SELECT status, signature_status, signed_document_url,
+           signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id`, { id: agreementId });
+  assert.deepEqual(replay, completed, 'stale attempt must not mutate completed agreement');
+
+  // Rollback: a SQL-side failure after the agreement UPDATE must not mark
+  // the lease completed or persist a signed URL; retry remains available.
+  const request2 = 'lease-rollback-' + crypto.randomBytes(6).toString('hex');
+  const agreement2 = await insertAgreement(a, request2);
+  const secondIdentity = { tenantId: a.tenantId, agreementId: agreement2, requestId: request2 };
+  const pending = await acquireEviaArchiveLease(secondIdentity);
+  assert.equal(pending.status, 'acquired');
+  await pool.request().batch(`
+    CREATE TRIGGER dbo.archive_lease_disposable_rollback ON dbo.agreements
+    AFTER UPDATE AS
+    BEGIN
+      IF EXISTS (SELECT 1 FROM inserted WHERE id = '${agreement2}')
+        THROW 51011, 'Disposable archive publication rollback', 1;
+    END
+  `);
+  try {
+    await assert.rejects(
+      finalizeEviaArchiveLease({
+        ...secondIdentity, attemptId: pending.attemptId,
+        signedDocumentUrl: '/storage/documents/' + buildEviaCompletedDocumentPath({
+          tenantId: a.tenantId, agreementId: agreement2,
+          archiveAttemptId: pending.attemptId, documentName: 'Lease.pdf'
+        })
+      }), /Disposable archive publication rollback/);
+    const rolledBack = await first(pool, `
+      SELECT status, signed_document_url FROM dbo.agreements WHERE id = @id
+    `, { id: agreement2 });
+    assert.equal(rolledBack.status, 'pending_signature');
+    assert.equal(rolledBack.signed_document_url, null);
+    const leaseRecord = await first(pool, `
+      SELECT processed FROM dbo.webhook_events
+      WHERE tenant_id = @tenantId AND request_id = @requestId
+        AND event_type = @eventType
+    `, { tenantId: a.tenantId, requestId: request2, eventType: EVIA_ARCHIVE_LEASE_EVENT });
+    assert.equal(leaseRecord.processed, false);
+  } finally {
+    await pool.request().batch('DROP TRIGGER IF EXISTS dbo.archive_lease_disposable_rollback');
+  }
+  const recovered = await finalizeEviaArchiveLease({
+    ...secondIdentity, attemptId: pending.attemptId,
+    signedDocumentUrl: '/storage/documents/' + buildEviaCompletedDocumentPath({
+      tenantId: a.tenantId, agreementId: agreement2,
+      archiveAttemptId: pending.attemptId, documentName: 'Lease.pdf'
+    })
+  });
+  assert.equal(recovered.status, 'published');
+  console.log('PASS: dormant SQL-fenced Evia archive lease claims, stale takeover, immutable stages, publication and rollback');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -692,6 +867,7 @@ async function main() {
     await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
     await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
     await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);
+    await verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.

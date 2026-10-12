@@ -101,3 +101,47 @@ period before deleting unreferenced storage. Monitor lease contention, retry
 rates, archive duration, pool use, staged-object counts and storage cost.
 Until fencing, orphan policy and race acceptance are proven, keep the
 currently deployed SQL lock and capacity limit as the authority.
+
+## Prepared durable lease core (not yet wired into webhook)
+
+The independent `src/api/evia/archiveLease.js` module now implements
+short-transaction `acquireEviaArchiveLease`, `renewEviaArchiveLease`, and
+`finalizeEviaArchiveLease` operations using a reserved
+`webhook_events.event_type = 'evia.archive.lease.v1'` row. The unique logical
+identity is tenant + agreement + Evia request; `sp_getapplock` serializes
+writers under a transaction. The server clock and `updatedat` determine
+15-minute lease validity, preventing host-clock skew. A new UUID attempt
+fences old owners, and the final SQL transaction verifies tenant, Evia
+request, current token, expiry, immutable attempted PDF URL, and live terminal
+state before publishing signed-document pointers and completing the
+reserved event. Stale attempts never receive publication authority. A
+failed publish transaction rolls back both the agreement and lease row.
+
+This is an **unreferenced runtime module**; the actual webhook still calls
+`withEviaArchiveCapacity` and `withEviaAgreementArchiveLock`. Real
+disposable SQL acceptance exercises the module but cannot be treated as
+live integration acceptance. Although the reserved event row requires no
+new DDL, it is a separate namespace from Evia-delivery events: avoid
+matching it as a provider delivery or exposing it in provider event views.
+
+### Remaining prerequisites before any live switch
+
+- Preserve signatory-completion metadata and audited processed **delivery**
+  record semantics together with a winning archive promotion; the lease
+  module presently finalizes the agreement and lease row but deliberately
+  does **not** replace the webhook's delivery-event workflow.
+- Decide how to pair the winning audit trail URL with a signed-PDF URL and
+  how to safely retrieve a missing retained PDF after a partially successful
+  callback without losing prior completed-signature data.
+- Add periodic ownership-checked renewal around slow Evia download/storage,
+  and bound external operations with appropriate timeouts; an expired
+  worker must never regain the lease.
+- Confirm correct behavior under process death between claim, upload,
+  database commit and HTTP acknowledgement, including orphan staged objects
+  and duplicate provider retry.
+- End-to-end disposable SQL Server + fake storage integration must prove that
+  the external call runs with **no connection pinned by the lease** and that
+  only one attempt's immutable PDF is published during an expiry/race.
+- Do not activate the new lease in live webhook until all these gates are
+  green and a separately reviewed migration slice explicitly replaces the
+  old archive lock.

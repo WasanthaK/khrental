@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  EVIA_ARCHIVE_LEASE_EVENT, EVIA_ARCHIVE_LEASE_MS,
+  validateEviaArchiveLeaseIdentity, validateEviaStagedArchiveUrl
+} from '../src/api/evia/archiveLease.js';
+import {
   withEviaArchiveCapacity, getEviaArchiveCapacityLimit,
   getEviaArchiveCapacityStatus
 } from '../src/api/evia/archiveCapacity.js';
@@ -453,4 +457,63 @@ test('live Evia webhook does not opt into staged paths without fenced SQL lease 
   const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
   assert.doesNotMatch(webhook, /archiveAttemptId:\s*createEviaArchiveAttemptId/);
   assert.match(webhook, /withEviaAgreementArchiveLock\(/);
+});
+
+test('dormant Evia durable archive lease identity requires tenant-bound UUIDs and request', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const requestId = 'request-123';
+  assert.equal(EVIA_ARCHIVE_LEASE_EVENT, 'evia.archive.lease.v1');
+  assert.equal(EVIA_ARCHIVE_LEASE_MS, 15 * 60 * 1000);
+  assert.doesNotThrow(() => validateEviaArchiveLeaseIdentity({ tenantId, agreementId, requestId }));
+  for (const invalid of [
+    { tenantId: '../other', agreementId, requestId },
+    { tenantId, agreementId: 'not-a-guid', requestId },
+    { tenantId, agreementId, requestId: '' },
+    { tenantId, agreementId, requestId: 'x'.repeat(256) }
+  ]) {
+    assert.throws(() => validateEviaArchiveLeaseIdentity(invalid),
+      error => error.code === 'EVIA_ARCHIVE_LEASE_IDENTITY_INVALID');
+  }
+});
+
+test('fenced signed document promotion rejects paths from old attempts or other tenants', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  const prefix = '/storage/documents/tenants/' + tenantId + '/agreements/'
+    + agreementId + '/signed/staged/' + attemptId + '/';
+  const identity = { tenantId, agreementId, attemptId };
+  const url = prefix + 'Lease.pdf';
+  assert.equal(validateEviaStagedArchiveUrl({ ...identity, url }), url);
+  const invalid = [
+    prefix + '../Lease.pdf',
+    prefix + '..',
+    prefix + '.',
+    prefix + 'a'.repeat(181),
+    prefix.replace(tenantId, '44444444-4444-4444-8444-444444444444') + 'Lease.pdf',
+    prefix.replace(attemptId, '55555555-5555-4555-8555-555555555555') + 'Lease.pdf',
+    '/storage/documents/tenants/' + tenantId + '/agreements/' + agreementId + '/signed/Lease.pdf'
+  ];
+  for (const bad of invalid) {
+    assert.throws(() => validateEviaStagedArchiveUrl({ ...identity, url: bad }),
+      error => error.code === 'EVIA_ARCHIVE_STAGE_URL_INVALID');
+  }
+});
+
+test('lease is a dormant separate event type and live webhook retains transactional archive lock', () => {
+  const source = readFileSync(new URL('../src/api/evia/archiveLease.js', import.meta.url), 'utf8');
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  assert.match(source, /sys\.sp_getapplock/);
+  assert.match(source, /evia\.archive\.lease\.v1/);
+  assert.match(source, /JSON_VALUE\(raw_data, '\$\.agreementId'\)/);
+  assert.match(source, /JSON_VALUE\(raw_data, '\$\.attemptId'\)/);
+  assert.match(source, /signed_document_url IS NULL AND signeddocumenturl IS NULL/);
+  assert.match(source, /WHERE id = @agreementId AND tenant_id = @tenantId/);
+  assert.match(source, /leaseAgeValid\(lease\)/);
+  assert.match(source, /await transaction\.commit\(\)/);
+  assert.match(source, /await transaction\.rollback\(\)/);
+  assert.doesNotMatch(webhook, /acquireEviaArchiveLease|finalizeEviaArchiveLease/);
+  assert.match(webhook, /withEviaAgreementArchiveLock/);
+  assert.match(webhook, /withEviaArchiveCapacity/);
 });
