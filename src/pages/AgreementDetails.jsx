@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { formatDate } from '../utils/helpers';
 import { toast } from 'react-hot-toast';
 import SignatureProgressTracker from '../components/ui/SignatureProgressTracker';
+import { evaluateManualSigning } from '../utils/manualAgreementSigning';
 import {
   fetchAgreement,
   getTemplate,
@@ -264,8 +265,8 @@ const AgreementDetails = () => {
       <div className="mb-8 flex flex-wrap gap-3">
         <div className="flex-1"></div>
         <div className="flex flex-wrap gap-3">
-          {/* Show sign button only if agreement is still editable */}
-          {!['signed', 'completed', 'cancelled'].includes(agreement.status) && (
+          {/* Only pending, non-Evia agreements can be manually signed. */}
+          {evaluateManualSigning(agreement).allowed && (
             <button
               onClick={() => setShowSignConfirm(true)}
               className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center"
