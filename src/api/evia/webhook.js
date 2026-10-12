@@ -787,7 +787,9 @@ export const processEviaWebhook = async (payload = {}, {
   const webhookEventId = claim.eventId;
   const finalState = mapFinalAgreementState(normalized);
   if (isEviaFencedArchiveCanaryEligible({
-    verifiedRequest, agreement, normalized, finalState,
+    verifiedRequest,
+    verifiedAgreementBound: Boolean(expectedAgreementId && expectedTenantId),
+    agreement, normalized, finalState,
     hasRetainedSignedDocument: Boolean(getStoredSignedDocumentUrl(agreement)),
     env: fencedCanaryEnv
   })) {
