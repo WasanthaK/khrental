@@ -49,7 +49,7 @@ async function fixture(pool, label, rent, water) {
   const reading = await first(pool,
     "INSERT INTO utility_readings (tenant_id, renteeid, propertyid, utilitytype, readingdate, calculatedbill, status, billing_status) OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'water', '2026-09-20', @water, 'approved', 'pending_invoice')",
     { tenantId, renteeId, propertyId, water });
-  return { tenantId, propertyId, renteeId, agreementId: guid(agreement.id),
+  return { tenantId, propertyId, renteeId, email: 'sqlbilling-' + suffix + '@example.invalid', agreementId: guid(agreement.id),
     readingId: guid(reading.id), expected: rent + water };
 }
 
@@ -177,13 +177,22 @@ async function main() {
     const { guardBillingMssqlCompatibility } =
       await import('../src/api/platform/billingMutationGuard.js');
     const auth = async item => {
+      // Reproduce the real auth identity -> app_users profile relationship.
+      // An authenticated browser must resolve profileId via the server, not a
+      // fabricated browser-local ID or a development bypass.
+      const authId = crypto.randomUUID();
       const record = await createAuthRecord({
-        authId: crypto.randomUUID(),
+        authId,
         appUserId: item.renteeId,
-        email: 'auth-' + crypto.randomUUID() + '@example.invalid',
+        email: item.email,
         role: 'rentee',
         password: crypto.randomBytes(24).toString('base64url')
       });
+      const linked = await query(pool,
+        'UPDATE app_users SET auth_id = @authId OUTPUT INSERTED.id WHERE tenant_id = @tenantId AND id = @renteeId',
+        { authId, tenantId: item.tenantId, renteeId: item.renteeId });
+      assert.equal(linked.length, 1, 'disposable renter must link to its real auth identity');
+      item.authId = authId;
       return (await issueAuthSession(record)).accessToken;
     };
     const tokenA = await auth(a);
@@ -323,14 +332,14 @@ async function main() {
     const browserVisit = async (item, token, route, { visibleInvoice = false } = {}) => {
       const page = await browser.newPage();
       try {
-        await page.evaluateOnNewDocument((sessionToken, tenantId, profileId) => {
+        await page.evaluateOnNewDocument((sessionToken, tenantId, authId, email) => {
           localStorage.removeItem('dev_bypass_role');
           localStorage.setItem('khrental.activeTenantId', tenantId);
           localStorage.setItem('khrental.local.session', JSON.stringify({
             access_token: sessionToken,
-            user: { id: profileId, email: 'browser-fixture@example.invalid', role: 'rentee' }
+            user: { id: authId, email, role: 'rentee' }
           }));
-        }, token, item.tenantId, item.renteeId);
+        }, token, item.tenantId, item.authId, item.email);
         await page.goto(origin + route, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.waitForFunction(() => (
           !document.body.innerText.includes('Loading application...')
