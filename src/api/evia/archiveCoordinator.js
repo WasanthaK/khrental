@@ -1,6 +1,6 @@
 import {
   acquireEviaArchiveLease, renewEviaArchiveLease, finalizeEviaArchiveLease,
-  EVIA_ARCHIVE_LEASE_MS
+  acknowledgePublishedEviaArchiveDelivery, EVIA_ARCHIVE_LEASE_MS
 } from './archiveLease.js';
 import {
   storeEviaWebhookCompletedDocuments, retrieveAndStoreEviaCompletedDocuments
@@ -41,6 +41,8 @@ export const stageEviaDocumentsForFencedLease = async ({
 // prefix prevents it overwriting a newer winner's bytes.
 export const runDormantEviaFencedArchive = async ({
   tenantId, agreementId, requestId, stageDocuments,
+  verifiedDeliveryEventId = null,
+  acknowledge = acknowledgePublishedEviaArchiveDelivery,
   acquire = acquireEviaArchiveLease,
   renew = renewEviaArchiveLease,
   finalize = finalizeEviaArchiveLease,
@@ -49,7 +51,7 @@ export const runDormantEviaFencedArchive = async ({
 }) => {
   if (typeof stageDocuments !== 'function'
     || typeof acquire !== 'function' || typeof renew !== 'function'
-    || typeof finalize !== 'function') {
+    || typeof finalize !== 'function' || typeof acknowledge !== 'function') {
     throw new TypeError('Fenced Evia archive requires staging and lease operations.');
   }
   if (!Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1
@@ -58,7 +60,14 @@ export const runDormantEviaFencedArchive = async ({
   }
   const identity = { tenantId, agreementId, requestId };
   const claim = await acquire(identity);
-  if (claim?.status === 'complete') return { status: 'complete', signedDocumentUrl: claim.url };
+  if (claim?.status === 'complete') {
+    if (verifiedDeliveryEventId !== null) {
+      const audit = await acknowledge({ ...identity, verifiedDeliveryEventId });
+      return { status: 'complete', signedDocumentUrl: audit.signedDocumentUrl,
+        deliveryStatus: audit.status };
+    }
+    return { status: 'complete', signedDocumentUrl: claim.url };
+  }
   if (claim?.status === 'busy') return { status: 'busy', retryable: true };
   if (claim?.status !== 'acquired' || typeof claim.attemptId !== 'string') {
     throw archiveError('EVIA_ARCHIVE_LEASE_CLAIM_INVALID', 'Archive lease returned no owner token.');
@@ -114,7 +123,8 @@ export const runDormantEviaFencedArchive = async ({
     const published = await finalize({
       ...owner,
       signedDocumentUrl: staged.signedDocumentUrl,
-      auditTrailUrl: staged.auditTrailUrl || null
+      auditTrailUrl: staged.auditTrailUrl || null,
+      ...(verifiedDeliveryEventId !== null ? { verifiedDeliveryEventId } : {})
     });
     if (published?.status !== 'published') {
       throw archiveError('EVIA_ARCHIVE_PUBLICATION_NOT_CONFIRMED',
