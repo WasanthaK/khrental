@@ -691,6 +691,39 @@ schema, production credentials or cross-domain compatibility operations.
 PR/CI/production proof are still required before declaring this slice done.
 ```
 
+## Phase 4 dedicated renter invoice list — PR #231
+
+```text
+PR #231 migrated only the renter invoice listing screen to
+GET /api/billing/rentee/invoices, with authenticated server-owned renter
+identity, verified active tenant membership, status=draft exclusion, and
+tenant-scoped property labels. Invoice account/receipts retain their
+existing dedicated lifecycle read contract. No payment writes or DDL.
+Earlier compatibility-source assertion was updated to enforce this new
+explicit billing contract.
+
+Exact PR-head e378af819d766da9be37a587a60a38c5df7fd4f6:
+standard build/authorization run 38227354564 GREEN;
+disposable SQL Server + authenticated two-tenant/browser acceptance
+run 38227354696 GREEN; protected browser smoke run 38227354749 GREEN.
+Merge SHA: d24041af61e23f15edfd31e17e2a7b1c2c5db1b4.
+Status: MERGED. Production serving revision, exact external fingerprint,
+runtime configuration and live MSSQL health for this change PENDING.
+Do not claim deployment attested solely from PR-head CI.
+
+ACTIVE release gate: verify a post-merge production workflow reports its
+latest Azure revision Ready, exact deployed main-commit SHA publicly served,
+and live MSSQL connection Ready. Only then accept this slice.
+
+NEXT bounded Phase 4 task (not yet active until release gate passes):
+inventory one remaining compatibility-domain operation and prove
+MSSQL API authority/contract parity before changing application runtime.
+Prioritize remaining agreement-template or invoice-management read path,
+and keep core billing/payment mutations strictly under lifecycle APIs.
+Phase 4 as a whole remains OPEN until the wider canonical inventory is
+discharged, regardless of this one successful invoice-list migration.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
