@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { paginateQuery, runQuery, runSingleQuery } from './query.js';
 import { getMssqlPool, sql } from './pool.js';
+import { evaluateManualSigning } from '../../utils/manualAgreementSigning.js';
 
 const DEFAULT_PAGE_SIZE = 50;
 const TABLE_COLUMN_CACHE = new Map();
@@ -1995,14 +1996,51 @@ export const deleteAgreementById = async (id, tenantId) => {
 };
 
 export const markAgreementSigned = async (id, tenantId) => {
+  const scopedTenantId = assertTenantId(tenantId);
   const pool = await getMssqlPool();
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
+  let committed = false;
 
   try {
+    // Hold the row lock through the entire signed-state and associated-record
+    // transition. Concurrent manual requests or webhook writes must serialize.
+    const stateRequest = new sql.Request(transaction);
+    stateRequest.input('id', id);
+    stateRequest.input('tenantId', scopedTenantId);
+    const stateResult = await stateRequest.query(`
+      SELECT TOP 1 id, status, eviasignreference, evia_document_id,
+             signature_request_id, signature_status, signature_sent_at,
+             signature_completed_at
+      FROM agreements WITH (UPDLOCK, HOLDLOCK)
+      WHERE id = @id AND tenant_id = @tenantId
+    `);
+    const current = stateResult.recordset[0];
+    if (!current) {
+      throw createRepositoryError(404, 'Agreement not found.', 'AGREEMENT_NOT_FOUND');
+    }
+
+    const eligibility = evaluateManualSigning(current);
+    if (eligibility.alreadySigned) {
+      // Exact manual-sign replay is a read-only success; never repeat unit,
+      // property or renter-association changes and never reset signeddate.
+      await transaction.commit();
+      committed = true;
+      return getAgreementById(id, scopedTenantId);
+    }
+    if (!eligibility.allowed) {
+      throw createRepositoryError(
+        409,
+        eligibility.code === 'EVIA_SIGNING_MANAGED'
+          ? 'Evia-managed agreements must be completed by the verified Evia workflow.'
+          : 'Only pending agreements may be manually signed.',
+        eligibility.code
+      );
+    }
+
     const agreementRequest = new sql.Request(transaction);
     agreementRequest.input('id', id);
-    agreementRequest.input('tenantId', assertTenantId(tenantId));
+    agreementRequest.input('tenantId', scopedTenantId);
     agreementRequest.input('signeddate', new Date().toISOString());
     agreementRequest.input('updatedat', new Date().toISOString());
 
@@ -2014,18 +2052,18 @@ export const markAgreementSigned = async (id, tenantId) => {
       OUTPUT INSERTED.*
       WHERE id = @id
         AND tenant_id = @tenantId
+        AND LOWER(LTRIM(RTRIM(status))) IN ('pending', 'pending_signature')
     `);
 
     const updatedAgreement = agreementResult.recordset[0];
-
     if (!updatedAgreement) {
-      throw new Error('Agreement not found');
+      throw createRepositoryError(409, 'Agreement signing state changed.', 'MANUAL_SIGN_STATE_INVALID');
     }
 
     if (updatedAgreement.propertyid) {
       const propertyRequest = new sql.Request(transaction);
       propertyRequest.input('propertyId', updatedAgreement.propertyid);
-      propertyRequest.input('tenantId', tenantId);
+      propertyRequest.input('tenantId', scopedTenantId);
       propertyRequest.input('updatedat', new Date().toISOString());
       await propertyRequest.query(`
         UPDATE properties
@@ -2039,7 +2077,7 @@ export const markAgreementSigned = async (id, tenantId) => {
     if (updatedAgreement.unitid) {
       const unitRequest = new sql.Request(transaction);
       unitRequest.input('unitId', updatedAgreement.unitid);
-      unitRequest.input('tenantId', tenantId);
+      unitRequest.input('tenantId', scopedTenantId);
       unitRequest.input('updatedat', new Date().toISOString());
       await unitRequest.query(`
         UPDATE property_units
@@ -2053,7 +2091,7 @@ export const markAgreementSigned = async (id, tenantId) => {
     if (updatedAgreement.renteeid && updatedAgreement.propertyid) {
       const userRequest = new sql.Request(transaction);
       userRequest.input('renteeId', updatedAgreement.renteeid);
-      userRequest.input('tenantId', tenantId);
+      userRequest.input('tenantId', scopedTenantId);
       const userResult = await userRequest.query(`
         SELECT TOP 1 associated_property_ids
         FROM app_users
@@ -2069,7 +2107,7 @@ export const markAgreementSigned = async (id, tenantId) => {
         currentProperties.push(updatedAgreement.propertyid);
         const updateUserRequest = new sql.Request(transaction);
         updateUserRequest.input('renteeId', updatedAgreement.renteeid);
-        updateUserRequest.input('tenantId', tenantId);
+        updateUserRequest.input('tenantId', scopedTenantId);
         updateUserRequest.input('associatedPropertyIds', JSON.stringify(currentProperties));
         updateUserRequest.input('updatedat', new Date().toISOString());
         await updateUserRequest.query(`
@@ -2083,9 +2121,13 @@ export const markAgreementSigned = async (id, tenantId) => {
     }
 
     await transaction.commit();
-    return getAgreementById(id, tenantId);
+    committed = true;
+    return getAgreementById(id, scopedTenantId);
   } catch (error) {
-    await transaction.rollback();
+    if (!committed) {
+      try { await transaction.rollback(); }
+      catch (rollbackError) { error.rollbackError = rollbackError; }
+    }
     throw error;
   }
 };
