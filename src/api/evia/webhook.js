@@ -6,6 +6,8 @@ import { claimEviaWebhookDelivery } from './deliveryClaim.js';
 import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from './terminalPolicy.js';
 import { withEviaAgreementArchiveLock } from './archiveLock.js';
 import { withEviaArchiveCapacity } from './archiveCapacity.js';
+import { isEviaFencedArchiveCanaryEligible } from './fencedCanaryPolicy.js';
+import { runDormantEviaFencedArchive, stageEviaDocumentsForFencedLease } from './archiveCoordinator.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
@@ -648,7 +650,12 @@ const mapFinalAgreementState = ({ eventType, eventId, status }) => {
   return null;
 };
 
-export const processEviaWebhook = async (payload = {}, { expectedAgreementId = null, expectedTenantId = null } = {}) => {
+export const processEviaWebhook = async (payload = {}, {
+  expectedAgreementId = null, expectedTenantId = null, verifiedRequest = false,
+  fencedCanaryRunner = runDormantEviaFencedArchive,
+  fencedCanaryStage = stageEviaDocumentsForFencedLease,
+  fencedCanaryEnv = process.env
+} = {}) => {
   const normalized = normalizeEviaWebhookPayload(payload);
 
   console.info('[EviaDiag] webhook_normalized', {
@@ -779,6 +786,69 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   }
   const webhookEventId = claim.eventId;
   const finalState = mapFinalAgreementState(normalized);
+  if (isEviaFencedArchiveCanaryEligible({
+    verifiedRequest, agreement, normalized, finalState,
+    hasRetainedSignedDocument: Boolean(getStoredSignedDocumentUrl(agreement)),
+    env: fencedCanaryEnv
+  })) {
+    // This branch can only be selected after the authenticated router has
+    // verified the request and a delivery event was claimed in SQL.
+    // Never mix this transport with the long-held legacy agreement lock.
+    try {
+      const archived = await withEviaArchiveCapacity({
+        execute: () => fencedCanaryRunner({
+          tenantId: agreement.tenant_id,
+          agreementId: agreement.id,
+          requestId: normalized.requestId,
+          verifiedDeliveryEventId: webhookEventId,
+          stageDocuments: async attempt => {
+            const staged = await fencedCanaryStage({
+              ...attempt, documents: normalized.documents
+            });
+            // Do not enable staged publishing unless the audit trail is
+            // retained alongside the signed document for this attempt.
+            if (!staged?.signedDocumentUrl || !staged?.auditTrailUrl) {
+              const error = new Error('Both signed agreement and audit trail are required.');
+              error.code = 'EVIA_FENCED_ARCHIVE_DOCUMENT_PAIR_REQUIRED';
+              error.status = 503;
+              throw error;
+            }
+            return staged;
+          }
+        })
+      });
+      if (archived?.status === 'published' || archived?.status === 'complete') {
+        return { statusCode: 200, body: {
+          received: true, matched: true, updated: archived.status === 'published',
+          agreementId: agreement.id, status: 'signed', signatureStatus: 'completed',
+          archiveTransport: 'fenced_canary'
+        }};
+      }
+      if (archived?.status !== 'busy') {
+        throw Object.assign(new Error('Fenced archival not confirmed.'), {
+          code: 'EVIA_FENCED_ARCHIVE_UNCONFIRMED', status: 503
+        });
+      }
+    } catch (error) {
+      console.warn('[EviaArchive] canary_retry_required', {
+        code: error?.code || 'EVIA_FENCED_ARCHIVE_FAILED',
+        agreementId: shortId(agreement.id)
+      });
+    }
+    // This event was not completed. Evia must retry it; make this delivery
+    // claim immediately reclaimable rather than requiring a 15-minute wait.
+    if (webhookEventId) {
+      await runQuery(`
+        UPDATE dbo.webhook_events
+        SET updatedat = DATEADD(MINUTE, -16, SYSUTCDATETIME())
+        WHERE id = @eventId AND tenant_id = @tenantId AND processed = 0
+      `, { eventId: webhookEventId, tenantId: agreement.tenant_id });
+    }
+    return { statusCode: 503, body: {
+      received: false, matched: true, updated: false, retryable: true,
+      code: 'EVIA_FENCED_ARCHIVE_RETRY', agreementId: agreement.id
+    }};
+  }
   const terminalDecision = evaluateEviaTerminalDelivery({
     agreement, nextState: finalState,
     hasRetainedSignedDocument: Boolean(getStoredSignedDocumentUrl(agreement))
@@ -1136,7 +1206,8 @@ const handleWebhook = async (req, res, next) => {
 
     const result = await processEviaWebhook(req.body || {}, {
       expectedAgreementId: verification.agreementId || null,
-      expectedTenantId: verification.tenantId || null
+      expectedTenantId: verification.tenantId || null,
+      verifiedRequest: true
     });
     res.status(result.statusCode).json(result.body);
   } catch (error) {
