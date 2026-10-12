@@ -686,6 +686,97 @@ async function verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b) {
   console.log('PASS: dormant SQL-fenced Evia archive lease claims, stale takeover, immutable stages, publication and rollback');
 }
 
+async function verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b) {
+  const { runDormantEviaFencedArchive, stageEviaDocumentsForFencedLease } =
+    await import('../src/api/evia/archiveCoordinator.js');
+  const { storeEviaWebhookCompletedDocuments } =
+    await import('../src/api/evia/completedDocuments.js');
+  const ref = 'coordinator-' + crypto.randomBytes(7).toString('hex');
+  const row = await first(pool, `
+    INSERT INTO dbo.agreements
+      (tenant_id, renteeid, propertyid, eviasignreference, status, signature_status)
+    OUTPUT INSERTED.id
+    VALUES (@tenantId, @renteeId, @propertyId, @requestId,
+            'pending_signature', 'in_progress')
+  `, { tenantId: a.tenantId, renteeId: a.renteeId,
+    propertyId: a.propertyId, requestId: ref });
+  const identity = { tenantId: a.tenantId, agreementId: guid(row.id), requestId: ref };
+  let signalEntered;
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  let releaseStorage;
+  const blockedStorage = new Promise(resolve => { releaseStorage = resolve; });
+  const writes = new Map();
+  const storageDriver = {
+    upload: async (bucket, relativePath, body) => {
+      assert.equal(bucket, 'documents');
+      writes.set(relativePath, Buffer.from(body));
+      return { path: relativePath };
+    }
+  };
+  const documents = [
+    { DocumentName: 'Signed.pdf', DocumentContent: Buffer.from('signed-pdf').toString('base64') },
+    { DocumentName: 'audit_trail.pdf', DocumentContent: Buffer.from('audit-pdf').toString('base64') }
+  ];
+  let stagingCalls = 0;
+  const stageDocuments = async attempt => {
+    stagingCalls++;
+    signalEntered();
+    // A blocked external upload does not keep the short SQL claim
+    // transaction open; all other queries and competing claims may proceed.
+    assert.equal((await first(pool, 'SELECT 1 AS ready')).ready, 1);
+    await blockedStorage;
+    return stageEviaDocumentsForFencedLease({
+      ...attempt, documents,
+      inlineStore: args => storeEviaWebhookCompletedDocuments({ ...args, storageDriver }),
+      retrieve: async () => { throw new Error('valid inline signed PDF must not fetch Evia'); }
+    });
+  };
+  const firstAttempt = runDormantEviaFencedArchive({ ...identity, stageDocuments });
+  await entered;
+  try {
+    const concurrent = await runDormantEviaFencedArchive({
+      ...identity, stageDocuments: async () => {
+        throw new Error('in-flight rival must not stage documents');
+      }
+    });
+    assert.deepEqual(concurrent, { status: 'busy', retryable: true });
+    assert.equal((await first(pool, 'SELECT 1 AS ready')).ready, 1);
+    assert.equal(writes.size, 0, 'no uploads while first fake worker remains blocked');
+  } finally {
+    releaseStorage();
+  }
+  const published = await firstAttempt;
+  assert.equal(published.status, 'published');
+  assert.equal(stagingCalls, 1);
+  assert.equal(writes.size, 2);
+  assert.ok(published.signedDocumentUrl.includes('/signed/staged/' + published.attemptId + '/'));
+  assert.ok(published.auditTrailUrl.includes('/signed/staged/' + published.attemptId + '/'));
+  const authoritative = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signeddate, signature_completed_at
+    FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId
+  `, { agreementId: identity.agreementId, tenantId: a.tenantId });
+  assert.equal(authoritative.status, 'signed');
+  assert.equal(authoritative.signature_status, 'completed');
+  assert.equal(authoritative.signed_document_url, published.signedDocumentUrl);
+  assert.ok(authoritative.signeddate && authoritative.signature_completed_at);
+  const replay = await runDormantEviaFencedArchive({
+    ...identity, stageDocuments: async () => {
+      throw new Error('completed replay must not upload');
+    }
+  });
+  assert.equal(replay.status, 'complete');
+  assert.equal(replay.signedDocumentUrl, published.signedDocumentUrl);
+  assert.equal(writes.size, 2, 'replay must not upload or overwrite staged objects');
+  await assert.rejects(
+    runDormantEviaFencedArchive({
+      ...identity, tenantId: b.tenantId,
+      stageDocuments: async () => { throw new Error('foreign tenant must not reach storage'); }
+    }),
+    error => error?.code === 'EVIA_ARCHIVE_LEASE_AGREEMENT_NOT_FOUND'
+  );
+  console.log('PASS: dormant Evia staging coordinator with SQL claim, concurrent busy, released connection, publication and replay');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -868,6 +959,7 @@ async function main() {
     await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
     await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);
     await verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b);
+    await verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
