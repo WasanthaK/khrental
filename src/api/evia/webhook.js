@@ -3,6 +3,7 @@ import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { sql } from '../mssql/pool.js';
 import { claimEviaWebhookDelivery } from './deliveryClaim.js';
+import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from './terminalPolicy.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
@@ -775,8 +776,23 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     };
   }
   const webhookEventId = claim.eventId;
+  const finalState = mapFinalAgreementState(normalized);
+  const terminalDecision = evaluateEviaTerminalDelivery({
+    agreement, nextState: finalState,
+    hasRetainedSignedDocument: Boolean(getStoredSignedDocumentUrl(agreement))
+  });
+  if (terminalDecision.action === 'ignore') {
+    // Record the authenticated delivery as processed for audit/replay tracking
+    // without mutating a completed, rejected or cancelled agreement.
+    await markWebhookEventProcessed(webhookEventId);
+    return { statusCode: 200, body: {
+      received: true, matched: true, updated: false,
+      agreementId: agreement.id, reason: terminalDecision.reason
+    }};
+  }
+  const terminalAtRead = isEviaTerminalAgreement(agreement);
 
-  const emailStatuses = updateSignatoryEmailDelivery(agreement.signatories_status, {
+  const emailStatuses = !terminalAtRead && updateSignatoryEmailDelivery(agreement.signatories_status, {
     email: normalized.recipientEmail,
     name: normalized.recipientName,
     deliveryStatus: normalized.deliveryStatus,
@@ -785,22 +801,24 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   });
 
   if (emailStatuses) {
-    await runQuery(`
+    const savedEmailStatus = await runQuery(`
       UPDATE dbo.agreements
       SET signatories_status = @signatoriesStatus,
           updatedat = SYSUTCDATETIME()
+      OUTPUT INSERTED.id
       WHERE id = @agreementId
         AND eviasignreference = @requestId
+        AND LOWER(COALESCE(status, '')) NOT IN ('signed', 'cancelled', 'rejected', 'completed', 'terminated', 'expired')
+        AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
     `, {
       agreementId: agreement.id,
       requestId: normalized.requestId,
       signatoriesStatus: JSON.stringify(emailStatuses)
     });
-    agreement.signatories_status = JSON.stringify(emailStatuses);
+    if (savedEmailStatus.length) agreement.signatories_status = JSON.stringify(emailStatuses);
   }
 
-  const finalState = mapFinalAgreementState(normalized);
-  if (!finalState && isSignatoryCompletionNotification(normalized)) {
+  if (!finalState && isSignatoryCompletionNotification(normalized) && !terminalAtRead) {
     const completedSignatories = updateSignatoryCompletion(agreement.signatories_status, {
       email: normalized.recipientEmail,
       name: normalized.recipientName,
@@ -808,14 +826,17 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     });
 
     if (completedSignatories) {
-      await runQuery(`
+      const savedSignatory = await runQuery(`
         UPDATE dbo.agreements
         SET
           signature_status = @signatureStatus,
           signatories_status = @signatoriesStatus,
           updatedat = SYSUTCDATETIME()
+        OUTPUT INSERTED.id
         WHERE id = @agreementId
           AND eviasignreference = @requestId
+          AND LOWER(COALESCE(status, '')) NOT IN ('signed', 'cancelled', 'rejected', 'completed', 'terminated', 'expired')
+          AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
       `, {
         agreementId: agreement.id,
         requestId: normalized.requestId,
@@ -823,6 +844,13 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
         signatoriesStatus: JSON.stringify(completedSignatories)
       });
 
+      if (!savedSignatory.length) {
+        await markWebhookEventProcessed(webhookEventId);
+        return { statusCode: 200, body: {
+          received: true, matched: true, updated: false,
+          agreementId: agreement.id, reason: 'evia_terminal_state_immutable'
+        }};
+      }
       console.info('[EviaDiag] webhook_partial_update_ok', {
         agreementId: shortId(agreement.id),
         requestId: shortId(normalized.requestId),
@@ -858,7 +886,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
       body: {
         received: true,
         matched: true,
-        updated: Boolean(emailStatuses),
+        updated: Boolean(emailStatuses && agreement.signatories_status === JSON.stringify(emailStatuses)),
         agreementId: agreement.id
       }
     };
@@ -931,7 +959,7 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     ? markAllSignatoriesCompleted(agreement.signatories_status, safeCompletedAt.toISOString())
     : null;
 
-  await runQuery(`
+  const terminalUpdated = await runQuery(`
     UPDATE dbo.agreements
     SET
       status = @agreementStatus,
@@ -961,8 +989,22 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
         ELSE signature_pdf_url
       END,
       updatedat = SYSUTCDATETIME()
+    OUTPUT INSERTED.id
     WHERE id = @agreementId
       AND eviasignreference = @requestId
+      AND (
+        (
+          @signatureStatus = 'completed'
+          AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'rejected', 'completed', 'terminated', 'expired')
+          AND LOWER(COALESCE(signature_status, '')) <> 'failed'
+        )
+        OR
+        (
+          @signatureStatus = 'failed'
+          AND LOWER(COALESCE(status, '')) NOT IN ('signed', 'cancelled', 'rejected', 'completed', 'terminated', 'expired')
+          AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
+        )
+      )
   `, {
     agreementId: agreement.id,
     requestId: normalized.requestId,
@@ -972,6 +1014,14 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     completedSignatories: completedSignatories ? JSON.stringify(completedSignatories) : null,
     signedDocumentUrl
   });
+
+  if (!terminalUpdated.length) {
+    await markWebhookEventProcessed(webhookEventId);
+    return { statusCode: 200, body: {
+      received: true, matched: true, updated: false,
+      agreementId: agreement.id, reason: 'evia_terminal_state_immutable'
+    }};
+  }
 
   console.info('[EviaDiag] webhook_terminal_update_ok', {
     agreementId: shortId(agreement.id),
