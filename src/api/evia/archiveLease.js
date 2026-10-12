@@ -222,6 +222,7 @@ export const finalizeEviaArchiveLease = async ({
   update.input('requestId', requestId);
   update.input('signedDocumentUrl', signedDocumentUrl);
   const winner = await update.query(`
+    DECLARE @updated TABLE (id UNIQUEIDENTIFIER NOT NULL);
     UPDATE dbo.agreements
     SET signed_document_url = @signedDocumentUrl,
         signeddocumenturl = @signedDocumentUrl,
@@ -230,14 +231,15 @@ export const finalizeEviaArchiveLease = async ({
         signeddate = COALESCE(signeddate, SYSUTCDATETIME()),
         signature_completed_at = COALESCE(signature_completed_at, SYSUTCDATETIME()),
         updatedat = SYSUTCDATETIME()
-    OUTPUT INSERTED.id
+    OUTPUT INSERTED.id INTO @updated(id)
     WHERE id = @agreementId AND tenant_id = @tenantId
       AND eviasignreference = @requestId
       AND signed_document_url IS NULL AND signeddocumenturl IS NULL
       AND signature_pdf_url IS NULL
       AND LOWER(COALESCE(status, '')) NOT IN
         ('cancelled', 'rejected', 'terminated', 'expired')
-      AND LOWER(COALESCE(signature_status, '')) <> 'failed'
+      AND LOWER(COALESCE(signature_status, '')) <> 'failed';
+    SELECT id FROM @updated;
   `);
   if (winner.recordset?.length !== 1) {
     throw err('EVIA_ARCHIVE_TERMINAL_CONFLICT', 'Agreement state changed before archive publication.');
