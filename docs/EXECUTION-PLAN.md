@@ -860,6 +860,44 @@ statuses as an incidental consequence of fail-closed hardening.
 Phase 4 remains OPEN.
 ```
 
+## Phase 4 server-authoritative manual-signing transitions — next active slice
+
+```text
+PR #236: the client now fails closed after an authoritative manual sign
+API failure, without secondary agreement/property/unit/renter updates.
+Exact-head CI run 38234889222 GREEN at
+570f65f5a17e39d5d99b41e2646c22114a253a77;
+merged SHA 7bb36019c2a4360cdf26d0777b047a1b9d62156c.
+Production run 38235488928 SUCCESS: Azure revision 0000239
+Ready, public exact deployed SHA 7bb36019c2a4360cdf26d0777b047a1b9d62156c,
+live /api/mssql/health MSSQL connection ready and browser runtime config OK.
+
+ACTIVE bounded change: the server-side manual admin sign transaction must
+lock its tenant-scoped agreement before evaluating eligibility. Manual sign
+is allowed only from canonical pending/pending_signature states and only
+when no Evia request/document/signature flow owns the agreement. Repeated
+manual sign of an already-signed non-Evia record is a read-only success:
+no signeddate rewrite or property/unit/renter association replay.
+Foreign tenant returns 404, invalid or terminal state and Evia-managed
+records return explicit 409. SQL transaction protects agreement status
+and all related property, unit and renter-association updates; a failure
+of any related update rolls the agreement state back. UI sign action
+uses the same central eligibility predicate. No migrations, credential
+changes, billing mutations or Evia webhook behavior changes.
+
+PROOF GATES: pure state-policy tests; real disposable SQL Server tests for
+tenant A/B isolation, rejected states, Evia guards, rollback by induced
+property-update failure, replay and concurrent requests. Require exact PR
+head build/authorization + disposable SQL acceptance GREEN before merge;
+production Ready revision/public exact SHA/live MSSQL separately required.
+
+RISK / NEXT: the transactional manual-sign route is distinct from Evia
+webhook completion and retained-document authority. Later slices must
+review Evia webhook idempotency and manual-versus-Evia authority policies
+independently, as well as the legacy global app_users tenant_id versus
+multi-membership renter assignment concern. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
