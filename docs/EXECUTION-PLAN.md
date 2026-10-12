@@ -1340,6 +1340,52 @@ CI must all be GREEN before merge; production acceptance separately
 requires Azure Ready/exact public SHA/live MSSQL. Phase 4 OPEN.
 ```
 
+## Phase 4 Evia expired-worker storage race and read-only orphan triage
+
+```text
+PR #247 default-off callback canary: exact-head build and authorization
+workflow #38321632557 GREEN, dedicated Evia tests #38321632595 GREEN,
+and disposable two-tenant SQL Server acceptance #38321632586 GREEN
+on PR head a26066db4752b2c3890af3ce42ffa25c341713e0.
+Merged SHA 945a556e99cae93b8782cd48812161bb3e3ffc71.
+Main production workflow #38321788228 SUCCESS: Azure revision
+0000250 Ready, public exact build SHA
+945a556e99cae93b8782cd48812161bb3e3ffc71, live MSSQL health
+connection ready; main Evia tests #38321788268 and webhook security
+#38321788344 GREEN. The canary remains OFF by default and no
+production allowlists were changed.
+
+ACTIVE independent Phase 4 slice: require real disposable SQL Server
+and mocked immutable storage proof for a stalled external upload
+from worker A, SQL lease expiry and takeover by worker B, successful
+signed PDF + audit publication by B, and delayed A upload completion.
+B must be authoritative; A's renewed/finalized SQL attempt must be
+rejected as EVIA_ARCHIVE_LEASE_FENCED. Both attempts' staged keys
+must stay disjoint, B's signed/completion timestamps and audit URL
+unchanged, A delivery pending until validated read-only HTTP-ack
+recovery. Prove SQL queries can run while storage is blocked, tenant
+isolation, and no automatic storage deletion.
+
+Introduce read-only scoped staging-object triage to identify
+potential orphan candidates for human review; never auto delete.
+At least 30 days of observed age, valid tenant/agreement/attempt
+path, matching authoritative lease and agreement snapshot, and
+no winning PDF/audit reference or active matching attempt must
+all be proven before calling it a *manual review candidate*.
+Bad/missing metadata and younger files remain protected; all
+results set mayDelete=false. Overwritten lease event history
+is insufficient for safe automatic cleanup, so no purge API or
+deletion job is authorized. No live Evia callback, production
+storage, payment mutation, schema DDL or canary activation.
+
+REQUIRED exact-head gates: build/authorization, Evia document tests,
+disposable two-tenant SQL Server/browser proof; after green merge,
+separate Azure revision Ready/public merge SHA/MSSQL acceptance.
+Remain blocked on append-only orphan attempt history, audit-trail
+access policy and actual authenticated HTTP crash-recovery proof
+before any canary activation. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
