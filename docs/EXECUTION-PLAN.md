@@ -976,6 +976,50 @@ acceptance must be green before merge; then Azure Ready/public SHA/live
 MSSQL attestation must pass. Phase 4 remains OPEN.
 ```
 
+## Phase 4 Evia terminal order and completion protection — bounded slice
+
+```text
+PR #239: concurrent Evia delivery claims serialized by SQL application
+locks for tenant/request/delivery with retryable in-flight response,
+processed replay, and stale lease recovery. Exact-head Evia webhook
+test run 38240567886 GREEN, build/authorization run 38240567884 GREEN,
+and disposable two-tenant SQL Server run 38240568071 GREEN.
+Merge SHA ce1ea66d694acde96a20277a9868ad4dcbdbd74f.
+Production run 38240778054 SUCCESS: Azure revision 0000242 Ready,
+exact public serving SHA ce1ea66d694acde96a20277a9868ad4dcbdbd74f
+and live MSSQL connection ready; webhook security setup run 38240778082
+also GREEN.
+
+ACTIVE bounded Evia terminal-order slice: authenticated, scoped Evia
+cancellation/rejection/completion deliveries must not reverse previously
+finalized signed/completed or cancelled/rejected agreement states.
+Previously finalized state makes a delayed conflicting event an
+audited, processed, read-only acknowledgement. An already signed
+agreement with a missing locally retained signed document may still
+handle a completion callback for document recovery; signed timestamps
+remain preserved. A stale signatory-completed callback must not turn
+completed signature_status back into in_progress. SQL UPDATE must use a
+live-state predicate and OUTPUT check, not only a stale JS read, to
+prevent a concurrent terminal winner from being overwritten.
+Keep existing HMAC/callback verification and tenant/request scoping.
+No schema/migration, production webhook injections, payment or signing
+state changes in tests. Real disposable two-tenant SQL Server proof
+covers signed -> late rejected/cancelled/signer, cancelled -> late
+completed, valid pending -> rejected -> late completed, audit rows,
+timestamps, signed document and tenant isolation.
+
+IMPORTANT: This policy applies a first-terminal-event-wins model,
+except for completed-PDF recovery. It does not fully serialize
+different delivery IDs or enforce ordering by provider eventTime.
+A concurrent completion may archive a document before losing the
+conditional final-state update. Document archival coordination,
+inconsistent terminal repairs and long-running claim heartbeat
+remain independent follow-ups. Do not claim Phase 4 closed.
+Required merge gates: exact head build/authorization, dedicated
+Evia webhook tests, and real disposable SQL Server acceptance.
+Production Azure Ready/public SHA/MSSQL verification is separate.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

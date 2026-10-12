@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EVIA_CLAIM_LEASE_MS } from '../src/api/evia/deliveryClaim.js';
+import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from '../src/api/evia/terminalPolicy.js';
 import {
   createEviaCallbackToken,
   extractSignedDocumentUrl,
@@ -261,4 +262,60 @@ test('Evia claim is SQL-serialized by tenant, request, and delivery with crash r
   assert.ok(handler.indexOf('claimEviaWebhookDelivery(') < handler.indexOf('updateSignatoryEmailDelivery('));
   assert.match(handler, /statusCode: 503,/);
   assert.match(handler, /EVIA_DELIVERY_IN_PROGRESS/);
+});
+
+test('terminal Evia states are monotonic across delayed completion, cancellation and rejection', () => {
+  const completed = { status: 'signed', signature_status: 'completed' };
+  const cancelled = { status: 'cancelled', signature_status: 'failed' };
+  const rejected = { status: 'rejected', signature_status: 'failed' };
+  for (const agreement of [completed, cancelled, rejected]) {
+    assert.equal(isEviaTerminalAgreement(agreement), true);
+    for (const nextState of [
+      { agreementStatus: 'signed', signatureStatus: 'completed' },
+      { agreementStatus: 'cancelled', signatureStatus: 'failed' },
+      { agreementStatus: 'rejected', signatureStatus: 'failed' },
+      null
+    ]) {
+      const decision = evaluateEviaTerminalDelivery({
+        agreement, nextState, hasRetainedSignedDocument: true
+      });
+      assert.equal(decision.action, 'ignore');
+    }
+  }
+  assert.equal(evaluateEviaTerminalDelivery({
+    agreement: { status: 'pending_signature', signature_status: 'in_progress' },
+    nextState: { agreementStatus: 'signed', signatureStatus: 'completed' }
+  }).action, 'process');
+});
+
+test('signed-document repair is the sole permitted terminal completion retry', () => {
+  const agreement = { status: 'signed', signature_status: 'completed' };
+  const nextState = { agreementStatus: 'signed', signatureStatus: 'completed' };
+  assert.equal(evaluateEviaTerminalDelivery({
+    agreement, nextState, hasRetainedSignedDocument: false
+  }).action, 'recover_document');
+  assert.equal(evaluateEviaTerminalDelivery({
+    agreement, nextState, hasRetainedSignedDocument: true
+  }).action, 'ignore');
+  for (const oldState of [
+    { status: 'cancelled', signature_status: 'failed' },
+    { status: 'rejected', signature_status: 'failed' },
+    { status: 'signed', signature_status: 'failed' }
+  ]) {
+    assert.equal(evaluateEviaTerminalDelivery({
+      agreement: oldState, nextState, hasRetainedSignedDocument: false
+    }).action, 'ignore');
+  }
+});
+
+test('SQL update fences reject stale partial callbacks and terminal overrides', () => {
+  const source = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  const processing = source.slice(source.indexOf('export const processEviaWebhook = '));
+  assert.match(processing, /evaluateEviaTerminalDelivery\(/);
+  assert.match(processing, /if \(terminalDecision\.action === 'ignore'\)/);
+  assert.match(processing, /OUTPUT INSERTED\.id/);
+  assert.match(processing, /LOWER\(COALESCE\(signature_status, ''\)\) NOT IN \('completed', 'failed'\)/);
+  assert.match(processing, /@signatureStatus = 'completed'/);
+  assert.match(processing, /@signatureStatus = 'failed'/);
+  assert.match(processing, /if \(!terminalUpdated\.length\)/);
 });
