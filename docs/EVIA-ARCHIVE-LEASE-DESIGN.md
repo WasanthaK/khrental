@@ -145,3 +145,38 @@ matching it as a provider delivery or exposing it in provider event views.
 - Do not activate the new lease in live webhook until all these gates are
   green and a separately reviewed migration slice explicitly replaces the
   old archive lock.
+
+## Prepared dormant staging coordinator (not yet a webhook handler)
+
+`src/api/evia/archiveCoordinator.js` now composes the existing SQL lease
+operations into a **dormant** fenced PDF staging attempt. It obtains a short
+tenant/request-bound lease, passes the exact lease `attemptId` into the
+optional immutable storage path, renews ownership while external staging is
+active, drains any in-flight heartbeat, renews once again before publication,
+and only returns success following a fenced `finalizeEviaArchiveLease`.
+
+For documents, the `stageEviaDocumentsForFencedLease` adapter uses the
+existing validated inline signed-document storage first and falls back to
+the verified Evia API retrieval contract. A missing signed PDF is an error,
+not an authoritative completion. A busy lease returns retryable status, and
+a completed lease short-circuits without another upload. Renewal loss
+requests cancellation through an `AbortSignal`, but storage drivers may not
+honor cancellation; immutable attempt IDs and fenced finalization therefore
+remain the decisive protections.
+
+The module is **not imported into the live Evia webhook**. No background
+jobs or live provider callbacks invoke it. The existing cross-replica
+agreement SQL lock and per-replica archive capacity guard remain the
+production authority. This module does not yet mark the source delivery
+event processed, transfer verified signer metadata, publish the completed
+audit trail through its own canonical field, or implement orphan cleanup.
+All remain required before any live switch.
+
+The dedicated Evia test covers the heartbeat, stolen-owner fencing, empty
+signed-PDF failure, inline/API fallback, tenant/attempt identity preservation
+and lack of webhook integration. Real disposable two-tenant SQL Server tests
+exercise two workers with one blocked fake storage operation: one claim wins,
+another observes busy, SQL remains queryable, the winner alone publishes a
+staged PDF and audit pair, and replay and foreign-tenant calls are
+non-mutating. These are pre-production integration proofs, not authorization
+to flip runtime transport.

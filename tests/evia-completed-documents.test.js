@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  EVIA_ARCHIVE_HEARTBEAT_MS,
+  runDormantEviaFencedArchive,
+  stageEviaDocumentsForFencedLease
+} from '../src/api/evia/archiveCoordinator.js';
+import {
   EVIA_ARCHIVE_LEASE_EVENT, EVIA_ARCHIVE_LEASE_MS,
   validateEviaArchiveLeaseIdentity, validateEviaStagedArchiveUrl
 } from '../src/api/evia/archiveLease.js';
@@ -516,4 +521,145 @@ test('lease is a dormant separate event type and live webhook retains transactio
   assert.doesNotMatch(webhook, /acquireEviaArchiveLease|finalizeEviaArchiveLease/);
   assert.match(webhook, /withEviaAgreementArchiveLock/);
   assert.match(webhook, /withEviaArchiveCapacity/);
+});
+
+test('dormant archive coordinator leaves busy and complete claims without storage side effects', async () => {
+  const id = { tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1' };
+  let stored = 0;
+  const args = {
+    ...id,
+    stageDocuments: async () => { stored++; throw new Error('storage must not run'); },
+    renew: async () => { throw new Error('renew must not run'); },
+    finalize: async () => { throw new Error('finalize must not run'); }
+  };
+  assert.equal(EVIA_ARCHIVE_HEARTBEAT_MS, 5 * 60 * 1000);
+  assert.deepEqual(await runDormantEviaFencedArchive({
+    ...args, acquire: async () => ({ status: 'busy' })
+  }), { status: 'busy', retryable: true });
+  assert.deepEqual(await runDormantEviaFencedArchive({
+    ...args, acquire: async () => ({ status: 'complete', url: '/storage/documents/signed.pdf' })
+  }), { status: 'complete', signedDocumentUrl: '/storage/documents/signed.pdf' });
+  assert.equal(stored, 0);
+});
+
+test('dormant coordinator renews ownership during PDF staging, then fences before publication', async () => {
+  const calls = [];
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  const identity = { tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1' };
+  const signedDocumentUrl = '/storage/documents/staged/' + attemptId + '/Lease.pdf';
+  const auditTrailUrl = '/storage/documents/staged/' + attemptId + '/audit.pdf';
+  const result = await runDormantEviaFencedArchive({
+    ...identity, heartbeatMs: 10,
+    acquire: async args => { calls.push(['acquire', args]); return { status: 'acquired', attemptId }; },
+    renew: async args => { calls.push(['renew', args]); return { status: 'renewed' }; },
+    stageDocuments: async args => {
+      calls.push(['stage', args.attemptId]);
+      assert.equal(args.archiveAttemptId, attemptId, 'lease token must namespace immutable uploads');
+      assert.equal(args.signal.aborted, false);
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return { signedDocumentUrl, auditTrailUrl };
+    },
+    finalize: async args => {
+      calls.push(['finalize', args]);
+      return { status: 'published', attemptId: args.attemptId, signedDocumentUrl: args.signedDocumentUrl };
+    }
+  });
+  assert.equal(result.status, 'published');
+  assert.ok(calls.filter(x => x[0] === 'renew').length >= 2, 'heartbeat plus required final renewal');
+  assert.equal(calls[0][0], 'acquire');
+  assert.equal(calls.findIndex(x => x[0] === 'stage') < calls.findIndex(x => x[0] === 'finalize'), true);
+  const final = calls.at(-1);
+  assert.equal(final[0], 'finalize');
+  assert.deepEqual(final[1], { ...identity, attemptId, signedDocumentUrl, auditTrailUrl });
+});
+
+test('expired or stolen owner aborts staging and cannot finalize even if upload completes', async () => {
+  const lost = Object.assign(new Error('worker lease taken over'), { code: 'EVIA_ARCHIVE_LEASE_FENCED' });
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  let finalizeCount = 0;
+  let aborted;
+  await assert.rejects(runDormantEviaFencedArchive({
+    tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1',
+    heartbeatMs: 5, logger: { warn() {} },
+    acquire: async () => ({ status: 'acquired', attemptId }),
+    renew: async () => { throw lost; },
+    stageDocuments: async ({ signal }) => {
+      await new Promise(resolve => {
+        if (signal.aborted) return resolve();
+        signal.addEventListener('abort', resolve, { once: true });
+      });
+      aborted = signal.aborted;
+      // Deliberately represent an upload that ignored abort and finished.
+      return { signedDocumentUrl: '/storage/documents/staged/old.pdf' };
+    },
+    finalize: async () => { finalizeCount++; }
+  }), error => error === lost);
+  assert.equal(aborted, true);
+  assert.equal(finalizeCount, 0);
+});
+
+test('failed PDF retrieval or missing signed PDF does not publish an authoritative URL', async () => {
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  const failure = new Error('mock Evia download refused');
+  let published = 0;
+  let renewals = 0;
+  const common = {
+    tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1',
+    acquire: async () => ({ status: 'acquired', attemptId }),
+    renew: async () => { renewals++; return { status: 'renewed' }; },
+    finalize: async () => { published++; }
+  };
+  await assert.rejects(runDormantEviaFencedArchive({
+    ...common, stageDocuments: async () => { throw failure; }
+  }), error => error === failure);
+  await assert.rejects(runDormantEviaFencedArchive({
+    ...common, stageDocuments: async () => ({ auditTrailUrl: '/storage/documents/staged/audit.pdf' })
+  }), error => error.code === 'EVIA_ARCHIVE_SIGNED_PDF_REQUIRED');
+  assert.equal(published, 0);
+  assert.equal(renewals, 0);
+});
+
+test('fenced staging prefers verified inline documents and keeps scoped fallback identity', async () => {
+  const identity = {
+    tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1',
+    archiveAttemptId: '33333333-3333-4333-8333-333333333333'
+  };
+  const calls = [];
+  const common = {
+    ...identity, documents: [{ DocumentName: 'Lease.pdf' }],
+    inlineStore: async args => {
+      calls.push(['inline', args]);
+      return { signedDocumentUrl: '/storage/documents/inline.pdf' };
+    },
+    retrieve: async args => {
+      calls.push(['retrieve', args]);
+      return { signedDocumentUrl: '/storage/documents/api.pdf' };
+    }
+  };
+  await assert.rejects(stageEviaDocumentsForFencedLease({
+    ...common, archiveAttemptId: null
+  }), error => error.code === 'EVIA_ARCHIVE_ATTEMPT_ID_REQUIRED');
+  assert.deepEqual(calls, [], 'missing lease token must not touch storage');
+  const preferred = await stageEviaDocumentsForFencedLease(common);
+  assert.equal(preferred.signedDocumentUrl, '/storage/documents/inline.pdf');
+  assert.deepEqual(calls.map(c => c[0]), ['inline']);
+  calls.length = 0;
+  const fallback = await stageEviaDocumentsForFencedLease({
+    ...common,
+    inlineStore: async args => { calls.push(['inline', args]); return { auditTrailUrl: 'audit-only' }; },
+    retrievalOptions: { accessToken: 'test-oauth', tenantId: 'foreign', agreementId: 'wrong', archiveAttemptId: 'stale', requestId: 'wrong' }
+  });
+  assert.equal(fallback.signedDocumentUrl, '/storage/documents/api.pdf');
+  assert.deepEqual(calls.map(c => c[0]), ['inline', 'retrieve']);
+  assert.deepEqual(
+    Object.fromEntries(['tenantId', 'agreementId', 'requestId', 'archiveAttemptId'].map(k => [k, calls[1][1][k]])),
+    identity
+  );
+});
+
+test('dormant Evia coordinator is not wired into the verified production webhook', () => {
+  const source = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /runDormantEviaFencedArchive|stageEviaDocumentsForFencedLease/);
+  assert.match(source, /withEviaAgreementArchiveLock/);
+  assert.match(source, /withEviaArchiveCapacity/);
 });

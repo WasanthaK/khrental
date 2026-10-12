@@ -1190,6 +1190,55 @@ compatibility-client removals before Phase 4 closure. The dormant core
 alone DOES NOT satisfy migration or production runtime safety.
 ```
 
+## Phase 4 dormant Evia fenced staging orchestration — bounded slice
+
+```text
+PR #244 dormant SQL archive lease core: build/authorization workflow
+38314351787 GREEN, dedicated Evia tests 38314351775 GREEN, disposable
+two-tenant SQL acceptance 38314351778 GREEN at exact-head SHA
+8c55b032372dd387b77f1d93ebe2facf1b52dc6f. Merged SHA
+e4a264b028b5b9dfc80fa63018bbc5683c642d18.
+Production release workflow 38314498863 SUCCESS: Azure revision
+0000247 Ready, public exact serving SHA
+e4a264b028b5b9dfc80fa63018bbc5683c642d18, MSSQL live connection
+ready. Evia main-branch tests 38314498940 GREEN and Evia security
+workflow 38314499101 GREEN. The lease module is deployed but DORMANT.
+
+ACTIVE bounded change: prepare an independent, unreferenced Evia
+archiveCoordinator.js composing acquire/renew/finalize lease operations.
+An attempt holding a fresh fenced UUID uses that EXACT token as the
+immutable PDF and audit staging path. Both verified inline-document
+storage and authenticated Evia API fallback are supported. Heartbeat
+renews during slow external work; failed ownership renewal aborts
+cooperative staging and always prevents final SQL publication even if
+a storage driver ignores cancellation. After uploads, drain the
+heartbeat and renew once again before SQL publication. No signed PDF
+means fail closed. Busy claim returns retryable; already complete is
+read only. Verified tenant/agreement/request identity cannot be
+overridden by retrieval options.
+
+Acceptance: dedicated Evia tests for busy/complete, controlled slow
+staging and heartbeat, expired-owner fencing, failure/no-signed-PDF,
+inline/API fallback, attempt token continuity and unchanged live
+webhook. Real disposable two-tenant SQL test with blocked mock
+external upload proves another worker returns busy, SQL remains
+queryable, final publication is owner-fenced with immutable signed
+PDF and audit pair, completion replay is read-only and foreign
+tenant cannot publish.
+
+IMPORTANT: this is STILL NOT A LIVE CALLBACK SWITCH. Actual webhook
+HMAC/callback-token authorization, signatory metadata and provider
+delivery-event bookkeeping are unchanged. Existing live archiveLock
+and archiveCapacity remain authoritative. Before any live activation,
+verify event audit, signatory completion, long-work expiry/cancellation,
+post-commit acknowledgement, staged cleanup and real two-tenant
+storage race recovery. No production SQL DDL, callback replay,
+agreement mutation, billing write or external PDF upload in
+acceptance. Require exact PR-head build/authorization, Evia tests
+and disposable SQL/browser green before merge, followed by separate
+Azure Ready/exact SHA/MSSQL release proof. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
