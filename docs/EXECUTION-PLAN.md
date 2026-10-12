@@ -610,6 +610,32 @@ Remaining: account/payment interaction and actual multi-membership tenant switch
 Azure external build SHA, Ready revision and production MSSQL runtime attestation.
 ```
 
+## Phase 4 renter invoice browser data acceptance — PR #228
+
+```text
+PR #227: authenticated renter utility-history browser acceptance merged as
+SHA 23f911bec1f411a6e3e8c4ecffd6eea1b8d99e61.
+
+PR #228: exact-head build CI #634 (run 38216343608), disposable two-tenant
+SQL Server browser acceptance #9 (run 38216343572), and protected browser
+smoke #3 (run 38216343500) all passed at head
+bcb49a1fd5550f3df3babf4812920f60b194d7ef.
+Merge SHA: 82b439e0d9b0dae93a24c38c17f7f0d58710b556.
+Result: MERGED — two different authenticated renters see their own invoice
+property label and amount, while prior tenant-scoped SQL/HTTP assertions remain.
+Production Azure Ready revision, exact external serving SHA and live MSSQL
+health remain unverified, so deployment acceptance and Phase 4 closure remain open.
+
+ACTIVE next item: disposable authenticated renter invoice-account/payment
+read and non-mutating browser interaction acceptance. Verify tenant A/B own
+invoice account/receipt view, outstanding arithmetic and foreign invoice
+denial through existing dedicated billing routes. Preserve blocked direct
+invoice writes; do not submit payment proofs, create payments, change
+invoice status, access production credentials, or change production SQL.
+Follow with actual multi-membership tenant switching and production
+Azure/MSSQL attestation in separately gated slices.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
