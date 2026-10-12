@@ -424,7 +424,7 @@ async function createServer() {
     // Only fenced staged audit PDFs are changed; legacy routes are retained.
     async (req, res, next) => {
       try {
-        const objectPath = String(req.params[0] || req.path || '').replace(/^\\/+/, '');
+        const objectPath = String(req.params[0] || req.path || '').replace(/^[/]+/, '');
         const result = await authorizeFencedEviaAuditTrailRead({
           bucket: req.params.bucket,
           path: objectPath,
