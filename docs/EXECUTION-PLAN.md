@@ -1106,6 +1106,47 @@ before merge, then production Azure Ready/public exact SHA/MSSQL proof.
 Phase 4 remains OPEN.
 ```
 
+## Phase 4 Evia immutable archive staging precondition — bounded preparation
+
+```text
+PR #242 archive pool backpressure: exact-head build/authorization
+workflow 38310719490 GREEN, dedicated Evia workflow 38310719400 GREEN,
+and disposable two-tenant SQL Server workflow 38310719452 GREEN.
+Merged as 1c70123204f89047dbf66faa20120db43165cfe4.
+Production workflow 38310894009 SUCCESS: latest Azure revision 0000245
+Ready, public exact serving SHA 1c70123204f89047dbf66faa20120db43165cfe4,
+live MSSQL connection ready, Evia security configuration 38310894013 GREEN.
+Archive admission default of two per replica is now production-accepted.
+
+ACTIVE bounded preparation (non-runtime): support optional immutable,
+attempt-scoped staging paths for both completed Evia inline webhook PDFs
+and Evia API-retrieved signed PDFs and audit trails. Each attempt is
+identified by a fresh opaque UUID; one attempt stages under
+tenants/{tenant}/agreements/{agreement}/signed/staged/{attempt}/{file}.
+Identifiers are validated and the public URL shape remains storage-relative.
+When no archive attempt is specified, previous production document paths,
+uploads and returned URLs MUST stay exactly unchanged. The live webhook
+continues using existing cross-replica SQL application lock and existing
+per-replica admission guard; staged paths are NOT yet activated in runtime.
+No SQL migration, new secrets, webhook authority or production files are
+changed by this preparatory slice.
+
+Proof: unit tests for two distinct attempts staging same named PDF and
+audit trail without collision, successful API download staging, invalid
+identifiers, backward-compatible default paths and unchanged webhook
+locking. DESIGN ONLY protocol and future fences are documented in
+docs/EVIA-ARCHIVE-LEASE-DESIGN.md. Exact-head build/authorization,
+dedicated Evia tests and disposable SQL/browser acceptance must be green
+before merge, followed by exact merge-SHA production release evidence.
+
+NEXT AFTER ACCEPTANCE: implement a durable, tenant-scoped, fenced archive
+lease with short claim/commit transactions, a live lease-token check
+at promotion, worker crash takeover, and safe staged-object cleanup
+policy. Until all these pass real two-tenant SQL race proofs, retain
+the existing long-held SQL lock and archive capacity limit. Phase 4
+remains OPEN and legacy compatible clients remain to be audited.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
