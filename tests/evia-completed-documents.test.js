@@ -554,6 +554,7 @@ test('dormant coordinator renews ownership during PDF staging, then fences befor
     renew: async args => { calls.push(['renew', args]); return { status: 'renewed' }; },
     stageDocuments: async args => {
       calls.push(['stage', args.attemptId]);
+      assert.equal(args.archiveAttemptId, attemptId, 'lease token must namespace immutable uploads');
       assert.equal(args.signal.aborted, false);
       await new Promise(resolve => setTimeout(resolve, 60));
       return { signedDocumentUrl, auditTrailUrl };
