@@ -828,14 +828,12 @@ export const cancelAgreement = async (agreementId, cancelReason = '') => {
  */
 export const deleteAgreement = async (agreementId) => {
   try {
+    // An authoritative MSSQL failure must not cause a second delete attempt
+    // through the generic compatibility client (especially after 403/409/5xx).
     if (isMssqlApiEnabled()) {
-      try {
-        return await requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
-          method: 'DELETE'
-        });
-      } catch (mssqlError) {
-        console.error('Error deleting agreement in MSSQL, falling back to the local compatibility layer:', mssqlError);
-      }
+      return await requestMssqlApi(`/api/mssql/agreements/${agreementId}`, {
+        method: 'DELETE'
+      });
     }
 
     const { data, error } = await platformClient
@@ -845,10 +843,7 @@ export const deleteAgreement = async (agreementId) => {
       .select('*')
       .single();
 
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
     console.error('Error deleting agreement:', error);

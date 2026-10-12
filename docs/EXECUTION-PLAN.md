@@ -747,6 +747,31 @@ remaining agreement/property compatibility operations and select one
 bounded contract-first migration. Phase 4 remains OPEN.
 ```
 
+## Phase 4 authoritative agreement DELETE (bounded follow-on)
+
+```text
+PR #232: agreement-template get/list/create/update/delete fail closed when
+MSSQL mode is enabled. Exact-head test/build workflow 38230100641 GREEN.
+Merge SHA 6558e9410889b20527cbbb9fae4811506029c759.
+Production merge-SHA workflow 38230264800 must independently confirm
+Azure latest Ready revision/public exact SHA/MSSQL health; do not
+declare production release accepted while this workflow is running.
+
+ACTIVE independent slice: fail closed only deleteAgreement() when the
+authoritative DELETE /api/mssql/agreements/:id fails. It must never
+retry against platformClient table deletion after 401/403/404/409/5xx.
+Legacy compatibility deletion remains available solely with MSSQL
+explicitly disabled. No agreement schema/migration, signing-state,
+cancellation workflow, permission broadening or production data writes.
+Contract tests exercise actual service implementation and one-delete
+semantics, including API success/failure and disabled-MSSQL behavior.
+
+Follow-up: finish authoritative transport/route inventory and verify
+agreement create/sign/updates and external signatures separately.
+Phase 4 remains OPEN. This delete hardening is not proof of overall
+agreement lifecycle parity.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
