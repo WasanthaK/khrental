@@ -68,7 +68,7 @@ const withLeaseTransaction = async (identity, operation) => {
     leaseRequest.input('agreementId', agreementId);
     leaseRequest.input('eventType', EVIA_ARCHIVE_LEASE_EVENT);
     const current = await leaseRequest.query(`
-      SELECT TOP 1 id, processed, updatedat,
+      SELECT TOP 1 id, processed, updatedat, SYSUTCDATETIME() AS serverNow,
              JSON_VALUE(raw_data, '$.attemptId') AS attemptId
       FROM dbo.webhook_events
       WHERE tenant_id = @tenantId
@@ -107,9 +107,12 @@ const assertCanComplete = agreement => {
   }
 };
 
-const leaseAgeValid = (lease, now = new Date()) => !!lease
+const leaseAgeValid = lease => !!lease
   && Number.isFinite(new Date(lease.updatedat).getTime())
-  && now.getTime() - new Date(lease.updatedat).getTime() < EVIA_ARCHIVE_LEASE_MS;
+  && Number.isFinite(new Date(lease.serverNow).getTime())
+  && new Date(lease.serverNow).getTime() >= new Date(lease.updatedat).getTime()
+  && new Date(lease.serverNow).getTime() - new Date(lease.updatedat).getTime()
+    < EVIA_ARCHIVE_LEASE_MS;
 
 // Staging URLs are allowed as input to a future *fenced* finalization only.
 // They must name the current winning attempt, never a stable production path.
