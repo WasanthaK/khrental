@@ -1147,6 +1147,49 @@ the existing long-held SQL lock and archive capacity limit. Phase 4
 remains OPEN and legacy compatible clients remain to be audited.
 ```
 
+## Phase 4 fenced Evia archive lease core — dormant SQL acceptance
+
+```text
+PR #243 immutable stage contract: exact-head build/authorization run
+38312502397 GREEN, Evia suite 38312502354 GREEN, disposable two-tenant
+SQL acceptance 38312502346 GREEN at 92c7c55e2e85b2e992f2b58477921d9e5542e112.
+Merge SHA 6619404650d7b1d46ddaa1807c5d310a6935698a.
+Production run 38312722143 SUCCESS: Azure latest revision 0000246 Ready,
+public build SHA 6619404650d7b1d46ddaa1807c5d310a6935698a exact,
+live /api/mssql/health connection ready, Evia security configuration
+workflow 38312722223 green.
+
+ACTIVE bounded follow-on: independently implement a DORMANT durable,
+tenant-scoped and Evia request-scoped archive-lease module using reserved
+webhook_events event_type 'evia.archive.lease.v1' (no schema change) and
+a transaction-owned app lock held only during SQL claim/renew/finalize.
+Each claim generates a fresh UUID attempt token and uses the SQL Server
+clock + updatedat for 15-minute expiry. A new worker may reclaim an
+expired token; stale workers must fail renewal and final publication.
+Final publication accepts only the current attempt's immutable signed
+PDF staging URL and verifies live tenant, Evia request and terminal
+agreement guards before atomically updating signed URL/status and
+marking the reserved lease event processed. Missing/other-tenant
+agreements fail closed. Existing signed document wins without another
+upload. SQL rollback must restore agreement and lease on failure.
+
+Critically, this slice IS NOT A LIVE WEBHOOK SWITCH. Existing Evia HMAC,
+delivery claims/events, manual signing, cross-replica archiveLock.js,
+archiveCapacity.js, document storage and callback completion workflow
+remain unchanged. Disposable Docker SQL Server acceptance must prove
+two concurrent claims, tenant isolation, expiry takeover, stale-token
+fencing, disjoint stage paths, one winning URL, stable replay, and
+transactional rollback. Unit tests validate stage URL and IDs. No
+production SQL DDL or live PDF writes; exact-head CI gates before merge
+and separate Ready/public SHA/MSSQL attestation afterwards.
+
+NEXT: integrated short-transaction lease + verified callback + immutable
+storage and signatory/audit status consistency, long-operation heartbeat,
+crash and post-commit recovery, orphan cleanup. Review remaining live
+compatibility-client removals before Phase 4 closure. The dormant core
+alone DOES NOT satisfy migration or production runtime safety.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
