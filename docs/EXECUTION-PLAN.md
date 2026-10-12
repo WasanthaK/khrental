@@ -1239,6 +1239,53 @@ and disposable SQL/browser green before merge, followed by separate
 Azure Ready/exact SHA/MSSQL release proof. Phase 4 remains OPEN.
 ```
 
+## Phase 4 dormant verified Evia delivery accounting and HTTP recovery
+
+```text
+PR #245 dormant fenced staging coordinator exact-head acceptance:
+build and authorization #38316076456 GREEN, Evia test #38316076503
+GREEN, disposable two-tenant SQL Server acceptance #38316076476
+GREEN, head 1fe5572ea22410ef007a7e5ca2dc7e354913b8b8.
+Merged SHA b85e93a2f789d9e77104654c69c2e63a04f3b756.
+Production deploy #38316295570 SUCCESS: Azure ready revision 0000248,
+public exact serving SHA b85e93a2f789d9e77104654c69c2e63a04f3b756,
+live MSSQL connection ready. Main-branch Evia tests #38316295555
+and security configuration #38316295567 GREEN.
+
+ACTIVE bounded follow-on: extend only the DORMANT Evia archive lease
+and coordinator to optionally accept a verified, tenant/request-scoped
+webhook_events completion event ID. The winner atomically completes its
+archive lease, signs the agreement, updates only its stored signer
+metadata (existing signed-at dates preserved) and marks the verified
+source delivery processed within ONE SQL transaction. Scoped event
+must be completion and must not be the reserved lease row.
+An authenticated new completion event delivered AFTER a successful
+commit but failed HTTP reply can acknowledge the already-retained
+signed agreement using a separate tenant/request/lease-processed
+short transaction, WITHOUT another PDF upload or agreement timestamp
+mutation. Already-processed replay is idempotent. Foreign tenant,
+foreign request, non-completion, invalid event ID and pending
+unpublished document all fail closed.
+
+Disposable two-tenant SQL Server integration proofs cover atomic
+source-event+lease+agreement completion, two signatories, preserved
+historic dates, negative tenant/request and event-type cases,
+new-delivery lost-HTTP-ack recovery, replay timestamp stability
+and no false acknowledgement for unpublished PDF. Unit contract
+tests cover signer metadata, coordinator delivery propagation and
+live webhook disconnection. No schema DDL, live callback,
+manual-signing/billing update or storage upload from tests.
+
+Critical: this remains a DORMANT PREPARATION PR; the existing live
+HMAC/callback-token handler, event logging, agreement archive SQL lock
+and concurrency guard are unchanged. Before live activation prove
+verified callback integration, signer completion parity, audit trail
+discovery and safe orphan cleanup with crash/race SQL+storage tests.
+Require exact-head build/authorization, Evia and disposable SQL/browser
+green before merge; verify Azure Ready/exact public SHA/MSSQL after.
+Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
