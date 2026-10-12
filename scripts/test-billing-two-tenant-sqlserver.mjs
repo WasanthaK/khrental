@@ -82,6 +82,40 @@ async function verify(pool, item) {
   return guid(invoice.id);
 }
 
+// Seed synthetic payment history directly into the disposable fixture only.
+// This proves authenticated account/receipt READ behavior, not payment creation.
+async function seedAccountHistory(pool, item, invoiceId, tag, verifiedAmount, pendingAmount) {
+  const verified = await first(pool,
+    `INSERT INTO payments
+       (tenant_id, invoiceid, propertyid, renteeid, amount, paymentmethod,
+        transactionreference, paymentdate, status)
+     OUTPUT INSERTED.id
+     VALUES (@tenantId, @invoiceId, @propertyId, @renteeId, @amount,
+             'bank_transfer', @reference, '2026-10-05', 'verified')`,
+    { tenantId: item.tenantId, invoiceId, propertyId: item.propertyId,
+      renteeId: item.renteeId, amount: verifiedAmount,
+      reference: 'FIXTURE-' + tag + '-VERIFIED' });
+  await query(pool,
+    `INSERT INTO payments
+       (tenant_id, invoiceid, propertyid, renteeid, amount,
+        paymentmethod, transactionreference, paymentdate, status)
+     VALUES (@tenantId, @invoiceId, @propertyId, @renteeId, @amount,
+             'bank_transfer', @reference, '2026-10-06', 'pending')`,
+    { tenantId: item.tenantId, invoiceId, propertyId: item.propertyId,
+      renteeId: item.renteeId, amount: pendingAmount,
+      reference: 'FIXTURE-' + tag + '-PENDING' });
+  item.receiptNumber = 'TEST-RECEIPT-' + tag;
+  item.outstanding = item.expected - verifiedAmount;
+  item.verifiedAmount = verifiedAmount;
+  item.pendingAmount = pendingAmount;
+  await query(pool,
+    `INSERT INTO payment_receipts
+       (tenant_id, invoice_id, payment_id, receipt_number, amount)
+     VALUES (@tenantId, @invoiceId, @paymentId, @receiptNumber, @amount)`,
+    { tenantId: item.tenantId, invoiceId, paymentId: verified.id,
+      receiptNumber: item.receiptNumber, amount: verifiedAmount });
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -173,6 +207,7 @@ async function main() {
     const { createAuthRecord, issueAuthSession, createSessionAuthMiddleware } =
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
+    const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
     const { createMssqlRouter } = await import('../src/api/mssql/router.js');
     const { guardBillingMssqlCompatibility } =
       await import('../src/api/platform/billingMutationGuard.js');
@@ -201,6 +236,7 @@ async function main() {
     app.use(express.json());
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
+    app.use('/api/billing', createBillingRouter());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
@@ -305,6 +341,25 @@ async function main() {
     await query(pool,
       "UPDATE invoices SET status = 'pending' WHERE id IN (@invoiceA, @invoiceB)",
       { invoiceA, invoiceB });
+    // Only the isolated Docker test database receives these synthetic records.
+    await seedAccountHistory(pool, a, invoiceA, 'A', 500, 125);
+    await seedAccountHistory(pool, b, invoiceB, 'B', 750, 150);
+
+    // Audit that browser navigation and account GET calls never create, settle,
+    // update, or verify payments, receipts, invoice states, or lifecycle events.
+    const readOnlySnapshot = async () => ({
+      invoices: (await query(pool,
+        'SELECT id, status, totalamount FROM invoices ORDER BY id'))
+        .map(row => ({ id: guid(row.id), status: row.status, amount: Number(row.totalamount) })),
+      paymentCount: Number((await first(pool, 'SELECT COUNT(*) AS n FROM payments')).n),
+      receiptCount: Number((await first(pool, 'SELECT COUNT(*) AS n FROM payment_receipts')).n),
+      eventCount: Number((await first(pool, 'SELECT COUNT(*) AS n FROM billing_lifecycle_events')).n)
+    });
+    const beforeAccountReads = await readOnlySnapshot();
+    assert.equal(beforeAccountReads.paymentCount, 4);
+    assert.equal(beforeAccountReads.receiptCount, 2);
+    assert.equal(beforeAccountReads.eventCount, 2);
+
     // Verify the same authorized projection used by the React invoice screen.
     // This differentiates missing API data from a browser/profile rendering defect.
     for (const item of [a, b]) {
@@ -326,6 +381,39 @@ async function main() {
         'tenant-scoped invoice API must resolve its own property relationship');
       assert.equal(Number(ownInvoiceQuery.payload.data[0].totalamount), item.expected);
     }
+    // Exercise real dedicated billing GET authority with genuine tenant sessions.
+    for (const [ownItem, ownToken, ownInvoice, foreignItem, foreignInvoiceId] of [
+      [a, tokenA, invoiceA, b, invoiceB],
+      [b, tokenB, invoiceB, a, invoiceA]
+    ]) {
+      const response = await call('/api/billing/invoices/' + ownInvoice + '/account', {
+        token: ownToken, tenantId: ownItem.tenantId
+      });
+      assert.equal(response.status, 200, JSON.stringify(response));
+      const account = response.payload.data;
+      assert.equal(guid(account.invoice.id), ownInvoice);
+      assert.equal(guid(account.invoice.renteeid), ownItem.renteeId);
+      assert.equal(Number(account.invoice.totalamount), ownItem.expected);
+      assert.equal(Number(account.outstandingBalance), ownItem.outstanding,
+        'pending payment must not reduce outstanding balance');
+      assert.equal(account.payments.length, 2);
+      assert.deepEqual(new Set(account.payments.map(p => p.status)), new Set(['verified', 'pending']));
+      assert.equal(account.receipts.length, 1);
+      assert.equal(account.receipts[0].receipt_number, ownItem.receiptNumber);
+      assert.equal(Number(account.receipts[0].amount), ownItem.verifiedAmount);
+      assert.equal(account.components.reduce((sum, row) => sum + Number(row.amount), 0), ownItem.expected);
+      const foreign = await call('/api/billing/invoices/' + foreignInvoiceId + '/account', {
+        token: ownToken, tenantId: ownItem.tenantId
+      });
+      assert.equal(foreign.status, 404, 'billing account lookup must hide foreign tenant invoices');
+      assert.equal(foreign.payload.code, 'INVOICE_NOT_FOUND');
+      assert.notEqual(ownItem.receiptNumber, foreignItem.receiptNumber);
+    }
+    const anonymousAccount = await call('/api/billing/invoices/' + invoiceA + '/account', {
+      tenantId: a.tenantId
+    });
+    assert.equal(anonymousAccount.status, 401, 'anonymous billing account query must be denied');
+
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
@@ -365,6 +453,31 @@ async function main() {
             'the tenant-specific invoice total must be visible');
           assert.doesNotMatch(state.text, /No invoices found\./,
             'visible test invoice must not be silently omitted');
+
+          // Click only the READ-only Account & Receipts button. Never submit
+          // a payment proof or invoke a billing/payment mutation from the browser.
+          await page.evaluate(() => {
+            const button = [...document.querySelectorAll('button')]
+              .find(entry => entry.textContent.trim() === 'Account & Receipts');
+            if (!button) throw new Error('Account & Receipts read button is missing');
+            button.click();
+          });
+          await page.waitForFunction(
+            receiptNumber => document.body.innerText.includes(receiptNumber),
+            { timeout: 30000 }, item.receiptNumber
+          );
+          const accountText = await page.evaluate(() => document.body.innerText);
+          assert.match(accountText, /Invoice Account/);
+          assert.match(accountText, /Payments/);
+          assert.match(accountText, /Receipts/);
+          assert.match(accountText, new RegExp(item.receiptNumber));
+          assert.match(accountText, new RegExp(item.outstanding.toLocaleString('en-US')),
+            'actual browser account view must show verified-payment outstanding balance');
+          assert.match(accountText, /FIXTURE-[AB]-VERIFIED/,
+            'real account view must show the verified transaction reference');
+          const foreignReceipt = item.tenantId === a.tenantId ? b.receiptNumber : a.receiptNumber;
+          assert.doesNotMatch(accountText, new RegExp(foreignReceipt),
+            'foreign tenant receipt must never be rendered');
         }
       } finally { await page.close(); }
     };
@@ -372,7 +485,9 @@ async function main() {
     await browserVisit(b, tokenB, '/rentee/utilities/history');
     await browserVisit(a, tokenA, '/rentee/invoices', { visibleInvoice: true });
     await browserVisit(b, tokenB, '/rentee/invoices', { visibleInvoice: true });
-    console.log('PASS: disposable two-tenant SQL Server invoice isolation, rent/utility totals, lifecycle events, correct reading linkage and duplicate prevention');
+    assert.deepEqual(await readOnlySnapshot(), beforeAccountReads,
+      'account and receipt views must not mutate invoice/payment/receipt/lifecycle data');
+    console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
     if (browser) await browser.close().catch(() => {});
     if (vite) await vite.close().catch(() => {});
