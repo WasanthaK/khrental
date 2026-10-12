@@ -19,6 +19,13 @@ export const stageEviaDocumentsForFencedLease = async ({
   retrieve = retrieveAndStoreEviaCompletedDocuments,
   retrievalOptions = {}
 }) => {
+  // Missing attempt ownership must never silently fall back to the live,
+  // stable signed-document object path.
+  if (typeof archiveAttemptId !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(archiveAttemptId)) {
+    throw archiveError('EVIA_ARCHIVE_ATTEMPT_ID_REQUIRED',
+      'Fenced archive staging requires a valid owner attempt token.', 400);
+  }
   const options = { tenantId, agreementId, archiveAttemptId };
   if (Array.isArray(documents) && documents.length > 0) {
     const result = await inlineStore({ ...options, documents });
@@ -79,7 +86,6 @@ export const runDormantEviaFencedArchive = async ({
         })
         .then(() => schedule());
     }, heartbeatMs);
-    timer.unref?.();
   };
   schedule();
 
