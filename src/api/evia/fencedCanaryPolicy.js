@@ -6,10 +6,14 @@ const guid = value => typeof value === 'string'
 const allowlist = input => String(input || '')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 export const isEviaFencedArchiveCanaryEligible = ({
-  verifiedRequest = false, agreement = null, normalized = null,
+  verifiedRequest = false, verifiedAgreementBound = false,
+  agreement = null, normalized = null,
   finalState = null, hasRetainedSignedDocument = false, env = process.env
 } = {}) => {
-  if (env?.EVIA_FENCED_ARCHIVE_MODE !== 'canary' || verifiedRequest !== true) return false;
+  // Only callbacks carrying a cryptographically verified agreement/tenant
+  // binding may opt in. HMAC-only shared RequestId lookup remains legacy.
+  if (env?.EVIA_FENCED_ARCHIVE_MODE !== 'canary'
+      || verifiedRequest !== true || verifiedAgreementBound !== true) return false;
   if (!agreement || !normalized || finalState?.signatureStatus !== 'completed') return false;
   const tenantId = String(agreement.tenant_id || '').toLowerCase();
   const agreementId = String(agreement.id || '').toLowerCase();
