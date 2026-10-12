@@ -433,22 +433,25 @@ const markWebhookEventProcessed = async (eventRecordId) => {
 };
 
 
-const hasProcessedWebhookDelivery = async ({ requestId, deliveryId, currentEventId }) => {
-  if (!requestId || !deliveryId) return false;
+const hasProcessedWebhookDelivery = async ({ tenantId, requestId, deliveryId }) => {
+  if (!tenantId || !requestId || !deliveryId) return false;
 
+  // Match only previously completed deliveries within the resolved tenant.
+  // In-flight or failed deliveries remain retryable; no second event is
+  // inserted for a fully processed duplicate.
   const existing = await runSingleQuery(`
     SELECT TOP 1 id
     FROM dbo.webhook_events
-    WHERE request_id = @requestId
+    WHERE tenant_id = @tenantId
+      AND request_id = @requestId
       AND processed = 1
-      AND id <> @currentEventId
       AND ISJSON(raw_data) = 1
       AND JSON_VALUE(raw_data, '$.deliveryId') = @deliveryId
     ORDER BY createdat DESC
   `, {
+    tenantId,
     requestId,
-    deliveryId,
-    currentEventId
+    deliveryId
   });
 
   return Boolean(existing?.id);
@@ -462,6 +465,15 @@ const getStoredSignedDocumentUrl = (agreement = {}) => {
   ].filter(Boolean);
 
   return candidates.find((value) => String(value).startsWith('/storage/documents/tenants/')) || null;
+};
+// A processed completion without an archived signed document is still
+// recoverable: re-delivery may be the only chance to retain the signed PDF.
+export const shouldIgnoreProcessedEviaDelivery = ({ alreadyProcessed, normalized = {}, agreement = {} }) => {
+  if (!alreadyProcessed) return false;
+  if (!isCompletionNotification(normalized)) return true;
+  return String(agreement.status || '').toLowerCase() === 'signed'
+    && String(agreement.signature_status || '').toLowerCase() === 'completed'
+    && Boolean(getStoredSignedDocumentUrl(agreement));
 };
 
 export const markAllSignatoriesCompleted = (value, completedAt) => {
@@ -706,6 +718,27 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
     storedSignatories: summarizeStoredSignatories(agreement.signatories_status)
   });
 
+  const alreadyProcessed = await hasProcessedWebhookDelivery({
+    tenantId: agreement.tenant_id,
+    requestId: normalized.requestId,
+    deliveryId: normalized.deliveryId
+  });
+
+  if (shouldIgnoreProcessedEviaDelivery({ alreadyProcessed, normalized, agreement })) {
+    return {
+      statusCode: 200,
+      body: {
+        received: true,
+        matched: true,
+        updated: false,
+        duplicate: true,
+        agreementId: agreement.id,
+        status: agreement.status,
+        signatureStatus: agreement.signature_status
+      }
+    };
+  }
+
   const webhookEventId = await recordVerifiedWebhookEvent({
     agreement,
     normalized,
@@ -804,14 +837,9 @@ export const processEviaWebhook = async (payload = {}, { expectedAgreementId = n
   const safeCompletedAt = Number.isNaN(completedAt.getTime()) ? new Date() : completedAt;
   let signedDocumentUrl = getStoredSignedDocumentUrl(agreement);
   let auditTrailStored = false;
-  let duplicateDelivery = false;
+  const duplicateDelivery = alreadyProcessed;
 
   if (finalState.signatureStatus === 'completed') {
-    duplicateDelivery = await hasProcessedWebhookDelivery({
-      requestId: normalized.requestId,
-      deliveryId: normalized.deliveryId,
-      currentEventId: webhookEventId
-    });
 
     if (!signedDocumentUrl && normalized.documents.length > 0) {
       const retainedDocuments = await storeEviaWebhookCompletedDocuments({

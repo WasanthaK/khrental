@@ -898,6 +898,42 @@ independently, as well as the legacy global app_users tenant_id versus
 multi-membership renter assignment concern. Phase 4 remains OPEN.
 ```
 
+## Phase 4 Evia processed-delivery replay gate
+
+```text
+PR #237: tenant-locked manual signing state guards, Evia exclusion,
+transactional property/unit/user updates, read-only replay and concurrent
+SQL signing proof. CI build/authorization run 38237086761 GREEN;
+disposable two-tenant SQL Server acceptance run 38237086698 GREEN;
+renter SQL workflow run 38237086598 GREEN at exact head
+847cbefefe88441d0c9b89d72b56cecceb9648f2.
+Merge SHA b067a873d68f51e97cbf7deba324a95d5329c91a.
+Production workflow 38237267065 SUCCESS: latest Azure revision 0000240
+Ready, public exact build SHA b067a873d68f51e97cbf7deba324a95d5329c91a
+and live MSSQL health connection ready.
+
+ACTIVE bounded Evia webhook slice: after authenticated HMAC/callback-token
+verification and tenant/RequestId-bound agreement resolution, check existing
+processed deliveryId before recording another webhook event or mutating
+signatory/completion state. Same tenant+request+deliveryId with processed=1
+is a read-only acknowledgement for non-completion events; completed
+agreements are read-only duplicates ONLY when signed status, completed
+signature status and locally retained signed document are present.
+A previously processed completion missing its retained local document
+must still be retryable for document retrieval. No deliveryId or unprocessed
+events remain retryable. Tests cover pure duplicate policy and actual
+disposable SQL Server idempotency, tenant isolation, event count and
+timestamp preservation. Authentication/verification remains unchanged.
+
+LIMITATION / follow-on: this slice suppresses SEQUENTIAL processed
+re-delivery. It does not create a uniqueness lock for simultaneous
+unprocessed deliveries or change out-of-order terminal state authority.
+Plan independent concurrency/idempotent terminal transition review and
+document-retention recovery proof after this slice. No production webhook
+replay, external Evia requests, migrations, SQL modifications or document
+writes are executed for acceptance.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

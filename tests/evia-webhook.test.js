@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   createEviaCallbackToken,
   extractSignedDocumentUrl,
@@ -8,6 +9,7 @@ import {
   markAllSignatoriesCompleted,
   normalizeEviaWebhookPayload,
   shouldAcknowledgeUnmappedWebhook,
+  shouldIgnoreProcessedEviaDelivery,
   updateSignatoryCompletion,
   updateSignatoryEmailDelivery,
   verifyEviaCallbackToken,
@@ -190,4 +192,49 @@ test('creates and verifies agreement-bound Evia callback tokens', () => {
   assert.equal(expired.expired, true);
 
   assert.equal(verifyEviaCallbackToken({ token: token + 'tampered', secret, now }).ok, false);
+});
+
+test('processed non-terminal Evia delivery is acknowledged without another mutation', () => {
+  const agreement = { status: 'pending_signature', signature_status: 'in_progress' };
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: true, normalized: { eventType: 'request.sent', eventId: null, status: 'sent' }, agreement
+  }), true);
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: false, normalized: { eventType: 'request.sent', eventId: null, status: 'sent' }, agreement
+  }), false);
+});
+
+test('completed Evia delivery skips only when signed state and retained local document are present', () => {
+  const normalized = { eventType: 'request.completed', eventId: 3, status: 'completed' };
+  const completed = {
+    status: 'signed', signature_status: 'completed',
+    signed_document_url: '/storage/documents/tenants/tenant-1/agreements/agreement-1/signed.pdf'
+  };
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: true, normalized, agreement: completed
+  }), true);
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: true, normalized,
+    agreement: { ...completed, signed_document_url: null }
+  }), false, 'previous completion with missing archived PDF must remain recoverable');
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: true, normalized,
+    agreement: { ...completed, signature_status: 'in_progress' }
+  }), false, 'incomplete database transition must remain retryable');
+  assert.equal(shouldIgnoreProcessedEviaDelivery({
+    alreadyProcessed: false, normalized, agreement: completed
+  }), false, 'a distinct deliveryId must remain processable');
+});
+
+test('delivery deduplication is scoped to tenant/request and precedes event insertion', () => {
+  const source = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  const lookup = source.slice(source.indexOf('const hasProcessedWebhookDelivery = '),
+    source.indexOf('const getStoredSignedDocumentUrl = '));
+  assert.match(lookup, /tenant_id = @tenantId/);
+  assert.match(lookup, /request_id = @requestId/);
+  assert.match(lookup, /processed = 1/);
+  assert.match(lookup, /JSON_VALUE\(raw_data, '\$\.deliveryId'\) = @deliveryId/);
+  const handler = source.slice(source.indexOf('export const processEviaWebhook = '));
+  assert.ok(handler.indexOf('shouldIgnoreProcessedEviaDelivery(') <
+    handler.indexOf('recordVerifiedWebhookEvent('));
 });
