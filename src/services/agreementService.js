@@ -856,13 +856,12 @@ export const deleteAgreement = async (agreementId) => {
 export const markAgreementAsSigned = async (agreementId) => {
   try {
     if (isMssqlApiEnabled()) {
-      try {
-        return await requestMssqlApi(`/api/mssql/agreements/${agreementId}/sign`, {
-          method: 'POST'
-        });
-      } catch (mssqlError) {
-        console.error('Error signing agreement in MSSQL, falling back to the local compatibility layer:', mssqlError);
-      }
+      // The scoped MSSQL signing transaction is authoritative. A failed or
+      // ambiguous response must not trigger a second signing transition and
+      // property/unit/renter side effects through the compatibility client.
+      return await requestMssqlApi(`/api/mssql/agreements/${agreementId}/sign`, {
+        method: 'POST'
+      });
     }
 
     const agreement = await fetchAgreement(agreementId);
