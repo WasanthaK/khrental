@@ -21,6 +21,18 @@ const migrationProbeSource = readFileSync(new URL('../scripts/probe-production-d
 const migrationWorkflowSource = readFileSync(new URL('../.github/workflows/run-production-db-migrations.yml', import.meta.url), 'utf8');
 const renterAssociationMigrationSource = readFileSync(new URL('../migrations/20260926_01_add_rentee_property_unit_associations.sql', import.meta.url), 'utf8');
 const dashboardLayoutSource = readFileSync(new URL('../src/components/layouts/DashboardLayout.jsx', import.meta.url), 'utf8');
+const authHookSource = readFileSync(new URL('../src/hooks/useAuth.jsx', import.meta.url), 'utf8');
+
+test('multi-membership renter profile is derived only from authenticated server context', () => {
+  const beginning = authHookSource.indexOf('const mergeTenantContext =');
+  const ending = authHookSource.indexOf('// Effect for development bypass', beginning);
+  assert.ok(beginning > 0 && ending > beginning);
+  const merge = authHookSource.slice(beginning, ending);
+  assert.match(merge, /platformClient\.auth\.getTenantContext\(\)/);
+  assert.match(merge, /profileId: userRecord\?\.profileId \|\| tenantContext\?\.user\?\.id \|\| null/);
+  assert.match(merge, /if \(tenantContextError \|\| !tenantContext\)/);
+  assert.doesNotMatch(merge, /localStorage|x-auth-id|x-user-id/);
+});
 
 test('canonicalizes administrator and tenant membership roles', () => {
   assert.deepEqual(normalizeMembershipAccess({ role: 'admin' }), {
