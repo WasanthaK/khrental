@@ -399,17 +399,16 @@ export const saveAgreement = async (agreement) => {
 
     if (isNewAgreement) {
       if (isMssqlApiEnabled()) {
-        try {
-          savedAgreement = await requestMssqlApi('/api/mssql/agreements', {
-            method: 'POST',
-            body: filteredData
-          });
-        } catch (mssqlError) {
-          console.error('Error creating agreement in MSSQL, falling back to the local compatibility layer:', mssqlError);
+        // The authoritative API owns agreement creation. Never re-issue an
+        // ambiguous or rejected POST as a generic upsert on another transport.
+        savedAgreement = await requestMssqlApi('/api/mssql/agreements', {
+          method: 'POST',
+          body: filteredData
+        });
+        if (!savedAgreement?.id) {
+          throw new Error('Agreement creation did not return an ID from the MSSQL API.');
         }
-      }
-
-      if (!savedAgreement) {
+      } else {
         const { data, error } = await platformClient
           .from('agreements')
           .upsert(filteredData)
