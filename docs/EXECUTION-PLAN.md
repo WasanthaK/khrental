@@ -1286,6 +1286,60 @@ green before merge; verify Azure Ready/exact public SHA/MSSQL after.
 Phase 4 remains OPEN.
 ```
 
+## Phase 4 default-off Evia fenced webhook canary — bounded gate
+
+```text
+PR #246 dormant verified delivery accounting exact-head acceptance:
+build/authorization #38319730497 GREEN, Evia tests #38319730373
+GREEN, disposable two-tenant SQL Server #38319730439 GREEN at
+c4ed5df408bc901c6091e23a9e630cd23f7b128e. Merged SHA
+652a4b61b19ba52750699f67836eaedabd08772f.
+Production release #38319901574 SUCCESS: Azure revision 0000249
+Ready, public serving exact SHA
+652a4b61b19ba52750699f67836eaedabd08772f, live MSSQL connected.
+Evia main tests #38319901573 and webhook security #38319901582 GREEN.
+These accepted improvements remain DORMANT by default.
+
+ACTIVE bounded gate: connect the verified Evia webhook processor to
+the prepared short-transaction fenced lease coordinator behind an
+EXPLICIT DEFAULT-OFF, PER-TENANT AND PER-AGREEMENT CANARY:
+EVIA_FENCED_ARCHIVE_MODE='canary', plus UUID allowlists for both
+EVIA_FENCED_ARCHIVE_CANARY_TENANTS and
+EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS.
+Only callback-token-verified tenant-and-agreement-bound completion
+requests with a provider deliveryId, no recipient-specific signatory
+details, no existing retained signed document, and no conflicting
+terminal state can enter. HMAC-only (unscoped) and all non-canary
+requests keep the existing verified callback implementation.
+The canary routes an already-claimed verified delivery to SQL-fenced
+agreement lease, immutable per-attempt signed PDF and audit trail,
+ownership-checked renewal and atomic signer/event/pointer completion.
+Missing either PDF or audit trail, busy lease, or failure returns
+retryable 503, with the unprocessed provider event claim immediately
+eligible for retry. Completed publication/recovery may return 200.
+Capacity admission is retained; the old agreement SQL lock is not
+mixed with the new canary path.
+
+ACCEPTANCE: dedicated Evia unit tests prove off-by-default,
+exact allowlist and cryptographic scoped route requirement, no
+selection on nonterminal/partial/signer-specific events, claim
+ordering, fail-closed document-pair requirement, and unchanged
+legacy path. Disposable two-tenant SQL Server acceptance uses
+verified-scope simulator and fake immutable object storage:
+busy->retry, source provider claim, signed+audit publication,
+lease+delivery processed, signer completion, read-only replay,
+unchanged dates and denied foreign tenant. No live Evia provider
+requests, production SQL schema, signed records or payment writes.
+
+DO NOT ENABLE CANARY IN AZURE IN THIS SLICE. Operator review is
+required after full callback-token end-to-end, delayed/crash
+storage-race, audit-trail access and orphan stage cleanup proof.
+The feature is a preparedness gate not blanket live migration.
+Exact-head build/authorization, Evia and real disposable SQL/browser
+CI must all be GREEN before merge; production acceptance separately
+requires Azure Ready/exact public SHA/live MSSQL. Phase 4 OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:

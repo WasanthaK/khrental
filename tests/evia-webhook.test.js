@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EVIA_CLAIM_LEASE_MS } from '../src/api/evia/deliveryClaim.js';
+import { isEviaFencedArchiveCanaryEligible } from '../src/api/evia/fencedCanaryPolicy.js';
 import { evaluateEviaTerminalDelivery, isEviaTerminalAgreement } from '../src/api/evia/terminalPolicy.js';
 import {
   createEviaCallbackToken,
@@ -318,4 +319,63 @@ test('SQL update fences reject stale partial callbacks and terminal overrides', 
   assert.match(processing, /@signatureStatus = 'completed'/);
   assert.match(processing, /@signatureStatus = 'failed'/);
   assert.match(processing, /if \(!terminalUpdated\.length\)/);
+});
+
+test('fenced Evia canary is OFF by default, requires cryptographically scoped request and exact UUID allowlists', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const agreement = { id: agreementId, tenant_id: tenantId, status: 'pending_signature', signature_status: 'pending' };
+  const normalized = { requestId: 'request-001', deliveryId: 'delivery-001', recipientEmail: null, recipientName: null };
+  const finalState = { agreementStatus: 'signed', signatureStatus: 'completed' };
+  const env = { EVIA_FENCED_ARCHIVE_MODE: 'canary',
+    EVIA_FENCED_ARCHIVE_CANARY_TENANTS: tenantId,
+    EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS: agreementId };
+  const args = { verifiedRequest: true, verifiedAgreementBound: true,
+    agreement, normalized, finalState, env };
+  assert.equal(isEviaFencedArchiveCanaryEligible(args), true);
+  for (const changes of [
+    { env: {} },
+    { env: { ...env, EVIA_FENCED_ARCHIVE_MODE: 'enabled' } },
+    { verifiedRequest: false },
+    { verifiedAgreementBound: false },
+    { normalized: { ...normalized, deliveryId: '' } },
+    { normalized: { ...normalized, recipientEmail: 'signer@example.invalid' } },
+    { normalized: { ...normalized, recipientName: 'Signer' } },
+    { finalState: { agreementStatus: 'cancelled', signatureStatus: 'failed' } },
+    { agreement: { ...agreement, status: 'cancelled' } },
+    { agreement: { ...agreement, status: 'rejected' } },
+    { hasRetainedSignedDocument: true },
+    { env: { ...env, EVIA_FENCED_ARCHIVE_CANARY_TENANTS: 'ffffffff-ffff-4fff-8fff-ffffffffffff' } },
+    { env: { ...env, EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS: 'ffffffff-ffff-4fff-8fff-ffffffffffff' } }
+  ]) {
+    assert.equal(isEviaFencedArchiveCanaryEligible({ ...args, ...changes }), false,
+      'unsafe or unapproved canary must retain legacy processing');
+  }
+  assert.equal(isEviaFencedArchiveCanaryEligible({
+    ...args, env: { ...env,
+      EVIA_FENCED_ARCHIVE_CANARY_TENANTS: '  ' + tenantId.toUpperCase() + ' , ',
+      EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS: agreementId.toUpperCase()
+    }
+  }), true);
+});
+
+test('only the verified and agreement-bound route can nominate a fenced canary', () => {
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  const handler = webhook.slice(webhook.indexOf('const handleWebhook = '));
+  const processor = webhook.slice(webhook.indexOf('export const processEviaWebhook = '),
+    webhook.indexOf('const handleWebhook = '));
+  assert.ok(handler.indexOf('verifyEviaWebhookRequest(req)') <
+    handler.indexOf('processEviaWebhook(req.body'));
+  assert.match(handler, /verifiedRequest: true/);
+  assert.match(processor, /verifiedAgreementBound: Boolean\(expectedAgreementId && expectedTenantId\)/);
+  assert.match(processor, /isEviaFencedArchiveCanaryEligible\(/);
+  assert.ok(processor.indexOf('claimEviaWebhookDelivery(') <
+    processor.indexOf('isEviaFencedArchiveCanaryEligible('));
+  assert.ok(processor.indexOf('isEviaFencedArchiveCanaryEligible(') <
+    processor.indexOf('updateSignatoryEmailDelivery('));
+  assert.match(processor, /EVIA_FENCED_ARCHIVE_DOCUMENT_PAIR_REQUIRED/);
+  assert.match(processor, /DATEADD\(MINUTE, -16, SYSUTCDATETIME\(\)\)/);
+  assert.match(processor, /EVIA_FENCED_ARCHIVE_RETRY/);
+  assert.match(processor, /withEviaArchiveCapacity\(/);
+  assert.match(processor, /fencedCanaryRunner\(/);
 });

@@ -918,6 +918,133 @@ async function verifyDormantArchiveDeliveryAccountingAgainstSql(pool, a, b) {
   console.log('PASS: fenced Evia delivery event atomic publication, retained signatories and HTTP-ack recovery');
 }
 
+async function verifyEviaFencedCanaryAgainstDisposableSql(pool, a, b) {
+  const { processEviaWebhook } = await import('../src/api/evia/webhook.js');
+  const {
+    stageEviaDocumentsForFencedLease
+  } = await import('../src/api/evia/archiveCoordinator.js');
+  const { storeEviaWebhookCompletedDocuments } =
+    await import('../src/api/evia/completedDocuments.js');
+  const ref = 'canary-' + crypto.randomBytes(7).toString('hex');
+  const signers = JSON.stringify([
+    { email: a.email, name: 'Tenant', status: 'pending' },
+    { name: 'Owner', status: 'pending' }
+  ]);
+  const row = await first(pool, `
+    INSERT INTO dbo.agreements
+      (tenant_id, renteeid, propertyid, eviasignreference,
+       status, signature_status, signatories_status)
+    OUTPUT INSERTED.id VALUES
+      (@tenantId, @renteeId, @propertyId, @requestId,
+       'pending_signature', 'in_progress', @signers)
+  `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId,
+    requestId: ref, signers });
+  const agreementId = guid(row.id);
+  const env = {
+    EVIA_FENCED_ARCHIVE_MODE: 'canary',
+    EVIA_FENCED_ARCHIVE_CANARY_TENANTS: a.tenantId,
+    EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS: agreementId
+  };
+  const uploads = new Map();
+  const storageDriver = {
+    upload: async (bucket, key, body) => {
+      assert.equal(bucket, 'documents');
+      assert.ok(key.includes('/signed/staged/'));
+      uploads.set(key, Buffer.from(body));
+      return { path: key };
+    }
+  };
+  const docs = [
+    { DocumentName: 'Signed.pdf', DocumentContent: Buffer.from('evia signed').toString('base64') },
+    { DocumentName: 'audit_trail.pdf', DocumentContent: Buffer.from('evia audit').toString('base64') }
+  ];
+  const payload = {
+    RequestId: ref, EventId: 3, event: 'request.completed', Status: 'completed',
+    deliveryId: 'canary-delivery-' + crypto.randomBytes(8).toString('hex'),
+    Documents: docs
+  };
+  const options = {
+    expectedAgreementId: agreementId, expectedTenantId: a.tenantId,
+    verifiedRequest: true, fencedCanaryEnv: env,
+    fencedCanaryStage: args => stageEviaDocumentsForFencedLease({
+      ...args,
+      inlineStore: inputs => storeEviaWebhookCompletedDocuments({
+        ...inputs, storageDriver
+      }),
+      retrieve: async () => { throw new Error('Inline signed pair should be authoritative'); }
+    })
+  };
+
+  // A busy archive must not be falsely acknowledged. Its unprocessed
+  // delivery claim is made reclaimable immediately.
+  const busy = await processEviaWebhook(payload, {
+    ...options, fencedCanaryRunner: async () => ({ status: 'busy' })
+  });
+  assert.equal(busy.statusCode, 503);
+  assert.equal(busy.body.code, 'EVIA_FENCED_ARCHIVE_RETRY');
+  assert.equal(uploads.size, 0);
+  const staleClaim = await first(pool, `
+    SELECT processed, updatedat FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND request_id = @requestId
+      AND event_type = 'request.completed'
+  `, { tenantId: a.tenantId, requestId: ref });
+  assert.equal(staleClaim.processed, false);
+  assert.ok(Date.now() - new Date(staleClaim.updatedat).getTime() > 15 * 60 * 1000);
+
+  const accepted = await processEviaWebhook(payload, options);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(accepted.body.archiveTransport, 'fenced_canary');
+  assert.equal(accepted.body.updated, true);
+  assert.equal(uploads.size, 2);
+  const completed = await first(pool, `
+    SELECT status, signature_status, signatories_status, signed_document_url,
+           signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements
+    WHERE id = @id AND tenant_id = @tenantId
+  `, { id: agreementId, tenantId: a.tenantId });
+  assert.equal(completed.status, 'signed');
+  assert.equal(completed.signature_status, 'completed');
+  assert.ok(completed.signed_document_url.includes('/signed/staged/'));
+  assert.ok(JSON.parse(completed.signatories_status).every(x => x.status === 'completed'));
+  assert.ok(completed.signeddate && completed.signature_completed_at);
+  const events = await query(pool, `
+    SELECT event_type, processed, raw_data FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND request_id = @requestId
+  `, { tenantId: a.tenantId, requestId: ref });
+  assert.equal(events.length, 2, 'one source delivery and one reserved lease');
+  assert.ok(events.every(x => Boolean(x.processed)));
+  const lease = events.find(x => x.event_type === 'evia.archive.lease.v1');
+  assert.ok(lease);
+  assert.ok(JSON.parse(lease.raw_data).auditTrailUrl.includes('/signed/staged/'));
+
+  const replay = await processEviaWebhook(payload, options);
+  assert.equal(replay.statusCode, 200);
+  assert.equal(replay.body.updated, false);
+  assert.equal(uploads.size, 2, 'same provider delivery cannot upload twice');
+  const otherDelivery = await processEviaWebhook({
+    ...payload, deliveryId: 'other-' + crypto.randomBytes(8).toString('hex')
+  }, options);
+  assert.equal(otherDelivery.statusCode, 200);
+  assert.equal(otherDelivery.body.updated, false);
+  assert.equal(uploads.size, 2);
+  const unchanged = await first(pool, `
+    SELECT status, signature_status, signatories_status, signed_document_url,
+           signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id AND tenant_id = @tenantId
+  `, { id: agreementId, tenantId: a.tenantId });
+  assert.deepEqual(unchanged, completed);
+
+  // The canary is scoped to a token-verified tenant+agreement; a callback
+  // purporting to be another tenant must not resolve or mutate this row.
+  const foreign = await processEviaWebhook({
+    ...payload, deliveryId: 'foreign-' + crypto.randomBytes(6).toString('hex')
+  }, { ...options, expectedTenantId: b.tenantId });
+  assert.equal(foreign.statusCode, 200);
+  assert.equal(foreign.body.matched, false);
+  assert.equal(uploads.size, 2);
+  console.log('PASS: authenticated-scope canary policy routes real disposable SQL event claims to fenced PDF publishing and replay');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -1102,6 +1229,7 @@ async function main() {
     await verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b);
     await verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b);
     await verifyDormantArchiveDeliveryAccountingAgainstSql(pool, a, b);
+    await verifyEviaFencedCanaryAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
