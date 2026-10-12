@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { EVIA_CLAIM_LEASE_MS } from '../src/api/evia/deliveryClaim.js';
 import {
   createEviaCallbackToken,
   extractSignedDocumentUrl,
@@ -237,4 +238,27 @@ test('delivery deduplication is scoped to tenant/request and precedes event inse
   const handler = source.slice(source.indexOf('export const processEviaWebhook = '));
   assert.ok(handler.indexOf('shouldIgnoreProcessedEviaDelivery(') <
     handler.indexOf('recordVerifiedWebhookEvent('));
+});
+
+test('Evia claim is SQL-serialized by tenant, request, and delivery with crash recovery', () => {
+  const claimSource = readFileSync(
+    new URL('../src/api/evia/deliveryClaim.js', import.meta.url), 'utf8'
+  );
+  assert.equal(EVIA_CLAIM_LEASE_MS, 15 * 60 * 1000);
+  assert.match(claimSource, /crypto\.createHash\('sha256'\)/);
+  assert.match(claimSource, /JSON\.stringify\(\[String\(tenantId\)/);
+  assert.match(claimSource, /sys\.sp_getapplock/);
+  assert.match(claimSource, /@LockMode = 'Exclusive'/);
+  assert.match(claimSource, /@LockOwner = 'Transaction'/);
+  assert.match(claimSource, /processed = 0/);
+  assert.match(claimSource, /return \{ eventId: null, alreadyProcessed, inFlight: true/);
+  assert.match(claimSource, /transaction\.rollback\(\)/);
+
+  const webhookSource = readFileSync(
+    new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8'
+  );
+  const handler = webhookSource.slice(webhookSource.indexOf('export const processEviaWebhook = '));
+  assert.ok(handler.indexOf('claimEviaWebhookDelivery(') < handler.indexOf('updateSignatoryEmailDelivery('));
+  assert.match(handler, /statusCode: 503,/);
+  assert.match(handler, /EVIA_DELIVERY_IN_PROGRESS/);
 });
