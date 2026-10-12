@@ -85,7 +85,7 @@ export const runDormantEviaFencedArchive = async ({
 
   try {
     const staged = await stageDocuments({
-      ...owner, signal: abortController.signal
+      ...owner, archiveAttemptId: attemptId, signal: abortController.signal
     });
     // Never publish a URL after background renewal failed, even if upload
     // continued after cancellation was requested.
