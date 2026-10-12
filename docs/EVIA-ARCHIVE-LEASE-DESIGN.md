@@ -302,3 +302,44 @@ safe crash recovery for incomplete upload pairs and post-commit response
 loss on the actual authenticated HTTP route, and full scoped storage purge
 authorization (if cleanup is ever enabled). Do not set canary environment
 variables or run deletes as a result of the review helper.
+
+## Fenced audit evidence access and append-only attempt history
+
+The authenticated `/storage/documents` delivery route now performs an
+additional **fail-closed** check for immutable fenced audit objects:
+`tenants/{tenant UUID}/agreements/{agreement UUID}/signed/staged/{attempt UUID}/audit_trail.pdf`.
+The existing authenticated tenant middleware runs first. Access requires
+the active tenant's **admin** role with `agreements.manage`, the
+tenant-bound agreement in `signed/completed` state, a locally retained
+signed PDF, and a processed reserved lease record whose stored
+`attemptId`, signed PDF pointer and **exact audit URL** match the
+requested staged object. A tenant member or staff user is not assumed to
+have audit-evidence authority merely because a same-tenant path is known.
+Other storage objects and historic stable signed-file routes are unchanged.
+This narrow guard does not create a new public audit URL, role or API.
+
+The fenced lease claim now appends a separate reserved
+`evia.archive.attempt.v1` event for **every** new owner attempt,
+including a takeover. It stores the scoped agreement ID, fresh UUID token
+and predecessor UUID token, but no signed bytes, webhook credentials or
+personally identifying signatory data. The canonical lease row still
+updates in place. Successful fenced publication appends an independent
+`evia.archive.publication.v1` event containing the winning attempt and
+its signed/audit object pointers in the SAME SQL transaction as the
+agreement URL and processed verified delivery. Internal ledger event types
+are explicitly excluded from completed provider-delivery lookups.
+Disposable SQL acceptance demonstrates A's claim remains in history after
+B's takeover and committed publication. No production schema DDL is added:
+reserved event types use existing `dbo.webhook_events`.
+
+**Limitations:** these are application-level INSERT-only records. There is
+no database-enforced WORM retention, privileged administrator immutability,
+or automated old-attempt inventory. The audit-route policy protects only
+the exact `audit_trail.pdf` fenced naming contract; historic archive
+naming/disclosure and general tenant storage deletion privileges are
+separate security issues. No storage-delete API or orphan cleanup job is
+added, and review candidates still always return `mayDelete:false`.
+Before activating a canary, validate the real cookie/bearer session HTTP
+download, alternative document names, publication recovery, and non-public
+storage integrity under the planned role policy. Continue to require
+operator approval for any canary activation.
