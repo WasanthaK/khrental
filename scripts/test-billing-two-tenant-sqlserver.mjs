@@ -1011,11 +1011,13 @@ async function verifyEviaFencedCanaryAgainstDisposableSql(pool, a, b) {
     SELECT event_type, processed, raw_data FROM dbo.webhook_events
     WHERE tenant_id = @tenantId AND request_id = @requestId
   `, { tenantId: a.tenantId, requestId: ref });
-  assert.equal(events.length, 2, 'one source delivery and one reserved lease');
+  assert.equal(events.length, 4, 'provider delivery, durable lease, immutable attempt and publication rows');
   assert.ok(events.every(x => Boolean(x.processed)));
   const lease = events.find(x => x.event_type === 'evia.archive.lease.v1');
   assert.ok(lease);
   assert.ok(JSON.parse(lease.raw_data).auditTrailUrl.includes('/signed/staged/'));
+  assert.equal(events.filter(x => x.event_type === 'evia.archive.attempt.v1').length, 1);
+  assert.equal(events.filter(x => x.event_type === 'evia.archive.publication.v1').length, 1);
 
   const replay = await processEviaWebhook(payload, options);
   assert.equal(replay.statusCode, 200);
@@ -1178,6 +1180,31 @@ async function verifyExpiredEviaWorkerStagingRaceAgainstSql(pool, a, b) {
   `, { tenantId: a.tenantId, requestId: ref, eventType: EVIA_ARCHIVE_LEASE_EVENT });
   const auditUrl = JSON.parse(audited.raw_data).auditTrailUrl;
   assert.ok(auditUrl.includes('/signed/staged/' + attempts.get('B') + '/'));
+  // Immutable history survives canonical lease takeover. Both claims and
+  // B's winning publication are separate INSERT-only SQL records.
+  const journal = await query(pool, `
+    SELECT event_type, processed, raw_data
+    FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND request_id = @requestId
+      AND event_type IN (@claimEvent, @publicationEvent)
+    ORDER BY createdat, id
+  `, { tenantId: a.tenantId, requestId: ref,
+    claimEvent: 'evia.archive.attempt.v1',
+    publicationEvent: 'evia.archive.publication.v1' });
+  assert.equal(journal.length, 3, 'two distinct lease claims and one winner publication retained');
+  assert.ok(journal.every(row => Boolean(row.processed)));
+  const claims = journal.filter(row => row.event_type === 'evia.archive.attempt.v1')
+    .map(row => JSON.parse(row.raw_data));
+  assert.deepEqual(new Set(claims.map(row => row.attemptId)),
+    new Set([attempts.get('A'), attempts.get('B')]));
+  assert.ok(claims.some(row => row.attemptId === attempts.get('A') && !row.priorAttemptId));
+  assert.ok(claims.some(row => row.attemptId === attempts.get('B')
+    && row.priorAttemptId === attempts.get('A')));
+  const publication = JSON.parse(journal.find(row =>
+    row.event_type === 'evia.archive.publication.v1').raw_data);
+  assert.equal(publication.attemptId, attempts.get('B'));
+  assert.equal(publication.auditTrailUrl, auditUrl);
+  assert.equal(publication.signedDocumentUrl, latest.signed_document_url);
   const now = new Date('2026-12-15T00:00:00Z');
   const old = new Date(now.getTime() - EVIA_STAGE_REVIEW_MIN_AGE_MS - 86_400_000);
   const baseReview = { tenantId: a.tenantId, agreementId: identity.agreementId,

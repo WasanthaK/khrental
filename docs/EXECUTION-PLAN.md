@@ -1386,6 +1386,56 @@ access policy and actual authenticated HTTP crash-recovery proof
 before any canary activation. Phase 4 remains OPEN.
 ```
 
+## Phase 4 Evia fenced audit access and immutable attempt history
+
+```text
+PR #248 late-worker race and no-delete orphan triage: exact-head
+build/authorization #38322894696 GREEN, Evia suite #38322894674
+GREEN, disposable two-tenant SQL Server #38322894680 GREEN.
+Merged SHA 866dd470d323e3240b57a72b2a4edca9aac33984.
+Production workflow #38323031674 SUCCESS: Azure revision 0000251
+Ready, public serving exact SHA 866dd470d323e3240b57a72b2a4edca9aac33984
+and MSSQL live connection ready. Main Evia #38323031731 and
+security configuration #38323031815 GREEN. Canary remains OFF.
+
+ACTIVE independent slice: preserve durable evidence of EVERY newly
+claimed archive attempt including takeover, using a reserved
+evia.archive.attempt.v1 row INSERTED in the same short SQL transaction
+as the existing mutable archive lease claim. Append an immutable
+evia.archive.publication.v1 evidence row in the transaction publishing
+the winning signed PDF + audit trail, processed provider delivery and
+completed agreement. Restrict provider delivery lookup to exclude
+all reserved archive internal event types. No new schema/table or
+privilege; application-level append-only rows do not constitute
+database-enforced WORM retention.
+
+Audit-trail access: add fail-closed validation for staged
+audit_trail.pdf objects on existing authenticated tenant storage
+route, after tenant context resolution and before object download.
+Require same-tenant active admin with agreements.manage and a
+completed/signed agreement whose canonical local PDF and processed
+Evia archive lease agree exactly with the requested staged audit URL
+and attempt UUID. Ordinary signed PDF/legacy file routes remain
+unchanged. Staff and rentees are denied pending explicit audit
+disclosure policy review. Do not expose new public links.
+
+Acceptance: dedicated Evia tests validate role+scope+lease-published
+audit URL checks, malformed/foreign/unpublished/old attempt denial,
+and guarded server route ordering. Disposable SQL acceptance proves
+A's claim remains in immutable history after B takes over, only B
+publishes, publication evidence and authoritative URLs agree,
+provider delivery event remains separate, and canary's expected
+new history cardinality is preserved.
+
+No production canary environment changes, new SQL migration,
+actual Evia callbacks, payment/tenant agreement writes, or storage
+deletion. Require exact PR-head build/authorization, Evia and
+disposable SQL/browser CI GREEN before merge, then release Ready,
+public exact SHA and live MSSQL proof. Security follow-ups:
+real signed-in download HTTP acceptance, broader historic audit
+policy and tenant storage deletion privilege review. Phase 4 OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
