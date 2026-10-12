@@ -10,11 +10,11 @@ const fencedAuditPattern = new RegExp(
 
 export const parseFencedEviaAuditTrailPath = (bucket, path) => {
   if (String(bucket || '').toLowerCase() !== 'documents') return null;
-  const match = fencedAuditPattern.exec(String(path || '').replace(/^\\/+/, ''));
+  const match = fencedAuditPattern.exec(String(path || '').replace(/^[/]+/, ''));
   return match ? {
     tenantId: match[1], agreementId: match[2],
     attemptId: match[3],
-    url: '/storage/documents/' + String(path).replace(/^\\/+/, '')
+    url: '/storage/documents/' + String(path).replace(/^[/]+/, '')
   } : null;
 };
 
