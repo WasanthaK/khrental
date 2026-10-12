@@ -824,6 +824,42 @@ remove a fallback before separately proving webhook lifecycle invariants.
 Phase 4 remains OPEN.
 ```
 
+## Phase 4 manual signing authority — single transport, no fallback
+
+```text
+PR #235 (agreement update fail-closed): exact-head CI run 38233284859
+GREEN at 057faa50c3095e88450de490a36015b245167e64;
+merged as 3a1c0ea5e48e8dbef873352b8ceb7a261d72c86e.
+Its separate production workflow 38234629958 must prove Ready revision,
+exact public commit SHA and live MSSQL connectivity; PR CI is not
+production attestation.
+
+ACTIVE isolated manual-signing slice: AgreementDetails invokes
+markAgreementAsSigned. Under MSSQL mode it must use only one
+POST /api/mssql/agreements/:id/sign. On denial, conflict, failed or
+ambiguous transport, no legacy updateAgreementData, property status,
+unit status or renter association side effects are permitted. Existing
+manual-sign server authority (admin guard) and tenant-bound SQL
+transaction are unchanged; non-MSSQL compatibility mode retains its
+existing behavior. Source-contract and injected service-body tests
+prove fail-closed HTTP 401/403/404/409/500/503 outcomes and absent
+secondary side effects. No live sign requests or database mutations
+are performed by this acceptance.
+
+IMPORTANT: manual admin signing is NOT Evia webhook completion.
+Evia's authenticated callback signature checks, completed-document
+retention, webhook event de-duplication and terminal state changes
+remain untouched and require their own separate review/acceptance.
+Never conflate these authorities or grant signing privilege via this PR.
+
+Next: assess whether manual sign should be available for
+Evia-managed agreements, and prove server-side signing state
+preconditions, replay/idempotency and side-effect invariants against
+a disposable SQL Server fixture. Do not change webhook authority or
+statuses as an incidental consequence of fail-closed hardening.
+Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
