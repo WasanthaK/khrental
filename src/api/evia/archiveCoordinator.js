@@ -25,7 +25,7 @@ export const stageEviaDocumentsForFencedLease = async ({
     if (result?.signedDocumentUrl) return result;
   }
   // Preserve the existing inline-first, authenticated API-retrieval fallback.
-  return retrieve({ ...options, ...retrievalOptions, requestId });
+  return retrieve({ ...retrievalOptions, ...options, requestId });
 };
 
 // Short SQL lease transactions never span stageDocuments. Heartbeats renew
