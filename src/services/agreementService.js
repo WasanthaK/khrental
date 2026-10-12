@@ -625,28 +625,27 @@ async function getMergeDataForAgreement(agreement) {
  * @returns {Promise<Object|null>} - The template data or null if not found
  */
 export const getTemplate = async (templateId) => {
-  try {
-    if (isMssqlApiEnabled()) {
-      try {
-        return await requestMssqlApi(`/api/mssql/agreement-templates/${templateId}`);
-      } catch (mssqlError) {
-        if (isSchemaUnavailableError(mssqlError)) {
-          return null;
-        }
-        console.error('Error fetching template from MSSQL, falling back to the local compatibility layer:', mssqlError);
+  // When MSSQL owns the tenant's agreement templates, an API denial or
+  // connectivity failure must never fall through to a generic table lookup.
+  if (isMssqlApiEnabled()) {
+    try {
+      return await requestMssqlApi(`/api/mssql/agreement-templates/${templateId}`);
+    } catch (mssqlError) {
+      if (isSchemaUnavailableError(mssqlError) || mssqlError?.status === 404) {
+        return null;
       }
+      throw mssqlError;
     }
+  }
 
+  try {
     const { data, error } = await platformClient
       .from('agreement_templates')
       .select('*')
       .eq('id', templateId)
       .single();
 
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
     console.error('Error fetching template:', error);
@@ -665,7 +664,8 @@ export const listTemplates = async ({ language } = {}) => {
       if (isSchemaUnavailableError(mssqlError)) {
         return [];
       }
-      console.error('Error loading templates from MSSQL, falling back to the local compatibility layer:', mssqlError);
+      // The authoritative MSSQL operation failed; never retry under a different transport.
+      throw mssqlError;
     }
   }
 
@@ -697,7 +697,8 @@ export const createTemplate = async (templateData) => {
       if (isSchemaUnavailableError(mssqlError)) {
         throw new Error('Agreement templates are not available in the current local MSSQL schema.');
       }
-      console.error('Error creating template in MSSQL, falling back to the local compatibility layer:', mssqlError);
+      // The authoritative MSSQL operation failed; never retry under a different transport.
+      throw mssqlError;
     }
   }
 
@@ -725,7 +726,8 @@ export const updateTemplate = async (templateId, templateData) => {
       if (isSchemaUnavailableError(mssqlError)) {
         throw new Error('Agreement templates are not available in the current local MSSQL schema.');
       }
-      console.error('Error updating template in MSSQL, falling back to the local compatibility layer:', mssqlError);
+      // The authoritative MSSQL operation failed; never retry under a different transport.
+      throw mssqlError;
     }
   }
 
@@ -753,7 +755,8 @@ export const deleteTemplate = async (templateId) => {
       if (isSchemaUnavailableError(mssqlError)) {
         throw new Error('Agreement templates are not available in the current local MSSQL schema.');
       }
-      console.error('Error deleting template in MSSQL, falling back to the local compatibility layer:', mssqlError);
+      // The authoritative MSSQL operation failed; never retry under a different transport.
+      throw mssqlError;
     }
   }
 

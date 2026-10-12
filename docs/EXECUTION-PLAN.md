@@ -724,6 +724,29 @@ Phase 4 as a whole remains OPEN until the wider canonical inventory is
 discharged, regardless of this one successful invoice-list migration.
 ```
 
+## Phase 4 agreement-template authoritative transport hardening
+
+```text
+ACTIVE bounded slice (proposal): when MSSQL mode is enabled, agreement-template
+get/list/create/update/delete must treat the scoped MSSQL API as authoritative.
+403/401/409/5xx must not trigger platformClient table fallback. For unchanged
+UI behavior, missing/schema-unavailable get returns null, list returns [];
+schema-unavailable mutations fail with a descriptive error; every other
+MSSQL error propagates to the caller. The compatibility table path remains
+available only when MSSQL mode is explicitly disabled.
+
+Risk and acceptance: no widening of privileges, no new database migration,
+no agreement-signing changes, no write retries. Regression tests exercise
+actual five service function bodies under unsuccessful and successful MSSQL
+requests, assert no generic-table calls after authoritative failure, and
+retain the prior non-MSSQL path behavior. Exact-head CI, merge and production
+Azure Ready/SHA/MSSQL verification are required before recording completion.
+
+Next after this slice: inventory live agreement-template endpoints and
+remaining agreement/property compatibility operations and select one
+bounded contract-first migration. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
