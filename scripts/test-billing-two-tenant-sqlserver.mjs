@@ -489,6 +489,25 @@ async function verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b) {
     execute: () => lock(a.tenantId, async () => 'retry allowed')
   }), 'retry allowed');
   assert.equal(getEviaArchiveCapacityStatus().active, 0);
+  // Prepare the future fenced lease proof: two holders can stage the same
+  // PDF name without ever targeting the same storage object. The currently
+  // deployed transaction-owned archive lock remains unchanged.
+  const {
+    createEviaArchiveAttemptId, buildEviaCompletedDocumentPath
+  } = await import('../src/api/evia/completedDocuments.js');
+  const firstAttempt = createEviaArchiveAttemptId();
+  const nextAttempt = createEviaArchiveAttemptId();
+  const pathFor = attempt => buildEviaCompletedDocumentPath({
+    tenantId: a.tenantId, agreementId, archiveAttemptId: attempt,
+    documentName: 'Lease.pdf'
+  });
+  assert.notEqual(pathFor(firstAttempt), pathFor(nextAttempt));
+  assert.ok(pathFor(firstAttempt).includes('/signed/staged/' + firstAttempt + '/'));
+  const tenantBPath = buildEviaCompletedDocumentPath({
+    tenantId: b.tenantId, agreementId, archiveAttemptId: nextAttempt,
+    documentName: 'Lease.pdf'
+  });
+  assert.notEqual(tenantBPath, pathFor(nextAttempt), 'staged documents remain tenant-scoped');
   console.log('PASS: Evia agreement-scoped archival lock serializes different deliveries and recovers after failures');
 }
 
