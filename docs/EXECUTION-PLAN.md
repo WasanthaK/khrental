@@ -772,6 +772,33 @@ Phase 4 remains OPEN. This delete hardening is not proof of overall
 agreement lifecycle parity.
 ```
 
+## Phase 4 authoritative agreement creation — next bounded gate
+
+```text
+PR #233 agreement DELETE fail-closed: authorization/build workflow 38230968660
+passed on head 274a14640c1abed2ccfac18e9a71ba28071d7a78;
+merged as e5d68d6d8f166f4e6fb1a14f1c658233c7efd79f.
+Production workflow 38231239449 succeeded: Azure revision 0000236 Ready,
+public exact SHA e5d68d6d8f166f4e6fb1a14f1c658233c7efd79f served,
+live /api/mssql/health connection ready and startup/browser runtime valid.
+
+ACTIVE bounded change: saveAgreement new-record creation must execute a
+single authoritative POST /api/mssql/agreements when MSSQL mode is enabled.
+After a failed, ambiguous or empty success response, never retry the same
+creation through platformClient agreement upsert. Existing agreement updates,
+Evia signing and document-generation behavior remain separately governed and
+unchanged. Explicit disabled-MSSQL mode retains the legacy creation path.
+Tests exercise the real service saveAgreement body with injectable transports,
+including success, 401/403/404/409/5xx, no result, legacy mode and unchanged
+existing-agreement delegation. No schema, auth, billing or production-data
+changes. CI/merge/production release gates still required.
+
+NEXT: contract-first review and individual hardening of agreement updates
+and signature transitions, preserving Evia webhook authority and refusing
+secondary side effects after ambiguous MSSQL writes. Do not batch these
+with the new-agreement-creation slice. Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
