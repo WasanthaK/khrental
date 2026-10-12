@@ -636,6 +636,10 @@ test('fenced staging prefers verified inline documents and keeps scoped fallback
       return { signedDocumentUrl: '/storage/documents/api.pdf' };
     }
   };
+  await assert.rejects(stageEviaDocumentsForFencedLease({
+    ...common, archiveAttemptId: null
+  }), error => error.code === 'EVIA_ARCHIVE_ATTEMPT_ID_REQUIRED');
+  assert.deepEqual(calls, [], 'missing lease token must not touch storage');
   const preferred = await stageEviaDocumentsForFencedLease(common);
   assert.equal(preferred.signedDocumentUrl, '/storage/documents/inline.pdf');
   assert.deepEqual(calls.map(c => c[0]), ['inline']);
