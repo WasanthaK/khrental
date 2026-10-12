@@ -296,6 +296,27 @@ async function main() {
     await query(pool,
       "UPDATE invoices SET status = 'pending' WHERE id IN (@invoiceA, @invoiceB)",
       { invoiceA, invoiceB });
+    // Verify the same authorized projection used by the React invoice screen.
+    // This differentiates missing API data from a browser/profile rendering defect.
+    for (const item of [a, b]) {
+      const ownToken = item.tenantId === a.tenantId ? tokenA : tokenB;
+      const ownProperty = item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property';
+      const ownInvoiceQuery = await call('/api/platform/query', {
+        token: ownToken, tenantId: item.tenantId, method: 'POST',
+        body: {
+          action: 'select', table: 'invoices',
+          select: '*, properties!propertyid(id, name, address)',
+          filters: [{ column: 'renteeid', operator: 'eq', value: item.renteeId }],
+          order: [{ column: 'createdat', ascending: false }]
+        }
+      });
+      assert.equal(ownInvoiceQuery.status, 200, JSON.stringify(ownInvoiceQuery));
+      assert.equal(ownInvoiceQuery.payload.data?.length, 1,
+        'tenant must receive exactly its own invoice from the authenticated API');
+      assert.equal(ownInvoiceQuery.payload.data[0]?.properties?.name, ownProperty,
+        'tenant-scoped invoice API must resolve its own property relationship');
+      assert.equal(Number(ownInvoiceQuery.payload.data[0].totalamount), item.expected);
+    }
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
@@ -319,7 +340,9 @@ async function main() {
         const state = await page.evaluate(() => ({
           path: window.location.pathname, text: document.body.innerText.slice(0, 12000)
         }));
-        assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login');
+        // Only disposable fixture content is included in a failure; no bearer tokens.
+        const browserEvidence = 'Path: ' + state.path + '\\nPage: ' + state.text.slice(-3000);
+        assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login; ' + browserEvidence);
         assert.notEqual(state.path, '/unauthorized', 'valid rentee session must reach its portal');
         assert.ok(state.path.startsWith('/rentee/'), 'tenant portal route must be preserved');
         const ownProperty = item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property';
@@ -328,7 +351,7 @@ async function main() {
           'rentee-facing browser must not leak another tenant property');
         if (visibleInvoice) {
           assert.match(state.text, /My Invoices/, 'actual renter invoice screen must load');
-          assert.match(state.text, new RegExp(ownProperty), 'own property must be visible on invoice');
+          assert.match(state.text, new RegExp(ownProperty), 'own property must be visible on invoice; ' + browserEvidence);
           assert.match(state.text, new RegExp(item.expected.toLocaleString('en-US')),
             'the tenant-specific invoice total must be visible');
           assert.doesNotMatch(state.text, /No invoices found\./,
