@@ -289,6 +289,91 @@ async function verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b) {
   console.log('PASS: concurrent Evia SQL claims, retry lease, stale recovery and tenant isolation');
 }
 
+async function verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b) {
+  const { processEviaWebhook } = await import('../src/api/evia/webhook.js');
+  const prefix = 'terminal-' + crypto.randomBytes(6).toString('hex');
+  const savedPdf = '/storage/documents/tenants/test/agreements/terminal/signed.pdf';
+  const create = async (item, suffix, status, signatureStatus, signedDocument = null) => {
+    const requestId = prefix + '-' + suffix;
+    const agreement = await first(pool,
+      `INSERT INTO agreements
+         (tenant_id, renteeid, propertyid, status, signature_status,
+          eviasignreference, signed_document_url, signeddate, signature_completed_at)
+       OUTPUT INSERTED.id
+       VALUES (@tenantId, @renteeId, @propertyId, @status,
+               @signatureStatus, @requestId, @signedDocument, @signedDate, @completedAt)`,
+      { tenantId: item.tenantId, renteeId: item.renteeId, propertyId: item.propertyId,
+        status, signatureStatus, requestId, signedDocument,
+        signedDate: status === 'signed' ? '2026-10-01' : null,
+        completedAt: status === 'signed' ? '2026-10-01' : null });
+    return { item, requestId, id: guid(agreement.id) };
+  };
+  const signed = await create(a, 'signed', 'signed', 'completed', savedPdf);
+  const cancelled = await create(b, 'cancelled', 'cancelled', 'failed');
+  const pending = await create(a, 'pending', 'pending_signature', 'in_progress');
+
+  const snapshot = async record => first(pool, `
+    SELECT status, signature_status, signatories_status,
+           signeddate, signature_completed_at, signed_document_url, updatedat
+    FROM agreements WHERE id = @agreementId AND tenant_id = @tenantId`,
+  { agreementId: record.id, tenantId: record.item.tenantId });
+
+  const send = async (record, suffix, event, status, email = null) =>
+    processEviaWebhook({
+      event, Status: status, RequestId: record.requestId,
+      deliveryId: prefix + '-delivery-' + suffix,
+      ...(email ? { Email: email, Name: 'Test Renter' } : {})
+    }, { expectedAgreementId: record.id, expectedTenantId: record.item.tenantId });
+
+  const signedBefore = await snapshot(signed);
+  for (const [suffix, event, status, email] of [
+    ['late-cancel', 'request.cancelled', 'cancelled', null],
+    ['late-reject', 'request.rejected', 'rejected', null],
+    ['late-signer', 'signatory.completed', 'completed_signatory', a.email]
+  ]) {
+    const result = await send(signed, suffix, event, status, email);
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body.updated, false, 'terminal state cannot be revised by late callback');
+    assert.equal(result.body.reason, 'evia_terminal_state_immutable');
+    assert.deepEqual(await snapshot(signed), signedBefore,
+      'late terminal or partial callback must preserve signed PDF and immutable timestamps');
+  }
+  const signedEvents = await query(pool,
+    'SELECT processed FROM webhook_events WHERE tenant_id = @tenantId AND request_id = @requestId',
+    { tenantId: a.tenantId, requestId: signed.requestId });
+  assert.equal(signedEvents.length, 3);
+  assert.ok(signedEvents.every(row => Boolean(row.processed)),
+    'ignored terminal events must still be logged as processed for audit');
+
+  const cancelledBefore = await snapshot(cancelled);
+  const lateComplete = await send(cancelled, 'late-complete', 'request.completed', 'completed');
+  assert.equal(lateComplete.statusCode, 200);
+  assert.equal(lateComplete.body.updated, false);
+  assert.deepEqual(await snapshot(cancelled), cancelledBefore,
+    'late completion cannot re-open a cancelled agreement or attempt PDF retention');
+
+  const deniedByTenant = await processEviaWebhook({
+    event: 'request.rejected', Status: 'rejected',
+    RequestId: signed.requestId, deliveryId: prefix + '-foreign'
+  }, { expectedAgreementId: signed.id, expectedTenantId: b.tenantId });
+  assert.equal(deniedByTenant.statusCode, 200);
+  assert.equal(deniedByTenant.body.matched, false);
+  assert.deepEqual(await snapshot(signed), signedBefore);
+
+  // A valid first terminal failure must still be accepted, then become
+  // immutable against a later conflicting completion callback.
+  const firstReject = await send(pending, 'first-reject', 'request.rejected', 'rejected');
+  assert.equal(firstReject.statusCode, 200);
+  assert.equal(firstReject.body.updated, true);
+  assert.equal((await snapshot(pending)).status, 'rejected');
+  const rejectedBefore = await snapshot(pending);
+  const lateCompletion = await send(pending, 'later-completion', 'request.completed', 'completed');
+  assert.equal(lateCompletion.statusCode, 200);
+  assert.equal(lateCompletion.body.updated, false);
+  assert.deepEqual(await snapshot(pending), rejectedBefore);
+  console.log('PASS: Evia terminal-state monotonicity, rejected/cancelled delay, signer replay and tenant isolation');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -468,6 +553,7 @@ async function main() {
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
     await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
+    await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
