@@ -26,6 +26,103 @@ const query = async (pool, statement, inputs = {}) => {
 const first = async (pool, statement, inputs = {}) => (await query(pool, statement, inputs))[0] || null;
 const guid = value => String(value).toLowerCase();
 
+// Transaction/replay proof uses the very same isolated Docker SQL database
+// as billing acceptance. No externally configured or production database.
+async function verifyManualSigningAgainstDisposableSql(pool, a, b) {
+  const { markAgreementSigned } = await import('../src/api/mssql/repositories.js');
+  const unit = await first(pool,
+    "INSERT INTO property_units (tenant_id, propertyid, unitnumber, status) OUTPUT INSERTED.id VALUES (@tenantId, @propertyId, 'SIGN-TEST', 'available')",
+    { tenantId: a.tenantId, propertyId: a.propertyId });
+  const unitId = guid(unit.id);
+  const createAgreement = async ({ tenantId, renteeId, propertyId, status, evia = null, signatureStatus = null, withUnit = false }) => {
+    const row = await first(pool,
+      `INSERT INTO agreements (tenant_id, renteeid, propertyid, unitid, status, eviasignreference, signature_status)
+       OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, @unitId, @status, @evia, @signatureStatus)`,
+      { tenantId, renteeId, propertyId, unitId: withUnit ? unitId : null, status, evia, signatureStatus });
+    return guid(row.id);
+  };
+  const aPending = await createAgreement({
+    ...a, status: 'pending', withUnit: true
+  });
+  const aActive = await createAgreement({ ...a, status: 'active' });
+  const aEvia = await createAgreement({ ...a, status: 'pending', evia: 'disposable-evia-request' });
+  const aInProgress = await createAgreement({ ...a, status: 'pending_signature', signatureStatus: 'in_progress' });
+  const bPending = await createAgreement({ ...b, status: 'pending_signature' });
+
+  const expectCode = async (operation, code) => {
+    await assert.rejects(operation, error => {
+      assert.equal(error?.code, code);
+      return true;
+    });
+  };
+  await expectCode(markAgreementSigned(aPending, b.tenantId), 'AGREEMENT_NOT_FOUND');
+  await expectCode(markAgreementSigned(bPending, a.tenantId), 'AGREEMENT_NOT_FOUND');
+  await expectCode(markAgreementSigned(aActive, a.tenantId), 'MANUAL_SIGN_STATE_INVALID');
+  await expectCode(markAgreementSigned(aEvia, a.tenantId), 'EVIA_SIGNING_MANAGED');
+  await expectCode(markAgreementSigned(aInProgress, a.tenantId), 'EVIA_SIGNING_MANAGED');
+  for (const id of [aPending, aActive, aEvia, aInProgress]) {
+    assert.equal((await first(pool, 'SELECT status FROM agreements WHERE id = @id', { id })).status,
+      id === aActive ? 'active' : id === aInProgress ? 'pending_signature' : 'pending');
+  }
+
+  // Force a related property mutation to fail after the agreement is updated
+  // in its transaction. SQL must roll back the agreement state and signeddate.
+  await pool.request().batch(`
+    CREATE TRIGGER dbo.sign_fixture_force_rollback ON dbo.properties
+    AFTER UPDATE AS
+    BEGIN
+      IF EXISTS (SELECT 1 FROM inserted WHERE id = '${a.propertyId}')
+        THROW 51001, 'Disposable signing rollback proof', 1;
+    END
+  `);
+  try {
+    await assert.rejects(markAgreementSigned(aPending, a.tenantId),
+      /Disposable signing rollback proof/);
+    const rolledBack = await first(pool,
+      'SELECT status, signeddate FROM agreements WHERE id = @id', { id: aPending });
+    assert.equal(rolledBack.status, 'pending');
+    assert.equal(rolledBack.signeddate, null);
+    assert.equal((await first(pool, 'SELECT status FROM property_units WHERE id = @id', { id: unitId })).status, 'available');
+  } finally {
+    await pool.request().batch('DROP TRIGGER IF EXISTS dbo.sign_fixture_force_rollback');
+  }
+
+  // A retry after rollback now performs the complete transaction; further
+  // manual replays are read-only and cannot duplicate the side effects.
+  const signed = await markAgreementSigned(aPending, a.tenantId);
+  assert.equal(signed.status, 'signed');
+  const snapshot = async () => ({
+    agreement: await first(pool,
+      'SELECT status, signeddate, updatedat FROM agreements WHERE id = @id', { id: aPending }),
+    property: await first(pool,
+      'SELECT status, updatedat FROM properties WHERE id = @id', { id: a.propertyId }),
+    unit: await first(pool,
+      'SELECT status, updatedat FROM property_units WHERE id = @id', { id: unitId }),
+    rentee: await first(pool,
+      'SELECT associated_property_ids, updatedat FROM app_users WHERE id = @id', { id: a.renteeId })
+  });
+  const beforeReplay = await snapshot();
+  assert.ok(beforeReplay.agreement.signeddate);
+  assert.equal(beforeReplay.unit.status, 'occupied');
+  const associated = JSON.parse(beforeReplay.rentee.associated_property_ids || '[]')
+    .map(guid);
+  assert.equal(associated.filter(id => id === a.propertyId).length, 1);
+  const twice = await markAgreementSigned(aPending, a.tenantId);
+  assert.equal(twice.status, 'signed');
+  assert.deepEqual(await snapshot(), beforeReplay,
+    'second manual signing must not repeat any SQL side effects');
+  // Concurrent requests must lock the same row and only one transition is
+  // performed; both callers may observe a signed record afterwards.
+  const simultaneous = await Promise.all([
+    markAgreementSigned(bPending, b.tenantId),
+    markAgreementSigned(bPending, b.tenantId)
+  ]);
+  assert.ok(simultaneous.every(row => row.status === 'signed'));
+  assert.equal((await first(pool,
+    'SELECT status FROM agreements WHERE id = @id', { id: bPending })).status, 'signed');
+  console.log('PASS: tenant-isolated manual signing state, Evia protection, rollback, replay and concurrency');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -201,6 +298,8 @@ async function main() {
     assert.equal((await query(pool,
       'SELECT id FROM utility_readings WHERE tenant_id = @tenantId AND invoice_id = @invoiceId',
       { tenantId: a.tenantId, invoiceId: invoiceB })).length, 0);
+
+    await verifyManualSigningAgainstDisposableSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
