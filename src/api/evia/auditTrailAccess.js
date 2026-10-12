@@ -1,4 +1,4 @@
-import { hasPermission, PERMISSIONS } from '../platform/permissionEngine.js';
+import { hasPermission, isAdminRole, PERMISSIONS } from '../platform/permissionEngine.js';
 
 // Only protected fenced *audit* objects. Do not alter legacy signed-PDF
 // routes or historic stable archive downloads as part of this slice.
@@ -25,7 +25,8 @@ export const authorizeFencedEviaAuditTrailRead = async ({
   if (!target) return { applies: false, allowed: true };
   const deny = reason => ({ applies: true, allowed: false, reason });
   if (!tenantId || target.tenantId.toLowerCase() !== String(tenantId).toLowerCase()
-      || !user?.id || !hasPermission({ user, membership }, PERMISSIONS.AGREEMENTS_MANAGE)) {
+      || !user?.id || !isAdminRole({ user, membership })
+      || !hasPermission({ user, membership }, PERMISSIONS.AGREEMENTS_MANAGE)) {
     return deny('not_authorized');
   }
   if (typeof loadPublishedArchive !== 'function') return deny('publication_unavailable');
