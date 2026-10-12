@@ -41,14 +41,7 @@ const RenteeInvoices = () => {
 
         const { data: invoicesData, error: invoicesError } = await platformClient
           .from('invoices')
-          .select(`
-            *,
-            properties!propertyid (
-              id,
-              name,
-              address
-            )
-          `)
+          .select('*, properties!propertyid(id, name, address)')
           .eq('renteeid', appUserId)
           .order('createdat', { ascending: false });
 
