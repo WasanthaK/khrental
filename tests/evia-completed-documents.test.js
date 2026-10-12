@@ -658,11 +658,17 @@ test('fenced staging prefers verified inline documents and keeps scoped fallback
   );
 });
 
-test('dormant Evia coordinator is not wired into the verified production webhook', () => {
+test('fenced Evia coordinator requires the default-off verified callback canary gate', () => {
   const source = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /runDormantEviaFencedArchive|stageEviaDocumentsForFencedLease/);
+  const policy = readFileSync(new URL('../src/api/evia/fencedCanaryPolicy.js', import.meta.url), 'utf8');
+  assert.match(source, /isEviaFencedArchiveCanaryEligible\(/);
+  assert.match(source, /verifiedAgreementBound: Boolean\(expectedAgreementId && expectedTenantId\)/);
+  assert.match(source, /fencedCanaryRunner\(/);
   assert.match(source, /withEviaAgreementArchiveLock/);
   assert.match(source, /withEviaArchiveCapacity/);
+  assert.match(policy, /EVIA_FENCED_ARCHIVE_MODE !== 'canary'/);
+  assert.match(policy, /EVIA_FENCED_ARCHIVE_CANARY_TENANTS/);
+  assert.match(policy, /EVIA_FENCED_ARCHIVE_CANARY_AGREEMENTS/);
 });
 
 test('fenced signatory completion derives from stored agreement without losing historical signed dates', () => {
@@ -735,5 +741,7 @@ test('fenced SQL finalization requires scoped completion row and commits its eve
   assert.match(lease, /markCompletedDeliveryInTransaction/);
   assert.match(lease, /acknowledgePublishedEviaArchiveDelivery/);
   assert.match(lease, /EVIA_ARCHIVE_PUBLICATION_NOT_PROVEN/);
-  assert.doesNotMatch(webhook, /acknowledgePublishedEviaArchiveDelivery|runDormantEviaFencedArchive/);
+  assert.match(webhook, /fencedCanaryRunner = runDormantEviaFencedArchive/);
+  assert.match(webhook, /isEviaFencedArchiveCanaryEligible\(/);
+  assert.match(webhook, /withEviaAgreementArchiveLock/);
 });
