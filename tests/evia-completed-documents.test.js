@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { completeStoredEviaSignatories } from '../src/api/evia/archivedSignatories.js';
 import {
   EVIA_ARCHIVE_HEARTBEAT_MS,
   runDormantEviaFencedArchive,
@@ -662,4 +663,77 @@ test('dormant Evia coordinator is not wired into the verified production webhook
   assert.doesNotMatch(source, /runDormantEviaFencedArchive|stageEviaDocumentsForFencedLease/);
   assert.match(source, /withEviaAgreementArchiveLock/);
   assert.match(source, /withEviaArchiveCapacity/);
+});
+
+test('fenced signatory completion derives from stored agreement without losing historical signed dates', () => {
+  const timestamp = '2026-10-13T00:00:00.000Z';
+  assert.equal(completeStoredEviaSignatories(null, timestamp), null);
+  assert.equal(completeStoredEviaSignatories('[]', timestamp), null);
+  const source = JSON.stringify([
+    { email: 'renter@example.invalid', status: 'pending', signed_at: '2026-10-12T01:00:00Z', email_delivery_status: 'delivered' },
+    { email: 'owner@example.invalid', status: 'pending', meta: { role: 'owner' } }
+  ]);
+  const data = JSON.parse(completeStoredEviaSignatories(source, timestamp));
+  assert.equal(data[0].status, 'completed');
+  assert.equal(data[0].signed_at, '2026-10-12T01:00:00Z');
+  assert.equal(data[0].signedAt, '2026-10-12T01:00:00Z');
+  assert.equal(data[0].email_delivery_status, 'delivered');
+  assert.equal(data[1].status, 'completed');
+  assert.equal(data[1].signed_at, timestamp);
+  assert.equal(data[1].signedAt, timestamp);
+  assert.deepEqual(data[1].meta, { role: 'owner' });
+  assert.throws(() => completeStoredEviaSignatories('broken json', timestamp),
+    error => error.code === 'EVIA_SIGNATORIES_STORED_INVALID');
+  assert.throws(() => completeStoredEviaSignatories('{"not":"an array"}', timestamp),
+    error => error.code === 'EVIA_SIGNATORIES_STORED_INVALID');
+});
+
+test('dormant coordinator passes verified provider delivery to publication and recovers completed HTTP replay', async () => {
+  const identity = { tenantId: 'tenant-1', agreementId: 'agreement-1', requestId: 'request-1' };
+  const attemptId = '11111111-1111-4111-8111-111111111111';
+  const verifiedDeliveryEventId = '22222222-2222-4222-8222-222222222222';
+  const signedDocumentUrl = '/storage/documents/tenants/tenant-1/agreements/agreement-1/signed/staged/' + attemptId + '/Signed.pdf';
+  let published;
+  const result = await runDormantEviaFencedArchive({
+    ...identity, verifiedDeliveryEventId,
+    acquire: async () => ({ status: 'acquired', attemptId }),
+    stageDocuments: async () => ({ signedDocumentUrl }),
+    renew: async () => ({ status: 'renewed' }),
+    finalize: async args => {
+      published = args;
+      return { status: 'published', signedDocumentUrl, attemptId };
+    }
+  });
+  assert.equal(result.status, 'published');
+  assert.equal(published.verifiedDeliveryEventId, verifiedDeliveryEventId);
+  assert.equal(published.signedDocumentUrl, signedDocumentUrl);
+  let ackCalls = 0;
+  const repeat = await runDormantEviaFencedArchive({
+    ...identity, verifiedDeliveryEventId,
+    acquire: async () => ({ status: 'complete', url: signedDocumentUrl }),
+    stageDocuments: async () => { throw new Error('replay must not stage'); },
+    acknowledge: async args => {
+      ackCalls++;
+      assert.deepEqual(args, { ...identity, verifiedDeliveryEventId });
+      return { status: 'already_processed', signedDocumentUrl };
+    }
+  });
+  assert.deepEqual(repeat, {
+    status: 'complete', signedDocumentUrl, deliveryStatus: 'already_processed'
+  });
+  assert.equal(ackCalls, 1);
+});
+
+test('fenced SQL finalization requires scoped completion row and commits its event with signer metadata', () => {
+  const lease = readFileSync(new URL('../src/api/evia/archiveLease.js', import.meta.url), 'utf8');
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  assert.match(lease, /loadVerifiedCompletionDelivery/);
+  assert.match(lease, /FROM dbo\.webhook_events WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(lease, /tenant_id = @tenantId AND request_id = @requestId/);
+  assert.match(lease, /EVIA_ARCHIVE_DELIVERY_NOT_COMPLETED/);
+  assert.match(lease, /signatories_status = COALESCE\(@completedSignatories, signatories_status\)/);
+  assert.match(lease, /markCompletedDeliveryInTransaction/);
+  assert.match(lease, /acknowledgePublishedEviaArchiveDelivery/);
+  assert.match(lease, /EVIA_ARCHIVE_PUBLICATION_NOT_PROVEN/);
+  assert.doesNotMatch(webhook, /acknowledgePublishedEviaArchiveDelivery|runDormantEviaFencedArchive/);
 });
