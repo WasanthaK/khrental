@@ -660,6 +660,37 @@ No production account changes, migrations, writes or privilege widening.
 Follow with production release attestation and Phase 4 closure review.
 ```
 
+## Phase 4 authenticated multi-membership switching — PR #230
+
+```text
+PR #230: accepted a single global renter identity with two active tenant
+memberships, A -> B -> A browser switching, invoices, payments, receipts,
+foreign-tenant denial and stale-view isolation. Profile resolution now uses
+the authenticated server context, not a different tenant's app-user row.
+Exact-head build/authorization run 38225084235 GREEN and disposable
+SQL Server + browser run 38225084192 GREEN at
+8f31c5dc2d39016a686f0d05f8f3e3db7e68bab2.
+Merge SHA: e7f3b9aaa1d3cd04a5b2f8b8a87491a9eeecd154.
+Production run 38225640159 SUCCESS: latest Azure revision 0000233
+Ready, public build-info SHA exactly e7f3b9aaa1d3cd04a5b2f8b8a87491a9eeecd154,
+live /api/mssql/health returned ok:true, connection:ready, and
+runtime/startup configuration checks passed.
+Result: MERGED + PRODUCTION ATTESTED for this exact SHA. This evidence
+does not retrospectively prove each earlier historical serving revision.
+
+ACTIVE next item: migrate just the renter invoice list read from the
+generic platform-client query to an explicit tenant-scoped billing GET.
+The server derives the current renter from the authenticated global
+identity and the active tenant from a verified membership, hides drafts,
+preserves property label/amount presentation, and fails closed.
+Continue to use the dedicated invoice-account/receipt lifecycle API.
+Run anonymous/foreign-user/other-tenant, same-tenant other-renter,
+draft-hiding and A -> B -> A disposable SQL + real-browser acceptance.
+Do not alter payment writes, invoice generation, status transitions,
+schema, production credentials or cross-domain compatibility operations.
+PR/CI/production proof are still required before declaring this slice done.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
