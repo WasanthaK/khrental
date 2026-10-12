@@ -1045,6 +1045,185 @@ async function verifyEviaFencedCanaryAgainstDisposableSql(pool, a, b) {
   console.log('PASS: authenticated-scope canary policy routes real disposable SQL event claims to fenced PDF publishing and replay');
 }
 
+async function verifyExpiredEviaWorkerStagingRaceAgainstSql(pool, a, b) {
+  const { runDormantEviaFencedArchive, stageEviaDocumentsForFencedLease } =
+    await import('../src/api/evia/archiveCoordinator.js');
+  const {
+    acquireEviaArchiveLease, acknowledgePublishedEviaArchiveDelivery,
+    EVIA_ARCHIVE_LEASE_EVENT
+  } = await import('../src/api/evia/archiveLease.js');
+  const { storeEviaWebhookCompletedDocuments } =
+    await import('../src/api/evia/completedDocuments.js');
+  const { reviewEviaStagedObject, EVIA_STAGE_REVIEW_MIN_AGE_MS } =
+    await import('../src/api/evia/stagedOrphanReview.js');
+
+  const ref = 'expired-race-' + crypto.randomBytes(7).toString('hex');
+  const agreement = await first(pool, `
+    INSERT INTO dbo.agreements
+      (tenant_id, renteeid, propertyid, eviasignreference, status,
+       signature_status, signatories_status)
+    OUTPUT INSERTED.id VALUES
+      (@tenantId, @renteeId, @propertyId, @requestId, 'pending_signature',
+       'in_progress', '[]')
+  `, { tenantId: a.tenantId, renteeId: a.renteeId,
+    propertyId: a.propertyId, requestId: ref });
+  const identity = { tenantId: a.tenantId, agreementId: guid(agreement.id), requestId: ref };
+  const delivery = async worker => {
+    const row = await first(pool, `
+      INSERT INTO dbo.webhook_events
+        (tenant_id, request_id, event_type, event_id, raw_data, processed)
+      OUTPUT INSERTED.id
+      VALUES (@tenantId, @requestId, 'request.completed', 3, @rawData, 0)
+    `, { tenantId: a.tenantId, requestId: ref,
+      rawData: JSON.stringify({ status: 'completed', deliveryId: worker + '-' + crypto.randomBytes(5).toString('hex') }) });
+    return guid(row.id);
+  };
+  const deliveryA = await delivery('A');
+  const deliveryB = await delivery('B');
+  const documents = [
+    { DocumentName: 'Signed.pdf', DocumentContent: Buffer.from('immutable signed').toString('base64') },
+    { DocumentName: 'audit_trail.pdf', DocumentContent: Buffer.from('audit evidence').toString('base64') }
+  ];
+  const staged = new Map();
+  const attempts = new Map();
+  const storageDriver = {
+    upload: async (bucket, key, body) => {
+      assert.equal(bucket, 'documents');
+      assert.ok(key.includes('/signed/staged/'));
+      assert.equal(staged.has(key), false, 'staging must never overwrite an existing object');
+      staged.set(key, Buffer.from(body));
+      return { path: key };
+    }
+  };
+  const store = async params => stageEviaDocumentsForFencedLease({
+    ...params, documents,
+    inlineStore: args => storeEviaWebhookCompletedDocuments({ ...args, storageDriver }),
+    retrieve: async () => { throw new Error('Evia inline pair must be retained'); }
+  });
+  let signalFirstEntered;
+  const firstEntered = new Promise(resolve => { signalFirstEntered = resolve; });
+  let releaseFirst;
+  const blockedUpload = new Promise(resolve => { releaseFirst = resolve; });
+
+  const firstWorker = runDormantEviaFencedArchive({
+    ...identity, verifiedDeliveryEventId: deliveryA,
+    stageDocuments: async args => {
+      attempts.set('A', args.attemptId);
+      signalFirstEntered();
+      await blockedUpload; // A loses its SQL lease while the external operation is paused
+      return store(args);
+    }
+  });
+  await firstEntered;
+  try {
+    const busy = await acquireEviaArchiveLease(identity);
+    assert.equal(busy.status, 'busy');
+    assert.equal((await first(pool, 'SELECT 1 AS available')).available, 1,
+      'blocked external I/O must not pin a SQL connection');
+    // Simulate a process that cannot renew while storage is stalled.
+    const leaseRecord = await first(pool, `
+      SELECT id FROM dbo.webhook_events
+      WHERE tenant_id = @tenantId AND request_id = @requestId
+        AND event_type = @eventType
+    `, { tenantId: a.tenantId, requestId: ref, eventType: EVIA_ARCHIVE_LEASE_EVENT });
+    await query(pool, `
+      UPDATE dbo.webhook_events
+      SET updatedat = DATEADD(MINUTE, -18, SYSUTCDATETIME())
+      WHERE id = @id
+    `, { id: leaseRecord.id });
+
+    const publishedB = await runDormantEviaFencedArchive({
+      ...identity, verifiedDeliveryEventId: deliveryB,
+      stageDocuments: async args => {
+        attempts.set('B', args.attemptId);
+        return store(args);
+      }
+    });
+    assert.equal(publishedB.status, 'published');
+    assert.notEqual(attempts.get('A'), attempts.get('B'));
+    assert.equal(staged.size, 2, 'only B has stored documents before delayed A resumes');
+    const accepted = await first(pool, `
+      SELECT id, tenant_id, status, signature_status, signed_document_url,
+             signeddate, signature_completed_at, updatedat
+      FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId
+    `, { agreementId: identity.agreementId, tenantId: a.tenantId });
+    assert.equal(accepted.status, 'signed');
+    assert.equal(accepted.signed_document_url, publishedB.signedDocumentUrl);
+    assert.equal((await first(pool,
+      'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: deliveryB })).processed, true);
+    assert.equal((await first(pool,
+      'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: deliveryA })).processed, false);
+  } finally {
+    releaseFirst();
+  }
+  await assert.rejects(firstWorker,
+    error => error?.code === 'EVIA_ARCHIVE_LEASE_FENCED',
+    'old owner must fail after uploading into its own immutable prefix');
+
+  const urls = [...staged.keys()];
+  assert.equal(urls.length, 4, 'both owners may upload but never to the same key');
+  assert.equal(new Set(urls).size, 4);
+  const latest = await first(pool, `
+    SELECT id, tenant_id, status, signature_status, signed_document_url,
+           signeddocumenturl, signature_pdf_url, signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId
+  `, { agreementId: identity.agreementId, tenantId: a.tenantId });
+  assert.ok(latest.signed_document_url.includes('/signed/staged/' + attempts.get('B') + '/'));
+  assert.equal(staged.get(latest.signed_document_url.replace(/^\/storage\/documents\//, '')).toString(),
+    'immutable signed');
+  const audited = await first(pool, `
+    SELECT raw_data, processed FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND request_id = @requestId
+      AND event_type = @eventType
+  `, { tenantId: a.tenantId, requestId: ref, eventType: EVIA_ARCHIVE_LEASE_EVENT });
+  const auditUrl = JSON.parse(audited.raw_data).auditTrailUrl;
+  assert.ok(auditUrl.includes('/signed/staged/' + attempts.get('B') + '/'));
+  const now = new Date('2026-12-15T00:00:00Z');
+  const old = new Date(now.getTime() - EVIA_STAGE_REVIEW_MIN_AGE_MS - 86_400_000);
+  const baseReview = { tenantId: a.tenantId, agreementId: identity.agreementId,
+    agreement: latest, lease: audited, now, lastModified: old };
+  assert.deepEqual(reviewEviaStagedObject({
+    ...baseReview, attemptId: attempts.get('B'), objectUrl: latest.signed_document_url
+  }).status, 'protected');
+  assert.equal(reviewEviaStagedObject({
+    ...baseReview, attemptId: attempts.get('B'), objectUrl: auditUrl
+  }).reason, 'retained_or_audit_document');
+  const staleUrl = '/storage/documents/' + urls.find(path =>
+    path.includes('/signed/staged/' + attempts.get('A') + '/') && path.endsWith('/Signed.pdf'));
+  const review = reviewEviaStagedObject({
+    ...baseReview, attemptId: attempts.get('A'), objectUrl: staleUrl
+  });
+  assert.equal(review.status, 'manual_review_candidate');
+  assert.equal(review.mayDelete, false, 'orphan review is never an automatic delete approval');
+  assert.equal(reviewEviaStagedObject({
+    ...baseReview, attemptId: attempts.get('A'), objectUrl: staleUrl,
+    lastModified: new Date(now.getTime() - 60_000)
+  }).status, 'protected');
+  assert.equal(reviewEviaStagedObject({
+    ...baseReview, attemptId: attempts.get('A'), objectUrl: staleUrl, tenantId: b.tenantId
+  }).status, 'protected');
+
+  const beforeRecovery = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signeddate,
+           signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id
+  `, { id: identity.agreementId });
+  const recovery = await acknowledgePublishedEviaArchiveDelivery({
+    ...identity, verifiedDeliveryEventId: deliveryA
+  });
+  assert.equal(recovery.status, 'acknowledged');
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: deliveryA })).processed, true);
+  const afterRecovery = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signeddate,
+           signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id
+  `, { id: identity.agreementId });
+  assert.deepEqual(afterRecovery, beforeRecovery,
+    'post-commit recovery must preserve original winning PDF and completion timestamps');
+  console.log('PASS: Evia A expired, B publishes, A late upload cannot overwrite/commit, orphan review read-only, replay acknowledges');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -1230,6 +1409,7 @@ async function main() {
     await verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b);
     await verifyDormantArchiveDeliveryAccountingAgainstSql(pool, a, b);
     await verifyEviaFencedCanaryAgainstDisposableSql(pool, a, b);
+    await verifyExpiredEviaWorkerStagingRaceAgainstSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { reviewEviaStagedObject, EVIA_STAGE_REVIEW_MIN_AGE_MS } from '../src/api/evia/stagedOrphanReview.js';
 import { completeStoredEviaSignatories } from '../src/api/evia/archivedSignatories.js';
 import {
   EVIA_ARCHIVE_HEARTBEAT_MS,
@@ -744,4 +745,71 @@ test('fenced SQL finalization requires scoped completion row and commits its eve
   assert.match(webhook, /fencedCanaryRunner = runDormantEviaFencedArchive/);
   assert.match(webhook, /isEviaFencedArchiveCanaryEligible\(/);
   assert.match(webhook, /withEviaAgreementArchiveLock/);
+});
+
+test('Evia staged-object review cannot authorize deletion and protects active, winning and audit objects', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const winning = '33333333-3333-4333-8333-333333333333';
+  const loser = '44444444-4444-4444-8444-444444444444';
+  const root = '/storage/documents/tenants/' + tenantId + '/agreements/' + agreementId + '/signed/staged/';
+  const pdf = root + winning + '/Signed.pdf';
+  const audit = root + winning + '/audit_trail.pdf';
+  const stale = root + loser + '/Signed.pdf';
+  const now = new Date('2026-12-15T00:00:00Z');
+  const old = new Date(now.getTime() - EVIA_STAGE_REVIEW_MIN_AGE_MS - 60_000);
+  const agreement = { id: agreementId, tenant_id: tenantId,
+    signed_document_url: pdf, signeddocumenturl: pdf, signature_pdf_url: pdf };
+  const lease = { processed: true, raw_data: JSON.stringify({
+    agreementId, attemptId: winning, signedDocumentUrl: pdf, auditTrailUrl: audit
+  }) };
+  const base = { tenantId, agreementId, agreement, lease, now, lastModified: old };
+  assert.equal(EVIA_STAGE_REVIEW_MIN_AGE_MS, 30 * 24 * 60 * 60 * 1000);
+  for (const [url, attemptId] of [[pdf, winning], [audit, winning]]) {
+    const result = reviewEviaStagedObject({ ...base, objectUrl: url, attemptId });
+    assert.deepEqual(result, { status: 'protected', reason: 'retained_or_audit_document', mayDelete: false });
+  }
+  const result = reviewEviaStagedObject({ ...base, objectUrl: stale, attemptId: loser });
+  assert.equal(result.status, 'manual_review_candidate');
+  assert.equal(result.reason, 'old_unreferenced_staging_object');
+  assert.equal(result.mayDelete, false);
+  assert.ok(result.ageMs > EVIA_STAGE_REVIEW_MIN_AGE_MS);
+  assert.deepEqual(reviewEviaStagedObject({
+    ...base, objectUrl: stale, attemptId: loser, lastModified: new Date(now.getTime() - 1000)
+  }), { status: 'protected', reason: 'recent_or_unknown_timestamp', mayDelete: false });
+  const active = { processed: false,
+    raw_data: JSON.stringify({ agreementId, attemptId: loser, state: 'staging' }) };
+  assert.deepEqual(reviewEviaStagedObject({ ...base, lease: active,
+    objectUrl: stale, attemptId: loser
+  }), { status: 'protected', reason: 'current_active_attempt', mayDelete: false });
+});
+
+test('Evia orphan review fails closed for invalid URLs, unscoped records and absent history', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const agreementId = '22222222-2222-4222-8222-222222222222';
+  const attemptId = '33333333-3333-4333-8333-333333333333';
+  const url = '/storage/documents/tenants/' + tenantId + '/agreements/' +
+    agreementId + '/signed/staged/' + attemptId + '/Signed.pdf';
+  const now = new Date('2026-12-15T00:00:00Z');
+  const agreement = { id: agreementId, tenant_id: tenantId };
+  const lease = { processed: true,
+    raw_data: JSON.stringify({ agreementId, attemptId: '44444444-4444-4444-8444-444444444444' }) };
+  const base = { tenantId, agreementId, attemptId, objectUrl: url,
+    lastModified: new Date('2026-10-01T00:00:00Z'), now, agreement, lease };
+  for (const changes of [
+    { objectUrl: url + '/../../another.pdf' }, { objectUrl: '' },
+    { agreement: null }, { lease: null },
+    { agreement: { ...agreement, tenant_id: 'other' } },
+    { lease: { ...lease, raw_data: '{not json' } },
+    { minAgeMs: 1000 },
+    { lastModified: 'unknown' },
+    { lastModified: new Date(now.getTime() + 60_000) }
+  ]) {
+    const candidate = reviewEviaStagedObject({ ...base, ...changes });
+    assert.equal(candidate.status, 'protected');
+    assert.equal(candidate.mayDelete, false);
+  }
+  const source = readFileSync(new URL('../src/api/evia/stagedOrphanReview.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\.delete\(|\.remove\(|\.unlink\(|DELETE FROM/i,
+    'review module must never create storage or SQL delete authority');
 });
