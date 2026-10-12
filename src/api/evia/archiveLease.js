@@ -6,6 +6,8 @@ import { completeStoredEviaSignatories } from './archivedSignatories.js';
 // A reserved webhook_events row is an existing-schema durable lease journal.
 // The transaction-scoped application lock is held ONLY for acquire/renew/finalize.
 export const EVIA_ARCHIVE_LEASE_EVENT = 'evia.archive.lease.v1';
+export const EVIA_ARCHIVE_ATTEMPT_EVENT = 'evia.archive.attempt.v1';
+export const EVIA_ARCHIVE_PUBLICATION_EVENT = 'evia.archive.publication.v1';
 export const EVIA_ARCHIVE_LEASE_MS = 15 * 60 * 1000;
 
 const err = (code, message, status = 409) =>
@@ -108,6 +110,18 @@ const assertCanComplete = agreement => {
   }
 };
 
+const appendArchiveLedgerEvent = async ({ transaction, tenantId, requestId, eventType, data }) => {
+  const request = new sql.Request(transaction);
+  request.input('tenantId', tenantId);
+  request.input('requestId', requestId);
+  request.input('eventType', eventType);
+  request.input('data', JSON.stringify(data));
+  await request.query(`
+    INSERT INTO dbo.webhook_events (tenant_id, request_id, event_type, raw_data, processed, processed_at)
+    VALUES (@tenantId, @requestId, @eventType, @data, 1, SYSUTCDATETIME())
+  `);
+};
+
 const leaseAgeValid = lease => !!lease
   && Number.isFinite(new Date(lease.updatedat).getTime())
   && Number.isFinite(new Date(lease.serverNow).getTime())
@@ -173,6 +187,12 @@ export const acquireEviaArchiveLease = async (identity) =>
         throw err('EVIA_ARCHIVE_LEASE_CLAIM_FAILED', 'Lease insertion failed.', 503);
       }
     }
+    // Append a distinct immutable evidence row in the SAME transaction as
+    // the mutable lease claim. A reclaimed worker never erases its predecessor.
+    await appendArchiveLedgerEvent({
+      transaction, tenantId, requestId, eventType: EVIA_ARCHIVE_ATTEMPT_EVENT,
+      data: { agreementId, attemptId, priorAttemptId: lease?.attemptId || null, state: 'claimed' }
+    });
     return { status: 'acquired', attemptId };
   });
 
@@ -215,12 +235,14 @@ const loadVerifiedCompletionDelivery = async ({
   request.input('requestId', requestId);
   request.input('deliveryEventId', deliveryEventId);
   request.input('reservedType', EVIA_ARCHIVE_LEASE_EVENT);
+  request.input('reservedAttempt', EVIA_ARCHIVE_ATTEMPT_EVENT);
+  request.input('reservedPublication', EVIA_ARCHIVE_PUBLICATION_EVENT);
   const result = await request.query(`
     SELECT TOP 1 id, processed, event_type, event_id, raw_data
     FROM dbo.webhook_events WITH (UPDLOCK, HOLDLOCK)
     WHERE id = @deliveryEventId
       AND tenant_id = @tenantId AND request_id = @requestId
-      AND (event_type IS NULL OR event_type <> @reservedType)
+      AND (event_type IS NULL OR event_type NOT IN (@reservedType, @reservedAttempt, @reservedPublication))
   `);
   const event = result.recordset?.[0];
   if (!event) {
@@ -338,6 +360,12 @@ export const finalizeEviaArchiveLease = async ({
   if (saved.recordset?.length !== 1) {
     throw err('EVIA_ARCHIVE_LEASE_FENCED', 'Archive lease completion was lost.');
   }
+  // Append immutable publication proof together with the agreement update,
+  // mutable lease completion, and verified provider delivery accounting.
+  await appendArchiveLedgerEvent({
+    transaction, tenantId, requestId, eventType: EVIA_ARCHIVE_PUBLICATION_EVENT,
+    data: { agreementId, attemptId, signedDocumentUrl, auditTrailUrl, state: 'published' }
+  });
   // The provider delivery audit and its authoritative PDF pointer commit
   // together. A lost HTTP 200 cannot leave publication without an audit row.
   if (verifiedDeliveryEventId !== null) {
