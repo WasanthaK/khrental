@@ -799,6 +799,31 @@ secondary side effects after ambiguous MSSQL writes. Do not batch these
 with the new-agreement-creation slice. Phase 4 remains OPEN.
 ```
 
+## Phase 4 authoritative agreement update — bounded follow-on
+
+```text
+PR #234 new-agreement single-write acceptance: CI run 38232900230
+GREEN at exact head 1b4cd2e572a5f48081ffbd83ea083e82c6ec19d1.
+Merge SHA: 4d90f378ce5d3f1fc1adeaf7af6757d3f0bbd0f5.
+Production workflow 38233055711 is a separate pending release gate:
+Ready Azure revision, exact public SHA and live MSSQL connection must pass
+before release acceptance.
+
+ACTIVE independent update slice: when MSSQL mode is enabled, the existing
+agreement updater must use one authoritative PUT /api/mssql/agreements/:id.
+Any 401/403/404/409/500/503 or ambiguous result must not trigger a secondary
+platformClient update. Retain generic table path only with MSSQL explicitly
+disabled. All template, signing/webhook, invoice, document and tenant roles
+remain untouched; no real agreement records are mutated in acceptance.
+Exact service-body regression covers success, failures, empty result and
+disabled-MSSQL compatibility.
+
+NEXT: inspect Evia signing and property/unit status side effects as a
+separate contract-authority slice. Do not claim signing complete or
+remove a fallback before separately proving webhook lifecycle invariants.
+Phase 4 remains OPEN.
+```
+
 ## Maintenance rule for this document
 
 After each merged production change:
