@@ -777,6 +777,147 @@ async function verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b
   console.log('PASS: dormant Evia staging coordinator with SQL claim, concurrent busy, released connection, publication and replay');
 }
 
+async function verifyDormantArchiveDeliveryAccountingAgainstSql(pool, a, b) {
+  const {
+    acquireEviaArchiveLease, finalizeEviaArchiveLease,
+    acknowledgePublishedEviaArchiveDelivery, EVIA_ARCHIVE_LEASE_EVENT
+  } = await import('../src/api/evia/archiveLease.js');
+  const { buildEviaCompletedDocumentPath } =
+    await import('../src/api/evia/completedDocuments.js');
+  const ref = 'acct-' + crypto.randomBytes(7).toString('hex');
+  const signatories = JSON.stringify([
+    { name: 'Renter One', email: a.email, status: 'pending', signed_at: '2026-10-01T10:00:00Z' },
+    { name: 'Manager', email: 'manager@example.invalid', status: 'pending' }
+  ]);
+  const row = await first(pool, `
+    INSERT INTO dbo.agreements
+      (tenant_id, renteeid, propertyid, eviasignreference, status, signature_status, signatories_status)
+    OUTPUT INSERTED.id VALUES
+      (@tenantId, @renteeId, @propertyId, @requestId, 'pending_signature', 'pending', @signatories)
+  `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId, requestId: ref, signatories });
+  const identity = { tenantId: a.tenantId, agreementId: guid(row.id), requestId: ref };
+  const deliver = async (tenant, requestId, type = 'request.completed', status = 'completed') => {
+    const event = await first(pool, `
+      INSERT INTO dbo.webhook_events
+        (tenant_id, request_id, event_type, event_id, raw_data, processed)
+      OUTPUT INSERTED.id VALUES (@tenantId, @requestId, @eventType, 3, @rawData, 0)
+    `, {
+      tenantId: tenant.tenantId, requestId, eventType: type,
+      rawData: JSON.stringify({ deliveryId: 'acct-' + crypto.randomBytes(6).toString('hex'), status })
+    });
+    return guid(event.id);
+  };
+  const eventId = await deliver(a, ref);
+  const lease = await acquireEviaArchiveLease(identity);
+  assert.equal(lease.status, 'acquired');
+  const stageUrl = '/storage/documents/' + buildEviaCompletedDocumentPath({
+    tenantId: a.tenantId, agreementId: identity.agreementId,
+    documentName: 'Signed.pdf', archiveAttemptId: lease.attemptId
+  });
+  const audit = '/storage/documents/' + buildEviaCompletedDocumentPath({
+    tenantId: a.tenantId, agreementId: identity.agreementId,
+    documentName: 'audit_trail.pdf', archiveAttemptId: lease.attemptId
+  });
+
+  const foreignEvent = await deliver(b, ref);
+  await assert.rejects(finalizeEviaArchiveLease({
+    ...identity, attemptId: lease.attemptId, signedDocumentUrl: stageUrl,
+    verifiedDeliveryEventId: foreignEvent
+  }), error => error?.code === 'EVIA_ARCHIVE_DELIVERY_NOT_FOUND');
+  assert.equal((await first(pool,
+    'SELECT status FROM dbo.agreements WHERE id = @id', { id: identity.agreementId })).status, 'pending_signature');
+  const foreignRequestEvent = await deliver(a, ref + '-foreign');
+  await assert.rejects(finalizeEviaArchiveLease({
+    ...identity, attemptId: lease.attemptId, signedDocumentUrl: stageUrl,
+    verifiedDeliveryEventId: foreignRequestEvent
+  }), error => error?.code === 'EVIA_ARCHIVE_DELIVERY_NOT_FOUND');
+  const reservedEvent = await first(pool, `
+    SELECT id FROM dbo.webhook_events
+    WHERE tenant_id = @tenantId AND request_id = @requestId
+      AND event_type = @eventType
+  `, { tenantId: a.tenantId, requestId: ref, eventType: EVIA_ARCHIVE_LEASE_EVENT });
+  await assert.rejects(finalizeEviaArchiveLease({
+    ...identity, attemptId: lease.attemptId, signedDocumentUrl: stageUrl,
+    verifiedDeliveryEventId: guid(reservedEvent.id)
+  }), error => error?.code === 'EVIA_ARCHIVE_DELIVERY_NOT_FOUND');
+  const wrongType = await deliver(a, ref, 'request.sent', 'sent');
+  await query(pool, 'UPDATE dbo.webhook_events SET event_id = NULL WHERE id = @id', { id: wrongType });
+  await assert.rejects(finalizeEviaArchiveLease({
+    ...identity, attemptId: lease.attemptId, signedDocumentUrl: stageUrl,
+    verifiedDeliveryEventId: wrongType
+  }), error => error?.code === 'EVIA_ARCHIVE_DELIVERY_NOT_COMPLETED');
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: eventId })).processed, false);
+
+  const finalized = await finalizeEviaArchiveLease({
+    ...identity, attemptId: lease.attemptId, signedDocumentUrl: stageUrl,
+    auditTrailUrl: audit, verifiedDeliveryEventId: eventId
+  });
+  assert.equal(finalized.status, 'published');
+  const stored = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signatories_status,
+      signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id`, { id: identity.agreementId });
+  assert.equal(stored.status, 'signed');
+  assert.equal(stored.signature_status, 'completed');
+  assert.equal(stored.signed_document_url, stageUrl);
+  const completedSigners = JSON.parse(stored.signatories_status);
+  assert.equal(completedSigners.length, 2);
+  assert.ok(completedSigners.every(x => x.status === 'completed'));
+  assert.equal(completedSigners[0].signed_at, '2026-10-01T10:00:00Z');
+  assert.equal(completedSigners[0].signedAt, '2026-10-01T10:00:00Z');
+  assert.ok(completedSigners[1].signed_at && completedSigners[1].signedAt);
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: eventId })).processed, true);
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: reservedEvent.id })).processed, true);
+
+  // Simulated lost HTTP acknowledgment: a NEW verified provider callback
+  // event is recorded; it may be acknowledged against the committed winner.
+  const redelivery = await deliver(a, ref);
+  const ack = await acknowledgePublishedEviaArchiveDelivery({
+    ...identity, verifiedDeliveryEventId: redelivery
+  });
+  assert.equal(ack.status, 'acknowledged');
+  assert.equal(ack.signedDocumentUrl, stageUrl);
+  const replayAck = await acknowledgePublishedEviaArchiveDelivery({
+    ...identity, verifiedDeliveryEventId: redelivery
+  });
+  assert.equal(replayAck.status, 'already_processed');
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: redelivery })).processed, true);
+  const afterAck = await first(pool, `
+    SELECT status, signature_status, signed_document_url, signatories_status,
+      signeddate, signature_completed_at, updatedat
+    FROM dbo.agreements WHERE id = @id`, { id: identity.agreementId });
+  assert.deepEqual(afterAck, stored, 'acknowledgment recovery must be strictly read-only on agreement');
+  await assert.rejects(acknowledgePublishedEviaArchiveDelivery({
+    ...identity, tenantId: b.tenantId, verifiedDeliveryEventId: redelivery
+  }), error => error?.code === 'EVIA_ARCHIVE_LEASE_AGREEMENT_NOT_FOUND');
+  await assert.rejects(acknowledgePublishedEviaArchiveDelivery({
+    ...identity, verifiedDeliveryEventId: foreignEvent
+  }), error => error?.code === 'EVIA_ARCHIVE_DELIVERY_NOT_FOUND');
+
+  // A completed delivery must NEVER be acknowledged if the PDF was never
+  // published: the provider needs a retry, not a false 200.
+  const pendingRef = 'acct-pending-' + crypto.randomBytes(5).toString('hex');
+  const pending = await first(pool, `
+    INSERT INTO dbo.agreements
+      (tenant_id, renteeid, propertyid, eviasignreference, status, signature_status)
+    OUTPUT INSERTED.id VALUES
+      (@tenantId, @renteeId, @propertyId, @requestId, 'pending_signature', 'in_progress')
+  `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId, requestId: pendingRef });
+  const pendingIdentity = { tenantId: a.tenantId, agreementId: guid(pending.id), requestId: pendingRef };
+  const pendingEvent = await deliver(a, pendingRef);
+  await acquireEviaArchiveLease(pendingIdentity);
+  await assert.rejects(acknowledgePublishedEviaArchiveDelivery({
+    ...pendingIdentity, verifiedDeliveryEventId: pendingEvent
+  }), error => error?.code === 'EVIA_ARCHIVE_PUBLICATION_NOT_PROVEN');
+  assert.equal((await first(pool,
+    'SELECT processed FROM dbo.webhook_events WHERE id = @id', { id: pendingEvent })).processed, false);
+  console.log('PASS: fenced Evia delivery event atomic publication, retained signatories and HTTP-ack recovery');
+}
+
 async function fixture(pool, label, rent, water) {
   const suffix = crypto.randomBytes(6).toString('hex');
   const tenant = await first(pool,
@@ -960,6 +1101,7 @@ async function main() {
     await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);
     await verifyDormantFencedArchiveLeaseAgainstDisposableSql(pool, a, b);
     await verifyDormantEviaFencedCoordinatorAgainstDisposableSql(pool, a, b);
+    await verifyDormantArchiveDeliveryAccountingAgainstSql(pool, a, b);
 
     // Exercise real bearer sessions and actual HTTP routing over loopback,
     // never development identity headers or externally configured SQL.
