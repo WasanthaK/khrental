@@ -26,6 +26,7 @@ import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createStorageDeliveryHandler } from './src/api/storage/index.js';
 import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
+import { authorizeFencedEviaAuditTrailRead } from './src/api/evia/auditTrailAccess.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
@@ -418,6 +419,43 @@ async function createServer() {
       next();
     },
     createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
+    // Audit trails contain signing evidence and require stricter agreement
+    // management authorization than ordinary tenant-scoped file delivery.
+    // Only fenced staged audit PDFs are changed; legacy routes are retained.
+    async (req, res, next) => {
+      try {
+        const objectPath = String(req.params[0] || req.path || '').replace(/^\\/+/, '');
+        const result = await authorizeFencedEviaAuditTrailRead({
+          bucket: req.params.bucket,
+          path: objectPath,
+          tenantId: req.tenantId,
+          user: req.user,
+          membership: req.membership,
+          loadPublishedArchive: async ({ agreementId, tenantId }) => runSingleQuery(`
+            SELECT TOP 1 a.id, a.tenant_id, a.status, a.signature_status,
+              a.signed_document_url,
+              e.processed AS lease_processed, e.raw_data AS lease_raw_data
+            FROM dbo.agreements a
+            INNER JOIN dbo.webhook_events e
+              ON e.tenant_id = a.tenant_id
+              AND e.request_id = a.eviasignreference
+              AND e.event_type = 'evia.archive.lease.v1'
+              AND e.processed = 1
+              AND ISJSON(e.raw_data) = 1
+            WHERE a.id = @agreementId AND a.tenant_id = @tenantId
+            ORDER BY e.createdat DESC
+          `, { agreementId, tenantId })
+        });
+        if (result.applies && !result.allowed) {
+          res.status(403).json({
+            error: 'Audit-trail access is not authorized.',
+            code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED'
+          });
+          return;
+        }
+        next();
+      } catch (error) { next(error); }
+    },
     createStorageDeliveryHandler()
   );
 
