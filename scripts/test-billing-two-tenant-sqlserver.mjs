@@ -49,7 +49,7 @@ async function fixture(pool, label, rent, water) {
   const reading = await first(pool,
     "INSERT INTO utility_readings (tenant_id, renteeid, propertyid, utilitytype, readingdate, calculatedbill, status, billing_status) OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'water', '2026-09-20', @water, 'approved', 'pending_invoice')",
     { tenantId, renteeId, propertyId, water });
-  return { tenantId, propertyId, renteeId, agreementId: guid(agreement.id),
+  return { tenantId, propertyId, renteeId, email: 'sqlbilling-' + suffix + '@example.invalid', agreementId: guid(agreement.id),
     readingId: guid(reading.id), expected: rent + water };
 }
 
@@ -177,13 +177,22 @@ async function main() {
     const { guardBillingMssqlCompatibility } =
       await import('../src/api/platform/billingMutationGuard.js');
     const auth = async item => {
+      // Reproduce the real auth identity -> app_users profile relationship.
+      // An authenticated browser must resolve profileId via the server, not a
+      // fabricated browser-local ID or a development bypass.
+      const authId = crypto.randomUUID();
       const record = await createAuthRecord({
-        authId: crypto.randomUUID(),
+        authId,
         appUserId: item.renteeId,
-        email: 'auth-' + crypto.randomUUID() + '@example.invalid',
+        email: item.email,
         role: 'rentee',
         password: crypto.randomBytes(24).toString('base64url')
       });
+      const linked = await query(pool,
+        'UPDATE app_users SET auth_id = @authId OUTPUT INSERTED.id WHERE tenant_id = @tenantId AND id = @renteeId',
+        { authId, tenantId: item.tenantId, renteeId: item.renteeId });
+      assert.equal(linked.length, 1, 'disposable renter must link to its real auth identity');
+      item.authId = authId;
       return (await issueAuthSession(record)).accessToken;
     };
     const tokenA = await auth(a);
@@ -290,20 +299,47 @@ async function main() {
     assert.equal(guid(ownB.payload.data[0].id), b.readingId);
 
 
+    // Billing generator intentionally drafts invoices; the renter invoice list
+    // intentionally hides drafts. Promote only disposable fixture rows to the
+    // legacy visible "pending" state to test the actual renter-facing display.
+    await query(pool,
+      "UPDATE invoices SET status = 'pending' WHERE id IN (@invoiceA, @invoiceB)",
+      { invoiceA, invoiceB });
+    // Verify the same authorized projection used by the React invoice screen.
+    // This differentiates missing API data from a browser/profile rendering defect.
+    for (const item of [a, b]) {
+      const ownToken = item.tenantId === a.tenantId ? tokenA : tokenB;
+      const ownProperty = item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property';
+      const ownInvoiceQuery = await call('/api/platform/query', {
+        token: ownToken, tenantId: item.tenantId, method: 'POST',
+        body: {
+          action: 'select', table: 'invoices',
+          select: '*, properties!propertyid(id, name, address)',
+          filters: [{ column: 'renteeid', operator: 'eq', value: item.renteeId }],
+          order: [{ column: 'createdat', ascending: false }]
+        }
+      });
+      assert.equal(ownInvoiceQuery.status, 200, JSON.stringify(ownInvoiceQuery));
+      assert.equal(ownInvoiceQuery.payload.data?.length, 1,
+        'tenant must receive exactly its own invoice from the authenticated API');
+      assert.equal(ownInvoiceQuery.payload.data[0]?.properties?.name, ownProperty,
+        'tenant-scoped invoice API must resolve its own property relationship');
+      assert.equal(Number(ownInvoiceQuery.payload.data[0].totalamount), item.expected);
+    }
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const browserVisit = async (item, token, route) => {
+    const browserVisit = async (item, token, route, { visibleInvoice = false } = {}) => {
       const page = await browser.newPage();
       try {
-        await page.evaluateOnNewDocument((sessionToken, tenantId, profileId) => {
+        await page.evaluateOnNewDocument((sessionToken, tenantId, authId, email) => {
           localStorage.removeItem('dev_bypass_role');
           localStorage.setItem('khrental.activeTenantId', tenantId);
           localStorage.setItem('khrental.local.session', JSON.stringify({
             access_token: sessionToken,
-            user: { id: profileId, email: 'browser-fixture@example.invalid', role: 'rentee' }
+            user: { id: authId, email, role: 'rentee' }
           }));
-        }, token, item.tenantId, item.renteeId);
+        }, token, item.tenantId, item.authId, item.email);
         await page.goto(origin + route, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.waitForFunction(() => (
           !document.body.innerText.includes('Loading application...')
@@ -313,15 +349,29 @@ async function main() {
         const state = await page.evaluate(() => ({
           path: window.location.pathname, text: document.body.innerText.slice(0, 12000)
         }));
-        assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login');
+        // Only disposable fixture content is included in a failure; no bearer tokens.
+        const browserEvidence = 'Path: ' + state.path + '\\nPage: ' + state.text.slice(-3000);
+        assert.notEqual(state.path, '/login', 'valid fixture session must not bounce to login; ' + browserEvidence);
         assert.notEqual(state.path, '/unauthorized', 'valid rentee session must reach its portal');
         assert.ok(state.path.startsWith('/rentee/'), 'tenant portal route must be preserved');
-        assert.doesNotMatch(state.text, /Tenant B Property|Tenant A Property/,
-          'rentee-facing browser must not leak other tenant property labels');
+        const ownProperty = item.tenantId === a.tenantId ? 'Tenant A Property' : 'Tenant B Property';
+        const foreignProperty = item.tenantId === a.tenantId ? 'Tenant B Property' : 'Tenant A Property';
+        assert.doesNotMatch(state.text, new RegExp(foreignProperty),
+          'rentee-facing browser must not leak another tenant property');
+        if (visibleInvoice) {
+          assert.match(state.text, /My Invoices/, 'actual renter invoice screen must load');
+          assert.match(state.text, new RegExp(ownProperty), 'own property must be visible on invoice; ' + browserEvidence);
+          assert.match(state.text, new RegExp(item.expected.toLocaleString('en-US')),
+            'the tenant-specific invoice total must be visible');
+          assert.doesNotMatch(state.text, /No invoices found\./,
+            'visible test invoice must not be silently omitted');
+        }
       } finally { await page.close(); }
     };
     await browserVisit(a, tokenA, '/rentee/utilities/history');
     await browserVisit(b, tokenB, '/rentee/utilities/history');
+    await browserVisit(a, tokenA, '/rentee/invoices', { visibleInvoice: true });
+    await browserVisit(b, tokenB, '/rentee/invoices', { visibleInvoice: true });
     console.log('PASS: disposable two-tenant SQL Server invoice isolation, rent/utility totals, lifecycle events, correct reading linkage and duplicate prevention');
   } finally {
     if (browser) await browser.close().catch(() => {});
