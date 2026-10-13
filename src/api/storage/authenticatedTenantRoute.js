@@ -2,7 +2,7 @@ import express from 'express';
 import { createSessionAuthMiddleware } from '../auth/index.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { runSingleQuery } from '../mssql/query.js';
-import { authorizeFencedEviaAuditTrailRead } from '../evia/auditTrailAccess.js';
+import { authorizeFencedEviaAuditTrailRead, authorizeHistoricEviaAuditTrailRead } from '../evia/auditTrailAccess.js';
 import { createStorageDeliveryHandler } from './index.js';
 
 // Production uses the existing real authentication, tenant, SQL and storage.
@@ -26,6 +26,10 @@ export const createAuthenticatedTenantStorageRouter = ({
   sessionMiddleware = createSessionAuthMiddleware({ allowStorageCookie: true }),
   tenantMiddleware = createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
   loadPublishedArchive = loadPublishedArchiveFromSql,
+  loadHistoricAgreement = ({ agreementId, tenantId }) => runSingleQuery(
+    'SELECT TOP 1 id, tenant_id, status, signature_status, signed_document_url, signeddocumenturl, signature_pdf_url FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId',
+    { agreementId, tenantId }
+  ),
   deliveryHandler = createStorageDeliveryHandler()
 } = {}) => {
   const router = express.Router();
@@ -67,6 +71,14 @@ export const createAuthenticatedTenantStorageRouter = ({
             error: 'Audit-trail access is not authorized.',
             code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED'
           });
+          return;
+        }
+        const historic = await authorizeHistoricEviaAuditTrailRead({
+          bucket: req.params.bucket, path: objectPath, tenantId: req.tenantId,
+          user: req.user, membership: req.membership, loadHistoricAgreement
+        });
+        if (historic.applies && !historic.allowed) {
+          res.status(403).json({ error: 'Audit-trail access is not authorized.', code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED' });
           return;
         }
         next();
