@@ -1646,6 +1646,29 @@ billing money/status, server endpoints, schema, or the Evia canary.
 Run PR-head authorization tests/build and independent production acceptance.
 Phase 4 remains OPEN.
 
+## Phase 4 utility invoice preview read migration — bounded slice
+
+PR #260 merged as `9ffe0a3ee0942222c450082fe7dc99679e287744`.
+Azure revision 0000263 was Ready; public build SHA matched this merge and live
+MSSQL health was ready. The legacy mock-invoice action is contained.
+
+ACTIVE: migrate ONLY `fetchReadingsForInvoice` to an explicit authenticated,
+tenant-scoped read-only `/api/platform/query` transport. The routed review
+screen continues to show pending, unlinked utility readings with optional
+reading-month/year filters, property/rentee filters, stable paginated IDs,
+tenant/assigned-property authorization, and clear failures for unavailable
+database/schema. Display persisted calculated charges without inventing zero
+amounts or re-billing readings from property rate fallbacks. The preview
+is not the generator's full eligibility determination: governed monthly
+billing independently applies tenancy and prior-service-period rules.
+No `utility_billing` table dependency or schema change is introduced.
+The existing `markAsInvoiced` legacy helper remains for separate caller
+census/retirement rather than being invoked by this screen.
+No invoice/reading writes, billing amount changes, permission expansions,
+or Evia canary enablement. Require exact-head CI, disposable two-tenant
+SQL/browser acceptance and post-merge Azure Ready/public SHA/MSSQL evidence.
+Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
