@@ -54,3 +54,23 @@ test('generic platform invoice mutations remain prohibited', () => {
   assert.equal(res.statusCode, 409);
   assert.equal(res.body?.code, 'BILLING_LIFECYCLE_REQUIRED');
 });
+
+test('legacy invoice list applies renter owner and draft predicate before SQL pagination', () => {
+  const repo = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../src/api/mssql/router.js', import.meta.url), 'utf8');
+  const list = repo.slice(repo.indexOf('export const listInvoices ='), repo.indexOf('export const getInvoiceById ='));
+  const handler = route.slice(route.indexOf("router.get('/invoices'"), route.indexOf("router.get('/invoices/:id'"));
+  assert.match(list, /viewerRenteeId !== null[\\s\\S]*?renteeid = @viewerRenteeId/);
+  assert.match(list, /excludeDrafts[\\s\\S]*?LOWER\\(status\\) <> 'draft'/);
+  assert.ok(list.indexOf('viewerRenteeId !== null') < list.indexOf('paginateQuery('));
+  assert.match(handler, /viewerRenteeId: renterView \\? req\\.user\\.id : null/);
+  assert.match(handler, /excludeDrafts: renterView/);
+  assert.doesNotMatch(handler, /invoices\\.filter/);
+});
+test('legacy renter invoice detail denies another renter with indistinguishable 404', () => {
+  const route = readFileSync(new URL('../src/api/mssql/router.js', import.meta.url), 'utf8');
+  const handler = route.slice(route.indexOf("router.get('/invoices/:id'"), route.indexOf("router.", route.indexOf("router.get('/invoices/:id'") + 1));
+  assert.match(handler, /invoice\\.renteeid/);
+  assert.match(handler, /req\\.user\\?\\.id/);
+  assert.match(handler, /res\\.status\\(404\\)/);
+});
