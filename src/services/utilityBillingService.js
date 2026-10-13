@@ -1,5 +1,6 @@
 import { platform as platformClient } from './platformClient';
 import { UTILITY_TYPES } from '../utils/constants';
+import { listUtilityInvoicePreviewRows } from './utilityInvoicePreviewReadClient';
 
 /**
  * Calculate utility bill amount using standardized rates
@@ -163,150 +164,10 @@ export const fetchPendingReadings = async (options = {}) => {
  */
 export const fetchReadingsForInvoice = async (options = {}) => {
   try {
-    const { month, year, propertyId, renteeId } = options;
-    
-    // First try to get utility billing data that's ready for invoicing from utility_billing table
-    let query = platformClient
-      .from('utility_billing')
-      .select(`
-        *,
-        utility_readings!inner (
-          id,
-          renteeid,
-          propertyid,
-          utilitytype,
-          previousreading,
-          currentreading,
-          readingdate,
-          photourl,
-          calculatedbill,
-          status,
-          approved_date
-        )
-      `)
-      .eq('status', 'pending_invoice');
-    
-    if (month) {
-      query = query.eq('billing_month', month);
-    }
-    
-    if (year) {
-      query = query.eq('billing_year', year);
-    }
-    
-    if (propertyId) {
-      query = query.eq('property_id', propertyId);
-    }
-    
-    if (renteeId) {
-      query = query.eq('rentee_id', renteeId);
-    }
-    
-    const { data, error } = await query;
-    
-    // If we get a specific error indicating the table doesn't exist, or related issues
-    if (error) {
-      console.log('Error fetching from utility_billing, falling back to utility_readings:', error);
-      
-      // Fallback to approved readings from the utility_readings table
-      const validStatuses = await discoverValidStatusValues();
-      const approvalStatus = validStatuses.includes(READING_STATUS.COMPLETED) 
-        ? READING_STATUS.COMPLETED 
-        : validStatuses.includes(READING_STATUS.VERIFIED) 
-          ? READING_STATUS.VERIFIED 
-          : validStatuses[0];
-      
-      console.log(`Using ${approvalStatus} status for fetching approved readings`);
-      
-      let readingsQuery = platformClient
-        .from('utility_readings')
-        .select(`
-          *,
-          app_users!renteeid (
-            id,
-            name,
-            email
-          ),
-          properties!propertyid (
-            id,
-            name,
-            address,
-            electricity_rate,
-            water_rate
-          )
-        `)
-        .eq('status', approvalStatus)
-        .eq('billing_status', 'pending_invoice');
-      
-      if (month) {
-        // Extract month from readingdate
-        const monthIndex = months.indexOf(month) + 1;
-        if (monthIndex > 0) {
-          // Create date range for the month
-          const startDate = new Date(year, monthIndex - 1, 1).toISOString();
-          const endDate = new Date(year, monthIndex, 0).toISOString();
-          readingsQuery = readingsQuery.gte('readingdate', startDate).lte('readingdate', endDate);
-        }
-      }
-      
-      if (year) {
-        // Use approved_date for year filtering if it exists
-        readingsQuery = readingsQuery.gte('readingdate', `${year}-01-01`).lte('readingdate', `${year}-12-31`);
-      }
-      
-      if (propertyId) {
-        readingsQuery = readingsQuery.eq('propertyid', propertyId);
-      }
-      
-      if (renteeId) {
-        readingsQuery = readingsQuery.eq('renteeid', renteeId);
-      }
-      
-      const { data: readingsData, error: readingsError } = await readingsQuery;
-      
-      if (readingsError) { 
-        throw readingsError; 
-      }
-      
-      // Transform readings data to match the format expected by the UI
-      const transformedData = readingsData.map(reading => {
-        // Calculate consumption
-        const consumption = reading.currentreading - (reading.previousreading || 0);
-        
-        // Get rate based on utility type
-        let rate = 0;
-        if (reading.utilitytype === UTILITY_TYPES.ELECTRICITY) {
-          rate = parseFloat(reading.properties?.electricity_rate) || 0;
-        } else if (reading.utilitytype === UTILITY_TYPES.WATER) {
-          rate = parseFloat(reading.properties?.water_rate) || 0;
-        }
-        
-        // Calculate amount
-        const amount = consumption * rate;
-        
-        return {
-          id: reading.id, // Using reading ID as billing ID
-          utility_type: reading.utilitytype,
-          consumption: consumption,
-          rate: rate,
-          amount: amount,
-          reading_id: reading.id,
-          property_id: reading.propertyid,
-          rentee_id: reading.renteeid,
-          reading_date: reading.readingdate,
-          billing_month: new Date(reading.readingdate).toLocaleString('default', { month: 'long' }),
-          billing_year: new Date(reading.readingdate).getFullYear(),
-          status: 'pending_invoice',
-          utility_readings: reading // Include the full reading record
-        };
-      });
-      
-      return { data: transformedData, error: null };
-    }
-    
+    const data = await listUtilityInvoicePreviewRows(options);
     return { data, error: null };
   } catch (error) {
-    console.error('Error fetching readings for invoice:', error);
+    console.error('Error fetching readings for invoice preview:', error);
     return { data: null, error };
   }
 };

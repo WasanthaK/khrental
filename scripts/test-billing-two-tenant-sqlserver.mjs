@@ -1840,9 +1840,9 @@ async function main() {
       for (const item of [a, a, b]) {
         const row = await first(pool, `
           INSERT INTO utility_readings
-            (tenant_id, renteeid, propertyid, utilitytype, status, billing_status)
+            (tenant_id, renteeid, propertyid, utilitytype, status, billing_status, readingdate, previousreading, currentreading, calculatedbill)
           OUTPUT INSERTED.id VALUES
-            (@tenantId, @renteeId, @propertyId, 'water', 'approved', 'pending_invoice')
+            (@tenantId, @renteeId, @propertyId, 'water', 'approved', 'pending_invoice', '2026-09-15', 1, 3, 150)
         `, { tenantId: item.tenantId, renteeId: item.renteeId, propertyId: item.propertyId });
         pendingFixtures.push({ id: guid(row.id), tenantId: item.tenantId });
       }
@@ -1869,7 +1869,21 @@ async function main() {
           const allPage = await listPendingInvoiceReadingPage(0, 10);
           const projects = await listPendingInvoiceProperties([ownId, otherId]);
           const summary = await getPropertiesWithPendingReadings();
-          return { firstPage, secondPage, allPage, projects, summary };
+          const { listUtilityInvoicePreviewRows } =
+            await import('/src/services/utilityInvoicePreviewReadClient.js');
+          const september = await listUtilityInvoicePreviewRows({
+            month: 'September', year: 2026, pageSize: 1
+          });
+          const october = await listUtilityInvoicePreviewRows({
+            month: 'October', year: 2026, pageSize: 1
+          });
+          const filteredOtherProperty = await listUtilityInvoicePreviewRows({
+            month: 'September', year: 2026, propertyId: otherId
+          });
+          return {
+            firstPage, secondPage, allPage, projects, summary,
+            september, october, filteredOtherProperty
+          };
         }, item.propertyId, item.tenantId === a.tenantId ? b.propertyId : a.propertyId);
         assert.equal(observed.allPage.length, expectedCount,
           'dashboard read must see only pending, unlinked readings owned by authenticated renter');
@@ -1884,6 +1898,15 @@ async function main() {
         assert.equal(observed.summary.data.length, 1);
         assert.equal(guid(observed.summary.data[0].id), item.propertyId);
         assert.equal(observed.summary.data[0].pendingReadingsCount, expectedCount);
+        assert.equal(observed.september.length, expectedCount,
+          'utility preview must return only own pending unlinked September readings');
+        assert.ok(observed.september.every(row =>
+          guid(row.property_id) === item.propertyId && row.amount === 150 && row.consumption === 2
+        ), 'preview preserves own SQL reading amounts and consumption');
+        assert.deepEqual(observed.october, [],
+          'preview month filter must exclude other service months');
+        assert.deepEqual(observed.filteredOtherProperty, [],
+          'cross-tenant property filters must not reveal utility preview rows');
         await dashboardPage.close();
         dashboardPage = null;
       }
