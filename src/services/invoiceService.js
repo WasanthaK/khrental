@@ -27,7 +27,9 @@ const buildInvoiceQuery = (options = {}) => {
     query.set('renteeId', options.renteeId);
   }
 
-  if (options.status && !Array.isArray(options.status)) {
+  if (Array.isArray(options.status)) {
+    options.status.forEach(status => query.append('status', status));
+  } else if (options.status) {
     query.set('status', options.status);
   }
 
@@ -51,10 +53,18 @@ const buildInvoiceQuery = (options = {}) => {
     query.set('pageSize', options.pageSize);
   }
 
+  if (options.sortBy) query.set('sortBy', options.sortBy);
+  if (options.sortOrder) query.set('sortOrder', options.sortOrder);
+
   return query.toString();
 };
 
 export const listInvoices = async (options = {}) => {
+  // Match the compatibility client's empty IN-filter semantics on both transports.
+  // An empty status selection means no invoices, never an unfiltered request.
+  if (Array.isArray(options.status) && options.status.length === 0) {
+    return { data: [], error: null };
+  }
   if (isMssqlApiEnabled()) {
     try {
       const query = buildInvoiceQuery(options);
