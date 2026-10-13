@@ -2,6 +2,7 @@ import { platform as platformClient } from './platformClient';
 import { calculateUtilityAmount } from './utilityBillingService';
 import { formatErrorMessage } from '../utils/errorFormatting';
 import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
+import { listPendingInvoiceReadingPage, listPendingInvoiceProperties } from './pendingInvoiceDashboardReadClient';
 
 const normalizeInvoiceRecord = (invoice) => {
   if (!invoice) {
@@ -626,17 +627,7 @@ export async function getPropertiesWithPendingReadings() {
     const pageSize = 500;
     const propertiesData = [];
     for (let page = 0; page < 1000; page += 1) {
-      const { data, error } = await platformClient
-        .from('utility_readings')
-        .select('id, propertyid')
-        .eq('billing_status', 'pending_invoice')
-        .is('invoice_id', null)
-        .order('id', { ascending: true })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
-      if (error) throw new Error(formatErrorMessage(error));
-      if (!Array.isArray(data)) {
-        throw new Error('Pending utility readings returned an invalid response.');
-      }
+      const data = await listPendingInvoiceReadingPage(page, pageSize);
       propertiesData.push(...data);
       if (data.length < pageSize) break;
       if (page === 999) {
@@ -652,15 +643,8 @@ export async function getPropertiesWithPendingReadings() {
     if (propertyIds.length === 0) return { data: [], error: null };
     
     // Get property details
-    const { data: properties, error: propDetailsError } = await platformClient
-      .from('properties')
-      .select('id, name, address')
-      .in('id', propertyIds);
-    
-    if (propDetailsError) {
-      throw new Error(formatErrorMessage(propDetailsError));
-    }
-    
+    const properties = await listPendingInvoiceProperties(propertyIds);
+
     // Count from the same authorized pending-reading result set used to discover
     // properties. Avoid separate per-property queries and misleading zero counts.
     const counts = {};
