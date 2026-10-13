@@ -1582,40 +1582,74 @@ async function main() {
     await query(pool, 'UPDATE app_users SET auth_id = @authId WHERE id = @appUserId AND tenant_id = @tenantId',
       { authId: otherAuthId, appUserId: otherId, tenantId: a.tenantId });
     const otherToken = (await issueAuthSession(otherRecord)).accessToken;
+    // The generator's existing invoiceA is DRAFT by contract. Seed separate
+    // issued invoices ONLY in this disposable SQL database to prove positive
+    // visibility without modifying lifecycle-generated records.
+    const issuedForA = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'issued', '2026-10', 75)
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+    const issuedForOther = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'issued', '2026-10', 90)
+    `, { tenantId: a.tenantId, renteeId: otherId, propertyId: a.propertyId });
+    // Add the newest row as a DRAFT, deliberately ahead of issued rows by
+    // timestamp, so filtering after SQL OFFSET/FETCH would return an empty page.
+    const newestDraft = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount, createdat)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'draft', '2026-10', 50,
+        DATEADD(MINUTE, 5, SYSUTCDATETIME()))
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+
     const ownLegacy = await call('/api/mssql/invoices?page=1&pageSize=1', {
       token: tokenA, tenantId: a.tenantId
     });
     assert.equal(ownLegacy.status, 200, JSON.stringify(ownLegacy));
     assert.equal(ownLegacy.payload.data.length, 1);
-    assert.equal(guid(ownLegacy.payload.data[0].id), invoiceA);
+    assert.equal(guid(ownLegacy.payload.data[0].id), guid(issuedForA.id),
+      'SQL must exclude drafts and other renter invoices before paging');
+    const ownSecondPage = await call('/api/mssql/invoices?page=2&pageSize=1', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(ownSecondPage.status, 200, JSON.stringify(ownSecondPage));
+    assert.deepEqual(ownSecondPage.payload.data, []);
+
     const otherLegacy = await call('/api/mssql/invoices?page=1&pageSize=1', {
       token: otherToken, tenantId: a.tenantId
     });
     assert.equal(otherLegacy.status, 200, JSON.stringify(otherLegacy));
-    assert.deepEqual(otherLegacy.payload.data, [],
-      'same-tenant renter cannot see invoices belonging to a different renter');
-    const otherDetail = await call('/api/mssql/invoices/' + invoiceA, {
+    assert.equal(otherLegacy.payload.data.length, 1);
+    assert.equal(guid(otherLegacy.payload.data[0].id), guid(issuedForOther.id),
+      'second renter sees only their own issued invoice in same organization');
+    const ownIssuedDetail = await call('/api/mssql/invoices/' + issuedForA.id, {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(ownIssuedDetail.status, 200, JSON.stringify(ownIssuedDetail));
+    assert.equal(guid(ownIssuedDetail.payload.data.id), guid(issuedForA.id));
+    const otherDetail = await call('/api/mssql/invoices/' + issuedForA.id, {
       token: otherToken, tenantId: a.tenantId
     });
-    assert.equal(otherDetail.status, 404);
+    assert.equal(otherDetail.status, 404,
+      'same-tenant foreign renter invoice detail is not visible');
+    const hiddenDraft = await call('/api/mssql/invoices/' + invoiceA, {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(hiddenDraft.status, 404,
+      'original monthly-billing draft stays hidden even from its own renter');
     const requestedForeign = await call('/api/mssql/invoices?renteeId=' + a.renteeId, {
       token: otherToken, tenantId: a.tenantId
     });
-    assert.equal(requestedForeign.status, 200);
-    assert.deepEqual(requestedForeign.payload.data, []);
-    const draftInvoice = await first(pool, `
-      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount)
-      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'draft', '2026-10', 50)
-    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
-    const ownWithDraft = await call('/api/mssql/invoices?page=1&pageSize=1', {
-      token: tokenA, tenantId: a.tenantId
-    });
-    assert.equal(ownWithDraft.status, 200);
-    assert.equal(ownWithDraft.payload.data.length, 1);
-    assert.equal(guid(ownWithDraft.payload.data[0].id), invoiceA,
-      'draft must not consume a paginated renter-visible slot');
-    await query(pool, 'DELETE FROM invoices WHERE id = @id AND tenant_id = @tenantId',
-      { id: draftInvoice.id, tenantId: a.tenantId });
+    assert.equal(requestedForeign.status, 200, JSON.stringify(requestedForeign));
+    assert.deepEqual(requestedForeign.payload.data, [],
+      'query parameter must never override authenticated owner');
+
+    // Restore the original billing lifecycle fixture, used below to prove
+    // its own draft and subsequent authorized issuance transitions.
+    await query(pool, `
+      DELETE FROM invoices WHERE tenant_id = @tenantId
+        AND id IN (@issuedA, @issuedOther, @draftId)
+    `, { tenantId: a.tenantId, issuedA: issuedForA.id,
+      issuedOther: issuedForOther.id, draftId: newestDraft.id });
 
     const foreignInvoice = await call('/api/mssql/invoices/' + invoiceB, {
       token: tokenA, tenantId: a.tenantId
