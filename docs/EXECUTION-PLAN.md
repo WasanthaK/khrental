@@ -1579,6 +1579,24 @@ with no SQL execution, runtime behavior change or production canary activation.
 The original Phase 4 goal remains outstanding: safely retire remaining live
 compatibility paths one bounded domain at a time. Phase 5 remains downstream.
 
+## Phase 4 legacy invoice read ownership — active bounded slice
+
+PR #256 merged as `d4898551c9b26f4a80b189f71db5595854589c65`.
+Production run #38355539021 passed: Azure revision 0000259 Ready,
+exact public SHA and live MSSQL ready.
+
+ACTIVE: restrict legacy MSSQL invoice list and detail reads for renter
+identities to their own invoice records. Apply SQL owner and draft predicates
+before pagination; do not filter only the returned page. Detail lookup must
+return 404 for another renter's same-tenant invoice. Preserve administrator
+reads, tenant SQL scope and dedicated billing lifecycle mutations.
+No invoice amount/status changes, compatibility fallback enablement, schema
+changes or Evia canary activation.
+
+Follow with disposable two-tenant SQL-backed HTTP acceptance before this
+release is considered sufficient for broader invoice contract migrations.
+Phase 4 remains OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
