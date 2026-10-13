@@ -488,6 +488,7 @@ export const createMssqlRouter = () => {
   }));
 
   router.get('/invoices', asyncHandler(async (req, res) => {
+    const renterView = isTenantRole({ user: req.user, membership: req.membership });
     const invoices = await listInvoices({
       tenantId: req.tenantId,
       propertyId: req.query.propertyId,
@@ -496,14 +497,12 @@ export const createMssqlRouter = () => {
       billingPeriod: req.query.billingPeriod,
       fromDate: req.query.fromDate,
       toDate: req.query.toDate,
+      viewerRenteeId: renterView ? req.user.id : null,
+      excludeDrafts: renterView,
       ...getPagination(req)
     });
 
-    const visibleInvoices = isTenantRole({ user: req.user, membership: req.membership })
-      ? invoices.filter((invoice) => String(invoice.status || '').toLowerCase() !== 'draft')
-      : invoices;
-
-    res.json({ data: visibleInvoices });
+    res.json({ data: invoices });
   }));
 
   router.get('/invoices/:id', asyncHandler(async (req, res) => {
@@ -511,7 +510,8 @@ export const createMssqlRouter = () => {
 
     if (!invoice || (
       isTenantRole({ user: req.user, membership: req.membership })
-      && String(invoice.status || '').toLowerCase() === 'draft'
+      && (String(invoice.status || '').toLowerCase() === 'draft'
+        || String(invoice.renteeid || '').toLowerCase() !== String(req.user?.id || '').toLowerCase())
     )) {
       res.status(404).json({ error: 'Invoice not found.' });
       return;
