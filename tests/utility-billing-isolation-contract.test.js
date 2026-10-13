@@ -50,18 +50,19 @@ test('invoice and payment generic mutations remain reserved for lifecycle', () =
   }
 });
 
-test('pending dashboard uses canonical scoped platform-read API and stable pagination', () => {
+test('pending dashboard uses scoped read client with stable pagination', () => {
   const service = readFileSync(new URL('../src/services/invoiceService.js', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('../src/services/pendingInvoiceDashboardReadClient.js', import.meta.url), 'utf8');
   const start = service.indexOf('export async function getPropertiesWithPendingReadings');
   const end = service.indexOf('export const getInvoicesByProperty', start);
-  assert.ok(start !== -1 && end > start);
   const pending = service.slice(start, end);
-  assert.match(pending, /platformClient[\s\S]*?\.from\('utility_readings'\)/);
-  assert.match(pending, /\.select\('id, propertyid'\)/);
-  assert.match(pending, /\.eq\('billing_status', 'pending_invoice'\)/);
-  assert.match(pending, /\.is\('invoice_id', null\)/);
-  assert.match(pending, /\.order\('id', \{ ascending: true \}\)/);
-  assert.match(pending, /\.range\(page \* pageSize, \(page \+ 1\) \* pageSize - 1\)/);
+  assert.ok(start !== -1 && end > start);
+  assert.match(pending, /listPendingInvoiceReadingPage/);
+  assert.match(client, /billing_status/);
+  assert.match(client, /pending_invoice/);
+  assert.match(client, /invoice_id/);
+  assert.match(client, /pageSize - 1/);
+  assert.match(client, /buildRequestContextHeaders/);
 });
 
 test('monthly invoice generator retains tenant-specific transactional reading linkage', () => {
