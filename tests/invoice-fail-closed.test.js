@@ -77,3 +77,25 @@ test('renter invoice detail denies another renter with indistinguishable 404', (
   assert.ok(handler.includes('req.user?.id'));
   assert.ok(handler.includes('res.status(404)'));
 });
+
+test('invoice MSSQL read filters statuses before SQL pagination and allowlists stable sort', () => {
+  const repo = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../src/api/mssql/router.js', import.meta.url), 'utf8');
+  const list = repo.slice(repo.indexOf('export const listInvoices ='), repo.indexOf('export const getInvoiceById ='));
+  assert.match(list, /Array\.isArray\(status\)/);
+  assert.match(list, /status IN \(/);
+  assert.match(list, /allowedSort/);
+  assert.match(list, /id ASC/);
+  assert.match(list, /viewerRenteeId !== null/);
+  assert.match(list, /excludeDrafts/);
+  assert.match(route, /sortBy: req\.query\.sortBy/);
+  assert.match(route, /sortOrder: req\.query\.sortOrder/);
+});
+
+test('invoice client sends repeated statuses and explicit sort for MSSQL reads', () => {
+  const list = service.slice(service.indexOf('const buildInvoiceQuery'), service.indexOf('export const createInvoiceRecord'));
+  assert.match(list, /query\.append\('status', status\)/);
+  assert.match(list, /query\.set\('sortBy', options\.sortBy\)/);
+  assert.match(list, /query\.set\('sortOrder', options\.sortOrder\)/);
+  assert.match(list, /options\.status\.length === 0/);
+});
