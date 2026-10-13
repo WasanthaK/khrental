@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'src/api/platform/monthlyBillingService.js'
       - 'src/api/platform/billingLifecycle.js'
       - 'src/api/mssql/repositories.js'

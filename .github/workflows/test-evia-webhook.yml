@@ -11,6 +11,8 @@ on:
       - 'tests/evia-storage-retention.test.js'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
+      - 'scripts/verify-evia-real-session-audit-http.mjs'
+      - 'scripts/test-billing-two-tenant-sqlserver.mjs'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
   push:
@@ -23,6 +25,8 @@ on:
       - 'tests/evia-storage-retention.test.js'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
+      - 'scripts/verify-evia-real-session-audit-http.mjs'
+      - 'scripts/test-billing-two-tenant-sqlserver.mjs'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
 
