@@ -1474,8 +1474,12 @@ async function main() {
     };
     const tokenA = await auth(a);
     const tokenB = await auth(b);
+    const { createAuthenticatedTenantStorageRouter } = await import('../src/api/storage/authenticatedTenantRoute.js');
+    const { createAuditHttpStorageProbe, verifyEviaRealSessionAuditHttp } = await import('./verify-evia-real-session-audit-http.mjs');
+    const auditProbe = createAuditHttpStorageProbe();
     const app = express();
     app.use(express.json());
+    app.use('/storage', createAuthenticatedTenantStorageRouter({ deliveryHandler: auditProbe.deliveryHandler }));
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
@@ -1499,6 +1503,9 @@ async function main() {
       server.once('error', reject);
     });
     const origin = 'http://127.0.0.1:' + httpServer.address().port;
+    await verifyEviaRealSessionAuditHttp({
+      pool, a, b, origin, tokenA, tokenB, createAuthRecord, issueAuthSession, probe: auditProbe
+    });
     const call = async (path, { token, tenantId, method = 'GET', body } = {}) => {
       const response = await fetch(origin + path, {
         method,
