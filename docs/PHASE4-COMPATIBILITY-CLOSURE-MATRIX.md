@@ -17,6 +17,35 @@ GitHub repository code search on main reports **118 files** containing `platform
 | P1 operations | Utility billing, maintenance and notifications | Live compatibility call sites remain in utility, lifecycle and UI modules. | Migrate per bounded domain with tenant isolation and lifecycle proofs. |
 | P2 legacy candidates | `getCurrentUserPropertyAccess`, `generateInvoicesByProperty` | Indexed search found only definitions/docs, not proved absence of dynamic/manual use. | Verify import/route/operator census before any deletion. |
 
+## Utility invoicing helper caller audit — 2026-10-14
+
+PR #261 merged as `5f8b433bcf610b5fe34c41b65a9a1223408259b4`;
+Azure revision 0000264 reached Ready, public SHA matched, live MSSQL
+reported ready and the post-merge Evia workflow succeeded.
+
+- **Live:** `fetchReadingsForInvoice` is used by the routed, read-only
+  `UtilityBillingInvoice.jsx` screen. It now uses the authenticated
+  `utilityInvoicePreviewReadClient` and remains intact.
+- **Dead (source-search census):** `markAsInvoiced` has no importing or
+  invoking application call sites after PR #260 removed the routed mock-ID
+  action. Retire this helper rather than retaining an alternative utility
+  linkage mutation path.
+- **Dead (local source census):** `discoverValidStatusValues`,
+  `READING_STATUS` and its associated cache have no callers after PR #261
+  removed the legacy invoice-preview status fallback.
+- **Preserved live:** `approveReading` and `rejectReading` are used by
+  `UtilityBillingReview.jsx`. `getValidStatusesFromConstraint` remains
+  required by the approval path. Keep these as-is for a separate governed
+  lifecycle evaluation.
+- **Not retired:** `invoiceService.fetchReadingsForInvoice` is a distinct
+  exported helper; its own consumer audit is not proved by this slice.
+- **Authority:** `monthlyBillingService` retains sole approved invoice
+  creation and transactional reading-linkage responsibility.
+
+The source-search census does not prove absence of all possible dynamic
+third-party calls; this bounded removal is subject to PR-head build and
+regressions. No server or SQL schema change is proposed.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
