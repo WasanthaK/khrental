@@ -114,7 +114,15 @@ export const verifyEviaRealSessionAuditHttp = async ({
     );
     await deny(auditUrl.replace(attemptId, crypto.randomUUID()), bearer(adminA.token), 403);
     await deny(auditUrl, { ...bearer(adminB.token), 'x-tenant-id': a.tenantId }, 403);
-    await deny(auditUrl, { ...bearer(adminA.token), 'x-tenant-id': b.tenantId }, 200);
+    for (const headers of [bearer(adminA.token), cookie(adminA.token), { ...bearer(adminA.token), 'x-tenant-id': b.tenantId }]) {
+      const before = probe.reads();
+      const response = await hit(auditUrl, headers);
+      assert.equal(response.status, 200);
+      assert.equal(response.body, '%PDF-disposable-audit-test');
+      assert.equal(probe.reads(), before + 1);
+    }
+    await revokeAccessToken(adminA.token);
+    await deny(auditUrl, bearer(adminA.token), 401);
   } finally {
     await Promise.allSettled([
       revokeAccessToken(adminA.token), revokeAccessToken(adminB.token),
