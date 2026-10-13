@@ -1569,6 +1569,9 @@ export const listInvoices = async ({
   billingPeriod,
   fromDate,
   toDate,
+  // Set only by the authenticated route, never from a query parameter.
+  viewerRenteeId = null,
+  excludeDrafts = false,
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE
 } = {}) => {
@@ -1576,6 +1579,16 @@ export const listInvoices = async ({
   const params = {};
 
   applyTenantFilter({ filters, params, tenantId });
+
+  // Apply viewer authorization before ORDER BY/OFFSET/FETCH. Filtering a
+  // returned page can lose the user's records and leak other tenants' data.
+  if (viewerRenteeId !== null) {
+    filters.push('renteeid = @viewerRenteeId');
+    params.viewerRenteeId = viewerRenteeId;
+  }
+  if (excludeDrafts) {
+    filters.push("LOWER(status) <> 'draft'");
+  }
 
   if (propertyId) {
     filters.push('propertyid = @propertyId');
