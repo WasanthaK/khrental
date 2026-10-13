@@ -1546,6 +1546,24 @@ Remaining storage upload overwrite paths, historic filename variations,
 broad storage deletion privileges and durable object lock require separate
 review. Do not activate the Evia canary or delete evidence. Phase 4 OPEN.
 
+## Phase 4 generic storage upload protection — bounded slice
+
+PR #254 merge `f37784c107273892291910b3cbf3022ef2ede6d1`
+production accepted on Azure revision 0000257, public exact SHA, live
+MSSQL ready, deployment workflow #38350572904 successful.
+
+ACTIVE: reject generic authenticated tenant storage uploads into the
+tenant/UUID/agreements/UUID/signed namespace, including legacy signed PDFs,
+historic audit_trail.pdf and staged immutable attempt evidence. The guard
+runs after tenant path scoping and before calling either storage driver.
+The internal Evia document writer is deliberately unchanged. This protects
+the generic API from overwriting signing evidence, but is NOT storage
+object-lock or provider-wide immutability: internal writer permissions,
+alternate R2 credentials and other storage paths need distinct review.
+No canary activation, object deletion, DDL, or public new endpoint.
+Run exact PR-head authorization/build, Evia and appropriate SQL/browser
+acceptance before merge. Phase 4 OPEN; canary OFF.
+
 ## Maintenance rule for this document
 
 After each merged production change:
