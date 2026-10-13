@@ -1459,6 +1459,29 @@ public SHA and MSSQL. Separate pending work remains: authenticated cookie/
 bearer audit download HTTP acceptance, historic audit naming/disclosure,
 crash recovery, and wider deletion-authority inventory. Phase 4 OPEN.
 
+## Phase 4 Evia authenticated audit-download HTTP acceptance
+
+PR #250 merge `37258033ba8e80e4392be99e26dc0e8ee5f5a927` is production-accepted:
+workflow #38330107457 SUCCESS, Azure revision 0000253 Ready, exact public
+merge SHA and live MSSQL ready. The archive canary remains OFF.
+
+ACTIVE bounded testability/HTTP slice: mount the production storage delivery
+middleware chain through one shared Express router. The default dependencies
+remain SQL-backed bearer/cookie session authentication, tenant middleware,
+lease publication validation, and real storage. Test-only injection permits
+isolated HTTP requests with synthetic sessions, tenants, publication snapshots
+and fake object bytes, proving 401/403 before storage and successful
+cookie/bearer delivery. No real identities, provider calls, database writes,
+storage deletes, canary environment changes, or altered authorization policy.
+The synthetic credential middleware in this acceptance test is NOT proof of
+the real SQL token verifier; full end-to-end SQL-backed session HTTP tests
+remain a separate prerequisite. The historic audit document naming and wider
+read/delete authority inventory remain unresolved. Phase 4 OPEN.
+
+Acceptance: exact-head authorization/build, Evia HTTP tests and disposable
+SQL/browser gates, then independent Azure Ready/exact public SHA/live MSSQL
+proof. Do not merge until CI is green or activate the canary.
+
 ## Maintenance rule for this document
 
 After each merged production change:
