@@ -21,6 +21,7 @@ import {
   verifyPasswordCredential
 } from '../auth/index.js';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
+import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -1193,6 +1194,7 @@ export const createPlatformRouter = () => {
   router.post('/storage/upload', requireAuthenticated, express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
+      assertEviaGenericDocumentUploadAllowed(req.query.bucket, relativePath);
       const data = await getStorageDriver().upload(
         req.query.bucket,
         relativePath,
