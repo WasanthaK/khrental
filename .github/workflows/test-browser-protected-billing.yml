@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/test-browser-billing-unauthenticated.mjs'
       - 'src/routes.jsx'
+      - 'src/api/storage/authenticatedTenantRoute.js'
+      - 'tests/evia-audit-http.test.js'
       - 'src/components/common/ProtectedRoute.jsx'
       - 'src/pages/InvoiceManagementDashboard.jsx'
       - 'src/pages/rentee/**'
