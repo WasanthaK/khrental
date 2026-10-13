@@ -38,6 +38,11 @@ const serverSource = readFileSync(
   'utf8'
 );
 
+const authenticatedStorageRouteSource = readFileSync(
+  new URL('../src/api/storage/authenticatedTenantRoute.js', import.meta.url),
+  'utf8'
+);
+
 const eviaLegacySource = readFileSync(
   new URL('../src/services/eviaSignServiceLegacy.js', import.meta.url),
   'utf8'
@@ -133,12 +138,13 @@ test('storage API provides authenticated tenant-scoped download support', () => 
   assert.match(storageApiServiceSource, /headers: buildRequestContextHeaders\(\)/);
 });
 
-test('direct storage delivery requires the tenant encoded in the object path', () => {
-  assert.match(serverSource, /TENANT_STORAGE_PATH_REQUIRED/);
-  assert.match(serverSource, /tenantIdFromPath/);
-  assert.match(serverSource, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
-  assert.doesNotMatch(serverSource, /req\.query\s*=/);
-  assert.match(serverSource, /req\.headers\['x-tenant-id'\]\s*=\s*tenantIdFromPath/);
+test('direct storage delivery requires tenant context from the object path on the mounted production router', () => {
+  assert.match(serverSource, /app\.use\('\/storage', createAuthenticatedTenantStorageRouter\(\)\)/);
+  assert.match(authenticatedStorageRouteSource, /TENANT_STORAGE_PATH_REQUIRED/);
+  assert.match(authenticatedStorageRouteSource, /tenantIdFromPath/);
+  assert.match(authenticatedStorageRouteSource, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
+  assert.doesNotMatch(authenticatedStorageRouteSource, /req\.query\s*=/);
+  assert.match(authenticatedStorageRouteSource, /req\.headers\['x-tenant-id'\]\s*=\s*tenantIdFromPath/);
 });
 
 

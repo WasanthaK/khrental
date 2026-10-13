@@ -24,9 +24,8 @@ import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
-import { createStorageDeliveryHandler } from './src/api/storage/index.js';
+import { createAuthenticatedTenantStorageRouter } from './src/api/storage/authenticatedTenantRoute.js';
 import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
-import { authorizeFencedEviaAuditTrailRead } from './src/api/evia/auditTrailAccess.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
@@ -403,61 +402,7 @@ async function createServer() {
   app.post('/api/platform/query', guardTenancyActivationQuery);
   app.post('/api/platform/query', guardTenancyClosureQuery);
   app.use('/api/platform', createPlatformRouter());
-  app.use('/storage', createSessionAuthMiddleware({ allowStorageCookie: true }), requireApiSession);
-  app.use(
-    '/storage/:bucket',
-    (req, res, next) => {
-      const parts = String(req.path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-      const tenantIdFromPath = parts[0] === 'tenants' ? parts[1] : null;
-      if (!tenantIdFromPath) {
-        res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
-        return;
-      }
-      // Express 5 exposes req.query as a getter, so do not mutate it here.
-      // The tenant encoded in the storage object path is authoritative for delivery.
-      req.headers['x-tenant-id'] = tenantIdFromPath;
-      next();
-    },
-    createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
-    // Audit trails contain signing evidence and require stricter agreement
-    // management authorization than ordinary tenant-scoped file delivery.
-    // Only fenced staged audit PDFs are changed; legacy routes are retained.
-    async (req, res, next) => {
-      try {
-        const objectPath = String(req.params[0] || req.path || '').replace(/^[/]+/, '');
-        const result = await authorizeFencedEviaAuditTrailRead({
-          bucket: req.params.bucket,
-          path: objectPath,
-          tenantId: req.tenantId,
-          user: req.user,
-          membership: req.membership,
-          loadPublishedArchive: async ({ agreementId, tenantId }) => runSingleQuery(`
-            SELECT TOP 1 a.id, a.tenant_id, a.status, a.signature_status,
-              a.signed_document_url,
-              e.processed AS lease_processed, e.raw_data AS lease_raw_data
-            FROM dbo.agreements a
-            INNER JOIN dbo.webhook_events e
-              ON e.tenant_id = a.tenant_id
-              AND e.request_id = a.eviasignreference
-              AND e.event_type = 'evia.archive.lease.v1'
-              AND e.processed = 1
-              AND ISJSON(e.raw_data) = 1
-            WHERE a.id = @agreementId AND a.tenant_id = @tenantId
-            ORDER BY e.createdat DESC
-          `, { agreementId, tenantId })
-        });
-        if (result.applies && !result.allowed) {
-          res.status(403).json({
-            error: 'Audit-trail access is not authorized.',
-            code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED'
-          });
-          return;
-        }
-        next();
-      } catch (error) { next(error); }
-    },
-    createStorageDeliveryHandler()
-  );
+  app.use('/storage', createAuthenticatedTenantStorageRouter());
 
   if (isProduction) {
     const publicPath = path.resolve(process.cwd(), 'public');

@@ -874,17 +874,15 @@ test('published staged Evia audit is restricted to tenant admin and exact lease-
   }
 });
 
-test('fenced audit route executes permission and publication checks before reading object bytes', () => {
+test('fenced audit route executes permission and publication before storage reads', () => {
   const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-  const start = server.indexOf("app.use('/storage', createSessionAuthMiddleware");
-  const end = server.indexOf('createStorageDeliveryHandler()', start);
-  const route = server.slice(start, end);
-  assert.ok(start >= 0 && end > start);
+  const route = readFileSync(new URL('../src/api/storage/authenticatedTenantRoute.js', import.meta.url), 'utf8');
+  assert.match(server, /app\.use\('\/storage', createAuthenticatedTenantStorageRouter\(\)\)/);
+  assert.match(route, /createSessionAuthMiddleware\(\{ allowStorageCookie: true \}\)/);
   assert.match(route, /createTenantContextMiddleware\(\{ requireUser: true, requireTenant: true \}\)/);
   assert.match(route, /authorizeFencedEviaAuditTrailRead\(/);
   assert.match(route, /EVIA_AUDIT_TRAIL_ACCESS_DENIED/);
-  assert.ok(route.indexOf('authorizeFencedEviaAuditTrailRead(') <
-    route.indexOf('createStorageDeliveryHandler(') || route.includes('createTenantContextMiddleware'));
+  assert.ok(route.indexOf('authorizeFencedEviaAuditTrailRead(') < route.lastIndexOf('    deliveryHandler'));
 });
 
 test('fenced lease attempt and publication journal is append-only and excluded from provider delivery IDs', () => {
