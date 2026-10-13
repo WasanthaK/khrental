@@ -1612,6 +1612,22 @@ Require exact-head build and disposable SQL/renter acceptance and production
 verification prior to treating this behavior change as accepted.
 Phase 4 remains OPEN.
 
+## Phase 4 pending-invoice dashboard read transport — bounded slice
+
+PR #258 merged as `7840b8acee13f635b27217ee9c4b5cf9c08390ee`.
+Azure Ready/exact public SHA/live MSSQL evidence is still a separate
+production release gate until the post-merge workflow finishes.
+
+ACTIVE: replace ONLY `getPropertiesWithPendingReadings`' compatibility-client
+queries with explicit authenticated `/api/platform/query` read requests,
+retaining the existing backend tenant, renter and staff authorization policy,
+same pending_invoice/invoice_id-null filters, stable ID ordering, bounded
+pagination, and grouped pending-reading counts. Explicitly reject unavailable
+database/schema responses instead of presenting a false zero-count dashboard.
+No new backend authority, money/status mutations, SQL DDL, or Evia canary
+activation. Preserve remaining live utility-reading projections for separate
+contract and browser acceptance. Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:

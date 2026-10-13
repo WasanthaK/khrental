@@ -1831,6 +1831,71 @@ async function main() {
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
+    // Run the actual new browser-side pending-invoice dashboard read client
+    // against the same disposable SQL backend with two real renter sessions.
+    // Only synthetic fixture rows are inserted, and all are deleted afterwards.
+    const pendingFixtures = [];
+    let dashboardPage;
+    try {
+      for (const item of [a, a, b]) {
+        const row = await first(pool, `
+          INSERT INTO utility_readings
+            (tenant_id, renteeid, propertyid, utilitytype, status, billing_status)
+          OUTPUT INSERTED.id VALUES
+            (@tenantId, @renteeId, @propertyId, 'water', 'approved', 'pending_invoice')
+        `, { tenantId: item.tenantId, renteeId: item.renteeId, propertyId: item.propertyId });
+        pendingFixtures.push({ id: guid(row.id), tenantId: item.tenantId });
+      }
+
+      for (const [item, token, expectedCount] of [[a, tokenA, 2], [b, tokenB, 1]]) {
+        dashboardPage = await browser.newPage();
+        await dashboardPage.evaluateOnNewDocument((sessionToken, tenantId, authId, email) => {
+          localStorage.removeItem('dev_bypass_role');
+          localStorage.setItem('khrental.activeTenantId', tenantId);
+          localStorage.setItem('khrental.local.session', JSON.stringify({
+            access_token: sessionToken,
+            user: { id: authId, email, role: 'rentee' }
+          }));
+        }, token, item.tenantId, item.authId, item.email);
+        await dashboardPage.goto(origin + '/rentee/invoices',
+          { waitUntil: 'domcontentloaded', timeout: 45000 });
+        const observed = await dashboardPage.evaluate(async (ownId, otherId) => {
+          const { listPendingInvoiceReadingPage, listPendingInvoiceProperties } =
+            await import('/src/services/pendingInvoiceDashboardReadClient.js');
+          const { getPropertiesWithPendingReadings } =
+            await import('/src/services/invoiceService.js');
+          const firstPage = await listPendingInvoiceReadingPage(0, 1);
+          const secondPage = await listPendingInvoiceReadingPage(1, 1);
+          const allPage = await listPendingInvoiceReadingPage(0, 10);
+          const projects = await listPendingInvoiceProperties([ownId, otherId]);
+          const summary = await getPropertiesWithPendingReadings();
+          return { firstPage, secondPage, allPage, projects, summary };
+        }, item.propertyId, item.tenantId === a.tenantId ? b.propertyId : a.propertyId);
+        assert.equal(observed.allPage.length, expectedCount,
+          'dashboard read must see only pending, unlinked readings owned by authenticated renter');
+        assert.equal(observed.firstPage.length, 1);
+        assert.equal(observed.secondPage.length, expectedCount === 2 ? 1 : 0);
+        assert.equal(new Set(observed.allPage.map(row => guid(row.id))).size, expectedCount,
+          'stable ID pagination cannot duplicate entries');
+        assert.ok(observed.allPage.every(row => guid(row.propertyid) === item.propertyId));
+        assert.deepEqual(observed.projects.map(row => guid(row.id)), [item.propertyId],
+          'cross-tenant property expansion must remain denied');
+        assert.equal(observed.summary.error, null, JSON.stringify(observed.summary));
+        assert.equal(observed.summary.data.length, 1);
+        assert.equal(guid(observed.summary.data[0].id), item.propertyId);
+        assert.equal(observed.summary.data[0].pendingReadingsCount, expectedCount);
+        await dashboardPage.close();
+        dashboardPage = null;
+      }
+      console.log('PASS: actual pending-invoice browser reader respects SQL tenant isolation, stable pages and dashboard counts');
+    } finally {
+      if (dashboardPage) await dashboardPage.close().catch(() => {});
+      for (const fixture of pendingFixtures) {
+        await query(pool, 'DELETE FROM utility_readings WHERE id = @id AND tenant_id = @tenantId',
+          { id: fixture.id, tenantId: fixture.tenantId });
+      }
+    }
+
     const browserVisit = async (item, token, route, { visibleInvoice = false } = {}) => {
       const page = await browser.newPage();
       try {

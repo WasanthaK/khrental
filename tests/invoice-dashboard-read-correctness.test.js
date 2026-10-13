@@ -23,21 +23,30 @@ test('dashboard totals iterate paginated tenant-scoped invoice-list endpoint to 
   assert.doesNotMatch(summary, /pageSize:\s*1000/);
 });
 
-test('pending readings dashboard counts from scoped pending reading set, not N+1 queries', () => {
-  assert.match(pending, /\.eq\('billing_status', 'pending_invoice'\)/);
-  assert.match(pending, /\.is\('invoice_id', null\)/);
+test('pending readings dashboard uses the explicit scoped read client and preserves counts', () => {
+  assert.match(pending, /listPendingInvoiceReadingPage\(page, pageSize\)/);
+  assert.match(pending, /listPendingInvoiceProperties\(propertyIds\)/);
   assert.match(pending, /for \(const reading of propertiesData\)/);
   assert.match(pending, /counts\[reading\.propertyid\] = \(counts\[reading\.propertyid\] \|\| 0\) \+ 1/);
   assert.match(pending, /pendingReadingsCount: counts\[property\.id\] \|\| 0/);
-  assert.match(pending, /\.select\('id, propertyid'\)/);
-  assert.match(pending, /\.order\('id', \{ ascending: true \}\)/);
-  assert.match(pending, /\.range\(page \* pageSize, \(page \+ 1\) \* pageSize - 1\)/);
   assert.match(pending, /if \(data\.length < pageSize\) break/);
   assert.match(pending, /pagination limit/);
-  assert.match(pending, /if \(!Array\.isArray\(data\)\)/);
-  assert.doesNotMatch(pending, /\.select\('property_id'\)/);
-  assert.doesNotMatch(pending, /countError/);
-  assert.equal((pending.match(/\.from\('utility_readings'\)/g) || []).length, 1);
+  assert.doesNotMatch(pending, /platformClient/);
+});
+
+test('explicit pending reading transport retains scoped filters and avoids compatibility facade', () => {
+  const client = readFileSync(new URL('../src/services/pendingInvoiceDashboardReadClient.js', import.meta.url), 'utf8');
+  assert.match(client, /buildRequestContextHeaders/);
+  assert.match(client, /\/api\/platform\/query/);
+  assert.match(client, /billing_status/);
+  assert.match(client, /pending_invoice/);
+  assert.match(client, /invoice_id/);
+  assert.match(client, /ascending: true/);
+  assert.match(client, /missingTable/);
+  assert.match(client, /databaseConfigured === false/);
+  // Guard actual compatibility imports/calls, not comments describing the migration.
+  assert.doesNotMatch(client, /from ['\"][^'\"]*platformClient/);
+  assert.doesNotMatch(client, /platformClient\\./);
 });
 
 test('dashboard read changes do not modify invoice mutation guards', () => {
