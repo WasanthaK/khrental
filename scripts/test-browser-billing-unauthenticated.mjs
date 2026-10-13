@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 import { preview } from 'vite';
+import { assertEviaEvidenceDeletionAllowed } from '../src/api/storage/eviaEvidenceRetention.js';
+
+// Check server-side Evia evidence protection alongside the browser smoke.
+assert.throws(() => assertEviaEvidenceDeletionAllowed('documents'), { code: 'EVIA_EVIDENCE_DELETE_DENIED' });
 
 // Browser security-boundary smoke only: isolated built frontend, no credentials,
 // no production URL, and no development authentication bypass.

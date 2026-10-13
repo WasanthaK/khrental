@@ -8,6 +8,12 @@ import express from 'express';
 import puppeteer from 'puppeteer';
 import { createServer as createViteServer } from 'vite';
 import react from '@vitejs/plugin-react';
+import { assertEviaEvidenceDeletionAllowed } from '../src/api/storage/eviaEvidenceRetention.js';
+
+// Verify the same retention boundary before the disposable two-tenant SQL acceptance.
+const stagedEvidence = 'tenants/feec0269-d580-49c3-a982-5b3ecbbb1a09/agreements/f2de49bb-d787-4319-8233-654059273b53/signed/staged/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/audit_trail.pdf';
+assert.throws(() => assertEviaEvidenceDeletionAllowed('documents', [stagedEvidence]), { code: 'EVIA_EVIDENCE_DELETE_DENIED' });
+assert.throws(() => assertEviaEvidenceDeletionAllowed('documents'), { code: 'EVIA_EVIDENCE_DELETE_DENIED' });
 
 // Mandatory disposable Docker SQL Server; never use a preexisting/production endpoint.
 const docker = args => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
