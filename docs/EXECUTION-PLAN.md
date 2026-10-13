@@ -1525,6 +1525,27 @@ publication authority or database schema changes. Require exact-head
 authorization/build and Evia tests before merge and independent deployment
 verification afterwards. Phase 4 OPEN; canary OFF.
 
+## Phase 4 historic Evia audit-trail disclosure — bounded access slice
+
+PR #253 merge `0236b7360f07754e1ae7969acc5e4a0ad3fa58d4`
+production accepted: workflow #38347047466 green, Azure revision
+0000256 Ready, exact public SHA and live MSSQL ready.
+
+ACTIVE: Protect the legacy stable audit URL
+`tenants/{tenant UUID}/agreements/{agreement UUID}/signed/audit_trail.pdf`
+using the same authenticated tenant storage route. Require an active
+tenant administrator with agreement-management permission, tenant-scoped
+completed signed agreement and a locally retained stable signed PDF.
+Keep ordinary signed-PDF delivery and fenced lease-backed audit handling
+unchanged. A legacy stable audit has no fenced publication ledger; this
+does not prove historical file authenticity and is an access restriction,
+not a retroactive signing-evidence guarantee.
+
+Add authorization tests and execute the existing build and Evia gates.
+Remaining storage upload overwrite paths, historic filename variations,
+broad storage deletion privileges and durable object lock require separate
+review. Do not activate the Evia canary or delete evidence. Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
