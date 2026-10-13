@@ -44,7 +44,9 @@ test('explicit pending reading transport retains scoped filters and avoids compa
   assert.match(client, /ascending: true/);
   assert.match(client, /missingTable/);
   assert.match(client, /databaseConfigured === false/);
-  assert.doesNotMatch(client, /platformClient/);
+  // Guard actual compatibility imports/calls, not comments describing the migration.
+  assert.doesNotMatch(client, /from ['\"][^'\"]*platformClient/);
+  assert.doesNotMatch(client, /platformClient\\./);
 });
 
 test('dashboard read changes do not modify invoice mutation guards', () => {
