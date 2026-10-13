@@ -1564,6 +1564,21 @@ No canary activation, object deletion, DDL, or public new endpoint.
 Run exact PR-head authorization/build, Evia and appropriate SQL/browser
 acceptance before merge. Phase 4 OPEN; canary OFF.
 
+
+## Phase 4 compatibility closure and migration-authority census — current active slice
+
+PR #255 merged as `3b04f611709ee4ffa9280aa7fe051d9debc21b4b`.
+Its production release is pending independent Ready/exact-SHA/MSSQL verification.
+
+ACTIVE inspection-only slice: reconcile the current compatibility inventory in
+`docs/PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md`, distinguishing the governed
+production migration workflow, the legacy `npm run migrate` SQL-RPC script,
+already-removed browser SQL migration UI, and live invoice, agreement and
+auth/utility consumers. Add startup/migration authority regression checks,
+with no SQL execution, runtime behavior change or production canary activation.
+The original Phase 4 goal remains outstanding: safely retire remaining live
+compatibility paths one bounded domain at a time. Phase 5 remains downstream.
+
 ## Maintenance rule for this document
 
 After each merged production change:
