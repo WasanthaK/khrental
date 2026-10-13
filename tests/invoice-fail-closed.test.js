@@ -55,22 +55,25 @@ test('generic platform invoice mutations remain prohibited', () => {
   assert.equal(res.body?.code, 'BILLING_LIFECYCLE_REQUIRED');
 });
 
-test('legacy invoice list applies renter owner and draft predicate before SQL pagination', () => {
-  const repo = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+test('legacy invoice list enforces owner and draft constraints inside SQL before pagination', () => {
+  const repository = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
   const route = readFileSync(new URL('../src/api/mssql/router.js', import.meta.url), 'utf8');
-  const list = repo.slice(repo.indexOf('export const listInvoices ='), repo.indexOf('export const getInvoiceById ='));
+  const list = repository.slice(repository.indexOf('export const listInvoices ='), repository.indexOf('export const getInvoiceById ='));
   const handler = route.slice(route.indexOf("router.get('/invoices'"), route.indexOf("router.get('/invoices/:id'"));
-  assert.match(list, /viewerRenteeId !== null[\\s\\S]*?renteeid = @viewerRenteeId/);
-  assert.match(list, /excludeDrafts[\\s\\S]*?LOWER\\(status\\) <> 'draft'/);
+  assert.ok(list.includes("filters.push('renteeid = @viewerRenteeId')"));
+  assert.ok(list.includes('params.viewerRenteeId = viewerRenteeId'));
+  assert.ok(list.includes('LOWER(status)'));
+  assert.ok(list.includes("draft"));
   assert.ok(list.indexOf('viewerRenteeId !== null') < list.indexOf('paginateQuery('));
-  assert.match(handler, /viewerRenteeId: renterView \\? req\\.user\\.id : null/);
-  assert.match(handler, /excludeDrafts: renterView/);
-  assert.doesNotMatch(handler, /invoices\\.filter/);
+  assert.ok(handler.includes('viewerRenteeId: renterView ? req.user.id : null'));
+  assert.ok(handler.includes('excludeDrafts: renterView'));
+  assert.ok(!handler.includes('invoices.filter('));
 });
-test('legacy renter invoice detail denies another renter with indistinguishable 404', () => {
+test('renter invoice detail denies another renter with indistinguishable 404', () => {
   const route = readFileSync(new URL('../src/api/mssql/router.js', import.meta.url), 'utf8');
-  const handler = route.slice(route.indexOf("router.get('/invoices/:id'"), route.indexOf("router.", route.indexOf("router.get('/invoices/:id'") + 1));
-  assert.match(handler, /invoice\\.renteeid/);
-  assert.match(handler, /req\\.user\\?\\.id/);
-  assert.match(handler, /res\\.status\\(404\\)/);
+  const start = route.indexOf("router.get('/invoices/:id'");
+  const handler = route.slice(start, route.indexOf('router.', start + 1));
+  assert.ok(handler.includes('invoice.renteeid'));
+  assert.ok(handler.includes('req.user?.id'));
+  assert.ok(handler.includes('res.status(404)'));
 });
