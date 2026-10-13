@@ -93,6 +93,9 @@ const UtilityBillingInvoice = () => {
   };
   
   const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) {
+      return 'Not calculated';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
@@ -171,8 +174,9 @@ const UtilityBillingInvoice = () => {
         </Box>
         
         <Alert severity="info" sx={{ mb: 2 }}>
-          Read-only utility billing preview. Amounts shown here are not final invoice charges.
-          Invoice creation and reading linkage are handled by the monthly billing lifecycle.
+          Read-only utility billing preview. Only pending, unlinked readings are shown.
+          Amounts are persisted estimates, not final invoice charges. Monthly invoice generation
+          applies its own eligibility rules and remains the sole invoice and reading-linkage authority.
         </Alert>
         {canManageInvoices && (
           <Button
@@ -197,7 +201,7 @@ const UtilityBillingInvoice = () => {
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="h6">No billing data found</Typography>
             <Typography variant="body2" color="textSecondary">
-              There are no approved utility readings ready for invoicing in the selected period.
+              There are no pending, unlinked utility readings in the selected reading period.
             </Typography>
           </Box>
         ) : (
@@ -228,7 +232,7 @@ const UtilityBillingInvoice = () => {
                               'Water' : item.utility_type}
                           </TableCell>
                           <TableCell>{formatDate(item.utility_readings?.readingdate)}</TableCell>
-                          <TableCell>{item.consumption} {item.utility_type === UTILITY_TYPES.ELECTRICITY ? 'kWh' : 'm³'}</TableCell>
+                          <TableCell>{item.consumption ?? 'Not calculated'} {item.utility_type === UTILITY_TYPES.ELECTRICITY ? 'kWh' : 'm³'}</TableCell>
                           <TableCell>{formatCurrency(item.rate)} per {item.utility_type === UTILITY_TYPES.ELECTRICITY ? 'kWh' : 'm³'}</TableCell>
                           <TableCell>{formatCurrency(item.amount)}</TableCell>
                         </TableRow>
