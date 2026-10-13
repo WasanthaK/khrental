@@ -1669,6 +1669,24 @@ or Evia canary enablement. Require exact-head CI, disposable two-tenant
 SQL/browser acceptance and post-merge Azure Ready/public SHA/MSSQL evidence.
 Phase 4 OPEN.
 
+## Phase 4 retire dead utility invoicing helpers — bounded slice
+
+PR #261 merged as `5f8b433bcf610b5fe34c41b65a9a1223408259b4`.
+Azure revision 0000264 Ready, exact public SHA, live MSSQL ready and
+post-merge Evia green are verified.
+
+ACTIVE: retire only `utilityBillingService.markAsInvoiced`, which no
+longer has application callers after the routed mock-invoice UI was
+contained, and the unused `discoverValidStatusValues` + `READING_STATUS`
+fallback from the formerly compatible `fetchReadingsForInvoice` path.
+Preserve the live approval/rejection paths, their constraint discovery,
+the read-only invoice preview and the server-governed monthly billing
+generator. Update regression tests and caller inventory. No SQL schema,
+monetary amount, payment/status mutation, authority expansion or Evia
+canary activation. Require PR-head authorization/build, Evia and any
+required disposable SQL acceptance; verify production Ready/public
+SHA/MSSQL independently after merge. Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
