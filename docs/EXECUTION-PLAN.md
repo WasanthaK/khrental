@@ -1503,6 +1503,28 @@ Require exact-head build and authorization, Evia, disposable SQL and browser
 acceptance green before merge, then Azure revision Ready/public exact SHA/live
 MSSQL. Phase 4 OPEN; canary OFF.
 
+## Phase 4 fenced archive crash-recovery acceptance — test-only slice
+
+PR #252 merged at `6abb2c5a21a265c47838f38e300a8f67ffadccaf`.
+Production Azure readiness, public SHA and live MSSQL verification remains a
+separate mandatory release gate.
+
+ACTIVE: introduce deterministic crash-window regression tests of the dormant
+fenced coordinator. Reproduce a signed-PDF upload followed by failure before
+its audit-trail partner, ensure no publication, then simulate lease expiry
+and successful takeover into a distinct immutable attempt namespace. Prove
+the old worker cannot renew, the partial bytes are not automatically deleted,
+and replay of a committed publication neither stages nor finalizes again.
+This test uses mocked storage/lease boundaries; it does NOT replace the
+existing disposable SQL takeover proof or establish full process-crash
+recovery across real storage. SQL-backed and end-to-end storage acceptance
+remain separate requirements before canary activation.
+
+No production canary flag, live Evia request, object deletion, additional
+publication authority or database schema changes. Require exact-head
+authorization/build and Evia tests before merge and independent deployment
+verification afterwards. Phase 4 OPEN; canary OFF.
+
 ## Maintenance rule for this document
 
 After each merged production change:
