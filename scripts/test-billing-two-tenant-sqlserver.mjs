@@ -1562,6 +1562,61 @@ async function main() {
     assert.equal(ownA.payload.data.length, 1, 'A may read own reading');
     assert.equal(guid(ownA.payload.data[0].id), a.readingId);
 
+    // Same-tenant second renter: the compatibility list must apply owner and
+    // draft predicates in SQL before pagination, and detail must return 404.
+    const other = await first(pool, `
+      INSERT INTO app_users (tenant_id, name, email, role, user_type)
+      OUTPUT INSERTED.id VALUES (@tenantId, 'Other Renter', @email, 'rentee', 'rentee')
+    `, { tenantId: a.tenantId, email: 'same-tenant-' + crypto.randomUUID() + '@example.invalid' });
+    const otherId = guid(other.id);
+    await query(pool, `
+      INSERT INTO tenant_memberships (tenant_id, app_user_id, role, status, is_default)
+      VALUES (@tenantId, @appUserId, 'rentee', 'active', 1)
+    `, { tenantId: a.tenantId, appUserId: otherId });
+    const otherAuthId = crypto.randomUUID();
+    const otherRecord = await createAuthRecord({
+      authId: otherAuthId, appUserId: otherId,
+      email: 'same-tenant-' + otherId + '@example.invalid',
+      role: 'rentee', password: crypto.randomBytes(25).toString('base64url')
+    });
+    await query(pool, 'UPDATE app_users SET auth_id = @authId WHERE id = @appUserId AND tenant_id = @tenantId',
+      { authId: otherAuthId, appUserId: otherId, tenantId: a.tenantId });
+    const otherToken = (await issueAuthSession(otherRecord)).accessToken;
+    const ownLegacy = await call('/api/mssql/invoices?page=1&pageSize=1', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(ownLegacy.status, 200, JSON.stringify(ownLegacy));
+    assert.equal(ownLegacy.payload.data.length, 1);
+    assert.equal(guid(ownLegacy.payload.data[0].id), invoiceA);
+    const otherLegacy = await call('/api/mssql/invoices?page=1&pageSize=1', {
+      token: otherToken, tenantId: a.tenantId
+    });
+    assert.equal(otherLegacy.status, 200, JSON.stringify(otherLegacy));
+    assert.deepEqual(otherLegacy.payload.data, [],
+      'same-tenant renter cannot see invoices belonging to a different renter');
+    const otherDetail = await call('/api/mssql/invoices/' + invoiceA, {
+      token: otherToken, tenantId: a.tenantId
+    });
+    assert.equal(otherDetail.status, 404);
+    const requestedForeign = await call('/api/mssql/invoices?renteeId=' + a.renteeId, {
+      token: otherToken, tenantId: a.tenantId
+    });
+    assert.equal(requestedForeign.status, 200);
+    assert.deepEqual(requestedForeign.payload.data, []);
+    const draftInvoice = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'draft', '2026-10', 50)
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+    const ownWithDraft = await call('/api/mssql/invoices?page=1&pageSize=1', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(ownWithDraft.status, 200);
+    assert.equal(ownWithDraft.payload.data.length, 1);
+    assert.equal(guid(ownWithDraft.payload.data[0].id), invoiceA,
+      'draft must not consume a paginated renter-visible slot');
+    await query(pool, 'DELETE FROM invoices WHERE id = @id AND tenant_id = @tenantId',
+      { id: draftInvoice.id, tenantId: a.tenantId });
+
     const foreignInvoice = await call('/api/mssql/invoices/' + invoiceB, {
       token: tokenA, tenantId: a.tenantId
     });
