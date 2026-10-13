@@ -350,7 +350,8 @@ test('removing sourced utility lines from a draft returns them to pending invoic
 
 test('renter-facing MSSQL invoice reads hide draft invoices', () => {
   assert.match(mssqlRouterSource, /isTenantRole/);
-  assert.match(mssqlRouterSource, /status \|\| ''\)\.toLowerCase\(\) !== 'draft'/);
+  assert.match(mssqlRouterSource, /excludeDrafts: renterView/);
+  assert.match(mssqlRouterSource, /viewerRenteeId: renterView/);
   assert.match(mssqlRouterSource, /Invoice not found/);
 });
 
