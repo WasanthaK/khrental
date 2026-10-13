@@ -1436,6 +1436,29 @@ real signed-in download HTTP acceptance, broader historic audit
 policy and tenant storage deletion privilege review. Phase 4 OPEN.
 ```
 
+## Phase 4 Evia staged archive evidence retention — bounded follow-on
+
+PR #249 merged as `232b70403d570986e5c2a06479ee77687090e54b`.
+Production run #38324419524 SUCCESS, Azure revision 0000252 Ready,
+public build exact merge SHA and live MSSQL connected. The audit access
+and attempt/publication records are released; the default-off canary remains OFF.
+
+ACTIVE independent retention guard: prevent the general documents storage
+API from deleting a documents bucket, fenced Evia staged agreement records,
+or ancestor folders that could recursively erase those records. Enforce at
+both local and R2 storage drivers, not only the tenant router; retain unrelated
+object behavior. No cleanup, schema change, production canary activation,
+external Evia callback, or new delete authority. Add fail-closed tests to
+the authorization suite. This guard is an interim safeguard, NOT a complete
+retention/immutability or object-lock policy. Alternate R2 credentials and
+privileged administrators remain outside this application-level protection.
+
+Next acceptance gate: exact PR-head authorization/build, Evia and disposable
+SQL/browser CI, followed by independently verified production revision,
+public SHA and MSSQL. Separate pending work remains: authenticated cookie/
+bearer audit download HTTP acceptance, historic audit naming/disclosure,
+crash recovery, and wider deletion-authority inventory. Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
