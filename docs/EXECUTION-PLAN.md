@@ -1628,6 +1628,24 @@ No new backend authority, money/status mutations, SQL DDL, or Evia canary
 activation. Preserve remaining live utility-reading projections for separate
 contract and browser acceptance. Phase 4 OPEN.
 
+## Phase 4 legacy utility invoicing UI containment — bounded slice
+
+PR #259 merged at `c151cf2f8b9e05fa7459753bfa48c1549275695f`.
+Post-merge build/deployment and Evia workflows succeeded; the independent
+Azure Ready/exact public SHA/live MSSQL acceptance remains a release gate.
+
+ACTIVE: make the routed `/dashboard/utilities/invoicing` screen read-only.
+Remove its mock `INV-${Date.now()}` invoice ID, selected-reading invoice
+action, and direct `markAsInvoiced` call. Retain review/filter display
+and show a permission-gated link to the established monthly invoice generator.
+Show read failures explicitly rather than presenting an empty success state.
+Preserve existing monthly invoice authority, server authorization,
+tenant/tenancy isolation and transactional utility-reading linkage.
+Do not migrate `fetchReadingsForInvoice` in the same slice. Do not change
+billing money/status, server endpoints, schema, or the Evia canary.
+Run PR-head authorization tests/build and independent production acceptance.
+Phase 4 remains OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:

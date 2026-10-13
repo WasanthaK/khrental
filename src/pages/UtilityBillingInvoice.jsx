@@ -1,23 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Alert, Box, Button, Checkbox, CircularProgress, Container, 
-  FormControl, FormControlLabel, Grid, InputLabel, MenuItem, 
-  Paper, Select, Snackbar, Table, TableBody, TableCell, 
-  TableContainer, TableHead, TableRow, Typography 
+  Alert, Box, Button, CircularProgress, Container,
+  FormControl, InputLabel, MenuItem, Paper, Select, Snackbar,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { FiDollarSign, FiFilter, FiFileText, FiCheckSquare, FiAlertTriangle } from 'react-icons/fi';
+import { FiFilter, FiFileText } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { fetchReadingsForInvoice, markAsInvoiced } from '../services/utilityBillingService';
+import { fetchReadingsForInvoice } from '../services/utilityBillingService';
+import { useAuth } from '../hooks/useAuth';
+import { hasPermission, PERMISSIONS } from '../utils/accessPolicy.js';
 import { UTILITY_TYPES } from '../utils/constants';
 
 const UtilityBillingInvoice = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user, membership } = useAuth();
+  const canManageInvoices = hasPermission(
+    { user, membership: membership || user?.membership || null },
+    PERMISSIONS.INVOICES_MANAGE
+  );
   
   const [billingData, setBillingData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedItems, setSelectedItems] = useState([]);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState({
     month: new Date().toLocaleString('default', { month: 'long' }),
     year: new Date().getFullYear()
@@ -42,7 +48,8 @@ const UtilityBillingInvoice = () => {
   
   const loadBillingData = async () => {
     setLoading(true);
-    
+    setLoadError(false);
+
     try {
       const { data, error } = await fetchReadingsForInvoice({
         month: filter.month,
@@ -52,9 +59,10 @@ const UtilityBillingInvoice = () => {
       if (error) throw error;
       
       setBillingData(data || []);
-      setSelectedItems([]);
     } catch (error) {
       console.error('Error loading billing data:', error);
+      setBillingData([]);
+      setLoadError(true);
       showAlert('Failed to load billing data', 'error');
     } finally {
       setLoading(false);
@@ -67,47 +75,6 @@ const UtilityBillingInvoice = () => {
       ...prev,
       [name]: value
     }));
-  };
-  
-  const handleSelectAll = (event) => {
-    if (event.target.checked) {
-      setSelectedItems(billingData.map(item => item.id));
-    } else {
-      setSelectedItems([]);
-    }
-  };
-  
-  const handleSelectItem = (id) => {
-    setSelectedItems(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(itemId => itemId !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
-  };
-  
-  const handleCreateInvoice = async () => {
-    if (selectedItems.length === 0) {
-      showAlert('Please select at least one billing record', 'warning');
-      return;
-    }
-    
-    try {
-      // In a real application, you would integrate with the invoice service
-      // For now, we'll just simulate creating an invoice with a mock ID
-      const mockInvoiceId = `INV-${Date.now()}`;
-      
-      const { data, error } = await markAsInvoiced(selectedItems, mockInvoiceId);
-      
-      if (error) throw error;
-      
-      showAlert(`Successfully created invoice: ${mockInvoiceId}`, 'success');
-      loadBillingData(); // Refresh the list
-    } catch (error) {
-      console.error('Error creating invoice:', error);
-      showAlert('Failed to create invoice', 'error');
-    }
   };
   
   const showAlert = (message, severity = 'info') => {
@@ -130,18 +97,6 @@ const UtilityBillingInvoice = () => {
       style: 'currency',
       currency: 'USD'
     }).format(amount);
-  };
-  
-  const calculateTotal = () => {
-    let total = 0;
-    
-    billingData.forEach(item => {
-      if (selectedItems.includes(item.id)) {
-        total += parseFloat(item.amount);
-      }
-    });
-    
-    return total;
   };
   
   const formatDate = (dateString) => {
@@ -177,7 +132,7 @@ const UtilityBillingInvoice = () => {
           Utility Billing for Invoicing
         </Typography>
         <Typography variant="body1" paragraph>
-          View approved utility readings that are ready to be invoiced. Select items to include in an invoice.
+          Review utility readings awaiting billing. This screen does not create or issue invoices.
         </Typography>
         
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
@@ -215,10 +170,29 @@ const UtilityBillingInvoice = () => {
           </FormControl>
         </Box>
         
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Read-only utility billing preview. Amounts shown here are not final invoice charges.
+          Invoice creation and reading linkage are handled by the monthly billing lifecycle.
+        </Alert>
+        {canManageInvoices && (
+          <Button
+            variant="outlined"
+            startIcon={<FiFileText />}
+            onClick={() => navigate('/dashboard/invoices/batch-generate')}
+            sx={{ mb: 3 }}
+          >
+            Open Monthly Invoice Generation
+          </Button>
+        )}
+
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
+        ) : loadError ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Utility billing data could not be loaded. No invoice has been created.
+          </Alert>
         ) : billingData.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="h6">No billing data found</Typography>
@@ -228,35 +202,6 @@ const UtilityBillingInvoice = () => {
           </Box>
         ) : (
           <>
-            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedItems.length === billingData.length && billingData.length > 0}
-                    indeterminate={selectedItems.length > 0 && selectedItems.length < billingData.length}
-                    onChange={handleSelectAll}
-                  />
-                }
-                label="Select All"
-              />
-              
-              <Box>
-                <Typography variant="h6" sx={{ display: 'inline-block', mr: 2 }}>
-                  Total Selected: {formatCurrency(calculateTotal())}
-                </Typography>
-                
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleCreateInvoice}
-                  disabled={selectedItems.length === 0}
-                  startIcon={<FiFileText />}
-                >
-                  Create Invoice
-                </Button>
-              </Box>
-            </Box>
-            
             {Object.entries(groupByRentee()).map(([renteeId, data]) => (
               <Paper key={renteeId} sx={{ mb: 3, p: 2, border: `1px solid ${theme.palette.divider}` }}>
                 <Typography variant="h6">
@@ -267,9 +212,6 @@ const UtilityBillingInvoice = () => {
                   <Table>
                     <TableHead>
                       <TableRow>
-                        <TableCell padding="checkbox">
-                          <Checkbox />
-                        </TableCell>
                         <TableCell>Utility</TableCell>
                         <TableCell>Reading Date</TableCell>
                         <TableCell>Consumption</TableCell>
@@ -279,18 +221,7 @@ const UtilityBillingInvoice = () => {
                     </TableHead>
                     <TableBody>
                       {data.readings.map((item) => (
-                        <TableRow 
-                          key={item.id}
-                          hover
-                          selected={selectedItems.includes(item.id)}
-                          onClick={() => handleSelectItem(item.id)}
-                        >
-                          <TableCell padding="checkbox">
-                            <Checkbox
-                              checked={selectedItems.includes(item.id)}
-                              onChange={() => {}}
-                            />
-                          </TableCell>
+                        <TableRow key={item.id}>
                           <TableCell>
                             {item.utility_type === UTILITY_TYPES.ELECTRICITY ? 
                               'Electricity' : item.utility_type === UTILITY_TYPES.WATER ? 
@@ -302,18 +233,6 @@ const UtilityBillingInvoice = () => {
                           <TableCell>{formatCurrency(item.amount)}</TableCell>
                         </TableRow>
                       ))}
-                      <TableRow>
-                        <TableCell colSpan={5} align="right">
-                          <Typography variant="subtitle1">Total</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="subtitle1">
-                            {formatCurrency(data.readings.reduce((sum, item) => 
-                              sum + (selectedItems.includes(item.id) ? parseFloat(item.amount) : 0), 0)
-                            )}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
                     </TableBody>
                   </Table>
                 </TableContainer>
