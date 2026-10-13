@@ -1482,6 +1482,27 @@ Acceptance: exact-head authorization/build, Evia HTTP tests and disposable
 SQL/browser gates, then independent Azure Ready/exact public SHA/live MSSQL
 proof. Do not merge until CI is green or activate the canary.
 
+## Phase 4 real SQL-session Evia audit HTTP acceptance — bounded follow-on
+
+PR #251 merged at `4bec1611ae1137ddedcfdd1c35842623df260de3`.
+Post-merge Azure Ready/public exact-SHA/MSSQL acceptance must be captured
+separately from green verification CI before this release gate closes.
+
+ACTIVE TEST-ONLY: extend the existing disposable Docker SQL Server two-tenant
+billing/browser harness with real hashed bearer and storage-cookie sessions,
+real tenant memberships, the real /storage audit middleware and SQL publication
+lookup. Only the final storage-byte responder is simulated. Prove invalid and
+revoked tokens deny, renters and staff cannot read, foreign tenant is denied,
+absent/unprocessed/wrong-attempt publication is denied before any bytes are
+served, and a properly authorized local administrator can read using both
+carriers. Disposable fixture SQL writes are allowed only in the test database.
+No production data, canary activation, object deletion, schema change or
+broadened disclosure policy. Historic audit naming/retention still pending.
+
+Require exact-head build and authorization, Evia, disposable SQL and browser
+acceptance green before merge, then Azure revision Ready/public exact SHA/live
+MSSQL. Phase 4 OPEN; canary OFF.
+
 ## Maintenance rule for this document
 
 After each merged production change:
