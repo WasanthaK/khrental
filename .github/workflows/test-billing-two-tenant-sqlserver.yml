@@ -9,6 +9,8 @@ on:
       - 'src/api/platform/billingLifecycle.js'
       - 'src/api/mssql/repositories.js'
       - 'migrations/**'
+      - 'src/api/storage/authenticatedTenantRoute.js'
+      - 'tests/evia-audit-http.test.js'
       - '.github/workflows/test-billing-two-tenant-sqlserver.yml'
   workflow_dispatch:
 
