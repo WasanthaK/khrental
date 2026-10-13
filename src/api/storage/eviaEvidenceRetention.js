@@ -34,3 +34,25 @@ export const assertEviaEvidenceDeletionAllowed = (bucket, paths = []) => {
     }
   }
 };
+
+
+// The public tenant storage-upload API is not an Evia archive writer.
+// Reject all agreement "signed" paths at that entry point, including stable
+// legacy PDFs, historic audit evidence and immutable staged attempts.
+// Internal Evia archive storage calls do NOT use this generic API guard.
+// This deliberately does not claim object-lock / R2 credential immutability.
+const agreementSignedNamespace = new RegExp(
+  '^tenants/' + uuid + '/agreements/' + uuid + '/signed(?:/|$)', 'i'
+);
+
+export const assertEviaGenericDocumentUploadAllowed = (bucket, relativePath) => {
+  if (String(bucket || '').toLowerCase() !== 'documents') return;
+  const normalized = String(relativePath || '').replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (agreementSignedNamespace.test(normalized)) {
+    const error = new Error('Signed agreement evidence is reserved for the Evia archive writer.');
+    error.status = 403;
+    error.code = 'EVIA_EVIDENCE_UPLOAD_DENIED';
+    throw error;
+  }
+};
