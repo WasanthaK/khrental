@@ -28,7 +28,7 @@ test('utility review navigation uses governed invoice management permission and 
 test('governed generator retains backend invoice authority and transaction-scoped utility linkage', () => {
   const wizard = read('../src/components/invoices/InvoiceGenerationWizard.jsx');
   const monthly = read('../src/api/platform/monthlyBillingService.js');
-  assert.match(wizard, /generateMonthlyInvoices/);
+  assert.match(wizard, /await generateTenancyMonthlyInvoices\(/);
   assert.match(monthly, /FROM utility_readings WITH \(UPDLOCK, HOLDLOCK\)/);
   assert.match(monthly, /invoice_id IS NULL/);
   assert.match(monthly, /WHERE tenant_id = @tenantId/);
