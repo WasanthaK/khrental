@@ -1566,6 +1566,8 @@ export const listInvoices = async ({
   propertyId,
   renteeId,
   status,
+  sortBy = 'createdat',
+  sortOrder = 'desc',
   billingPeriod,
   fromDate,
   toDate,
@@ -1600,7 +1602,14 @@ export const listInvoices = async ({
     params.renteeId = renteeId;
   }
 
-  if (status) {
+  if (Array.isArray(status)) {
+    if (status.length === 0) return [];
+    const values = [...new Set(status.map(value => String(value)))];
+    values.forEach((value, index) => {
+      params['status' + index] = value;
+    });
+    filters.push('status IN (' + values.map((_, index) => '@status' + index).join(', ') + ')');
+  } else if (status) {
     filters.push('status = @status');
     params.status = status;
   }
@@ -1620,10 +1629,19 @@ export const listInvoices = async ({
     params.toDate = toDate;
   }
 
+  const allowedSort = {
+    createdat: 'createdat',
+    totalamount: 'totalamount',
+    status: 'status',
+    billingperiod: 'billingperiod',
+    duedate: 'duedate'
+  };
+  const column = allowedSort[String(sortBy || '').toLowerCase()] || 'createdat';
+  const direction = String(sortOrder || '').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = await paginateQuery({
     baseQuery: `SELECT * FROM invoices ${whereClause}`,
-    orderBy: 'createdat DESC',
+    orderBy: `${column} ${direction}, id ASC`,
     page,
     pageSize,
     params
