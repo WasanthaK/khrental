@@ -9,6 +9,8 @@ on:
       - 'tests/evia-completed-documents.test.js'
       - 'src/api/storage/**'
       - 'tests/evia-storage-retention.test.js'
+      - 'src/api/storage/authenticatedTenantRoute.js'
+      - 'tests/evia-audit-http.test.js'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
   push:
@@ -19,6 +21,8 @@ on:
       - 'tests/evia-completed-documents.test.js'
       - 'src/api/storage/**'
       - 'tests/evia-storage-retention.test.js'
+      - 'src/api/storage/authenticatedTenantRoute.js'
+      - 'tests/evia-audit-http.test.js'
       - 'server.js'
       - '.github/workflows/test-evia-webhook.yml'
 
@@ -35,4 +39,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js
+      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js tests/evia-audit-http.test.js
