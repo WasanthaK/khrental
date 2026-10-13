@@ -11,6 +11,7 @@ on:
       - 'tests/evia-storage-retention.test.js'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
+      - 'tests/evia-historic-audit.test.js'
       - 'tests/evia-archive-crash-recovery.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
@@ -26,6 +27,7 @@ on:
       - 'tests/evia-storage-retention.test.js'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
+      - 'tests/evia-historic-audit.test.js'
       - 'tests/evia-archive-crash-recovery.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
@@ -45,4 +47,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js tests/evia-audit-http.test.js tests/evia-archive-crash-recovery.test.js
+      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js tests/evia-audit-http.test.js tests/evia-archive-crash-recovery.test.js tests/evia-historic-audit.test.js
