@@ -1643,6 +1643,51 @@ async function main() {
     assert.deepEqual(requestedForeign.payload.data, [],
       'query parameter must never override authenticated owner');
 
+    // Query parity: repeated status values and SQL sorting must be applied
+    // after tenant/owner/draft authorization, but before OFFSET/FETCH.
+    // This synthetic invoice exists only in the disposable SQL database.
+    const paidForA = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'paid', '2026-10', 120)
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+    const sortedPage = (page, sortOrder) =>
+      '/api/mssql/invoices?status=issued&status=paid&sortBy=totalamount&sortOrder='
+      + sortOrder + '&page=' + page + '&pageSize=1';
+    const ascendingFirst = await call(sortedPage(1, 'asc'), {
+      token: tokenA, tenantId: a.tenantId
+    });
+    const ascendingSecond = await call(sortedPage(2, 'asc'), {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(ascendingFirst.status, 200, JSON.stringify(ascendingFirst));
+    assert.equal(ascendingSecond.status, 200, JSON.stringify(ascendingSecond));
+    assert.deepEqual(ascendingFirst.payload.data.map(entry => guid(entry.id)), [guid(issuedForA.id)]);
+    assert.deepEqual(ascendingSecond.payload.data.map(entry => guid(entry.id)), [guid(paidForA.id)]);
+    const descending = await call(sortedPage(1, 'desc'), {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(descending.status, 200, JSON.stringify(descending));
+    assert.deepEqual(descending.payload.data.map(entry => guid(entry.id)), [guid(paidForA.id)]);
+    const onlyPaid = await call('/api/mssql/invoices?status=paid', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(onlyPaid.status, 200, JSON.stringify(onlyPaid));
+    assert.deepEqual(onlyPaid.payload.data.map(entry => guid(entry.id)), [guid(paidForA.id)]);
+    const impossibleStatus = await call('/api/mssql/invoices?status=paid&status=impossible', {
+      token: otherToken, tenantId: a.tenantId
+    });
+    assert.equal(impossibleStatus.status, 200, JSON.stringify(impossibleStatus));
+    assert.deepEqual(impossibleStatus.payload.data, [],
+      'status arrays never bypass authenticated owner scope');
+    const invalidSort = await call('/api/mssql/invoices?sortBy=invalid_column&sortOrder=desc', {
+      token: tokenA, tenantId: a.tenantId
+    });
+    assert.equal(invalidSort.status, 200, JSON.stringify(invalidSort));
+    assert.equal(invalidSort.payload.data.length, 2,
+      'invalid sort names must be allowlisted/fallback, not interpolated into SQL');
+    await query(pool, 'DELETE FROM invoices WHERE id = @id AND tenant_id = @tenantId',
+      { id: paidForA.id, tenantId: a.tenantId });
+
     // Restore the original billing lifecycle fixture, used below to prove
     // its own draft and subsequent authorized issuance transitions.
     await query(pool, `
