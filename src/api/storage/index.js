@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { assertEviaEvidenceDeletionAllowed } from './eviaEvidenceRetention.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'public', 'storage');
 const DEFAULT_BUCKETS = ['images', 'files', 'documents', 'invoices', 'media', 'maintenance'];
@@ -66,6 +67,7 @@ class LocalStorageDriver {
   }
 
   async deleteBucket(bucket) {
+    assertEviaEvidenceDeletionAllowed(bucket);
     await fs.rm(path.join(STORAGE_ROOT, ensureBucketName(bucket)), { recursive: true, force: true });
   }
 
@@ -85,6 +87,7 @@ class LocalStorageDriver {
   }
 
   async deleteObjects(bucket, paths = []) {
+    assertEviaEvidenceDeletionAllowed(bucket, paths);
     const safeBucket = ensureBucketName(bucket);
     const safePaths = paths.map(normalizeStoragePath);
     await Promise.all(safePaths.map((item) => fs.rm(path.join(STORAGE_ROOT, safeBucket, item), { force: true, recursive: true })));
@@ -221,6 +224,7 @@ class R2StorageDriver {
   }
 
   async deleteBucket(bucket) {
+    assertEviaEvidenceDeletionAllowed(bucket);
     const prefix = this.objectKey(bucket);
     const keys = await this.listAllKeys(prefix);
     await Promise.all(keys.map((key) => this.request('DELETE', key)));
@@ -262,6 +266,7 @@ class R2StorageDriver {
   }
 
   async deleteObjects(bucket, paths = []) {
+    assertEviaEvidenceDeletionAllowed(bucket, paths);
     const safePaths = paths.map(normalizeStoragePath);
     await Promise.all(safePaths.map((item) => this.request('DELETE', this.objectKey(bucket, item))));
     return safePaths.map((name) => ({ name }));
