@@ -1597,6 +1597,21 @@ Follow with disposable two-tenant SQL-backed HTTP acceptance before this
 release is considered sufficient for broader invoice contract migrations.
 Phase 4 remains OPEN.
 
+## Phase 4 invoice list query parity — bounded active slice
+
+PR #257 merged at `0a1c25c03534260f3c09bd2e88e2b526971773a4`.
+Its post-merge Azure Ready/exact SHA/MSSQL acceptance is a separate release gate.
+
+ACTIVE: carry explicit status arrays and allowed sort fields through the
+existing MSSQL invoice list path. SQL applies owner/draft/tenant predicates
+before pagination and always includes an immutable ID tie-breaker for stable
+page boundaries. An empty status array must not widen a filtered request.
+Do not widen sorting beyond an allowlist, modify invoice money/status,
+change mutation authorization, or enable the Evia canary.
+Require exact-head build and disposable SQL/renter acceptance and production
+verification prior to treating this behavior change as accepted.
+Phase 4 remains OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:

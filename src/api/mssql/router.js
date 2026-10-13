@@ -494,6 +494,8 @@ export const createMssqlRouter = () => {
       propertyId: req.query.propertyId,
       renteeId: req.query.renteeId,
       status: req.query.status,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
       billingPeriod: req.query.billingPeriod,
       fromDate: req.query.fromDate,
       toDate: req.query.toDate,
