@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
+import { transitionUtilityReading } from '../../services/utilityReviewClient';
 import ImageViewer from '../../components/common/ImageViewer';
 
 const UtilityReadingsReview = () => {
@@ -61,103 +62,30 @@ const UtilityReadingsReview = () => {
   const handleApprove = async (reading) => {
     try {
       setLoading(true);
-
-      // Calculate the bill based on consumption and property utility rates
-      const consumption = reading.currentreading - (reading.previousreading || 0);
-      
-      // Get the appropriate rate based on utility type
-      let rate = 0;
-      if (reading.utilitytype === UTILITY_TYPES.ELECTRICITY) {
-        rate = parseFloat(reading.properties?.electricity_rate) || 0;
-      } else if (reading.utilitytype === UTILITY_TYPES.WATER) {
-        rate = parseFloat(reading.properties?.water_rate) || 0;
-      }
-      
-      // Calculate the total amount
-      const totalAmount = consumption * rate;
-
-      // Create billing data object that can be easily reused by invoice module
-      const billingData = {
-        utility_type: reading.utilitytype,
-        consumption: consumption,
-        rate: rate,
-        amount: totalAmount,
-        reading_id: reading.id,
-        property_id: reading.propertyid,
-        rentee_id: reading.renteeid,
-        reading_date: reading.readingdate,
-        billing_month: new Date(reading.readingdate).toLocaleString('default', { month: 'long' }),
-        billing_year: new Date(reading.readingdate).getFullYear(),
-        approved_date: new Date().toISOString()
-      };
-
-      console.log('Calculated billing data:', billingData);
-
-      // Update reading status to approved with calculated bill and billing data
-      const { error: updateError } = await platformClient
-        .from('utility_readings')
-        .update({ 
-          status: 'approved',
-          calculatedbill: totalAmount,
-          billing_data: billingData,
-          approved_date: billingData.approved_date
-        })
-        .eq('id', reading.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-      
-      // Store billing data in a separate utility_billing table for the invoice module to use
-      const { error: billingError } = await platformClient
-        .from('utility_billing')
-        .insert({
-          reading_id: reading.id,
-          rentee_id: reading.renteeid,
-          property_id: reading.propertyid,
-          utility_type: reading.utilitytype,
-          consumption: consumption,
-          rate: rate,
-          amount: totalAmount,
-          reading_date: reading.readingdate,
-          billing_month: billingData.billing_month,
-          billing_year: billingData.billing_year,
-          status: 'pending_invoice',
-          approved_date: billingData.approved_date
-        });
-        
-      if (billingError) {
-        console.error('Error creating billing record:', billingError);
-        // Don't stop the process if billing record fails, just log it
-      }
-
-      toast.success('Reading approved and ready for invoice');
-      fetchReadings();
+      await transitionUtilityReading(reading.id, 'approve');
+      toast.success('Reading approved and ready for invoice generation');
+      await fetchReadings();
     } catch (error) {
-      console.error('Error approving reading:', error);
-      toast.error('Failed to approve reading');
+      toast.error('Failed to approve reading: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleReject = async (reading) => {
+    const reason = window.prompt('Reason for rejecting this utility reading:');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast.error('Rejection reason is required');
+      return;
+    }
     try {
       setLoading(true);
-      const { error } = await platformClient
-        .from('utility_readings')
-        .update({ status: 'rejected' })
-        .eq('id', reading.id);
-
-      if (error) {
-        throw error;
-      }
-
+      await transitionUtilityReading(reading.id, 'reject', { reason: reason.trim() });
       toast.success('Reading rejected');
-      fetchReadings();
+      await fetchReadings();
     } catch (error) {
-      console.error('Error rejecting reading:', error);
-      toast.error('Failed to reject reading');
+      toast.error('Failed to reject reading: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
