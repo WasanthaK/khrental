@@ -1489,6 +1489,15 @@ async function main() {
     ]) {
       await pool.request().batch(fs.readFileSync(path.resolve('migrations', filename), 'utf8'));
     }
+    // The production tenancy-onboarding migration adds agreements.activated_at.
+    // This acceptance fixture intentionally omits the migration's UNIQUE
+    // active-tenancy indexes: existing signing/rollback tests need historical
+    // overlapping synthetic agreements to prove those separate contracts.
+    // Restore only its additive column in disposable Docker SQL so that the
+    // maintenance create endpoint uses the same canonical schema shape.
+    await pool.request().batch(
+      'ALTER TABLE dbo.agreements ADD activated_at DATETIMEOFFSET NULL'
+    );
 
     process.env.MSSQL_SERVER = '127.0.0.1';
     process.env.MSSQL_PORT = String(port);
