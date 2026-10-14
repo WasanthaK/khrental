@@ -508,60 +508,17 @@ export const getInvoicesByProperty = async (propertyIds, options = {}) => {
 };
 
 /**
- * Gets property IDs that the current user has access to
- * @returns {Promise<Object>} - Object containing data and error
+ * Deprecated compatibility helper.
+ *
+ * Its former implementation treated a missing staff profile as permission to
+ * return all properties. Property access must instead be obtained from a
+ * tenant-authenticated, server-authorized endpoint. Preserve the return
+ * envelope for unresolved legacy/manual callers; never expand access here.
  */
 export async function getCurrentUserPropertyAccess() {
-  try {
-    const { data: userData, error: userError } = await platformClient.auth.getUser();
-    
-    if (userError) {
-      throw new Error(formatErrorMessage(userError));
-    }
-    
-    if (!userData?.user) {
-      return { data: [], error: 'No authenticated user found' };
-    }
-    
-    // Try to get staff profile first
-    const { data: profile, error: profileError } = await platformClient
-      .from('staff')
-      .select('id, user_id, role, properties_access')
-      .eq('user_id', userData.user.id)
-      .maybeSingle();
-    
-    // If staff profile exists and has properties_access
-    if (profile && !profileError) {
-      // If admin or has full access, get all property IDs
-      if (profile.role === 'admin' || !profile.properties_access || profile.properties_access.length === 0) {
-        const { data: allProperties, error: propError } = await platformClient
-          .from('properties')
-          .select('id');
-        
-        if (propError) {
-          throw new Error(formatErrorMessage(propError));
-        }
-        
-        return { data: allProperties.map(p => p.id), error: null };
-      }
-      
-      // Otherwise, return the properties the user has access to
-      return { data: profile.properties_access, error: null };
-    }
-    
-    // Fallback to getting all properties
-    // In a real implementation, you would check app_users or other tables for permissions
-    const { data: allProperties, error: propError } = await platformClient
-      .from('properties')
-      .select('id');
-    
-    if (propError) {
-      throw new Error(formatErrorMessage(propError));
-    }
-    
-    return { data: allProperties.map(p => p.id), error: null };
-  } catch (error) {
-    console.error('Error getting user property access:', error);
-    return { data: null, error: error.message };
-  }
-} 
+  return {
+    data: null,
+    error: 'Property access must be resolved by the authenticated tenant-scoped API.',
+    code: 'PROPERTY_ACCESS_AUTHORITY_REQUIRED'
+  };
+}
