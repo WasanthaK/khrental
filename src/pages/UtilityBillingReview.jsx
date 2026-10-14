@@ -3,7 +3,8 @@ import { Box, Button, Card, CardContent, CircularProgress, Container, Divider, F
 import { useTheme } from '@mui/material/styles';
 import { FiCheckCircle, FiXCircle, FiFilter, FiImage, FiDollarSign, FiActivity, FiHelpCircle, FiEdit, FiSave } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { fetchReadings, approveReading, rejectReading, fetchReadingById, calculateUtilityAmount, updateReadingValue } from '../services/utilityBillingService';
+import { fetchReadings, fetchReadingById, calculateUtilityAmount, updateReadingValue } from '../services/utilityBillingService';
+import { transitionUtilityReading } from '../services/utilityReviewClient';
 import { UTILITY_TYPES } from '../utils/constants';
 import ImageViewer from '../components/common/ImageViewer';
 
@@ -112,104 +113,29 @@ const UtilityBillingReview = () => {
   
   const handleApprove = async (reading) => {
     try {
-      console.log('Approving reading:', reading.id, reading);
-      const { data, error } = await approveReading(reading);
-      
-      console.log('Approval response:', data, error);
-      
-      if (error) {
-        throw error;
-      }
-      
-      // Verify the status change by fetching the reading directly
-      const { data: updatedReading, error: fetchError } = await fetchReadingById(reading.id);
-      
-      if (fetchError) {
-        throw fetchError;
-      }
-      
-      // Check if the status has changed to approved/completed/verified
-      if (updatedReading && ['approved', 'completed', 'verified'].includes(updatedReading.status)) {
-        console.log('Status successfully changed to:', updatedReading.status);
-        showAlert(`Reading approved successfully (status: ${updatedReading.status})`, 'success');
-      } else if (updatedReading && updatedReading.status === 'pending' && 
-                (updatedReading.billing_data || updatedReading.calculatedbill)) {
-        // Fallback worked - data was processed but status wasn't changed
-        console.log('Status unchanged but billing data processed');
-        showAlert('Reading processed successfully using fallback method', 'success');
-      } else {
-        console.error('Status did not change as expected:', updatedReading?.status);
-        showAlert('Warning: Reading may not have been properly processed', 'warning');
-      }
-      
-      // Force a reload to ensure we get the latest data
+      await transitionUtilityReading(reading.id, 'approve');
+      showAlert('Reading approved and ready for monthly invoice generation.', 'success');
       await loadReadings();
     } catch (error) {
-      console.error('Error approving reading:', error);
-      showAlert('Failed to approve reading: ' + (error.message || 'Unknown error'), 'error');
+      showAlert('Approval failed: ' + (error.message || 'Unknown error'), 'error');
     }
   };
-  
+
   const handleReject = async (reading, reason) => {
     try {
-      console.log('Rejecting reading:', reading.id, reason);
-      const { data, error } = await rejectReading(reading, reason);
-      
-      console.log('Rejection response:', data, error);
-      
-      if (error) {
-        throw error;
+      const confirmedReason = String(reason || '').trim();
+      if (!confirmedReason) {
+        showAlert('A rejection reason is required.', 'error');
+        return;
       }
-      
-      // Verify the status change by fetching the reading directly
-      const { data: updatedReading, error: fetchError } = await fetchReadingById(reading.id);
-      
-      if (fetchError) {
-        console.warn('Could not verify status update:', fetchError);
-      } else {
-        console.log('Reading after rejection:', updatedReading);
-        
-        // Check if the status has changed to rejected
-        if (updatedReading && (updatedReading.status === 'rejected' || updatedReading.billing_status === 'rejected')) {
-          console.log('Status successfully changed to rejected');
-          showAlert('Reading rejected successfully', 'success');
-          
-          // Update the local state to reflect the rejection
-          // This will hide the action buttons
-          setReadings(prevReadings => 
-            prevReadings.map(r => 
-              r.id === reading.id 
-                ? { ...r, status: 'rejected', billing_status: 'rejected', rejection_reason: reason }
-                : r
-            )
-          );
-        } else if (updatedReading && updatedReading.rejection_reason) {
-          // Fallback worked - rejection reason was recorded but status wasn't changed
-          console.log('Status unchanged but rejection reason recorded');
-          showAlert('Reading rejection processed successfully', 'success');
-          
-          // Still update local state with the rejection data
-          setReadings(prevReadings => 
-            prevReadings.map(r => 
-              r.id === reading.id 
-                ? { ...r, billing_data: { ...r.billing_data, effective_status: 'rejected' }, rejection_reason: reason }
-                : r
-            )
-          );
-        } else {
-          console.error('Status did not change as expected:', updatedReading?.status);
-          showAlert('Warning: Reading may not have been properly rejected', 'warning');
-        }
-      }
-      
-      // Force a reload to ensure we get the latest data
+      await transitionUtilityReading(reading.id, 'reject', { reason: confirmedReason });
+      showAlert('Reading rejected successfully.', 'success');
       await loadReadings();
     } catch (error) {
-      console.error('Error rejecting reading:', error);
-      showAlert('Failed to reject reading: ' + (error.message || 'Unknown error'), 'error');
+      showAlert('Rejection failed: ' + (error.message || 'Unknown error'), 'error');
     }
   };
-  
+
   const showAlert = (message, severity = 'info') => {
     setAlert({
       open: true,
