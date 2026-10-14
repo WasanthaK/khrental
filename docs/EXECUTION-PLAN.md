@@ -1772,6 +1772,12 @@ the governed billing writer, Evia canary, SQL schema, or production DDL.
 Gate on exact-head authorization/build tests and production Ready/serving
 SHA/MSSQL evidence. Phase 4 OPEN; Phase 5 still pending.
 
+## Phase 4 consolidated authenticated acceptance and routed business-browser follow-on — 2026-10-15
+
+PR #281 has merged as `2a283aa24cb3bcbac53186b15065bb9e12eccf22` from verified PR-head `ad357f5bc52bbda75e26fd3d4d22ab52af97b968`. Build/authorization, disposable two-tenant SQL Server acceptance and Evia webhook tests all succeeded on the exact head. The test package adds real-session HTTP maintenance and notification ownership/tenant-denial assertions. It does **not** prove end-to-end browser workflows, production object upload, email delivery or full lifecycle correctness. Confirm independently that its post-merge Azure Ready revision serves the exact SHA and reports MSSQL healthy.
+
+Current next Phase 4 domain: **routed renter browser acceptance**, in one disposable two-tenant SQL fixture. Exercise actual logged-in React maintenance list/detail and agreement screens for both tenants plus denied foreign request navigation. Retain existing invoice/receipt browser evidence. Do not mutate production identity, invoices, maintenance, email, Evia signature or database DDL. Broader invitation/resend, signed-document, payment verification, staff maintenance transitions and final compatibility caller census remain release blockers before Phase 5. Keep the Evia fenced canary OFF.
+
 ## Maintenance rule for this document
 
 After each merged production change:
