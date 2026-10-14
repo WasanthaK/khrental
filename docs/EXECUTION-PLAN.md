@@ -279,11 +279,17 @@ Before changing code:
 - [x] Inventory remaining `platformClient` / `platformClientCore` consumers.
 - [x] Group completed storage compatibility consumers by business domain.
 - [x] Remove storage compatibility façade and the major PropertyDetails/AgreementList read fallbacks in bounded production-verified slices.
-- [ ] Continue remaining non-storage compatibility paths one bounded PR at a time, preserving authority and behavior.
+- [ ] Complete remaining non-storage compatibility contracts in consolidated domain packages, with per-operation authority tests and one PR/deployment per accepted package.
 
 Completed bounded domains include billing/payment proof storage, utilities/meter evidence, maintenance media, Evia diagnostic uploads, application storage initialization, bucket tooling, shared storage façade, PropertyContext/PropertyList/PropertyDetails reads, AgreementList/detail reads, and multiple dead agreement/invoice compatibility helpers.
 
-Current active domain: **closure-readiness review and live compatibility contract inventory**.
+Current active domain: **consolidated compatibility acceptance and closure
+decision**, including disposable two-tenant SQL evidence and an explicit list
+of still-live/blocked or owner-approved deferred contracts. For operational
+efficiency, group related maintenance/notification and contract acceptance
+tasks per PR, but preserve exact-head CI, Azure served-SHA and MSSQL
+verification after every runtime merge. Doc/test/workflow-only merges no
+longer require a new Azure serving revision.
 
 Remaining work is concentrated in narrower, higher-risk areas: live agreement/property/property-unit fallbacks, agreement-template operations, invoice list/create/update compatibility paths, app-user/auth compatibility, and final repository-wide inventory/closure. These require explicit authority/behavior parity before removal.
 

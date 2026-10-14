@@ -10,7 +10,6 @@ on:
       - 'tests/evia-oauth-v2.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
-      - 'server.js'
       - 'Dockerfile'
       - '.github/workflows/test-evia-oauth-v2.yml'
   push:
@@ -22,7 +21,6 @@ on:
       - 'tests/evia-oauth-v2.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
-      - 'server.js'
       - 'Dockerfile'
       - '.github/workflows/test-evia-oauth-v2.yml'
 

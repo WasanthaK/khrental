@@ -13,7 +13,7 @@ import {
   assertMaintenanceTransition,
   canTenantCancelMaintenance
 } from './maintenanceLifecycle.js';
-import { authorizeMaintenanceImageAttachment, normalizeMaintenanceImageUrl } from './maintenanceImagePolicy.js';
+import { authorizeMaintenanceImageAttachment, normalizeMaintenanceImageUrl, sameMaintenanceIdentifier } from './maintenanceImagePolicy.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -57,7 +57,7 @@ const requireManager = (req) => {
 
 const hasPropertyScope = (req, propertyId) => {
   if (isAdminRole({ user: req.user, membership: req.membership })) return true;
-  return (req.membership?.assignedPropertyIds || []).some((id) => String(id) === String(propertyId));
+  return (req.membership?.assignedPropertyIds || []).some((id) => sameMaintenanceIdentifier(id, propertyId));
 };
 
 const loadRequest = async (tenantId, requestId) => {
@@ -79,14 +79,14 @@ const loadRequest = async (tenantId, requestId) => {
 
 const assertReadAccess = (req, request) => {
   if (isTenantRole({ user: req.user, membership: req.membership })) {
-    if (String(request.renteeid || '') !== String(req.user?.id || '')) {
+    if (!sameMaintenanceIdentifier(request.renteeid, req.user?.id)) {
       throw createRequestError(403, 'This maintenance request does not belong to the current tenant.', 'RESOURCE_ACCESS_DENIED');
     }
     return;
   }
 
   if (isManager(req) && hasPropertyScope(req, request.propertyid)) return;
-  if (canUpdateAssigned(req) && String(request.assignedto || '') === String(req.user?.id || '')) return;
+  if (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user?.id)) return;
   throw createRequestError(403, 'This maintenance request is outside the current assignment scope.', 'RESOURCE_ACCESS_DENIED');
 };
 
@@ -309,7 +309,7 @@ export const createMaintenanceLifecycleRouter = () => {
     try {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       const allowed = (isManager(req) && hasPropertyScope(req, request.propertyid))
-        || (canUpdateAssigned(req) && String(request.assignedto || '') === String(req.user.id));
+        || (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user.id));
       if (!allowed) throw createRequestError(403, 'Only the assigned worker or maintenance manager can start work.', 'RESOURCE_ACCESS_DENIED');
       assertMaintenanceTransition(request.status, MAINTENANCE_STATUS.IN_PROGRESS);
 
@@ -349,7 +349,7 @@ export const createMaintenanceLifecycleRouter = () => {
     try {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       const allowed = (isManager(req) && hasPropertyScope(req, request.propertyid))
-        || (canUpdateAssigned(req) && String(request.assignedto || '') === String(req.user.id));
+        || (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user.id));
       if (!allowed) throw createRequestError(403, 'Only the assigned worker or maintenance manager can complete work.', 'RESOURCE_ACCESS_DENIED');
       assertMaintenanceTransition(request.status, MAINTENANCE_STATUS.COMPLETED);
       const completionCost = req.body?.completionCost === undefined || req.body?.completionCost === null || req.body?.completionCost === ''
@@ -405,7 +405,7 @@ export const createMaintenanceLifecycleRouter = () => {
     try {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       const tenantOwner = isTenantRole({ user: req.user, membership: req.membership })
-        && String(request.renteeid || '') === String(req.user.id)
+        && sameMaintenanceIdentifier(request.renteeid, req.user.id)
         && canTenantCancelMaintenance(request.status);
       const managerAllowed = isManager(req) && hasPropertyScope(req, request.propertyid);
       if (!tenantOwner && !managerAllowed) {

@@ -5,6 +5,14 @@ on:
     branches: [main]
   push:
     branches: [main]
+    # PR-head verification still runs for every PR. Avoid an Azure rollout
+    # after a push containing only docs, tests or CI workflow changes.
+    # Any application/runtime change in the same push still deploys.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'tests/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
