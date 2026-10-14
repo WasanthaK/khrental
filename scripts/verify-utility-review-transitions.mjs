@@ -130,6 +130,49 @@ export const verifyUtilityReviewTransitions = async ({
     }
     await assertRow(rollbackId, { status: 'pending', billing_status: 'pending', calculatedbill: null, invoice_id: null });
 
+
+    // Governed meter editing: same tenant, stale compare-and-swap, zero values,
+    // permission denial, invoiced guard, and unchanged billing ownership.
+    const editReading = async (item, token, readingId, payload) => call(
+      '/api/utility-reviews/readings/' + readingId + '/value', {
+        method: 'PUT', tenantId: item.tenantId, token, body: payload
+      }
+    );
+    const pendingEditId = await insertReading(a);
+    const original = {
+      previousReading: 100, currentReading: 105,
+      expectedPreviousReading: 100, expectedCurrentReading: 105
+    };
+    assert.equal((await editReading(a, null, pendingEditId, original)).status, 401);
+    assert.equal((await editReading(a, a.token, pendingEditId, original)).status, 403);
+    assert.equal((await editReading(a, adminA.token, pendingEditId,
+      { ...original, currentReading: -1 })).status, 422);
+    assert.equal((await editReading(a, adminA.token, pendingEditId,
+      { ...original, currentReading: '101.12345' })).status, 422);
+    assert.equal((await editReading(a, adminA.token, readingB, original)).status, 404);
+    const saved = await editReading(a, adminA.token, pendingEditId,
+      { ...original, previousReading: 0, currentReading: 110 });
+    assert.equal(saved.status, 200, JSON.stringify(saved));
+    assert.equal(Number(saved.payload.data.previousreading), 0);
+    assert.equal(Number(saved.payload.data.currentreading), 110);
+    const stale = await editReading(a, adminA.token, pendingEditId, original);
+    assert.equal(stale.status, 409);
+    assert.equal(stale.payload.code, 'STALE_METER_READING');
+    const storedEdited = await readRow(pool, pendingEditId);
+    assert.equal(storedEdited.status, 'pending');
+    assert.equal(storedEdited.invoice_id, null);
+    const processedEdit = await editReading(a, adminA.token, readingA, original);
+    assert.equal(processedEdit.status, 409);
+    assert.equal(processedEdit.payload.code, 'READING_ALREADY_PROCESSED');
+    const concurrentEditId = await insertReading(a);
+    const racingEdits = await Promise.all([
+      editReading(a, adminA.token, concurrentEditId, { ...original, currentReading: 106 }),
+      editReading(a, adminA.token, concurrentEditId, { ...original, currentReading: 107 })
+    ]);
+    assert.deepEqual(racingEdits.map(row => row.status).sort(), [200, 409]);
+
+    console.log('PASS: governed meter-edit scope, stale-write rejection, precision, concurrency and billing isolation');
+
     // Full React/browser acceptance: exercise real buttons in both live routes
     // with actual tenant-selected administrator sessions and synthetic SQL data.
     const openReview = async (item, admin, path) => {
