@@ -32,3 +32,29 @@ export const transitionUtilityReading = async (readingId, transition, { reason }
   }
   return result.data;
 };
+
+/** Compare-and-swap pending meter correction. No billing/status fields are accepted. */
+export const editPendingUtilityReading = async (readingId, {
+  previousReading, currentReading, expectedPreviousReading, expectedCurrentReading
+}) => {
+  if (!readingId) throw new Error('Reading ID is required.');
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/utility-reviews/readings/${encodeURIComponent(readingId)}/value`,
+    {
+      method: 'PUT',
+      headers: buildRequestContextHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        previousReading, currentReading, expectedPreviousReading, expectedCurrentReading
+      })
+    }
+  );
+  const result = await response.json().catch(() => null);
+  if (!response.ok || result?.error || !result?.data?.id) {
+    const error = new Error(typeof result?.error === 'string'
+      ? result.error : result?.error?.message || 'Meter correction was not saved.');
+    error.code = result?.code || null;
+    error.status = response.status;
+    throw error;
+  }
+  return result.data;
+};

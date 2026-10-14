@@ -25,6 +25,26 @@ export const calculateReviewedUtilityCharge = ({ previousreading, currentreading
   return { consumption: current - previous, rate: price, amount };
 };
 
+/** Exact DECIMAL(18,4) payload; reject implicit rounding and exponent notation. */
+export const normalizeMeterReadingValue = (value, field = 'reading') => {
+  const raw = typeof value === 'number' || typeof value === 'string'
+    ? String(value).trim() : '';
+  if (!/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(raw) ||
+      !Number.isFinite(Number(raw))) {
+    throw requestError(422, 'INVALID_METER_READING', field + ' must be a nonnegative decimal with at most four fractional places.');
+  }
+  return Number(raw);
+};
+
+export const validateMeterReadingPair = (previous, current) => {
+  const previousReading = normalizeMeterReadingValue(previous, 'Previous reading');
+  const currentReading = normalizeMeterReadingValue(current, 'Current reading');
+  if (currentReading <= previousReading) {
+    throw requestError(422, 'INVALID_METER_READING_RANGE', 'Current reading must be greater than previous reading.');
+  }
+  return { previousReading, currentReading };
+};
+
 const query = async (transaction, text, values) => {
   const request = new sql.Request(transaction);
   Object.entries(values).forEach(([key, value]) => request.input(key, value));
@@ -117,6 +137,76 @@ export const createUtilityReviewRouter = () => {
       await transaction.commit();
       transaction = null;
       return res.json({ data: result, error: null });
+    } catch (error) {
+      if (transaction) {
+        try { await transaction.rollback(); } catch { /* preserve original error */ }
+      }
+      return next(error);
+    }
+  });
+
+  // Meter corrections have no authority to approve, bill, or link invoices.
+  router.put('/readings/:readingId/value', async (req, res, next) => {
+    let transaction;
+    try {
+      authorizePermission({ user: req.user, membership: req.membership }, PERMISSIONS.UTILITIES_REVIEW);
+      const readingId = req.params.readingId;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(readingId)) {
+        throw requestError(400, 'INVALID_READING_ID', 'Valid utility reading ID required.');
+      }
+      const body = req.body || {};
+      if (!Object.prototype.hasOwnProperty.call(body, 'expectedPreviousReading') ||
+          !Object.prototype.hasOwnProperty.call(body, 'expectedCurrentReading')) {
+        throw requestError(400, 'EXPECTED_READINGS_REQUIRED', 'Original readings are required to prevent overwriting concurrent changes.');
+      }
+      const values = validateMeterReadingPair(body.previousReading, body.currentReading);
+      const expectedPrevious = body.expectedPreviousReading === null
+        ? null : normalizeMeterReadingValue(body.expectedPreviousReading, 'Original previous reading');
+      const expectedCurrent = body.expectedCurrentReading === null
+        ? null : normalizeMeterReadingValue(body.expectedCurrentReading, 'Original current reading');
+
+      transaction = new sql.Transaction(await getMssqlPool());
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      const [reading] = await query(transaction,
+        `SELECT TOP 1 id, tenant_id, propertyid, status, billing_status, invoice_id,
+                previousreading, currentreading
+         FROM utility_readings WITH (UPDLOCK, HOLDLOCK)
+         WHERE tenant_id = @tenantId AND id = @readingId`,
+        { tenantId: req.tenantId, readingId }
+      );
+      if (!reading) throw requestError(404, 'READING_NOT_FOUND', 'Utility reading not found.');
+      if (!isAdminRole({ user: req.user, membership: req.membership })) {
+        const assigned = new Set((req.membership?.assignedPropertyIds || []).map(String));
+        if (!assigned.has(String(reading.propertyid))) {
+          throw requestError(403, 'RESOURCE_ACCESS_DENIED', 'Utility reading property is not assigned.');
+        }
+      }
+      if (reading.status !== 'pending' || reading.invoice_id !== null ||
+          (reading.billing_status && reading.billing_status !== 'pending')) {
+        throw requestError(409, 'READING_ALREADY_PROCESSED', 'Only pending, unlinked readings can be edited.');
+      }
+      const currentPrevious = reading.previousreading === null ? null : Number(reading.previousreading);
+      const currentCurrent = reading.currentreading === null ? null : Number(reading.currentreading);
+      if (expectedPrevious !== currentPrevious || expectedCurrent !== currentCurrent) {
+        throw requestError(409, 'STALE_METER_READING', 'This reading changed since it was opened. Refresh before editing.');
+      }
+
+      const [updated] = await query(transaction,
+        `UPDATE utility_readings
+         SET previousreading = @previousReading,
+             currentreading = @currentReading,
+             updatedat = SYSUTCDATETIME()
+         OUTPUT INSERTED.id, INSERTED.previousreading, INSERTED.currentreading,
+                INSERTED.status, INSERTED.billing_status
+         WHERE id = @readingId AND tenant_id = @tenantId
+           AND status = 'pending' AND invoice_id IS NULL
+           AND (billing_status IS NULL OR billing_status = 'pending')`,
+        { tenantId: req.tenantId, readingId, ...values }
+      );
+      if (!updated) throw requestError(409, 'READING_CONCURRENTLY_CHANGED', 'Utility reading changed during editing.');
+      await transaction.commit();
+      transaction = null;
+      return res.json({ data: updated, error: null });
     } catch (error) {
       if (transaction) {
         try { await transaction.rollback(); } catch { /* preserve original error */ }

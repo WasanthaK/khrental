@@ -61,3 +61,33 @@ test('both routed utility review screens use only the governed mutation client',
   assert.match(client, /!response\.ok \|\| result\?\.error/);
   assert.doesNotMatch(client, /\.from\(|markAsInvoiced|invoice_id/);
 });
+
+test('meter correction rejects imprecise or invalid inputs', async () => {
+  const { normalizeMeterReadingValue, validateMeterReadingPair } =
+    await import('../src/api/platform/utilityReviewRouter.js');
+  assert.equal(normalizeMeterReadingValue('0'), 0);
+  assert.equal(normalizeMeterReadingValue('125.1250'), 125.125);
+  assert.deepEqual(validateMeterReadingPair(0, 1.25), { previousReading: 0, currentReading: 1.25 });
+  for (const value of [null, undefined, -1, '1.00001', '1e3', 'NaN', Infinity, '']) {
+    assert.throws(() => normalizeMeterReadingValue(value), error => error.code === 'INVALID_METER_READING');
+  }
+  assert.throws(() => validateMeterReadingPair(5, 5), error => error.code === 'INVALID_METER_READING_RANGE');
+});
+
+test('pending edits are scoped atomic and do not touch billing or invoice authority', () => {
+  const api = read('../src/api/platform/utilityReviewRouter.js');
+  const client = read('../src/services/utilityReviewClient.js');
+  const view = read('../src/pages/UtilityBillingReview.jsx');
+  assert.match(api, /router\.put\('\/readings\/:readingId\/value'/);
+  assert.match(api, /STALE_METER_READING/);
+  assert.match(api, /SERIALIZABLE/);
+  assert.match(api, /WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(api, /previousreading = @previousReading/);
+  assert.match(api, /currentreading = @currentReading/);
+  assert.match(api, /invoice_id IS NULL/);
+  assert.match(api, /PERMISSIONS\.UTILITIES_REVIEW/);
+  assert.match(client, /editPendingUtilityReading/);
+  assert.match(view, /await editPendingUtilityReading\(readingId/);
+  assert.doesNotMatch(view, /await updateReadingValue\(/);
+  assert.doesNotMatch(client, /\.from\('utility_readings'\)/);
+});
