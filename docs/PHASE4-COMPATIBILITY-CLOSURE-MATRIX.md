@@ -108,6 +108,25 @@ Classification: property and unit helpers **LIVE**; fallback after an
 authoritative API failure **RETIRED**. A two-tenant browser agreement form
 and signing acceptance remains a separate broader regression gate.
 
+## Agreement directory pagination and response integrity — 2026-10-14
+
+The live Property Details directory uses `listAgreementsByProperty` and
+`listAgreementsByUnitIds` from `agreementService`. Both previously fetched
+only 500 agreements and silently treated a malformed authoritative MSSQL
+response as an empty list. The underlying tenant-scoped SQL list ordered only
+by `createdat`, which may tie and lead to omissions or duplicates across
+OFFSET/FETCH pages.
+
+This bounded Phase 4 slice reads complete sequential 500-row pages, validates
+every page and unique agreement ID, and fails explicitly instead of claiming
+there are no agreements after malformed, duplicate or truncated results.
+MSSQL ordering now uses `a.createdat DESC, a.id ASC` as a stable
+tie-breaker. Tenant, unit, property and status predicates stay on the server.
+No agreement mutation, signing/Evia, property status, SQL schema or invoices
+are changed. Pure pagination tests cover more than 500 results, exact-page
+boundaries and explicit failures. Full authenticated browser acceptance
+remains a separate Phase 4/5 gate.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
