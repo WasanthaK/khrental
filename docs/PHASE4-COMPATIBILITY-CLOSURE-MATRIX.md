@@ -221,6 +221,31 @@ has a reconciled `dbo.schema_migrations` ledger. Verify those separately
 before production apply. No database grant, schema, canary, migration or
 production user mutation is performed in this slice.
 
+## In-app notification delivery truth — 2026-10-14
+
+Live maintenance lifecycle notifiers use `notificationService.notifyUser`.
+Its compatibility notification INSERT previously caught and suppressed a
+database authorization or persistence failure and then returned
+`{ success: true }`, even though the in-app message had not been saved.
+The same file has placeholder email/SMS logging, not a substitute for
+successful delivery. Staff-notification and cancellation fan-out wrappers
+also returned `success: true` when individual notifications failed.
+
+This bounded slice preserves the current scoped notification INSERT and
+does **not** introduce a new transport or alter authorization. If the
+in-app INSERT returns an error or throws, `notifyUser` now returns
+`success: false` with an explicit persistence failure and never claims
+placeholder email/SMS delivery. Staff/cancellation aggregators return
+a failed summary when any selected recipient write failed, retaining
+per-recipient results. Successful in-app storage retains its existing
+`success: true` envelope. Maintenance state transitions remain owned by
+the server lifecycle and are not rolled back by best-effort notifications.
+
+The actual notification function bodies are tested against successful,
+denied, failed and rejected insert boundaries. This does **not** prove
+full notification tenant-scope or real email/SMS delivery; those remain
+Phase 4/5 end-to-end and capability decisions. No DDL or Evia changes.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
