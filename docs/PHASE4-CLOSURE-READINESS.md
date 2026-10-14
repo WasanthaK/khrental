@@ -1,4 +1,4 @@
-# Phase 4 closure-readiness review — 2026-10-09
+# Phase 4 closure-readiness review — 2026-10-14
 
 ## Decision
 
@@ -19,6 +19,50 @@ This is an evidence inventory, not a full runtime call-graph proof. Paths below 
 | #214 | unused config `platformClient` forwarding shim | `662f274445194ef7d37568bf4b90ee2904b2581b` | #602 / `37894412141` succeeded | operator reported green; independent proof pending |
 
 PR-head verify workflows are not themselves production deployments. Capture the main-push run's Ready revision, effective serving SHA/public fingerprint, startup/runtime configuration, MSSQL health, and any acceptance notes. Where production has advanced beyond an older SHA, prefer retained historical deployment artifacts rather than expecting older commits to remain live.
+
+## Reconciled October 14 production evidence and remaining decisions
+
+The earlier ledger was a historical snapshot. The following **newer**
+independently checked main deployments have Azure Ready revisions, exact
+public served SHA and live MSSQL health (not just operator-reported green):
+
+| PR | Control advanced | Main merge SHA | Ready revision | Deployment run |
+| --- | --- | --- | --- | --- |
+| #275 | App-user lookup authority | `2938d0b` | `0000278` | `38527419662` |
+| #276 | Privileged migration runbook separation | `71822a5` | `0000279` | `38529134988` |
+| #277 | Notification persistence truth | `cc256a5` | `0000280` | `38530294899` |
+| #278 | Maintenance authorized detail projections | `f3ca25a` | `0000281` | `38600664385` |
+| #279 | Maintenance images + notification tenant isolation batch | `92bebbd` | `0000282` | `38603644212` |
+
+Those successful deployments do not by themselves demonstrate authenticated
+cross-tenant UI coverage for all maintenance/notification workflows or prove
+that a privileged production DB migration executor is operational.
+
+### Remaining Phase 4 exit decisions, bundled into larger packages
+
+1. **Security and lifecycle contract acceptance:** Reconcile the verified
+   app-user/invitation, invoice, agreement signature, utility review and
+   maintenance boundaries with a concrete real-SQL and routed-browser
+   acceptance checklist. Fail-closed responses must not be misreported as
+   successful business operations.
+2. **Legacy compatibility inventory:** Classify remaining live, legacy-needed,
+   dead and unresolved references by exported operation and caller. Only
+   retire proven dead operations. Existing `platformClient` remains a
+   supported compatibility transport in specifically identified flows.
+3. **Migration authority:** Static separation of serving DDL and governed
+   plan/apply is verified, but privileged executor provisioning and
+   `schema_migrations` ledger reconciliation remain operational work.
+   No automatic or browser-initiated production DDL.
+4. **Release decision:** Mark every unresolved high-risk item fixed or
+   explicitly blocked. Any noncritical accepted deferral needs an owner,
+   an operational control and a Phase 5 follow-on. Phase 5 is not permission
+   to waive tenant boundaries, payment authority or signature retention.
+5. **CI/deployment efficiency:** Consolidate related changes into larger
+   contracts, retain exact-head tests, and skip Azure deployment for changes
+   only affecting docs, tests or workflow definitions.
+
+Status remains **NOT READY TO CLOSE** pending the remaining high-risk contract
+acceptance and sign-off. This document is not an approval to start Phase 5.
 
 ## Live compatibility inventory: do not remove without contract parity
 
@@ -46,4 +90,4 @@ PR-head verify workflows are not themselves production deployments. Capture the 
 
 ## Next bounded item
 
-**Contract/inventory slice first; no runtime change.** Map the migration executor entry points and `exec_sql` references, distinguish privileged operational tooling from app/UI callers, and write a supported migration-authority decision with tests and clear non-goals. Do not remove `runMigration.js`, `SqlMigration.jsx` or any DB tool on the basis of grep hits alone. Subsequent PRs can separately target verified dead tooling or one API fallback at a time.
+**Consolidated acceptance and closure decision.** Verify maintenance/notification tenant isolation using the disposable two-tenant SQL fixture; reconcile the remaining P1 live contracts and final owned-deferral register. Keep all production DDL execution separate from the serving container. Proceed to Phase 5 only after the documented closure criteria have been discharged or risk-approved.
