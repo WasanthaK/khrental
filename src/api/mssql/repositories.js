@@ -1818,7 +1818,7 @@ export const listAgreements = async ({ tenantId, propertyId, renteeId, status, u
 
   const rows = await paginateQuery({
     baseQuery: `${AGREEMENT_SELECT} ${whereClause}`,
-    orderBy: 'createdat DESC',
+    orderBy: 'a.createdat DESC, a.id ASC',
     page,
     pageSize,
     params
