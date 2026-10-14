@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   authorizeMaintenanceImageAttachment,
-  normalizeMaintenanceImageUrl
+  normalizeMaintenanceImageUrl,
+  sameMaintenanceIdentifier
 } from '../src/api/platform/maintenanceImagePolicy.js';
 import {
   parseNotificationPage,
@@ -32,6 +33,22 @@ test('maintenance attachment roles allow only the owning renter, scoped manager 
   assert.equal(allowed({ request: { ...work, status: 'completed' } }), false);
   assert.equal(allowed({ request: { ...work, status: 'cancelled' } }), false);
   assert.equal(allowed({ user: null }), false);
+});
+
+test('SQL Server uppercase GUIDs preserve matching maintenance owner/worker/manager scope', () => {
+  assert.equal(sameMaintenanceIdentifier('7C7BEAFB-7EC3-4AAC-A23D-000000000001',
+    '7c7beafb-7ec3-4aac-a23d-000000000001'), true);
+  assert.equal(sameMaintenanceIdentifier(null, ''), false);
+  assert.equal(sameMaintenanceIdentifier('other', '7c7beafb-7ec3-4aac-a23d-000000000001'), false);
+  assert.equal(authorizeMaintenanceImageAttachment({
+    user: { id: '7c7beafb-7ec3-4aac-a23d-000000000001' },
+    request: { status: 'pending', renteeid: '7C7BEAFB-7EC3-4AAC-A23D-000000000001' },
+    isTenant: true, canManage: false, canUpdateAssigned: false, hasPropertyScope: false
+  }), true);
+  const router = src('../src/api/platform/maintenanceLifecycleRouter.js');
+  assert.match(router, /sameMaintenanceIdentifier\(request\.renteeid, req\.user\?\.id\)/);
+  assert.match(router, /sameMaintenanceIdentifier\(id, propertyId\)/);
+  assert.match(router, /sameMaintenanceIdentifier\(request\.assignedto, req\.user\.id\)/);
 });
 
 test('maintenance image URLs cannot target foreign tenant storage, external hosts or arbitrary files', () => {
