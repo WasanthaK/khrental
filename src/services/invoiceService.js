@@ -3,6 +3,7 @@ import { calculateUtilityAmount } from './utilityBillingService';
 import { formatErrorMessage } from '../utils/errorFormatting';
 import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
 import { listPendingInvoiceReadingPage, listPendingInvoiceProperties } from './pendingInvoiceDashboardReadClient';
+import { requireInvoiceListRows } from './invoiceListReadContract';
 
 const normalizeInvoiceRecord = (invoice) => {
   if (!invoice) {
@@ -71,7 +72,7 @@ export const listInvoices = async (options = {}) => {
       const query = buildInvoiceQuery(options);
       const path = query ? `/api/mssql/invoices?${query}` : '/api/mssql/invoices';
       const data = await requestMssqlApi(path);
-      const invoices = Array.isArray(data) ? data.map(normalizeInvoiceRecord) : [];
+      const invoices = requireInvoiceListRows(data).map(normalizeInvoiceRecord);
 
       return { data: invoices, error: null };
     } catch (mssqlError) {
@@ -132,7 +133,7 @@ export const listInvoices = async (options = {}) => {
     }
 
     return {
-      data: (data || []).map(normalizeInvoiceRecord),
+      data: requireInvoiceListRows(data).map(normalizeInvoiceRecord),
       error: null
     };
   } catch (error) {
