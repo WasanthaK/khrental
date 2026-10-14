@@ -1602,6 +1602,10 @@ async function main() {
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
+    // Production uses the MSSQL API. Mirror that browser runtime flag so
+    // AgreementActions never activates obsolete PostgreSQL realtime paths
+    // (platformClientCore has no channel subscription API).
+    process.env.VITE_USE_MSSQL_API = 'true';
     delete process.env.VITE_ENABLE_DEV_BYPASS;
     vite = await createViteServer({
       plugins: [react()],
