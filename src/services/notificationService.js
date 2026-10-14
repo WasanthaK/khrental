@@ -1,5 +1,6 @@
 import { platform as platformClient } from './platformClient';
 import { sendDirectEmail } from './directEmailService';
+import { requestMssqlApi } from './mssqlApiClient';
 
 const loadAppUserService = () => import('./appUserService');
 
@@ -205,74 +206,49 @@ export const sendSmsNotification = async (phoneNumber, message, templateId = nul
 };
 
 // Get user notifications
-export const getUserNotifications = async (userId) => {
+// The read/list contract is SELF-only; a caller-supplied legacy userId
+// cannot override the authenticated session's user and tenant context.
+export const getUserNotifications = async (_userId) => {
   try {
-    const { data, error } = await platformClient
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('createdat', { ascending: false });
-
-    if (error) {
-      throw error;
+    const all = [];
+    const seen = new Set();
+    const pageSize = 100;
+    for (let page = 1; page <= 100; page += 1) {
+      const rows = await requestMssqlApi(`/api/notifications/me?page=${page}&pageSize=${pageSize}`);
+      if (!Array.isArray(rows) || rows.length > pageSize || rows.some(
+        row => !row || typeof row.id !== 'string' || !row.id
+      )) {
+        throw new Error('Notification list returned an invalid response.');
+      }
+      for (const row of rows) {
+        if (seen.has(row.id)) throw new Error('Notification list contains repeated results.');
+        seen.add(row.id);
+        all.push({ ...row, title: 'Notification' });
+      }
+      if (rows.length < pageSize) {
+        return { success: true, data: all, error: null };
+      }
     }
-
-    // If the frontend expects title and type fields, add them as defaults here
-    const enhancedData = data.map(notification => ({
-      ...notification,
-      // Add any fields that the frontend needs but aren't in the database
-      title: 'Notification' // Add a default title
-    }));
-
-    return { 
-      success: true, 
-      data: enhancedData,
-      error: null
-    };
+    throw new Error('Notification history exceeded the supported page limit.');
   } catch (error) {
     console.error('Error fetching user notifications:', error.message);
-    return { 
-      success: false, 
-      data: null,
-      error: error.message 
-    };
+    return { success: false, data: null, error: error.message };
   }
 };
 
-// Mark notification as read
+// An ID is only a locator. The server enforces BOTH the tenant and owner.
 export const markNotificationAsRead = async (notificationId) => {
   try {
-    // Use only fields that exist in the schema
-    const updateData = { 
-      is_read: true,
-      updatedat: new Date().toISOString()
-    };
-    
-    console.log('Marking notification as read:', notificationId);
-    
-    const { data, error } = await platformClient
-      .from('notifications')
-      .update(updateData)
-      .eq('id', notificationId)
-      .select();
-
-    if (error) {
-      console.error('Error in markNotificationAsRead:', error);
-      throw error;
-    }
-
-    return { 
-      success: true, 
-      data,
-      error: null
-    };
+    if (!notificationId) throw new Error('Notification ID is required.');
+    const record = await requestMssqlApi(
+      `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+      { method: 'PATCH' }
+    );
+    if (!record?.id) throw new Error('Notification update returned an invalid response.');
+    return { success: true, data: [record], error: null };
   } catch (error) {
     console.error('Error marking notification as read:', error.message);
-    return { 
-      success: false, 
-      data: null,
-      error: error.message 
-    };
+    return { success: false, data: null, error: error.message };
   }
 };
 

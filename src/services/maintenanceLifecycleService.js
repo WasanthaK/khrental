@@ -1,4 +1,3 @@
-import { platform as platformClient } from './platformClient';
 import { saveImage } from './fileService';
 import { mapMaintenanceLifecycleProjection } from './maintenanceProjectionMapper';
 import {
@@ -10,6 +9,7 @@ import {
 } from './notificationService';
 import {
   addMaintenanceLifecycleComment,
+  attachMaintenanceLifecycleImage,
   assignMaintenanceLifecycleRequest,
   cancelMaintenanceLifecycleRequest,
   completeMaintenanceLifecycleRequest,
@@ -39,16 +39,13 @@ const uploadLifecycleImages = async (requestId, images = [], imageType = 'additi
       }
       if (!imageUrl) continue;
 
-      const { error } = await platformClient
-        .from('maintenance_request_images')
-        .insert({
-          maintenance_request_id: requestId,
-          image_url: imageUrl,
-          image_type: imageType,
-          description: image?.description || '',
-          uploaded_at: new Date().toISOString()
-        });
+      const { error } = await attachMaintenanceLifecycleImage(requestId, {
+        imageUrl,
+        imageType,
+        description: image?.description || ''
+      });
       if (!error) uploaded.push(imageUrl);
+      else console.error('Maintenance image metadata attachment rejected:', error);
     } catch (error) {
       console.error('Error uploading maintenance lifecycle image:', error);
     }
