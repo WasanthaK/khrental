@@ -1450,6 +1450,7 @@ async function verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, 
     'SELECT id FROM maintenance_request_images WHERE tenant_id = @tenantId AND maintenance_request_id = @requestId',
     { tenantId: a.tenantId, requestId: reqB })).length, 0);
   console.log('PASS: disposable two-tenant notification owner/tenant read, read-state and active-recipient isolation; maintenance image actor, tenant and request scope');
+  return { notificationA: idA, notificationB: idB, requestA: reqA, requestB: reqB };
 }
 
 async function main() {
@@ -1497,7 +1498,7 @@ async function main() {
     ({ closeMssqlPool } = await import('../src/api/mssql/pool.js'));
     const a = await fixture(pool, 'Tenant A', 2000, 125);
     const b = await fixture(pool, 'Tenant B', 3000, 225);
-    await verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, a, b);
+    const phase4Seeded = await verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, a, b);
     const generate = tenantId => generateMonthlyInvoicesForTenant({
       tenantId, billingPeriod: '2026-10', source: 'test', authorizeProperty: () => {}
     });
@@ -1556,6 +1557,8 @@ async function main() {
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
     const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
+    const { createMaintenanceLifecycleRouter } = await import('../src/api/platform/maintenanceLifecycleRouter.js');
+    const { createNotificationSelfRouter } = await import('../src/api/platform/notificationSelfRouter.js');
     const { createUtilityReviewRouter } = await import('../src/api/platform/utilityReviewRouter.js');
     const { createMssqlRouter } = await import('../src/api/mssql/router.js');
     const { guardBillingMssqlCompatibility } =
@@ -1590,6 +1593,8 @@ async function main() {
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
+    app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
+    app.use('/api/notifications', createNotificationSelfRouter());
     app.use('/api/utility-reviews', createUtilityReviewRouter());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
@@ -1634,6 +1639,14 @@ async function main() {
     await verifyUtilityReviewTransitions({
       pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
       call, createAuthRecord, issueAuthSession, browser, origin
+    });
+
+    const { verifyPhase4MaintenanceNotificationHttp } = await import('./verify-phase4-maintenance-notification-http.mjs');
+    await verifyPhase4MaintenanceNotificationHttp({
+      a: { ...a, token: tokenA },
+      b: { ...b, token: tokenB },
+      seeded: phase4Seeded,
+      call
     });
 
     const authContext = await call('/api/platform/auth/context', {
