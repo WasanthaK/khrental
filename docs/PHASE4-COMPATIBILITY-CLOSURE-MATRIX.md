@@ -310,6 +310,41 @@ fan-out and email/SMS delivery, and exhaustive Phase 4 compatibility closure
 inventory. No SQL DDL, migration apply, user reset/invitation, billing writer,
 Evia or production data mutation is part of this batch.
 
+## Consolidated SQL acceptance and workflow budget — 2026-10-14
+
+This bundled Phase 4 package adds real disposable SQL Server checks to the
+already established two-tenant billing/authorization harness for:
+
+- `notificationAccess.listOwnNotificationPage` returns only the owning
+  organization and application user, not a different tenant's messages.
+- `markOwnNotificationRead` cannot mark a foreign user's or another
+  tenant's notification, and leaves those rows unchanged on denial.
+- `requireNotificationTenantRecipient` accepts a same-tenant active
+  membership and rejects a cross-tenant recipient.
+- Maintenance requests and image metadata are seeded in both tenants
+  for request/tenant filtering, actor authorization and tenant-root URL
+  validation. These are parameterized SQL contract checks against the
+  same **disposable Docker SQL** fixture; they are not a substitute for
+  full authenticated browser attachment workflow acceptance.
+
+**Action cost control:** Generic `server.js` and platform router changes
+no longer trigger extra Evia-specific test jobs or a webhook-secret
+configuration run. The exact-head `test:authorization` suite now executes
+the Evia webhook, completed-document, V2 OAuth and signing tests in
+addition to previously included audit/retention tests; Evia-specific
+workflows still run when their actual source, test, storage or workflow
+files change. The Production webhook configuration remains manually
+dispatchable and still runs on actual `src/api/evia/**` changes.
+The main deploy workflow retains PR-head verification and automatically
+skips production deployment for commits containing **only** documentation,
+tests or workflow files. Mixed code/documentation commits still deploy.
+
+**Remaining before Phase 4 sign-off:** Full authenticated browser
+maintenance/notification acceptance; remaining live business compatibility
+callers and owned deferrals; migration executor provisioning/ledger
+evidence; signature, billing and identity contract sign-off. This batch
+does **not** mark Phase 4 complete or activate the Evia canary.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
@@ -319,9 +354,14 @@ Evia or production data mutation is part of this batch.
 5. Keep separately verified Azure Ready, exact public SHA and live MSSQL evidence for each production merge; PR-head CI alone is insufficient.
 6. Close Phase 4 only when the live inventory is discharged or explicit deferrals are agreed, before launching the Phase 5 full product regression.
 
-## Immediate next bounded engineering item
+## Next consolidated engineering package
 
-Audit the **legacy `npm run migrate` caller/operational surface** and add static regression evidence that it does not run from serving startup and that the governed production workflow remains present. This slice must not execute migrations, remove commands or change database permissions. Then choose the first live invoice/agreements/auth compatibility contract for a separate behavior-changing PR.
+Complete remaining live compatibility caller inventory and the authenticated
+tenant/billing/agreement release acceptance checklist as a single bounded
+Phase 4 closure decision. Mark unresolved high-risk items BLOCKED rather than
+silently waiving them; separately owned and controlled noncritical deferrals
+may move to Phase 5. Do not execute production migrations, change payment
+authority, weaken tenant scope, or activate the fenced Evia canary.
 
 ## Constraints
 
