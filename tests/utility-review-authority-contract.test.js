@@ -46,3 +46,18 @@ test('existing monthly billing remains sole owner of invoice creation and linkag
   assert.match(monthly, /invoice_id IS NULL/);
   assert.match(monthly, /UPDATE utility_readings[\s\S]*?WHERE tenant_id = @tenantId/);
 });
+
+test('both routed utility review screens use only the governed mutation client', () => {
+  const primary = read('../src/pages/UtilityBillingReview.jsx');
+  const staff = read('../src/pages/staff/UtilityReadingsReview.jsx');
+  const client = read('../src/services/utilityReviewClient.js');
+  for (const view of [primary, staff]) {
+    assert.match(view, /transitionUtilityReading\(reading\.id, 'approve'\)/);
+    assert.match(view, /transitionUtilityReading\(reading\.id, 'reject'/);
+    assert.doesNotMatch(view, /\.from\('utility_billing'\)|\.update\(\{ status: 'rejected' \}\)|await approveReading\(|await rejectReading\(/);
+  }
+  assert.match(client, /buildRequestContextHeaders/);
+  assert.match(client, /\/api\/utility-reviews\/readings\//);
+  assert.match(client, /!response\.ok \|\| result\?\.error/);
+  assert.doesNotMatch(client, /\.from\(|markAsInvoiced|invoice_id/);
+});
