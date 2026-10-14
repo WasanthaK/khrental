@@ -18,8 +18,9 @@ test('live utility approval, rejection and governed invoice linkage remain intac
   assert.match(utility, /export const approveReading =/);
   assert.match(utility, /export const rejectReading =/);
   assert.match(utility, /const getValidStatusesFromConstraint =/);
-  assert.match(review, /approveReading/);
-  assert.match(review, /rejectReading/);
+  assert.match(review, /transitionUtilityReading\(reading\.id, 'approve'\)/);
+  assert.match(review, /transitionUtilityReading\(reading\.id, 'reject'/);
+  assert.doesNotMatch(review, /await approveReading\(|await rejectReading\(/);
   assert.match(monthly, /FROM utility_readings WITH \(UPDLOCK, HOLDLOCK\)/);
   assert.match(monthly, /invoice_id IS NULL/);
   assert.match(monthly, /UPDATE utility_readings[\s\S]*?WHERE tenant_id = @tenantId/);

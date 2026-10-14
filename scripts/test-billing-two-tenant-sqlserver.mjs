@@ -1450,6 +1450,7 @@ async function main() {
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
     const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
+    const { createUtilityReviewRouter } = await import('../src/api/platform/utilityReviewRouter.js');
     const { createMssqlRouter } = await import('../src/api/mssql/router.js');
     const { guardBillingMssqlCompatibility } =
       await import('../src/api/platform/billingMutationGuard.js');
@@ -1483,6 +1484,7 @@ async function main() {
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
+    app.use('/api/utility-reviews', createUtilityReviewRouter());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
@@ -1518,6 +1520,16 @@ async function main() {
       });
       return { status: response.status, payload: await response.json() };
     };
+    const { verifyUtilityReviewTransitions } =
+      await import('./verify-utility-review-transitions.mjs');
+    browser = await puppeteer.launch({
+      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    await verifyUtilityReviewTransitions({
+      pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
+      call, createAuthRecord, issueAuthSession, browser, origin
+    });
+
     const authContext = await call('/api/platform/auth/context', {
       token: tokenA, tenantId: a.tenantId
     });
@@ -1828,9 +1840,7 @@ async function main() {
     });
     assert.equal(anonymousAccount.status, 401, 'anonymous billing account query must be denied');
 
-    browser = await puppeteer.launch({
-      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+
     // Run the actual new browser-side pending-invoice dashboard read client
     // against the same disposable SQL backend with two real renter sessions.
     // Only synthetic fixture rows are inserted, and all are deleted afterwards.
