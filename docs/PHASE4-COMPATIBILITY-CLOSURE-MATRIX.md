@@ -271,6 +271,45 @@ screen compatibility reads need specific authorization/contract review.
 No lifecycle mutation, email/SMS delivery, SQL schema, permissions, or
 Evia canary is altered. Phase 4 remains active.
 
+## Batched maintenance image / notification tenant authority — 2026-10-14
+
+**Implementation grouped into one PR and one production rollout**, avoiding
+separate build/deploy cycles for closely related authorization work.
+
+- **Maintenance image attachments:** Replaced the live generic
+  `maintenance_request_images` INSERT after lifecycle transitions with
+  `POST /api/maintenance-lifecycle/requests/:requestId/images`. The existing
+  authenticated tenant context and request loader establish organization
+  ownership first. The new guarded writer allows the owning renter, manager
+  with assigned property scope, or assigned worker with update permission,
+  and only while pending/in-progress. It validates an image URL under the
+  active tenant's `images/maintenance` storage namespace and writes the
+  actor/tenant/request IDs from the server. The original image object storage
+  upload remains separate; failed metadata attachment is not counted as
+  successful. No generic writer fallback or schema change is introduced.
+- **Notification self-service:** Moved `getUserNotifications` and
+  `markNotificationAsRead` onto dedicated tenant-authenticated
+  `GET /api/notifications/me` and `PATCH /api/notifications/:id/read`.
+  SQL now binds both active tenant and app-user ID for every read/update,
+  with stable paged ordering and a 404 for nonexistent/foreign identifiers.
+  Client-provided `userId` cannot widen the self-only read.
+- **Cross-tenant recipient rejection:** Generic in-app notification inserts
+  now require the specified recipient to hold an **active membership in the
+  same tenant**, even when requested by an organization admin. The check runs
+  before any insert. No implicit auto-email or SMS delivery is claimed.
+- **Acceptance:** Added source-backed and executable policy/client tests
+  covering owner/staff/property scope, terminal states, foreign storage URL
+  and tenant path rejection, notification tenant-and-user SQL predicates,
+  same-tenant recipient eligibility, pagination and denied/malformed reads.
+  The existing authorization/build suite remains mandatory. Live two-tenant
+  browser and real SQL integration acceptance are still separate Phase 4/5
+  gates; source-level assertions do not replace that evidence.
+
+**Deferred explicitly:** Other maintenance screen generic reads, notification
+fan-out and email/SMS delivery, and exhaustive Phase 4 compatibility closure
+inventory. No SQL DDL, migration apply, user reset/invitation, billing writer,
+Evia or production data mutation is part of this batch.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
