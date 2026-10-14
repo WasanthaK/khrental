@@ -53,12 +53,19 @@ export const notifyUser = async (userId, notification) => {
 
       if (dbError) {
         console.error('Could not store in-app notification:', dbError.message);
-        // Continue execution even if notification fails
+        return {
+          success: false,
+          error: dbError.message || 'Unable to store in-app notification.',
+          code: dbError.code || 'NOTIFICATION_PERSISTENCE_FAILED'
+        };
       }
     } catch (dbError) {
       console.error('Could not store in-app notification:', dbError.message);
-      // Continue execution even if in-app notification fails
-      // This allows email/SMS to still be sent
+      return {
+        success: false,
+        error: dbError.message || 'Unable to store in-app notification.',
+        code: dbError.code || 'NOTIFICATION_PERSISTENCE_FAILED'
+      };
     }
 
     // Get user's contact info for email/SMS
@@ -74,7 +81,8 @@ export const notifyUser = async (userId, notification) => {
 
     if (!contactDetails) {
       console.warn('Cannot send email/SMS notification: missing contact info');
-      // Still return success because the in-app notification might have worked
+      // The notification was stored successfully; contact channels are
+      // placeholders and are not claimed as delivered.
       return { success: true };
     }
 
@@ -379,7 +387,7 @@ export const notifyStaffAboutNewRequest = async (request) => {
       notifications.push(notification);
     }
 
-    return { success: true, data: notifications };
+    return { success: notifications.every(item => item?.success === true), data: notifications };
   } catch (error) {
     console.error('Error notifying staff about new request:', error);
     return { success: false, error: error.message };
@@ -505,7 +513,7 @@ export const notifyAboutCancellation = async (request, cancelledBy) => {
       notifications.push(staffNotification);
     }
 
-    return { success: true, data: notifications };
+    return { success: notifications.every(item => item?.success === true), data: notifications };
   } catch (error) {
     console.error('Error notifying about cancellation:', error);
     return { success: false, error: error.message };
