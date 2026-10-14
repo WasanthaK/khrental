@@ -62,7 +62,17 @@ export const createAppUserRecord = async (userData, userType) => {
     }
 
     const existingResult = await findAppUserByEmailRecord(dataToInsert.email);
-    if (existingResult.success && existingResult.data) {
+    // A failed authoritative duplicate-email read is not evidence that
+    // the address is unused; do not proceed to account creation.
+    if (!existingResult.success) {
+      return {
+        success: false,
+        error: existingResult.error || 'User lookup failed; account creation was not attempted.',
+        ...(existingResult.code ? { code: existingResult.code } : {}),
+        ...(existingResult.status ? { status: existingResult.status } : {})
+      };
+    }
+    if (existingResult.data) {
       return createEmailConflictResult(dataToInsert.email, existingResult.data);
     }
 
@@ -204,7 +214,7 @@ export const findAppUserByEmailRecord = async (email) => {
         const data = await requestMssqlApi(`/api/mssql/app-users/lookup?email=${encodeURIComponent(email)}`);
         return { success: true, data: data ? ensureValidTimestamps(data) : data };
       } catch (mssqlError) {
-        console.error('Error finding user by email via MSSQL, falling back to the local compatibility layer:', mssqlError.message);
+        throw mssqlError;
       }
     }
 
@@ -221,7 +231,11 @@ export const findAppUserByEmailRecord = async (email) => {
     return { success: true, data: data ? ensureValidTimestamps(data) : data };
   } catch (error) {
     console.error('Error finding user by email:', error.message);
-    return { success: false, error: error.message };
+    return {
+      success: false, error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
+    };
   }
 };
 
@@ -232,7 +246,7 @@ export const findAppUserByAuthIdRecord = async (authId) => {
         const data = await requestMssqlApi(`/api/mssql/app-users/lookup?authId=${encodeURIComponent(authId)}`);
         return { success: true, data: data ? ensureValidTimestamps(data) : data };
       } catch (mssqlError) {
-        console.error('Error finding user by auth ID via MSSQL, falling back to the local compatibility layer:', mssqlError.message);
+        throw mssqlError;
       }
     }
 
@@ -249,7 +263,11 @@ export const findAppUserByAuthIdRecord = async (authId) => {
     return { success: true, data: data ? ensureValidTimestamps(data) : data };
   } catch (error) {
     console.error('Error finding user by auth ID:', error.message);
-    return { success: false, error: error.message };
+    return {
+      success: false, error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
+    };
   }
 };
 
@@ -260,7 +278,7 @@ export const checkAppUserInvitationStatusRecord = async (userId) => {
         const data = await requestMssqlApi(`/api/mssql/app-users/${userId}/invitation-status`);
         return { success: true, data };
       } catch (mssqlError) {
-        console.error(`Error checking invitation status for ${userId} via MSSQL, falling back to the local compatibility layer:`, mssqlError.message);
+        throw mssqlError;
       }
     }
 
@@ -303,7 +321,11 @@ export const checkAppUserInvitationStatusRecord = async (userId) => {
     };
   } catch (error) {
     console.error(`Error checking invitation status for ${userId}:`, error.message);
-    return { success: false, error: error.message };
+    return {
+      success: false, error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {})
+    };
   }
 };
 
@@ -362,7 +384,7 @@ export const fetchAppUserRecord = async (id) => {
 
         return ensureValidTimestamps(data);
       } catch (mssqlError) {
-        console.error('Error fetching user via MSSQL, falling back to the local compatibility layer:', mssqlError);
+        throw mssqlError;
       }
     }
 
@@ -408,9 +430,14 @@ export const fetchAppUsersRecord = async (userType, filters = {}) => {
         });
 
         const data = await requestMssqlApi(`/api/mssql/app-users?${searchParams.toString()}`);
-        return Array.isArray(data) ? data.map((record) => ensureValidTimestamps(record)) : [];
+        if (!Array.isArray(data) || data.some(record => !record || !record.id)) {
+          const error = new Error('App-user list returned an invalid response.');
+          error.code = 'INVALID_APP_USERS_RESPONSE';
+          throw error;
+        }
+        return data.map((record) => ensureValidTimestamps(record));
       } catch (mssqlError) {
-        console.error('Error fetching users via MSSQL, falling back to the local compatibility layer:', mssqlError);
+        throw mssqlError;
       }
     }
 

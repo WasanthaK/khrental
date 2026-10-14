@@ -167,6 +167,33 @@ slice.** Identity reads, invitations and registration are separately
 LIVE/UNRESOLVED and need a dedicated contract/tenant acceptance before
 full Phase 4 closure.
 
+## Identity lookup / invitation-read authority — 2026-10-14
+
+The live `appUserRepository` identity read helpers
+`findAppUserByEmailRecord`, `findAppUserByAuthIdRecord`,
+`checkAppUserInvitationStatusRecord`, `fetchAppUserRecord` and
+`fetchAppUsersRecord` previously retried a failed authoritative MSSQL
+request via `platformClient.from('app_users')`, including 401/403/404,
+ambiguous transport errors and server failures. The list helper also
+treated a malformed MSSQL result as `[]`. This bounded slice preserves
+the existing API return envelopes (success/failure objects, single-record
+throws and list arrays), tenant-authenticated server routes, and explicit
+compatibility mode when MSSQL is off, but does not retry a denied MSSQL
+read under a different client. Invalid lists now fail explicitly.
+
+An additional create-user precondition prevents `createAppUserRecord`
+from attempting an INSERT after the duplicate-email lookup failed; it
+does not treat an authorization or connectivity failure as proof that an
+email is unused. The source-backed runtime tests prove each read's
+no-fallback behavior for authorization denials and 5xx/network failures,
+distinguish successful no-match/empty lists, reject malformed lists, and
+prove failed duplicate-email preflight cannot attempt a create.
+
+No invitation token changes, password resets, tenant membership changes,
+SQL schema changes, or production user mutations occur in this slice.
+Invite/registration and complete tenant browser acceptance remain separate
+release gates; Phase 4 stays ACTIVE.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
