@@ -1784,6 +1784,12 @@ PR #283 merged as `5aaf9c569ac8503c600efc75ceeb5d7bdb305516` after passing exact
 
 The next bounded test-only acceptance gate reuses the very same SQL/Puppeteer fixture and authenticated renter sessions to verify that both tenant portals display **their own** issued receipts after full settlement, never foreign receipts, and that opening the account panel does not mutate invoices/payments/receipts/events. Also assert a second renter within one organization cannot read or submit proof for another renter's invoice. Preserve PR #283's existing partial settlement/ledger tests, do not rerun Azure rollout on a test-only main merge, and keep Phase 4 ACTIVE until controlled full business workflows and compatibility/privileged migration signoff pass.
 
+## Phase 4 — assigned staff maintenance HTTP acceptance (active, 2026-10-15)
+
+Merged PR #285 (`251ff536b3b84a5c917c18791c3d6afc41fa69bb`) completed actual renter receipt browser isolation on both disposable SQL tenants. The next **test-only** package exercises the existing maintenance lifecycle with real SQL-backed bearer sessions: renter creation with active tenancy, property-scoped manager assignment, assigned-only worker start and completion, internal/public comment visibility, tenant-local image metadata, foreign tenant/property denial, replay/closed state denial, and durable lifecycle event ledger. The disposable SQL fixture adds the existing staff-property-assignment migration to test explicit property grants.
+
+No production schema, notification delivery, object storage bytes or Evia authority changes. Tests use only synthetic tenant/actor data. The current maintenance router records lifecycle events but does not itself guarantee an in-app notification or outbound email/SMS; these require separate product acceptance. Keep Phase 4 active until actual staff/browser interactions, invitations, signing, R2 payment files, compatibility caller census and migration executor proof are resolved. PR-head authorization/build, disposable SQL and Evia checks must all be green before merge.
+
 ## Maintenance rule for this document
 
 After each merged production change:

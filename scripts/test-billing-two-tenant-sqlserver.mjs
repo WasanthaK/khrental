@@ -1478,6 +1478,7 @@ async function main() {
     pool = await connect({ port, password, database });
     for (const filename of [
       '20260913_00_create_fresh_mssql_schema.sql',
+      '20260915_01_create_staff_property_assignments.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
       // Routed maintenance detail/comments need their governed lifecycle DDL,
@@ -1654,6 +1655,12 @@ async function main() {
       b: { ...b, token: tokenB },
       seeded: phase4Seeded,
       call
+    });
+
+    const { verifyPhase4StaffMaintenanceHttp } =
+      await import('./verify-phase4-staff-maintenance-http.mjs');
+    await verifyPhase4StaffMaintenanceHttp({
+      pool, a, b, tokenA, tokenB, call, createAuthRecord, issueAuthSession
     });
 
     const authContext = await call('/api/platform/auth/context', {

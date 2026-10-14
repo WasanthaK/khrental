@@ -58,7 +58,8 @@ test('main deployment avoids non-runtime-only commits without weakening PR-head 
     "'scripts/test-billing-two-tenant-sqlserver.mjs'",
     "'scripts/verify-phase4-maintenance-notification-http.mjs'",
     "'scripts/verify-phase4-renter-workspace-browser.mjs'",
-    "'scripts/verify-phase4-payment-lifecycle-http.mjs'"
+    "'scripts/verify-phase4-payment-lifecycle-http.mjs'",
+    "'scripts/verify-phase4-staff-maintenance-http.mjs'"
   ]) {
     assert.ok(mainPush.includes(ignore), 'avoid main rollout for non-runtime-only paths: ' + ignore);
   }
