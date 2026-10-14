@@ -113,6 +113,14 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
         || location.pathname === '/unauthorized' || location.pathname === '/login',
       { timeout: 30000 }
     );
+    // The auth context can refresh once after the initial denied response.
+    // Require a second settled denial instead of sampling an interim blank.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await denied.waitForFunction(
+      () => document.body.innerText.includes('Failed to load maintenance request details')
+        || location.pathname === '/unauthorized',
+      { timeout: 15000, polling: 200 }
+    );
     const state = await denied.evaluate(() => ({
       route: location.pathname, body: document.body.innerText
     }));
