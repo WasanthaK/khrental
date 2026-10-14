@@ -1480,6 +1480,9 @@ async function main() {
       '20260913_00_create_fresh_mssql_schema.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
+      // Routed maintenance detail/comments need their governed lifecycle DDL,
+      // especially comments.is_internal and maintenance_lifecycle_events.
+      '20260916_05_add_maintenance_lifecycle.sql',
       '20260920_01_add_tenancy_billing_adjustments.sql',
       '20261005_01_add_property_utility_configs.sql'
     ]) {
