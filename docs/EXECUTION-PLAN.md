@@ -1729,6 +1729,26 @@ concurrency and browser acceptance before wiring clients or treating this
 as a completed behavior change. No production DDL or Evia canary changes.
 Phase 4 OPEN.
 
+## Phase 4 — pending utility meter correction authority
+
+PR #264 is production accepted on merge `c3c594b1b93c8de24d77feb8b9e323e01525fa99`
+(Azure Ready revision `0000267`, exact public SHA and live MSSQL Ready;
+workflow `38509575288`).
+
+Active bounded follow-on: migrate the primary review screen's pending
+meter corrections away from client-side read-then-write into the
+`PUT /api/utility-reviews/readings/:readingId/value` transactional API.
+Require tenant and `UTILITIES_REVIEW` permission; assigned-property
+scope for staff; pending, unlinked billing state; explicit original
+reading values for stale-write detection; exact four-decimal meter
+precision. Change only previous/current readings and updated timestamp,
+never billing amount, status, or invoice linkage.
+
+Release gates: exact-head authorization/build; disposable two-tenant SQL
+permission, amount, concurrency and stale-write proof; existing browser
+acceptance; Evia regression; independent production SHA/MSSQL verification
+after merge. No DDL or canary changes. Phase 4 remains ACTIVE.
+
 ## Maintenance rule for this document
 
 After each merged production change:
