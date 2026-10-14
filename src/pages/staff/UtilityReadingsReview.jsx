@@ -7,6 +7,7 @@ import ImageViewer from '../../components/common/ImageViewer';
 
 const UtilityReadingsReview = () => {
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [readings, setReadings] = useState([]);
   const [selectedReading, setSelectedReading] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -54,6 +55,7 @@ const UtilityReadingsReview = () => {
     } catch (error) {
       console.error('Error fetching readings:', error);
       toast.error('Failed to load utility readings');
+      setNotice({ kind: 'error', text: 'Failed to load utility readings.' });
     } finally {
       setLoading(false);
     }
@@ -62,11 +64,14 @@ const UtilityReadingsReview = () => {
   const handleApprove = async (reading) => {
     try {
       setLoading(true);
+      setNotice(null);
       await transitionUtilityReading(reading.id, 'approve');
       toast.success('Reading approved and ready for invoice generation');
+      setNotice({ kind: 'success', text: 'Reading approved and ready for invoice generation.' });
       await fetchReadings();
     } catch (error) {
       toast.error('Failed to approve reading: ' + (error.message || 'Unknown error'));
+      setNotice({ kind: 'error', text: 'Failed to approve reading: ' + (error.message || 'Unknown error') });
     } finally {
       setLoading(false);
     }
@@ -77,15 +82,19 @@ const UtilityReadingsReview = () => {
     if (reason === null) return;
     if (!reason.trim()) {
       toast.error('Rejection reason is required');
+      setNotice({ kind: 'error', text: 'Rejection reason is required.' });
       return;
     }
     try {
       setLoading(true);
+      setNotice(null);
       await transitionUtilityReading(reading.id, 'reject', { reason: reason.trim() });
       toast.success('Reading rejected');
+      setNotice({ kind: 'success', text: 'Reading rejected successfully.' });
       await fetchReadings();
     } catch (error) {
       toast.error('Failed to reject reading: ' + (error.message || 'Unknown error'));
+      setNotice({ kind: 'error', text: 'Failed to reject reading: ' + (error.message || 'Unknown error') });
     } finally {
       setLoading(false);
     }
@@ -95,6 +104,12 @@ const UtilityReadingsReview = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Utility Readings Review</h1>
+        {notice && (
+          <div role={notice.kind === 'error' ? 'alert' : 'status'}
+            className={`my-3 rounded border p-3 text-sm ${notice.kind === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'}`}>
+            {notice.text}
+          </div>
+        )}
         
         {/* Filters */}
         <div className="flex gap-4">
