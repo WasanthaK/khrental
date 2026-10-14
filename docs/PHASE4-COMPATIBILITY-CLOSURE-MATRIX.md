@@ -146,6 +146,27 @@ tests cover 1001 templates, missing-schema behavior and SQL ordering.
 Phase 4 remains ACTIVE until live auth, other compatibility domains, the
 migration-authority review and final census/closure are discharged.
 
+## App-user mutation authority — 2026-10-14
+
+The app-user repository exposes four **LIVE** writes used by account and
+invitation workflows: `createAppUserRecord`, `linkAppUserRecord`,
+`updateAppUserRecord` and `deleteAppUserRecord`. When the scoped MSSQL
+API was enabled, these previously retried a failed authoritative request
+through `platformClient.from('app_users')`; even an ambiguous transport
+error or a 404 could induce a second write with changed authorization
+semantics. This bounded slice retains the existing return envelopes and
+explicitly disabled-MSSQL compatibility branch but **fails closed** for
+all MSSQL write failures, including 401/403/404/409/5xx/network.
+Pre-existing email-conflict normalization remains unchanged.
+
+Regression tests isolate all four actual function bodies and prove no
+generic second mutation, preserve their correct API methods, and verify the
+tenant-context middleware remains mounted on the server. **No auth
+credentials, invitation/reset tokens, users or schema are changed in this
+slice.** Identity reads, invitations and registration are separately
+LIVE/UNRESOLVED and need a dedicated contract/tenant acceptance before
+full Phase 4 closure.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
