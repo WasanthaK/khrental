@@ -10,6 +10,11 @@ const fixtureLabel = (own, a, b) => own.tenantId === a.tenantId ? 'A' : 'B';
 export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b, tokenA, tokenB, seeded }) {
   const browse = async (own, token, route, { expected, forbidden, rejectEmpty } = {}) => {
     const page = await browser.newPage();
+    const browserErrors = [];
+    page.on('pageerror', error => browserErrors.push('pageerror: ' + error.message));
+    page.on('console', message => {
+      if (message.type() === 'error') browserErrors.push('console: ' + message.text().slice(0, 900));
+    });
     try {
       await page.evaluateOnNewDocument((accessToken, tenantId, authId, email) => {
         localStorage.removeItem('dev_bypass_role');
@@ -25,7 +30,8 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
       // Wait for the positive, tenant-specific fixture before inspecting.
       try {
         await page.waitForFunction(
-          expectedText => document.body.innerText.includes(expectedText),
+          expectedText => document.body.innerText.includes(expectedText)
+            || document.body.innerText.includes('Page Not Found'),
           { timeout: 30000, polling: 200 }, expected
         );
       } catch (error) {
@@ -33,7 +39,15 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
           route: location.pathname, body: document.body.innerText.slice(-3000)
         }));
         throw new Error('Routed fixture did not render: ' + route +
-          ', actual route=' + state.route + ', visible=' + state.body, { cause: error });
+          ', actual route=' + state.route + ', visible=' + state.body +
+          ', browser errors=' + browserErrors.slice(-5).join(' | '), { cause: error });
+      }
+      // A React Router error element is not a successful page and may hide
+      // the actual exception. Report observed browser errors before assertions.
+      const renderedError = await page.evaluate(() => document.body.innerText.includes('Page Not Found'));
+      if (renderedError) {
+        throw new Error('Route '+ route + ' rendered generic error page; browser errors=' +
+          browserErrors.slice(-8).join(' | '));
       }
       // One more React paint prevents capturing a transient empty body during
       // hydration immediately after the positive readiness condition.
