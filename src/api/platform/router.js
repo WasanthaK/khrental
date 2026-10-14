@@ -23,6 +23,7 @@ import {
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
+import { requireNotificationTenantRecipient } from './notificationAccess.js';
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TENANT_SCOPED_TABLES = new Set([
@@ -493,9 +494,20 @@ const getResourceScopeConstraint = ({ table, resourceScope, params, tenantId }) 
 };
 
 const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId }) => {
-  if (resourceScope?.kind !== 'tenant-insert') {return;}
-
   const rows = Array.isArray(payload) ? payload : [payload];
+  // Recipient membership applies to EVERY role, including organization admins.
+  // A global app_user may belong to another organization but must never
+  // receive a notification recorded inside a different tenant's namespace.
+  if (table === 'notifications') {
+    for (const row of rows) {
+      await requireNotificationTenantRecipient({
+        tenantId, userId: row?.user_id, queryOne: runSingleQuery
+      });
+    }
+    return;
+  }
+
+  if (resourceScope?.kind !== 'tenant-insert') {return;}
   for (const row of rows) {
     if (table === 'maintenance_requests' || table === 'utility_readings') {
       if (!row?.propertyid) {
