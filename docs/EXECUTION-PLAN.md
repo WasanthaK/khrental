@@ -1778,6 +1778,12 @@ PR #281 has merged as `2a283aa24cb3bcbac53186b15065bb9e12eccf22` from verified P
 
 Current next Phase 4 domain: **routed renter browser acceptance**, in one disposable two-tenant SQL fixture. Exercise actual logged-in React maintenance list/detail and agreement screens for both tenants plus denied foreign request navigation. Retain existing invoice/receipt browser evidence. Do not mutate production identity, invoices, maintenance, email, Evia signature or database DDL. Broader invitation/resend, signed-document, payment verification, staff maintenance transitions and final compatibility caller census remain release blockers before Phase 5. Keep the Evia fenced canary OFF.
 
+## Phase 4 consolidated governed payment acceptance — 2026-10-15
+
+The merged acceptance-only PR #282 (`69f960b7bd8b4f7f2a3cf920a9cf4d8da279fdd0`) passed exact-head authorization/build, disposable two-tenant SQL and Evia CI. Its real-browser acceptance covers renter maintenance list/details, foreign-request denial and renter agreement visibility for both tenant fixtures. The workflow now avoids Azure rollouts for the explicitly allowlisted CI-only scripts; this does not waive build/authorization or disposable SQL gates on PR heads.
+
+**Active next package: real payment lifecycle, not payment UI redesign.** Use the existing loopback Express app, server-backed bearer sessions and disposable SQL container to prove: foreign-tenant and same-tenant-other-renter denial; a submitted proof is still outstanding and creates no receipt; duplicate proof and missing rejection reason fail closed; rejection→resubmission→verified/paid produces exactly one receipt; replay cannot double-charge; tenant B records remain unchanged; real renter invoice/account UI shows the verified receipt. All proof references are synthetic metadata in disposable SQL, not real R2 uploads or bank receipts. **Do not claim invoice issuance/email delivery** from this test because the governed `issue` endpoint contacts the configured email provider before committing. Full browser draft→issue, actual R2 proof upload, staff approval UI, invitation/regression, and production-executor authority remain phase-closing gates. Keep Phase 4 active and Evia canary OFF.
+
 ## Maintenance rule for this document
 
 After each merged production change:
