@@ -2088,6 +2088,14 @@ async function main() {
       }
     }
 
+    // Routed business-page acceptance extends the existing real-session
+    // fixture; no production endpoints, browser dev-bypass or external services.
+    const { verifyPhase4RenterWorkspaceBrowser } =
+      await import('./verify-phase4-renter-workspace-browser.mjs');
+    await verifyPhase4RenterWorkspaceBrowser({
+      browser, origin, a, b, tokenA, tokenB, seeded: phase4Seeded
+    });
+
     const browserVisit = async (item, token, route, { visibleInvoice = false } = {}) => {
       const page = await browser.newPage();
       try {
