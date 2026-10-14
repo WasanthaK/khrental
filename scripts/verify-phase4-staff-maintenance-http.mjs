@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 const guid = value => String(value || '').toLowerCase();
 
 export async function verifyPhase4StaffMaintenanceHttp({
-  pool, a, b, tokenA, tokenB, call, createAuthRecord, issueAuthSession
+  pool, a, b, tokenA, tokenB, call, createAuthRecord, issueAuthSession, browser, origin
 }) {
   // A/B are disposable Docker SQL tenants. No live people or external URLs.
   const sqlRows = async (statement, inputs = {}) => {
@@ -194,5 +194,116 @@ export async function verifyPhase4StaffMaintenanceHttp({
   // No real outgoing notification is claimed. This router records lifecycle
   // events; external delivery is a distinct unresolved acceptance gate.
   assert.equal((await snapshot(id)).request.status, 'completed');
+
+  // Exercise the actual staff React detail page and its action controls,
+  // not synthetic HTTP button replacements. Use the same server-backed
+  // bearer session and disposable tenant assigned above.
+  const liveRequest = check(await request(a, tokenA, 'POST', null, '', {
+    propertyId: a.propertyId,
+    title: 'Browser staff lifecycle proof',
+    description: 'Disposable staff interface Start Work and Complete acceptance'
+  }), 201);
+  const liveId = guid(liveRequest.id);
+  check(await request(a, managerA.token, 'POST', liveId, '/assign',
+    { staffUserId: workerA.userId }), 200);
+
+  const openStaffPage = async (item, staff, requestId) => {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.evaluateOnNewDocument((token, tenantId, authId, email) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token: token, user: { id: authId, email, role: 'staff' }
+      }));
+    }, staff.token, item.tenantId, staff.authId, staff.email);
+    await page.goto(origin + '/dashboard/maintenance/' + requestId, {
+      waitUntil: 'domcontentloaded', timeout: 45000
+    });
+    return { page, errors };
+  };
+  const { page, errors } = await openStaffPage(a, workerA, liveId);
+  try {
+    const clickAction = async label => {
+      const clicked = await page.evaluate(text => {
+        const button = [...document.querySelectorAll('button')].find(
+          candidate => candidate.textContent.trim() === text && !candidate.disabled
+        );
+        if (!button) return false;
+        button.click();
+        return true;
+      }, label);
+      assert.equal(clicked, true, 'Expected enabled staff button: ' + label);
+    };
+    try {
+      await page.waitForFunction(
+        title => document.body.innerText.includes(title)
+          && [...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Start Work'),
+        { timeout: 30000, polling: 200 }, 'Browser staff lifecycle proof'
+      );
+    } catch (error) {
+      const body = await page.evaluate(() => document.body.innerText.slice(-2500));
+      throw new Error('Assigned staff details failed to load: ' + body + '; browser errors='
+        + errors.slice(-4).join(' | '), { cause: error });
+    }
+    await clickAction('Start Work');
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(
+        b => b.textContent.trim() === 'Mark as Completed'
+      ), { timeout: 30000, polling: 200 });
+    const startedInSql = (await snapshot(liveId)).request;
+    assert.equal(startedInSql.status, 'in_progress');
+    assert.ok(startedInSql.startedat);
+    await clickAction('Mark as Completed');
+    await page.waitForSelector('#completionNotes', { timeout: 12000 });
+    await page.type('#completionNotes', 'Completed through the real staff browser');
+    // There are two buttons labeled Mark as Completed after the dialog
+    // opens; choose the visible dialog-local submit control deliberately.
+    const clickedComplete = await page.evaluate(() => {
+      const dialog = [...document.querySelectorAll('h2')]
+        .find(node => node.textContent.trim() === 'Complete Maintenance Request')
+        ?.closest('div.fixed');
+      const button = [...(dialog?.querySelectorAll('button') || [])]
+        .find(node => node.textContent.trim() === 'Mark as Completed' && !node.disabled);
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    assert.equal(clickedComplete, true, 'Enabled completion dialog submit must be present');
+    await page.waitForFunction(() =>
+      document.body.innerText.includes('Browser staff lifecycle proof') &&
+      !document.body.innerText.includes('Complete Maintenance Request') &&
+      ![...document.querySelectorAll('button')].some(
+        b => b.textContent.trim() === 'Mark as Completed'
+      ), { timeout: 30000, polling: 200 });
+    const doneInSql = await snapshot(liveId);
+    assert.equal(doneInSql.request.status, 'completed');
+    assert.equal(guid(doneInSql.request.completed_by), workerA.userId);
+    assert.deepEqual(doneInSql.events.map(e => e.event_type).sort(),
+      ['request_assigned', 'request_created', 'work_completed', 'work_started']);
+    assert.equal(doneInSql.comments.length, 0, 'completing from browser must not duplicate comments');
+    assert.equal(doneInSql.request.completion_cost, null);
+    const body = await page.evaluate(() => document.body.innerText);
+    assert.ok(body.includes('Browser staff lifecycle proof'));
+    assert.ok(!body.includes('Tenant B Property'));
+  } finally {
+    await page.close();
+  }
+
+  const foreign = await openStaffPage(b, workerB, liveId);
+  try {
+    await foreign.page.waitForFunction(() =>
+      document.body.innerText.includes('Failed to load maintenance request details')
+      || location.pathname === '/unauthorized',
+      { timeout: 30000, polling: 200 });
+    const foreignBody = await foreign.page.evaluate(() => document.body.innerText);
+    assert.ok(!foreignBody.includes('Browser staff lifecycle proof'),
+      'tenant B staff cannot see tenant A details by guessing URL');
+    assert.ok(!foreignBody.includes('Tenant A Property'));
+  } finally {
+    await foreign.page.close();
+  }
+  console.log('PASS: actual assigned staff browser Start Work / Complete flow, durable SQL events and foreign tenant denial');
   console.log('PASS: real-session renter request -> scoped staff assignment -> assigned start/comment/image/complete, replay and cross-tenant denials');
 }

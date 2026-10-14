@@ -1790,6 +1790,10 @@ Merged PR #285 (`251ff536b3b84a5c917c18791c3d6afc41fa69bb`) completed actual ren
 
 No production schema, notification delivery, object storage bytes or Evia authority changes. Tests use only synthetic tenant/actor data. The current maintenance router records lifecycle events but does not itself guarantee an in-app notification or outbound email/SMS; these require separate product acceptance. Keep Phase 4 active until actual staff/browser interactions, invitations, signing, R2 payment files, compatibility caller census and migration executor proof are resolved. PR-head authorization/build, disposable SQL and Evia checks must all be green before merge.
 
+## Phase 4 — actual assigned-staff maintenance browser gate, 2026-10-15
+
+PR #286 merged at `bc61165ec5d6bb5fd75ac9d56d185f0dec674d61`, with exact-head authorization/build, disposable two-tenant SQL and Evia green. Its post-merge Evia test also passed. The real-session maintenance HTTP proof covers renter create, scoped manager assignment, assigned worker state transitions, internal/public comments, image metadata and closed/replay denials. The separate current gate exercises the **actual staff React detail page**: logged-in assigned worker clicks Start Work and completes through the required notes dialog, SQL ledger records the two transitions, and a foreign organization's worker cannot view the request by URL. It reuses the same SQL/Puppeteer fixture, without duplicate containers, new workflows, runtime changes or Azure rollout. Notifications, actual storage image bytes, manager assignment selection, invitations and signed document journeys, final compatibility census and production migration executor remain outstanding; Phase 4 remains open.
+
 ## Maintenance rule for this document
 
 After each merged production change:
