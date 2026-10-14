@@ -32,6 +32,7 @@ import { ensureEviaSignatureAnchors, populateMergeFields } from '../utils/docume
 import { toDatabaseFormat } from '../utils/dataUtils';
 import { fetchAppUser, updateAppUser } from './appUserService';
 import { isMssqlApiEnabled, requestMssqlApi } from './mssqlApiClient';
+import { collectAgreementPages } from './agreementListReadContract';
 
 const isSchemaUnavailableError = (error) => {
   const message = String(error?.message || error || '').toLowerCase();
@@ -95,11 +96,9 @@ export const listAgreementsByProperty = async (propertyId) => {
     return [];
   }
 
-  const agreements = await requestMssqlApi(
-    `/api/mssql/agreements?propertyId=${encodeURIComponent(propertyId)}&pageSize=500`
-  );
-
-  return Array.isArray(agreements) ? agreements : [];
+  return collectAgreementPages((page, pageSize) => requestMssqlApi(
+    `/api/mssql/agreements?propertyId=${encodeURIComponent(propertyId)}&page=${page}&pageSize=${pageSize}`
+  ));
 };
 
 export const listAgreementsByUnitIds = async (unitIds, statuses = []) => {
@@ -124,8 +123,11 @@ export const listAgreementsByUnitIds = async (unitIds, statuses = []) => {
     params.set('statuses', normalizedStatuses.join(','));
   }
 
-  const agreements = await requestMssqlApi(`/api/mssql/agreements?${params.toString()}`);
-  return Array.isArray(agreements) ? agreements : [];
+  return collectAgreementPages((page, pageSize) => {
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    return requestMssqlApi(`/api/mssql/agreements?${params.toString()}`);
+  });
 };
 
 export const fetchAgreement = async (agreementId) => {
