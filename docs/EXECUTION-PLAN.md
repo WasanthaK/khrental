@@ -1709,6 +1709,26 @@ create invoices or link readings outside monthly billing, widen
 permissions, enable Evia canary or apply production DDL as a side effect.
 Phase 4 remains OPEN, Phase 5 pending.
 
+## Phase 4 governed utility review API — bounded backend-first slice
+
+PR #263 audit merged as `e401842058d0a4cdf1ef99034c7620c5ce77dd0a`.
+PR #263's post-merge production proof is a separate acceptance gate.
+
+ACTIVE: introduce `POST /api/utility-reviews/readings/:readingId/approve`
+and `.../reject` as tenant-authenticated, `UTILITIES_REVIEW`-permissioned,
+assigned-property-scoped and SERIALIZABLE/MSSQL-row-locked review transitions.
+Only pending unlinked readings can be reviewed; approval requires an explicit
+configured property rate and stores amount/status/billing metadata atomically;
+rejection requires a reason and updates review fields atomically. No
+`utility_billing` writes, hard-coded pricing defaults, or invoice ID linkage.
+
+This is backend-first: the two competing routed review UIs are NOT yet
+migrated or deactivated. They remain an independent release blocker.
+Require exact-head CI plus disposable two-tenant SQL transition/rollback/
+concurrency and browser acceptance before wiring clients or treating this
+as a completed behavior change. No production DDL or Evia canary changes.
+Phase 4 OPEN.
+
 ## Maintenance rule for this document
 
 After each merged production change:
