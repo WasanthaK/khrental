@@ -46,6 +46,27 @@ The source-search census does not prove absence of all possible dynamic
 third-party calls; this bounded removal is subject to PR-head build and
 regressions. No server or SQL schema change is proposed.
 
+## Utility approval/rejection authority census — 2026-10-14
+
+Production acceptance for PR #262 is independently verified: merge
+`1945ef06020af3f1bb93c7a283a44759466efc5e`, Ready revision
+`0000265`, public exact SHA, and live MSSQL health; deployment workflow
+`38489769099` succeeded.
+
+**High priority / LIVE / not yet governed:** Both routed utility review
+screens have competing client-side approval/rejection code. The admin page
+has split fallback mutations and the staff page writes a legacy
+`utility_billing` table. Read-only invoicing preview remains safe to
+preserve, but does not establish review-write authority parity.
+See `docs/PHASE4-UTILITY-REVIEW-AUTHORITY-AUDIT.md` for source-backed
+contracts, caller paths, permission mismatches and next proof gates.
+
+**Next bounded item:** design and implement a single server-governed
+utility review transition, beginning with approval/rejection preconditions,
+tenant/property authorization and transactional updates. Preserve invoice
+creation/attachment exclusively in monthly billing. Require two-tenant SQL
+and browser acceptance before merging behavior changes. Phase 4 OPEN.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
