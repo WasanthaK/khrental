@@ -3,8 +3,8 @@ import { Box, Button, Card, CardContent, CircularProgress, Container, Divider, F
 import { useTheme } from '@mui/material/styles';
 import { FiCheckCircle, FiXCircle, FiFilter, FiImage, FiDollarSign, FiActivity, FiHelpCircle, FiEdit, FiSave } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { fetchReadings, fetchReadingById, calculateUtilityAmount, updateReadingValue } from '../services/utilityBillingService';
-import { transitionUtilityReading } from '../services/utilityReviewClient';
+import { fetchReadings, fetchReadingById, calculateUtilityAmount } from '../services/utilityBillingService';
+import { transitionUtilityReading, editPendingUtilityReading } from '../services/utilityReviewClient';
 import { UTILITY_TYPES } from '../utils/constants';
 import ImageViewer from '../components/common/ImageViewer';
 
@@ -295,70 +295,39 @@ const UtilityBillingReview = () => {
   
   // Function to save edited reading
   const handleSaveEdit = async (readingId) => {
+    const reading = readings.find(row => row.id === readingId);
+    if (!reading) return;
     try {
-      const readingToUpdate = readings.find(r => r.id === readingId);
-      if (!readingToUpdate) {
-        return;
+      const nextPrevious = editingField === 'previous'
+        ? Number(editedPreviousValue) : Number(reading.previousreading);
+      const nextCurrent = editingField === 'current'
+        ? Number(editedValue) : Number(reading.currentreading);
+      if ((editingField === 'previous' && !editedPreviousValue.trim()) ||
+          (editingField === 'current' && !editedValue.trim())) {
+        throw new Error('A meter reading value is required.');
       }
-      
-      if (editingField === 'previous') {
-        // Validate the new previous reading value
-        const numValue = parseFloat(editedPreviousValue);
-        if (isNaN(numValue)) {
-          showAlert('Please enter a valid number', 'error');
-          return;
-        }
-        
-        // Make sure the previous reading is less than current reading
-        if (numValue >= readingToUpdate.currentreading) {
-          showAlert('Previous reading must be less than current reading', 'error');
-          return;
-        }
-        
-        // Update the previous reading value
-        const { data, error } = await updateReadingValue(readingId, readingToUpdate.currentreading, numValue);
-        
-        if (error) {
-          throw error;
-        }
-      } else {
-        // Validate the new current reading value
-        const numValue = parseFloat(editedValue);
-        if (isNaN(numValue)) {
-          showAlert('Please enter a valid number', 'error');
-          return;
-        }
-        
-        // Make sure the new value is at least greater than the previous reading
-        if (numValue <= readingToUpdate.previousreading) {
-          showAlert('Current reading must be greater than previous reading', 'error');
-          return;
-        }
-        
-        // Update the current reading value
-        const { data, error } = await updateReadingValue(readingId, numValue, readingToUpdate.previousreading);
-        
-        if (error) {
-          throw error;
-        }
+      if (!Number.isFinite(nextPrevious) || !Number.isFinite(nextCurrent) ||
+          nextPrevious < 0 || nextCurrent <= nextPrevious) {
+        throw new Error('Current reading must exceed the nonnegative previous reading.');
       }
-      
-      // Reset editing state
-      setEditingReading(null);
-      setEditingField(null);
-      setEditedValue('');
-      setEditedPreviousValue('');
-      
-      // Reload the readings
+      await editPendingUtilityReading(readingId, {
+        previousReading: nextPrevious,
+        currentReading: nextCurrent,
+        expectedPreviousReading: reading.previousreading ?? null,
+        expectedCurrentReading: reading.currentreading ?? null
+      });
+      handleCancelEdit();
       await loadReadings();
-      
-      showAlert('Reading updated successfully', 'success');
+      showAlert('Meter reading updated successfully.', 'success');
     } catch (error) {
-      console.error('Error updating reading:', error);
       showAlert('Failed to update reading: ' + (error.message || 'Unknown error'), 'error');
+      if (error.code === 'STALE_METER_READING' || error.code === 'READING_ALREADY_PROCESSED') {
+        handleCancelEdit();
+        await loadReadings();
+      }
     }
   };
-  
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
