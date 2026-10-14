@@ -20,16 +20,26 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
         }));
       }, token, own.tenantId, own.authId, own.email);
       await page.goto(origin + route, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      // React can briefly render an empty/unauthorized shell during session
+      // hydration or an intermediate fetch. These are not settled outcomes.
+      // Wait for the positive, tenant-specific fixture before inspecting.
+      try {
+        await page.waitForFunction(
+          expectedText => document.body.innerText.includes(expectedText),
+          { timeout: 30000, polling: 200 }, expected
+        );
+      } catch (error) {
+        const state = await page.evaluate(() => ({
+          route: location.pathname, body: document.body.innerText.slice(-3000)
+        }));
+        throw new Error('Routed fixture did not render: ' + route +
+          ', actual route=' + state.route + ', visible=' + state.body, { cause: error });
+      }
+      // One more React paint prevents capturing a transient empty body during
+      // hydration immediately after the positive readiness condition.
       await page.waitForFunction(
-        ({ expectedText, emptyText }) => {
-          const body = document.body.innerText;
-          return body.includes(expectedText) ||
-            (emptyText && body.includes(emptyText)) ||
-            location.pathname === '/login' || location.pathname === '/unauthorized' ||
-            body.includes('Error loading requests') ||
-            body.includes('Failed to load maintenance request details');
-        },
-        { timeout: 30000 }, { expectedText: expected, emptyText: rejectEmpty }
+        expectedText => document.body.innerText.includes(expectedText),
+        { timeout: 10000, polling: 200 }, expected
       );
 
       const state = await page.evaluate(() => ({
