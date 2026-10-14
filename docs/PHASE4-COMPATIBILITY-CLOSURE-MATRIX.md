@@ -327,6 +327,15 @@ already established two-tenant billing/authorization harness for:
   same **disposable Docker SQL** fixture; they are not a substitute for
   full authenticated browser attachment workflow acceptance.
 
+**SQL acceptance finding:** The first real disposable acceptance run uncovered
+an existing maintenance owner authorization mismatch when SQL Server
+returned the same GUID in uppercase while session/user IDs were
+lowercase. Authorization now compares nonempty canonicalized identifiers
+in owner, assigned-worker and property-scope checks without changing
+the underlying tenant checks, and a regression covers mixed-case GUIDs.
+Keep the failed initial CI run in the audit trail; only a clean exact-head
+rerun may pass this release gate.
+
 **Action cost control:** Generic `server.js` and platform router changes
 no longer trigger extra Evia-specific test jobs or a webhook-secret
 configuration run. The exact-head `test:authorization` suite now executes
