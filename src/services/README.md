@@ -236,7 +236,7 @@ The Utility Billing Service manages the workflow for utility readings and billin
 
 2. **Utility Billing Management**
    - Fetching approved readings ready for invoicing (`fetchReadingsForInvoice`)
-   - Marking utility bills as invoiced (`markAsInvoiced`)
+   - Invoice creation and utility-reading linkage use the governed monthly billing lifecycle, not this legacy utility service.
    - Usage summary and analytics (`getRenteeUtilityUsage`)
 
 3. **Database Integration**
