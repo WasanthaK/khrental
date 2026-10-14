@@ -1749,6 +1749,23 @@ permission, amount, concurrency and stale-write proof; existing browser
 acceptance; Evia regression; independent production SHA/MSSQL verification
 after merge. No DDL or canary changes. Phase 4 remains ACTIVE.
 
+## Phase 4 — live invoice dashboard read integrity (bounded slice)
+
+After PR #268, the remaining live invoice read surface was audited.
+`InvoiceManagementDashboard.jsx` calls `getInvoiceSummaryByProperty`
+(paginated authorized invoice reads) and `getPropertiesWithPendingReadings`
+(scoped utility preview). The summary view retained stale financial figures
+after read failures or cleared property selection, and its month/year date
+filters used midnight on the final calendar day. A bounded client change
+clears stale/in-flight values, rejects superseded results, distinguishes
+unavailable from genuine zero totals, and includes the full last day
+for MSSQL `createdat <= toDate` selection.
+
+Do not change tenant authorization, invoice amounts, payment status,
+the governed billing writer, Evia canary, SQL schema, or production DDL.
+Gate on exact-head authorization/build tests and production Ready/serving
+SHA/MSSQL evidence. Phase 4 OPEN; Phase 5 still pending.
+
 ## Maintenance rule for this document
 
 After each merged production change:
