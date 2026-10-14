@@ -1522,9 +1522,12 @@ async function main() {
     };
     const { verifyUtilityReviewTransitions } =
       await import('./verify-utility-review-transitions.mjs');
+    browser = await puppeteer.launch({
+      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     await verifyUtilityReviewTransitions({
       pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
-      call, createAuthRecord, issueAuthSession
+      call, createAuthRecord, issueAuthSession, browser, origin
     });
 
     const authContext = await call('/api/platform/auth/context', {
@@ -1837,9 +1840,7 @@ async function main() {
     });
     assert.equal(anonymousAccount.status, 401, 'anonymous billing account query must be denied');
 
-    browser = await puppeteer.launch({
-      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+
     // Run the actual new browser-side pending-invoice dashboard read client
     // against the same disposable SQL backend with two real renter sessions.
     // Only synthetic fixture rows are inserted, and all are deleted afterwards.
