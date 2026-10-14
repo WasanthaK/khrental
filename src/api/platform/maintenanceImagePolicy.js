@@ -2,15 +2,23 @@
  * Guards the scoped maintenance image metadata write. A valid tenant context
  * and a request loaded with tenant_id are required before this check.
  */
+// SQL Server GUID values and session/membership IDs may have different
+// letter casing. Normalize only identifier representation, not authority.
+export const sameMaintenanceIdentifier = (left, right) => (
+  left != null && right != null
+  && String(left).trim() !== '' && String(right).trim() !== ''
+  && String(left).trim().toLowerCase() === String(right).trim().toLowerCase()
+);
+
 export const authorizeMaintenanceImageAttachment = ({ user, membership, request, isTenant, canManage, canUpdateAssigned, hasPropertyScope }) => {
-  const actor = String(user?.id || '');
+  const actor = String(user?.id || '').trim();
   if (!actor || !request || !['pending', 'in_progress'].includes(String(request.status || '').toLowerCase())) {
     return false;
   }
 
-  if (isTenant) return String(request.renteeid || '') === actor;
+  if (isTenant) return sameMaintenanceIdentifier(request.renteeid, actor);
   if (canManage && hasPropertyScope) return true;
-  return Boolean(canUpdateAssigned && String(request.assignedto || '') === actor);
+  return Boolean(canUpdateAssigned && sameMaintenanceIdentifier(request.assignedto, actor));
 };
 
 /**
