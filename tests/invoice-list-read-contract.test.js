@@ -25,5 +25,5 @@ test('both invoice list transports preserve authorization failures and reject ba
   assert.match(list, /return \{ data: null, error: mssqlError \}/);
   assert.doesNotMatch(list, /Array\.isArray\(data\) \? data\.map\(normalizeInvoiceRecord\) : \[\]/);
   assert.match(list, /if \(Array\.isArray\(options\.status\) && options\.status\.length === 0\)/);
-  assert.match(list, /query\.append\('status', status\)/);
+  assert.match(service, /query\.append\('status', status\)/);
 });
