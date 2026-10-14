@@ -1,5 +1,6 @@
 import { platform as platformClient } from './platformClient';
 import { saveImage } from './fileService';
+import { mapMaintenanceLifecycleProjection } from './maintenanceProjectionMapper';
 import {
   notifyStaffAboutNewRequest,
   notifyAboutAssignment,
@@ -18,20 +19,11 @@ import {
 } from './maintenanceLifecycleClient';
 
 const fetchCompleteRequest = async (requestId) => {
-  const { data, error } = await platformClient
-    .from('maintenance_requests')
-    .select(`
-      *,
-      property:properties!maintenance_requests_propertyid_fkey(*),
-      rentee:app_users!maintenance_requests_renteeid_fkey(*),
-      assigned_staff:app_users!maintenance_requests_assignedto_fkey(*),
-      maintenance_request_images(*)
-    `)
-    .eq('id', requestId)
-    .single();
-
+  // Reuse the authorized lifecycle projection for follow-up notifications and
+  // page updates. A denied/failed read must never retry via generic queries.
+  const { data, error } = await getMaintenanceLifecycleRequest(requestId);
   if (error) throw error;
-  return data;
+  return mapMaintenanceLifecycleProjection(data);
 };
 
 const uploadLifecycleImages = async (requestId, images = [], imageType = 'additional') => {
