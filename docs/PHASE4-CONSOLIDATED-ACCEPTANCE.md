@@ -1,0 +1,34 @@
+# Phase 4 consolidated acceptance gate — 2026-10-14
+
+Status: **ACTIVE — BLOCKED FROM PHASE 5**. This document distinguishes source-contract evidence, real disposable SQL acceptance, authenticated HTTP acceptance and production browser acceptance. A pass in one tier never substitutes for another tier.
+
+## Latest source baseline
+
+- Baseline: main SHA `945d4b140e8f448d93efc24715e64fb3040eb26c` (PR #280). Its PR-head disposable SQL acceptance passed. The main deployment #792 was still in progress when this package began; Ready revision, exact serving SHA and live MSSQL require separate confirmation.
+- Existing real disposable SQL proof: `scripts/test-billing-two-tenant-sqlserver.mjs` checks billing invoice creation/idempotency, rent and utility component amounts, tenant filtering, authenticated renter invoice/account reads, signing/Evia semantics, utility-review transitions, and maintenance-image/notification SQL isolation.
+- Existing browser proof is primarily protected billing/utility navigation and selected renter invoice/utility behavior. Full logged-in invitation, signing, payment-verification and maintenance journeys are **not** established by the prior SQL or anonymous browser checks.
+- This package expands that existing Docker fixture with **real SQL-backed bearer session HTTP requests** through the actual notification and maintenance Express routers, including read/mark isolation, maintenance projection, request/tenant denial and image attachment metadata. Image object bytes are not uploaded; real email/SMS delivery is not exercised.
+
+## Exit matrix: every critical workflow needs an owner and evidence
+
+| Contract | Present evidence | Required remaining acceptance | Decision |
+| --- | --- | --- | --- |
+| Invitations and account recovery | `docs/P0.3-INVITATION-ACCEPTANCE-STORIES.md` records historical production invite/send/resend/redeem/team-user acceptance; security/UI unit tests exist. | Reconfirm on current exact SHA using two tenant identities: only active target membership, no redeemed/expired-token reuse, correct sign-in and role workspace, proper status refresh, no cross-tenant invite, password reset/recovery. Safe SendGrid provider acknowledgment and actual controlled-mailbox receipt are separate evidence. | **BLOCKED** until current-build acceptance |
+| Agreements and signing | SQL fixture covers manual sign, duplicate/late Evia events and tenant isolation; document retention tests and template/pagination contracts exist. | Authenticated browser create/edit/template→sign→retained signed PDF for owned tenant; deny foreign tenant/property/unit, revoke/delete/sign denial, preserve external signing evidence. Confirm canary remains OFF. | **BLOCKED** until browser parity |
+| Billing and utilities | Two-tenant SQL proves monthly invoice uniqueness, amount/component/linkage, owner-scoped account reads, and utility review. Legacy invoice mutations fail closed with `BILLING_LIFECYCLE_REQUIRED`. | Authenticated browser draft→issue→payment proof→reject/resubmit→verify→receipt and balance; same-tenant other-renter and foreign-tenant 403/404; payment never becomes paid solely from proof upload; dashboard amounts and failed-read indicators. | **BLOCKED** until complete lifecycle |
+| Maintenance and notifications | SQL and source tests establish active tenant/image authority, notification owner-scope and tenant recipient membership. This package adds real-session HTTP tests, if they pass on exact PR head. | Authenticated browser renter create→staff assign/start→upload→complete→notification visible/read; cross-tenant and staff property-scope denial; closed request attachment denial; email/SMS remains **not proven**. | **BLOCKED** until logged-in browser acceptance |
+| Tenant isolation | Tenant A/B disposable SQL with real bearer sessions proves selected billing/utility/signing/storage paths; this package expands maintenance/notifications. | Repeat cross-tenant URL/header/API reads/writes for invitation, agreements, financials, maintenance, attachment delivery and notifications. Confirm no partial write or leaked data on denied requests. | **BLOCKED** until full matrix |
+| Production migration execution | Source-backed DDL-free serving startup, governed plan/apply workflow and static gates. Legacy `npm run migrate` still exists, not canonical. | Read-only Azure evidence of dedicated migration executor provisioning/grants/network path and checksum ledger `dbo.schema_migrations`; reconcile operational legacy commands. **No production DDL apply** during acceptance. | **BLOCKED** operational evidence |
+| Compatibility exports | `docs/PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` classifies many operations. `invoiceService.createInvoiceRecord` and `updateInvoiceRecord` now throw rather than mutate; legacy invoice generators fail closed. `paymentService.generateInvoice` and `updateInvoice` still import those blocked wrappers; `platformClient` remains live in specifically declared domains. | Per-export static/dynamic route/caller inventory with live/needed/dead/unresolved classification, safe removal only after parity. Update stale historic audit descriptions instead of treating them as current runtime facts. | **BLOCKED** until operation inventory |
+| Deployment evidence | PR #280 merged; no assumption that green PR CI proves current production serving revision. | Verify merged exact SHA on Azure Ready revision, public fingerprint, MSSQL health; capture successful CI run IDs and failed-run remediation evidence. | **BLOCKED** pending verification |
+
+## Work sequencing and release efficiency
+
+1. Finish **this single PR** with authenticated HTTP proof and current inventory/checklist. PR-head `test:authorization`, `npm run build`, and disposable two-tenant SQL acceptance must pass. Do not merge red.
+2. A follow-on **consolidated UI acceptance package** uses disposable tenant A/B and controlled mailboxes, reuses a single browser/SQL fixture, and covers invitation, agreement, billing and maintenance critical journeys. Browser checks must exercise actual routed screens and server-issued sessions rather than source-only regexes.
+3. A final **compatibility/operational-closure package** reconciles per-export imports, operational DDL authority, owned deferrals and exact production evidence. High-risk tenant, billing, signing and auth gaps cannot be waived silently.
+4. Phase 4 closes only on an explicit pass ledger. Only then advance the canonical plan into Phase 5 product regression, accessibility, failure UX, deployment/release hardening and product polish.
+
+## Non-goals
+
+No production SQL/identity mutation, no production invitation emails, no payment changes, no Evia canary activation, no object delete, and no assertion that synthetic fixtures constitute successful production acceptance.
