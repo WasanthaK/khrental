@@ -308,233 +308,26 @@ export async function fetchReadingsForInvoice(propertyIds, options = {}) {
 }
 
 /**
- * Generate invoices from utility readings for multiple properties
- * @param {Object} readingsByProperty - Readings grouped by property and rentee
- * @param {Object} options - Additional options for invoice generation
- * @returns {Promise<Object>} - Generated invoices with status
+ * Deprecated compatibility entrypoint. Invoice issue, utility linking and
+ * totals must run exclusively through the governed monthly billing lifecycle.
+ * Preserve the former result envelope for any unresolved manual callers,
+ * but never attempt an invoice or utility_readings write here.
  */
-export const generateInvoicesByProperty = async (readingsByProperty, options = {}) => {
-  try {
-    console.log('Generating invoices by property:', { options });
-    
-    const results = {
-      success: true,
-      invoiceIds: [],
-      propertyResults: {},
-      errors: []
-    };
-    
-    // Process each property
-    for (const propertyId in readingsByProperty) {
-      const propertyData = readingsByProperty[propertyId];
-      results.propertyResults[propertyId] = {
-        invoiceCount: 0,
-        totalAmount: 0,
-        rentees: []
-      };
-      
-      // Process each rentee in the property
-      for (const renteeId in propertyData.rentees) {
-        const renteeData = propertyData.rentees[renteeId];
-        
-        try {
-          // Skip if there are no readings
-          if (renteeData.readings.length === 0) {
-            continue;
-          }
-          
-          // Prepare invoice components
-          const components = {
-            rent: 0,
-            electricity: 0,
-            water: 0,
-            pastDues: 0,
-            taxes: 0
-          };
-          
-          // Calculate component amounts from readings
-          renteeData.readings.forEach(reading => {
-            if (reading.utilitytype === 'electricity') {
-              components.electricity += parseFloat(reading.calculatedbill) || 0;
-            } else if (reading.utilitytype === 'water') {
-              components.water += parseFloat(reading.calculatedbill) || 0;
-            }
-          });
-          
-          // Add rent component if enabled in options
-          if (options.includeRent && propertyData.propertyInfo?.rentalvalues?.rent) {
-            components.rent = parseFloat(propertyData.propertyInfo.rentalvalues.rent) || 0;
-          }
-          
-          // Calculate total amount
-          const totalAmount = Object.values(components).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-          
-          // Create invoice record
-          const { data: invoice, error: invoiceError } = await platformClient
-            .from('invoices')
-            .insert({
-              renteeid: renteeId,
-              propertyid: propertyId,
-              billingperiod: options.billingPeriod || new Date().toISOString().split('T')[0].substring(0, 7),
-              components,
-              totalamount: totalAmount,
-              status: 'pending',
-              duedate: options.dueDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              notes: options.notes || ''
-            })
-            .select()
-            .single();
-          
-          if (invoiceError) {
-            throw invoiceError;
-          }
-          
-          // Update readings with invoice ID
-          const readingIds = renteeData.readings.map(reading => reading.id);
-          const { error: updateError } = await platformClient
-            .from('utility_readings')
-            .update({
-              invoice_id: invoice.id,
-              billing_status: 'invoiced'
-            })
-            .in('id', readingIds);
-          
-          if (updateError) {
-            throw updateError;
-          }
-          
-          // Update results
-          results.invoiceIds.push(invoice.id);
-          results.propertyResults[propertyId].invoiceCount += 1;
-          results.propertyResults[propertyId].totalAmount += totalAmount;
-          results.propertyResults[propertyId].rentees.push({
-            renteeId,
-            invoiceId: invoice.id,
-            amount: totalAmount
-          });
-          
-          // Send notification if enabled
-          if (options.sendNotifications) {
-            // TODO: Implement notification service integration
-            console.log(`Should send notification to rentee ${renteeId} for invoice ${invoice.id}`);
-          }
-        } catch (error) {
-          console.error(`Error generating invoice for rentee ${renteeId} in property ${propertyId}:`, error);
-          results.errors.push({
-            propertyId,
-            renteeId,
-            error: error.message
-          });
-        }
-      }
-    }
-    
-    // Mark operation as failed if there are errors
-    if (results.errors.length > 0 && results.invoiceIds.length === 0) {
-      results.success = false;
-    }
-    
-    console.log(`Successfully generated ${results.invoiceIds.length} invoices across ${Object.keys(results.propertyResults).length} properties`);
-    
-    return results;
-  } catch (error) {
-    console.error('Error generating invoices by property:', error);
-    return {
-      success: false,
-      invoiceIds: [],
-      propertyResults: {},
-      errors: [{ error: error.message }]
-    };
-  }
+export const generateInvoicesByProperty = async (_readingsByProperty, _options = {}) => {
+  const error = billingLifecycleRequired();
+  return {
+    success: false,
+    invoiceIds: [],
+    propertyResults: {},
+    errors: [{ code: error.code, error: error.message }],
+    code: error.code
+  };
 };
 
-/**
- * Generates invoices for the given properties and readings (alternative implementation)
- * @param {Array} readings - Array of readings to include in invoices
- * @param {Object} invoiceData - Invoice data (billing_period, due_date, etc.)
- * @returns {Promise<Object>} - Object containing generated invoices and error
- */
-export async function generateInvoices(readings, invoiceData) {
-  try {
-    if (!readings || readings.length === 0) {
-      return { data: [], error: 'No readings provided' };
-    }
-    
-    // Group readings by rentee
-    const readingsByRentee = {};
-    
-    readings.forEach(reading => {
-      const renteeId = reading.rentee_id;
-      if (!readingsByRentee[renteeId]) {
-        readingsByRentee[renteeId] = [];
-      }
-      readingsByRentee[renteeId].push(reading);
-    });
-    
-    const invoicesCreated = [];
-    
-    // Process each rentee's readings
-    for (const renteeId in readingsByRentee) {
-      const renteeReadings = readingsByRentee[renteeId];
-      const propertyId = renteeReadings[0].property_id;
-      
-      // Calculate total amount
-      let totalAmount = 0;
-      
-      renteeReadings.forEach(reading => {
-        // Get amount from billing_data if available
-        if (reading.billing_data && reading.billing_data.amount) {
-          totalAmount += parseFloat(reading.billing_data.amount);
-        }
-      });
-      
-      // Create invoice
-      const { data: invoice, error: invoiceError } = await platformClient
-        .from('invoices')
-        .insert({
-          rentee_id: renteeId,
-          property_id: propertyId,
-          type: 'utility',
-          status: 'pending',
-          amount: totalAmount,
-          billing_period: invoiceData.billing_period,
-          due_date: invoiceData.due_date,
-          issue_date: new Date().toISOString(),
-          notes: invoiceData.notes || 'Utility billing'
-        })
-        .select()
-        .single();
-      
-      if (invoiceError) {
-        throw new Error(formatErrorMessage(invoiceError));
-      }
-      
-      // Update readings with invoice ID
-      const readingIds = renteeReadings.map(reading => reading.id);
-      
-      const { error: updateError } = await platformClient
-        .from('utility_readings')
-        .update({
-          invoice_id: invoice.id,
-          billing_status: 'billed'
-        })
-        .in('id', readingIds);
-      
-      if (updateError) {
-        throw new Error(formatErrorMessage(updateError));
-      }
-      
-      invoicesCreated.push({
-        ...invoice,
-        readingCount: renteeReadings.length
-      });
-    }
-    
-    return { data: invoicesCreated, error: null };
-  } catch (error) {
-    console.error('Error generating invoices:', error);
-    return { data: null, error: error.message };
-  }
+/** Legacy alternative entrypoint: safely reject instead of creating invoices. */
+export async function generateInvoices(_readings, _invoiceData) {
+  const error = billingLifecycleRequired();
+  return { data: null, error: error.message, code: error.code };
 }
 
 /**
