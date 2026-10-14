@@ -521,7 +521,10 @@ const UtilityBillingReview = () => {
                       <Button
                         variant="outlined"
                         color="error"
-                        onClick={() => handleReject(reading, prompt('Please provide a reason for rejection:'))}
+                        onClick={() => {
+                          const reason = window.prompt('Please provide a reason for rejection:');
+                          if (reason !== null) handleReject(reading, reason);
+                        }}
                         startIcon={<FiXCircle />}
                         disabled={editingReading === reading.id}
                       >
