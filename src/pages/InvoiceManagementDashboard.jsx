@@ -61,7 +61,7 @@ const InvoiceManagementDashboard = () => {
       }
       
       if (requestId !== summaryRequestId.current) return;
-      if (data !== null && data !== undefined && (Array.isArray(data) || typeof data !== 'object')) {
+      if (!data || Array.isArray(data) || typeof data !== 'object') {
         throw new Error('Invoice summary returned an invalid response.');
       }
       setInvoiceSummary(data || {});
