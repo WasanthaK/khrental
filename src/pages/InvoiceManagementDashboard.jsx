@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useProperty } from '../contexts/PropertyContext';
 import { getInvoiceSummaryByProperty, getPropertiesWithPendingReadings } from '../services/invoiceService';
@@ -11,6 +11,8 @@ const InvoiceManagementDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [invoiceSummary, setInvoiceSummary] = useState({});
+  const [summaryAvailable, setSummaryAvailable] = useState(false);
+  const summaryRequestId = useRef(0);
   const [propertiesWithReadings, setPropertiesWithReadings] = useState([]);
   const [filterOptions, setFilterOptions] = useState({
     status: 'all',
@@ -19,8 +21,13 @@ const InvoiceManagementDashboard = () => {
   
   // Load invoice summary data when selected properties change
   useEffect(() => {
+    const requestId = ++summaryRequestId.current;
     if (selectedPropertyIds.length > 0) {
-      loadInvoiceSummary();
+      loadInvoiceSummary(requestId);
+    } else {
+      setInvoiceSummary({});
+      setSummaryAvailable(false);
+      setLoading(false);
     }
   }, [selectedPropertyIds, filterOptions]);
   
@@ -30,9 +37,11 @@ const InvoiceManagementDashboard = () => {
   }, []);
   
   // Load invoice summary for selected properties
-  const loadInvoiceSummary = async () => {
+  const loadInvoiceSummary = async (requestId) => {
+    setLoading(true);
+    setSummaryAvailable(false);
+    setInvoiceSummary({});
     try {
-      setLoading(true);
       setError(null);
       
       // Set date filters based on period
@@ -46,13 +55,13 @@ const InvoiceManagementDashboard = () => {
       
       if (filterOptions.period === 'current_month') {
         options.fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+        options.toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
       } else if (filterOptions.period === 'last_month') {
         options.fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
+        options.toDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
       } else if (filterOptions.period === 'current_year') {
         options.fromDate = new Date(now.getFullYear(), 0, 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), 11, 31).toISOString();
+        options.toDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999).toISOString();
       }
       
       const { data, error } = await getInvoiceSummaryByProperty(selectedPropertyIds, options);
@@ -61,12 +70,20 @@ const InvoiceManagementDashboard = () => {
         throw error;
       }
       
+      if (requestId !== summaryRequestId.current) return;
+      if (data !== null && data !== undefined && (Array.isArray(data) || typeof data !== 'object')) {
+        throw new Error('Invoice summary returned an invalid response.');
+      }
       setInvoiceSummary(data || {});
+      setSummaryAvailable(true);
     } catch (err) {
+      if (requestId !== summaryRequestId.current) return;
       console.error('Error loading invoice summary:', err);
-      setError(err.message);
+      setInvoiceSummary({});
+      setSummaryAvailable(false);
+      setError(err?.message || 'Unable to load invoice summary.');
     } finally {
-      setLoading(false);
+      if (requestId === summaryRequestId.current) setLoading(false);
     }
   };
   
@@ -232,22 +249,22 @@ const InvoiceManagementDashboard = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Total Invoices</p>
-              <p className="text-2xl font-semibold">{totals.totalInvoices}</p>
+              <p className="text-2xl font-semibold">{summaryAvailable ? totals.totalInvoices : '—'}</p>
             </div>
             
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Total Amount</p>
-              <p className="text-2xl font-semibold">{formatCurrency(totals.totalAmount)}</p>
+              <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.totalAmount) : '—'}</p>
             </div>
             
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Pending Amount</p>
-              <p className="text-2xl font-semibold">{formatCurrency(totals.pendingAmount)}</p>
+              <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.pendingAmount) : '—'}</p>
             </div>
             
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Paid Amount</p>
-              <p className="text-2xl font-semibold">{formatCurrency(totals.paidAmount)}</p>
+              <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.paidAmount) : '—'}</p>
             </div>
           </div>
           
