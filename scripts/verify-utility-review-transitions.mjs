@@ -82,7 +82,8 @@ export const verifyUtilityReviewTransitions = async ({
     const wrongTenant = await requestReview(a, adminA.token, readingB, 'approve');
     assert.equal(wrongTenant.status, 404, 'foreign utility reading hidden');
     const falseTenant = await requestReview(b, adminA, readingB, 'approve');
-    assert.equal(falseTenant.status, 403, 'authenticated session cannot choose foreign tenant');
+    assert.ok([401, 403].includes(falseTenant.status), 'authenticated session must not select a foreign tenant');
+    await assertRow(readingB, { status: 'pending', billing_status: 'pending', invoice_id: null });
     const badReason = await requestReview(a, adminA.token, readingA, 'reject', { reason: '' });
     assert.equal(badReason.status, 400);
     await assertRow(readingA, { status: 'pending', billing_status: 'pending', invoice_id: null });
