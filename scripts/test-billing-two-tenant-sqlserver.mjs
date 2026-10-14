@@ -2359,6 +2359,16 @@ async function main() {
     assert.deepEqual(await readOnlySnapshot(), beforeTenantSwitch,
       'actual A-B-A tenant switches and account reads must not write billing data');
 
+    // Mutation acceptance runs last, against fresh issued-only fixture invoices.
+    // This keeps all preceding read-only snapshot counts and browser assertions
+    // unchanged while proving actual server-owned payment/receipt transactions.
+    const { verifyPhase4PaymentLifecycleHttp } =
+      await import('./verify-phase4-payment-lifecycle-http.mjs');
+    await verifyPhase4PaymentLifecycleHttp({
+      pool, first, query, a, b, tokenA, tokenB,
+      call, createAuthRecord, issueAuthSession
+    });
+
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
     if (browser) await browser.close().catch(() => {});
