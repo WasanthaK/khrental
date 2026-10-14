@@ -1347,6 +1347,111 @@ async function seedAccountHistory(pool, item, invoiceId, tag, verifiedAmount, pe
       receiptNumber: item.receiptNumber, amount: verifiedAmount });
 }
 
+
+/**
+ * Phase 4 acceptance on the disposable SQL Server already used by billing.
+ * Exercise the real parameterized notification access contracts against two
+ * tenant/user fixtures and inspect actual maintenance image metadata scope.
+ * No shared/production database is contacted.
+ */
+async function verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, a, b) {
+  const {
+    listOwnNotificationPage,
+    markOwnNotificationRead,
+    requireNotificationTenantRecipient
+  } = await import('../src/api/platform/notificationAccess.js');
+  const {
+    authorizeMaintenanceImageAttachment,
+    normalizeMaintenanceImageUrl
+  } = await import('../src/api/platform/maintenanceImagePolicy.js');
+  const run = (statement, params) => query(pool, statement, params);
+  const one = (statement, params) => first(pool, statement, params);
+
+  const nA = await first(pool,
+    `INSERT INTO notifications (tenant_id, user_id, message)
+     OUTPUT INSERTED.id VALUES (@tenantId, @userId, 'Tenant A private notification')`,
+    { tenantId: a.tenantId, userId: a.renteeId });
+  const nB = await first(pool,
+    `INSERT INTO notifications (tenant_id, user_id, message)
+     OUTPUT INSERTED.id VALUES (@tenantId, @userId, 'Tenant B private notification')`,
+    { tenantId: b.tenantId, userId: b.renteeId });
+  const idA = guid(nA.id), idB = guid(nB.id);
+  for (const [own, foreignId] of [[a, idB], [b, idA]]) {
+    const rows = await listOwnNotificationPage({
+      tenantId: own.tenantId, userId: own.renteeId,
+      page: 1, pageSize: 100, query: run
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(guid(rows[0].id), own === a ? idA : idB);
+    assert.ok(!rows.some(row => guid(row.id) === foreignId));
+  }
+  // Same tenant, different user must not be allowed to mark the notification.
+  await assert.rejects(() => markOwnNotificationRead({
+    tenantId: a.tenantId, userId: b.renteeId,
+    notificationId: idA, queryOne: one
+  }), error => error.code === 'NOTIFICATION_NOT_FOUND');
+  // Foreign organization, even with the same owner ID, also must not update.
+  await assert.rejects(() => markOwnNotificationRead({
+    tenantId: b.tenantId, userId: a.renteeId,
+    notificationId: idA, queryOne: one
+  }), error => error.code === 'NOTIFICATION_NOT_FOUND');
+  assert.equal((await first(pool, 'SELECT is_read FROM notifications WHERE id = @id', { id: idA })).is_read, false);
+  const updated = await markOwnNotificationRead({
+    tenantId: a.tenantId, userId: a.renteeId,
+    notificationId: idA, queryOne: one
+  });
+  assert.equal(guid(updated.id), idA);
+  assert.equal(Boolean(updated.is_read), true);
+  assert.equal(Boolean((await first(pool, 'SELECT is_read FROM notifications WHERE id = @id', { id: idB })).is_read), false);
+
+  assert.equal(await requireNotificationTenantRecipient({
+    tenantId: a.tenantId, userId: a.renteeId, queryOne: one
+  }), true);
+  await assert.rejects(() => requireNotificationTenantRecipient({
+    tenantId: a.tenantId, userId: b.renteeId, queryOne: one
+  }), error => error.code === 'NOTIFICATION_RECIPIENT_SCOPE_DENIED');
+
+  const requestA = await first(pool,
+    `INSERT INTO maintenance_requests (tenant_id, propertyid, renteeid, title, description)
+     OUTPUT INSERTED.* VALUES (@tenantId, @propertyId, @renteeId, 'Fixture A', 'Private maintenance request')`,
+    a);
+  const requestB = await first(pool,
+    `INSERT INTO maintenance_requests (tenant_id, propertyid, renteeid, title, description)
+     OUTPUT INSERTED.* VALUES (@tenantId, @propertyId, @renteeId, 'Fixture B', 'Private maintenance request')`,
+    b);
+  const reqA = guid(requestA.id), reqB = guid(requestB.id);
+  assert.equal(authorizeMaintenanceImageAttachment({
+    user: { id: a.renteeId }, request: requestA,
+    isTenant: true, canManage: false, canUpdateAssigned: false, hasPropertyScope: false
+  }), true);
+  assert.equal(authorizeMaintenanceImageAttachment({
+    user: { id: b.renteeId }, request: requestA,
+    isTenant: true, canManage: false, canUpdateAssigned: false, hasPropertyScope: false
+  }), false);
+  const ownPath = `/storage/images/tenants/${a.tenantId}/maintenance/test-fixture.jpg`;
+  assert.equal(normalizeMaintenanceImageUrl({
+    value: ownPath, tenantId: a.tenantId, requestHost: 'localhost:5174'
+  }), ownPath);
+  assert.equal(normalizeMaintenanceImageUrl({
+    value: ownPath, tenantId: b.tenantId, requestHost: 'localhost:5174'
+  }), null);
+  await query(pool,
+    `INSERT INTO maintenance_request_images
+       (tenant_id, maintenance_request_id, image_url, image_type, uploaded_by)
+     VALUES (@tenantId, @requestId, @imageUrl, 'initial', @userId)`,
+    { tenantId: a.tenantId, requestId: reqA, imageUrl: ownPath, userId: a.renteeId });
+  assert.equal((await query(pool,
+    'SELECT id FROM maintenance_request_images WHERE tenant_id = @tenantId AND maintenance_request_id = @requestId',
+    { tenantId: a.tenantId, requestId: reqA })).length, 1);
+  assert.equal((await query(pool,
+    'SELECT id FROM maintenance_request_images WHERE tenant_id = @tenantId AND maintenance_request_id = @requestId',
+    { tenantId: b.tenantId, requestId: reqA })).length, 0);
+  assert.equal((await query(pool,
+    'SELECT id FROM maintenance_request_images WHERE tenant_id = @tenantId AND maintenance_request_id = @requestId',
+    { tenantId: a.tenantId, requestId: reqB })).length, 0);
+  console.log('PASS: disposable two-tenant notification owner/tenant read, read-state and active-recipient isolation; maintenance image actor, tenant and request scope');
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -1392,6 +1497,7 @@ async function main() {
     ({ closeMssqlPool } = await import('../src/api/mssql/pool.js'));
     const a = await fixture(pool, 'Tenant A', 2000, 125);
     const b = await fixture(pool, 'Tenant B', 3000, 225);
+    await verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, a, b);
     const generate = tenantId => generateMonthlyInvoicesForTenant({
       tenantId, billingPeriod: '2026-10', source: 'test', authorizeProperty: () => {}
     });
