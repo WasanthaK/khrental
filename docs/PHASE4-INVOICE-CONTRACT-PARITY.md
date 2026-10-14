@@ -49,3 +49,27 @@ The existing `listInvoices`, dashboard summary, pending-reading projections, and
 ## 2026-10-14: property-access helper safety guard
 
 An indexed source/caller census found no active application imports of `getCurrentUserPropertyAccess`. Its legacy fallback returned every property when no staff profile existed, without proving entitlement. This bounded security slice retains the function's result-envelope contract but fails closed with `PROPERTY_ACCESS_AUTHORITY_REQUIRED`. Real tenant and staff property selection must use server-enforced permission/tenant-scoped APIs, not this legacy fallback. Live invoice listing, property summary, pending-reading dashboard reads, and governed billing are unchanged. Unknown dynamic/manual callers remain possible and must handle the explicit failure. Phase 4 stays active.
+
+## 2026-10-14: live invoice summary read and presentation correctness
+
+The routed `InvoiceManagementDashboard.jsx` consumes live
+`getInvoiceSummaryByProperty` and `getPropertiesWithPendingReadings`.
+`getInvoiceSummaryByProperty` paginates authorized `listInvoices`
+results to completion, but the dashboard previously retained stale summary
+totals when an invoice-read request failed, or all selected properties
+were cleared. It also generated last-day date cutoffs at midnight,
+excluding most of the last calendar day from the inclusive
+`createdat <= toDate` MSSQL query.
+
+This bounded slice changes dashboard presentation and date-filter
+construction only. A failed or superseded request cannot display its
+previous totals as current; loading, failed and unselected states show
+unavailable figures rather than `$0`. A successfully loaded empty result
+may still display zero. Inclusive month/year end-of-day bounds are tested
+for calendar rollover and leap years. No financial writes, SQL schema,
+API authorization, invoice payment state, or monthly billing logic change.
+
+Retain the existing tenant-scoped API and its fail-closed error behavior.
+Browser-backed financial dashboard acceptance and two-tenant read
+parity remain broader Phase 4/5 release gates.
+
