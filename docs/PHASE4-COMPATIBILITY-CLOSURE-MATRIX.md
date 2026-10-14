@@ -67,6 +67,26 @@ tenant/property authorization and transactional updates. Preserve invoice
 creation/attachment exclusively in monthly billing. Require two-tenant SQL
 and browser acceptance before merging behavior changes. Phase 4 OPEN.
 
+## Utility review legacy writer retirement — 2026-10-14
+
+The primary and staff routed utility-review actions now use the governed
+server transitions. Pending meter edits also use the scoped compare-and-swap
+endpoint as of PR #265 (production deployment acceptance is tracked separately).
+
+A current import and source-search census finds no application consumers of
+the retired client-side `approveReading`, `rejectReading`,
+`rejectReadingWithProcedure`, `getValidStatusesFromConstraint`,
+`updateReadingValue` or `createApproveReadingProcedure` definitions.
+This slice removes these obsolete compatibility mutation paths, including
+PostgreSQL constraint introspection and an inert procedure-success stub.
+Preserve live read helpers, renter submissions, the governed server review
+API, and transactional monthly billing as the only invoice-linkage writer.
+
+Classification: retired writers **DEAD by indexed call-site census**;
+remaining utility service read and submission functions **LIVE/UNRESOLVED**.
+No broad compatibility-client retirement, schema or permission change.
+Phase 4 stays OPEN.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
