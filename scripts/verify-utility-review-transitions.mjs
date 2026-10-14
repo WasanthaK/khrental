@@ -175,7 +175,7 @@ export const verifyUtilityReviewTransitions = async ({
     try {
       page.once('dialog', async dialog => { await dialog.accept('Incorrect meter photo'); });
       await clickLabel(page, 'Reject');
-      await page.waitForFunction(() => document.body.innerText.includes('Reading rejected'),
+      await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent.includes('Reading rejected successfully.'),
         { timeout: 30000 });
       await assertRow(staffRejectId, { status: 'rejected', billing_status: 'rejected',
         rejection_reason: 'Incorrect meter photo', invoice_id: null });
