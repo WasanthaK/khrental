@@ -127,6 +127,25 @@ are changed. Pure pagination tests cover more than 500 results, exact-page
 boundaries and explicit failures. Full authenticated browser acceptance
 remains a separate Phase 4/5 gate.
 
+## Agreement template directory read parity — 2026-10-14
+
+`agreementService.listTemplates` has live consumers in the agreement form,
+template selector, template form and template list. Its authoritative MSSQL
+read requested only `pageSize=500`, silently truncating tenants with more
+templates. The SQL endpoint ordered by `name ASC` without a stable tie-break.
+This bounded follow-on uses the already-tested paged, fail-closed agreement
+collection contract, requests successive tenant-scoped template pages,
+validates record IDs and completeness, and orders SQL template pages by
+`name ASC, id ASC`. Explicit schema-unavailable behavior still returns
+`[]`; an authoritative denied or malformed read does not retry through
+the compatibility client or appear as an empty success.
+
+Existing create/update/delete permissions and signature/retained-document
+lifecycle remain unchanged. The authorization regression and real pagination
+tests cover 1001 templates, missing-schema behavior and SQL ordering.
+Phase 4 remains ACTIVE until live auth, other compatibility domains, the
+migration-authority review and final census/closure are discharged.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.

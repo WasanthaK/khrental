@@ -1447,7 +1447,7 @@ export const listAgreementTemplates = async ({ tenantId, language, page = 1, pag
 
   return paginateQuery({
     baseQuery: `SELECT * FROM agreement_templates ${whereClause}`,
-    orderBy: 'name ASC',
+    orderBy: 'name ASC, id ASC',
     page,
     pageSize,
     params

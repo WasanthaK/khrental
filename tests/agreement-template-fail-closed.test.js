@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { collectAgreementPages } from '../src/services/agreementListReadContract.js';
 
 const source = readFileSync(
   new URL('../src/services/agreementService.js', import.meta.url),
@@ -18,7 +19,7 @@ const schemaTo = source.indexOf('const toNullableNumber = ', schemaFrom);
 assert.ok(from > 0 && to > from && schemaFrom > 0 && schemaTo > schemaFrom);
 const functionBodies = source.slice(from, to).replaceAll('export const ', 'const ');
 const instantiate = new Function(
-  'isMssqlApiEnabled', 'requestMssqlApi', 'platformClient', 'console',
+  'isMssqlApiEnabled', 'requestMssqlApi', 'platformClient', 'console', 'collectAgreementPages',
   `${source.slice(schemaFrom, schemaTo)}
 ${functionBodies}
 return { getTemplate, listTemplates, createTemplate, updateTemplate, deleteTemplate };`
@@ -32,7 +33,7 @@ const inputs = {
   deleteTemplate: ['template-1']
 };
 
-function harness({ mssqlEnabled = true, result = { id: 'template-1' }, apiError = null } = {}) {
+function harness({ mssqlEnabled = true, result = { id: 'template-1' }, apiError = null, listRows = [] } = {}) {
   const apiCalls = [];
   const genericCalls = [];
   const dbResult = { data: result, error: null };
@@ -51,10 +52,16 @@ function harness({ mssqlEnabled = true, result = { id: 'template-1' }, apiError 
   const requestMssqlApi = async (path, options) => {
     apiCalls.push({ path, options });
     if (apiError) throw apiError;
+    if (path.startsWith('/api/mssql/agreement-templates?')) {
+      const params = new URL('https://example.invalid' + path).searchParams;
+      const page = Number(params.get('page'));
+      const pageSize = Number(params.get('pageSize'));
+      return listRows.slice((page - 1) * pageSize, page * pageSize);
+    }
     return result;
   };
   return {
-    operations: instantiate(() => mssqlEnabled, requestMssqlApi, platformClient, { error() {} }),
+    operations: instantiate(() => mssqlEnabled, requestMssqlApi, platformClient, { error() {} }, collectAgreementPages),
     apiCalls,
     genericCalls
   };
@@ -75,7 +82,7 @@ for (const name of methods) {
 test('successful MSSQL operations preserve their dedicated paths and HTTP verbs', async () => {
   const expected = {
     getTemplate: ['/api/mssql/agreement-templates/template-1', 'GET'],
-    listTemplates: ['/api/mssql/agreement-templates?language=en&pageSize=500', 'GET'],
+    listTemplates: ['/api/mssql/agreement-templates?page=1&pageSize=500&language=en', 'GET'],
     createTemplate: ['/api/mssql/agreement-templates', 'POST'],
     updateTemplate: ['/api/mssql/agreement-templates/template-1', 'PUT'],
     deleteTemplate: ['/api/mssql/agreement-templates/template-1', 'DELETE']
@@ -127,4 +134,35 @@ test('compatibility transport is only used with MSSQL disabled', async () => {
     assert.deepEqual(fixture.apiCalls, []);
     assert.ok(fixture.genericCalls.some(c => c[0] === 'from' && c[1] === 'agreement_templates'));
   }
+});
+
+test('agreement template list returns every authorized page instead of truncating at 500', async () => {
+  const templates = Array.from({ length: 1001 }, (_, i) => ({
+    id: 'template-' + i, name: 'Agreement ' + i, language: 'en'
+  }));
+  const f = harness({ listRows: templates });
+  assert.deepEqual(await f.operations.listTemplates({ language: 'en' }), templates);
+  assert.equal(f.apiCalls.length, 3);
+  assert.deepEqual(f.apiCalls.map(call => {
+    const params = new URL('https://example.invalid' + call.path).searchParams;
+    return [params.get('page'), params.get('pageSize'), params.get('language')];
+  }), [['1', '500', 'en'], ['2', '500', 'en'], ['3', '500', 'en']]);
+  assert.deepEqual(f.genericCalls, []);
+});
+
+test('template list keeps successful empty results distinct from schema-unavailable errors', async () => {
+  const f = harness();
+  assert.deepEqual(await f.operations.listTemplates(), []);
+  assert.equal(f.apiCalls.length, 1);
+  assert.deepEqual(f.genericCalls, []);
+});
+
+test('template-list SQL enforces tenant filter and tie-breaks names by ID', () => {
+  const sql = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+  const start = sql.indexOf('export const listAgreementTemplates =');
+  const end = sql.indexOf('export const getAgreementTemplateById', start);
+  assert.ok(start >= 0 && end > start);
+  const list = sql.slice(start, end);
+  assert.match(list, /applyTenantFilter\(\{ filters, params, tenantId \}\)/);
+  assert.match(list, /orderBy: 'name ASC, id ASC'/);
 });

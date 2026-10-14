@@ -645,10 +645,11 @@ export const getTemplate = async (templateId) => {
 export const listTemplates = async ({ language } = {}) => {
   if (isMssqlApiEnabled()) {
     try {
-      const query = language
-        ? `/api/mssql/agreement-templates?language=${encodeURIComponent(language)}&pageSize=500`
-        : '/api/mssql/agreement-templates?pageSize=500';
-      return await requestMssqlApi(query);
+      return await collectAgreementPages((page, pageSize) => {
+        const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+        if (language) params.set('language', language);
+        return requestMssqlApi(`/api/mssql/agreement-templates?${params.toString()}`);
+      });
     } catch (mssqlError) {
       if (isSchemaUnavailableError(mssqlError)) {
         return [];
