@@ -250,35 +250,47 @@ export async function verifyPhase4StaffMaintenanceHttp({
     assert.ok(!options.includes(workerB.userId));
     assert.ok(!options.includes(financeA.userId));
     assert.ok(!options.includes(readOnlyA.userId));
-    const selected = await managerPage.evaluate(workerId => {
-      const select = document.querySelector('#staffMember');
-      const option = [...select.options].find(
-        candidate => candidate.value.toLowerCase() === workerId
+    // Puppeteer's native select drives React's controlled onChange and
+    // form validation, unlike a synthetic value-property assignment.
+    const actualValue = await managerPage.evaluate(workerId => {
+      const option = [...document.querySelector('#staffMember').options].find(
+        row => row.value.toLowerCase() === workerId
       );
-      if (!option) return false;
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
-      setter.call(select, option.value);
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
+      return option?.value || null;
     }, workerA.userId);
-    assert.equal(selected, true);
-    await managerPage.waitForFunction(() =>
-      [...document.querySelectorAll('button')].some(b =>
-        b.type === 'submit' && b.textContent.trim() === 'Assign Staff' && !b.disabled
-      ), { timeout: 10000, polling: 200 });
-    const submitted = await managerPage.evaluate(() => {
-      const button = [...document.querySelectorAll('button')].find(b =>
-        b.type === 'submit' && b.textContent.trim() === 'Assign Staff' && !b.disabled
-      );
-      if (!button) return false;
-      button.click();
-      return true;
+    assert.ok(actualValue);
+    const selected = await managerPage.select('#staffMember', actualValue);
+    assert.deepEqual(selected, [actualValue]);
+    await managerPage.waitForFunction(() => {
+      const button = document.querySelector('#staffAssignment button[type="submit"]');
+      return button && !button.disabled && button.textContent.trim() === 'Assign Staff';
+    }, { timeout: 10000, polling: 200 });
+    const browserErrors = [];
+    const outbound = [];
+    managerPage.on('pageerror', error => browserErrors.push(error.message));
+    managerPage.on('request', request => {
+      if (request.url().includes('/api/maintenance-lifecycle/requests/')) {
+        outbound.push(request.method() + ' ' + request.url().split('/api/maintenance-lifecycle/')[1]);
+      }
     });
-    assert.equal(submitted, true);
-    await managerPage.waitForFunction(() =>
-      [...document.querySelectorAll('button')].some(
-        button => button.textContent.trim() === 'Start Work'
-      ), { timeout: 30000, polling: 200 });
+    await managerPage.click('#staffAssignment button[type="submit"]');
+    try {
+      await managerPage.waitForFunction(() =>
+        [...document.querySelectorAll('button')].some(
+          button => button.textContent.trim() === 'Start Work'
+        ), { timeout: 15000, polling: 200 });
+    } catch (error) {
+      const visible = await managerPage.evaluate(() => ({
+        text: document.body.innerText.slice(-3600),
+        select: document.querySelector('#staffMember')?.value || null,
+        errors: [...document.querySelectorAll('[role="alert"]')].map(node => node.innerText)
+      }));
+      const actual = await snapshot(managerFixtureId);
+      throw new Error('Manager assignment did not settle: ' + JSON.stringify({
+        visible, assignedto: actual.request.assignedto, events: actual.events,
+        outbound: outbound.slice(-6), browserErrors: browserErrors.slice(-5)
+      }), { cause: error });
+    }
     const saved = await snapshot(managerFixtureId);
     assert.equal(guid(saved.request.assignedto), workerA.userId);
     assert.deepEqual(saved.events.map(event => event.event_type).sort(),
