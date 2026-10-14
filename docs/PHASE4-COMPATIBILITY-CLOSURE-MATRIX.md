@@ -87,6 +87,27 @@ remaining utility service read and submission functions **LIVE/UNRESOLVED**.
 No broad compatibility-client retirement, schema or permission change.
 Phase 4 stays OPEN.
 
+## Agreement property and unit authority — 2026-10-14
+
+Live `agreementService` property and unit read helpers are consumed by
+agreement form hooks, context, and workflow services. An audit found that
+`fetchProperty`, `listProperties`, `fetchPropertyUnit`,
+`listPropertyUnits`, and `updatePropertyData` caught errors from the
+authoritative MSSQL APIs and retried through generic compatibility queries.
+This could turn an authorization denial, missing resource, transient failure,
+or ambiguous property update into a second request on a different transport.
+
+The bounded Phase 4 fix propagates the MSSQL error without fallback whenever
+MSSQL is explicitly enabled; the compatibility-only mode is preserved when
+the API is disabled. No agreement signing, Evia event handling, template
+lifecycle, SQL schema or property data is changed. Regression tests exercise
+401/403/404/409/5xx failures for all five live operations and prove that no
+second generic read/write occurs.
+
+Classification: property and unit helpers **LIVE**; fallback after an
+authoritative API failure **RETIRED**. A two-tenant browser agreement form
+and signing acceptance remains a separate broader regression gate.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
