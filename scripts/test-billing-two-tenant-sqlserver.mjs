@@ -1697,6 +1697,43 @@ async function main() {
     assert.equal(invalidSort.status, 200, JSON.stringify(invalidSort));
     assert.equal(invalidSort.payload.data.length, 2,
       'invalid sort names must be allowlisted/fallback, not interpolated into SQL');
+    // Fiscal month-end parity: inclusive createdat <= toDate must include
+    // late final-day invoices while excluding the next month's first instant.
+    const monthEnd = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount, createdat)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'issued', '2026-10', 42,
+        '2026-10-31T23:59:59.250+00:00')
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+    const nextMonth = await first(pool, `
+      INSERT INTO invoices (tenant_id, renteeid, propertyid, status, billingperiod, totalamount, createdat)
+      OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'issued', '2026-11', 43,
+        '2026-11-01T00:00:00.000+00:00')
+    `, { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId });
+    const withinOctober = await call('/api/mssql/invoices?' + new URLSearchParams({
+      fromDate: '2026-10-31T00:00:00.000Z',
+      toDate: '2026-10-31T23:59:59.999Z',
+      status: 'issued'
+    }), { token: tokenA, tenantId: a.tenantId });
+    assert.equal(withinOctober.status, 200, JSON.stringify(withinOctober));
+    assert.deepEqual(withinOctober.payload.data.map(x => guid(x.id)), [guid(monthEnd.id)]);
+    const withinNovember = await call('/api/mssql/invoices?' + new URLSearchParams({
+      fromDate: '2026-11-01T00:00:00.000Z',
+      toDate: '2026-11-01T23:59:59.999Z',
+      status: 'issued'
+    }), { token: tokenA, tenantId: a.tenantId });
+    assert.equal(withinNovember.status, 200, JSON.stringify(withinNovember));
+    assert.deepEqual(withinNovember.payload.data.map(x => guid(x.id)), [guid(nextMonth.id)]);
+    const otherCannotSee = await call('/api/mssql/invoices?' + new URLSearchParams({
+      fromDate: '2026-10-31T00:00:00.000Z',
+      toDate: '2026-10-31T23:59:59.999Z',
+      status: 'issued'
+    }), { token: otherToken, tenantId: a.tenantId });
+    assert.equal(otherCannotSee.status, 200, JSON.stringify(otherCannotSee));
+    assert.deepEqual(otherCannotSee.payload.data, []);
+    await query(pool, 'DELETE FROM invoices WHERE tenant_id = @tenantId AND id IN (@monthEnd, @nextMonth)',
+      { tenantId: a.tenantId, monthEnd: monthEnd.id, nextMonth: nextMonth.id });
+    console.log('PASS: invoice month-end read boundaries retain renter isolation');
+
     await query(pool, 'DELETE FROM invoices WHERE id = @id AND tenant_id = @tenantId',
       { id: paidForA.id, tenantId: a.tenantId });
 

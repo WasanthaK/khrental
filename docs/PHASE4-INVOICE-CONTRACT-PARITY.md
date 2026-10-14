@@ -73,3 +73,25 @@ Retain the existing tenant-scoped API and its fail-closed error behavior.
 Browser-backed financial dashboard acceptance and two-tenant read
 parity remain broader Phase 4/5 release gates.
 
+
+## 2026-10-14: invoice-list response shape and month-end SQL parity
+
+The live `listInvoices` service has both MSSQL and retained platform-query
+transports. Source inspection confirmed that a non-array MSSQL response
+previously mapped silently to `[]`, which can misstate a failed financial
+read as zero invoices. A bounded Phase 4 correction uses a shared, executable
+response contract to reject missing/malformed invoice lists, preserving the
+existing error envelope and never retrying a failed authoritative MSSQL
+request through the alternate transport.
+
+The disposable two-tenant SQL Server test already covers SQL-side renter
+ownership, no draft leakage, repeated status filters, allowlisted sorting
+and pagination. This slice adds positive month-end (October 31 late evening)
+and negative next-month (November 1 at midnight) `createdat` read parity,
+plus same-tenant other-renter denial, matching the inclusive dashboard
+date-range calculation. The tests use disposable records only and remove
+their fixtures before the subsequent billing acceptance checks.
+
+The live dashboard API and monthly billing writer remain unchanged.
+Remaining phase gates include read-path browser acceptance, full migration
+census, and production Ready/exact SHA/live MSSQL evidence.
