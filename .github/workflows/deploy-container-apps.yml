@@ -19,6 +19,7 @@ on:
       - 'scripts/verify-phase4-maintenance-notification-http.mjs'
       - 'scripts/verify-phase4-renter-workspace-browser.mjs'
       - 'scripts/verify-phase4-payment-lifecycle-http.mjs'
+      - 'scripts/verify-phase4-staff-maintenance-http.mjs'
   workflow_dispatch:
 
 permissions:

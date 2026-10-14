@@ -1478,6 +1478,7 @@ async function main() {
     pool = await connect({ port, password, database });
     for (const filename of [
       '20260913_00_create_fresh_mssql_schema.sql',
+      '20260915_01_create_staff_property_assignments.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
       // Routed maintenance detail/comments need their governed lifecycle DDL,
@@ -1488,6 +1489,15 @@ async function main() {
     ]) {
       await pool.request().batch(fs.readFileSync(path.resolve('migrations', filename), 'utf8'));
     }
+    // The production tenancy-onboarding migration adds agreements.activated_at.
+    // This acceptance fixture intentionally omits the migration's UNIQUE
+    // active-tenancy indexes: existing signing/rollback tests need historical
+    // overlapping synthetic agreements to prove those separate contracts.
+    // Restore only its additive column in disposable Docker SQL so that the
+    // maintenance create endpoint uses the same canonical schema shape.
+    await pool.request().batch(
+      'ALTER TABLE dbo.agreements ADD activated_at DATETIMEOFFSET NULL'
+    );
 
     process.env.MSSQL_SERVER = '127.0.0.1';
     process.env.MSSQL_PORT = String(port);
@@ -1654,6 +1664,12 @@ async function main() {
       b: { ...b, token: tokenB },
       seeded: phase4Seeded,
       call
+    });
+
+    const { verifyPhase4StaffMaintenanceHttp } =
+      await import('./verify-phase4-staff-maintenance-http.mjs');
+    await verifyPhase4StaffMaintenanceHttp({
+      pool, a, b, tokenA, tokenB, call, createAuthRecord, issueAuthSession
     });
 
     const authContext = await call('/api/platform/auth/context', {
