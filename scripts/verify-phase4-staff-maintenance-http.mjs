@@ -52,6 +52,8 @@ export async function verifyPhase4StaffMaintenanceHttp({
   const workerA = await actor(a, 'maintenance');
   const idleWorkerA = await actor(a, 'maintenance');
   const workerB = await actor(b, 'maintenance');
+  const financeA = await actor(a, 'finance');
+  const readOnlyA = await actor(a, 'read_only');
   const managerB = await actor(b, 'property_operations', b.propertyId);
   const path = id => '/api/maintenance-lifecycle/requests' + (id ? '/' + id : '');
   const api = (item, token, method, suffix, body) => call(suffix, {
@@ -191,6 +193,100 @@ export async function verifyPhase4StaffMaintenanceHttp({
   check(await request(a, managerA.token, 'POST', outsideId, '/assign',
     { staffUserId: workerA.userId }), 403, 'RESOURCE_ACCESS_DENIED');
   assert.equal((await snapshot(outsideId)).request.assignedto, null);
+  // The browser picker must use membership permissions, not obsolete
+  // app_users.role. Verify both its scoped GET and real assignment button.
+  const managerFixture = check(await request(a, tokenA, 'POST', null, '', {
+    propertyId: a.propertyId, title: 'Browser manager assignment proof',
+    description: 'Synthetic manager assignment test'
+  }), 201);
+  const managerFixtureId = guid(managerFixture.id);
+  const eligiblePath = path(managerFixtureId) + '/eligible-staff';
+  check(await api(a, null, 'GET', eligiblePath), 401);
+  check(await api(a, tokenA, 'GET', eligiblePath), 403, 'MAINTENANCE_MANAGE_REQUIRED');
+  check(await api(a, workerA.token, 'GET', eligiblePath), 403, 'MAINTENANCE_MANAGE_REQUIRED');
+  check(await api(a, managerNoScope.token, 'GET', eligiblePath), 403, 'RESOURCE_ACCESS_DENIED');
+  check(await api(b, managerB.token, 'GET', eligiblePath), 404, 'MAINTENANCE_REQUEST_NOT_FOUND');
+  const listed = check(await api(a, managerA.token, 'GET', eligiblePath), 200);
+  assert.ok(Array.isArray(listed));
+  const ids = listed.map(item => guid(item.id));
+  assert.ok(ids.includes(workerA.userId), 'maintenance-bundle worker must be eligible');
+  assert.ok(ids.includes(idleWorkerA.userId));
+  assert.ok(!ids.includes(workerB.userId), 'foreign worker must be hidden');
+  assert.ok(!ids.includes(financeA.userId), 'finance staff cannot perform maintenance');
+  assert.ok(!ids.includes(readOnlyA.userId), 'read-only staff cannot perform maintenance');
+  check(await request(a, managerA.token, 'POST', managerFixtureId, '/assign',
+    { staffUserId: financeA.userId }), 400, 'INVALID_MAINTENANCE_ASSIGNEE');
+  check(await request(a, managerA.token, 'POST', managerFixtureId, '/assign',
+    { staffUserId: readOnlyA.userId }), 400, 'INVALID_MAINTENANCE_ASSIGNEE');
+  assert.equal((await snapshot(managerFixtureId)).request.assignedto, null);
+
+  const managerPage = await browser.newPage();
+  try {
+    await managerPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token: token, user: { id: authId, email, role: 'staff' }
+      }));
+    }, managerA.token, a.tenantId, managerA.authId, managerA.email);
+    await managerPage.goto(origin + '/dashboard/maintenance/' + managerFixtureId,
+      { waitUntil: 'domcontentloaded', timeout: 45000 });
+    try {
+      await managerPage.waitForFunction(workerId => {
+        const selector = document.querySelector('#staffMember');
+        return selector && [...selector.options].some(
+          option => option.value.toLowerCase() === workerId
+        );
+      }, { timeout: 30000, polling: 200 }, workerA.userId);
+    } catch (error) {
+      const visible = await managerPage.evaluate(() => document.body.innerText.slice(-3200));
+      throw new Error('Manager picker not available: ' + visible, { cause: error });
+    }
+    const options = await managerPage.evaluate(() =>
+      [...document.querySelector('#staffMember').options]
+        .map(option => option.value.toLowerCase()).filter(Boolean)
+    );
+    assert.ok(options.includes(workerA.userId));
+    assert.ok(!options.includes(workerB.userId));
+    assert.ok(!options.includes(financeA.userId));
+    assert.ok(!options.includes(readOnlyA.userId));
+    const selected = await managerPage.evaluate(workerId => {
+      const select = document.querySelector('#staffMember');
+      const option = [...select.options].find(
+        candidate => candidate.value.toLowerCase() === workerId
+      );
+      if (!option) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, option.value);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }, workerA.userId);
+    assert.equal(selected, true);
+    await managerPage.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(b =>
+        b.type === 'submit' && b.textContent.trim() === 'Assign Staff' && !b.disabled
+      ), { timeout: 10000, polling: 200 });
+    const submitted = await managerPage.evaluate(() => {
+      const button = [...document.querySelectorAll('button')].find(b =>
+        b.type === 'submit' && b.textContent.trim() === 'Assign Staff' && !b.disabled
+      );
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    assert.equal(submitted, true);
+    await managerPage.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(
+        button => button.textContent.trim() === 'Start Work'
+      ), { timeout: 30000, polling: 200 });
+    const saved = await snapshot(managerFixtureId);
+    assert.equal(guid(saved.request.assignedto), workerA.userId);
+    assert.deepEqual(saved.events.map(event => event.event_type).sort(),
+      ['request_assigned', 'request_created']);
+  } finally {
+    await managerPage.close();
+  }
+  console.log('PASS: manager picker uses tenant-scoped permission bundles and real form assigns only eligible workers');
   // No real outgoing notification is claimed. This router records lifecycle
   // events; external delivery is a distinct unresolved acceptance gate.
   assert.equal((await snapshot(id)).request.status, 'completed');

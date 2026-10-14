@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { platform as platformClient } from '../../services/platformClient';
+import { listEligibleMaintenanceAssignees } from '../../services/maintenanceLifecycleClient';
 import { formatDate } from '../../utils/helpers';
 import ImageUpload from '../common/ImageUpload';
-import { fetchAppUsers } from '../../services/appUserService';
 
 const StaffAssignment = ({ 
   requestId,
   currentAssignee = null, 
   onAssign, 
   disabled = false,
-  existingImages = [] // Add a prop for existing images
+  existingImages = [], // Add a prop for existing images
+  activeTenantId = null
 }) => {
   const [staffMembers, setStaffMembers] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState(currentAssignee?.id || '');
@@ -27,20 +27,25 @@ const StaffAssignment = ({
       try {
         setLoading(true);
         
-        // Get maintenance staff from app_users table
-        const data = await fetchAppUsers('staff');
-        
-        setStaffMembers((data || []).filter((member) => ['maintenance', 'maintenance_staff', 'admin'].includes(member.role)));
+        const { data, error: listError } = await listEligibleMaintenanceAssignees(requestId);
+        if (listError) throw listError;
+        if (!Array.isArray(data) || data.some(row => !row?.id || !row?.name)) {
+          throw new Error('Invalid eligible maintenance staff response.');
+        }
+        setStaffMembers(data);
+        setSelectedStaffId(current => data.some(row => row.id === current) ? current : '');
       } catch (err) {
-        console.error('Error fetching staff members:', err.message);
-        setError('Failed to load staff members. Please try again.');
+        console.error('Error fetching eligible staff members:', err.message);
+        setStaffMembers([]);
+        setSelectedStaffId('');
+        setError('Unable to load eligible maintenance staff for this request.');
       } finally {
         setLoading(false);
       }
     };
     
     fetchStaffMembers();
-  }, []);
+  }, [requestId, activeTenantId]);
   
   // Set initial scheduled date if available
   useEffect(() => {
@@ -236,6 +241,9 @@ const StaffAssignment = ({
         </div>
       ) : (
         <form onSubmit={handleAssign}>
+          {!loading && !error && staffMembers.length === 0 && (
+            <p className="mb-3 text-sm text-amber-700">No eligible maintenance staff are available.</p>
+          )}
           <div className="mb-4">
             <label htmlFor="staffMember" className="block text-sm font-medium text-gray-700 mb-1">
               Staff Member
@@ -251,7 +259,7 @@ const StaffAssignment = ({
               <option value="">Select a staff member</option>
               {staffMembers.map(staff => (
                 <option key={staff.id} value={staff.id}>
-                  {staff.name} ({staff.role})
+                  {staff.name} ({staff.permission_bundle || staff.role})
                 </option>
               ))}
             </select>
@@ -371,7 +379,7 @@ const StaffAssignment = ({
             <button
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300"
-              disabled={disabled || loading || !selectedStaffId}
+              disabled={disabled || loading || !!error || !selectedStaffId}
             >
               {loading ? 'Assigning...' : currentAssignee ? 'Update Assignment' : 'Assign Staff'}
             </button>

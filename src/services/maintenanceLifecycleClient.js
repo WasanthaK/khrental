@@ -42,6 +42,10 @@ export const getMaintenanceLifecycleRequest = (requestId) => result(() => reques
   `/requests/${encodeURIComponent(requestId)}`
 ));
 
+export const listEligibleMaintenanceAssignees = (requestId) => result(() => request(
+  `/requests/${encodeURIComponent(requestId)}/eligible-staff`
+));
+
 export const assignMaintenanceLifecycleRequest = (requestId, assignment = {}) => result(() => request(
   `/requests/${encodeURIComponent(requestId)}/assign`,
   { method: 'POST', body: assignment }
