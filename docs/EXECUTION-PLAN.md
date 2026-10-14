@@ -1794,6 +1794,12 @@ No production schema, notification delivery, object storage bytes or Evia author
 
 PR #286 merged at `bc61165ec5d6bb5fd75ac9d56d185f0dec674d61`, with exact-head authorization/build, disposable two-tenant SQL and Evia green. Its post-merge Evia test also passed. The real-session maintenance HTTP proof covers renter create, scoped manager assignment, assigned worker state transitions, internal/public comments, image metadata and closed/replay denials. The separate current gate exercises the **actual staff React detail page**: logged-in assigned worker clicks Start Work and completes through the required notes dialog, SQL ledger records the two transitions, and a foreign organization's worker cannot view the request by URL. It reuses the same SQL/Puppeteer fixture, without duplicate containers, new workflows, runtime changes or Azure rollout. Notifications, actual storage image bytes, manager assignment selection, invitations and signed document journeys, final compatibility census and production migration executor remain outstanding; Phase 4 remains open.
 
+## Phase 4 — governed staff assignment picker, 2026-10-15
+
+PR #287 merged as `3adeda8b4019a7b1ea2097ab4db00ae4a0df94aa`: the assigned worker's real React Start Work/Complete flow, build, disposable two-tenant SQL and Evia tests all passed. Its post-merge Evia run #38628116983 is green. The next package updates the manager assignment picker from legacy role-name filtering to a request-, property- and tenant-scoped eligible worker endpoint using canonical membership permission bundles. The same permission predicate governs actual assignments, including denial of finance and read-only identities. The real manager assignment form must select a permitted worker and persist one assignment event on disposable SQL. This change affects production runtime and therefore requires normal exact-head CI and post-merge deployment verification.
+
+Full Phase 4 closure still requires controlled invitation/signing, actual storage upload, lifecycle notification evidence, compatibility caller census, and operational migration authority confirmation. Phase 5 stays pending.
+
 ## Maintenance rule for this document
 
 After each merged production change:

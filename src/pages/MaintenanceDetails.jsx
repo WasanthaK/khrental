@@ -13,6 +13,7 @@ import {
 import { formatDate } from '../utils/helpers';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../utils/constants';
 import { useAuth } from '../hooks/useAuth';
+import { PERMISSIONS } from '../utils/accessPolicy';
 import { isValidUUID } from '../utils/validators';
 import { toast } from 'react-hot-toast';
 
@@ -26,7 +27,8 @@ import MaintenanceImageUpload from '../components/maintenance/MaintenanceImageUp
 const MaintenanceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, activeTenantId } = useAuth();
+  const { user, activeTenantId, hasPermission } = useAuth();
+  const mayManageMaintenance = hasPermission(PERMISSIONS.MAINTENANCE_MANAGE);
   
   // State
   const [request, setRequest] = useState({
@@ -184,6 +186,7 @@ const MaintenanceDetails = () => {
     } catch (error) {
       console.error('Error assigning staff:', error.message);
       setError(error.message);
+      throw error;
     } finally {
       setActionLoading(false);
     }
@@ -909,7 +912,7 @@ const MaintenanceDetails = () => {
               {canPerformActions() && (
                 <div className="mt-6 flex flex-wrap gap-3">
                   {/* Assign Staff Button */}
-                  {request.status === MAINTENANCE_STATUS.PENDING && !request.assignedto && (
+                  {mayManageMaintenance && request.status === MAINTENANCE_STATUS.PENDING && !request.assignedto && (
                     <button
                       onClick={() => document.getElementById('staffAssignment').scrollIntoView({ behavior: 'smooth' })}
                       className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -974,10 +977,11 @@ const MaintenanceDetails = () => {
           />
           
           {/* Staff Assignment */}
-          {canPerformActions() && (request.status === MAINTENANCE_STATUS.PENDING || request.status === MAINTENANCE_STATUS.IN_PROGRESS) && (
+          {mayManageMaintenance && (request.status === MAINTENANCE_STATUS.PENDING || request.status === MAINTENANCE_STATUS.IN_PROGRESS) && (
             <div id="staffAssignment">
               <StaffAssignment
                 requestId={id}
+                activeTenantId={activeTenantId}
                 currentAssignee={assignedTeamMember ? {
                   id: assignedTeamMember.id,
                   name: assignedTeamMember.name,

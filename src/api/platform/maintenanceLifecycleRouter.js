@@ -60,6 +60,31 @@ const hasPropertyScope = (req, propertyId) => {
   return (req.membership?.assignedPropertyIds || []).some((id) => sameMaintenanceIdentifier(id, propertyId));
 };
 
+
+const isEligibleMaintenanceAssignee = (membership) => {
+  const subject = { user: { role: membership.role }, membership };
+  return hasPermission(subject, PERMISSIONS.MAINTENANCE_UPDATE_ASSIGNED)
+    || hasPermission(subject, PERMISSIONS.MAINTENANCE_MANAGE);
+};
+
+// Membership is the tenant authority; app_users.tenant_id can legitimately
+// differ when the same identity belongs to multiple organizations.
+const listEligibleMaintenanceAssignees = async (tenantId, staffUserId = null) => {
+  const rows = await runQuery(
+    `SELECT au.id, au.name, tm.role, tm.permission_bundle
+     FROM tenant_memberships tm
+     JOIN app_users au ON au.id = tm.app_user_id
+     WHERE tm.tenant_id = @tenantId
+       AND tm.status = 'active'
+       AND au.status = 'active' AND au.active = 1
+       ${staffUserId ? 'AND tm.app_user_id = @staffUserId' : ''}
+     ORDER BY au.name, au.id`,
+    { tenantId, ...(staffUserId ? { staffUserId } : {}) }
+  );
+  return rows.filter(isEligibleMaintenanceAssignee)
+    .map(({ id, name, role, permission_bundle }) => ({ id, name, role, permission_bundle }));
+};
+
 const loadRequest = async (tenantId, requestId) => {
   const request = await runSingleQuery(
     `SELECT TOP 1 mr.*,
@@ -238,6 +263,22 @@ export const createMaintenanceLifecycleRouter = () => {
     }
   });
 
+  router.get('/requests/:requestId/eligible-staff', async (req, res, next) => {
+    try {
+      requireManager(req);
+      const request = await loadRequest(req.tenantId, req.params.requestId);
+      if (!hasPropertyScope(req, request.propertyid)) {
+        throw createRequestError(403, 'The maintenance property is outside the current staff scope.', 'RESOURCE_ACCESS_DENIED');
+      }
+      if ([MAINTENANCE_STATUS.COMPLETED, MAINTENANCE_STATUS.CANCELLED].includes(request.status)) {
+        throw createRequestError(409, 'Closed maintenance requests cannot be reassigned.', 'MAINTENANCE_REQUEST_CLOSED');
+      }
+      res.json({ data: await listEligibleMaintenanceAssignees(req.tenantId), error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/requests/:requestId/assign', async (req, res, next) => {
     try {
       requireManager(req);
@@ -251,16 +292,8 @@ export const createMaintenanceLifecycleRouter = () => {
       const staffUserId = req.body?.staffUserId || req.body?.staffId;
       if (!staffUserId) throw createRequestError(400, 'staffUserId is required.', 'STAFF_USER_REQUIRED');
 
-      const staffMembership = await runSingleQuery(
-        `SELECT TOP 1 tm.app_user_id, tm.role, tm.permission_bundle
-         FROM tenant_memberships tm
-         WHERE tm.tenant_id = @tenantId
-           AND tm.app_user_id = @staffUserId
-           AND tm.status = 'active'
-           AND tm.role NOT IN ('tenant', 'rentee')`,
-        { tenantId: req.tenantId, staffUserId }
-      );
-      if (!staffMembership) {
+      const eligible = await listEligibleMaintenanceAssignees(req.tenantId, staffUserId);
+      if (!eligible.length) {
         throw createRequestError(400, 'The assignee must be an active staff member in this organization.', 'INVALID_MAINTENANCE_ASSIGNEE');
       }
 

@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      # Maintenance business contracts are exercised by the same disposable
+      # two-tenant SQL/Puppeteer harness; runtime edits must trigger this gate.
+      - 'scripts/verify-phase4-staff-maintenance-http.mjs'
+      - 'src/api/platform/maintenanceLifecycleRouter.js'
+      - 'src/services/maintenanceLifecycleClient.js'
+      - 'src/components/maintenance/StaffAssignment.jsx'
+      - 'src/pages/MaintenanceDetails.jsx'
       - 'scripts/verify-utility-review-transitions.mjs'
       - 'src/api/platform/utilityReviewRouter.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
