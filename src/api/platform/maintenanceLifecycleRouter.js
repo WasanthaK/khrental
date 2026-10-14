@@ -13,6 +13,7 @@ import {
   assertMaintenanceTransition,
   canTenantCancelMaintenance
 } from './maintenanceLifecycle.js';
+import { authorizeMaintenanceImageAttachment, normalizeMaintenanceImageUrl } from './maintenanceImagePolicy.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -443,6 +444,55 @@ export const createMaintenanceLifecycleRouter = () => {
         await transaction.rollback().catch(() => {});
         throw error;
       }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/requests/:requestId/images', async (req, res, next) => {
+    try {
+      const request = await loadRequest(req.tenantId, req.params.requestId);
+      const allowed = authorizeMaintenanceImageAttachment({
+        user: req.user,
+        membership: req.membership,
+        request,
+        isTenant: isTenantRole({ user: req.user, membership: req.membership }),
+        canManage: isManager(req),
+        canUpdateAssigned: canUpdateAssigned(req),
+        hasPropertyScope: hasPropertyScope(req, request.propertyid)
+      });
+      if (!allowed) {
+        throw createRequestError(403, 'Maintenance image attachment is not authorized for this request and state.', 'RESOURCE_ACCESS_DENIED');
+      }
+
+      const imageUrl = normalizeMaintenanceImageUrl({
+        value: req.body?.imageUrl,
+        tenantId: req.tenantId,
+        requestHost: req.get('host')
+      });
+      if (!imageUrl) {
+        throw createRequestError(400, 'Image URL must refer to this tenant\'s stored maintenance image.', 'INVALID_MAINTENANCE_IMAGE_URL');
+      }
+      const imageType = String(req.body?.imageType || 'additional').trim().toLowerCase();
+      if (!['initial', 'additional', 'completion'].includes(imageType)) {
+        throw createRequestError(400, 'Unsupported maintenance image type.', 'INVALID_MAINTENANCE_IMAGE_TYPE');
+      }
+      const description = String(req.body?.description || '').trim().slice(0, 1000);
+      const created = await runSingleQuery(
+        `INSERT INTO maintenance_request_images (
+           tenant_id, maintenance_request_id, image_url, image_type, description, uploaded_by
+         ) OUTPUT INSERTED.*
+         VALUES (@tenantId, @requestId, @imageUrl, @imageType, @description, @actorUserId)`,
+        {
+          tenantId: req.tenantId,
+          requestId: request.id,
+          imageUrl,
+          imageType,
+          description,
+          actorUserId: req.user.id
+        }
+      );
+      res.status(201).json({ data: created, error: null });
     } catch (error) {
       next(error);
     }
