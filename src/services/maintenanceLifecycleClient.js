@@ -66,3 +66,8 @@ export const addMaintenanceLifecycleComment = (requestId, comment = {}) => resul
   `/requests/${encodeURIComponent(requestId)}/comments`,
   { method: 'POST', body: comment }
 ));
+
+export const attachMaintenanceLifecycleImage = (requestId, image = {}) => result(() => request(
+  `/requests/${encodeURIComponent(requestId)}/images`,
+  { method: 'POST', body: image }
+));
