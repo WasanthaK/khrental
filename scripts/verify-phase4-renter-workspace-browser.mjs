@@ -1,0 +1,135 @@
+import assert from 'node:assert/strict';
+
+const fixtureLabel = (own, a, b) => own.tenantId === a.tenantId ? 'A' : 'B';
+
+/**
+ * Genuine routed React acceptance for a SQL-backed renter session, with
+ * two separate organizations. Read-only: never submits an agreement,
+ * payment, maintenance update, document signature or external email.
+ */
+export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b, tokenA, tokenB, seeded }) {
+  const browse = async (own, token, route, { expected, forbidden, rejectEmpty } = {}) => {
+    const page = await browser.newPage();
+    const browserErrors = [];
+    page.on('pageerror', error => browserErrors.push('pageerror: ' + error.message));
+    page.on('console', message => {
+      if (message.type() === 'error') browserErrors.push('console: ' + message.text().slice(0, 900));
+    });
+    try {
+      await page.evaluateOnNewDocument((accessToken, tenantId, authId, email) => {
+        localStorage.removeItem('dev_bypass_role');
+        localStorage.setItem('khrental.activeTenantId', tenantId);
+        localStorage.setItem('khrental.local.session', JSON.stringify({
+          access_token: accessToken,
+          user: { id: authId, email, role: 'rentee' }
+        }));
+      }, token, own.tenantId, own.authId, own.email);
+      await page.goto(origin + route, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      // React can briefly render an empty/unauthorized shell during session
+      // hydration or an intermediate fetch. These are not settled outcomes.
+      // Wait for the positive, tenant-specific fixture before inspecting.
+      try {
+        await page.waitForFunction(
+          expectedText => document.body.innerText.includes(expectedText)
+            || document.body.innerText.includes('Page Not Found'),
+          { timeout: 30000, polling: 200 }, expected
+        );
+      } catch (error) {
+        const state = await page.evaluate(() => ({
+          route: location.pathname, body: document.body.innerText.slice(-3000)
+        }));
+        throw new Error('Routed fixture did not render: ' + route +
+          ', actual route=' + state.route + ', visible=' + state.body +
+          ', browser errors=' + browserErrors.slice(-5).join(' | '), { cause: error });
+      }
+      // A React Router error element is not a successful page and may hide
+      // the actual exception. Report observed browser errors before assertions.
+      const renderedError = await page.evaluate(() => document.body.innerText.includes('Page Not Found'));
+      if (renderedError) {
+        throw new Error('Route '+ route + ' rendered generic error page; browser errors=' +
+          browserErrors.slice(-8).join(' | '));
+      }
+      // One more React paint prevents capturing a transient empty body during
+      // hydration immediately after the positive readiness condition.
+      await page.waitForFunction(
+        expectedText => document.body.innerText.includes(expectedText),
+        { timeout: 10000, polling: 200 }, expected
+      );
+
+      const state = await page.evaluate(() => ({
+        route: location.pathname,
+        body: document.body.innerText.slice(0, 18000)
+      }));
+      // No credentials or real customer data: the browser uses disposable fixture tenants.
+      const diag = 'route=' + state.route + ', visible=' + state.body.slice(-2500);
+      assert.equal(state.route, route, 'authenticated renter must retain route: ' + diag);
+      assert.ok(state.body.includes(expected), 'own fixture must render: ' + diag);
+      assert.ok(!state.body.includes(forbidden), 'cross-tenant fixture must not render: ' + diag);
+      if (rejectEmpty) assert.ok(!state.body.includes(rejectEmpty), 'own fixture must not appear empty: ' + diag);
+      assert.ok(!state.body.includes('Error loading requests'), 'renter maintenance query failed: ' + diag);
+      assert.ok(!state.body.includes('Failed to load maintenance request details'), 'own maintenance detail failed: ' + diag);
+      return state;
+    } finally {
+      await page.close();
+    }
+  };
+
+  for (const [own, foreign, token] of [[a, b, tokenA], [b, a, tokenB]]) {
+    const ownLabel = fixtureLabel(own, a, b);
+    const otherLabel = fixtureLabel(foreign, a, b);
+    await browse(own, token, '/rentee/maintenance', {
+      expected: 'Fixture ' + ownLabel,
+      forbidden: 'Fixture ' + otherLabel,
+      rejectEmpty: 'No maintenance requests found.'
+    });
+    await browse(own, token, '/rentee/maintenance/' + (own === a ? seeded.requestA : seeded.requestB), {
+      expected: 'Fixture ' + ownLabel,
+      forbidden: 'Fixture ' + otherLabel,
+      rejectEmpty: 'Maintenance request not found'
+    });
+    await browse(own, token, '/rentee/agreements', {
+      expected: 'Tenant ' + ownLabel + ' Property',
+      forbidden: 'Tenant ' + otherLabel + ' Property',
+      rejectEmpty: 'No agreements found.'
+    });
+  }
+
+  // An arbitrary foreign identifier is not a valid navigation capability.
+  // The actual details screen must show an error, not the other tenant's data.
+  const denied = await browser.newPage();
+  try {
+    await denied.evaluateOnNewDocument((accessToken, tenantId, authId, email) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token: accessToken,
+        user: { id: authId, email, role: 'rentee' }
+      }));
+    }, tokenA, a.tenantId, a.authId, a.email);
+    await denied.goto(origin + '/rentee/maintenance/' + seeded.requestB,
+      { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await denied.waitForFunction(
+      () => document.body.innerText.includes('Failed to load maintenance request details')
+        || location.pathname === '/unauthorized' || location.pathname === '/login',
+      { timeout: 30000 }
+    );
+    // The auth context can refresh once after the initial denied response.
+    // Require a second settled denial instead of sampling an interim blank.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await denied.waitForFunction(
+      () => document.body.innerText.includes('Failed to load maintenance request details')
+        || location.pathname === '/unauthorized',
+      { timeout: 15000, polling: 200 }
+    );
+    const state = await denied.evaluate(() => ({
+      route: location.pathname, body: document.body.innerText
+    }));
+    assert.ok(!state.body.includes('Fixture B'), 'foreign maintenance details must not leak');
+    assert.ok(!state.body.includes('Tenant B Property'), 'foreign property name must not leak');
+    assert.ok(state.body.includes('Failed to load maintenance request details')
+      || state.route === '/unauthorized', 'denied lookup must not display success');
+  } finally {
+    await denied.close();
+  }
+  console.log('PASS: authenticated routed renter maintenance list/detail, agreement cards and foreign request denial for tenants A/B');
+}

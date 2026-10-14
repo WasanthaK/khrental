@@ -53,7 +53,12 @@ test('Evia webhook credentials remain production-only, manually dispatchable and
 test('main deployment avoids non-runtime-only commits without weakening PR-head gates or production acceptance', () => {
   const mainPush = deploy.slice(deploy.indexOf('  push:'), deploy.indexOf('  workflow_dispatch:'));
   assert.match(deploy, /pull_request:\s*\n\s*branches: \[main\]/);
-  for (const ignore of ["'**/*.md'", "'docs/**'", "'tests/**'", "'.github/workflows/**'"]) {
+  for (const ignore of [
+    "'**/*.md'", "'docs/**'", "'tests/**'", "'.github/workflows/**'",
+    "'scripts/test-billing-two-tenant-sqlserver.mjs'",
+    "'scripts/verify-phase4-maintenance-notification-http.mjs'",
+    "'scripts/verify-phase4-renter-workspace-browser.mjs'"
+  ]) {
     assert.ok(mainPush.includes(ignore), 'avoid main rollout for non-runtime-only paths: ' + ignore);
   }
   assert.match(deploy, /if: github\.event_name != 'pull_request'/);

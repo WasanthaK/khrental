@@ -4,7 +4,8 @@ Status: **ACTIVE — BLOCKED FROM PHASE 5**. This document distinguishes source-
 
 ## Latest source baseline
 
-- Baseline: main SHA `945d4b140e8f448d93efc24715e64fb3040eb26c` (PR #280). Its PR-head disposable SQL acceptance passed. The main deployment #792 was still in progress when this package began; Ready revision, exact serving SHA and live MSSQL require separate confirmation.
+- PR #280 baseline SHA `945d4b140e8f448d93efc24715e64fb3040eb26c` passed PR-head disposable SQL acceptance and its main deployment workflow #792 succeeded. Independent Azure revision/public fingerprint/live MSSQL evidence remains a separate production verification task.
+- PR #281 merged as `2a283aa24cb3bcbac53186b15065bb9e12eccf22` after exact PR-head authorization/build #794, disposable SQL #77 and Evia #173 all passed at `ad357f5bc52bbda75e26fd3d4d22ab52af97b968`. Its post-merge serving revision and MSSQL must be checked separately.
 - Existing real disposable SQL proof: `scripts/test-billing-two-tenant-sqlserver.mjs` checks billing invoice creation/idempotency, rent and utility component amounts, tenant filtering, authenticated renter invoice/account reads, signing/Evia semantics, utility-review transitions, and maintenance-image/notification SQL isolation.
 - Existing browser proof is primarily protected billing/utility navigation and selected renter invoice/utility behavior. Full logged-in invitation, signing, payment-verification and maintenance journeys are **not** established by the prior SQL or anonymous browser checks.
 - This package expands that existing Docker fixture with **real SQL-backed bearer session HTTP requests** through the actual notification and maintenance Express routers, including read/mark isolation, maintenance projection, request/tenant denial and image attachment metadata. Image object bytes are not uploaded; real email/SMS delivery is not exercised.
