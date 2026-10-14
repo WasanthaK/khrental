@@ -1778,6 +1778,12 @@ PR #281 has merged as `2a283aa24cb3bcbac53186b15065bb9e12eccf22` from verified P
 
 Current next Phase 4 domain: **routed renter browser acceptance**, in one disposable two-tenant SQL fixture. Exercise actual logged-in React maintenance list/detail and agreement screens for both tenants plus denied foreign request navigation. Retain existing invoice/receipt browser evidence. Do not mutate production identity, invoices, maintenance, email, Evia signature or database DDL. Broader invitation/resend, signed-document, payment verification, staff maintenance transitions and final compatibility caller census remain release blockers before Phase 5. Keep the Evia fenced canary OFF.
 
+## Phase 4 — post-PR #283 renter receipt browser gate — 2026-10-15
+
+PR #283 merged as `5aaf9c569ac8503c600efc75ceeb5d7bdb305516` after passing exact-head authorization/build, two-tenant disposable SQL and Evia CI. It covers governed payment proof, reject/resubmit, partial/full verification, receipt/ledger creation, replay refusal and tenant isolation through real session-backed HTTP requests. Do **not** mistake this evidence for successful email issuance, actual R2 proof upload, live bank verification, or user-interface settlement approval.
+
+The next bounded test-only acceptance gate reuses the very same SQL/Puppeteer fixture and authenticated renter sessions to verify that both tenant portals display **their own** issued receipts after full settlement, never foreign receipts, and that opening the account panel does not mutate invoices/payments/receipts/events. Also assert a second renter within one organization cannot read or submit proof for another renter's invoice. Preserve PR #283's existing partial settlement/ledger tests, do not rerun Azure rollout on a test-only main merge, and keep Phase 4 ACTIVE until controlled full business workflows and compatibility/privileged migration signoff pass.
+
 ## Maintenance rule for this document
 
 After each merged production change:
