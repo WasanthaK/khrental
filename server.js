@@ -15,6 +15,7 @@ import { createUtilityReviewRouter } from './src/api/platform/utilityReviewRoute
 import { startAutomaticMonthlyBillingScheduler } from './src/api/platform/monthlyBillingScheduler.js';
 import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
+import { createNotificationSelfRouter } from './src/api/platform/notificationSelfRouter.js';
 import { createTenancyExitRouter } from './src/api/platform/tenancyExitRouter.js';
 import { guardBillingMssqlCompatibility, guardBillingPlatformQuery } from './src/api/platform/billingMutationGuard.js';
 import { guardTenancyActivationQuery } from './src/api/platform/tenancyActivationGuard.js';
@@ -397,6 +398,7 @@ async function createServer() {
   app.use('/api/properties', createPropertyUtilityConfigRouter());
   app.use('/api/utility-reviews', createUtilityReviewRouter());
   app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
+  app.use('/api/notifications', createNotificationSelfRouter());
   app.use('/api/tenancy-exit', createTenancyExitRouter());
   app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
   app.use('/api/platform/auth', createInvitationRouter());
