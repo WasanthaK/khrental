@@ -17,8 +17,8 @@ const assertResponse = (result, status, reason) => {
  * proof metadata; this does not exercise R2 upload or invoice issuing.
  */
 export async function verifyPhase4PaymentLifecycleHttp({
-  pool, first, query, a, b, tokenA, tokenB,
-  call, createAuthRecord, issueAuthSession
+  pool, first, query, a, b, tokenA, tokenB, otherToken,
+  call, createAuthRecord, issueAuthSession, browser, origin
 }) {
   const createAdmin = async item => {
     const email = 'billing-lifecycle-' + crypto.randomUUID() + '@example.invalid';
@@ -182,6 +182,101 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.equal(paidB.receipts.length, 1);
   assertResponse(await account(invoiceB, tokenA, a.tenantId), 404,
     'paid foreign receipt remains private');
+
+  // Same organization does not imply same renter account ownership.
+  assertResponse(await account(invoiceA, otherToken, a.tenantId), 403,
+    'same tenant second renter cannot read someone else\'s account');
+  assertResponse(await submit(invoiceA, otherToken, a.tenantId, 5), 403,
+    'same tenant second renter cannot submit someone else\'s proof');
+
+  const ownReceiptsA = projection.receipts.map(row => row.receipt_number);
+  const ownReceiptsB = paidB.receipts.map(row => row.receipt_number);
+  assert.equal(ownReceiptsA.length, 2);
+  assert.equal(ownReceiptsB.length, 1);
+  const stableSqlSnapshot = async () => ({
+    invoices: await query(pool,
+      'SELECT id, status, updatedat FROM invoices WHERE id IN (@invoiceA, @invoiceB) ORDER BY id',
+      { invoiceA, invoiceB }),
+    payments: await query(pool,
+      'SELECT id, invoiceid, status, verified_at, rejection_reason FROM payments WHERE invoiceid IN (@invoiceA, @invoiceB) ORDER BY id',
+      { invoiceA, invoiceB }),
+    receipts: await query(pool,
+      'SELECT id, invoice_id, payment_id, receipt_number, amount FROM payment_receipts WHERE invoice_id IN (@invoiceA, @invoiceB) ORDER BY id',
+      { invoiceA, invoiceB }),
+    events: await query(pool,
+      'SELECT id, invoice_id, event_type FROM billing_lifecycle_events WHERE invoice_id IN (@invoiceA, @invoiceB) ORDER BY id',
+      { invoiceA, invoiceB })
+  });
+  const beforeBrowser = await stableSqlSnapshot();
+
+  for (const [own, token, invoiceId, receiptNumbers, foreignNumbers] of [
+    [a, tokenA, invoiceA, ownReceiptsA, ownReceiptsB],
+    [b, tokenB, invoiceB, ownReceiptsB, ownReceiptsA]
+  ]) {
+    const page = await browser.newPage();
+    try {
+      // Same real auth shape used elsewhere by the disposable two-tenant
+      // browser harness: token is server-issued, no development bypass.
+      await page.evaluateOnNewDocument((accessToken, tenantId, authId, email) => {
+        localStorage.removeItem('dev_bypass_role');
+        localStorage.setItem('khrental.activeTenantId', tenantId);
+        localStorage.setItem('khrental.local.session', JSON.stringify({
+          access_token: accessToken,
+          user: { id: authId, email, role: 'rentee' }
+        }));
+      }, token, own.tenantId, own.authId, own.email);
+      await page.goto(origin + '/rentee/invoices', {
+        waitUntil: 'domcontentloaded', timeout: 45000
+      });
+      const shortId = invoiceId.slice(0, 8);
+      await page.waitForFunction(fragment =>
+        document.body.innerText.toLowerCase().includes('invoice #' + fragment),
+        { timeout: 30000 }, shortId
+      );
+      const clicked = await page.evaluate(fragment => {
+        const card = [...document.querySelectorAll('div.relative')].find(element =>
+          element.innerText.toLowerCase().includes('invoice #' + fragment) &&
+          [...element.querySelectorAll('button')].some(button =>
+            button.textContent.trim() === 'Account & Receipts'
+          )
+        );
+        const button = [...(card?.querySelectorAll('button') || [])].find(element =>
+          element.textContent.trim() === 'Account & Receipts'
+        );
+        if (!button) return false;
+        button.click();
+        return true;
+      }, shortId);
+      assert.equal(clicked, true, 'must click account for this paid invoice, not a different card');
+      await page.waitForFunction(number =>
+        document.body.innerText.includes('Receipt ' + number),
+        { timeout: 30000 }, receiptNumbers[0]
+      );
+      const visible = await page.evaluate(() => ({
+        route: location.pathname, body: document.body.innerText
+      }));
+      assert.equal(visible.route, '/rentee/invoices');
+      assert.match(visible.body, /Invoice Account/);
+      assert.match(visible.body, /Outstanding/);
+      assert.match(visible.body, /paid/i);
+      for (const ownReceipt of receiptNumbers) {
+        assert.ok(visible.body.includes('Receipt ' + ownReceipt),
+          'all own verified receipts must appear on the actual renter account screen');
+      }
+      for (const foreignReceipt of foreignNumbers) {
+        assert.ok(!visible.body.includes(foreignReceipt),
+          'foreign tenant receipt must remain private even after settlement');
+      }
+      assert.ok(!visible.body.includes(own.tenantId === a.tenantId
+        ? 'Tenant B Property' : 'Tenant A Property'),
+        'renter browser must not render a foreign tenant property');
+    } finally {
+      await page.close();
+    }
+  }
+  assert.deepEqual(await stableSqlSnapshot(), beforeBrowser,
+    'read-only routed renter receipt views cannot mutate invoice, payment or ledger records');
+  console.log('PASS: real routed renter account UI exposes only own approved receipts in both tenant organizations');
 
   console.log('PASS: real-session two-tenant payment proof -> reject/resubmit -> verify -> paid/receipts, amount limits, duplicate and ledger isolation');
 }
