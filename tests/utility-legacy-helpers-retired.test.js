@@ -15,9 +15,10 @@ test('live utility approval, rejection and governed invoice linkage remain intac
   const utility = read('../src/services/utilityBillingService.js');
   const review = read('../src/pages/UtilityBillingReview.jsx');
   const monthly = read('../src/api/platform/monthlyBillingService.js');
-  assert.match(utility, /export const approveReading =/);
-  assert.match(utility, /export const rejectReading =/);
-  assert.match(utility, /const getValidStatusesFromConstraint =/);
+  assert.doesNotMatch(utility, /export const approveReading|export const rejectReading|export const updateReadingValue|const getValidStatusesFromConstraint/);
+  const authority = read('../src/api/platform/utilityReviewRouter.js');
+  assert.ok(authority.includes('STALE_METER_READING'));
+  assert.ok(authority.includes('READING_ALREADY_PROCESSED'));
   assert.match(review, /transitionUtilityReading\(reading\.id, 'approve'\)/);
   assert.match(review, /transitionUtilityReading\(reading\.id, 'reject'/);
   assert.doesNotMatch(review, /await approveReading\(|await rejectReading\(/);
