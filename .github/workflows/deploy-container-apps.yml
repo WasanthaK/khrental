@@ -13,6 +13,11 @@ on:
       - 'docs/**'
       - 'tests/**'
       - '.github/workflows/**'
+      # CI-only executable acceptance scripts are not runtime container code.
+      # PR-head verification still runs without path filters.
+      - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'scripts/verify-phase4-maintenance-notification-http.mjs'
+      - 'scripts/verify-phase4-renter-workspace-browser.mjs'
   workflow_dispatch:
 
 permissions:
