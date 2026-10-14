@@ -53,19 +53,29 @@ Local development may use the local storage driver.
 
 ## SQL Server migrations
 
-Current production migrations live in the repository-level `migrations/` directory and are executed with:
+Production SQL migrations are controlled by the existing, separately
+authorized **Run production database migrations** GitHub Actions workflow:
+`.github/workflows/run-production-db-migrations.yml`. Its `plan` mode
+is read-only. `apply` requires manual `workflow_dispatch`, the
+`APPLY-PRODUCTION` confirmation, GitHub's Production environment and a
+privileged direct SQL connection or the approved dedicated migration job.
+The runner records checksum-bound migration history in
+`dbo.schema_migrations`. Verify the privileged executor's real
+provisioning, permissions and ledger before any production apply.
 
-```bash
-npm run execute-sql -- ./migrations/<migration>.sql
-```
+Use the workflow's **plan** mode to inspect outstanding changes first.
+For a real production apply, follow
+`docs/PRODUCTION-MIGRATION-EXECUTOR.md` and
+`docs/production-database-migrations.md`; do not use the serving
+application's identity for DDL or rely on automatic schema creation.
 
-For a fresh Azure SQL database, begin with:
-
-```bash
-npm run migrate:fresh:mssql
-```
-
-Do not run the older PostgreSQL migration history under `src/db/migrations/` against Azure SQL. Those files are retained only where they still document historical schema evolution and are not the production migration source of truth.
+Repository-level `migrations/` contains the production MSSQL scripts.
+Commands such as `npm run execute-sql`, `npm run migrate:fresh:mssql`
+and `npm run migrate` are legacy/manual tools, **not** approved
+production migration entrypoints. The last command still executes
+`platformClient.rpc('exec_sql')` and is not ledger-governed. Do not
+run it in production. Do not run historical PostgreSQL migrations from
+`src/db/migrations/` against Azure SQL.
 
 ## Health verification
 
