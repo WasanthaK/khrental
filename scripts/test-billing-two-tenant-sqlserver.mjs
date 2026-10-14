@@ -2365,8 +2365,8 @@ async function main() {
     const { verifyPhase4PaymentLifecycleHttp } =
       await import('./verify-phase4-payment-lifecycle-http.mjs');
     await verifyPhase4PaymentLifecycleHttp({
-      pool, first, query, a, b, tokenA, tokenB,
-      call, createAuthRecord, issueAuthSession
+      pool, first, query, a, b, tokenA, tokenB, otherToken,
+      call, createAuthRecord, issueAuthSession, browser, origin
     });
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
