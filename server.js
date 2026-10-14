@@ -11,6 +11,7 @@ import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboard
 import { createBillingRouter } from './src/api/platform/billingRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
 import { createPropertyUtilityConfigRouter } from './src/api/platform/propertyUtilityConfigRouter.js';
+import { createUtilityReviewRouter } from './src/api/platform/utilityReviewRouter.js';
 import { startAutomaticMonthlyBillingScheduler } from './src/api/platform/monthlyBillingScheduler.js';
 import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
 import { createMaintenanceLifecycleRouter } from './src/api/platform/maintenanceLifecycleRouter.js';
@@ -394,6 +395,7 @@ async function createServer() {
   app.use('/api/billing', createBillingAdjustmentsRouter());
   app.use('/api/billing', createMonthlyBillingRouter());
   app.use('/api/properties', createPropertyUtilityConfigRouter());
+  app.use('/api/utility-reviews', createUtilityReviewRouter());
   app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
   app.use('/api/tenancy-exit', createTenancyExitRouter());
   app.use('/api/platform/auth', createPasswordResetRouter({ sendEmail, getBaseUrl: getPasswordResetBaseUrl }));
