@@ -39,3 +39,9 @@ This is a source-based inventory, **not** evidence of functional parity in produ
 A **bounded, tests-first contract hardening PR** for invoice mutation failures and authorization, after verifying the legacy single-invoice form's actual callers. Prefer preventing a confusing compatibility retry over broad invoice rewrites. Preserve `/api/billing` workflows and do not delete invoice helpers solely on indexed search evidence. Do not alter payment totals or invoice statuses without transaction/tenant proofs.
 
 See `docs/PHASE4-CLOSURE-READINESS.md` and `docs/EXECUTION-PLAN.md` for phase gates.
+
+## 2026-10-14: legacy invoice generation guard
+
+Source-search identified no indexed application consumers of the exported legacy `generateInvoicesByProperty` and `generateInvoices` functions. Unlike the governed monthly billing service, their former implementations performed separate generic invoice inserts and utility-reading linkage writes. The bounded Phase 4 follow-on retains these exported names and their legacy result envelopes, but makes both **fail closed** with `BILLING_LIFECYCLE_REQUIRED`. This avoids implicit database writes through an unapproved path while preserving explicit failure for any unknown caller.
+
+The existing `listInvoices`, dashboard summary, pending-reading projections, and governed monthly billing APIs are unchanged. Absence of indexed callers is not proof against unknown external/manual callers; that uncertainty is why the exported functions are retained as non-mutating compatibility stubs. Authorization/build, runtime regression, and production exact-SHA acceptance still apply. Phase 4 stays open.
