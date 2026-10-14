@@ -15,21 +15,23 @@ The container is stateless when `STORAGE_DRIVER=r2`. Run a single replica until 
 
 Create an Azure SQL free-offer database and select the option that pauses or blocks usage when its free allowance is exhausted.
 
-For a new, empty Azure SQL database, apply the fresh-install schema first:
+For a new Azure SQL database, use the approved production migration
+workflow in `.github/workflows/run-production-db-migrations.yml`,
+starting with its read-only **plan** mode. Do not execute one-off
+`npm run execute-sql` or `npm run migrate:fresh:mssql` commands
+against production. Follow `docs/PRODUCTION-MIGRATION-EXECUTOR.md`
+and `docs/production-database-migrations.md` for the
+manual Production-environment, confirmation, privileged executor and
+migration-ledger prerequisites. Provisioning and privileges must be
+verified separately; a configured workflow does not establish a working
+production apply path.
 
-```bash
-npm run execute-sql -- ./migrations/20260913_00_create_fresh_mssql_schema.sql
-```
-
-The fresh-install migration creates the SQL Server versions of the application tables and a default `KH Rentals` tenant. Do not run the older PostgreSQL migration history under `src/db/migrations/` against Azure SQL.
-
-Then apply the authentication schema:
-
-```bash
-npm run execute-sql -- ./migrations/20260913_01_create_auth_store.sql
-```
-
-The API also creates these two auth tables on first use if the deployment identity has DDL permission. Applying the migration explicitly is preferred so the runtime login can use normal data permissions afterward.
+The repository-level `migrations/` folder contains MSSQL migrations.
+The older PostgreSQL history in `src/db/migrations/` is not
+a production Azure SQL migration source. The serving application is not
+authorized to create authentication tables or perform DDL on startup.
+If the required auth schema is absent, use the governed migration
+process rather than granting DDL to the runtime identity.
 
 If `.local-auth-store.json` contains real users, run this once before removing the file:
 

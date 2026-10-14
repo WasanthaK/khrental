@@ -194,6 +194,33 @@ SQL schema changes, or production user mutations occur in this slice.
 Invite/registration and complete tenant browser acceptance remain separate
 release gates; Phase 4 stays ACTIVE.
 
+## Production migration runbook and authority audit — 2026-10-14
+
+A source-search and deployment census found no live serving-startup caller of
+`src/db/runMigration.js`; its package `migrate` command remains as manual
+legacy SQL-RPC tooling, not the approved production executor. The container
+starts `node server.js` after environment generation, and the serving
+deployment workflow does not run schema DDL. The governed production
+migration workflow already supports read-only `plan`, manually confirmed
+`apply`, GitHub's Production environment and a dedicated executor or
+privileged direct SQL connection.
+
+Older `database.md` and `docs/free-cloud-deployment.md` runbook sections
+still advised one-off direct SQL files during production provisioning and
+suggested runtime DDL capability for auth tables. Those instructions are
+reconciled to the governed workflow without applying any SQL. A new
+source-backed authorization-suite regression asserts serving startup stays
+DDL-free, plan/apply tools remain distinct, confirmation and dedicated
+migration markers persist, and both production guides direct operators to
+the controlled workflow. Legacy commands are **retained** for caller/usage
+inventory; they are not declared production-authorized.
+
+This is **static evidence only**, not proof that the dedicated
+`khrental-db-migrator` job exists, is privileged, can reach Azure SQL or
+has a reconciled `dbo.schema_migrations` ledger. Verify those separately
+before production apply. No database grant, schema, canary, migration or
+production user mutation is performed in this slice.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
