@@ -23,6 +23,13 @@ Status: **ACTIVE — BLOCKED FROM PHASE 5**. This document distinguishes source-
 | Compatibility exports | `docs/PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` classifies many operations. `invoiceService.createInvoiceRecord` and `updateInvoiceRecord` now throw rather than mutate; legacy invoice generators fail closed. `paymentService.generateInvoice` and `updateInvoice` still import those blocked wrappers; `platformClient` remains live in specifically declared domains. | Per-export static/dynamic route/caller inventory with live/needed/dead/unresolved classification, safe removal only after parity. Update stale historic audit descriptions instead of treating them as current runtime facts. | **BLOCKED** until operation inventory |
 | Deployment evidence | PR #280 merged; no assumption that green PR CI proves current production serving revision. | Verify merged exact SHA on Azure Ready revision, public fingerprint, MSSQL health; capture successful CI run IDs and failed-run remediation evidence. | **BLOCKED** pending verification |
 
+## Payment lifecycle HTTP acceptance follow-on — October 15, 2026
+
+- PR #282 merged as `69f960b7bd8b4f7f2a3cf920a9cf4d8da279fdd0` after exact-head central authorization/build, two-tenant SQL + routed renter maintenance/agreement browser, and Evia tests passed. It changed acceptance fixtures, docs and CI-only deployment budget; no new serving Azure revision was required.
+- Current bounded test-only package extends the disposable two-tenant SQL fixture to exercise the **real** `/api/billing` payment-proof, verification and account HTTP routes with real renter and administrator sessions. It uses independent **issued-state synthetic fixture invoices** to avoid calling the real outbound invoice issuance email API; payment proof URLs are synthetic persisted metadata, **not** proof of R2 upload.
+- Assert unauthorized/foreign payment submission/approval denial, no balance reduction on unverified/rejected proof, mandatory rejection reason, resubmission, prevention of duplicate pending or duplicate verification, partial verified payment, final full payment, exactly corresponding receipts, and tenant-specific ledger events.
+- This acceptance is an **HTTP + SQL financial mutation proof** if CI passes, not yet full routed UI payment-upload, issue-with-delivery, or SendGrid external acceptance. Those remain separate mandatory release gates. No production data or credentials are accessed.
+
 ## Work sequencing and release efficiency
 
 1. Finish **this single PR** with authenticated HTTP proof and current inventory/checklist. PR-head `test:authorization`, `npm run build`, and disposable two-tenant SQL acceptance must pass. Do not merge red.
