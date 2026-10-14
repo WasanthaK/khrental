@@ -158,11 +158,9 @@ export const updateAgreementData = async (agreementId, updates) => {
 
 export const fetchProperty = async (propertyId) => {
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/properties/${propertyId}`);
-    } catch (mssqlError) {
-      console.error('Error loading property from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
+    // The scoped MSSQL operation is authoritative. Never turn 403/404/5xx
+    // or an ambiguous write failure into a second compatibility request.
+    return requestMssqlApi(`/api/mssql/properties/${propertyId}`);
   }
 
   return fetchPropertyRecord(propertyId);
@@ -170,11 +168,9 @@ export const fetchProperty = async (propertyId) => {
 
 export const listProperties = async () => {
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi('/api/mssql/properties?pageSize=500');
-    } catch (mssqlError) {
-      console.error('Error loading properties from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
+    // The scoped MSSQL operation is authoritative. Never turn 403/404/5xx
+    // or an ambiguous write failure into a second compatibility request.
+    return requestMssqlApi('/api/mssql/properties?pageSize=500');
   }
 
   const { data, error } = await platformClient
@@ -191,14 +187,12 @@ export const listProperties = async () => {
 
 export const updatePropertyData = async (propertyId, updates) => {
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/properties/${propertyId}`, {
+    // The scoped MSSQL operation is authoritative. Never turn 403/404/5xx
+    // or an ambiguous write failure into a second compatibility request.
+    return requestMssqlApi(`/api/mssql/properties/${propertyId}`, {
         method: 'PUT',
         body: updates
       });
-    } catch (mssqlError) {
-      console.error('Error updating property in MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
   }
 
   const { data, error } = await platformClient
@@ -217,11 +211,9 @@ export const updatePropertyData = async (propertyId, updates) => {
 
 export const fetchPropertyUnit = async (unitId) => {
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/property-units/${unitId}`);
-    } catch (mssqlError) {
-      console.error('Error loading property unit from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
+    // The scoped MSSQL operation is authoritative. Never turn 403/404/5xx
+    // or an ambiguous write failure into a second compatibility request.
+    return requestMssqlApi(`/api/mssql/property-units/${unitId}`);
   }
 
   return fetchPropertyUnitRecord(unitId);
@@ -233,11 +225,9 @@ export const listPropertyUnits = async (propertyId) => {
   }
 
   if (isMssqlApiEnabled()) {
-    try {
-      return await requestMssqlApi(`/api/mssql/property-units?propertyId=${encodeURIComponent(propertyId)}&pageSize=500`);
-    } catch (mssqlError) {
-      console.error('Error loading property units from MSSQL, falling back to the local compatibility layer:', mssqlError);
-    }
+    // The scoped MSSQL operation is authoritative. Never turn 403/404/5xx
+    // or an ambiguous write failure into a second compatibility request.
+    return requestMssqlApi(`/api/mssql/property-units?propertyId=${encodeURIComponent(propertyId)}&pageSize=500`);
   }
 
   const { data, error } = await platformClient
