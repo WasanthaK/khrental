@@ -14,14 +14,6 @@ const isDuplicateEmailError = (error) => {
     || message.includes('unique constraint');
 };
 
-const shouldFallbackToPlatformQuery = (error) => {
-  if (!error?.status) {
-    return true;
-  }
-
-  return error.code === 'CENTRAL_AUTHORIZATION_REQUIRED' || error.status === 404;
-};
-
 const createEmailConflictResult = (email, existingUser = null) => ({
   success: false,
   error: `A KH Rentals user with email ${email} already exists. Use the existing user record or a different email address.`,
@@ -87,17 +79,16 @@ export const createAppUserRecord = async (userData, userType) => {
           return createEmailConflictResult(dataToInsert.email);
         }
 
-        if (!shouldFallbackToPlatformQuery(mssqlError)) {
-          console.error('Error creating user via MSSQL:', mssqlError);
-          return {
-            success: false,
-            error: mssqlError.message,
-            ...(mssqlError.code ? { code: mssqlError.code } : {}),
-            ...(mssqlError.status ? { status: mssqlError.status } : {})
-          };
-        }
+        // An authoritative API failure must not cause a second create
+        // through generic compatibility (including transport-ambiguous 5xx).
+        console.error('Error creating user via MSSQL:', mssqlError);
+        return {
+          success: false,
+          error: mssqlError.message,
+          ...(mssqlError.code ? { code: mssqlError.code } : {}),
+          ...(mssqlError.status ? { status: mssqlError.status } : {})
+        };
 
-        console.warn('MSSQL app-user create requires the central platform compatibility path; falling back:', mssqlError.message);
       }
     }
 
@@ -139,7 +130,12 @@ export const linkAppUserRecord = async (authId, appUserId) => {
 
         return { success: true, data };
       } catch (mssqlError) {
-        console.error(`Error linking app_user ${appUserId} via MSSQL, falling back to the local compatibility layer:`, mssqlError);
+        console.error(`Error linking app_user ${appUserId} via MSSQL:`, mssqlError);
+        return {
+          success: false, error: mssqlError.message,
+          ...(mssqlError.code ? { code: mssqlError.code } : {}),
+          ...(mssqlError.status ? { status: mssqlError.status } : {})
+        };
       }
     }
 
@@ -327,7 +323,12 @@ export const updateAppUserRecord = async (id, userData) => {
 
         return { success: true, data: ensureValidTimestamps(data) };
       } catch (mssqlError) {
-        console.error('Error updating user via MSSQL, falling back to the local compatibility layer:', mssqlError);
+        console.error('Error updating user via MSSQL:', mssqlError);
+        return {
+          success: false, error: mssqlError.message,
+          ...(mssqlError.code ? { code: mssqlError.code } : {}),
+          ...(mssqlError.status ? { status: mssqlError.status } : {})
+        };
       }
     }
 
@@ -450,7 +451,12 @@ export const deleteAppUserRecord = async (id) => {
 
         return { success: true, data };
       } catch (mssqlError) {
-        console.error('Error deleting user via MSSQL, falling back to the local compatibility layer:', mssqlError);
+        console.error('Error deleting user via MSSQL:', mssqlError);
+        return {
+          success: false, error: mssqlError.message,
+          ...(mssqlError.code ? { code: mssqlError.code } : {}),
+          ...(mssqlError.status ? { status: mssqlError.status } : {})
+        };
       }
     }
 
