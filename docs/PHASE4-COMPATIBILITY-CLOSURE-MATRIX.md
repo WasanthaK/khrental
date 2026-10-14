@@ -246,6 +246,31 @@ denied, failed and rejected insert boundaries. This does **not** prove
 full notification tenant-scope or real email/SMS delivery; those remain
 Phase 4/5 end-to-end and capability decisions. No DDL or Evia changes.
 
+## Maintenance post-transition projection read authority — 2026-10-14
+
+`maintenanceLifecycleService` previously reloaded request details via a
+generic compatibility query after successful canonical lifecycle actions,
+including a joined property/renter/staff/image projection. This introduced
+a second, potentially differently authorized read after tenant-scoped
+transitions; its failure could also make a successful creation or
+assignment appear unsuccessful.
+
+This bounded change reuses the existing authenticated
+`GET /api/maintenance-lifecycle/requests/:requestId` projection, whose
+server enforces tenant scope, renter ownership, manager property assignment,
+and assigned worker access. A small mapper preserves the request fields and
+the display-relevant property name/address, renter name/email, assigned
+staff name and image list that the server actually returns. A denied,
+failed, or malformed lifecycle projection no longer retries generic
+`maintenance_requests` reads.
+
+Tests exercise the actual read helper with denied outcomes, response-shape
+mapping and source-level tenant/owner SQL guards. **Deferred:** the separate
+`maintenance_request_images` generic insert path and other maintenance
+screen compatibility reads need specific authorization/contract review.
+No lifecycle mutation, email/SMS delivery, SQL schema, permissions, or
+Evia canary is altered. Phase 4 remains active.
+
 ## Phase 4 release gates
 
 1. Maintain this matrix as paths are verified, marking each operation **live, legacy-but-needed, dead, or unresolved**.
