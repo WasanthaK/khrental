@@ -1687,6 +1687,28 @@ canary activation. Require PR-head authorization/build, Evia and any
 required disposable SQL acceptance; verify production Ready/public
 SHA/MSSQL independently after merge. Phase 4 OPEN.
 
+## Phase 4 utility review mutation authority audit — next gate
+
+PR #262 merged as `1945ef06020af3f1bb93c7a283a44759466efc5e`.
+Deployment workflow `38489769099` completed successfully, revision
+`0000265` became Ready, public build SHA matched, and live MSSQL health
+was Ready. Mark the removed unused helper slice production-accepted.
+
+ACTIVE: classify two routed utility-review mutation entry points:
+`UtilityBillingReview.jsx` and `staff/UtilityReadingsReview.jsx`.
+Both still have client-side compatibility updates and divergent status,
+amount and failure-handling behavior; one still attempts
+`utility_billing` insert. Source-backed audit:
+`docs/PHASE4-UTILITY-REVIEW-AUTHORITY-AUDIT.md`.
+
+This audit is document/test-only. The next behavior-changing slice
+must introduce one governed server utility-reading review transition
+with tenant/property authorization and atomic status, charge and
+timestamp changes; prove two-tenant SQL/browser flows first. Never
+create invoices or link readings outside monthly billing, widen
+permissions, enable Evia canary or apply production DDL as a side effect.
+Phase 4 remains OPEN, Phase 5 pending.
+
 ## Maintenance rule for this document
 
 After each merged production change:
