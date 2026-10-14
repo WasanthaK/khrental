@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useProperty } from '../contexts/PropertyContext';
 import { getInvoiceSummaryByProperty, getPropertiesWithPendingReadings } from '../services/invoiceService';
+import { getInvoiceSummaryDateRange } from '../services/invoiceDashboardDateRange';
 import PropertySelector from '../components/properties/PropertySelector';
 
 const InvoiceManagementDashboard = () => {
@@ -51,18 +52,7 @@ const InvoiceManagementDashboard = () => {
         options.status = filterOptions.status;
       }
       
-      const now = new Date();
-      
-      if (filterOptions.period === 'current_month') {
-        options.fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-      } else if (filterOptions.period === 'last_month') {
-        options.fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
-      } else if (filterOptions.period === 'current_year') {
-        options.fromDate = new Date(now.getFullYear(), 0, 1).toISOString();
-        options.toDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999).toISOString();
-      }
+      Object.assign(options, getInvoiceSummaryDateRange(filterOptions.period, new Date()));
       
       const { data, error } = await getInvoiceSummaryByProperty(selectedPropertyIds, options);
       
