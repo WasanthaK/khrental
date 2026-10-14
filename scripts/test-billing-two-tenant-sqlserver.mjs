@@ -1450,6 +1450,7 @@ async function main() {
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
     const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
+    const { createUtilityReviewRouter } = await import('../src/api/platform/utilityReviewRouter.js');
     const { createMssqlRouter } = await import('../src/api/mssql/router.js');
     const { guardBillingMssqlCompatibility } =
       await import('../src/api/platform/billingMutationGuard.js');
@@ -1483,6 +1484,7 @@ async function main() {
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
+    app.use('/api/utility-reviews', createUtilityReviewRouter());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
@@ -1518,6 +1520,13 @@ async function main() {
       });
       return { status: response.status, payload: await response.json() };
     };
+    const { verifyUtilityReviewTransitions } =
+      await import('./verify-utility-review-transitions.mjs');
+    await verifyUtilityReviewTransitions({
+      pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
+      call, createAuthRecord, issueAuthSession
+    });
+
     const authContext = await call('/api/platform/auth/context', {
       token: tokenA, tenantId: a.tenantId
     });
