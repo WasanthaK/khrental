@@ -1,4 +1,11 @@
-export * from './maintenanceServiceLegacy.js';
+// Export only audited compatibility names; never wildcard-export generic SQL writers.
+export {
+  getMaintenanceRequest,
+  getMaintenanceRequests,
+  addMaintenanceRequestComment,
+  updateMaintenanceRequest,
+  deleteMaintenanceRequest
+} from './maintenanceCompatibilityBoundary.js';
 export {
   addMaintenanceComment,
   getMaintenanceComments,
