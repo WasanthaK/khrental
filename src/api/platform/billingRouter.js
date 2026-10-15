@@ -697,7 +697,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         if (!issued) throw createRequestError(409,'Invoice changed before issue.','INVOICE_STATE_CHANGED');
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
-          eventType:'invoice_issued', fromStatus:'draft', toStatus:'pending',
+          eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
           actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount }
         });
         await insertLifecycleEvent(tx, {
