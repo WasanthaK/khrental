@@ -5,7 +5,10 @@ on:
     branches: [main]
     paths:
       - 'src/api/evia/**'
+      - 'src/api/mssql/agreementWritePolicy.js'
+      - 'src/components/agreements/AgreementActions.jsx'
       - 'tests/evia-webhook.test.js'
+      - 'tests/agreement-signing-authority.test.js'
       - 'tests/evia-completed-documents.test.js'
       - 'src/api/storage/**'
       - 'tests/evia-storage-retention.test.js'
@@ -23,6 +26,8 @@ on:
     branches: [main]
     paths:
       - 'src/api/evia/**'
+      - 'src/api/mssql/agreementWritePolicy.js'
+      - 'src/components/agreements/AgreementActions.jsx'
       - 'tests/evia-webhook.test.js'
       - 'tests/evia-completed-documents.test.js'
       - 'src/api/storage/**'
@@ -51,4 +56,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-webhook.test.js tests/evia-completed-documents.test.js tests/evia-audit-http.test.js tests/evia-archive-crash-recovery.test.js tests/evia-historic-audit.test.js tests/evia-storage-retention.test.js
+      - run: node --test tests/agreement-signing-authority.test.js tests/evia-webhook.test.js tests/evia-completed-documents.test.js tests/evia-audit-http.test.js tests/evia-archive-crash-recovery.test.js tests/evia-historic-audit.test.js tests/evia-storage-retention.test.js
