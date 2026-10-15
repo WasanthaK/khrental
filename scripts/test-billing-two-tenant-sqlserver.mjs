@@ -1508,6 +1508,120 @@ async function verifyCrossTenantInvitationRecoveryAgainstDisposableSql(pool, a, 
   console.log('PASS: accepted account claims block re-invite across organizations; legitimate invitation and resend remain valid');
 }
 
+// Route-level invitation acceptance with real bearer sessions and the same
+// disposable SQL Server as billing. No provider email or live identity calls.
+async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createAuthRecord, issueAuthSession }) {
+  const rows = async (statement, inputs = {}) => {
+    const request = pool.request();
+    Object.entries(inputs).forEach(([name, value]) => request.input(name, value));
+    return (await request.query(statement)).recordset || [];
+  };
+  const one = async (statement, inputs) => (await rows(statement, inputs))[0] || null;
+  const check = (result, expectedStatus, code) => {
+    assert.equal(result.status, expectedStatus,
+      'invitation HTTP status mismatch: ' + result.status + ', code=' + result.payload?.code);
+    if (code) assert.equal(result.payload?.code, code);
+    return result.payload?.data;
+  };
+  const createTarget = async (tenantId, role = 'rentee') => {
+    const email = 'invitation-http-' + crypto.randomUUID() + '@example.invalid';
+    const row = await one(
+      "INSERT INTO app_users (tenant_id, name, email, role, user_type) OUTPUT INSERTED.id VALUES (@tenantId, 'Invitation Acceptance', @email, @role, @role)",
+      { tenantId, email, role }
+    );
+    const userId = guid(row.id);
+    await rows(
+      "INSERT INTO tenant_memberships (tenant_id, app_user_id, role, status, is_default) VALUES (@tenantId, @userId, @role, 'active', 1)",
+      { tenantId, userId, role }
+    );
+    return { tenantId, userId, email };
+  };
+
+  const admin = await createTarget(a.tenantId, 'admin');
+  const adminAuthId = crypto.randomUUID();
+  const adminRecord = await createAuthRecord({
+    authId: adminAuthId, appUserId: admin.userId, email: admin.email, role: 'admin',
+    password: crypto.randomBytes(24).toString('base64url')
+  });
+  await rows('UPDATE app_users SET auth_id = @authId WHERE id = @userId AND tenant_id = @tenantId',
+    { authId: adminAuthId, userId: admin.userId, tenantId: a.tenantId });
+  const adminToken = (await issueAuthSession(adminRecord)).accessToken;
+  const invited = await createTarget(a.tenantId);
+  const foreign = await createTarget(b.tenantId);
+  const path = '/api/platform/auth/invitations';
+  const issue = (token, tenantId, appUserId) => call(path, {
+    method: 'POST', token, tenantId, body: { appUserId }
+  });
+
+  check(await issue(null, a.tenantId, invited.userId), 401);
+  check(await issue(tokenA, a.tenantId, invited.userId), 403, 'ADMIN_ACCESS_REQUIRED');
+  check(await issue(adminToken, b.tenantId, invited.userId), 403, 'TENANT_ACCESS_DENIED');
+  check(await issue(adminToken, a.tenantId, foreign.userId), 404, 'INVITATION_TARGET_NOT_FOUND');
+  assert.equal((await rows('SELECT id FROM user_invitations WHERE app_user_id = @userId',
+    { userId: foreign.userId })).length, 0);
+
+  const firstInvite = check(await issue(adminToken, a.tenantId, invited.userId), 201);
+  assert.ok(firstInvite.invitation?.token);
+  const firstToken = firstInvite.invitation.token;
+  const validate = token => call(path + '/validate?token=' + encodeURIComponent(token));
+  assert.equal(check(await validate(firstToken), 200).valid, true);
+
+  const renewed = check(await issue(adminToken, a.tenantId, invited.userId), 201);
+  const activeToken = renewed.invitation.token;
+  assert.notEqual(firstToken, activeToken);
+  check(await validate(firstToken), 400, 'INVITATION_NOT_USABLE');
+  check(await call(path + '/redeem', {
+    method: 'POST', body: { token: firstToken, password: 'Fixture-Invite-Password-Old!' }
+  }), 400, 'INVITATION_REVOKED');
+
+  const password = 'Fixture-Invite-' + crypto.randomBytes(15).toString('base64url') + '!';
+  const accepted = check(await call(path + '/redeem', {
+    method: 'POST', body: { token: activeToken, password }
+  }), 201);
+  assert.ok(accepted.session?.access_token, 'redeem must issue a real session');
+  assert.equal(guid(accepted.invitation.appUserId), invited.userId);
+  check(await validate(activeToken), 400, 'INVITATION_NOT_USABLE');
+  check(await call(path + '/redeem', {
+    method: 'POST', body: { token: activeToken, password }
+  }), 400, 'INVITATION_ALREADY_ACCEPTED');
+  const snapshot = await one(`
+    SELECT au.auth_id, i.accepted_at, auth.app_user_id, auth.email,
+           (SELECT COUNT(*) FROM auth_users WHERE app_user_id = @appUserId) AS account_count
+    FROM app_users au
+    JOIN user_invitations i ON i.app_user_id = au.id AND i.token_hash = @tokenHash
+    JOIN auth_users auth ON auth.auth_id = au.auth_id
+    WHERE au.id = @appUserId AND au.tenant_id = @tenantId
+  `, {
+    appUserId: invited.userId, tenantId: a.tenantId,
+    tokenHash: crypto.createHash('sha256').update(activeToken).digest('hex')
+  });
+  assert.ok(snapshot?.auth_id && snapshot.accepted_at);
+  assert.equal(guid(snapshot.app_user_id), invited.userId);
+  assert.equal(Number(snapshot.account_count), 1, 'redeem must create exactly one linked auth identity');
+  check(await issue(adminToken, a.tenantId, invited.userId), 409, 'ACCOUNT_ALREADY_CLAIMED');
+
+  const acceptedContext = check(await call('/api/platform/auth/context', {
+    token: accepted.session.access_token, tenantId: a.tenantId
+  }), 200);
+  assert.equal(guid(acceptedContext.tenantId), a.tenantId);
+  check(await call('/api/platform/auth/context', {
+    token: accepted.session.access_token, tenantId: b.tenantId
+  }), 403, 'TENANT_ACCESS_DENIED');
+  const signIn = (value) => call('/api/platform/auth/sign-in', {
+    method: 'POST', body: { email: invited.email, password: value }
+  });
+  check(await signIn('Not-The-Correct-Password!'), 401);
+  const signedIn = check(await signIn(password), 200);
+  assert.ok(signedIn.session?.access_token);
+  assert.equal(guid(signedIn.user.id), guid(snapshot.auth_id));
+  const { getCanonicalInvitationStatus } = await import('../src/api/auth/invitationStatus.js');
+  const status = await getCanonicalInvitationStatus({
+    tenantId: a.tenantId, appUserId: invited.userId
+  });
+  assert.equal(status.status, 'registered');
+  console.log('PASS: authenticated invitation HTTP issue, denial, resend, single-use redeem, credential sign-in and two-tenant isolation');
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -1626,6 +1740,7 @@ async function main() {
     const { createAuthRecord, issueAuthSession, createSessionAuthMiddleware } =
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
+    const { createInvitationRouter } = await import('../src/api/auth/invitationRouter.js');
     const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
     const { createMaintenanceLifecycleRouter } = await import('../src/api/platform/maintenanceLifecycleRouter.js');
     const { createNotificationSelfRouter } = await import('../src/api/platform/notificationSelfRouter.js');
@@ -1661,6 +1776,7 @@ async function main() {
     app.use(express.json());
     app.use('/storage', createAuthenticatedTenantStorageRouter({ deliveryHandler: auditProbe.deliveryHandler }));
     app.use('/api', createSessionAuthMiddleware());
+    app.use('/api/platform/auth', createInvitationRouter());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
     app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
@@ -1705,6 +1821,9 @@ async function main() {
       });
       return { status: response.status, payload: await response.json() };
     };
+    await verifyInvitationLifecycleHttp({
+      pool, a, b, tokenA, call, createAuthRecord, issueAuthSession
+    });
     const { verifyUtilityReviewTransitions } =
       await import('./verify-utility-review-transitions.mjs');
     browser = await puppeteer.launch({
