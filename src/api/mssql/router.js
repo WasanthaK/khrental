@@ -633,10 +633,13 @@ export const createMssqlRouter = () => {
 
   router.get('/agreements', asyncHandler(async (req, res) => {
     try {
+      // Renter reads are always bound to the authenticated app-user identity.
+      // Never trust a renter-provided renteeId or omit ownership filtering.
+      const ownRenter = isTenantRole({ user: req.user, membership: req.membership });
       const agreements = await listAgreements({
         tenantId: req.tenantId,
         propertyId: req.query.propertyId,
-        renteeId: req.query.renteeId,
+        renteeId: ownRenter ? (req.user?.id || '00000000-0000-0000-0000-000000000000') : req.query.renteeId,
         status: req.query.status,
         unitIds: req.query.unitIds,
         statuses: req.query.statuses,
@@ -658,7 +661,8 @@ export const createMssqlRouter = () => {
     try {
       const agreement = await getAgreementById(req.params.id, req.tenantId);
 
-      if (!agreement) {
+      if (!agreement || (isTenantRole({ user: req.user, membership: req.membership })
+          && String(agreement.renteeid || '').toLowerCase() !== String(req.user?.id || '').toLowerCase())) {
         res.status(404).json({ error: 'Agreement not found.' });
         return;
       }

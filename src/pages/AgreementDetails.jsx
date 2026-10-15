@@ -37,6 +37,11 @@ const AgreementDetails = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
   const [signatories, setSignatories] = useState([]);
+  const signedComplete = ['signed', 'completed', 'active'].includes(String(agreement?.status || '').toLowerCase())
+    || ['signed', 'completed', 'signing_complete'].includes(String(agreement?.signature_status || '').toLowerCase());
+  const retainedPdfUrl = [agreement?.signed_document_url, agreement?.signeddocumenturl, agreement?.signature_pdf_url]
+    .find(url => typeof url === 'string' && url.includes('/storage/documents/tenants/') && url.includes('/signed/')) || null;
+  const displayDocumentUrl = signedComplete ? retainedPdfUrl : (agreement?.pdfurl || agreement?.documenturl || null);
 
   const fetchAgreementData = useCallback(async () => {
     try {
@@ -411,10 +416,10 @@ const AgreementDetails = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-medium">Agreement Document</h2>
-              {agreement.pdfurl && (
+              {displayDocumentUrl && (
                 <div className="flex space-x-2">
                   <a
-                    href={agreement.pdfurl}
+                    href={displayDocumentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-1 bg-indigo-600 text-white hover:bg-indigo-700 rounded text-sm flex items-center"
@@ -429,22 +434,16 @@ const AgreementDetails = () => {
             </div>
             
             {/* Document View - Show iframe if PDF is available, otherwise show content */}
-            {agreement.pdfurl ? (
+            {displayDocumentUrl ? (
               <div className="relative h-[600px] w-full">
                 <iframe
-                  src={agreement.pdfurl}
+                  src={displayDocumentUrl}
                   className="absolute top-0 left-0 w-full h-full border-0"
                   title="Agreement Document"
                 />
               </div>
-            ) : agreement.documenturl ? (
-              <div className="relative h-[600px] w-full">
-                <iframe
-                  src={agreement.documenturl}
-                  className="absolute top-0 left-0 w-full h-full border-0"
-                  title="Agreement Document"
-                />
-              </div>
+            ) : signedComplete ? (
+              <p className="text-amber-700" role="status">Signed document is not yet retained and available for viewing.</p>
             ) : (
               <div className="prose max-w-none">
                 {agreement.processedcontent ? (

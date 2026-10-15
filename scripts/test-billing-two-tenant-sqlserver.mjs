@@ -1871,6 +1871,11 @@ async function main() {
       browser, origin, pool, a, b, call, createAuthRecord, issueAuthSession,
       mailbox: resetMailbox
     });
+    const { verifyPhase4AgreementSignedDocumentClosure } = await import('./verify-phase4-agreement-signed-document-browser.mjs');
+    await verifyPhase4AgreementSignedDocumentClosure({
+      browser, origin, pool, a, b, tokenA, call, createAuthRecord,
+      issueAuthSession, storageProbe: auditProbe
+    });
     await verifyUtilityReviewTransitions({
       pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
       call, createAuthRecord, issueAuthSession, browser, origin
