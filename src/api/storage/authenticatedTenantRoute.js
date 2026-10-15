@@ -86,6 +86,13 @@ export const createAuthenticatedTenantStorageRouter = ({
           res.status(403).json({ error: 'Audit-trail access is not authorized.', code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED' });
           return;
         }
+        // The audit-trail ACLs above are stricter and authoritative for their
+        // objects. A permitted audit read is not a signed-PDF read and must
+        // not be blocked by its distinct retained-document URL comparison.
+        if (result.applies || historic.applies) {
+          next();
+          return;
+        }
         const signed = await authorizeSignedAgreementDocumentRead({
           bucket: req.params.bucket, path: objectPath, tenantId: req.tenantId,
           user: req.user, membership: req.membership,
