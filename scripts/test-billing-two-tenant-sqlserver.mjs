@@ -1803,7 +1803,20 @@ async function main() {
     const resetMailbox = createControlledResetMailbox();
     const app = express();
     app.use(express.json());
-    app.use('/storage', createAuthenticatedTenantStorageRouter({ deliveryHandler: auditProbe.deliveryHandler }));
+    // Use the real disposable storage object bytes for payment proof images.
+    // Keep the audit-trail's dedicated fake byte handler for existing Evia
+    // history acceptance; neither is a production R2 agreement assertion.
+    const { createStorageDeliveryHandler } = await import('../src/api/storage/index.js');
+    const realProofDelivery = createStorageDeliveryHandler();
+    app.use('/storage', createAuthenticatedTenantStorageRouter({
+      deliveryHandler: (req, res, next) => {
+        if (String(req.params.bucket).toLowerCase() === 'invoices' &&
+            String(req.params[0] || req.path || '').includes('/payment_proofs/')) {
+          return realProofDelivery(req, res, next);
+        }
+        return auditProbe.deliveryHandler(req, res, next);
+      }
+    }));
     app.use('/api', createSessionAuthMiddleware());
     app.use('/api/platform/auth', createPasswordResetRouter({
       sendEmail: resetMailbox.sendEmail,
