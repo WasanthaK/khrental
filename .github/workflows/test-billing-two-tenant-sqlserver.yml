@@ -9,6 +9,7 @@ on:
       # two-tenant SQL/Puppeteer harness; runtime edits must trigger this gate.
       - 'scripts/verify-phase4-staff-maintenance-http.mjs'
       - 'src/api/platform/maintenanceLifecycleRouter.js'
+      - 'src/api/platform/maintenanceNotificationWriter.js'
       - 'src/services/maintenanceLifecycleClient.js'
       - 'src/components/maintenance/StaffAssignment.jsx'
       - 'src/pages/MaintenanceDetails.jsx'
