@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../../utils/constants';
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import { addMaintenanceComment, cancelMaintenanceRequest } from '../../services/maintenanceService';
+import { getAuthorizedMaintenanceDetail } from '../../services/maintenanceDetailReadService';
 
 // Components
 import CommentSection from '../../components/maintenance/CommentSection';
@@ -36,44 +36,11 @@ const RenteeMaintenanceDetails = () => {
         const appUserId = userData?.profileId || userData?.appUserId || null;
         if (!appUserId) throw new Error('User not found');
         
-        // Fetch maintenance request with all related data
-        const { data: requestData, error: requestError } = await platformClient
-          .from('maintenance_requests')
-          .select(`
-            *,
-            property:properties!maintenance_requests_propertyid_fkey(
-              id,
-              name,
-              address,
-              propertytype,
-              status
-            ),
-            rentee:app_users!maintenance_requests_renteeid_fkey(
-              id,
-              name,
-              email,
-              contact_details
-            ),
-            assigned_staff:app_users!maintenance_requests_assignedto_fkey(
-              id,
-              name,
-              email,
-              contact_details
-            ),
-            maintenance_request_images(
-              id,
-              image_url,
-              image_type,
-              uploaded_at
-            )
-          `)
-          .eq('id', id)
-          .eq('renteeid', appUserId)
-          .single();
-        
-        if (requestError) throw requestError;
+        // Authenticated server owns renter/tenant authorization; no client ID
+        // can widen this scoped read or trigger a generic fallback.
+        const requestData = await getAuthorizedMaintenanceDetail(id);
         if (!requestData) throw new Error('Maintenance request not found');
-        
+
         console.log('Fetched request data:', requestData);
         setRequest(requestData);
         setProperty(requestData.property);
@@ -146,49 +113,10 @@ const RenteeMaintenanceDetails = () => {
         throw new Error(result.error || 'Failed to add comment');
       }
       
-      // Refresh request data to get updated comments
-      const { data: updatedRequest, error: requestError } = await platformClient
-        .from('maintenance_requests')
-        .select(`
-          *,
-          property:properties!maintenance_requests_propertyid_fkey(
-            id,
-            name,
-            address,
-            propertytype,
-            status
-          ),
-          rentee:app_users!maintenance_requests_renteeid_fkey(
-            id,
-            name,
-            email,
-            contact_details
-          ),
-          assigned_staff:app_users!maintenance_requests_assignedto_fkey(
-            id,
-            name,
-            email,
-            contact_details
-          ),
-          maintenance_request_images(
-            id,
-            image_url,
-            image_type,
-            uploaded_at
-          )
-        `)
-        .eq('id', id)
-        .single();
-      
-      if (requestError) {
-        console.error('Error fetching updated request:', requestError);
-        throw requestError;
-      }
-      
-      if (!updatedRequest) {
-        throw new Error('Updated request not found');
-      }
-      
+      // Refresh through the same server-authorized tenant/owner projection.
+      // A denied refresh must never retry via the compatibility table client.
+      const updatedRequest = await getAuthorizedMaintenanceDetail(id);
+
       console.log('Updated request after adding comment:', updatedRequest);
       setRequest(updatedRequest);
       setProperty(updatedRequest.property);

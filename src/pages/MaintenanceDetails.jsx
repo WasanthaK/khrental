@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchData, platform as platformClient, checkUserExists } from '../services/platformClient';
+import { checkUserExists } from '../services/platformClient';
+import { getAuthorizedMaintenanceDetail } from '../services/maintenanceDetailReadService';
 import { 
   updateMaintenanceRequest, 
   assignMaintenanceRequest, 
@@ -74,30 +75,10 @@ const MaintenanceDetails = () => {
     try {
       setLoading(true);
       
-      // Fetch maintenance request with all related data
-      const { data: requestData, error: requestError } = await platformClient
-        .from('maintenance_requests')
-        .select(`
-          *,
-          property:properties!maintenance_requests_propertyid_fkey(*),
-          rentee:app_users!maintenance_requests_renteeid_fkey(*),
-          assigned_staff:app_users!maintenance_requests_assignedto_fkey(*),
-          maintenance_request_images(*)
-        `)
-        .eq('id', id)
-        .single();
-      
-      if (requestError) {
-        console.error('Error fetching maintenance request:', requestError);
-        setError('Failed to load maintenance request details: ' + (requestError.message || 'Unknown error'));
-        setLoading(false);
-        return;
-      }
-      
-      if (!requestData) {
-        throw new Error('Maintenance request not found');
-      }
-      
+      // Tenant/owner/property authorization is enforced by the lifecycle API.
+      const requestData = await getAuthorizedMaintenanceDetail(id);
+      setError(null);
+
       // Detailed inspection of request images
       console.log('Maintenance request images:', requestData.maintenance_request_images);
       if (requestData.maintenance_request_images) {
@@ -455,34 +436,6 @@ const MaintenanceDetails = () => {
     return user && (user.role === 'admin' || user.role === 'staff' || user.role === 'maintenance');
   };
   
-  // Add this function at the end of the component but before the return statement
-  const debugFetchImages = async () => {
-    try {
-      console.log('Fetching images directly from database for debugging');
-      
-      const { data: images, error } = await platformClient
-        .from('maintenance_request_images')
-        .select('*')
-        .eq('maintenance_request_id', id);
-      
-      if (error) {
-        console.error('Error fetching images:', error);
-        return;
-      }
-      
-      console.log(`Direct query found ${images?.length || 0} images for request ${id}:`, images);
-      
-      // If we found images but they're not showing in the UI, force update
-      if (images && images.length > 0 && (!request.maintenance_request_images || request.maintenance_request_images.length === 0)) {
-        console.log('Found images directly but not in request - updating request data');
-        const updatedRequest = {...request, maintenance_request_images: images};
-        setRequest(updatedRequest);
-      }
-    } catch (err) {
-      console.error('Error in debug fetch images:', err);
-    }
-  };
-  
   // Add this function before the return statement
   const handleAddMultipleImages = async (files) => {
     try {
@@ -589,17 +542,6 @@ const MaintenanceDetails = () => {
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* Debug button - only visible in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <button 
-          onClick={debugFetchImages}
-          className="mb-4 px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
-          title="Debug: Fetch images directly"
-        >
-          Debug Images
-        </button>
-      )}
-      
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Maintenance Request Details</h1>

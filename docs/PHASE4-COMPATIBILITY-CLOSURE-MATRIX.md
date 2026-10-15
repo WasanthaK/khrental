@@ -385,3 +385,11 @@ This batch explicitly exports `addMaintenanceRequestImage` from a scoped adapter
 **Not claimed:** full retirement of `maintenanceServiceLegacy.js`, proof that unused historical pages have no residual generic writes, real R2 file acceptance for a production renter, or final cross-tenant browser coverage. Those remain in the Package C compatibility/acceptance register. The explicit export is the narrow live-callsite boundary; all other legacy exports remain pending individual census.
 
 No schema migration, real production data mutation, webhook signing, billing or email changes. Verify exact-head authorization/build and disposable two-tenant SQL/browser before merge; record exact Azure Ready SHA and MSSQL after any runtime deployment. Phase 4 remains OPEN, Phase 5 gated.
+
+## Package C — routed staff/renter maintenance detail reads (2026-10-15)
+
+Both routed detail pages previously made generic compatibility queries against `maintenance_requests` using supplied request IDs (and the renter page an additional browser-side rentee-ID predicate). The staff page also contained a development-only button that directly queried `maintenance_request_images` and could backfill request UI state from a separate, differently authorized read.
+
+The new `getAuthorizedMaintenanceDetail` delegates only to `GET /api/maintenance-lifecycle/requests/:requestId` and the validated `mapMaintenanceLifecycleProjection`. Server SQL restricts organization and ID, then `assertReadAccess` checks the owning renter, property-scoped manager or assigned worker. The server independently filters internal comments for renters. Malformed responses and denied access do **not** fall back to generic compatibility queries. The development-only direct image query/button is removed.
+
+This is **bounded detail-read closure**, not generic client retirement. Renter comments and other adjacent legacy reads/writes still require separate caller/contract inspection; completion/assignment/notification side effects remain unchanged. CI must run the exact-head build/authorization suite plus disposable two-tenant SQL/browser acceptance and perform independent Azure Ready/public SHA/MSSQL proof if merged. Phase 4 remains active and Phase 5 gated.
