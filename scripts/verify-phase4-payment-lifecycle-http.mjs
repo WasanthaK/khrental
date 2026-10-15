@@ -115,10 +115,25 @@ export async function verifyPhase4PaymentLifecycleHttp({
     await managerPage.waitForFunction(() =>
       [...document.querySelectorAll('button')].some(
         b => b.textContent.includes('Issue & Send Invoice')), { timeout: 30000 });
+    const issuedResponse = managerPage.waitForResponse(response =>
+      response.url().includes('/api/billing/invoices/') &&
+      response.url().endsWith('/issue') && response.request().method() === 'POST',
+    { timeout: 30000 });
     await managerPage.evaluate(() => [...document.querySelectorAll('button')]
       .find(b => b.textContent.includes('Issue & Send Invoice')).click());
-    await managerPage.waitForFunction(() => document.body.innerText.includes(
-      'Email provider accepted the notification'), { timeout: 30000 });
+    const response = await issuedResponse;
+    const body = await response.json().catch(() => ({}));
+    assert.equal(response.status(), 200,
+      'staff issue HTTP response must succeed: ' + JSON.stringify({
+        status: response.status(), code: body.code || null,
+        error: body.error || null
+      }));
+    assert.equal(body.data?.delivery?.status, 'accepted',
+      'controlled email must be accepted after commit');
+    await managerPage.waitForFunction(() =>
+      document.body.innerText.includes('Invoice email delivery') ||
+      document.body.innerText.includes('Email provider accepted the notification'),
+    { timeout: 30000 });
   } finally { await managerContext.close(); }
   assert.equal(invoiceMailbox.accepted.length, 1);
   assert.equal(invoiceMailbox.accepted[0].to, a.email);
