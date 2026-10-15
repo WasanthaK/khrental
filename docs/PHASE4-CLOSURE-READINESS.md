@@ -91,3 +91,19 @@ acceptance and sign-off. This document is not an approval to start Phase 5.
 ## Next bounded item
 
 **Consolidated acceptance and closure decision.** Verify maintenance/notification tenant isolation using the disposable two-tenant SQL fixture; reconcile the remaining P1 live contracts and final owned-deferral register. Keep all production DDL execution separate from the serving container. Proceed to Phase 5 only after the documented closure criteria have been discharged or risk-approved.
+
+## Package C — strict production migration executor verification candidate (2026-10-15)
+
+This package introduces a **read-only, explicitly invoked** verification flow. The earlier `verify-production-db-migration-executor.yml` ran `plan` and accepted job success, even if the database reported `PENDING` or `SATISFIED_UNTRACKED` migrations; it therefore did not prove readiness.
+
+The revised verifier uses the exact **Ready serving revision image** within the separate `khrental-db-migrator` execution. It requires a distinct system-assigned identity, a resting plan-mode job, and checks (without mutation) for:
+
+- An existing `dbo.schema_migrations` ledger and matching checksums for **every** managed migration;
+- A ledger row for every managed migration — untracked satisfied schemas and pending DDL are **not** acceptable;
+- Independent SQL schema inspection passing for every migration;
+- Effective `CREATE TABLE` and `ALTER ON SCHEMA::dbo` permissions on the executor identity;
+- Successful completion of the dedicated job executing `scripts/run-production-migration-verify.sh`, using an ephemeral per-run command/image override, not a stored job update.
+
+**Never treat this candidate code or a green PR-head workflow as operational evidence.** The production job's provisioning, exact identity, SQL grants, network connectivity, ledger and schema state remain **UNVERIFIED** until a manually dispatched Production verification produces a successful execution ID and retained log/output evidence. A failure here is a real Phase 4 blocker, not a reason to run schema DDL automatically.
+
+This package does not change serving startup, web identity privileges, migration scripts, signed agreements, payment authorization, live mail, Evia canary, or production records. Finish the independent tenant-isolation and compatibility release matrix; Phase 5 remains gated.
