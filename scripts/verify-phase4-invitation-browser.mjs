@@ -26,6 +26,10 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
     page.setDefaultTimeout(45000);
     if (staleSession) {
       await page.evaluateOnNewDocument(tenantId => {
+        // Seed once per tab: running on the post-redemption navigation would
+        // overwrite the real authenticated session being verified.
+        if (sessionStorage.getItem('phase4.invitation.staleSeeded')) return;
+        sessionStorage.setItem('phase4.invitation.staleSeeded', '1');
         localStorage.removeItem('dev_bypass_role');
         localStorage.setItem('khrental.activeTenantId', tenantId);
         localStorage.setItem('khrental.local.session', JSON.stringify({
