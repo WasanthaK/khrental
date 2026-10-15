@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { downloadTenantFile } from '../services/storageApiService';
+import { buildRequestContextHeaders } from '../services/requestContext';
 
 // Authenticated object bytes, rather than embedding the protected storage URL
 // in an iframe that cannot attach the selected-tenant bearer headers.
@@ -21,10 +21,10 @@ export const useAuthenticatedAgreementDocument = documentUrl => {
       }
       const canonical = source.pathname.match(/^\/storage\/([A-Za-z_][A-Za-z0-9_-]*)\/(.+\.pdf)$/i);
       if (canonical && source.origin === window.location.origin) {
-        file = {
-          bucket: canonical[1],
-          path: canonical[2].split('/').map(decodeURIComponent).join('/')
-        };
+        // The server owns the signed-document path, tenant, agreement and
+        // archive ACL. Do not re-scope its canonical persisted URL in the
+        // browser; normalization may change UUID case or object key bytes.
+        file = source.href;
       } else if (source.pathname.startsWith('/storage/')) {
         throw new Error('Protected documents must be loaded from this application.');
       } else {
@@ -38,7 +38,11 @@ export const useAuthenticatedAgreementDocument = documentUrl => {
     setState({ status: 'loading', url: null, error: null });
     const load = async () => {
       try {
-        const pdf = await downloadTenantFile(file);
+        const response = await fetch(file, {
+          headers: buildRequestContextHeaders()
+        });
+        if (!response.ok) throw new Error('Protected storage denied the PDF request.');
+        const pdf = await response.blob();
         if (pdf.size < 5 || String.fromCharCode(...new Uint8Array(await pdf.slice(0, 5).arrayBuffer())) !== '%PDF-') {
           throw new Error('Invalid or empty PDF received.');
         }

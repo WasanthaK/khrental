@@ -110,6 +110,12 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
     });
     await page.waitForFunction(expected => document.body.innerText.includes(expected),
       { timeout: 30000 }, title);
+    const fileResponses = [];
+    page.on('response', response => {
+      if (response.url().includes('/storage/documents/')) {
+        fileResponses.push(response.status());
+      }
+    });
     const scope = await page.evaluate(title => {
       const card = [...document.querySelectorAll('div.border.rounded-lg')]
         .find(element => element.innerText.includes(title)
@@ -120,12 +126,6 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
       return true;
     }, title);
     assert.equal(scope, true, 'routed admin card must expose retained signed PDF');
-    const fileResponses = [];
-    page.on('response', response => {
-      if (response.url().includes('/storage/documents/')) {
-        fileResponses.push(response.status());
-      }
-    });
     await page.waitForFunction(() => {
       const frame = document.querySelector('iframe[title="Agreement Document Viewer"]');
       const ready = frame && String(frame.getAttribute('src') || '').startsWith('blob:');
