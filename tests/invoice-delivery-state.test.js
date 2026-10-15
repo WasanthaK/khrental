@@ -16,3 +16,14 @@ test('definite provider rejection differs from ambiguous network delivery', () =
   assert.equal(classifyInvoiceEmailError({ code: 'EMAIL_PROVIDER_REQUEST_FAILED' }), 'unknown');
   assert.equal(classifyInvoiceEmailError(new Error('connection reset')), 'unknown');
 });
+
+test('invoice email ledger timestamps are serialized and strictly increasing for deterministic outcome reads', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/api/platform/billingRouter.js', import.meta.url), 'utf8');
+  assert.match(source, /const emailEvent = Object\.values\(DELIVERY_EVENTS\)\.includes\(eventType\)/);
+  assert.match(source, /invoices WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(source, /MAX\(createdat\)/);
+  assert.match(source, /DATEADD\(NANOSECOND, 100, @previousEventAt\)/);
+  assert.match(source, /ORDER BY createdat DESC, id DESC/);
+  assert.match(source, /last\?\.event_type !== DELIVERY_EVENTS\.failed/);
+});
