@@ -1,6 +1,7 @@
 import {
   generateTenancyMonthlyInvoices,
   recordManualInvoicePayment,
+  sendInvoicePaymentReminder,
   submitInvoicePaymentProof,
   verifyInvoicePayment
 } from './platformClient';
@@ -159,16 +160,12 @@ export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
  */
 export const sendPaymentReminder = async (invoiceId) => {
   try {
-    const response = await fetch(`/api/billing/invoices/${encodeURIComponent(invoiceId)}/send-reminder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include'
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload?.error || `Payment reminder failed with status ${response.status}`);
+    const { data, error } = await sendInvoicePaymentReminder(invoiceId);
+    if (error) throw error;
+    if (!data || data.sent !== true || String(data.invoiceId || '').toLowerCase() !== String(invoiceId || '').toLowerCase()) {
+      throw new Error('Payment reminder delivery was not acknowledged for this invoice.');
     }
-    return { success: true, data: payload?.data || null };
+    return { success: true, data };
   } catch (error) {
     console.error('Error sending payment reminder:', error.message);
     return { success: false, error: error.message };
