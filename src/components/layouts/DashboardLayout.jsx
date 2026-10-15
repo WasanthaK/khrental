@@ -235,6 +235,11 @@ const DashboardLayout = () => {
             </NavLink>
           )}
 
+          {showTenantWorkspace && (
+            <NavLink to="/dashboard/notifications" className={getNavLinkClass}>
+              Notifications
+            </NavLink>
+          )}
           {showMaintenance && (
             <NavLink to="/dashboard/maintenance" className={getNavLinkClass}>
               Maintenance
