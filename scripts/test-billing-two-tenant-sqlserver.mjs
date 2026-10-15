@@ -1453,6 +1453,61 @@ async function verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, 
   return { notificationA: idA, notificationB: idB, requestA: reqA, requestB: reqB };
 }
 
+// A user can be an active member of several organizations. An accepted
+// invitation in any organization is a global account claim, never a reason
+// for a different administrator to issue another one-time account setup link.
+async function verifyCrossTenantInvitationRecoveryAgainstDisposableSql(pool, a, b) {
+  const { createUserInvitation, validateUserInvitation } =
+    await import('../src/api/auth/invitations.js');
+  const user = await first(pool, `
+    INSERT INTO app_users (tenant_id, name, email, role, user_type)
+    OUTPUT INSERTED.id
+    VALUES (@tenantId, 'Historically Claimed', @email, 'rentee', 'rentee')
+  `, { tenantId: a.tenantId, email: 'historically-claimed-' + crypto.randomUUID() + '@example.invalid' });
+  const userId = guid(user.id);
+  await query(pool, `
+    INSERT INTO tenant_memberships (tenant_id, app_user_id, role, status, is_default)
+    VALUES (@tenantId, @appUserId, 'rentee', 'active', 0)
+  `, { tenantId: b.tenantId, appUserId: userId });
+  await query(pool, `
+    INSERT INTO user_invitations
+      (tenant_id, app_user_id, email, intended_role, user_type, token_hash, expires_at, accepted_at)
+    SELECT @tenantId, id, email, 'rentee', 'rentee', @hash,
+           DATEADD(HOUR, 24, SYSUTCDATETIME()), SYSUTCDATETIME()
+    FROM app_users WHERE id = @appUserId
+  `, { tenantId: a.tenantId, appUserId: userId, hash: crypto.randomBytes(32).toString('hex') });
+
+  await assert.rejects(
+    () => createUserInvitation({ tenantId: b.tenantId, appUserId: userId }),
+    error => error?.code === 'ACCOUNT_RECOVERY_REQUIRED'
+  );
+  assert.equal((await query(pool,
+    'SELECT id FROM user_invitations WHERE tenant_id = @tenantId AND app_user_id = @appUserId',
+    { tenantId: b.tenantId, appUserId: userId })).length, 0,
+  'foreign organization must not create a fresh token for a historically claimed user');
+
+  // A genuinely unclaimed member remains eligible for a valid invitation.
+  const eligible = await first(pool, `
+    INSERT INTO app_users (tenant_id, name, email, role, user_type)
+    OUTPUT INSERTED.id
+    VALUES (@tenantId, 'Unclaimed Member', @email, 'rentee', 'rentee')
+  `, { tenantId: b.tenantId, email: 'unclaimed-' + crypto.randomUUID() + '@example.invalid' });
+  const eligibleId = guid(eligible.id);
+  const issued = await createUserInvitation({ tenantId: b.tenantId, appUserId: eligibleId });
+  const checked = await validateUserInvitation(issued.token);
+  assert.equal(checked.valid, true, 'legitimate invitation must remain usable');
+  const replacement = await createUserInvitation({ tenantId: b.tenantId, appUserId: eligibleId });
+  assert.equal((await validateUserInvitation(issued.token)).valid, false,
+    'resend must revoke the previous invitation');
+  assert.equal((await validateUserInvitation(replacement.token)).valid, true);
+  assert.equal((await query(pool, `
+    SELECT id FROM user_invitations
+    WHERE tenant_id = @tenantId AND app_user_id = @appUserId
+      AND revoked_at IS NULL AND accepted_at IS NULL
+  `, { tenantId: b.tenantId, appUserId: eligibleId })).length, 1);
+  console.log('PASS: accepted account claims block re-invite across organizations; legitimate invitation and resend remain valid');
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -1479,6 +1534,7 @@ async function main() {
     for (const filename of [
       '20260913_00_create_fresh_mssql_schema.sql',
       '20260915_01_create_staff_property_assignments.sql',
+      '20260915_02_create_user_invitations.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
       // Routed maintenance detail/comments need their governed lifecycle DDL,
@@ -1511,6 +1567,7 @@ async function main() {
     ({ closeMssqlPool } = await import('../src/api/mssql/pool.js'));
     const a = await fixture(pool, 'Tenant A', 2000, 125);
     const b = await fixture(pool, 'Tenant B', 3000, 225);
+    await verifyCrossTenantInvitationRecoveryAgainstDisposableSql(pool, a, b);
     const phase4Seeded = await verifyMaintenanceNotificationIsolationAgainstDisposableSql(pool, a, b);
     const generate = tenantId => generateMonthlyInvoicesForTenant({
       tenantId, billingPeriod: '2026-10', source: 'test', authorizeProperty: () => {}

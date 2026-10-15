@@ -84,15 +84,15 @@ const validateTargetForInvitation = async (target) => {
     throw createInvitationError(409, 'This user already has a linked account.', 'ACCOUNT_ALREADY_CLAIMED');
   }
 
+  // Account claiming is global to app_user_id. A second organization must
+  // never re-invite an identity with a historically accepted claim.
   const acceptedInvitation = await runSingleQuery(`
     SELECT TOP 1 accepted_at
     FROM dbo.user_invitations
-    WHERE tenant_id = @tenantId
-      AND app_user_id = @appUserId
+    WHERE app_user_id = @appUserId
       AND accepted_at IS NOT NULL
     ORDER BY accepted_at DESC, id DESC
   `, {
-    tenantId: target.tenant_id,
     appUserId: target.id
   });
 
