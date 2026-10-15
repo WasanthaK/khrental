@@ -1800,6 +1800,14 @@ PR #287 merged as `3adeda8b4019a7b1ea2097ab4db00ae4a0df94aa`: the assigned worke
 
 Full Phase 4 closure still requires controlled invitation/signing, actual storage upload, lifecycle notification evidence, compatibility caller census, and operational migration authority confirmation. Phase 5 stays pending.
 
+## Phase 4 — durable maintenance in-app notification delivery, 2026-10-15
+
+PR #288 merged as `f3a1c30178d4a8059824e8caead57c33e79c0d6d` and the production deployment #38630468740 confirmed Ready Azure revision `0000285`, exact public serving SHA and live MSSQL connectivity.
+
+The next package adds **in-app notification records atomically with maintenance lifecycle events** for request creation (authorized managers of that property), assignment, work started, completed and cancelled (renter/assigned worker). Active tenant membership is checked again within the transaction; foreign and unassigned-property users are not notified. The existing real-session two-tenant SQL fixture verifies recipient visibility through /api/notifications/me, self-only mark-as-read, replay denial and no cross-tenant leakage. No new SQL schema, external service, payment or Evia authority changes are introduced.
+
+This does **not** prove a visible inbox in the React application or provider-backed email/SMS delivery. The existing notification service's legacy email/SMS placeholders are not accepted evidence of sending. UI presentation, external delivery, file bytes, invitation/signing and migration-executor operational verification remain Phase 4 blockers. Phase 5 is pending.
+
 ## Maintenance rule for this document
 
 After each merged production change:

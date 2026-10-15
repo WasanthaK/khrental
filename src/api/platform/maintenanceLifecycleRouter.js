@@ -14,6 +14,7 @@ import {
   canTenantCancelMaintenance
 } from './maintenanceLifecycle.js';
 import { authorizeMaintenanceImageAttachment, normalizeMaintenanceImageUrl, sameMaintenanceIdentifier } from './maintenanceImagePolicy.js';
+import { writeMaintenanceNotifications } from './maintenanceNotificationWriter.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -244,6 +245,11 @@ export const createMaintenanceLifecycleRouter = () => {
           actorUserId: req.user.id,
           metadata: { agreementId: agreement.id, unitId: agreement.unitid || null }
         });
+        await writeMaintenanceNotifications({
+          transaction, queryTransaction, tenantId: req.tenantId,
+          requestId: created.id, eventType: 'request_created',
+          propertyId: created.propertyid, renteeId: created.renteeid
+        });
         await transaction.commit();
         res.status(201).json({ data: created, error: null });
       } catch (error) {
@@ -327,6 +333,12 @@ export const createMaintenanceLifecycleRouter = () => {
           actorUserId: req.user.id,
           metadata: { staffUserId, scheduledAt: updated.assignedat }
         });
+        await writeMaintenanceNotifications({
+          transaction, queryTransaction, tenantId: req.tenantId,
+          requestId: request.id, eventType: 'request_assigned',
+          propertyId: request.propertyid, renteeId: request.renteeid,
+          assignedStaffId: staffUserId, previousStaffId: request.assignedto
+        });
         await transaction.commit();
         res.json({ data: updated, error: null });
       } catch (error) {
@@ -366,6 +378,12 @@ export const createMaintenanceLifecycleRouter = () => {
           fromStatus: request.status,
           toStatus: MAINTENANCE_STATUS.IN_PROGRESS,
           actorUserId: req.user.id
+        });
+        await writeMaintenanceNotifications({
+          transaction, queryTransaction, tenantId: req.tenantId,
+          requestId: request.id, eventType: 'work_started',
+          propertyId: request.propertyid, renteeId: request.renteeid,
+          assignedStaffId: request.assignedto
         });
         await transaction.commit();
         res.json({ data: updated, error: null });
@@ -423,6 +441,12 @@ export const createMaintenanceLifecycleRouter = () => {
           actorUserId: req.user.id,
           metadata: { completionCost }
         });
+        await writeMaintenanceNotifications({
+          transaction, queryTransaction, tenantId: req.tenantId,
+          requestId: request.id, eventType: 'work_completed',
+          propertyId: request.propertyid, renteeId: request.renteeid,
+          assignedStaffId: request.assignedto
+        });
         await transaction.commit();
         res.json({ data: updated, error: null });
       } catch (error) {
@@ -470,6 +494,12 @@ export const createMaintenanceLifecycleRouter = () => {
           toStatus: MAINTENANCE_STATUS.CANCELLED,
           actorUserId: req.user.id,
           metadata: { reason }
+        });
+        await writeMaintenanceNotifications({
+          transaction, queryTransaction, tenantId: req.tenantId,
+          requestId: request.id, eventType: 'request_cancelled',
+          propertyId: request.propertyid, renteeId: request.renteeid,
+          assignedStaffId: request.assignedto
         });
         await transaction.commit();
         res.json({ data: updated, error: null });
