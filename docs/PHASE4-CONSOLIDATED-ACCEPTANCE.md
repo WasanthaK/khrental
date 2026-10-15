@@ -40,3 +40,9 @@ Status: **ACTIVE — BLOCKED FROM PHASE 5**. This document distinguishes source-
 ## Non-goals
 
 No production SQL/identity mutation, no production invitation emails, no payment changes, no Evia canary activation, no object delete, and no assertion that synthetic fixtures constitute successful production acceptance.
+
+## Phase 4 — identity-wide invitation recovery safety (2026-10-15)
+
+After PR #290 merged and Azure revision `0000287` served SHA `93b4e32a0fe1cba752d9b2ac27c1051474b0543d` with ready MSSQL, the next focused package addresses a cross-organization account-claim gap. A person may have active memberships in multiple organizations, but invitation acceptance is a *global identity claim*, not an invitation claim limited to the user's original organization. The invitation writer now searches historical accepted invitations by app-user ID across organizations. A formerly claimed identity without usable auth linkage must stay `ACCOUNT_RECOVERY_REQUIRED` even when re-invited from another active organization. No new secret should be generated for that operation.
+
+The existing disposable two-tenant SQL test fixture now includes the existing invitation schema and verifies that cross-organization re-invitation is refused without a new token row, while an unclaimed target can still be invited and resend revokes its earlier token. This is source/SQL acceptance only until exact-head CI runs green; it is not a live invitation email, browser redemption journey, or proof of password reset. Phase 4 remains **ACTIVE**, with full invitation redemption/recovery, controlled mailbox delivery, agreement signing, R2 bytes, compatibility census, and production migration authority pending.
