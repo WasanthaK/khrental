@@ -120,10 +120,26 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
       return true;
     }, title);
     assert.equal(scope, true, 'routed admin card must expose retained signed PDF');
+    const fileResponses = [];
+    page.on('response', response => {
+      if (response.url().includes('/storage/documents/')) {
+        fileResponses.push(response.status());
+      }
+    });
     await page.waitForFunction(() => {
       const frame = document.querySelector('iframe[title="Agreement Document Viewer"]');
-      return frame && String(frame.getAttribute('src') || '').startsWith('blob:');
+      const ready = frame && String(frame.getAttribute('src') || '').startsWith('blob:');
+      const problem = document.querySelector('[role="alert"]')?.textContent?.includes('Unable to retrieve');
+      return ready || problem;
     }, { timeout: 30000 });
+    const summary = await page.evaluate(() => ({
+      blobLoaded: Boolean(document.querySelector('iframe[title="Agreement Document Viewer"][src^="blob:"]')),
+      error: document.querySelector('[role="alert"]')?.textContent || null
+    }));
+    assert.equal(summary.blobLoaded, true,
+      'authenticated signed PDF must load, not show an error: ' + JSON.stringify({
+        error: summary.error, storageResponses: fileResponses
+      }));
     const embedded = await page.evaluate(async () => {
       const frame = document.querySelector('iframe[title="Agreement Document Viewer"]');
       const download = [...document.querySelectorAll('a[download]')]
