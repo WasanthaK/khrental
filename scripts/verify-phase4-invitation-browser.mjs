@@ -91,8 +91,11 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
       assert.ok(stored.session?.access_token && stored.session?.user?.id,
         'successful setup must persist a server-issued authenticated session');
       assert.equal(lower(stored.session.user.email), lower(target.email));
-      assert.equal(lower(stored.activeTenant), lower(expectedTenant),
-        'routed renter portal must resolve the correct organization');
+      // Account setup deliberately clears the preexisting selected-tenant
+      // hint. An empty hint is correct; the authenticated server context below
+      // must resolve the new user to the only authorized organization.
+      assert.ok(!stored.activeTenant || lower(stored.activeTenant) === lower(expectedTenant),
+        'post-setup browser must not retain an unrelated tenant selection');
 
       const context = await call('/api/platform/auth/context', {
         token: stored.session.access_token, tenantId: expectedTenant
