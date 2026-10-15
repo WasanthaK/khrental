@@ -86,10 +86,21 @@ export async function verifyPhase4NotificationInboxBrowser({
     item: b, token: tokenB, role: 'rentee', path: '/rentee/notifications'
   });
   try {
-    await renterB.waitForSelector(
-      'article[data-notification-id="' + seeded.notificationB + '"]',
-      { timeout: 30000 }
-    );
+    try {
+      await renterB.waitForFunction(expected =>
+        [...document.querySelectorAll('article[data-notification-id]')].some(node =>
+          node.getAttribute('data-notification-id').toLowerCase() === expected.toLowerCase()
+        ), { timeout: 30000, polling: 200 }, seeded.notificationB
+      );
+    } catch (error) {
+      const state = await renterB.evaluate(() => ({
+        route: location.pathname,
+        text: document.body.innerText.slice(-2500),
+        ids: [...document.querySelectorAll('article[data-notification-id]')]
+          .map(node => node.getAttribute('data-notification-id'))
+      }));
+      throw new Error('Tenant B own inbox item missing: ' + JSON.stringify(state), { cause: error });
+    }
     const visible = await renterB.evaluate(() => document.body.innerText);
     assert.ok(!visible.includes(staffResult.requestId), 'tenant B UI must not expose tenant A');
     assert.ok(!visible.includes(seeded.requestA), 'tenant B UI must not render foreign request');
