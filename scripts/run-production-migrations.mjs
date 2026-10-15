@@ -224,8 +224,12 @@ const parseArgs = () => {
   const mode = values.mode || 'plan';
   const through = values.through || 'all';
 
-  if (!['plan', 'apply'].includes(mode)) {
+  if (!['plan', 'apply', 'verify'].includes(mode)) {
     throw new Error(`Unsupported migration mode: ${mode}`);
+  }
+
+  if (mode === 'verify' && through !== 'all') {
+    throw new Error('Strict migration verification must check all managed migrations.');
   }
 
   if (through !== 'all' && !MIGRATIONS.some((migration) => migration.id === through)) {
@@ -357,6 +361,19 @@ const assertDdlPermission = async (pool) => {
   }
 };
 
+const assertExecutorGrantReadiness = async (pool) => {
+  // Permission inspection is read-only; it is NOT a substitute for a governed apply.
+  const result = await pool.request().query(`
+    SELECT
+      HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'CREATE TABLE') AS can_create_table,
+      HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER') AS can_alter_dbo;
+  `);
+  const row = result.recordset?.[0] || {};
+  if (row.can_create_table !== 1 || row.can_alter_dbo !== 1) {
+    throw new Error('The isolated migration executor does not have the required CREATE TABLE and dbo schema ALTER grants.');
+  }
+};
+
 const recordMigration = async (pool, migration, checksum) => {
   const request = pool.request();
   request.input('migrationId', sql.NVarChar(200), migration.id);
@@ -372,6 +389,13 @@ const recordMigration = async (pool, migration, checksum) => {
 const main = async () => {
   const { mode, through } = parseArgs();
   const selected = getSelectedMigrations(through);
+
+  if (
+    mode === 'verify'
+    && (!envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY') || !envFlag('MSSQL_MIGRATION_DEDICATED_EXECUTOR'))
+  ) {
+    throw new Error('Strict production migration verification requires the dedicated executor managed identity.');
+  }
 
   if (
     mode === 'apply'
@@ -398,6 +422,29 @@ const main = async () => {
     console.log(`Migration mode: ${mode}`);
     console.log(`Database: ${process.env.MSSQL_SERVER}/${process.env.MSSQL_DATABASE}`);
     console.log(`Migration ledger: ${hasLedger ? 'present' : 'not yet created'}`);
+
+    if (mode === 'verify') {
+      // Never create or adopt a ledger row in verification mode.
+      if (!hasLedger) {
+        throw new Error('Migration ledger is missing; verification cannot claim production readiness.');
+      }
+      await assertExecutorGrantReadiness(pool);
+
+      let problems = 0;
+      for (const item of planned) {
+        const inspection = await item.migration.inspect(pool);
+        const ledgerState = item.appliedRow ? 'LEDGERED' : 'MISSING_LEDGER';
+        const schemaState = inspection.satisfied ? 'SCHEMA_OK' : 'SCHEMA_MISMATCH';
+        console.log(`VERIFY  ${item.migration.id}  ${ledgerState}  ${schemaState}  ${inspection.detail}`);
+        if (!item.appliedRow || !inspection.satisfied) problems += 1;
+      }
+
+      if (problems) {
+        throw new Error(`Strict migration verification failed for ${problems} managed migration(s); do not mark the executor or ledger production-ready.`);
+      }
+      console.log(`Strict read-only migration verification passed for ${planned.length} managed migrations; ledger checksums, schema state and executor grants are valid.`);
+      return;
+    }
 
     if (mode === 'plan') {
       for (const item of planned) {
