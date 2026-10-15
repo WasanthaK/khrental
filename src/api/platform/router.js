@@ -1213,7 +1213,7 @@ export const createPlatformRouter = () => {
   router.get('/storage/list', requireAuthenticated, async (req, res, next) => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
-      if (String(req.query.bucket).toLowerCase() === 'invoices' && /(?:^|\\/)payment_proofs(?:\\/|$)/i.test(relativePath)) {
+      if (String(req.query.bucket).toLowerCase() === 'invoices' && relativePath.includes('/payment_proofs')) {
         throw Object.assign(new Error('Payment proof listing is not available.'), {
           status: 403, code: 'PAYMENT_PROOF_LIST_FORBIDDEN'
         });
