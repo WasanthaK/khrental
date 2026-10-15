@@ -50,6 +50,9 @@ const RenteePortalLayout = () => {
       <NavLink to="/rentee/maintenance" className={getNavLinkClass}>
         Maintenance Requests
       </NavLink>
+      <NavLink to="/rentee/notifications" className={getNavLinkClass}>
+        Notifications
+      </NavLink>
       <NavLink to="/rentee/utilities" className={getNavLinkClass}>
         Utility Readings
       </NavLink>
