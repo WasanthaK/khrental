@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { verifyPaymentProof } from '../../services/paymentService';
 import FormTextarea from '../ui/FormTextarea';
+import { useAuthenticatedPaymentProof } from '../../hooks/useAuthenticatedPaymentProof';
 
 const PaymentVerification = ({ invoiceId, paymentProofUrl, payment, onSuccess, onError }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [verificationNotes, setVerificationNotes] = useState('');
-  const isPdf = /\.pdf(?:$|\?)/i.test(String(paymentProofUrl || ''));
+  const proof = useAuthenticatedPaymentProof(paymentProofUrl);
+  const isPdf = proof.type === 'application/pdf';
 
   const handleApprove = async () => {
     await handleVerification(true);
@@ -70,11 +72,15 @@ const PaymentVerification = ({ invoiceId, paymentProofUrl, payment, onSuccess, o
 
       <div className="mb-3 sm:mb-4">
         <h3 className="text-md font-medium mb-2">Payment Proof</h3>
-        {paymentProofUrl ? (
+        {paymentProofUrl ? proof.status === 'loading' ? (
+          <p role="status">Loading secure payment evidence...</p>
+        ) : proof.status === 'error' ? (
+          <p role="alert" className="text-red-700">{proof.error}</p>
+        ) : proof.status === 'ready' ? (
           <div className="border border-gray-200 rounded-lg p-2">
             {isPdf ? (
               <a
-                href={paymentProofUrl}
+                href={proof.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
@@ -83,13 +89,13 @@ const PaymentVerification = ({ invoiceId, paymentProofUrl, payment, onSuccess, o
               </a>
             ) : (
               <img
-                src={paymentProofUrl}
+                src={proof.url}
                 alt="Payment Proof"
                 className="max-w-full h-auto rounded"
               />
             )}
           </div>
-        ) : (
+        ) : null : (
           <p className="text-gray-500 text-sm">No payment proof available</p>
         )}
       </div>
@@ -115,7 +121,7 @@ const PaymentVerification = ({ invoiceId, paymentProofUrl, payment, onSuccess, o
         <button
           type="button"
           onClick={handleApprove}
-          disabled={loading}
+          disabled={loading || proof.status !== 'ready'}
           className="sm:flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           {loading ? 'Processing...' : 'Approve Payment'}
