@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { platform as platformClient } from '../../services/platformClient';
-import { downloadSignedDocument, getEviaAgreementCallbackUrl, getSignatureStatus, sendDocumentForSignature } from '../../services/eviaSignService';
+import { getEviaAgreementCallbackUrl, getSignatureStatus, sendDocumentForSignature } from '../../services/eviaSignService';
 import { STATUS } from '../../contexts/AgreementFormContext';
 import { fetchAppUser } from '../../services/appUserService';
 import { updateAgreementData } from '../../services/agreementService';
@@ -193,7 +193,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
       
       // If status is completed but DB doesn't reflect it, update accordingly
       if (result.status === 'completed' && agreement.status !== STATUS.SIGNED) {
-        await checkSignatureStatus(); // This will download the document and update DB
+        await checkSignatureStatus(); // Observation only: the webhook owns canonical updates
       }
       
       toast.success('Signature status refreshed');
@@ -243,59 +243,18 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
         });
       }
       
-      // If signed, download the final PDF and reconcile the canonical agreement.
-      // Preserve documenturl as the original agreement generated before signing.
+      // Evia polling is advisory only. A browser-observed "completed" status
+      // cannot write signatures, overwrite a retained PDF or change the
+      // canonical agreement. Verified webhooks and server-side archival own
+      // all terminal transitions; the signed-PDF view can safely reconcile
+      // later using the authenticated, tenant-scoped server endpoint.
       if (result.status === 'completed') {
-        const signedDoc = await downloadSignedDocument(agreement.eviasignreference);
-        if (!signedDoc.success) {
-          throw new Error(signedDoc.error || 'Failed to download signed document');
-        }
-
-        const completedAt = new Date().toISOString();
-        let signatoriesStatus = [];
-        try {
-          const current = typeof agreement.signatories_status === 'string'
-            ? JSON.parse(agreement.signatories_status)
-            : agreement.signatories_status;
-          if (Array.isArray(current)) {
-            signatoriesStatus = current.map((signatory) => ({
-              ...signatory,
-              status: 'completed',
-              signed_at: signatory.signed_at || signatory.signedAt || completedAt,
-              signedAt: signatory.signedAt || signatory.signed_at || completedAt
-            }));
-          }
-        } catch (_error) {
-          signatoriesStatus = [];
-        }
-        
-        console.info('[EviaDiag] completed_signature_reconcile_start', {
+        console.info('[EviaDiag] completion_poll_waiting_for_verified_archive', {
           agreementId: shortId(agreement.id),
           requestId: shortId(agreement.eviasignreference),
-          signatoryCount: signatoriesStatus.length
+          canonicalAgreementStatus: agreement.status || null,
+          hasRetainedSignedPdf: Boolean(retainedSignedDocumentUrl)
         });
-
-        await updateAgreementData(agreement.id, {
-          status: STATUS.SIGNED,
-          signature_status: 'completed',
-          signature_completed_at: completedAt,
-          signeddate: completedAt,
-          signed_document_url: signedDoc.documentUrl,
-          signeddocumenturl: signedDoc.documentUrl,
-          signature_pdf_url: signedDoc.documentUrl,
-          ...(signatoriesStatus.length > 0 ? { signatories_status: signatoriesStatus } : {}),
-          updatedat: completedAt
-        });
-        
-        console.info('[EviaDiag] completed_signature_reconcile_ok', {
-          agreementId: shortId(agreement.id),
-          requestId: shortId(agreement.eviasignreference)
-        });
-
-        if (onStatusChange) {
-          onStatusChange(STATUS.SIGNED);
-        }
-        toast.success('Agreement has been signed!');
       }
     } catch (error) {
       console.error('Error checking signature status:', error);

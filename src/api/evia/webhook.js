@@ -1029,8 +1029,14 @@ export const processEviaWebhook = async (payload = {}, {
     }
   }
 
-  if (!signedDocumentUrl) {
-    signedDocumentUrl = extractSignedDocumentUrl(payload);
+  // Provider URLs are not retained tenant objects. A failed download
+  // remains recoverable on the next verified delivery or scoped reconciliation;
+  // never commit an external link as the authoritative signed-PDF archive.
+  if (!signedDocumentUrl && extractSignedDocumentUrl(payload)) {
+    console.warn('[EviaArchive] provider_document_url_not_retained', {
+      agreementId: shortId(agreement.id),
+      requestId: shortId(normalized.requestId)
+    });
   }
 
   const completedSignatories = finalState.signatureStatus === 'completed'

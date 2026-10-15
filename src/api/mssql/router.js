@@ -1,7 +1,7 @@
 import express from 'express';
 import { getMssqlConfigStatus, isMssqlConfigured } from './config.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
-import { isTenantRole } from '../platform/permissionEngine.js';
+import { isTenantRole, hasPermission, PERMISSIONS } from '../platform/permissionEngine.js';
 import {
   createAppUser,
   createAgreement,
@@ -77,6 +77,19 @@ const ensureAdminUser = (req, res, next) => {
     return;
   }
 
+  next();
+};
+
+const requireAgreementManager = (req, res, next) => {
+  if (!req.user?.id || !req.tenantId || !hasPermission(
+    { user: req.user, membership: req.membership }, PERMISSIONS.AGREEMENTS_MANAGE
+  )) {
+    res.status(403).json({
+      error: 'Agreement management permission is required.',
+      code: 'AGREEMENT_MANAGEMENT_DENIED'
+    });
+    return;
+  }
   next();
 };
 
@@ -577,7 +590,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.post('/agreement-templates', asyncHandler(async (req, res) => {
+  router.post('/agreement-templates', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const template = await createAgreementTemplate(req.body || {}, req.tenantId);
       res.status(201).json({ data: template });
@@ -591,7 +604,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.put('/agreement-templates/:id', asyncHandler(async (req, res) => {
+  router.put('/agreement-templates/:id', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const template = await updateAgreementTemplate(req.params.id, req.body || {}, req.tenantId);
 
@@ -611,7 +624,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.delete('/agreement-templates/:id', asyncHandler(async (req, res) => {
+  router.delete('/agreement-templates/:id', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const template = await deleteAgreementTemplateById(req.params.id, req.tenantId);
 
@@ -678,7 +691,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.post('/agreements', asyncHandler(async (req, res) => {
+  router.post('/agreements', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const agreement = await createAgreement(req.body || {}, req.tenantId);
       res.status(201).json({ data: agreement });
@@ -692,7 +705,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.put('/agreements/:id', asyncHandler(async (req, res) => {
+  router.put('/agreements/:id', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const agreement = await updateAgreement(req.params.id, req.body || {}, req.tenantId);
 
@@ -712,7 +725,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.post('/agreements/:id/sign', asyncHandler(async (req, res) => {
+  router.post('/agreements/:id/sign', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const agreement = await markAgreementSigned(req.params.id, req.tenantId);
       res.json({ data: agreement });
@@ -726,7 +739,7 @@ export const createMssqlRouter = () => {
     }
   }));
 
-  router.delete('/agreements/:id', asyncHandler(async (req, res) => {
+  router.delete('/agreements/:id', requireAgreementManager, asyncHandler(async (req, res) => {
     try {
       const deletedAgreement = await deleteAgreementById(req.params.id, req.tenantId);
 

@@ -176,5 +176,47 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
     loadSignedAgreement: async () => { throw new Error('Empty paths should be denied before SQL'); }
   });
   assert.equal(malformed.allowed, false);
-  console.log('PASS: real signed-PDF authorization, browser-retrieved PDF bytes, temporary URL cleanup and tenant ownership');
+
+  // A generic agreement write must never manufacture signing evidence, and
+  // renter sessions cannot create, edit, manually sign or delete contracts.
+  const change = (method, path, token, tenantId, body = {}) => call(path, {
+    method, token, tenantId, body
+  });
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    const path = method === 'POST' ? '/api/mssql/agreements'
+      : '/api/mssql/agreements/' + agreementId;
+    const attempted = await change(method, path, otherRenterA.token, a.tenantId, {
+      title: 'renter cannot alter agreement'
+    });
+    assert.equal(attempted.status, 403, method + ' must require agreement-management permission');
+    assert.equal(attempted.payload?.code, 'AGREEMENT_MANAGEMENT_DENIED');
+  }
+  const foreignAttempt = await change('PUT', '/api/mssql/agreements/' + agreementId,
+    adminB.token, b.tenantId, { title: 'wrong tenant' });
+  assert.equal(foreignAttempt.status, 404);
+  const cannotForge = [
+    { status: 'signed' }, { signature_status: 'completed' },
+    { signed_document_url: signedUrl }, { signature_pdf_url: signedUrl },
+    { signatories_status: [{ status: 'completed', signed_at: new Date().toISOString() }] }
+  ];
+  for (const body of cannotForge) {
+    const create = await change('POST', '/api/mssql/agreements', adminA.token, a.tenantId, {
+      title: 'forged signature', renteeid: a.renteeId, propertyid: a.propertyId, ...body
+    });
+    assert.equal(create.status, 409);
+    assert.equal(create.payload?.code, 'AGREEMENT_SIGNING_AUTHORITY_REQUIRED');
+    const update = await change('PUT', '/api/mssql/agreements/' + agreementId,
+      adminA.token, a.tenantId, body);
+    assert.equal(update.status, 409);
+    assert.equal(update.payload?.code, 'AGREEMENT_SIGNING_AUTHORITY_REQUIRED');
+  }
+  const immutable = await change('PUT', '/api/mssql/agreements/' + agreementId,
+    adminA.token, a.tenantId, { notes: 'must not rewrite signed contract' });
+  assert.equal(immutable.status, 409);
+  assert.equal(immutable.payload?.code, 'SIGNED_AGREEMENT_IMMUTABLE');
+  const stillSigned = await hit('/api/mssql/agreements/' + agreementId, adminA.token, a.tenantId);
+  assert.equal(stillSigned.status, 200);
+  assert.equal(lower(stillSigned.payload.data.signed_document_url), lower(signedUrl));
+  assert.equal(stillSigned.payload.data.notes || null, null);
+  console.log('PASS: signed-PDF bytes, real-session tenant isolation, immutable signing authority and browser cleanup');
 }
