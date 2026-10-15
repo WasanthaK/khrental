@@ -80,6 +80,16 @@ export async function verifyPhase4StaffMaintenanceHttp({
     )
   });
 
+  const notificationRows = (item, recipientId, requestId) => sqlRows(
+    `SELECT id, tenant_id, user_id, message, is_read
+       FROM notifications
+       WHERE tenant_id = @tenantId AND user_id = @userId
+         AND message LIKE @pattern
+       ORDER BY createdat, id`,
+    { tenantId: item.tenantId, userId: recipientId, pattern: '%' + requestId + '%' }
+  );
+  const notificationTypes = rows => rows.map(row => row.message.split(':')[0].trim()).sort();
+  const inbox = (item, token) => api(item, token, 'GET', '/api/notifications/me?page=1&pageSize=200');
   const requestBody = {
     propertyId: a.propertyId, title: 'Staff lifecycle acceptance',
     description: 'Synthetic water leak for two-tenant acceptance'
@@ -93,6 +103,12 @@ export async function verifyPhase4StaffMaintenanceHttp({
   assert.equal(guid(created.renteeid), a.renteeId);
   assert.equal(guid(created.propertyid), a.propertyId);
   assert.equal(created.status, 'pending');
+  assert.deepEqual(notificationTypes(await notificationRows(a, managerA.userId, id)),
+    ['Maintenance request_created']);
+  assert.deepEqual(await notificationRows(a, managerNoScope.userId, id), [],
+    'manager without property scope must not receive an alert');
+  assert.deepEqual(await notificationRows(b, managerB.userId, id), [],
+    'foreign organization must not receive an alert');
   check(await request(b, tokenB, 'GET', id), 404, 'MAINTENANCE_REQUEST_NOT_FOUND');
   check(await request(a, tokenA, 'POST', id, '/assign', { staffUserId: workerA.userId }),
     403, 'MAINTENANCE_MANAGE_REQUIRED');
@@ -107,6 +123,21 @@ export async function verifyPhase4StaffMaintenanceHttp({
     { staffUserId: workerA.userId }), 200);
   assert.equal(guid(assigned.assignedto), workerA.userId);
   assert.equal(assigned.status, 'pending');
+  assert.deepEqual(notificationTypes(await notificationRows(a, workerA.userId, id)),
+    ['Maintenance request_assigned']);
+  assert.deepEqual(notificationTypes(await notificationRows(a, a.renteeId, id)),
+    ['Maintenance request_assigned']);
+  const ownStaffNotice = (await notificationRows(a, workerA.userId, id))[0];
+  const staffInbox = check(await inbox(a, workerA.token), 200);
+  assert.ok(staffInbox.some(row => guid(row.id) === guid(ownStaffNotice.id)));
+  check(await api(b, tokenB, 'PATCH',
+    '/api/notifications/' + ownStaffNotice.id + '/read'), 404, 'NOTIFICATION_NOT_FOUND');
+  check(await api(a, tokenA, 'PATCH',
+    '/api/notifications/' + ownStaffNotice.id + '/read'), 404, 'NOTIFICATION_NOT_FOUND');
+  check(await api(a, workerA.token, 'PATCH',
+    '/api/notifications/' + ownStaffNotice.id + '/read'), 200);
+  assert.equal(Boolean((await notificationRows(a, workerA.userId, id))[0].is_read), true);
+  assert.deepEqual(await notificationRows(b, workerB.userId, id), []);
 
   check(await request(a, tokenA, 'POST', id, '/start', {}), 403, 'RESOURCE_ACCESS_DENIED');
   check(await request(a, idleWorkerA.token, 'POST', id, '/start', {}),
@@ -118,6 +149,8 @@ export async function verifyPhase4StaffMaintenanceHttp({
   const started = check(await request(a, workerA.token, 'POST', id, '/start', {}), 200);
   assert.equal(started.status, 'in_progress');
   assert.ok(started.startedat);
+  assert.deepEqual(notificationTypes(await notificationRows(a, a.renteeId, id)),
+    ['Maintenance request_assigned', 'Maintenance work_started']);
   check(await request(a, workerA.token, 'POST', id, '/start', {}),
     409, 'INVALID_MAINTENANCE_TRANSITION');
 
@@ -162,6 +195,11 @@ export async function verifyPhase4StaffMaintenanceHttp({
   assert.equal(guid(completed.completed_by), workerA.userId);
   const afterComplete = await snapshot(id);
   assert.equal(afterComplete.request.status, 'completed');
+  assert.deepEqual(notificationTypes(await notificationRows(a, a.renteeId, id)),
+    ['Maintenance request_assigned', 'Maintenance work_completed', 'Maintenance work_started']);
+  assert.deepEqual(notificationTypes(await notificationRows(a, workerA.userId, id)),
+    ['Maintenance request_assigned', 'Maintenance work_completed', 'Maintenance work_started']);
+  const ownNoticesBeforeReplay = await notificationRows(a, a.renteeId, id);
   assert.deepEqual(afterComplete.events.map(e => e.event_type).sort(),
     ['request_assigned', 'request_created', 'work_completed', 'work_started']);
   assert.equal(afterComplete.images.length, 1);
@@ -177,6 +215,8 @@ export async function verifyPhase4StaffMaintenanceHttp({
   check(await request(a, tokenA, 'POST', id, '/cancel', { reason: 'too late' }),
     403, 'RESOURCE_ACCESS_DENIED');
   assert.deepEqual(await snapshot(id), afterComplete, 'denials/replays must not mutate closed request');
+  assert.deepEqual(await notificationRows(a, a.renteeId, id), ownNoticesBeforeReplay,
+    'denied transitions and replays must not duplicate notifications');
 
   // Property scope denial must hold even when staff and request share a tenant.
   const unrelatedProperty = await one(
@@ -193,6 +233,25 @@ export async function verifyPhase4StaffMaintenanceHttp({
   check(await request(a, managerA.token, 'POST', outsideId, '/assign',
     { staffUserId: workerA.userId }), 403, 'RESOURCE_ACCESS_DENIED');
   assert.equal((await snapshot(outsideId)).request.assignedto, null);
+  const cancelFixture = check(await request(a, tokenA, 'POST', null, '', {
+    propertyId: a.propertyId, title: 'Cancellation inbox fixture',
+    description: 'Disposable cancellation proof'
+  }), 201);
+  const cancelId = guid(cancelFixture.id);
+  check(await request(a, managerA.token, 'POST', cancelId, '/assign',
+    { staffUserId: idleWorkerA.userId }), 200);
+  check(await request(a, tokenA, 'POST', cancelId, '/cancel',
+    { reason: 'Cancelled before work started' }), 200);
+  assert.deepEqual(notificationTypes(await notificationRows(a, idleWorkerA.userId, cancelId)),
+    ['Maintenance request_assigned', 'Maintenance request_cancelled']);
+  assert.deepEqual(notificationTypes(await notificationRows(a, a.renteeId, cancelId)),
+    ['Maintenance request_assigned', 'Maintenance request_cancelled']);
+  check(await request(a, managerA.token, 'POST', cancelId, '/assign',
+    { staffUserId: workerA.userId }), 409, 'MAINTENANCE_REQUEST_CLOSED');
+  assert.deepEqual(notificationTypes(await notificationRows(a, a.renteeId, cancelId)),
+    ['Maintenance request_assigned', 'Maintenance request_cancelled']);
+  assert.deepEqual(await notificationRows(b, workerB.userId, cancelId), []);
+
   // The browser picker must use membership permissions, not obsolete
   // app_users.role. Verify both its scoped GET and real assignment button.
   const managerFixture = check(await request(a, tokenA, 'POST', null, '', {
