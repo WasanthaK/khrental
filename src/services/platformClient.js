@@ -288,6 +288,17 @@ export const issueInvoiceDraft = async (invoiceId) => {
   }
 };
 
+export const retryInvoiceDelivery = async invoiceId => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/retry-delivery`, {
+      method: 'POST', body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const submitInvoicePaymentProof = async (invoiceId, payment = {}) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/payment-proof`, {

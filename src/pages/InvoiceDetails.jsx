@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { getInvoiceAccount } from '../services/platformClient';
+import { getInvoiceAccount, retryInvoiceDelivery } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
@@ -64,6 +64,7 @@ const InvoiceDetails = () => {
   const payments = account?.payments || [];
   const receipts = account?.receipts || [];
   const components = account?.components || [];
+  const emailDelivery = account?.delivery || { status: 'not_attempted' };
   const outstandingBalance = Number(account?.outstandingBalance) || 0;
   const isDraft = String(invoice?.status || '').toLowerCase() === 'draft';
   const pendingPayment = payments.find((payment) => String(payment.status).toLowerCase() === 'pending') || null;
@@ -112,6 +113,21 @@ const InvoiceDetails = () => {
     } finally {
       setWorking(false);
     }
+  };
+
+  const handleRetryInvoiceEmail = async () => {
+    try {
+      setWorking(true); setError(null); setNotice(null);
+      const result = await retryInvoiceDelivery(id);
+      if (result.error) throw result.error;
+      setNotice(result.data?.delivery?.status === 'accepted'
+        ? 'Invoice email accepted by the provider.'
+        : 'Invoice remains issued. Delivery was not confirmed; review the delivery status.');
+      await loadAccount();
+    } catch (err) {
+      setError(err.message || 'Unable to retry invoice email.');
+      await loadAccount();
+    } finally { setWorking(false); }
   };
 
   const handleRecordReminder = async () => {
@@ -213,6 +229,27 @@ const InvoiceDetails = () => {
         <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Billing period</div><div className="text-lg font-semibold">{invoice.billingperiod || 'N/A'}</div></div>
         <div className="rounded-lg border bg-white p-4"><div className="text-xs text-gray-500">Status</div><span className={`mt-1 inline-block rounded-full px-2 py-1 text-sm font-medium ${getStatusBadgeColor(invoice.status)}`}>{String(invoice.status || '').replaceAll('_', ' ')}</span></div>
       </div>
+
+      {!isDraft && canManageInvoices && (
+        <section className="rounded-lg border bg-white p-4" aria-label="Invoice email delivery status">
+          <h2 className="font-semibold">Invoice email delivery</h2>
+          <p role="status" className="text-sm mt-1">
+            {emailDelivery.status === 'accepted'
+              ? 'Email provider accepted the message; mailbox delivery has not been confirmed.'
+              : emailDelivery.status === 'failed'
+                ? 'Email provider did not accept the message. The invoice is still issued.'
+                : emailDelivery.status === 'unknown'
+                  ? 'Email outcome uncertain. Review provider logs before any manual resend.'
+                  : 'Email delivery has not been attempted by this workflow.'}
+          </p>
+          {emailDelivery.canRetry && (
+            <button type="button" disabled={working} onClick={handleRetryInvoiceEmail}
+              className="mt-3 rounded border px-3 py-2 text-sm disabled:opacity-50">
+              Retry rejected invoice email
+            </button>
+          )}
+        </section>
+      )}
 
       {isDraft && canManageInvoices && (
         <InvoiceDraftEditor
