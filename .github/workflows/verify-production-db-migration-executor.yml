@@ -19,6 +19,7 @@ concurrency:
 env:
   AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
   AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
   AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
 
 jobs:
@@ -43,74 +44,77 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Put executor in read-only plan mode and verify it
+      - name: Verify isolated executor and read-only schema state
         shell: bash
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
 
-          if ! az containerapp job show \
-            --name "$AZURE_MIGRATION_JOB_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --output none 2>/dev/null; then
+          if ! az containerapp job show             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --output none 2>/dev/null; then
             echo "Dedicated migration job is not provisioned." >&2
             exit 1
           fi
 
-          az containerapp job update \
-            --name "$AZURE_MIGRATION_JOB_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --command /bin/sh \
-            --args scripts/run-production-migration-plan.sh \
-            --remove-env-vars MSSQL_MIGRATION_DEDICATED_EXECUTOR \
-            --set-env-vars MIGRATION_THROUGH=all \
-            --output none
-
-          stored_args=$(az containerapp job show \
-            --name "$AZURE_MIGRATION_JOB_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "properties.template.containers[0].args | [0]" \
-            -o tsv)
-
+          stored_args=$(az containerapp job show             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query "properties.template.containers[0].args | [0]" -o tsv)
           if [ "$stored_args" != "scripts/run-production-migration-plan.sh" ]; then
-            echo "Migration job did not settle into read-only plan mode." >&2
+            echo "Migration job is not resting in read-only plan mode." >&2
             exit 1
           fi
 
-          execution_name=$(az containerapp job start \
-            --name "$AZURE_MIGRATION_JOB_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query name \
-            -o tsv)
+          principal_id=$(az containerapp job identity show             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query principalId -o tsv)
+          if [ -z "$principal_id" ] || [ "$principal_id" = "None" ]; then
+            echo "Dedicated migration job has no managed identity." >&2
+            exit 1
+          fi
+          app_principal_id=$(az containerapp identity show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query principalId -o tsv)
+          if [ -n "$app_principal_id" ] && [ "$app_principal_id" != "None" ] && [ "$principal_id" = "$app_principal_id" ]; then
+            echo "Migration executor and serving app must not share an identity." >&2
+            exit 1
+          fi
+
+          ready_revision=$(az containerapp show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query properties.latestReadyRevisionName -o tsv)
+          image=$(az containerapp revision show             --name "$AZURE_CONTAINER_APP_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --revision "$ready_revision"             --query "properties.template.containers[0].image" -o tsv)
+
+          container_json=$(az containerapp job show             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --query "properties.template.containers[0]" -o json)
+          container_name=$(jq -r '.name // empty' <<<"$container_json")
+          cpu=$(jq -r '.resources.cpu // empty' <<<"$container_json")
+          memory=$(jq -r '.resources.memory // empty' <<<"$container_json")
+          server=$(jq -r '.env[]? | select(.name == "MSSQL_SERVER") | .value // empty' <<<"$container_json")
+          database=$(jq -r '.env[]? | select(.name == "MSSQL_DATABASE") | .value // empty' <<<"$container_json")
+
+          for value in ready_revision image container_name cpu memory server database; do
+            if [ -z "${!value:-}" ] || [ "${!value}" = "None" ]; then
+              echo "Missing executor verification prerequisite: $value" >&2
+              exit 1
+            fi
+          done
+
+          # Per-execution overrides do not change the resting job definition.
+          execution_name=$(az containerapp job start             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --container-name "$container_name"             --image "$image"             --cpu "$cpu"             --memory "$memory"             --command /bin/sh             --args scripts/run-production-migration-verify.sh             --env-vars               MSSQL_SERVER="$server"               MSSQL_DATABASE="$database"               MSSQL_MIGRATION_DEDICATED_EXECUTOR=true             --query name -o tsv)
 
           if [ -z "$execution_name" ]; then
             echo "Azure did not return a verification execution name." >&2
             exit 1
           fi
 
-          echo "Started read-only migration executor verification: $execution_name"
+          echo "Read-only schema verification: $execution_name"
+          echo "Image: $image"
+          echo "Ready serving revision: $ready_revision"
+          echo "Dedicated executor identity: $principal_id"
 
           for attempt in $(seq 1 90); do
-            status=$(az containerapp job execution show \
-              --name "$AZURE_MIGRATION_JOB_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --job-execution-name "$execution_name" \
-              --query properties.status \
-              -o tsv)
-
-            echo "Verification execution status: ${status:-unknown} (attempt $attempt/90)"
+            status=$(az containerapp job execution show               --name "$AZURE_MIGRATION_JOB_NAME"               --resource-group "$AZURE_RESOURCE_GROUP"               --job-execution-name "$execution_name"               --query properties.status -o tsv)
             case "$status" in
               Succeeded)
-                echo "Dedicated migration executor read-only verification succeeded."
+                echo "Strict read-only executor verification passed. Review execution logs for per-migration ledger and schema evidence."
                 exit 0
                 ;;
               Failed|Stopped)
-                echo "Dedicated migration executor verification ended with status $status." >&2
+                echo "Executor verification failed: $status; inspect execution logs." >&2
                 exit 1
                 ;;
             esac
             sleep 10
           done
-
-          echo "Dedicated migration executor verification did not complete within the workflow wait window." >&2
+          echo "Executor verification timed out; no readiness claim." >&2
           exit 1
