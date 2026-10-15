@@ -1665,7 +1665,6 @@ async function main() {
       '20260913_00_create_fresh_mssql_schema.sql',
       '20260915_01_create_staff_property_assignments.sql',
       '20260915_02_create_user_invitations.sql',
-      '20260916_01_create_password_reset_tokens.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
       // Routed maintenance detail/comments need their governed lifecycle DDL,
@@ -1694,6 +1693,15 @@ async function main() {
     process.env.MSSQL_AUTHENTICATION = 'sql-password';
     process.env.MSSQL_ENCRYPT = 'false';
     process.env.MSSQL_TRUST_SERVER_CERTIFICATE = 'true';
+    // The reset-token migration depends on auth_users. The disposable fixture
+    // creates the same canonical auth tables via the server's existing
+    // ensureAuthSchema() after its isolated SQL connection is configured.
+    const { ensureAuthSchema } = await import('../src/api/auth/index.js');
+    await ensureAuthSchema();
+    await pool.request().batch(
+      fs.readFileSync(path.resolve('migrations',
+        '20260916_01_create_password_reset_tokens.sql'), 'utf8')
+    );
     const { generateMonthlyInvoicesForTenant } = await import('../src/api/platform/monthlyBillingService.js');
     ({ closeMssqlPool } = await import('../src/api/mssql/pool.js'));
     const a = await fixture(pool, 'Tenant A', 2000, 125);
