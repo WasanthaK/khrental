@@ -473,4 +473,5 @@ export async function verifyPhase4StaffMaintenanceHttp({
   }
   console.log('PASS: actual assigned staff browser Start Work / Complete flow, durable SQL events and foreign tenant denial');
   console.log('PASS: real-session renter request -> scoped staff assignment -> assigned start/comment/image/complete, replay and cross-tenant denials');
+  return { requestId: id, manager: managerA };
 }

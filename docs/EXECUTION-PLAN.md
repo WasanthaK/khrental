@@ -1808,6 +1808,14 @@ The next package adds **in-app notification records atomically with maintenance 
 
 This does **not** prove a visible inbox in the React application or provider-backed email/SMS delivery. The existing notification service's legacy email/SMS placeholders are not accepted evidence of sending. UI presentation, external delivery, file bytes, invitation/signing and migration-executor operational verification remain Phase 4 blockers. Phase 5 is pending.
 
+## Phase 4 — notification inbox user experience and read-state acceptance, 2026-10-15
+
+PR #289 merged as `1597e645bae1226c9a65266398f651842c07b00d` after authorization/build and disposable two-tenant SQL acceptance passed. It persists maintenance notifications atomically with their lifecycle event, scopes recipients to active organization membership, and verifies self-only inbox access and read-state. Its production deployment must still be independently confirmed.
+
+The current UI acceptance package exposes a self-only Notifications page in both staff and renter workspaces. It shows readable event labels, unread/read status, refresh and safe links to the corresponding maintenance request (navigation is never authority); no generic user-ID or tenant-ID query is exposed. Tenant switching clears old organization content. The existing disposable SQL/Puppeteer fixture proves routed renter/manager pages, mark-as-read persistence and foreign-organization isolation. Treat CI and production rollout as separate gates. Email/SMS/desktop push is NOT delivered by this UI and is not accepted as complete external notification support.
+
+Other Phase 4 blockers: real object bytes, invitation and signing journeys, compatibility caller inventory and production migration-executor proof. Phase 5 still pending.
+
 ## Maintenance rule for this document
 
 After each merged production change:
