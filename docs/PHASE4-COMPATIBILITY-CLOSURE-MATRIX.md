@@ -375,3 +375,13 @@ authority, weaken tenant scope, or activate the fenced Evia canary.
 ## Constraints
 
 Evia fenced archive canary remains disabled. Do not activate it as a side-effect of Phase 4 closure. Storage object-level immutability and external R2 credentials remain independent evidence-security questions.
+
+## Package C — live staff maintenance image attachment closure (2026-10-15)
+
+Caller census identified an actual routed staff page, `src/pages/MaintenanceDetails.jsx`, still importing `addMaintenanceRequestImage` through the `maintenanceService.js` compatibility facade. That name previously resolved to the generic `maintenanceServiceLegacy.js` writer, which inserted `maintenance_request_images` metadata without server-side request/tenant/property authority. The canonical `POST /api/maintenance-lifecycle/requests/:requestId/images` already exists and verifies the tenant, request ownership/assigned staff/manager property scope, open state and tenant-local image path before SQL insertion, with the actor derived from the authenticated server context.
+
+This batch explicitly exports `addMaintenanceRequestImage` from a scoped adapter, shadowing the legacy star re-export. It preserves the current page's `{success, data, error}` envelope and existing file upload mechanism, preflights request read access before uploading bytes, forwards only image URL/type/description (never client-provided uploaded-by), then requires an acknowledged server attachment. A denied preflight, upload, server denial or missing acknowledgment cannot appear as successful attachment; no fallback generic metadata insert is performed. `general` and `progress` legacy UI types map to the server's `additional` image category.
+
+**Not claimed:** full retirement of `maintenanceServiceLegacy.js`, proof that unused historical pages have no residual generic writes, real R2 file acceptance for a production renter, or final cross-tenant browser coverage. Those remain in the Package C compatibility/acceptance register. The explicit export is the narrow live-callsite boundary; all other legacy exports remain pending individual census.
+
+No schema migration, real production data mutation, webhook signing, billing or email changes. Verify exact-head authorization/build and disposable two-tenant SQL/browser before merge; record exact Azure Ready SHA and MSSQL after any runtime deployment. Phase 4 remains OPEN, Phase 5 gated.
