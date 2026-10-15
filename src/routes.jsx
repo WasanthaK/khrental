@@ -48,6 +48,7 @@ import InvoiceDetails from './pages/InvoiceDetails';
 import MaintenanceList from './pages/MaintenanceList';
 import MaintenanceForm from './pages/MaintenanceForm';
 import MaintenanceDetails from './pages/MaintenanceDetails';
+import Notifications from './pages/Notifications';
 import CameraList from './pages/CameraList';
 import CameraForm from './pages/CameraForm';
 import CameraDetails from './pages/CameraDetails';
@@ -167,6 +168,7 @@ const tenantLegacyAliasRoute = ({ path, target }) => ({
 
 const tenantPortalChildren = [
   { index: true, element: <RenteePortal /> },
+  { path: 'notifications', element: <Notifications portal="rentee" /> },
   {
     path: 'profile',
     element: permissionRoute([PERMISSIONS.PROFILE_READ_SELF], <RenteeProfile />)
@@ -228,6 +230,7 @@ const routes = [
         ),
         children: [
           { index: true, element: <Dashboard /> },
+          { path: 'notifications', element: <Notifications portal="dashboard" /> },
           {
             path: 'properties',
             children: [
