@@ -30,6 +30,7 @@ on:
       - 'src/hooks/useAuthenticatedPaymentProof.js'
       - 'src/components/invoices/PaymentVerification.jsx'
       - 'src/services/paymentService.js'
+      - 'tests/phase4-payment-reminder-auth-context.test.js'
       - 'scripts/verify-phase4-payment-lifecycle-http.mjs'
       - 'src/pages/Notifications.jsx'
       - 'src/routes.jsx'
