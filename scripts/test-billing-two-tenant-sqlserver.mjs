@@ -1824,7 +1824,29 @@ async function main() {
     }));
     app.use('/api/platform/auth', createInvitationRouter());
     app.use('/api/platform', createPlatformRouter());
-    app.use('/api/billing', createBillingRouter());
+    const invoiceMailbox = {
+      accepted: [], attempts: [], rejectNext: false, unknownNext: false,
+      async sendEmail(message) {
+        this.attempts.push({ to: message.to, subject: message.subject });
+        if (this.rejectNext) {
+          this.rejectNext = false;
+          throw Object.assign(new Error('Controlled provider rejection'), {
+            code: 'EMAIL_PROVIDER_REJECTED', status: 502
+          });
+        }
+        if (this.unknownNext) {
+          this.unknownNext = false;
+          throw Object.assign(new Error('Controlled unresolved request'), {
+            code: 'EMAIL_PROVIDER_REQUEST_FAILED', status: 502
+          });
+        }
+        this.accepted.push({ to: message.to, text: message.text });
+        return { provider: 'controlled-sendgrid', accepted: true };
+      }
+    };
+    app.use('/api/billing', createBillingRouter({
+      sendInvoiceEmail: invoiceMailbox.sendEmail.bind(invoiceMailbox)
+    }));
     app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
     app.use('/api/notifications', createNotificationSelfRouter());
     app.use('/api/utility-reviews', createUtilityReviewRouter());
@@ -2623,7 +2645,7 @@ async function main() {
       await import('./verify-phase4-payment-lifecycle-http.mjs');
     await verifyPhase4PaymentLifecycleHttp({
       pool, first, query, a, b, tokenA, tokenB, otherToken,
-      call, createAuthRecord, issueAuthSession, browser, origin
+      call, createAuthRecord, issueAuthSession, browser, origin, invoiceMailbox
     });
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
