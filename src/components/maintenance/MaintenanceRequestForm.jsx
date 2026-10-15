@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { platform as platformClient } from '../../services/platformClient';
+import { getMyTenancySummary } from '../../services/platformClient';
+import { maintenancePropertiesFromTenancies } from '../../services/maintenancePropertyEligibility';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../../utils/constants';
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../../hooks/useAuth';
 import ImageUpload from '../common/ImageUpload';
 import { createMaintenanceRequest } from '../../services/maintenanceService';
-import { fetchAppUser } from '../../services/appUserService';
 
 const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false, initialData = null }) => {
   const navigate = useNavigate();
-  const { user, userData } = useAuth();
+  const { user, userData, activeTenantId } = useAuth();
   const appUserId = userData?.profileId || userData?.appUserId || null;
   
   // Add logging for userData
@@ -49,56 +49,35 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
     }
   }, [isEditMode, initialData]);
   
-  // Fetch properties based on user role
+  // Only the server's authenticated active tenancy projection determines
+  // which properties can receive a new renter maintenance request.
   useEffect(() => {
-    const fetchProperties = async () => {
+    let cancelled = false;
+    setProperties([]);
+    setFormData(prev => ({ ...prev, propertyid: '' }));
+    setError(null);
+    setLoading(true);
+    const load = async () => {
       try {
-        setLoading(true);
-        let query = platformClient.from('properties').select('*');
-        
-        // If user is a rentee, only fetch their associated properties
-        if (userData?.role === 'rentee') {
-          if (!appUserId) {
-            setProperties([]);
-            return;
-          }
-
-          const userData2 = await fetchAppUser(appUserId);
-          
-          if (userData2?.associated_property_ids?.length > 0) {
-            query = query.in('id', userData2.associated_property_ids);
-          } else {
-            setProperties([]);
-          }
-        }
-        
-        const { data, error } = await query;
-        if (error) {
-          throw error;
-        }
-        
-        setProperties(data || []);
-        
-        // Pre-select property if there's only one
-        if (data?.length === 1) {
-          setFormData(prev => ({
-            ...prev,
-            propertyid: data[0].id
-          }));
-        }
+        const { data, error: tenancyError } = await getMyTenancySummary();
+        if (tenancyError) throw tenancyError;
+        const eligible = maintenancePropertiesFromTenancies(data);
+        if (cancelled) return;
+        setProperties(eligible);
+        setFormData(prev => ({ ...prev, propertyid: eligible.length === 1 ? eligible[0].id : '' }));
       } catch (error) {
-        console.error('Error fetching properties:', error);
-        setError('Failed to load properties');
+        if (cancelled) return;
+        setProperties([]);
+        setError('Unable to verify active tenancy properties. Please try again.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    
-    if (userData) {
-      fetchProperties();
-    }
-  }, [appUserId, userData]);
-  
+    if (user?.id && activeTenantId) load();
+    else setLoading(false);
+    return () => { cancelled = true; };
+  }, [user?.id, activeTenantId]);
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -126,8 +105,8 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
 
     try {
       // Validate required fields
-      if (!formData.propertyid) {
-        throw new Error('Please select a property');
+      if (!formData.propertyid || !properties.some(p => p.id === formData.propertyid)) {
+        throw new Error('Please select an eligible active tenancy property');
       }
 
       if (!formData.title.trim()) {
@@ -325,7 +304,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         )}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || loading || properties.length === 0 || Boolean(error)}
           className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
         >
           {isSubmitting ? 'Submitting...' : 'Submit'}
