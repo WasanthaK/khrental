@@ -39,6 +39,8 @@ on:
       - 'src/services/maintenanceImageAttachment.js'
       - 'src/services/maintenanceImageService.js'
       - 'src/services/maintenanceService.js'
+      - 'src/services/maintenanceCompatibilityBoundary.js'
+      - 'tests/phase4-maintenance-legacy-facade.test.js'
       - 'tests/phase4-maintenance-image-compatibility.test.js'
       - 'src/components/maintenance/StaffAssignment.jsx'
       - 'src/components/maintenance/MaintenanceRequestForm.jsx'
