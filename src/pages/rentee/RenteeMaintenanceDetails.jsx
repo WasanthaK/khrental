@@ -6,6 +6,7 @@ import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import { addMaintenanceComment, cancelMaintenanceRequest } from '../../services/maintenanceService';
+import { getAuthorizedMaintenanceDetail } from '../../services/maintenanceDetailReadService';
 
 // Components
 import CommentSection from '../../components/maintenance/CommentSection';
@@ -36,44 +37,11 @@ const RenteeMaintenanceDetails = () => {
         const appUserId = userData?.profileId || userData?.appUserId || null;
         if (!appUserId) throw new Error('User not found');
         
-        // Fetch maintenance request with all related data
-        const { data: requestData, error: requestError } = await platformClient
-          .from('maintenance_requests')
-          .select(`
-            *,
-            property:properties!maintenance_requests_propertyid_fkey(
-              id,
-              name,
-              address,
-              propertytype,
-              status
-            ),
-            rentee:app_users!maintenance_requests_renteeid_fkey(
-              id,
-              name,
-              email,
-              contact_details
-            ),
-            assigned_staff:app_users!maintenance_requests_assignedto_fkey(
-              id,
-              name,
-              email,
-              contact_details
-            ),
-            maintenance_request_images(
-              id,
-              image_url,
-              image_type,
-              uploaded_at
-            )
-          `)
-          .eq('id', id)
-          .eq('renteeid', appUserId)
-          .single();
-        
-        if (requestError) throw requestError;
+        // Authenticated server owns renter/tenant authorization; no client ID
+        // can widen this scoped read or trigger a generic fallback.
+        const requestData = await getAuthorizedMaintenanceDetail(id);
         if (!requestData) throw new Error('Maintenance request not found');
-        
+
         console.log('Fetched request data:', requestData);
         setRequest(requestData);
         setProperty(requestData.property);
