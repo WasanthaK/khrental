@@ -207,12 +207,36 @@ const insertLifecycleEvent = async (transaction, {
   actorUserId = null,
   metadata = null
 }) => {
+  // SQL Server defaults can assign the same createdat to rapid successive
+  // email events. Since their IDs are random GUIDs, sorting by (createdat,id)
+  // otherwise mistakes an earlier 'attempted' for a later accepted outcome,
+  // or an earlier failure for an in-flight retry. Assign a strictly increasing
+  // timestamp to each invoice email event while holding the invoice row lock.
+  // All other lifecycle events retain their existing database default.
+  const emailEvent = Object.values(DELIVERY_EVENTS).includes(eventType);
+  const emailEventTimestampSql = emailEvent ? `
+    DECLARE @eventAt DATETIMEOFFSET(7) = TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00');
+    DECLARE @previousEventAt DATETIMEOFFSET(7);
+    DECLARE @lockedInvoice UNIQUEIDENTIFIER;
+    SELECT @lockedInvoice = id FROM invoices WITH (UPDLOCK, HOLDLOCK)
+    WHERE tenant_id = @tenantId AND id = @invoiceId;
+    IF @lockedInvoice IS NULL THROW 51000, 'Invoice is not available for email ledger event.', 1;
+    SELECT @previousEventAt = MAX(createdat)
+    FROM billing_lifecycle_events WITH (UPDLOCK, HOLDLOCK)
+    WHERE tenant_id = @tenantId AND invoice_id = @invoiceId
+      AND event_type IN ('invoice_email_attempted','invoice_email_accepted',
+                         'invoice_email_failed','invoice_email_unknown');
+    IF @previousEventAt IS NOT NULL AND @eventAt <= @previousEventAt
+      SET @eventAt = DATEADD(NANOSECOND, 100, @previousEventAt);
+  ` : '';
   await queryTransaction(
     transaction,
-    `INSERT INTO billing_lifecycle_events (
+    `${emailEventTimestampSql} INSERT INTO billing_lifecycle_events (
        tenant_id, invoice_id, payment_id, event_type, from_status, to_status, actor_user_id, metadata
+       ${emailEvent ? ', createdat' : ''}
      ) VALUES (
        @tenantId, @invoiceId, @paymentId, @eventType, @fromStatus, @toStatus, @actorUserId, @metadata
+       ${emailEvent ? ', @eventAt' : ''}
      )`,
     {
       tenantId,
