@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { platform as platformClient } from '../../services/platformClient';
+import { listAuthorizedMaintenanceRequests } from '../../services/maintenanceListReadService';
 import { useAuth } from '../../hooks/useAuth';
 import { MAINTENANCE_STATUS } from '../../utils/constants';
 import { toast } from 'react-hot-toast';
@@ -42,51 +42,12 @@ const RenteeMaintenance = () => {
         throw new Error('User not found');
       }
 
-      // Fetch the maintenance requests using the app_users ID
-      const { data, error: fetchError } = await platformClient
-        .from('maintenance_requests')
-        .select(`
-          id,
-          title,
-          description,
-          status,
-          priority,
-          requesttype,
-          createdat,
-          property:properties!maintenance_requests_propertyid_fkey(
-            id,
-            name,
-            address,
-            propertytype,
-            status
-          ),
-          maintenance_request_images(
-            id,
-            image_url,
-            image_type,
-            uploaded_at
-          ),
-          assigned_staff:app_users!maintenance_requests_assignedto_fkey(
-            id,
-            name
-          ),
-          rentee:app_users!maintenance_requests_renteeid_fkey(
-            id,
-            name,
-            email
-          )
-        `)
-        .eq('renteeid', appUserId)
-        .order('createdat', { ascending: false });
-
-      if (fetchError) {
-        console.error('Error fetching maintenance requests:', fetchError);
-        throw new Error('Failed to load maintenance requests');
-      }
+      const data = await listAuthorizedMaintenanceRequests();
 
       console.log('Successfully fetched maintenance requests:', data);
       setMaintenanceRequests(data || []);
     } catch (err) {
+      setMaintenanceRequests([]);
       console.error('Error in fetchMaintenanceRequests:', err);
       setError(err.message || 'Failed to load maintenance requests');
       toast.error(err.message || 'Failed to load maintenance requests');
