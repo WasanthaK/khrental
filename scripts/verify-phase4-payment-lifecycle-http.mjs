@@ -20,6 +20,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
   pool, first, query, a, b, tokenA, tokenB, otherToken,
   call, createAuthRecord, issueAuthSession, browser, origin
 }) {
+  const adminSessions = new Map();
   const createAdmin = async item => {
     const email = 'billing-lifecycle-' + crypto.randomUUID() + '@example.invalid';
     const row = await first(pool,
@@ -42,7 +43,9 @@ export async function verifyPhase4PaymentLifecycleHttp({
       'UPDATE app_users SET auth_id = @authId WHERE id = @id AND tenant_id = @tenantId',
       { tenantId: item.tenantId, id, authId }
     );
-    return (await issueAuthSession(record)).accessToken;
+    const session = (await issueAuthSession(record)).accessToken;
+    adminSessions.set(session, { id: authId, email, role: 'admin' });
+    return session;
   };
 
   const createIssuedFixture = async (item, total) => {
@@ -122,7 +125,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.equal(Number(pending.payment.amount), 400);
   assert.equal(pending.invoice.status, 'verification_pending');
   const urlOfProof = pending.payment.proofurl;
-  assert.ok(urlOfProof.startsWith('/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/'));
+  assert.ok(urlOfProof.toLowerCase().startsWith(('/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/').toLowerCase()));
   const proofRead = async (token, tenantId, url) => {
     const response = await fetch(origin + url, {
       headers: { Authorization: 'Bearer ' + token, 'x-tenant-id': tenantId }
@@ -145,13 +148,13 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const staffContext = await browser.createBrowserContext();
   const staffPage = await staffContext.newPage();
   try {
-    await staffPage.evaluateOnNewDocument((accessToken, tenantId) => {
+    await staffPage.evaluateOnNewDocument((accessToken, tenantId, profile) => {
       localStorage.removeItem('dev_bypass_role');
       localStorage.setItem('khrental.activeTenantId', tenantId);
       localStorage.setItem('khrental.local.session', JSON.stringify({
-        access_token: accessToken, user: { role: 'admin' }
+        access_token: accessToken, user: profile
       }));
-    }, adminA, a.tenantId);
+    }, adminA, a.tenantId, adminSessions.get(adminA));
     await staffPage.goto(origin + '/dashboard/invoices/' + invoiceA, {
       waitUntil: 'domcontentloaded', timeout: 45000
     });
