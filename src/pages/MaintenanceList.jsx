@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { platform as platformClient } from '../services/platformClient';
+import { listAuthorizedMaintenanceRequests } from '../services/maintenanceListReadService';
 import { useAuth } from '../hooks/useAuth';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
 import { toast } from 'react-hot-toast';
@@ -27,45 +27,12 @@ const MaintenanceList = () => {
       setIsLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await platformClient
-        .from('maintenance_requests')
-        .select(`
-          *,
-          property:properties!maintenance_requests_propertyid_fkey(
-            id,
-            name,
-            address,
-            propertytype,
-            status
-          ),
-          rentee:app_users!maintenance_requests_renteeid_fkey(
-            id,
-            name,
-            email,
-            contact_details
-          ),
-          assigned_staff:app_users!maintenance_requests_assignedto_fkey(
-            id,
-            name,
-            email,
-            contact_details
-          ),
-          maintenance_request_images(
-            id,
-            image_url,
-            image_type,
-            uploaded_at
-          )
-        `)
-        .order('createdat', { ascending: false });
-
-      if (fetchError) {
-        throw fetchError;
-      }
+      const data = await listAuthorizedMaintenanceRequests();
 
       console.log('Fetched maintenance requests:', data);
       setMaintenanceRequests(data || []);
     } catch (err) {
+      setMaintenanceRequests([]);
       console.error('Error fetching maintenance requests:', err);
       setError('Failed to load maintenance requests');
       toast.error('Failed to load maintenance requests');
