@@ -80,17 +80,39 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assertResponse(await account(invoiceB, tokenA, a.tenantId), 404, 'foreign invoice hidden');
   assertResponse(await account(invoiceA, null, a.tenantId), 401, 'anonymous denied');
 
-  const proofPath = tenant => '/storage/images/tenants/' + tenant + '/payment-proofs/disposable.jpg';
-  const submit = (invoiceId, token, tenantId, amount) => send(invoiceId, '/payment-proof', {
-    token, tenantId,
-    body: { amount, proofUrl: proofPath(tenantId), paymentMethod: 'bank_transfer',
-      transactionReference: 'DISPOSABLE-PROOF' }
-  });
+
+  // Exercise the real storage HTTP upload and object reader, not a fabricated
+  // persisted proof URL. Each resubmission has unique retained image bytes.
+  const proofBytes = Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82]);
+  const submit = async (invoiceId, token, tenantId, amount) => {
+    const relative = 'payment_proofs/' + invoiceId + '/' + crypto.randomUUID() + '.png';
+    const uploaded = await fetch(origin + '/api/platform/storage/upload?bucket=invoices&path=' +
+      encodeURIComponent(relative), {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'x-tenant-id': tenantId,
+        'content-type': 'image/png'
+      },
+      body: proofBytes
+    });
+    const receipt = await uploaded.json();
+    if (uploaded.status !== 201) return { status: uploaded.status, payload: receipt };
+    const proofUrl = '/storage/invoices/' + receipt.data.path;
+    return send(invoiceId, '/payment-proof', {
+      token, tenantId,
+      body: { amount, proofUrl, paymentMethod: 'bank_transfer',
+        transactionReference: 'DISPOSABLE-PROOF' }
+    });
+  };
   const verify = (invoiceId, token, tenantId, approved, notes) => send(invoiceId, '/verify-payment', {
     token, tenantId, body: { approved, ...(notes == null ? {} : { notes }) }
   });
 
-  assertResponse(await submit(invoiceB, tokenA, a.tenantId, 100), 404, 'cannot pay foreign invoice');
+  assertResponse(await submit(invoiceB, tokenA, a.tenantId, 100), 403, 'cannot upload against a foreign invoice');
+  assertResponse(await send(invoiceB, '/payment-proof', { token: tokenA, tenantId: a.tenantId,
+    body: { proofUrl: '/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceB + '/forged.png', amount: 100 } }), 404,
+  'billing API must hide foreign invoice');
   assertResponse(await submit(invoiceA, adminA, a.tenantId, 100), 403, 'admin cannot impersonate renter proof');
   assertResponse(await submit(invoiceA, tokenA, b.tenantId, 100), 403, 'cannot select foreign tenant');
   assertResponse(await submit(invoiceA, tokenA, a.tenantId, 1200), 400, 'cannot overpay');
@@ -99,10 +121,60 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.equal(pending.payment.status, 'pending');
   assert.equal(Number(pending.payment.amount), 400);
   assert.equal(pending.invoice.status, 'verification_pending');
+  const urlOfProof = pending.payment.proofurl;
+  assert.ok(urlOfProof.startsWith('/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/'));
+  const proofRead = async (token, tenantId, url) => {
+    const response = await fetch(origin + url, {
+      headers: { Authorization: 'Bearer ' + token, 'x-tenant-id': tenantId }
+    });
+    return { status: response.status, data: Buffer.from(await response.arrayBuffer()) };
+  };
+  assert.deepEqual((await proofRead(tokenA, a.tenantId, urlOfProof)).data, proofBytes);
+  assert.deepEqual((await proofRead(adminA, a.tenantId, urlOfProof)).data, proofBytes);
+  assert.equal((await proofRead(tokenB, b.tenantId, urlOfProof)).status, 403);
+  assert.equal((await proofRead(otherToken, a.tenantId, urlOfProof)).status, 403);
+  const missingProof = await send(invoiceA, '/payment-proof', { token: tokenA, tenantId: a.tenantId,
+    body: { proofUrl: '/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/' + crypto.randomUUID() + '.png', amount: 12 } });
+  assertResponse(missingProof, 409, 'missing object cannot be submitted');
   let projection = assertResponse(await account(invoiceA, tokenA, a.tenantId), 200, 'pending account');
   assert.equal(Number(projection.outstandingBalance), 1000,
     'unverified evidence must not reduce balance');
   assert.equal(projection.receipts.length, 0);
+
+  // Verify the actual routed staff UI loads the secure bytes into a local blob.
+  const staffContext = await browser.createBrowserContext();
+  const staffPage = await staffContext.newPage();
+  try {
+    await staffPage.evaluateOnNewDocument((accessToken, tenantId) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token: accessToken, user: { role: 'admin' }
+      }));
+    }, adminA, a.tenantId);
+    await staffPage.goto(origin + '/dashboard/invoices/' + invoiceA, {
+      waitUntil: 'domcontentloaded', timeout: 45000
+    });
+    await staffPage.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(b => b.textContent.includes('Verify pending payment')),
+      { timeout: 30000 }
+    );
+    await staffPage.evaluate(() =>
+      [...document.querySelectorAll('button')].find(b => b.textContent.includes('Verify pending payment')).click()
+    );
+    await staffPage.waitForFunction(() => Boolean(document.querySelector('img[alt="Payment Proof"][src^="blob:"]')),
+      { timeout: 30000 }
+    );
+    const proof = await staffPage.evaluate(async () => {
+      const url = document.querySelector('img[alt="Payment Proof"]').src;
+      const bytes = Array.from(new Uint8Array(await (await fetch(url)).arrayBuffer()));
+      return { url, bytes, enabled: ![...document.querySelectorAll('button')]
+        .find(b => b.textContent.includes('Approve Payment')).disabled };
+    });
+    assert.deepEqual(proof.bytes, [...proofBytes], 'staff must receive actual authenticated image bytes');
+    assert.equal(proof.enabled, true, 'verified evidence is available for staff review');
+  } finally { await staffContext.close(); }
+
   assertResponse(await submit(invoiceA, tokenA, a.tenantId, 100), 409, 'only one pending proof');
   assertResponse(await verify(invoiceA, tokenA, a.tenantId, true), 403,
     'renter cannot approve own payment');
