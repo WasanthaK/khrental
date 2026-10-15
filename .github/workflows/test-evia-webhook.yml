@@ -15,6 +15,9 @@ on:
       - 'tests/evia-archive-crash-recovery.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'src/components/agreements/AgreementDocument.jsx'
+      - 'src/hooks/useAuthenticatedAgreementDocument.js'
+      - 'scripts/verify-phase4-agreement-signed-document-browser.mjs'
       - '.github/workflows/test-evia-webhook.yml'
   push:
     branches: [main]
@@ -30,6 +33,9 @@ on:
       - 'tests/evia-archive-crash-recovery.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'src/components/agreements/AgreementDocument.jsx'
+      - 'src/hooks/useAuthenticatedAgreementDocument.js'
+      - 'scripts/verify-phase4-agreement-signed-document-browser.mjs'
       - '.github/workflows/test-evia-webhook.yml'
 
 permissions:

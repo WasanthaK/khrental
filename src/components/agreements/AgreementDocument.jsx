@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAuthenticatedAgreementDocument } from '../../hooks/useAuthenticatedAgreementDocument';
 import { FiDownload, FiX } from 'react-icons/fi';
 
 /**
@@ -7,6 +8,8 @@ import { FiDownload, FiX } from 'react-icons/fi';
 const AgreementDocument = ({ documentUrl, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const documentState = useAuthenticatedAgreementDocument(documentUrl);
+  useEffect(() => { setLoading(true); setError(null); }, [documentUrl]);
   
   // Check if documentUrl is actually HTML content rather than a URL
   const isHtmlContent = documentUrl && (
@@ -15,6 +18,10 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
     documentUrl.includes('<html')
   );
   
+  const viewUrl = documentState.url;
+  const loadingDocument = !isHtmlContent && (loading || documentState.status === 'loading');
+  const viewerError = documentState.error || error;
+
   // Handle loading state
   const handleIframeLoad = () => {
     setLoading(false);
@@ -32,9 +39,9 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
         <div className="p-4 border-b flex justify-between items-center">
           <h3 className="text-lg font-medium">Agreement Document</h3>
           <div className="flex items-center space-x-3">
-            {!isHtmlContent && (
+            {!isHtmlContent && viewUrl && (
               <a 
-                href={documentUrl} 
+                href={viewUrl} 
                 download
                 className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center"
               >
@@ -44,6 +51,7 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
             )}
             <button 
               onClick={onClose}
+              aria-label="Close document viewer"
               className="text-gray-500 hover:text-gray-700 focus:outline-none"
             >
               <FiX className="h-6 w-6" />
@@ -52,7 +60,7 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto p-1 bg-gray-100 relative">
-          {loading && (
+          {(loadingDocument || documentState.status === 'loading') && !viewerError && (
             <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
               <div className="flex flex-col items-center">
                 <svg className="animate-spin h-10 w-10 text-blue-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -64,7 +72,7 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
             </div>
           )}
           
-          {error && (
+          {viewerError && (
             <div className="absolute inset-0 flex items-center justify-center bg-white">
               <div className="text-center p-6 bg-red-50 rounded-lg border border-red-200">
                 <div className="text-red-600 mb-4">
@@ -73,22 +81,22 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
                   </svg>
                   <h3 className="text-lg font-medium mt-2">Document Error</h3>
                 </div>
-                <p>{error}</p>
+                <p role="alert">{viewerError}</p>
               </div>
             </div>
           )}
           
           {isHtmlContent ? (
             <div dangerouslySetInnerHTML={{ __html: documentUrl }} className="p-4 bg-white min-h-full" />
-          ) : (
+          ) : viewUrl ? (
             <iframe 
-              src={documentUrl} 
+              src={viewUrl} 
               className="w-full h-full border-0 rounded"
               title="Agreement Document Viewer"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </div>
