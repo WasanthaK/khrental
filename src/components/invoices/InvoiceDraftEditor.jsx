@@ -120,10 +120,24 @@ const InvoiceDraftEditor = ({
 
   const issue = async () => {
     if (!window.confirm('Issue this invoice and email it to the renter? After issue, line items are locked.')) return;
-    await run(
-      () => issueInvoiceDraft(invoice.id),
-      'Invoice issued and sent to the renter.'
-    );
+    try {
+      setWorking(true);
+      setError?.(null);
+      setNotice?.(null);
+      const result = await issueInvoiceDraft(invoice.id);
+      if (result?.error) throw result.error;
+      const status = result?.data?.delivery?.status;
+      setNotice?.(status === 'accepted'
+        ? 'Invoice issued. The email provider accepted the notification (delivery is not yet confirmed).'
+        : status === 'failed'
+          ? 'Invoice issued. Email was rejected; an authorized staff member can retry delivery.'
+          : 'Invoice issued. Email outcome is uncertain; check delivery status before taking further action.');
+      await onChanged?.();
+    } catch (error) {
+      setError?.(error.message || 'Invoice issue failed; refresh to check the current state.');
+    } finally {
+      setWorking(false);
+    }
   };
 
   return (

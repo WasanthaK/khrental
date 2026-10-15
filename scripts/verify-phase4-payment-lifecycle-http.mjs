@@ -18,7 +18,7 @@ const assertResponse = (result, status, reason) => {
  */
 export async function verifyPhase4PaymentLifecycleHttp({
   pool, first, query, a, b, tokenA, tokenB, otherToken,
-  call, createAuthRecord, issueAuthSession, browser, origin
+  call, createAuthRecord, issueAuthSession, browser, origin, invoiceMailbox
 }) {
   const adminSessions = new Map();
   const createAdmin = async item => {
@@ -75,6 +75,107 @@ export async function verifyPhase4PaymentLifecycleHttp({
     call(url(id) + suffix, { method: 'POST', token, tenantId, body });
   const account = (id, token, tenantId) =>
     call(url(id) + '/account', { token, tenantId });
+
+
+  // Governed issue through actual staff React UI and captured provider email.
+  // These are disposable accounts and no external provider is contacted.
+  const createDraft = async (item, period, amount = 1000) => {
+    const invoice = await first(pool,
+      "INSERT INTO invoices (tenant_id,renteeid,propertyid,agreementid,status,totalamount,billingperiod) " +
+      "OUTPUT INSERTED.id VALUES (@tenantId,@renteeId,@propertyId,@agreementId,'draft',0,@period)",
+      { ...item, period });
+    const invoiceId = guid(invoice.id);
+    await query(pool,
+      "INSERT INTO invoice_components (tenant_id,invoice_id,component_type,description,amount) " +
+      "VALUES (@tenantId,@invoiceId,'rent','Controlled invoice test',@amount)",
+      { tenantId: item.tenantId, invoiceId, amount });
+    return invoiceId;
+  };
+  const issue = (id, token, tenantId) =>
+    send(id, '/issue', { token, tenantId, body: {} });
+  const retry = (id, token, tenantId) =>
+    send(id, '/retry-delivery', { token, tenantId, body: {} });
+  const draftA = await createDraft(a, '2026-12', 555);
+  assertResponse(await account(draftA, tokenA, a.tenantId), 404, 'renter draft hidden');
+  assertResponse(await issue(draftA, tokenA, a.tenantId), 403, 'renter cannot issue');
+  assertResponse(await issue(draftA, adminB, b.tenantId), 404, 'foreign admin cannot issue');
+  assert.equal(invoiceMailbox.accepted.length, 0);
+  const managerContext = await browser.createBrowserContext();
+  const managerPage = await managerContext.newPage();
+  try {
+    await managerPage.evaluateOnNewDocument((token, tenantId, profile) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session',
+        JSON.stringify({ access_token: token, user: profile }));
+    }, adminA, a.tenantId, adminSessions.get(adminA));
+    managerPage.on('dialog', async dialog => dialog.accept());
+    await managerPage.goto(origin + '/dashboard/invoices/' + draftA,
+      { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await managerPage.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(
+        b => b.textContent.includes('Issue & Send Invoice')), { timeout: 30000 });
+    const issuedResponse = managerPage.waitForResponse(response =>
+      response.url().includes('/api/billing/invoices/') &&
+      response.url().endsWith('/issue') && response.request().method() === 'POST',
+    { timeout: 30000 });
+    await managerPage.evaluate(() => [...document.querySelectorAll('button')]
+      .find(b => b.textContent.includes('Issue & Send Invoice')).click());
+    const response = await issuedResponse;
+    const body = await response.json().catch(() => ({}));
+    assert.equal(response.status(), 200,
+      'staff issue HTTP response must succeed: ' + JSON.stringify({
+        status: response.status(), code: body.code || null,
+        error: body.error || null
+      }));
+    assert.equal(body.data?.delivery?.status, 'accepted',
+      'controlled email must be accepted after commit');
+    await managerPage.waitForFunction(() =>
+      document.body.innerText.includes('Invoice email delivery') ||
+      document.body.innerText.includes('Email provider accepted the notification'),
+    { timeout: 30000 });
+  } finally { await managerContext.close(); }
+  assert.equal(invoiceMailbox.accepted.length, 1);
+  assert.equal(invoiceMailbox.accepted[0].to, a.email);
+  assert.ok(invoiceMailbox.accepted[0].text.includes('555.00'));
+  assertResponse(await issue(draftA, adminA, a.tenantId), 409, 'duplicate issue denied');
+  assertResponse(await retry(draftA, adminA, a.tenantId), 409, 'accepted message no retry');
+  const issuedA = assertResponse(await account(draftA, tokenA, a.tenantId), 200, 'issued renter account');
+  assert.equal(issuedA.invoice.status, 'pending');
+  assert.equal(issuedA.delivery.status, 'accepted');
+
+  const draftB = await createDraft(b, '2026-12', 660);
+  invoiceMailbox.rejectNext = true;
+  const failed = assertResponse(await issue(draftB, adminB, b.tenantId), 200, 'rejected provider');
+  assert.equal(failed.invoice.status, 'pending');
+  assert.equal(failed.delivery.status, 'failed');
+  assert.equal(invoiceMailbox.accepted.length, 1);
+  assertResponse(await retry(draftB, tokenB, b.tenantId), 403, 'renter cannot retry');
+  assertResponse(await retry(draftB, adminA, a.tenantId), 404, 'foreign admin cannot retry');
+  const acceptedRetry = assertResponse(await retry(draftB, adminB, b.tenantId), 200, 'retry definite rejection');
+  assert.equal(acceptedRetry.delivery.status, 'accepted');
+  assert.equal(invoiceMailbox.accepted.length, 2);
+  assertResponse(await retry(draftB, adminB, b.tenantId), 409, 'no duplicate accepted email');
+  const issuedB = assertResponse(await account(draftB, tokenB, b.tenantId), 200, 'issued B account');
+  assert.equal(issuedB.delivery.status, 'accepted');
+
+  const ambiguousId = await createDraft(a, '2027-01', 700);
+  invoiceMailbox.unknownNext = true;
+  const uncertain = assertResponse(await issue(ambiguousId, adminA, a.tenantId), 200, 'uncertain transport');
+  assert.equal(uncertain.invoice.status, 'pending');
+  assert.equal(uncertain.delivery.status, 'unknown');
+  assertResponse(await retry(ambiguousId, adminA, a.tenantId), 409,
+    'uncertain provider must never automatically resend');
+  const deliveryRows = await query(pool,
+    "SELECT event_type FROM billing_lifecycle_events " +
+    "WHERE tenant_id=@tenantId AND invoice_id=@invoiceId ORDER BY createdat,id",
+    { tenantId: b.tenantId, invoiceId: draftB });
+  const deliveryTypes = deliveryRows.map(x => x.event_type);
+  assert.equal(deliveryTypes.filter(x => x === 'invoice_issued').length, 1);
+  assert.equal(deliveryTypes.filter(x => x === 'invoice_email_attempted').length, 2);
+  assert.equal(deliveryTypes.filter(x => x === 'invoice_email_failed').length, 1);
+  assert.equal(deliveryTypes.filter(x => x === 'invoice_email_accepted').length, 1);
+  console.log('PASS: governed staff issue browser, two-tenant controlled provider acceptance, failed email retry, uncertain no-resend and durable ledger');
 
   const initialA = assertResponse(await account(invoiceA, tokenA, a.tenantId), 200, 'initial owned account');
   assert.equal(Number(initialA.outstandingBalance), 1000);
