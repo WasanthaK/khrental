@@ -3,6 +3,7 @@ import { createSessionAuthMiddleware } from '../auth/index.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { runSingleQuery } from '../mssql/query.js';
 import { authorizeFencedEviaAuditTrailRead, authorizeHistoricEviaAuditTrailRead } from '../evia/auditTrailAccess.js';
+import { authorizeSignedAgreementDocumentRead } from '../evia/signedDocumentAccess.js';
 import { createStorageDeliveryHandler } from './index.js';
 
 // Production uses the existing real authentication, tenant, SQL and storage.
@@ -26,6 +27,10 @@ export const createAuthenticatedTenantStorageRouter = ({
   sessionMiddleware = createSessionAuthMiddleware({ allowStorageCookie: true }),
   tenantMiddleware = createTenantContextMiddleware({ requireUser: true, requireTenant: true }),
   loadPublishedArchive = loadPublishedArchiveFromSql,
+  loadSignedAgreement = ({ agreementId, tenantId }) => runSingleQuery(
+    'SELECT TOP 1 id, tenant_id, renteeid, status, signature_status, eviasignreference, signed_document_url, signeddocumenturl, signature_pdf_url FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId',
+    { agreementId, tenantId }
+  ),
   loadHistoricAgreement = ({ agreementId, tenantId }) => runSingleQuery(
     'SELECT TOP 1 id, tenant_id, status, signature_status, signed_document_url, signeddocumenturl, signature_pdf_url FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId',
     { agreementId, tenantId }
@@ -79,6 +84,22 @@ export const createAuthenticatedTenantStorageRouter = ({
         });
         if (historic.applies && !historic.allowed) {
           res.status(403).json({ error: 'Audit-trail access is not authorized.', code: 'EVIA_AUDIT_TRAIL_ACCESS_DENIED' });
+          return;
+        }
+        // The audit-trail ACLs above are stricter and authoritative for their
+        // objects. A permitted audit read is not a signed-PDF read and must
+        // not be blocked by its distinct retained-document URL comparison.
+        if (result.applies || historic.applies) {
+          next();
+          return;
+        }
+        const signed = await authorizeSignedAgreementDocumentRead({
+          bucket: req.params.bucket, path: objectPath, tenantId: req.tenantId,
+          user: req.user, membership: req.membership,
+          loadSignedAgreement, loadPublishedArchive
+        });
+        if (signed.applies && !signed.allowed) {
+          res.status(403).json({ error: 'Signed document access is not authorized.', code: 'SIGNED_AGREEMENT_ACCESS_DENIED' });
           return;
         }
         next();

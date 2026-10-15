@@ -336,6 +336,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </Link>
           )}
 
+          {isSignatureComplete && !hasViewableDocument && (
+            <span className="text-xs text-amber-700" role="status">Signed PDF not available yet</span>
+          )}
           {hasViewableDocument && (
             <button
               onClick={handleViewDocument}
