@@ -1620,6 +1620,22 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   });
   assert.equal(status.status, 'registered');
   console.log('PASS: authenticated invitation HTTP issue, denial, resend, single-use redeem, credential sign-in and two-tenant isolation');
+
+  // Two fresh, unclaimed users from separate organizations now cross the
+  // actual React Accept Invite screen. Tokens are minted by the canonical
+  // invitation service and never printed by this acceptance harness.
+  const pendingA = await createTarget(a.tenantId);
+  const pendingB = await createTarget(b.tenantId);
+  const inviteA = check(await issue(adminToken, a.tenantId, pendingA.userId), 201);
+  const { createUserInvitation } = await import('../src/api/auth/invitations.js');
+  const inviteB = await createUserInvitation({
+    tenantId: b.tenantId, appUserId: pendingB.userId
+  });
+  return {
+    a: { ...pendingA, token: inviteA.invitation.token },
+    b: { ...pendingB, token: inviteB.token },
+    revokedToken: firstToken
+  };
 }
 
 async function main() {
@@ -1821,13 +1837,17 @@ async function main() {
       });
       return { status: response.status, payload: await response.json() };
     };
-    await verifyInvitationLifecycleHttp({
+    const pendingInvitationBrowser = await verifyInvitationLifecycleHttp({
       pool, a, b, tokenA, call, createAuthRecord, issueAuthSession
     });
     const { verifyUtilityReviewTransitions } =
       await import('./verify-utility-review-transitions.mjs');
     browser = await puppeteer.launch({
       headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const { verifyPhase4InvitationBrowser } = await import('./verify-phase4-invitation-browser.mjs');
+    await verifyPhase4InvitationBrowser({
+      browser, origin, pool, a, b, call, pending: pendingInvitationBrowser
     });
     await verifyUtilityReviewTransitions({
       pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
