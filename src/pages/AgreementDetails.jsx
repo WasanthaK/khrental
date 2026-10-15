@@ -10,6 +10,7 @@ import {
   markAgreementAsSigned
 } from '../services/agreementService';
 import { deleteCancelledAgreement } from '../services/cancelledAgreementDeleteService';
+import { useAuthenticatedAgreementDocument } from '../hooks/useAuthenticatedAgreementDocument';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -42,6 +43,7 @@ const AgreementDetails = () => {
   const retainedPdfUrl = [agreement?.signed_document_url, agreement?.signeddocumenturl, agreement?.signature_pdf_url]
     .find(url => typeof url === 'string' && url.includes('/storage/documents/tenants/') && url.includes('/signed/')) || null;
   const displayDocumentUrl = signedComplete ? retainedPdfUrl : (agreement?.pdfurl || agreement?.documenturl || null);
+  const documentState = useAuthenticatedAgreementDocument(displayDocumentUrl);
 
   const fetchAgreementData = useCallback(async () => {
     try {
@@ -416,10 +418,10 @@ const AgreementDetails = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-medium">Agreement Document</h2>
-              {displayDocumentUrl && (
+              {documentState.status === 'ready' && documentState.url && (
                 <div className="flex space-x-2">
                   <a
-                    href={displayDocumentUrl}
+                    href={documentState.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-1 bg-indigo-600 text-white hover:bg-indigo-700 rounded text-sm flex items-center"
@@ -434,10 +436,14 @@ const AgreementDetails = () => {
             </div>
             
             {/* Document View - Show iframe if PDF is available, otherwise show content */}
-            {displayDocumentUrl ? (
+            {documentState.status === 'loading' ? (
+              <p role="status">Loading authenticated agreement document...</p>
+            ) : documentState.status === 'error' ? (
+              <p role="alert" className="text-red-700">{documentState.error}</p>
+            ) : documentState.status === 'ready' && documentState.url ? (
               <div className="relative h-[600px] w-full">
                 <iframe
-                  src={displayDocumentUrl}
+                  src={documentState.url}
                   className="absolute top-0 left-0 w-full h-full border-0"
                   title="Agreement Document"
                 />

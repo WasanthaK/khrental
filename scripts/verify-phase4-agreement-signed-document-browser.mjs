@@ -120,11 +120,36 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
       return true;
     }, title);
     assert.equal(scope, true, 'routed admin card must expose retained signed PDF');
-    await page.waitForFunction(() => Boolean(document.querySelector('iframe[title="Agreement Document Viewer"]')),
-      { timeout: 15000 });
-    const actualSrc = await page.$eval('iframe[title="Agreement Document Viewer"]', el => el.getAttribute('src'));
-    assert.equal(lower(actualSrc), lower(signedUrl));
-    assert.notEqual(actualSrc, oldOriginal, 'signed card must not fall back to the unsigned original');
+    await page.waitForFunction(() => {
+      const frame = document.querySelector('iframe[title="Agreement Document Viewer"]');
+      return frame && String(frame.getAttribute('src') || '').startsWith('blob:');
+    }, { timeout: 30000 });
+    const embedded = await page.evaluate(async () => {
+      const frame = document.querySelector('iframe[title="Agreement Document Viewer"]');
+      const download = [...document.querySelectorAll('a[download]')]
+        .find(a => a.textContent.includes('Download'));
+      const url = frame?.getAttribute('src');
+      const response = await fetch(url);
+      const buffer = await response.arrayBuffer();
+      return {
+        url, downloadUrl: download?.getAttribute('href'),
+        data: new TextDecoder().decode(buffer.slice(0, 28)),
+        status: response.status, type: response.headers.get('content-type')
+      };
+    });
+    assert.ok(embedded.url.startsWith('blob:'));
+    assert.equal(embedded.downloadUrl, embedded.url, 'download must use authenticated bytes');
+    assert.equal(embedded.status, 200);
+    assert.ok(embedded.data.startsWith('%PDF-disposable-audit-test'),
+      'rendered PDF bytes must be fetched through real-session storage');
+    assert.equal(embedded.type, 'application/pdf');
+    assert.notEqual(embedded.url, signedUrl, 'protected document must not use unauthenticated iframe');
+    assert.notEqual(embedded.url, oldOriginal, 'signed document must never fall back to draft');
+    await page.click('button[aria-label="Close document viewer"]');
+    await page.waitForFunction(() => !document.querySelector('iframe[title="Agreement Document Viewer"]'));
+    await page.waitForFunction(async old => {
+      try { await fetch(old); return false; } catch (_error) { return true; }
+    }, { timeout: 15000 }, embedded.url);
   } finally { await context.close(); }
 
   assert.ok(storageProbe.reads() >= before + 1);
@@ -135,5 +160,5 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
     loadSignedAgreement: async () => { throw new Error('Empty paths should be denied before SQL'); }
   });
   assert.equal(malformed.allowed, false);
-  console.log('PASS: real signed-PDF session isolation, publication proof, renter list ownership, and routed retained-document browser display');
+  console.log('PASS: real signed-PDF authorization, browser-retrieved PDF bytes, temporary URL cleanup and tenant ownership');
 }
