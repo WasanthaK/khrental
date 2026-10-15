@@ -71,9 +71,14 @@ export const updateInvoice = async (id, invoiceData) => {
  */
 export const uploadPaymentProof = async (invoiceId, file, paymentDetails = {}) => {
   try {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${invoiceId}_${Date.now()}.${fileExt}`;
-    const filePath = `payment_proofs/${fileName}`;
+    const fileExt = String(file.name || '').split('.').pop().toLowerCase();
+    const mime = String(file.type || '').toLowerCase();
+    if (!['pdf','png','jpg','jpeg'].includes(fileExt)
+      || !['application/pdf','image/png','image/jpeg'].includes(mime)
+      || !file.size || file.size > 5 * 1024 * 1024) {
+      throw new Error('Payment proof must be a PDF, PNG or JPEG up to 5 MB.');
+    }
+    const filePath = `payment_proofs/${invoiceId}/${crypto.randomUUID()}.${fileExt}`;
 
     const uploadedProof = await uploadTenantFile({
       bucket: 'invoices',
@@ -85,7 +90,7 @@ export const uploadPaymentProof = async (invoiceId, file, paymentDetails = {}) =
       throw new Error('Failed to get storage URL for payment proof');
     }
 
-    const proofUrl = uploadedProof.url;
+    const proofUrl = new URL(uploadedProof.url, window.location.origin).pathname;
 
     const { data, error } = await submitInvoicePaymentProof(invoiceId, {
       proofUrl,

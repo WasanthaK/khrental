@@ -22,8 +22,25 @@ import {
 } from '../auth/index.js';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
+import { authorizePaymentProofAccess, denyPaymentProofMutation } from './paymentProofAccess.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
 import { requireNotificationTenantRecipient } from './notificationAccess.js';
+
+const authorizeProofObject = async (req, bucket, path, operation) => {
+  const permission = await authorizePaymentProofAccess({
+    bucket, path, operation, tenantId: req.tenantId,
+    user: req.user, membership: req.membership,
+    loadInvoice: ({ tenantId, invoiceId }) => runSingleQuery(
+      'SELECT TOP 1 id, tenant_id, renteeid, propertyid FROM invoices WHERE id=@invoiceId AND tenant_id=@tenantId',
+      { invoiceId, tenantId }
+    )
+  });
+  if (permission.applies && !permission.allowed) {
+    throw Object.assign(new Error('Payment proof access denied.'), {
+      status: 403, code: 'PAYMENT_PROOF_ACCESS_DENIED'
+    });
+  }
+};
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TENANT_SCOPED_TABLES = new Set([
@@ -1196,6 +1213,11 @@ export const createPlatformRouter = () => {
   router.get('/storage/list', requireAuthenticated, async (req, res, next) => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
+      if (String(req.query.bucket).toLowerCase() === 'invoices' && relativePath.includes('/payment_proofs')) {
+        throw Object.assign(new Error('Payment proof listing is not available.'), {
+          status: 403, code: 'PAYMENT_PROOF_LIST_FORBIDDEN'
+        });
+      }
       const items = await getStorageDriver().list(req.query.bucket, relativePath);
       res.json({ data: items, meta: { path: relativePath, tenantContext: serializeTenantContext(req.tenantContext) } });
     } catch (error) {
@@ -1207,6 +1229,7 @@ export const createPlatformRouter = () => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
       assertEviaGenericDocumentUploadAllowed(req.query.bucket, relativePath);
+      await authorizeProofObject(req, req.query.bucket, relativePath, 'upload');
       const data = await getStorageDriver().upload(
         req.query.bucket,
         relativePath,
@@ -1223,6 +1246,7 @@ export const createPlatformRouter = () => {
     try {
       const pathsToDelete = Array.isArray(req.body?.paths) ? req.body.paths : [];
       const scopedPaths = pathsToDelete.map((item) => resolveTenantStoragePath(item, req.tenantId, { requireTenant: true }));
+      denyPaymentProofMutation(req.body?.bucket || req.query.bucket, scopedPaths);
       res.json({ data: await getStorageDriver().deleteObjects(req.body?.bucket || req.query.bucket, scopedPaths) });
     } catch (error) {
       next(error);

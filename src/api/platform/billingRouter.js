@@ -6,6 +6,8 @@ import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
 import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billingReminderEmail.js';
+import { getStorageDriver } from '../storage/index.js';
+import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import {
   PAYMENT_STATUS,
   calculateOutstandingBalance,
@@ -667,6 +669,8 @@ export const createBillingRouter = () => {
       assertInvoiceAccess(req, invoice, false);
       const proofUrl = String(req.body?.proofUrl || '').trim();
       if (!proofUrl) throw createRequestError(400, 'proofUrl is required.', 'PAYMENT_PROOF_REQUIRED');
+      await verifyStoredPaymentProof({ proofUrl, tenantId: req.tenantId, invoiceId: invoice.id,
+        readObject: (bucket, path) => getStorageDriver().getObject(bucket, path) });
 
       const payments = await loadPayments(req.tenantId, invoice.id);
       const outstandingBalance = calculateOutstandingBalance(invoice.totalamount, payments);

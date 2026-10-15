@@ -13,6 +13,8 @@ const suffix = `github-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const probes = [
   { bucket: 'images', path: `_healthchecks/${suffix}.txt`,
     bytes: Buffer.from('kh-rentals-r2-validation'), mime: 'text/plain' },
+  { bucket: 'invoices', path: `_healthchecks/${suffix}-proof.png`,
+    bytes: Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,73,72,68,82]), mime: 'image/png' },
   { bucket: 'documents', path: `_healthchecks/${suffix}.pdf`,
     bytes: Buffer.from('%PDF-1.4\\n%KH-Rentals-R2-probe\\n%%EOF'),
     mime: 'application/pdf' }
@@ -31,7 +33,7 @@ try {
       throw new Error('R2 validation content type was not retained.');
     }
   }
-  console.log('R2 images and documents write/read bytes and content-type validation succeeded.');
+  console.log('R2 images, documents and invoices write/read bytes and content-type validation succeeded.');
 } finally {
   for (const probe of uploaded) {
     await storage.deleteObjects(probe.bucket, [probe.path]);

@@ -4,6 +4,7 @@ import { createTenantContextMiddleware } from '../tenant/context.js';
 import { runSingleQuery } from '../mssql/query.js';
 import { authorizeFencedEviaAuditTrailRead, authorizeHistoricEviaAuditTrailRead } from '../evia/auditTrailAccess.js';
 import { authorizeSignedAgreementDocumentRead } from '../evia/signedDocumentAccess.js';
+import { authorizePaymentProofAccess } from '../platform/paymentProofAccess.js';
 import { createStorageDeliveryHandler } from './index.js';
 
 // Production uses the existing real authentication, tenant, SQL and storage.
@@ -100,6 +101,18 @@ export const createAuthenticatedTenantStorageRouter = ({
         });
         if (signed.applies && !signed.allowed) {
           res.status(403).json({ error: 'Signed document access is not authorized.', code: 'SIGNED_AGREEMENT_ACCESS_DENIED' });
+          return;
+        }
+        const proof = await authorizePaymentProofAccess({
+          bucket: req.params.bucket, path: objectPath,
+          tenantId: req.tenantId, user: req.user, membership: req.membership,
+          loadInvoice: ({ tenantId, invoiceId }) => runSingleQuery(
+            'SELECT TOP 1 id, tenant_id, renteeid, propertyid FROM invoices WHERE id=@invoiceId AND tenant_id=@tenantId',
+            { tenantId, invoiceId }
+          )
+        });
+        if (proof.applies && !proof.allowed) {
+          res.status(403).json({ error: 'Payment proof access denied.', code: 'PAYMENT_PROOF_ACCESS_DENIED' });
           return;
         }
         next();
