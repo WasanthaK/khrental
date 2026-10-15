@@ -15,6 +15,7 @@ import {
 } from './maintenanceLifecycle.js';
 import { authorizeMaintenanceImageAttachment, normalizeMaintenanceImageUrl, sameMaintenanceIdentifier } from './maintenanceImagePolicy.js';
 import { writeMaintenanceNotifications } from './maintenanceNotificationWriter.js';
+import { buildMaintenanceListScope, parseMaintenanceListPage } from './maintenanceListScope.js';
 
 const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
@@ -183,6 +184,60 @@ export const createMaintenanceLifecycleRouter = () => {
     requireTenant: true,
     auditLabel: 'maintenance-lifecycle'
   }));
+
+  router.get('/requests', async (req, res, next) => {
+    try {
+      const page = parseMaintenanceListPage(req.query);
+      const scope = buildMaintenanceListScope({
+        actorId: req.user?.id,
+        isRenter: isTenantRole({ user: req.user, membership: req.membership }),
+        canManage: isManager(req),
+        isAdmin: isAdminRole({ user: req.user, membership: req.membership }),
+        canUpdateAssigned: canUpdateAssigned(req),
+        assignedPropertyIds: req.membership?.assignedPropertyIds || []
+      });
+      const rows = await runQuery(
+        `SELECT mr.*, p.name AS property_name, p.address AS property_address,
+                renter.name AS rentee_name, renter.email AS rentee_email,
+                assigned.name AS assigned_name
+         FROM maintenance_requests mr
+         LEFT JOIN properties p ON p.id=mr.propertyid AND p.tenant_id=mr.tenant_id
+         LEFT JOIN app_users renter ON renter.id=mr.renteeid AND renter.tenant_id=mr.tenant_id
+         LEFT JOIN app_users assigned ON assigned.id=mr.assignedto AND assigned.tenant_id=mr.tenant_id
+         WHERE mr.tenant_id=@tenantId AND ${scope.predicate}
+         ORDER BY mr.createdat DESC, mr.id DESC
+         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+        { tenantId: req.tenantId, ...scope.params, ...page }
+      );
+      const ids = rows.map(row => row.id);
+      const images = ids.length ? await runQuery(
+        `SELECT * FROM maintenance_request_images
+         WHERE tenant_id=@tenantId AND maintenance_request_id IN (
+           SELECT TRY_CONVERT(uniqueidentifier, [value]) FROM OPENJSON(@requestIds)
+         ) ORDER BY uploaded_at, id`,
+        { tenantId: req.tenantId, requestIds: JSON.stringify(ids) }
+      ) : [];
+      const byId = new Map();
+      for (const image of images) {
+        const key = String(image.maintenance_request_id).toLowerCase();
+        if (!byId.has(key)) byId.set(key, []);
+        byId.get(key).push(image);
+      }
+      res.json({
+        data: rows.map(row => ({
+          ...row,
+          property: row.propertyid ? { id: row.propertyid, name: row.property_name, address: row.property_address } : null,
+          rentee: row.renteeid ? { id: row.renteeid, name: row.rentee_name, email: row.rentee_email } : null,
+          assigned_staff: row.assignedto ? { id: row.assignedto, name: row.assigned_name } : null,
+          maintenance_request_images: byId.get(String(row.id).toLowerCase()) || []
+        })),
+        nextOffset: rows.length === page.limit ? page.offset + rows.length : null,
+        error: null
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.post('/requests', async (req, res, next) => {
     try {
