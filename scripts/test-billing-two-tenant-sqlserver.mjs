@@ -1668,8 +1668,13 @@ async function main() {
 
     const { verifyPhase4StaffMaintenanceHttp } =
       await import('./verify-phase4-staff-maintenance-http.mjs');
-    await verifyPhase4StaffMaintenanceHttp({
+    const staffResult = await verifyPhase4StaffMaintenanceHttp({
       pool, a, b, tokenA, tokenB, call, createAuthRecord, issueAuthSession, browser, origin
+    });
+    const { verifyPhase4NotificationInboxBrowser } =
+      await import('./verify-phase4-notification-inbox-browser.mjs');
+    await verifyPhase4NotificationInboxBrowser({
+      browser, origin, pool, a, b, tokenA, tokenB, seeded: phase4Seeded, staffResult
     });
 
     const authContext = await call('/api/platform/auth/context', {
