@@ -56,10 +56,13 @@ export const createPasswordResetRouter = ({ sendEmail, getBaseUrl }) => {
           const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(request.token)}`;
           const emailContent = buildResetEmail({ resetLink, expiresAt: request.expiresAt });
 
-          await sendEmail({
+          const delivery = await sendEmail({
             to: request.email,
             ...emailContent
           });
+          if (delivery?.success !== true) {
+            throw new Error('The password reset email was not accepted for delivery.');
+          }
         } catch (deliveryError) {
           await revokePasswordResetToken(request.token).catch(() => {});
           console.error('[PasswordReset] Recovery email delivery failed:', deliveryError);

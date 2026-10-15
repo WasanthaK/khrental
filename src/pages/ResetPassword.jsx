@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { platform as platformClient } from '../services/platformClient';
 import { getApiBaseUrl } from '../utils/env';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -15,7 +15,39 @@ const ResetPassword = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [resetComplete, setResetComplete] = useState(false);
+  const [linkStatus, setLinkStatus] = useState(isRedeemMode ? 'checking' : 'idle');
   const navigate = useNavigate();
+
+  // Do not offer credential entry for a revoked, expired or already redeemed
+  // token. The server remains authoritative and rechecks at redemption.
+  useEffect(() => {
+    if (!token) {
+      setLinkStatus('idle');
+      return;
+    }
+    let cancelled = false;
+    setLinkStatus('checking');
+    setError('');
+    const validate = async () => {
+      try {
+        const response = await fetch(
+          `${getApiBaseUrl()}/api/platform/auth/reset-password/validate?token=${encodeURIComponent(token)}`
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.data?.valid !== true) {
+          throw new Error('This password reset link is invalid, expired or already used. Request a new link.');
+        }
+        if (!cancelled) setLinkStatus('valid');
+      } catch (_error) {
+        if (!cancelled) {
+          setLinkStatus('invalid');
+          setError('This password reset link is invalid, expired or already used. Request a new link.');
+        }
+      }
+    };
+    validate();
+    return () => { cancelled = true; };
+  }, [token]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -46,6 +78,7 @@ const ResetPassword = () => {
 
   const handleSetNewPassword = async (e) => {
     e.preventDefault();
+    if (linkStatus !== 'valid') return;
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
@@ -122,7 +155,11 @@ const ResetPassword = () => {
           </div>
         )}
 
-        {!resetComplete && (
+        {isRedeemMode && linkStatus === 'checking' && (
+          <p role="status" className="text-center text-sm text-gray-600">Checking your reset link...</p>
+        )}
+
+        {!resetComplete && (!isRedeemMode || linkStatus === 'valid') && (
           <form className="mt-8 space-y-6" onSubmit={isRedeemMode ? handleSetNewPassword : handleResetPassword}>
             {isRedeemMode ? (
               <div className="rounded-md shadow-sm space-y-3">

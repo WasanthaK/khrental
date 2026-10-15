@@ -1693,6 +1693,15 @@ async function main() {
     process.env.MSSQL_AUTHENTICATION = 'sql-password';
     process.env.MSSQL_ENCRYPT = 'false';
     process.env.MSSQL_TRUST_SERVER_CERTIFICATE = 'true';
+    // The reset-token migration depends on auth_users. The disposable fixture
+    // creates the same canonical auth tables via the server's existing
+    // ensureAuthSchema() after its isolated SQL connection is configured.
+    const { ensureAuthSchema } = await import('../src/api/auth/index.js');
+    await ensureAuthSchema();
+    await pool.request().batch(
+      fs.readFileSync(path.resolve('migrations',
+        '20260916_01_create_password_reset_tokens.sql'), 'utf8')
+    );
     const { generateMonthlyInvoicesForTenant } = await import('../src/api/platform/monthlyBillingService.js');
     ({ closeMssqlPool } = await import('../src/api/mssql/pool.js'));
     const a = await fixture(pool, 'Tenant A', 2000, 125);
@@ -1757,6 +1766,9 @@ async function main() {
       await import('../src/api/auth/index.js');
     const { createPlatformRouter } = await import('../src/api/platform/router.js');
     const { createInvitationRouter } = await import('../src/api/auth/invitationRouter.js');
+    const { createPasswordResetRouter } = await import('../src/api/auth/passwordResetRouter.js');
+    const { createControlledResetMailbox, verifyPhase4PasswordRecoveryBrowser } =
+      await import('./verify-phase4-password-recovery-browser.mjs');
     const { createBillingRouter } = await import('../src/api/platform/billingRouter.js');
     const { createMaintenanceLifecycleRouter } = await import('../src/api/platform/maintenanceLifecycleRouter.js');
     const { createNotificationSelfRouter } = await import('../src/api/platform/notificationSelfRouter.js');
@@ -1788,10 +1800,15 @@ async function main() {
     const { createAuthenticatedTenantStorageRouter } = await import('../src/api/storage/authenticatedTenantRoute.js');
     const { createAuditHttpStorageProbe, verifyEviaRealSessionAuditHttp } = await import('./verify-evia-real-session-audit-http.mjs');
     const auditProbe = createAuditHttpStorageProbe();
+    const resetMailbox = createControlledResetMailbox();
     const app = express();
     app.use(express.json());
     app.use('/storage', createAuthenticatedTenantStorageRouter({ deliveryHandler: auditProbe.deliveryHandler }));
     app.use('/api', createSessionAuthMiddleware());
+    app.use('/api/platform/auth', createPasswordResetRouter({
+      sendEmail: resetMailbox.sendEmail,
+      getBaseUrl: resetMailbox.getBaseUrl
+    }));
     app.use('/api/platform/auth', createInvitationRouter());
     app.use('/api/platform', createPlatformRouter());
     app.use('/api/billing', createBillingRouter());
@@ -1822,6 +1839,7 @@ async function main() {
       server.once('error', reject);
     });
     const origin = 'http://127.0.0.1:' + httpServer.address().port;
+    resetMailbox.setBaseUrl(origin);
     await verifyEviaRealSessionAuditHttp({
       pool, a, b, origin, tokenA, tokenB, createAuthRecord, issueAuthSession, probe: auditProbe
     });
@@ -1848,6 +1866,10 @@ async function main() {
     const { verifyPhase4InvitationBrowser } = await import('./verify-phase4-invitation-browser.mjs');
     await verifyPhase4InvitationBrowser({
       browser, origin, pool, a, b, call, pending: pendingInvitationBrowser
+    });
+    await verifyPhase4PasswordRecoveryBrowser({
+      browser, origin, pool, a, b, call, createAuthRecord, issueAuthSession,
+      mailbox: resetMailbox
     });
     await verifyUtilityReviewTransitions({
       pool, a: { ...a, token: tokenA }, b: { ...b, token: tokenB },
