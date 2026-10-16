@@ -79,3 +79,103 @@ test('shared invoice property selector uses supported context selection contract
     assert.ok(context.includes(name), name + ' must be implemented by PropertyContext');
   }
 });
+
+
+test('Phase 5 browser: real PropertySelector selects, toggles, clears, and respects controlled empty state', { timeout: 120000 }, async () => {
+  const { fileURLToPath } = await import('node:url');
+  const { createServer } = await import('vite');
+  const { default: react } = await import('@vitejs/plugin-react');
+  const { default: puppeteer } = await import('puppeteer');
+
+  // Never use live URLs, sessions or SQL. Vite aliases ONLY the selector's
+  // PropertyContext import to the in-memory fixture; the rendered component
+  // itself is the actual production PropertySelector.jsx.
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const mockContext = fileURLToPath(new URL('./fixtures/property-selector/mockPropertyContext.jsx', import.meta.url));
+  const vite = await createServer({
+    root, configFile: false, logLevel: 'error',
+    plugins: [react()],
+    resolve: { alias: [
+      { find: '../../contexts/PropertyContext', replacement: mockContext }
+    ] },
+    server: { host: '127.0.0.1', port: 0, strictPort: false }
+  });
+  let browser;
+  try {
+    await vite.listen();
+    const port = vite.httpServer.address().port;
+    browser = await puppeteer.launch({
+      headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    const browserErrors = [];
+    page.on('pageerror', error => browserErrors.push(error.message));
+    await page.setViewport({ width: 1280, height: 1000 });
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      try {
+        const destination = new URL(request.url());
+        if (destination.hostname !== '127.0.0.1') {
+          request.abort();
+          return;
+        }
+        request.continue();
+      } catch {
+        request.abort();
+      }
+    });
+    await page.goto('http://127.0.0.1:' + port + '/tests/fixtures/property-selector/index.html',
+      { waitUntil: 'networkidle2', timeout: 30000 });
+    const selected = async (name, expected) => {
+      await page.waitForFunction((fixture, value) => {
+        const output = document.querySelector('[data-selection="' + fixture + '"]');
+        return output && output.textContent.trim() === value;
+      }, { timeout: 12000 }, name, expected);
+    };
+    const card = (section, index) =>
+      'section[data-fixture="' + section + '"] .max-h-60 > div:nth-child(' + index + ')';
+    const action = (section, index) =>
+      'section[data-fixture="' + section + '"] .flex.justify-between button:nth-child(' + index + ')';
+
+    // Controlled [] must NOT accidentally inherit the shared context's Beta.
+    await selected('controlled', 'none');
+    await selected('uncontrolled', 'beta');
+    await page.click(card('controlled', 1));
+    await selected('controlled', 'alpha');
+    await page.click(card('controlled', 2));
+    await selected('controlled', 'alpha,beta');
+    await page.click(card('controlled', 1));
+    await selected('controlled', 'beta');
+    await page.click(action('controlled', 2));
+    await selected('controlled', 'none');
+    await selected('uncontrolled', 'beta');
+
+    // Controlled select-all works over search-filtered visible properties.
+    await page.type('section[data-fixture="controlled"] input[type="text"]', 'Alpha');
+    await page.click(action('controlled', 1));
+    await selected('controlled', 'alpha');
+    await page.click(action('controlled', 2));
+    await selected('controlled', 'none');
+
+    // Uncontrolled selection is owned by PropertyContext and is independent.
+    await page.click(card('uncontrolled', 1));
+    await selected('uncontrolled', 'beta,alpha');
+    await page.click(card('uncontrolled', 2));
+    await selected('uncontrolled', 'alpha');
+    await page.click(action('uncontrolled', 1));
+    await selected('uncontrolled', 'alpha,beta,gamma');
+    await page.click(action('uncontrolled', 2));
+    await selected('uncontrolled', 'none');
+
+    // Single selection replaces rather than appending an unrelated property.
+    await page.click(card('single', 3));
+    await selected('single', 'gamma');
+    await page.click(card('single', 1));
+    await selected('single', 'alpha');
+
+    assert.deepEqual(browserErrors, [], 'real React selector must render without browser exceptions');
+  } finally {
+    if (browser) await browser.close();
+    await vite.close();
+  }
+});
