@@ -27,6 +27,15 @@ test('verification entrypoint never uses apply and cannot silently run as a web 
   assert.doesNotMatch(verifier, /--mode=apply/);
 });
 
+test('strict executor retains redacted evidence for all six ledger and schema checks', () => {
+  assert.match(workflow, /capture_verification_evidence/);
+  assert.match(workflow, /az containerapp job logs show/);
+  assert.match(workflow, /Strict read-only migration verification passed for 6 managed migrations/);
+  assert.match(workflow, /LEDGERED.*SCHEMA_OK/);
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+  assert.match(workflow, /Raw Azure logs are not published/);
+});
+
 test('production verification uses an isolated execution, no persistent job update or DDL', () => {
   assert.match(workflow, /VERIFY-MIGRATION-EXECUTOR/);
   assert.match(workflow, /scripts\/run-production-migration-verify\.sh/);
