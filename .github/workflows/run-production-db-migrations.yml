@@ -369,7 +369,8 @@ jobs:
             exit 1
           fi
           if [ "$serving_sha" != "$GITHUB_SHA" ]; then
-            git fetch --no-tags origin "$serving_sha"
+            # actions/checkout uses a shallow clone; deepen history before ancestry checks.
+            git fetch --no-tags --unshallow origin
             if ! git merge-base --is-ancestor "$serving_sha" "$GITHUB_SHA"; then
               echo "Ready SHA is not an ancestor; refusing read-only plan." >&2
               exit 1
