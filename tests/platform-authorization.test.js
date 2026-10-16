@@ -389,6 +389,98 @@ test('maintenance staff property reads are scoped but finance data remains denie
   );
 });
 
+test('Phase 5: renter property-unit reads retain tenant ownership and reject writes', () => {
+  const read = authorizePlatformQuery({
+    user: tenant,
+    membership: activeMembership('rentee'),
+    action: 'select',
+    table: 'property_units',
+    filters: [{ column: 'propertyid', operator: 'eq', value: 'property-1' }]
+  });
+  assert.deepEqual(read.resourceScope, { kind: 'tenant-unit', userId: tenant.id });
+  assert.deepEqual(read.filters, [{ column: 'propertyid', operator: 'eq', value: 'property-1' }]);
+
+  for (const action of ['insert', 'update', 'delete', 'upsert']) {
+    expectAuthorizationError(
+      () => authorizePlatformQuery({
+        user: tenant,
+        membership: activeMembership('rentee'),
+        action,
+        table: 'property_units',
+        filters: [{ column: 'id', operator: 'eq', value: 'unit-1' }],
+        payload: { propertyid: 'property-2', unitnumber: 'A2' }
+      }),
+      'ACTION_ACCESS_DENIED'
+    );
+  }
+});
+
+test('Phase 5: staff property-unit reads stay assigned-property-scoped and all writes are denied', () => {
+  const manager = { id: 'manager-1', role: 'manager' };
+  const assigned = activeMembership('manager', ['property-1']);
+  const read = authorizePlatformQuery({
+    user: manager,
+    membership: assigned,
+    action: 'select',
+    table: 'property_units',
+    filters: [{ column: 'id', operator: 'eq', value: 'unit-1' }]
+  });
+  assert.deepEqual(read.filters.at(-1), {
+    column: 'propertyid',
+    operator: 'in',
+    value: ['property-1']
+  });
+
+  const unassigned = authorizePlatformQuery({
+    user: manager,
+    membership: activeMembership('manager'),
+    action: 'select',
+    table: 'property_units'
+  });
+  assert.deepEqual(unassigned.filters.at(-1), {
+    column: 'propertyid',
+    operator: 'in',
+    value: []
+  });
+
+  for (const action of ['insert', 'update', 'delete', 'upsert']) {
+    expectAuthorizationError(
+      () => authorizePlatformQuery({
+        user: manager,
+        membership: assigned,
+        action,
+        table: 'property_units',
+        filters: [{ column: 'id', operator: 'eq', value: 'unit-1' }],
+        payload: { propertyid: 'property-2', unitnumber: 'A2' }
+      }),
+      'STAFF_PERMISSION_REQUIRED'
+    );
+  }
+});
+
+test('Phase 5: admin property-unit mutations require a record filter for update and delete', () => {
+  for (const action of ['update', 'delete']) {
+    expectAuthorizationError(
+      () => authorizePlatformQuery({
+        user: admin,
+        action,
+        table: 'property_units',
+        payload: { status: 'available' }
+      }),
+      'UNFILTERED_MUTATION_BLOCKED'
+    );
+    const scoped = authorizePlatformQuery({
+      user: admin,
+      action,
+      table: 'property_units',
+      filters: [{ column: 'id', operator: 'eq', value: 'unit-1' }],
+      payload: { status: 'available' }
+    });
+    assert.equal(scoped.table, 'property_units');
+    assert.deepEqual(scoped.filters, [{ column: 'id', operator: 'eq', value: 'unit-1' }]);
+  }
+});
+
 test('blocks schema and raw SQL RPCs for every role including administrators', () => {
   for (const user of [admin, staff, tenant]) {
     for (const name of ['exec_sql', 'create_policy', 'enable_rls', 'create_app_users_table']) {
