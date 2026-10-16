@@ -102,11 +102,77 @@ jobs:
           echo "Ready serving revision: $ready_revision"
           echo "Dedicated executor identity: $principal_id"
 
+          # Retain curated status evidence in the GitHub run; never publish
+          # raw SQL inspection details or full Container Apps logs.
+          capture_verification_evidence() {
+            local log_file
+            log_file="$(mktemp)"
+            local found=0
+
+            # Container Apps log delivery can lag successful job completion.
+            for evidence_attempt in $(seq 1 12); do
+              if az containerapp job logs show \
+                --name "$AZURE_MIGRATION_JOB_NAME" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --execution "$execution_name" \
+                --container "$container_name" \
+                --tail 200 \
+                --format text > "$log_file" 2>/dev/null \
+                && grep -Fq 'Strict read-only migration verification passed for 6 managed migrations;' "$log_file"; then
+                found=1
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$found" -ne 1 ]; then
+              echo "Executor succeeded but strict six-migration verification evidence was unavailable. Do not claim release acceptance." >&2
+              rm -f "$log_file"
+              return 1
+            fi
+
+            migration_ids="20260920_01_add_tenancy_billing_adjustments
+            20260920_02_create_platform_admins
+            20260920_03_backfill_legacy_app_user_memberships
+            20260926_01_add_rentee_property_unit_associations
+            20261005_01_add_property_utility_configs
+            20261006_01_repair_auth_store_runtime_columns"
+
+            for migration_id in $migration_ids; do
+              if ! grep -Eq "VERIFY[[:space:]]+$migration_id[[:space:]]+LEDGERED[[:space:]]+SCHEMA_OK([[:space:]]|$)" "$log_file"; then
+                echo "Missing successful ledger/schema evidence for $migration_id; refusing release-ready verification." >&2
+                rm -f "$log_file"
+                return 1
+              fi
+            done
+
+            {
+              echo "### Production migration executor — strict read-only evidence"
+              echo
+              echo "Execution: $execution_name"
+              echo "Serving revision: $ready_revision"
+              echo "Serving image: $image"
+              echo "Distinct managed executor identity checked; ledger checksums and SQL grants validated by strict runner."
+              echo
+              echo "| Migration | Ledger | Schema |"
+              echo "| --- | --- | --- |"
+              for migration_id in $migration_ids; do
+                echo "| $migration_id | LEDGERED | SCHEMA_OK |"
+              done
+              echo
+              echo "**6/6 ledger/schema checks passed.** Raw Azure logs are not published."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "Retained 6/6 redacted LEDGERED / SCHEMA_OK results for execution $execution_name."
+            rm -f "$log_file"
+          }
+
           for attempt in $(seq 1 90); do
             status=$(az containerapp job execution show               --name "$AZURE_MIGRATION_JOB_NAME"               --resource-group "$AZURE_RESOURCE_GROUP"               --job-execution-name "$execution_name"               --query properties.status -o tsv)
             case "$status" in
               Succeeded)
-                echo "Strict read-only executor verification passed. Review execution logs for per-migration ledger and schema evidence."
+                capture_verification_evidence
+                echo "Strict read-only executor verification passed with six retained ledger/schema results."
                 exit 0
                 ;;
               Failed|Stopped)
