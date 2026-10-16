@@ -28,6 +28,8 @@ test('governed production workflow preserves separate, explicitly confirmed appl
   assert.match(prodWorkflow, /inputs\.mode \|\| 'plan'/);
   assert.match(prodWorkflow, /MIGRATION_MODE.*apply/);
   assert.match(prodWorkflow, /APPLY-PRODUCTION/);
+  assert.match(prodWorkflow, /git fetch --no-tags --unshallow origin/);
+  assert.match(prodWorkflow, /git merge-base --is-ancestor/);
   assert.match(prodWorkflow, /khrental-db-migrator/);
   assert.match(prodWorkflow, /MSSQL_MIGRATION_DEDICATED_EXECUTOR=true/);
   assert.match(plan, /--mode=plan/);
