@@ -2,6 +2,7 @@
 
 **Status date:** 2026-10-16  
 **Last verified behavior-changing application baseline:** `c2cedf0ae4787f688297d949d42f5f9a8acca484` (production deployment [#38874383888](https://github.com/WasanthaK/khrental/actions/runs/38874383888); Azure Ready revision `0000303`, exact public build SHA, MSSQL ready)  
+**Latest verified serving release-hardening SHA (tests/docs/contract only):** `0edeb80eb91840857a4d758d32360acbfa2fb231`, [main deployment #38899514979](https://github.com/WasanthaK/khrental/actions/runs/38899514979), Azure Ready revision `0000307`, exact public SHA, MSSQL ready; 568/568 authorization regression tests and build green.  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -1869,6 +1870,16 @@ Only after strict migration verification, collect explicit operator-controlled S
 **Single ACTIVE Phase 5 item:** First bounded regression group: property and property-unit authorization and existing property-details tenant directory behavior. Add explicit renter ownership/read-only and staff assigned-property/no-mutation checks, require admin record filters on unit updates/deletes, and include existing `tests/property-details-directory.test.js` in the existing `npm run test:authorization` gate. Verify the normal authorization/build checks on the exact PR head; **no second regression runner or broad test-framework change**. Test/docs only, so Azure runtime redeployment is unnecessary.
 
 **Next Phase 5 scope after green:** Continue the canonical Product Admin → properties/units → billing/invoices/receipts → maintenance → notifications/email → agreement cancel/delete → authorization regression sequence in bounded batches, reusing existing tests, and correcting only demonstrated release-critical defects. External provider checks stay owner-held; no customer mail, production SQL, Evia canary, changed financial records or Phase 4 closure by implication.
+
+## Phase 5 source regression complete — release-evidence handoff (2026-10-16)
+
+**Latest controlling status; supersedes the preceding Phase 5 ACTIVE first-regression instruction:** The owner-authorized Phase 5 Product Admin, property/unit, billing/payments/receipts, maintenance/notifications, agreement/signed-document, and final cross-domain **source-level regression scope is now complete**. PRs [#314](https://github.com/WasanthaK/khrental/pull/314), [#315](https://github.com/WasanthaK/khrental/pull/315), [#316](https://github.com/WasanthaK/khrental/pull/316), [#317](https://github.com/WasanthaK/khrental/pull/317), [#318](https://github.com/WasanthaK/khrental/pull/318), and [#319](https://github.com/WasanthaK/khrental/pull/319) are merged.
+
+**Latest operational proof:** GitHub [main deployment #38899514979](https://github.com/WasanthaK/khrental/actions/runs/38899514979) succeeded: full `npm run test:authorization` **568 passed / zero failed**, build green, deterministic startup verified, Azure Ready revision `0000307`, public build fingerprint SHA `0edeb80eb91840857a4d758d32360acbfa2fb231` and live MSSQL connection ready. The prior PR #319 check [#38899371734](https://github.com/WasanthaK/khrental/actions/runs/38899371734) skipped deploy, **but the subsequent main push did deploy**. Do not mislabel `0000303` as currently serving.
+
+**One ACTIVE item now: release-owner acceptance/evidence reconciliation, no new feature scope.** The detailed current checklist is **in the existing authoritative** `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md` under *Phase 5 regression consolidation and production release acceptance checklist*. Resolve independently: (1) operator-reported production migration `apply` plus all-six strict job/log proof; (2) owner-held controlled invoice SendGrid receipt; (3) owner-held real fenced Evia signer/callback/signed PDF and audit acceptance; (4) manual/dynamic compatibility caller risk decision; (5) final production business/security sign-off. Source-level CI green and deployed health alone are insufficient. No new migration workflow, extra test framework, generic SQL execution, external user email, unapproved Evia canary or automatic Phase 4 closure.
+
+**Decision:** Phase 5 **DEVELOPMENT / SOURCE REGRESSION GREEN**; Phase 4 **OPEN**; combined **PRODUCTION RELEASE SIGN-OFF BLOCKED** until the acceptance checklist is evidenced and approved. Phase 5 source work may be called engineering-complete within its tested scope, not acceptance-complete.
 
 ## Maintenance rule for this document
 
