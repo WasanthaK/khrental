@@ -1862,6 +1862,14 @@ Only after strict migration verification, collect explicit operator-controlled S
 
 **Release decision:** Phase 4 **ACTIVE / SIGN-OFF BLOCKED**; Phase 5 **GATED**. Independent static/caller disposition can complete now, but a documented risk-owner decision on unknown operational callers, verified strict migration execution, owner-controlled external delivery/signing receipts and final production business/workflow sign-off remain required. The release owner can return to the parked external acceptance without losing the completed independent review. Do not open a new enhancement package in its place.
 
+## Phase 5 parallel development authorization — 2026-10-16
+
+**Current instruction:** The release owner authorized proceeding with Phase 5 **development and regression hardening** while personally deferring the controlled Phase 4 SendGrid and Evia acceptance. This changes **development scheduling only**. Phase 4 remains **OPEN**, and the **production release / final Phase 5 sign-off remains gated** by the independent external and migration-evidence criteria in `PHASE4-CONSOLIDATED-ACCEPTANCE.md`. This explicitly supersedes older sequential prose that barred *starting development* until Phase 4 closed; it does not waive any release acceptance condition.
+
+**Single ACTIVE Phase 5 item:** First bounded regression group: property and property-unit authorization and existing property-details tenant directory behavior. Add explicit renter ownership/read-only and staff assigned-property/no-mutation checks, require admin record filters on unit updates/deletes, and include existing `tests/property-details-directory.test.js` in the existing `npm run test:authorization` gate. Verify the normal authorization/build checks on the exact PR head; **no second regression runner or broad test-framework change**. Test/docs only, so Azure runtime redeployment is unnecessary.
+
+**Next Phase 5 scope after green:** Continue the canonical Product Admin → properties/units → billing/invoices/receipts → maintenance → notifications/email → agreement cancel/delete → authorization regression sequence in bounded batches, reusing existing tests, and correcting only demonstrated release-critical defects. External provider checks stay owner-held; no customer mail, production SQL, Evia canary, changed financial records or Phase 4 closure by implication.
+
 ## Maintenance rule for this document
 
 After each merged production change:
