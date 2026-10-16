@@ -1843,6 +1843,25 @@ Only after strict migration verification, collect explicit operator-controlled S
 
 **Exit decision:** Keep Phase 4 open and Phase 5 gated until these existing acceptance items have retained artifacts and explicit sign-off. Scope is frozen; no opportunistic new feature/UI/cleanup PRs while waiting for the privileged operator step.
 
+## Phase 4 owner-held external acceptance; independent closure disposition — 2026-10-16
+
+**Latest controlling execution instruction (supersedes the preceding sequential ACTIVE step only as to scheduling):** The release owner will perform the real controlled SendGrid invoice-mailbox test and real Evia signatory/archive test separately when available. **PARKED / OWNER-HELD is not PASS, WAIVED or permission to close Phase 4.** Do not request Gmail credentials or broad personal mailbox permissions; the owner can independently confirm receipt and supply redacted provider/event evidence. Keep the fenced Evia canary OFF unless expressly authorized for a controlled test.
+
+**One ACTIVE independent work item:** complete and record the existing Package C compatibility/manual-tool caller disposition and final release-readiness evidence register, using `docs/PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` and `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. This limited scheduling exception allows independent review while provider checks are parked; it does **not** authorize a new migration workflow, runtime compatibility rewrite, unrelated UI work, deletion of unknown exports, production SQL, sending invoices, or an Evia request.
+
+**Reconciled evidence:**
+- Live serving behavior remains the confirmed [deploy #38874383888](https://github.com/WasanthaK/khrental/actions/runs/38874383888), Azure Ready revision `0000303`, SHA `c2cedf0ae4787f688297d949d42f5f9a8acca484`, MSSQL ready. Subsequent main changes to this point affect canonical documentation, not application behavior.
+- Fresh [plan #38877959860](https://github.com/WasanthaK/khrental/actions/runs/38877959860) and later [plan #38880543731](https://github.com/WasanthaK/khrental/actions/runs/38880543731) both passed against revision `0000303`: five `APPLIED`, one `SATISFIED_UNTRACKED`, zero `PENDING`, no database modification. Both are specifically **plan** jobs, not `apply` or strict verification.
+- The operator reports that the protected migration `apply` and strict verifier are green. **Provisional / evidence awaiting reconciliation:** the connected GitHub Actions run list available during this review has not exposed the newer apply/strict-verifier run URLs or the six per-migration `LEDGERED / SCHEMA_OK` log lines. Do not silently upgrade this report to independently confirmed migration closure or automatically repeat the privileged `apply`.
+
+**Independent technical disposition:**
+- Retain live tenant-, payment-, agreement-, identity-, maintenance-, utility- and notification-scoped clients where governed contracts and existing tests are documented. No broad `platformClient` removal.
+- Keep dormant fail-closed invoice/identity compatibility exports and historical manual SQL scripts inventoried. `npm run migrate` uses blocked `exec_sql`, while `execute-sql` and named `migrate:*` scripts execute direct SQL without the governed checksum ledger; none is approved production migration authority. Historical/manual/dynamic callers are **unresolved**. No deletion or blanket risk acceptance based on indexed search.
+- Reuse existing authorization/build, Evia contract, disposable two-tenant SQL/HTTP/browser and deployment proof; do not create duplicate workflows or demand reruns without a reason.
+- Any release-critical tenant isolation, payment mutation, signed-document immutability, identity boundary or privileged authority failure remains a **hard blocker**; no accepted deferral is granted here.
+
+**Release decision:** Phase 4 **ACTIVE / SIGN-OFF BLOCKED**; Phase 5 **GATED**. Independent static/caller disposition can complete now, but a documented risk-owner decision on unknown operational callers, verified strict migration execution, owner-controlled external delivery/signing receipts and final production business/workflow sign-off remain required. The release owner can return to the parked external acceptance without losing the completed independent review. Do not open a new enhancement package in its place.
+
 ## Maintenance rule for this document
 
 After each merged production change:
