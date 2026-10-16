@@ -6,6 +6,7 @@ import {
   normalizeMaintenanceImageUrl,
   sameMaintenanceIdentifier
 } from '../src/api/platform/maintenanceImagePolicy.js';
+import { writeMaintenanceNotifications } from '../src/api/platform/maintenanceNotificationWriter.js';
 import {
   parseNotificationPage,
   listOwnNotificationPage,
@@ -152,4 +153,100 @@ test('live server and clients use canonical image/notification paths, not generi
   const readFns = notifyService.slice(notifyService.indexOf('export const getUserNotifications'), notifyService.indexOf('// Function to get notification templates'));
   assert.doesNotMatch(readFns, /platformClient\.from|\.from\('notifications'\)/);
   assert.match(server, /app\.use\('\/api\/notifications', createNotificationSelfRouter\(\)\)/);
+});
+
+
+test('Phase 5: new maintenance request notifies only property-scoped managers and organization admins', async () => {
+  const transaction = { fixture: 'one SQL transaction' };
+  const recorded = [];
+  const candidates = [
+    { app_user_id: 'ADMIN-A', role: 'admin', property_scope: 0 },
+    { app_user_id: 'MANAGER-A', role: 'manager', property_scope: 1 },
+    { app_user_id: 'manager-a', role: 'manager', property_scope: 1 },
+    { app_user_id: 'MANAGER-NO-SCOPE', role: 'manager', property_scope: 0 },
+    { app_user_id: 'FINANCE-A', role: 'finance_staff', property_scope: 1 },
+    { app_user_id: 'WORKER-A', role: 'maintenance_staff', property_scope: 1 },
+    { app_user_id: 'READ-ONLY-A', role: 'staff', permission_bundle: 'read_only', property_scope: 1 }
+  ];
+  const queryTransaction = async (actualTransaction, sql, params) => {
+    assert.equal(actualTransaction, transaction);
+    recorded.push({ sql, params });
+    return sql.includes('SELECT tm.app_user_id') ? candidates : [];
+  };
+  await writeMaintenanceNotifications({
+    transaction, queryTransaction, tenantId: 'tenant-a', requestId: 'request-1',
+    eventType: 'request_created', propertyId: 'property-a',
+    renteeId: 'rentee-a', assignedStaffId: 'worker-a'
+  });
+  assert.equal(recorded[0].params.tenantId, 'tenant-a');
+  assert.equal(recorded[0].params.propertyId, 'property-a');
+  assert.match(recorded[0].sql, /tm\.tenant_id = @tenantId AND tm\.status = 'active'/);
+  assert.match(recorded[0].sql, /spa\.status = 'active'/);
+  assert.match(recorded[0].sql, /au\.status = 'active' AND au\.active = 1/);
+  const writes = recorded.slice(1);
+  assert.deepEqual(writes.map(item => item.params.userId).sort(), ['admin-a', 'manager-a']);
+  for (const write of writes) {
+    assert.match(write.sql, /INSERT INTO notifications/);
+    assert.match(write.sql, /tm\.tenant_id = @tenantId AND tm\.app_user_id = @userId/);
+    assert.match(write.sql, /tm\.status = 'active' AND au\.status = 'active' AND au\.active = 1/);
+    assert.deepEqual(Object.keys(write.params).sort(), ['message', 'tenantId', 'userId']);
+    assert.equal(write.params.message, 'Maintenance request_created: request request-1');
+    assert.ok(!/internal|payment|contact/i.test(write.params.message));
+  }
+});
+
+test('Phase 5: lifecycle notices deduplicate recipients and never broadcast or leak details', async () => {
+  for (const eventType of ['request_assigned', 'work_started', 'work_completed', 'request_cancelled']) {
+    const writes = [];
+    const transaction = { eventType };
+    await writeMaintenanceNotifications({
+      transaction,
+      queryTransaction: async (received, sql, params) => {
+        assert.equal(received, transaction);
+        assert.match(sql, /INSERT INTO notifications/);
+        writes.push(params);
+        return [];
+      },
+      tenantId: 'tenant-a', requestId: 'request-1',
+      eventType, propertyId: 'property-a',
+      renteeId: 'RENTEE-A', assignedStaffId: 'WORKER-A', previousStaffId: 'worker-a'
+    });
+    assert.deepEqual(writes.map(write => write.userId).sort(), ['rentee-a', 'worker-a']);
+    assert.ok(writes.every(write => write.tenantId === 'tenant-a'));
+    assert.ok(writes.every(write => write.message === 'Maintenance ' + eventType + ': request request-1'));
+    assert.ok(writes.every(write => !/contact|payment|internal/i.test(write.message)));
+  }
+});
+
+test('Phase 5: invalid maintenance event is rejected before any SQL operation', async () => {
+  let called = false;
+  await assert.rejects(
+    () => writeMaintenanceNotifications({
+      transaction: {},
+      queryTransaction: async () => { called = true; return []; },
+      tenantId: 'tenant-a', requestId: 'request-a', eventType: 'invoice_paid'
+    }),
+    /Unsupported maintenance notification event/
+  );
+  assert.equal(called, false);
+});
+
+test('Phase 5: notification SQL insertion failure propagates to caller transaction', async () => {
+  const transaction = { fixture: 'same transaction' };
+  let writes = 0;
+  const failure = new Error('Disposable SQL notification insertion failed');
+  await assert.rejects(
+    () => writeMaintenanceNotifications({
+      transaction, tenantId: 'tenant-a', requestId: 'request-a',
+      eventType: 'request_assigned', renteeId: 'rentee-a', assignedStaffId: 'worker-a',
+      queryTransaction: async (received, sql) => {
+        assert.equal(received, transaction);
+        assert.match(sql, /INSERT INTO notifications/);
+        writes += 1;
+        throw failure;
+      }
+    }),
+    error => error === failure
+  );
+  assert.equal(writes, 1, 'writer must not swallow SQL errors or retry outside the transaction');
 });
