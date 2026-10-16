@@ -167,20 +167,41 @@ jobs:
             rm -f "$log_file"
           }
 
-          for attempt in $(seq 1 90); do
-            status=$(az containerapp job execution show               --name "$AZURE_MIGRATION_JOB_NAME"               --resource-group "$AZURE_RESOURCE_GROUP"               --job-execution-name "$execution_name"               --query properties.status -o tsv)
-            case "$status" in
-              Succeeded)
-                capture_verification_evidence
-                echo "Strict read-only executor verification passed with six retained ledger/schema results."
-                exit 0
-                ;;
-              Failed|Stopped)
-                echo "Executor verification failed: $status; inspect execution logs." >&2
-                exit 1
-                ;;
-            esac
-            sleep 10
+          # Poll at a conservative cadence to avoid Azure control-plane throttling.
+          # A transient HTTP 429 is inconclusive: keep the existing execution
+          # name and retry, never start a second job or claim verification.
+          poll_error_file="$(mktemp)"
+          trap 'rm -f "$poll_error_file"' EXIT
+          for attempt in $(seq 1 36); do
+            if status=$(az containerapp job execution show \
+              --name "$AZURE_MIGRATION_JOB_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status -o tsv 2>"$poll_error_file"); then
+              case "$status" in
+                Succeeded)
+                  capture_verification_evidence
+                  echo "Strict read-only executor verification passed with six retained ledger/schema results."
+                  exit 0
+                  ;;
+                Failed|Stopped)
+                  echo "Executor verification failed: $status; inspect execution logs." >&2
+                  exit 1
+                  ;;
+                Running|Pending|Processing|Unknown|"")
+                  echo "Executor has not reached a terminal state (attempt $attempt/36)."
+                  ;;
+                *)
+                  echo "Executor returned nonterminal status: $status (attempt $attempt/36)."
+                  ;;
+              esac
+            elif grep -Eqi 'Too Many Requests|(^|[^0-9])429([^0-9]|$)|throttl|RateLimitExceeded' "$poll_error_file"; then
+              echo "Azure API throttled execution-status query (HTTP 429); retrying the same read-only execution (attempt $attempt/36)." >&2
+            else
+              echo "Azure execution-status query failed with a non-throttling error; no verification claim." >&2
+              exit 1
+            fi
+            sleep 25
           done
-          echo "Executor verification timed out; no readiness claim." >&2
+          echo "Executor status could not be verified within the bounded polling window; no readiness claim." >&2
           exit 1
