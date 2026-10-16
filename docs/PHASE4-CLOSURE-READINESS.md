@@ -107,3 +107,16 @@ The revised verifier uses the exact **Ready serving revision image** within the 
 **Never treat this candidate code or a green PR-head workflow as operational evidence.** The production job's provisioning, exact identity, SQL grants, network connectivity, ledger and schema state remain **UNVERIFIED** until a manually dispatched Production verification produces a successful execution ID and retained log/output evidence. A failure here is a real Phase 4 blocker, not a reason to run schema DDL automatically.
 
 This package does not change serving startup, web identity privileges, migration scripts, signed agreements, payment authorization, live mail, Evia canary, or production records. Finish the independent tenant-isolation and compatibility release matrix; Phase 5 remains gated.
+
+
+## Package C canonical closure decision — 2026-10-16
+
+**Decision: NOT READY TO CLOSE.** The existing live compatibility caller census and current exact-SHA acceptance evidence have been reconciled in `PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` and `PHASE4-CONSOLIDATED-ACCEPTANCE.md`. This is a documentation/evidence correction only: no separate plan, test harness, workflow, database migration or production API change is proposed.
+
+- Production application serving evidence **PASS**: PR #306 merge `09b443ceaeaa1ba9050dc958b9f20a894deb13a1`, deployment #38829467148, Azure Ready revision `0000302`, public exact build SHA and MSSQL health ready.
+- Existing PR-head authorization/build and disposable tenant A/B SQL/browser workflow gates **PASS** for the specified fixtures. They cannot substitute for production user journey or provider-backed receipt.
+- Code-level maintenance/billing compatibility containment is merged. Live contract helpers remain; unproved dynamic/manual callers and legacy migration tooling remain **UNRESOLVED**. No broad retirement is authorized.
+- **Blocking external/operational evidence**: real controlled email mailbox receipt, explicitly approved real Evia signature completion/retained signed-PDF audit evidence, isolated production migration executor identity/SQL grant/network/checksum ledger verification, and final full controlled tenant/workflow sign-off. Their missing evidence is not waived.
+- Next action remains the **existing** manual operational/external acceptance checklist, not a new Package D, CI workflow or tests. The production migration `apply`, browser SQL DDL, Evia canary activation, customer mail, and customer-record mutation are not authorized as a side effect.
+
+Maintain Phase 4 ACTIVE and Phase 5 GATED until each blocker has retained accepted evidence or an explicit authorized release decision.
