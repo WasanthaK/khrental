@@ -353,31 +353,40 @@ jobs:
           echo "Dedicated production migration execution did not complete within the workflow wait window." >&2
           exit 1
 
-      - name: Wait for this commit to be the serving Container App revision
+      - name: Verify serving revision for read-only migration plan
         if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
         shell: bash
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
-
-          fqdn=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.configuration.ingress.fqdn \
-            -o tsv)
-
-          for attempt in $(seq 1 75); do
-            build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
-            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
-              echo "Serving Container App revision now matches ${GITHUB_SHA}."
-              exit 0
+          fqdn=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+          image=$(az containerapp revision show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ready_revision" --query "properties.template.containers[0].image" -o tsv)
+          serving_sha="${image##*:}"
+          build_info=$(curl --fail --silent --show-error "https://${fqdn}/build-info.json")
+          if ! jq -e --arg sha "$serving_sha" '.buildSha == $sha' <<<"$build_info" >/dev/null; then
+            echo "Public build SHA does not match Ready revision image; refusing read-only plan." >&2
+            exit 1
+          fi
+          if [ "$serving_sha" != "$GITHUB_SHA" ]; then
+            git fetch --no-tags origin "$serving_sha"
+            if ! git merge-base --is-ancestor "$serving_sha" "$GITHUB_SHA"; then
+              echo "Ready SHA is not an ancestor; refusing read-only plan." >&2
+              exit 1
             fi
-            echo "Waiting for Container App to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
-            sleep 8
-          done
-
-          echo "Container App did not begin serving ${GITHUB_SHA} within the migration-plan wait window." >&2
-          exit 1
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              case "$file" in
+                docs/*|*.md|tests/*|.github/workflows/run-production-db-migrations.yml) ;;
+                *) echo "Runtime or migration file differs: $file" >&2; exit 1 ;;
+              esac
+            done < <(git diff --name-only "$serving_sha" "$GITHUB_SHA")
+            echo "Read-only plan: verified Ready SHA with only non-runtime changes."
+          else
+            echo "Ready revision matches workflow SHA."
+          fi
+          echo "Ready revision: $ready_revision"
+          echo "Public build SHA: $serving_sha"
 
       - name: Run read-only migration plan inside the Container App
         if: steps.db_probe.outputs.status == 'container' && env.MIGRATION_MODE == 'plan'
