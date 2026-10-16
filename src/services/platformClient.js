@@ -335,6 +335,20 @@ export const recordManualInvoicePayment = async (invoiceId, payment = {}) => {
   }
 };
 
+// Real provider-delivery action, distinct from the read-only/audit "record
+// reminder" API. Reuse the authenticated active-tenant request context.
+export const sendInvoicePaymentReminder = async (invoiceId) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/send-reminder`, {
+      method: 'POST',
+      body: {}
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const recordInvoiceReminder = async (invoiceId) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/reminder`, {
