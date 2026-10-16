@@ -12,7 +12,7 @@ import { useProperty } from '../../contexts/PropertyContext';
 const PropertySelector = ({ 
   multiSelect = false, 
   onChange, 
-  value = [], 
+  value, 
   className = "",
   showRecent = true,
   label = "Select Property"
@@ -20,8 +20,10 @@ const PropertySelector = ({
   const { 
     properties, 
     recentPropertyIds, 
-    selectProperty, 
-    selectMultipleProperties, 
+    selectProperty,
+    togglePropertySelection,
+    clearPropertySelection,
+    selectAllProperties,
     selectedPropertyIds,
     loading,
     error
@@ -47,7 +49,9 @@ const PropertySelector = ({
   );
   
   // Use controlled or uncontrolled selection
-  const currentSelection = value.length > 0 ? value : selectedPropertyIds;
+  // An explicitly controlled empty array must stay empty, not fall back to
+  // another screen's selection stored in the shared property context.
+  const currentSelection = onChange ? (Array.isArray(value) ? value : []) : selectedPropertyIds;
   
   // Handle property selection
   const handleSelectProperty = (propertyId) => {
@@ -63,7 +67,11 @@ const PropertySelector = ({
       }
     } else {
       // Uncontrolled component using context
-      selectProperty(propertyId, multiSelect);
+      if (multiSelect) {
+        togglePropertySelection(propertyId);
+      } else {
+        selectProperty(propertyId);
+      }
     }
   };
   
@@ -72,7 +80,7 @@ const PropertySelector = ({
     if (onChange) {
       onChange([]);
     } else {
-      selectMultipleProperties([]);
+      clearPropertySelection();
     }
   };
   
@@ -86,7 +94,7 @@ const PropertySelector = ({
     if (onChange) {
       onChange(allIds);
     } else {
-      selectMultipleProperties(allIds);
+      selectAllProperties();
     }
   };
   
