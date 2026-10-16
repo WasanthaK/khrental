@@ -95,6 +95,7 @@ test('Phase 5 browser: real PropertySelector selects, toggles, clears, and respe
   const vite = await createServer({
     root, configFile: false, logLevel: 'error',
     plugins: [react()],
+    optimizeDeps: { entries: ['tests/fixtures/property-selector/index.html'] },
     resolve: { alias: [
       { find: '../../contexts/PropertyContext', replacement: mockContext }
     ] },
