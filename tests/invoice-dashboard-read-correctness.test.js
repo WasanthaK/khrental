@@ -66,3 +66,16 @@ test('dashboard clears stale pending data and surfaces utility query failures', 
   assert.match(pendingLoader, /setPropertiesWithReadings\(\[\]\)/);
   assert.match(pendingLoader, /setError\(err\?\.message/);
 });
+
+test('shared invoice property selector uses supported context selection contracts', () => {
+  const selector = readFileSync(new URL('../src/components/properties/PropertySelector.jsx', import.meta.url), 'utf8');
+  const context = readFileSync(new URL('../src/contexts/PropertyContext.jsx', import.meta.url), 'utf8');
+  assert.match(selector, /togglePropertySelection\(propertyId\)/);
+  assert.match(selector, /clearPropertySelection\(\)/);
+  assert.match(selector, /selectAllProperties\(\)/);
+  assert.doesNotMatch(selector, /selectMultipleProperties/);
+  assert.match(selector, /onChange \? \(Array\.isArray\(value\) \? value : \[\]\) : selectedPropertyIds/);
+  for (const name of ['togglePropertySelection', 'clearPropertySelection', 'selectAllProperties']) {
+    assert.ok(context.includes(name), name + ' must be implemented by PropertyContext');
+  }
+});
