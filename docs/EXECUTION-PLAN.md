@@ -1,7 +1,7 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-10-05  
-**Last verified behavior-changing application baseline:** `6f345bd78a23f67612d17301ca406a86d42cf7e9`  
+**Status date:** 2026-10-16  
+**Last verified behavior-changing application baseline:** `c2cedf0ae4787f688297d949d42f5f9a8acca484` (production deployment [#38874383888](https://github.com/WasanthaK/khrental/actions/runs/38874383888); Azure Ready revision `0000303`, exact public build SHA, MSSQL ready)  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
 
@@ -1815,6 +1815,33 @@ PR #289 merged as `1597e645bae1226c9a65266398f651842c07b00d` after authorization
 The current UI acceptance package exposes a self-only Notifications page in both staff and renter workspaces. It shows readable event labels, unread/read status, refresh and safe links to the corresponding maintenance request (navigation is never authority); no generic user-ID or tenant-ID query is exposed. Tenant switching clears old organization content. The existing disposable SQL/Puppeteer fixture proves routed renter/manager pages, mark-as-read persistence and foreign-organization isolation. Treat CI and production rollout as separate gates. Email/SMS/desktop push is NOT delivered by this UI and is not accepted as complete external notification support.
 
 Other Phase 4 blockers: real object bytes, invitation and signing journeys, compatibility caller inventory and production migration-executor proof. Phase 5 still pending.
+
+## Phase 4 canonical closure execution lock — 2026-10-16
+
+**Status: Phase 4 ACTIVE / NOT READY TO CLOSE; Phase 5 GATED.** This entry supersedes *earlier historical “next package” or “active slice” prose* elsewhere in this document for determining the single current work item. No additional Package D, opportunistic UI fixes, new CI workflow, new migration mechanism, or compatibility-code removal is authorized merely because the operational gate is delayed. A separate production-critical security/outage/data-loss defect may interrupt under operating rule 2, with evidence.
+
+### Verified completed evidence
+
+- PR #310 merged at `0ec26289ebd42816bc6ad348396266494cb19622`, repairing the shallow Git checkout ancestry check in the **existing** production read-only migration workflow. The first subsequent automatic read-only production plan [#38860310178](https://github.com/WasanthaK/khrental/actions/runs/38860310178) passed, including Ready revision/public SHA ancestry and a real read-only in-container SQL plan on `khrentals.database.windows.net/khrentalsdb`. Five migrations are `APPLIED` with checksums; `20261006_01_repair_auth_store_runtime_columns` is `SATISFIED_UNTRACKED` with inspected auth schema and index present; **zero `PENDING`**. The run explicitly reported **no database modification**.
+- Dedicated isolated `khrental-db-migrator` was provisioned previously ([#36498501746](https://github.com/WasanthaK/khrental/actions/runs/36498501746)) and executed governed production migrations successfully in [#36946616128](https://github.com/WasanthaK/khrental/actions/runs/36946616128), [#37323211091](https://github.com/WasanthaK/khrental/actions/runs/37323211091), and [#37454655068](https://github.com/WasanthaK/khrental/actions/runs/37454655068). These historical executions are not evidence of a fresh all-six strict verification.
+- PR #311 (shared invoice Property Selector multi-select correction) merged as `c2cedf0ae4787f688297d949d42f5f9a8acca484`. Its [production deployment #38874383888](https://github.com/WasanthaK/khrental/actions/runs/38874383888) passed authorization/build, deployed Azure Ready revision `0000303`, verified public `/build-info.json` at the **exact merge SHA**, and received `{"ok":true,"provider":"mssql","connection":"ready"}`. The deployment gate is **CLOSED**. This UI correction was *not* the next canonical closure priority and must not be used to justify additional detours.
+- Existing Package C source/caller census remains classified as **live / fail-closed legacy / unresolved dynamic or manual** in `docs/PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md`. Earlier historical audit descriptions and dated subpackages do not override that disposition. Do not infer that absence of indexed imports proves an export safe to delete.
+
+### Exactly one ACTIVE item: governed production migration ledger reconciliation
+
+**Owner/authority:** Production release operator, using the *existing* protected GitHub Actions workflow with Production environment approval; no browser SQL RPC, unprivileged application runtime, or alternate dispatch pathway.
+
+1. With current serving SHA `c2cedf0ae4787f688297d949d42f5f9a8acca484`, run the existing **Run production database migrations** workflow in **plan / all**, and retain the actual run URL/output for `khrentals.database.windows.net/khrentalsdb`. The successful automatic plan #38860310178 is prior to the latest application deployment and is the reference baseline, **not** a substitute for this new deployment's fresh plan.
+2. Only if it again reports the same five `APPLIED` entries with matching checksums, the one auth-store `SATISFIED_UNTRACKED` and **no `PENDING` / checksum mismatch**, obtain separate explicit operator approval to run **apply / all** with the exact `APPLY-PRODUCTION` confirmation. The existing workflow's privileged `apply` branch also requires exact serving SHA, a preprovisioned dedicated job and SQL authority. The runner verifies satisfied schema and records its ledger row without replaying SQL *only if inspection remains satisfied*. If inspection differs or a pending schema change appears, **STOP**; the general `apply` code is able to run DDL.
+3. After authorized reconciliation, run the *existing* **Verify production database migration executor** workflow with `VERIFY-MIGRATION-EXECUTOR`; retain the real execution ID, all six `LEDGERED / SCHEMA_OK` results, matching checksums, distinct managed executor identity, SQL grant/network evidence and green completion. A green migration unit/CI test or `plan` is not this strict production verifier.
+
+**Execution blocker:** The current connected GitHub tools do not expose a `workflow_dispatch` action; Work-mode browser credits were unavailable at the last check. This is an **operator execution-access blocker**, not a database defect. Do not create a second migration workflow, change trigger/confirmation rules, redeploy the same code solely to trigger apply, or falsely claim completion.
+
+### Subsequent existing closure gates — sequential, not parallel feature work
+
+Only after strict migration verification, collect explicit operator-controlled SendGrid **invoice mailbox delivery** evidence, then an approved **Evia signer → callback/webhook → immutable archived signed PDF + audit → authorized browser retrieval** (fenced canary OFF unless separately authorized), then disposition unresolved live/dynamic/manual compatibility and obtain the final tenant/billing/agreement production sign-off under `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. Earlier Phase 2 historical signing completion remains valid as its own acceptance, but does not replace this later hardened workflow's provider-backed evidence.
+
+**Exit decision:** Keep Phase 4 open and Phase 5 gated until these existing acceptance items have retained artifacts and explicit sign-off. Scope is frozen; no opportunistic new feature/UI/cleanup PRs while waiting for the privileged operator step.
 
 ## Maintenance rule for this document
 
