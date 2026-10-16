@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { getInvitationActionLabel, shouldPollInvitationStatus } from '../src/utils/invitationLifecycle.js';
 
 const hookSource = readFileSync(new URL('../src/hooks/useInvitationStatus.js', import.meta.url), 'utf8');
 const detailsSource = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
@@ -15,7 +16,9 @@ test('invitation status cannot be skipped by details pages', () => {
 
 test('pending invitation state refreshes after external acceptance', () => {
   assert.match(hookSource, /PENDING_REFRESH_INTERVAL_MS = 30000/);
-  assert.match(hookSource, /status === 'pending'/);
+  assert.match(hookSource, /shouldPollInvitationStatus\(status\)/);
+  assert.equal(shouldPollInvitationStatus('pending'), true);
+  assert.equal(shouldPollInvitationStatus('registered'), false);
   assert.match(hookSource, /window\.addEventListener\('focus'/);
   assert.match(hookSource, /document\.addEventListener\('visibilitychange'/);
   assert.match(hookSource, /fetchStatus\(\{ silent: true \}\)/);
@@ -29,5 +32,7 @@ test('invitation status endpoint disables caching', () => {
 test('shared invite button resolves live state when caller does not provide it', () => {
   assert.match(inviteButtonSource, /useInvitationStatus\(invitationStatus \? null : userId\)/);
   assert.match(inviteButtonSource, /effectiveStatus/);
-  assert.match(inviteButtonSource, /Resend Invitation/);
+  assert.match(inviteButtonSource, /getInvitationActionLabel\(effectiveStatus\)/);
+  assert.equal(getInvitationActionLabel('pending'), 'Resend Invitation');
+  assert.equal(getInvitationActionLabel('registered'), null);
 });
