@@ -8,6 +8,7 @@ import { platform as platformClient } from '../../services/platformClient';
 import Button from '../ui/Button';
 import { toast } from 'react-hot-toast';
 import { fetchAppUser } from '../../services/appUserService';
+import { prepareRentalAgreementSignatories } from '../../utils/rentalAgreementSignatories';
 
 const AUTH_STORAGE_KEY = 'eviaSignAuth';
 
@@ -227,18 +228,19 @@ const SignatureForm = ({
         setSignatories(prev => [
           {
             // Landlord (current user)
-            name: currentUser?.name || prev[0].name,
-            email: currentUser?.email || prev[0].email,
+            name: currentUser?.name || prev[0]?.name || '',
+            email: currentUser?.email || prev[0]?.email || '',
             identifier: 'landlord',
             textMarker: 'For Landlord:'
           },
           {
             // Tenant (rentee)
-            name: renteeData?.name || prev[1].name,
-            email: renteeData?.email || renteeData?.contact_details?.email || prev[1].email,
+            name: renteeData?.name || prev[1]?.name || '',
+            email: renteeData?.email || renteeData?.contact_details?.email || prev[1]?.email || '',
             identifier: 'tenant',
             textMarker: 'For Tenant:'
-          }
+          },
+          ...prev.slice(2)
         ]);
       } catch (err) {
         console.error('Error in fetchTenantData:', err);
@@ -408,6 +410,7 @@ const SignatureForm = ({
 
   // Function to remove a signatory
   const removeSignatory = (index) => {
+    if (index < 2) return;
     setSignatories(signatories.filter((_, i) => i !== index));
   };
 
@@ -453,6 +456,8 @@ const SignatureForm = ({
         return;
       }
       console.log('Signatory fields all filled');
+
+      prepareRentalAgreementSignatories(signatories);
 
       // Check Evia Sign authentication before proceeding
       const storedAuth = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{}');
@@ -595,7 +600,7 @@ const SignatureForm = ({
               <div key={index} className="mb-4 p-3 border rounded bg-gray-50">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="font-medium">Signatory #{index + 1}</h3>
-                  {index > 0 && (
+                  {index > 1 && (
                     <button
                       type="button"
                       onClick={() => removeSignatory(index)}
