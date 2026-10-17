@@ -36,6 +36,16 @@ test('strict executor retains redacted evidence for all six ledger and schema ch
   assert.match(workflow, /Raw Azure logs are not published/);
 });
 
+test('transient Azure 429 polling retries the same read-only execution without minting success', () => {
+  assert.match(workflow, /if status=\$\(az containerapp job execution show/);
+  assert.match(workflow, /Too Many Requests/);
+  assert.match(workflow, /attempt \$attempt\/36/);
+  assert.match(workflow, /sleep 25/);
+  assert.match(workflow, /non-throttling error; no verification claim/);
+  assert.match(workflow, /Executor status could not be verified within the bounded polling window/);
+  assert.doesNotMatch(workflow, /sleep 10/);
+});
+
 test('production verification uses an isolated execution, no persistent job update or DDL', () => {
   assert.match(workflow, /VERIFY-MIGRATION-EXECUTOR/);
   assert.match(workflow, /scripts\/run-production-migration-verify\.sh/);
