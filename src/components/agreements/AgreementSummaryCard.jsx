@@ -145,7 +145,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
     if (normalized === 'queued') {
       return { label: 'Queued', className: 'bg-gray-100 text-gray-700' };
     }
-    return { label: 'Unknown', className: 'bg-gray-100 text-gray-500' };
+    return { label: 'Delivery not tracked', className: 'bg-gray-100 text-gray-500' };
   };
 
   const statusInfo = getStatusInfo();
@@ -270,6 +270,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             <FiUsers className="mr-1 h-4 w-4 text-gray-500" />
             <span className="text-sm font-semibold text-gray-700">Signatories</span>
           </div>
+          {agreement.eviasignreference && signatoriesData.length === 1 && (
+            <p className="text-xs text-amber-700 mb-2" role="status">Only one signer is recorded for this Evia request. Check the signer history.</p>
+          )}
           <div className="divide-y divide-gray-100 bg-gray-50 rounded-md overflow-hidden">
             {signatoriesData.map((signatory, index) => {
               const emailInfo = getEmailStatusInfo(signatory.emailDeliveryStatus);
