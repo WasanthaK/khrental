@@ -1889,3 +1889,24 @@ After each merged production change:
 2. Record the PR and deployed SHA in the completed-item block.
 3. Move exactly one next item into **ACTIVE** status.
 4. Add newly discovered non-critical work to the parked backlog or a future phase instead of starting it immediately.
+
+## Evia live-signing owner confirmation — 2026-10-17
+
+The release owner reports having successfully tested real Evia signing and supplied an October 17 application screenshot showing **Completed agreement / Signed signatory**. Mark the live signing exercise **OWNER-CONFIRMED FUNCTIONAL PASS**, replacing older 'not run' descriptions for that exercise. The UI concurrently shows **Signed — onboarding required** (a distinct tenancy step) and **Email: Unknown** (not explained by screenshot, not proof of failed or delivered email).
+
+Reconcile any remaining strict sign/archive proof using **existing** callback, signed PDF, audit and authorization artifacts; the screenshot alone is not that complete audit proof. Do not request a redundant real signer action or activate the fenced canary. See the authoritative `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. Phase 5 engineering and Property Selector acceptance remain green; final production sign-off remains blocked by strict migration-verifier evidence, separate live SendGrid invoice receipt, operator caller disposition, and business approval. This is docs-only and does not require an application redeployment.
+
+## Two-signatory Evia acceptance observation — 2026-10-18
+
+After successful PR #326 deployment (Ready `0000308`, public SHA `c13ece5cf5de0e6d810df655819fec11e4322bdb`, 573/573 authorization cases), the release owner provided a new production screenshot of rental agreement **#47FDEA13** with **both landlord and tenant listed as Signed** and the agreement Completed. The email badge now correctly says **Delivery not tracked**, which indicates absent tracked telemetry rather than proof of failure. Mark the two-signer display/workflow **OWNER-CONFIRMED UI PASS**, superseding the earlier missing-signer observation. This does not independently verify distinct Evia signature events, signed-PDF audit retention or access-control evidence. The signing-card tenant email differs from the onboarding invitation email; verify intentional test identity mapping before business sign-off. The onboarding screen explicitly shows **Invitation not accepted**, and activation remains blocked (other shown readiness checks complete). No invitation send, live Evia retest, storage modification or activation was performed by this update.
+
+The next open release dependencies remain strict migration verification, independent SendGrid invoice receipt, operational caller disposition and final business approval; tenancy onboarding invitation acceptance is the visible blocker for this particular agreement. See the authoritative Phase 4 consolidated acceptance ledger.
+
+
+## Secure invitation — independent owner acceptance and dummy-address fixture, 2026-10-18
+
+The owner has **already tested secure invitation acceptance separately and confirmed it works**. This supersedes any implication that invitation needs to be re-tested for release merely because agreement #47FDEA13's onboarding demo shows **Not accepted**. The owner explains that the demo uses a **dummy/non-receivable email**, so the actual fixture cannot accept its invitation. The activation button must stay disabled: this is correct fail-closed behavior for that instance, not a defect. Record **INVITATION WORKFLOW: OWNER-CONFIRMED FUNCTIONAL PASS** and **THIS DEMO TENANCY: NOT ACTIVATED (invitation unaccepted)** as different facts.
+
+Do not issue another invitation, bypass tenant membership security, mark the dummy fixture activated, or request an unnecessary repeated invitation test. If activation of a real tenancy is desired later, it must still satisfy secure invitation acceptance. Do not infer the separate signing-card and demo-invitation addresses are the same verified identity.
+
+The current canonical release blockers remain strict migration evidence, independent SendGrid *invoice* mailbox receipt, remaining retained-signature/audit evidence where required, operational caller sign-off and final business approval. The independent invitation workflow is not an additional product release blocker.
