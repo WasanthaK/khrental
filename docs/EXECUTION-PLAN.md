@@ -1889,3 +1889,9 @@ After each merged production change:
 2. Record the PR and deployed SHA in the completed-item block.
 3. Move exactly one next item into **ACTIVE** status.
 4. Add newly discovered non-critical work to the parked backlog or a future phase instead of starting it immediately.
+
+## Evia live-signing owner confirmation — 2026-10-17
+
+The release owner reports having successfully tested real Evia signing and supplied an October 17 application screenshot showing **Completed agreement / Signed signatory**. Mark the live signing exercise **OWNER-CONFIRMED FUNCTIONAL PASS**, replacing older 'not run' descriptions for that exercise. The UI concurrently shows **Signed — onboarding required** (a distinct tenancy step) and **Email: Unknown** (not explained by screenshot, not proof of failed or delivered email).
+
+Reconcile any remaining strict sign/archive proof using **existing** callback, signed PDF, audit and authorization artifacts; the screenshot alone is not that complete audit proof. Do not request a redundant real signer action or activate the fenced canary. See the authoritative `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. Phase 5 engineering and Property Selector acceptance remain green; final production sign-off remains blocked by strict migration-verifier evidence, separate live SendGrid invoice receipt, operator caller disposition, and business approval. This is docs-only and does not require an application redeployment.
