@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
@@ -12,6 +12,7 @@ import {
   updateAgreementCanonical
 } from '../../services/agreementWorkflowService';
 import { findAppUserByAuthId } from '../../services/appUserService';
+import { prepareRentalAgreementSignatories, matchesPendingRentalRoster } from '../../utils/rentalAgreementSignatories';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -34,6 +35,7 @@ const AgreementFormContainer = () => {
   const [formDataToSign, setFormDataToSign] = useState(null);
   const [agreement, setAgreement] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const sentEviaRequestRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +119,7 @@ const AgreementFormContainer = () => {
           existingId
         });
 
+        sentEviaRequestRef.current = false;
         const normalizedDraft = storeAgreementState(savedDraft);
         setFormDataToSign({
           ...formData,
@@ -156,9 +159,10 @@ const AgreementFormContainer = () => {
         throw new Error('Agreement ID is missing');
       }
 
-      if (!signatureData?.signatories?.length) {
-        throw new Error('At least one signatory is required');
+      if (sentEviaRequestRef.current || agreement.eviasignreference) {
+        throw new Error('An Evia signing request is already submitted. Do not resend.');
       }
+      const { submitted, pending } = prepareRentalAgreementSignatories(signatureData?.signatories);
 
       const documentAgreement = normalizeAgreementRecord(await generateAndAttachAgreementDocument({
         agreement
@@ -169,6 +173,12 @@ const AgreementFormContainer = () => {
       if (!documentUrl || typeof documentUrl !== 'string' || !documentUrl.startsWith('http')) {
         throw new Error('Generated agreement document URL is invalid');
       }
+
+      const rosterRecord = await updateAgreementCanonical(agreement.id, { signatories_status: pending });
+      if (!matchesPendingRentalRoster(rosterRecord?.signatories_status, pending)) {
+        throw new Error('The two-signer roster could not be saved. No Evia request was sent.');
+      }
+      storeAgreementState(rosterRecord);
 
       const {
         getEviaAgreementCallbackUrl,
@@ -187,7 +197,7 @@ const AgreementFormContainer = () => {
         documentUrl,
         title: signatureData.title || 'Rental Agreement',
         message: signatureData.message || 'Please sign this rental agreement',
-        signatories: signatureData.signatories,
+        signatories: submitted,
         ...(callbackUrl && {
           callbackUrl,
           callbackTypes: [0],
@@ -197,16 +207,23 @@ const AgreementFormContainer = () => {
       });
 
       if (!signatureResult?.success) {
-        throw new Error(signatureResult?.error || 'Failed to send document for signature');
+        throw new Error(signatureResult?.error || 'Evia submission failed or is uncertain. Verify provider status before resending.');
+      }
+      sentEviaRequestRef.current = true;
+      if (!signatureResult.requestId) {
+        throw new Error('Evia returned no request reference. Do not resend; reconcile with Evia first.');
       }
 
       const updatedAgreement = normalizeAgreementRecord(await updateAgreementCanonical(agreement.id, {
         status: AGREEMENT_STATUS.PENDING,
-        eviasignreference: signatureResult.requestId || null,
+        eviasignreference: signatureResult.requestId,
         signature_status: 'pending',
         signature_sent_at: new Date().toISOString()
       }));
 
+      if (String(updatedAgreement?.eviasignreference || '') !== String(signatureResult.requestId)) {
+        throw new Error('Evia request was sent but its reference was not confirmed in KH Rentals. Do not resend.');
+      }
       storeAgreementState(updatedAgreement);
       setShowSignatureForm(false);
       toast.success('Agreement sent for signature successfully');
@@ -214,6 +231,7 @@ const AgreementFormContainer = () => {
     } catch (error) {
       console.error('Error sending agreement for signature:', error);
       toast.error('Failed to send for signature: ' + error.message);
+      throw error;
     }
   };
 
