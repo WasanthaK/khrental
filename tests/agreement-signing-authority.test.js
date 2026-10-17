@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { assertGenericAgreementWriteSafe, shouldApplyGenericAgreementChange } from '../src/api/mssql/agreementWritePolicy.js';
+import { prepareRentalAgreementSignatories, matchesPendingRentalRoster } from '../src/utils/rentalAgreementSignatories.js';
+import { updateSignatoryCompletion, markAllSignatoriesCompleted } from '../src/api/evia/webhook.js';
 
 const denied = { status: 409, code: 'AGREEMENT_SIGNING_AUTHORITY_REQUIRED' };
 test('generic agreement CRUD cannot forge terminal signed states and evidence', () => {
@@ -50,4 +52,33 @@ test('verified Evia webhook does not publish remote provider URLs as archive pro
   const source = fs.readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /signedDocumentUrl\s*=\s*extractSignedDocumentUrl\(payload\)/);
   assert.match(source, /provider_document_url_not_retained/);
+});
+
+test('two required rental signers are validated and pending roster is durable', () => {
+  const owner = {name:'Owner',email:'owner@example.invalid',identifier:'landlord',textMarker:'For Landlord:'};
+  const tenant = {name:'Tenant',email:'tenant@example.invalid',identifier:'tenant',textMarker:'For Tenant:'};
+  assert.throws(() => prepareRentalAgreementSignatories([owner]), /both landlord and tenant/);
+  assert.throws(() => prepareRentalAgreementSignatories([owner,{...tenant,email:owner.email}]), /distinct/);
+  const {submitted,pending} = prepareRentalAgreementSignatories([owner,tenant]);
+  assert.equal(submitted.length,2);
+  assert.deepEqual(pending.map(x=>x.status),['pending','pending']);
+  assert.ok(matchesPendingRentalRoster(JSON.stringify(pending),pending));
+  assert.ok(!matchesPendingRentalRoster(JSON.stringify([pending[0]]),pending));
+  const partial = updateSignatoryCompletion(pending,{email:owner.email,eventTime:'2026-10-17T00:00:00Z'});
+  assert.deepEqual(partial.map(x=>x.status),['completed','pending']);
+  const complete = markAllSignatoriesCompleted(partial,'2026-10-17T00:01:00Z');
+  assert.deepEqual(complete.map(x=>x.type),['landlord','tenant']);
+  assert.deepEqual(complete.map(x=>x.status),['completed','completed']);
+});
+
+test('agreement creation persists roster before Evia provider submission', () => {
+  const source = fs.readFileSync(new URL('../src/components/agreements/AgreementFormContainer.jsx',import.meta.url),'utf8');
+  assert.ok(source.indexOf('const rosterRecord = await updateAgreementCanonical') < source.indexOf('const signatureResult = await sendDocumentForSignature'));
+  assert.match(source,/matchesPendingRentalRoster/);
+  assert.match(source,/sentEviaRequestRef.current = true/);
+  const form = fs.readFileSync(new URL('../src/components/agreements/SignatureForm.jsx',import.meta.url),'utf8');
+  assert.match(form,/if \(index < 2\) return/);
+  assert.match(form,/prepareRentalAgreementSignatories\(signatories\)/);
+  const card = fs.readFileSync(new URL('../src/components/agreements/AgreementSummaryCard.jsx',import.meta.url),'utf8');
+  assert.match(card,/Delivery not tracked/);
 });
