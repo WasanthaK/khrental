@@ -736,3 +736,19 @@ test('issued invoice PDF fails closed on draft and mismatched line items', async
   assert.match(billingRouterSource,/attachments: \[attachment\]/);
   assert.equal(classifyInvoiceEmailError({code:'INVOICE_PDF_GENERATION_FAILED'}),'failed');
 });
+
+test('authorized manual invoice resend has a separate confirmation and delivery audit', () => {
+  assert.match(billingRouterSource, /invoices\/:invoiceId\/resend/);
+  assert.match(billingRouterSource, /INVOICE_RESEND_REQUIRES_ACCEPTED_DELIVERY/);
+  assert.match(billingRouterSource, /INVOICE_RESEND_DUPLICATE/);
+  assert.match(billingRouterSource, /DELIVERY_EVENTS\.attempted/);
+  assert.match(billingRouterSource, /staff_requested_invoice_copy/);
+  assert.match(billingRouterSource, /invoiceRecipientEmail/);
+  assert.match(billingRouterSource, /deliverIssuedInvoice\(req/);
+  assert.doesNotMatch(billingRouterSource, /UPDATE invoices SET status='pending'[^;]*resend/);
+  const client = readFileSync(new URL('../src/services/platformClient.js',import.meta.url),'utf8');
+  assert.match(client, /resendIssuedInvoice/);
+  const ui = readFileSync(new URL('../src/pages/InvoiceDetails.jsx',import.meta.url),'utf8');
+  assert.match(ui, /Resend existing invoice/);
+  assert.match(ui, /window.confirm/);
+});
