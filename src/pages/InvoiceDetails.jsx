@@ -64,6 +64,7 @@ const InvoiceDetails = () => {
   const payments = account?.payments || [];
   const receipts = account?.receipts || [];
   const components = account?.components || [];
+  const paymentInstructions = account?.paymentInstructions || null;
   const emailDelivery = account?.delivery || { status: 'not_attempted' };
   const outstandingBalance = Number(account?.outstandingBalance) || 0;
   const isDraft = String(invoice?.status || '').toLowerCase() === 'draft';
@@ -167,7 +168,15 @@ const InvoiceDetails = () => {
         ...componentLines,
         '',
         `Total Amount: ${formatCurrency(invoice.totalamount)}`,
-        `Outstanding Balance: ${formatCurrency(outstandingBalance)}`
+        `Outstanding Balance: ${formatCurrency(outstandingBalance)}`,
+        '',
+        'PAYMENT INSTRUCTIONS:',
+        ...(paymentInstructions ? [
+          `Bank: ${paymentInstructions.bankName}`,
+          `Branch: ${paymentInstructions.branch}`,
+          `Account Number: ${paymentInstructions.accountNumber}`,
+          `Payment Reference: ${invoice.id}`
+        ] : ['Bank transfer details are not available on this invoice. Contact your property manager before paying.'])
       ].join('\n');
 
       const blob = new Blob([invoiceContent], { type: 'text/plain' });
@@ -248,6 +257,21 @@ const InvoiceDetails = () => {
               Retry rejected invoice email
             </button>
           )}
+        </section>
+      )}
+
+      {!isDraft && (
+        <section className="rounded-lg border bg-white p-4" aria-label="Invoice payment instructions">
+          <h2 className="font-semibold mb-2">Payment instructions</h2>
+          {paymentInstructions ? (
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div><dt className="text-gray-500">Bank</dt><dd>{paymentInstructions.bankName}</dd></div>
+              <div><dt className="text-gray-500">Branch</dt><dd>{paymentInstructions.branch}</dd></div>
+              <div><dt className="text-gray-500">Account number</dt><dd>{paymentInstructions.accountNumber}</dd></div>
+              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.id}</dd></div>
+            </dl>
+          ) : <p className="text-sm text-amber-700">Bank transfer details are not available on this invoice. Confirm payment instructions with your property manager before paying.</p>}
+          <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds. Changes to property banking details do not update issued invoice instructions.</p>
         </section>
       )}
 
