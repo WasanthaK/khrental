@@ -140,7 +140,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
         rightText('RENTAL INVOICE',R-12,H-65,{font:bold,size:15,minX:R-163,color:navy});
         rightText('Monthly rental statement',R-12,H-82,{size:8.5,minX:R-163,color:grey});
         rule(H-113);
-        y=H-141;
+        y=H-131;
       }
     };
     const ensure = (height, tableContinuation = false) => {
@@ -165,7 +165,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     page.drawText('Please pay by this date', {
       x:dueX+14,y:dueTop-72,font:regular,size:8,color:grey
     });
-    y-=115;
+    y-=105;
 
     const cardsGap=12, cardWidth=(R-L-cardsGap)/2;
     const tenantLines=wrap(model.renterName,cardWidth-26,bold,11);
@@ -180,7 +180,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     };
     card(L,'BILL TO',tenantLines);
     card(L+cardWidth+cardsGap,'PROPERTY',propertyLines);
-    y-=cardHeight+34;
+    y-=cardHeight+20;
 
     page.drawText('ITEMIZED CHARGES',{x:L,y,font:bold,size:12,color:navy});
     y-=17;rule(y);y-=12;
@@ -209,7 +209,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     page.drawRectangle({x:L,y:y-totalH,width:R-L,height:totalH,color:light});
     page.drawText('INVOICE TOTAL',{x:L+18,y:y-36,font:bold,size:12,color:navy});
     rightText(model.total,R-16,y-37,{font:bold,size:18,minX:L+220,color:blue});
-    y-=totalH+32;
+    y-=totalH+14;
 
     const bank=model.bank;
     const boxW=R-L;
