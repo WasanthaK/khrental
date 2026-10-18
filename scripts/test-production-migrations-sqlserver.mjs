@@ -12,6 +12,8 @@ const PROPERTY_UTILITY_MIGRATION_ID = '20261005_01_add_property_utility_configs'
 const PROPERTY_UTILITY_MIGRATION_FILE = `migrations/${PROPERTY_UTILITY_MIGRATION_ID}.sql`;
 const AUTH_STORE_MIGRATION_ID = '20261006_01_repair_auth_store_runtime_columns';
 const AUTH_STORE_MIGRATION_FILE = `migrations/${AUTH_STORE_MIGRATION_ID}.sql`;
+const PAYMENT_REF_MIGRATION_ID = '20261018_01_invoice_payment_references';
+const PAYMENT_REF_MIGRATION_FILE = `migrations/${PAYMENT_REF_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
@@ -20,7 +22,8 @@ const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
 const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   MIGRATION_ID,
   PROPERTY_UTILITY_MIGRATION_ID,
-  AUTH_STORE_MIGRATION_ID
+  AUTH_STORE_MIGRATION_ID,
+  PAYMENT_REF_MIGRATION_ID
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -142,6 +145,8 @@ const main = async () => {
   assert.match(authStoreMigrationSql, /ADD revoked_at DATETIME2 NULL/);
   assert.match(authStoreMigrationSql, /IX_auth_sessions_active/);
 
+  const paymentReferenceSql = fs.readFileSync(path.resolve(PAYMENT_REF_MIGRATION_FILE),'utf8');
+  assert.match(paymentReferenceSql,/UX_invoice_payment_references_tenant_reference/);
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
   const databaseName = `khrental_migration_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -423,6 +428,64 @@ const main = async () => {
     assert.equal(Number(authRows.recordset[0].revoked_rows), 1);
 
     console.log(`PASS: ${AUTH_STORE_MIGRATION_ID} repaired stale auth runtime columns/indexes and reran idempotently on SQL Server 2022.`);
+
+    // Execute the exact additive invoice reference migration on disposable
+    // SQL Server, including second-run idempotency and a real unique index
+    // violation. Do not exempt it from mandatory migration coverage.
+    await testPool.request().batch(`
+      CREATE TABLE dbo.tenants (
+        id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        slug NVARCHAR(100) NOT NULL
+      );
+      CREATE TABLE dbo.tenant_settings (
+        tenant_id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY
+      );
+      CREATE TABLE dbo.invoices (
+        id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        tenant_id UNIQUEIDENTIFIER NOT NULL
+      );
+      INSERT INTO dbo.tenants VALUES
+        ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', N'kh-rentals'),
+        ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', N'other-business');
+      INSERT INTO dbo.tenant_settings VALUES
+        ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+        ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+      INSERT INTO dbo.invoices VALUES
+        ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+        ('22222222-2222-4222-8222-222222222222','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+        ('33333333-3333-4333-8333-333333333333','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    `);
+    await testPool.request().batch(paymentReferenceSql);
+    await testPool.request().batch(paymentReferenceSql);
+    const refState = await testPool.request().query(`
+      SELECT
+        (SELECT billing_timezone FROM dbo.tenant_settings WHERE tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') AS kh_timezone,
+        (SELECT billing_timezone FROM dbo.tenant_settings WHERE tenant_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb') AS other_timezone,
+        (SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.invoice_payment_references')
+          AND name=N'UX_invoice_payment_references_tenant_reference' AND is_unique=1) AS unique_index;
+    `);
+    assert.equal(refState.recordset[0].kh_timezone,'Asia/Colombo');
+    assert.equal(refState.recordset[0].other_timezone,'UTC');
+    assert.equal(refState.recordset[0].unique_index,1);
+    await testPool.request().query(`
+      INSERT INTO dbo.invoice_payment_references
+        (invoice_id,tenant_id,payment_reference,reference_timezone,source)
+      VALUES
+        ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','26101801','Asia/Colombo','invoice_issue');
+    `);
+    await assert.rejects(testPool.request().query(`
+      INSERT INTO dbo.invoice_payment_references
+        (invoice_id,tenant_id,payment_reference,reference_timezone,source)
+      VALUES
+        ('22222222-2222-4222-8222-222222222222','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','26101801','Asia/Colombo','invoice_issue');
+    `), 'same tenant must not reuse reference');
+    await testPool.request().query(`
+      INSERT INTO dbo.invoice_payment_references
+        (invoice_id,tenant_id,payment_reference,reference_timezone,source)
+      VALUES
+        ('33333333-3333-4333-8333-333333333333','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','26101801','UTC','invoice_issue');
+    `);
+    console.log(`PASS: ${PAYMENT_REF_MIGRATION_ID} SQL Server execution, idempotency, timezone setup, tenant-specific uniqueness`);
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}
