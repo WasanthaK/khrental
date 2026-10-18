@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
+import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
 import {
