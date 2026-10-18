@@ -27,10 +27,15 @@ test('verification entrypoint never uses apply and cannot silently run as a web 
   assert.doesNotMatch(verifier, /--mode=apply/);
 });
 
-test('strict executor retains redacted evidence for all six ledger and schema checks', () => {
+test('strict executor retains evidence for every ledger and schema check in the migration manifest', () => {
   assert.match(workflow, /capture_verification_evidence/);
   assert.match(workflow, /az containerapp job logs show/);
-  assert.match(workflow, /Strict read-only migration verification passed for 6 managed migrations/);
+  const manifestIds = [...runner.matchAll(/^\\s+id:\\s*'(\\d{8}_\\d{2}_[^']+)'/gm)].map(match => match[1]);
+  const configuredIds = workflow.match(/migration_ids="([\\s\\S]*?)"/)?.[1]?.trim().split(/\\s+/);
+  assert.ok(manifestIds.length > 0);
+  assert.deepEqual(configuredIds, manifestIds, 'strict workflow evidence must cover every managed migration in order');
+  assert.ok(workflow.includes(`Strict read-only migration verification passed for ${manifestIds.length} managed migrations;`));
+  assert.ok(workflow.includes(`**${manifestIds.length}/${manifestIds.length} ledger/schema checks passed.**`));
   assert.match(workflow, /LEDGERED.*SCHEMA_OK/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.match(workflow, /Raw Azure logs are not published/);
