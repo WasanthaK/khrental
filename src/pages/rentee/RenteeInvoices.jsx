@@ -249,6 +249,18 @@ const RenteeInvoices = () => {
                   <div className="rounded bg-gray-50 p-3"><div className="text-xs text-gray-500">Status</div><div className="font-semibold capitalize">{String(account.invoice?.status || '').replace('_', ' ')}</div></div>
                 </div>
 
+                <div aria-label="Invoice payment instructions">
+                  <h3 className="font-medium mb-2">Payment instructions</h3>
+                  {account.paymentInstructions ? (
+                    <dl className="grid grid-cols-2 gap-2 text-sm">
+                      <div><dt className="text-gray-500">Bank</dt><dd>{account.paymentInstructions.bankName}</dd></div>
+                      <div><dt className="text-gray-500">Branch</dt><dd>{account.paymentInstructions.branch}</dd></div>
+                      <div><dt className="text-gray-500">Account number</dt><dd>{account.paymentInstructions.accountNumber}</dd></div>
+                      <div><dt className="text-gray-500">Reference</dt><dd>{account.invoice.id}</dd></div>
+                    </dl>
+                  ) : <p className="text-sm text-amber-700">Bank details not recorded on this invoice. Contact the property manager before paying.</p>}
+                  <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds.</p>
+                </div>
                 <div>
                   <h3 className="font-medium mb-2">Payments</h3>
                   {account.payments?.length ? (
