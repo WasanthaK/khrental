@@ -23,6 +23,11 @@ export const invoiceReferenceDay = (date, timeZone) => ymd(date, timeZone);
 export const displayInvoicePaymentReference = (reference) =>
   /^\d{8}$/.test(String(reference || '')) ? String(reference) : null;
 
+// Tenants may be created after an additive schema migration, so the
+// billing timezone can be unset. UTC is the documented safe default;
+// an explicitly configured business timezone always takes precedence.
+export const resolveBillingTimezone = value => String(value || '').trim() || 'UTC';
+
 /** Must run inside caller's SERIALIZABLE transaction, after locking invoice.
  * Scoped tenant app lock serializes generation between different invoice rows.
  * SQL unique index and PK enforce identity and tenant collision safety.
@@ -61,12 +66,7 @@ export const allocateInvoicePaymentReference = async ({
     SELECT billing_timezone FROM dbo.tenant_settings
     WHERE tenant_id=@tenantId
   `,{tenantId});
-  const zone = String(setting.recordset?.[0]?.billing_timezone || '').trim();
-  if (!zone) {
-    const err = new Error('Configure a billing timezone before issuing an invoice.');
-    err.code = 'BILLING_TIMEZONE_REQUIRED';
-    throw err;
-  }
+  const zone = resolveBillingTimezone(setting.recordset?.[0]?.billing_timezone);
   const day = invoiceReferenceDay(now,zone);
   const max = await request(`
     SELECT MAX(payment_reference) AS last_reference

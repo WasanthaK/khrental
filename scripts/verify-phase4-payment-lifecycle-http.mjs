@@ -143,6 +143,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const issuedA = assertResponse(await account(draftA, tokenA, a.tenantId), 200, 'issued renter account');
   assert.equal(issuedA.invoice.status, 'pending');
   assert.equal(issuedA.delivery.status, 'accepted');
+  assert.match(issuedA.invoice.payment_reference,/^\d{8}$/,
+    'newly created tenant without timezone setting must receive an 8-digit invoice reference');
 
   const draftB = await createDraft(b, '2026-12', 660);
   invoiceMailbox.rejectNext = true;
@@ -158,6 +160,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assertResponse(await retry(draftB, adminB, b.tenantId), 409, 'no duplicate accepted email');
   const issuedB = assertResponse(await account(draftB, tokenB, b.tenantId), 200, 'issued B account');
   assert.equal(issuedB.delivery.status, 'accepted');
+  assert.match(issuedB.invoice.payment_reference,/^\d{8}$/,
+    'second tenant must also receive a scoped reference');
 
   const ambiguousId = await createDraft(a, '2027-01', 700);
   invoiceMailbox.unknownNext = true;
