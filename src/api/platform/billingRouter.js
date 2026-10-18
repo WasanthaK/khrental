@@ -761,7 +761,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
           eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
-          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions }
+          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions, invoiceRecipientEmail: invoice.rentee_email }
         });
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
@@ -815,6 +815,91 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       }
       const delivery = await deliverIssuedInvoice(req, invoice);
       res.json({ data: { invoice, delivery }, error: null });
+    } catch (error) { next(error); }
+  });
+
+  // A manually requested second email for an already issued invoice, never
+  // a second invoice. Explicit action and per-command key prevent accidental
+  // double clicks; tenant/invoice authorization is server-side.
+  router.post('/invoices/:invoiceId/resend', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
+      const confirmation = String(req.body?.confirmation || '');
+      const resendRequestId = String(req.body?.resendRequestId || '');
+      if (confirmation !== 'RESEND-ISSUED-INVOICE'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resendRequestId)) {
+        throw createRequestError(400, 'Confirm the issued invoice resend with a unique request ID.', 'INVOICE_RESEND_CONFIRMATION_REQUIRED');
+      }
+      const tx = new sql.Transaction(await getMssqlPool());
+      await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      let targetEmail;
+      try {
+        const locked = await singleTransaction(tx,
+          'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: invoice.id });
+        if (!locked) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        assertInvoiceIssued(locked);
+
+        const duplicate = await singleTransaction(tx,
+          'SELECT TOP 1 id FROM billing_lifecycle_events ' +
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type=@attempted ' +
+          "AND ISJSON(metadata)=1 AND JSON_VALUE(metadata, '$.resendRequestId')=@resendRequestId",
+          { tenantId:req.tenantId, invoiceId:invoice.id,
+            attempted:DELIVERY_EVENTS.attempted, resendRequestId });
+        if (duplicate) throw createRequestError(409, 'This resend command was already processed.', 'INVOICE_RESEND_DUPLICATE');
+
+        const last = await singleTransaction(tx,
+          'SELECT TOP 1 event_type FROM billing_lifecycle_events ' +
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId ' +
+          "AND event_type IN ('invoice_email_attempted','invoice_email_accepted'," +
+          "'invoice_email_failed','invoice_email_unknown') " +
+          'ORDER BY createdat DESC, id DESC',
+          { tenantId:req.tenantId,invoiceId:invoice.id });
+        if (last?.event_type !== DELIVERY_EVENTS.accepted) {
+          throw createRequestError(409,
+            'Resend requires a previously accepted invoice email. Resolve unknown delivery before resending; use retry for rejected emails.',
+            'INVOICE_RESEND_REQUIRES_ACCEPTED_DELIVERY');
+        }
+        const issuance = await singleTransaction(tx,
+          'SELECT TOP 1 metadata FROM billing_lifecycle_events ' +
+          "WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type='invoice_issued' " +
+          'ORDER BY createdat DESC, id DESC',
+          { tenantId:req.tenantId,invoiceId:invoice.id });
+        let issuanceMetadata = null;
+        try { issuanceMetadata = issuance?.metadata ? JSON.parse(issuance.metadata) : null; }
+        catch { /* historical issue without valid snapshot */ }
+        const issueEmail = String(issuanceMetadata?.invoiceRecipientEmail || '').trim();
+        // Historic issues lack a recipient snapshot. Use the linked tenant's
+        // current email, never a caller-supplied address.
+        targetEmail = issueEmail || String(invoice.rentee_email || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+          throw createRequestError(409, 'Invoice has no usable recipient email.', 'INVOICE_RESEND_RECIPIENT_MISSING');
+        }
+        await insertLifecycleEvent(tx, {
+          tenantId:req.tenantId,invoiceId:invoice.id,
+          eventType:DELIVERY_EVENTS.attempted,actorUserId:req.user.id,
+          metadata: {
+            action:'manual_resend',resendRequestId,
+            reason:'staff_requested_invoice_copy',
+            recipientSource:issueEmail ? 'issue_snapshot' : 'legacy_linked_renter'
+          }
+        });
+        await tx.commit();
+      } catch (error) {
+        await tx.rollback().catch(() => {});
+        throw error;
+      }
+      // Reuse the unchanged issued invoice, its itemization and its retained
+      // issue-time bank snapshot; only a new delivery attempt is appended.
+      const delivery = await deliverIssuedInvoice(req, {
+        ...invoice, rentee_email: targetEmail
+      });
+      res.json({ data: {
+        invoice, delivery, action:'manual_resend', recipient:targetEmail
+      }, error:null });
     } catch (error) { next(error); }
   });
 
