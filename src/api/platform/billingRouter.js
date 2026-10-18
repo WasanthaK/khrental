@@ -9,6 +9,7 @@ import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billing
 import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
+import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
   PAYMENT_STATUS,
   calculateOutstandingBalance,
@@ -114,8 +115,16 @@ const assertInvoiceAccess = (req, invoice, manage = false) => {
   requirePropertyScope(req, invoice.propertyid);
 };
 
+const loadIssuedPaymentInstructions = async (tenantId, invoiceId) => {
+  const recorded = await runSingleQuery(
+    `SELECT TOP 1 metadata FROM billing_lifecycle_events
+     WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type='invoice_issued'
+     ORDER BY createdat DESC, id DESC`, {tenantId, invoiceId});
+  return readIssuedInvoiceBankDetails(recorded?.metadata);
+};
+
 const buildAccountProjection = async (req, invoice) => {
-  const [payments, receipts, components] = await Promise.all([
+  const [payments, receipts, components, paymentInstructions] = await Promise.all([
     loadPayments(req.tenantId, invoice.id),
     loadReceipts(req.tenantId, invoice.id),
     runQuery(
@@ -123,10 +132,11 @@ const buildAccountProjection = async (req, invoice) => {
        WHERE tenant_id = @tenantId AND invoice_id = @invoiceId
        ORDER BY createdat, component_type`,
       { tenantId: req.tenantId, invoiceId: invoice.id }
-    )
+    ),
+    loadIssuedPaymentInstructions(req.tenantId, invoice.id)
   ]);
   const outstandingBalance = calculateOutstandingBalance(invoice.totalamount, payments);
-  return { invoice, components, payments, receipts, outstandingBalance };
+  return { invoice, components, payments, receipts, paymentInstructions, outstandingBalance };
 };
 
 const loadInvoiceComponents = async (tenantId, invoiceId) => runQuery(
@@ -322,6 +332,7 @@ const appendInvoiceDeliveryEvent = async ({ tenantId, invoiceId, eventType, acto
 
 const makeInvoiceEmail = invoice => {
   const total = Number(invoice.totalamount || 0);
+  const payment = buildInvoiceBankEmailSections(invoice.paymentInstructions, invoice.id);
   const portalUrl = getBillingReminderPortalUrl();
   const billingPeriod = invoice.billingperiod || 'your tenancy';
   return {
@@ -331,11 +342,10 @@ const makeInvoiceEmail = invoice => {
       `Your KH Rentals invoice for ${billingPeriod} is ready.`,
       `Amount due: ${total.toFixed(2)}.`,
       invoice.duedate ? `Due date: ${new Date(invoice.duedate).toLocaleDateString('en-GB')}.` : null,
-      portalUrl ? `View your invoice: ${portalUrl}` : null
+      portalUrl ? `View your invoice: ${portalUrl}` : null,
+      payment.text
     ].filter(Boolean).join('\n'),
-    html: portalUrl
-      ? `<p>Your KH Rentals invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p><p><a href="${portalUrl}">View your invoice</a></p>`
-      : undefined
+    html: `<p>Your KH Rentals invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p>${payment.html}${portalUrl ? `<p><a href="${portalUrl}">View your invoice</a></p>` : ''}`
   };
 };
 
@@ -666,7 +676,8 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   const deliverIssuedInvoice = async (req, invoice) => {
     let outcome, provider = null;
     try {
-      const result = await sendInvoiceEmail(makeInvoiceEmail(invoice));
+      const paymentInstructions = await loadIssuedPaymentInstructions(req.tenantId, invoice.id);
+      const result = await sendInvoiceEmail(makeInvoiceEmail({ ...invoice, paymentInstructions }));
       if (result?.accepted === false || result?.success === false) {
         throw createRequestError(502, 'Email provider did not accept this invoice.', 'EMAIL_PROVIDER_REJECTED');
       }
@@ -719,10 +730,21 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id=@tenantId AND id=@invoiceId AND status='draft'`,
           { tenantId: req.tenantId, invoiceId: invoice.id, totalAmount, issuedBy: req.user.id });
         if (!issued) throw createRequestError(409,'Invoice changed before issue.','INVOICE_STATE_CHANGED');
+        const configuredBank = await singleTransaction(tx,
+          `SELECT p.bank_name AS property_bank_name, p.bank_branch AS property_bank_branch,
+                  p.bank_account_number AS property_bank_account_number,
+                  u.bank_name AS unit_bank_name, u.bank_branch AS unit_bank_branch,
+                  u.bank_account_number AS unit_bank_account_number
+           FROM properties p
+           LEFT JOIN agreements a ON a.id=@agreementId AND a.tenant_id=p.tenant_id
+           LEFT JOIN property_units u ON u.id=a.unitid AND u.tenant_id=p.tenant_id AND u.propertyid=p.id
+           WHERE p.id=@propertyId AND p.tenant_id=@tenantId`,
+          {tenantId:req.tenantId, propertyId:invoice.propertyid, agreementId:invoice.agreementid});
+        const paymentInstructions = captureInvoiceBankDetails(configuredBank);
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
           eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
-          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount }
+          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions }
         });
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
