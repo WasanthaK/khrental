@@ -744,12 +744,13 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const tx = new sql.Transaction(pool);
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       let issued;
+      let paymentReference;
       try {
         const locked = await singleTransaction(tx,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
         assertDraftInvoice(locked);
-        const paymentReference = await allocateInvoicePaymentReference({
+        paymentReference = await allocateInvoicePaymentReference({
           transaction: tx, sql, tenantId: req.tenantId, invoiceId: invoice.id,
           actorUserId: req.user.id, source: 'invoice_issue'
         });
