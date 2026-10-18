@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
 import {
   getAutomaticBillingPeriod,
   shouldRunAutomaticBilling
@@ -600,7 +601,7 @@ test('invoice and payment reminder links bypass broken SendGrid click tracking',
   assert.equal(payload.content[1].value.includes(direct), true);
   assert.equal(payload.personalizations[0].to[0].email, 'tenant@example.invalid');
   assert.doesNotMatch(JSON.stringify(payload), /url6679\.quixo\.online/);
-  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*makeInvoiceEmail\s*\(\s*invoice\s*\)\s*\)/);
+  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*makeInvoiceEmail\s*\(\s*\{\s*\.\.\.invoice,\s*paymentInstructions\s*\}\s*\)\s*\)/);
   const adjustmentRouter = readFileSync(
     new URL('../src/api/platform/billingAdjustmentsRouter.js', import.meta.url), 'utf8');
   assert.match(adjustmentRouter, /sendBillingReminderEmail/);
