@@ -744,6 +744,8 @@ test('authorized manual invoice resend has a separate confirmation and delivery 
   assert.match(billingRouterSource, /DELIVERY_EVENTS\.attempted/);
   assert.match(billingRouterSource, /staff_requested_invoice_copy/);
   assert.match(billingRouterSource, /invoiceRecipientEmail/);
+  assert.match(billingRouterSource, /recipientEmail = String\(invoice\.rentee_email/);
+  assert.match(billingRouterSource, /rentee_email: recipientEmail, paymentInstructions/);
   assert.match(billingRouterSource, /deliverIssuedInvoice\(req/);
   assert.doesNotMatch(billingRouterSource, /UPDATE invoices SET status='pending'[^;]*resend/);
   const client = readFileSync(new URL('../src/services/platformClient.js',import.meta.url),'utf8');
@@ -751,4 +753,20 @@ test('authorized manual invoice resend has a separate confirmation and delivery 
   const ui = readFileSync(new URL('../src/pages/InvoiceDetails.jsx',import.meta.url),'utf8');
   assert.match(ui, /Resend existing invoice/);
   assert.match(ui, /window.confirm/);
+});
+
+test('issued PDF handles negative adjustment credit but rejects negative rent', async () => {
+  const invoice = { id:'inv-credit',tenant_id:'tenant-a',renteeid:'renter-a',
+    propertyid:'property-a',status:'pending',totalamount:900,billingperiod:'2026-11' };
+  const components = [
+    {description:'Rent',component_type:'rent',amount:1000},
+    {description:'Credit',component_type:'adjustment',amount:-100}
+  ];
+  const model = normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:null});
+  assert.equal(model.lines[1].amount,'LKR -100.00');
+  const pdf = await createIssuedInvoicePdfAttachment({invoice,components,paymentInstructions:null});
+  assert.equal(Buffer.from(pdf.content,'base64').subarray(0,5).toString('ascii'),'%PDF-');
+  await assert.rejects(() => createIssuedInvoicePdfAttachment({
+    invoice, components:[{...components[0], amount:900,component_type:'rent'},{...components[1],component_type:'rent'}]
+  }), error=>error.code==='INVOICE_PDF_GENERATION_FAILED');
 });
