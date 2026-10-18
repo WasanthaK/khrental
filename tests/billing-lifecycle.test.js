@@ -29,7 +29,8 @@ import {
 } from '../src/api/platform/billingAdjustments.js';
 import {
   getBillingReminderPortalUrl,
-  sendBillingReminderEmail
+  sendBillingReminderEmail,
+  buildBillingSendGridPayload
 } from '../src/api/platform/billingReminderEmail.js';
 
 const paymentServiceSource = readFileSync(
@@ -581,6 +582,28 @@ test('billing reminder portal URL uses the configured public application URL', (
     if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
     else process.env.PUBLIC_APP_URL = previousPublicUrl;
   }
+});
+
+test('invoice and payment reminder links bypass broken SendGrid click tracking', () => {
+  const direct = 'https://rentals.example.invalid/rentee/invoices';
+  const payload = buildBillingSendGridPayload({
+    to: 'tenant@example.invalid',
+    subject: 'KH Rentals invoice for 2026-10',
+    text: 'View your invoice: ' + direct,
+    html: '<p><a href="' + direct + '">View your invoice</a></p>'
+  });
+  assert.deepEqual(payload.tracking_settings, {
+    click_tracking: { enable: false, enable_text: false },
+    open_tracking: { enable: false }
+  });
+  assert.equal(payload.content[0].value.includes(direct), true);
+  assert.equal(payload.content[1].value.includes(direct), true);
+  assert.equal(payload.personalizations[0].to[0].email, 'tenant@example.invalid');
+  assert.doesNotMatch(JSON.stringify(payload), /url6679\\.quixo\\.online/);
+  assert.match(billingRouterSource, /sendInvoiceEmail\\(makeInvoiceEmail\\(invoice\\)\\)/);
+  const adjustmentRouter = readFileSync(
+    new URL('../src/api/platform/billingAdjustmentsRouter.js', import.meta.url), 'utf8');
+  assert.match(adjustmentRouter, /sendBillingReminderEmail/);
 });
 
 test('billing reminder delivery fails clearly when server email is not configured', async () => {
