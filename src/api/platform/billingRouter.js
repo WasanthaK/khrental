@@ -691,8 +691,15 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const attachment = await createIssuedInvoicePdfAttachment({
         invoice: issuedInvoice, components, paymentInstructions
       });
+      // The server-selected issue-time recipient must survive the fresh
+      // invoice read. Otherwise an operator-approved historical resend could
+      // silently target an edited renter email instead.
+      const recipientEmail = String(invoice.rentee_email || issuedInvoice.rentee_email || '').trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+        throw createRequestError(409, 'No valid recipient for this issued invoice.', 'EMAIL_RECIPIENT_MISSING');
+      }
       const result = await sendInvoiceEmail({
-        ...makeInvoiceEmail({ ...issuedInvoice, paymentInstructions }),
+        ...makeInvoiceEmail({ ...issuedInvoice, rentee_email: recipientEmail, paymentInstructions }),
         attachments: [attachment]
       });
       if (result?.accepted === false || result?.success === false) {
