@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
+import { invoiceReferenceDay, displayInvoicePaymentReference } from '../src/api/platform/invoicePaymentReference.js';
 import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
@@ -796,4 +797,29 @@ test('redesigned issued PDF includes bank details without affecting invoice tota
   const pdf=await PDFDocument.load(Buffer.from(attachment.content,'base64'));
   assert.equal(pdf.getPageCount(),1,'short ordinary invoice should fit a single A4 sheet');
   assert.equal(normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:bank}).total,'LKR 21000.00');
+});
+
+test('numeric payment reference uses the tenant local day and accepts exactly 8 digits', () => {
+  const instant = new Date('2026-10-18T20:00:00Z');
+  assert.equal(invoiceReferenceDay(instant,'Asia/Colombo'),'261019');
+  assert.equal(invoiceReferenceDay(instant,'UTC'),'261018');
+  assert.equal(displayInvoicePaymentReference('26101801'),'26101801');
+  assert.equal(displayInvoicePaymentReference('KR26101801'),null);
+  assert.equal(displayInvoicePaymentReference('261018001'),null);
+  assert.throws(() => invoiceReferenceDay(instant,'Invalid/Zone'),error => error.code==='BILLING_TIMEZONE_INVALID');
+});
+
+test('reference allocation remains separate from invoice UUID with SQL uniqueness and manual issue gate', () => {
+  const src = readFileSync(new URL('../src/api/platform/invoicePaymentReference.js',import.meta.url),'utf8');
+  const migration = readFileSync(new URL('../migrations/20261018_01_invoice_payment_references.sql',import.meta.url),'utf8');
+  const runner = readFileSync(new URL('../scripts/run-production-migrations.mjs',import.meta.url),'utf8');
+  assert.match(src,/sp_getapplock/);
+  assert.match(src,/INVOICE_REFERENCE_DAILY_LIMIT/);
+  assert.match(src,/invoice_reference.*[+]/s);
+  assert.match(migration,/UNIQUE INDEX UX_invoice_payment_references_tenant_reference/);
+  assert.match(migration,/payment_reference CHAR\(8\)/);
+  assert.match(runner,/inspectInvoicePaymentReferences/);
+  assert.match(billingRouterSource,/allocateInvoicePaymentReference/);
+  assert.match(billingRouterSource,/refs\.payment_reference/);
+  assert.match(billingRouterSource,/buildInvoiceBankEmailSections\(invoice\.paymentInstructions, invoice\.payment_reference\)/);
 });
