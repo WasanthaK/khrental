@@ -771,3 +771,29 @@ test('issued PDF handles negative adjustment credit but rejects negative rent', 
     invoice, components:[{...components[0], amount:900,component_type:'rent'},{...components[1],component_type:'rent'}]
   }), error=>error.code==='INVOICE_PDF_GENERATION_FAILED');
 });
+
+test('redesigned invoice PDF supports many rows and long descriptions with page breaks', async () => {
+  const invoice={id:'11111111-1111-4111-8111-111111111111',tenant_id:'t',renteeid:'r',
+    propertyid:'p',status:'pending',totalamount:12000,billingperiod:'2026-11'};
+  const components=Array.from({length:60},(_,i)=>({
+    component_type:'rent',
+    description:'Charge '+(i+1)+' for monthly tenancy statement with long supporting description',
+    amount:200
+  }));
+  const attachment=await createIssuedInvoicePdfAttachment({invoice,components,paymentInstructions:null});
+  const pdf=await PDFDocument.load(Buffer.from(attachment.content,'base64'));
+  assert.ok(pdf.getPageCount()>1,'60 components must paginate rather than run off the page');
+  assert.equal(attachment.type,'application/pdf');
+});
+
+test('redesigned issued PDF includes bank details without affecting invoice total', async () => {
+  const invoice={id:'11111111-1111-4111-8111-111111111111',tenant_id:'t',renteeid:'r',
+    propertyid:'p',status:'pending',totalamount:21000,billingperiod:'2026-11'};
+  const components=[{component_type:'rent',description:'November rent',amount:20000},
+    {component_type:'utility',description:'Water',amount:1000}];
+  const bank={source:'property',bankName:'Approved Bank',branch:'Main',accountNumber:'123456789'};
+  const attachment=await createIssuedInvoicePdfAttachment({invoice,components,paymentInstructions:bank});
+  const pdf=await PDFDocument.load(Buffer.from(attachment.content,'base64'));
+  assert.equal(pdf.getPageCount(),1,'short ordinary invoice should fit a single A4 sheet');
+  assert.equal(normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:bank}).total,'LKR 21000.00');
+});
