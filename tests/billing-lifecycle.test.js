@@ -606,7 +606,8 @@ test('invoice and payment reminder links bypass broken SendGrid click tracking',
   assert.doesNotMatch(JSON.stringify(payload), /url6679\.quixo\.online/);
   // Billing now builds an itemized PDF from the issued, tenant-scoped invoice
   // and passes it to the same SendGrid sender as an attachment.
-  assert.match(billingRouterSource, /makeInvoiceEmail\s*\(\s*\{\s*\.\.\.issuedInvoice,\s*paymentInstructions\s*\}\s*\)/);
+  assert.match(billingRouterSource, /makeInvoiceEmail\s*\(\s*\{\s*\.\.\.issuedInvoice,\s*rentee_email:\s*recipientEmail,\s*paymentInstructions\s*\}\s*\)/);
+  assert.match(billingRouterSource, /const recipientEmail = String\(invoice\.rentee_email/);
   assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*\{/);
   assert.match(billingRouterSource, /attachments:\s*\[attachment\]/);
   assert.match(billingRouterSource, /createIssuedInvoicePdfAttachment/);
