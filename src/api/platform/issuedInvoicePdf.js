@@ -6,9 +6,9 @@ const ascii = (value, max = 400) => String(value ?? '')
   .replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7E]/g, '?')
   .trim().slice(0, max);
 
-const money = amount => {
+const money = (amount, { allowNegative = false } = {}) => {
   const value = Number(amount);
-  if (!Number.isFinite(value) || value < 0 || value > 1e12) {
+  if (!Number.isFinite(value) || (value < 0 && !allowNegative) || Math.abs(value) > 1e12) {
     throw new Error('Invoice has an invalid amount.');
   }
   return 'LKR ' + value.toFixed(2);
@@ -30,7 +30,7 @@ export const normalizeIssuedInvoicePdf = ({ invoice, components, paymentInstruct
   }
   const lines = components.map(c => ({
     description: ascii(c.description || c.component_type || 'Charge', 150),
-    amount: money(c.amount)
+    amount: money(c.amount, { allowNegative: String(c.component_type || '').toLowerCase() === 'adjustment' })
   }));
   const total = Number(invoice.totalamount);
   if (!Number.isFinite(total) || total <= 0) throw new Error('Issued invoice total is invalid.');
