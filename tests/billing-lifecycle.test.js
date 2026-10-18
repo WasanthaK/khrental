@@ -641,3 +641,41 @@ test('unused invoice detail compatibility read stays removed', () => {
   assert.doesNotMatch(invoiceServiceSource, /export const fetchInvoice\s*=/);
   assert.doesNotMatch(invoiceServiceSource, /Error loading invoice from MSSQL, falling back to the local compatibility layer/);
 });
+
+test('invoice banking snapshot uses full unit override, then property and never partial values', () => {
+  const row = {
+    property_bank_name: 'Property Bank', property_bank_branch: 'Main',
+    property_bank_account_number: '111222333',
+    unit_bank_name: 'Unit Bank', unit_bank_branch: 'Branch',
+    unit_bank_account_number: '444555666'
+  };
+  assert.deepEqual(captureInvoiceBankDetails(row), {
+    bankName: 'Unit Bank', branch: 'Branch', accountNumber: '444555666', source: 'unit'
+  });
+  assert.equal(captureInvoiceBankDetails({...row, unit_bank_account_number: ''}), null);
+  const propertyOnly = {...row,unit_bank_name:null,unit_bank_branch:null,unit_bank_account_number:null};
+  const snapshot = captureInvoiceBankDetails(propertyOnly);
+  assert.equal(snapshot.source, 'property');
+  assert.deepEqual(readIssuedInvoiceBankDetails(JSON.stringify({paymentInstructions:snapshot})), snapshot);
+  assert.equal(readIssuedInvoiceBankDetails('invalid json'), null);
+  assert.equal(readIssuedInvoiceBankDetails('{}'), null);
+});
+
+test('issued invoice banking instructions escape HTML and preserve the invoice reference', () => {
+  const payment = buildInvoiceBankEmailSections({
+    bankName: 'Bank & Co', branch: '<Branch>', accountNumber: '123456', source: 'property'
+  }, 'invoice-1');
+  assert.match(payment.text, /Account number: 123456/);
+  assert.match(payment.text, /Payment reference: invoice-1/);
+  assert.match(payment.html, /Bank &amp; Co/);
+  assert.match(payment.html, /&lt;Branch&gt;/);
+  assert.doesNotMatch(payment.html, /<Branch>/);
+  const missing = buildInvoiceBankEmailSections(null, 'invoice-1');
+  assert.match(missing.text, /Confirm payment instructions/);
+  assert.doesNotMatch(missing.text, /123456/);
+  assert.match(billingRouterSource, /eventType: 'invoice_issued'[\s\S]*?paymentInstructions/);
+  assert.match(billingRouterSource, /loadIssuedPaymentInstructions/);
+  assert.match(invoiceDetailsSource, /Payment instructions/);
+  const renterInvoices = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
+  assert.match(renterInvoices, /account.paymentInstructions/);
+});
