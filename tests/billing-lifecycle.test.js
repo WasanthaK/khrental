@@ -815,7 +815,7 @@ test('reference allocation remains separate from invoice UUID with SQL uniquenes
   const runner = readFileSync(new URL('../scripts/run-production-migrations.mjs',import.meta.url),'utf8');
   assert.match(src,/sp_getapplock/);
   assert.match(src,/INVOICE_REFERENCE_DAILY_LIMIT/);
-  assert.match(src,/invoice_reference.*[+]/s);
+  assert.match(src,/invoice-reference:/);
   assert.match(migration,/UNIQUE INDEX UX_invoice_payment_references_tenant_reference/);
   assert.match(migration,/payment_reference CHAR\(8\)/);
   assert.match(runner,/inspectInvoicePaymentReferences/);
