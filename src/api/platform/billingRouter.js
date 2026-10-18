@@ -10,6 +10,7 @@ import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
 import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
+import { allocateInvoicePaymentReference } from './invoicePaymentReference.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
   PAYMENT_STATUS,
@@ -65,7 +66,8 @@ const requirePropertyScope = (req, propertyId) => {
 const loadInvoice = async (tenantId, invoiceId) => {
   const invoice = await runSingleQuery(
     `SELECT TOP 1 i.*, a.status AS agreement_status, a.unitid, a.rentamount,
-            p.name AS property_name, au.name AS rentee_name, au.email AS rentee_email
+            p.name AS property_name, au.name AS rentee_name, au.email AS rentee_email,
+            refs.payment_reference
      FROM invoices i
      LEFT JOIN agreements a
        ON a.id = i.agreementid
@@ -76,6 +78,8 @@ const loadInvoice = async (tenantId, invoiceId) => {
      LEFT JOIN app_users au
        ON au.id = i.renteeid
       AND au.tenant_id = i.tenant_id
+     LEFT JOIN invoice_payment_references refs
+       ON refs.invoice_id = i.id AND refs.tenant_id = i.tenant_id
      WHERE i.tenant_id = @tenantId AND i.id = @invoiceId`,
     { tenantId, invoiceId }
   );
@@ -333,7 +337,7 @@ const appendInvoiceDeliveryEvent = async ({ tenantId, invoiceId, eventType, acto
 
 const makeInvoiceEmail = invoice => {
   const total = Number(invoice.totalamount || 0);
-  const payment = buildInvoiceBankEmailSections(invoice.paymentInstructions, invoice.id);
+  const payment = buildInvoiceBankEmailSections(invoice.paymentInstructions, invoice.payment_reference);
   const portalUrl = getBillingReminderPortalUrl();
   const billingPeriod = invoice.billingperiod || 'your tenancy';
   return {
@@ -745,6 +749,10 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
         assertDraftInvoice(locked);
+        const paymentReference = await allocateInvoicePaymentReference({
+          transaction: tx, sql, tenantId: req.tenantId, invoiceId: invoice.id,
+          actorUserId: req.user.id, source: 'invoice_issue'
+        });
         issued = await singleTransaction(tx,
           `UPDATE invoices
            SET status='pending', totalamount=@totalAmount,
@@ -768,7 +776,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
           eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
-          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions, invoiceRecipientEmail: invoice.rentee_email }
+          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions, paymentReference, invoiceRecipientEmail: invoice.rentee_email }
         });
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
@@ -779,7 +787,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         await tx.rollback().catch(() => {});
         throw error;
       }
-      const completeInvoice = { ...issued, rentee_email: invoice.rentee_email,
+      const completeInvoice = { ...issued, payment_reference: paymentReference, rentee_email: invoice.rentee_email,
         billingperiod: invoice.billingperiod, duedate: invoice.duedate };
       const delivery = await deliverIssuedInvoice(req, completeInvoice);
       res.json({ data: { invoice: issued, delivery }, error: null });
