@@ -47,6 +47,7 @@ export const normalizeIssuedInvoicePdf = ({ invoice, components, paymentInstruct
     } : null;
   return {
     id: ascii(invoice.id, 80),
+    paymentReference: /^\d{8}$/.test(String(invoice.payment_reference || '')) ? invoice.payment_reference : null,
     billingPeriod: ascii(invoice.billingperiod || 'Not specified', 100),
     propertyName: ascii(invoice.property_name || 'Not specified', 160),
     renterName: ascii(invoice.rentee_name || 'Not specified', 160),
@@ -220,7 +221,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     ] : [];
     const second=bank ? [
       wrap(bank.accountNumber,innerWidth,regular,10),
-      wrap(model.id,innerWidth,regular,9)
+      wrap(model.paymentReference || 'Not assigned',innerWidth,regular,9)
     ] : [];
     const firstH=bank ? 34+14*Math.max(first[0].length,first[1].length):0;
     const secondH=bank ? 34+14*Math.max(second[0].length,second[1].length):0;
