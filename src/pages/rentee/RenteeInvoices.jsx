@@ -256,7 +256,7 @@ const RenteeInvoices = () => {
                       <div><dt className="text-gray-500">Bank</dt><dd>{account.paymentInstructions.bankName}</dd></div>
                       <div><dt className="text-gray-500">Branch</dt><dd>{account.paymentInstructions.branch}</dd></div>
                       <div><dt className="text-gray-500">Account number</dt><dd>{account.paymentInstructions.accountNumber}</dd></div>
-                      <div><dt className="text-gray-500">Reference</dt><dd>{account.invoice.id}</dd></div>
+                      <div><dt className="text-gray-500">Reference</dt><dd>{account.invoice.payment_reference || 'Not assigned'}</dd></div>
                     </dl>
                   ) : <p className="text-sm text-amber-700">Bank details not recorded on this invoice. Contact the property manager before paying.</p>}
                   <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds.</p>
