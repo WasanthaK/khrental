@@ -193,7 +193,7 @@ const InvoiceDetails = () => {
           `Bank: ${paymentInstructions.bankName}`,
           `Branch: ${paymentInstructions.branch}`,
           `Account Number: ${paymentInstructions.accountNumber}`,
-          `Payment Reference: ${invoice.id}`
+          `Payment Reference: ${invoice.payment_reference || 'Not assigned'}`
         ] : ['Bank transfer details are not available on this invoice. Contact your property manager before paying.'])
       ].join('\n');
 
@@ -292,7 +292,7 @@ const InvoiceDetails = () => {
               <div><dt className="text-gray-500">Bank</dt><dd>{paymentInstructions.bankName}</dd></div>
               <div><dt className="text-gray-500">Branch</dt><dd>{paymentInstructions.branch}</dd></div>
               <div><dt className="text-gray-500">Account number</dt><dd>{paymentInstructions.accountNumber}</dd></div>
-              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.id}</dd></div>
+              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.payment_reference || 'Not assigned'}</dd></div>
             </dl>
           ) : <p className="text-sm text-amber-700">Bank transfer details are not available on this invoice. Confirm payment instructions with your property manager before paying.</p>}
           <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds. Changes to property banking details do not update issued invoice instructions.</p>
