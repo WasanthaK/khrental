@@ -599,8 +599,8 @@ test('invoice and payment reminder links bypass broken SendGrid click tracking',
   assert.equal(payload.content[0].value.includes(direct), true);
   assert.equal(payload.content[1].value.includes(direct), true);
   assert.equal(payload.personalizations[0].to[0].email, 'tenant@example.invalid');
-  assert.doesNotMatch(JSON.stringify(payload), /url6679\\.quixo\\.online/);
-  assert.match(billingRouterSource, /sendInvoiceEmail\\(makeInvoiceEmail\\(invoice\\)\\)/);
+  assert.doesNotMatch(JSON.stringify(payload), /url6679\.quixo\.online/);
+  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*makeInvoiceEmail\s*\(\s*invoice\s*\)\s*\)/);
   const adjustmentRouter = readFileSync(
     new URL('../src/api/platform/billingAdjustmentsRouter.js', import.meta.url), 'utf8');
   assert.match(adjustmentRouter, /sendBillingReminderEmail/);
