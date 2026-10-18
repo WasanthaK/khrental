@@ -5,7 +5,7 @@ import { FiDownload, FiX } from 'react-icons/fi';
 /**
  * Component for viewing PDF documents in agreements
  */
-const AgreementDocument = ({ documentUrl, onClose }) => {
+const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document' }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const documentState = useAuthenticatedAgreementDocument(documentUrl);
@@ -37,7 +37,7 @@ const AgreementDocument = ({ documentUrl, onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-5/6 flex flex-col">
         <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="text-lg font-medium">Agreement Document</h3>
+          <h3 className="text-lg font-medium">{title}</h3>
           <div className="flex items-center space-x-3">
             {!isHtmlContent && viewUrl && (
               <a 
