@@ -14,14 +14,19 @@ BEGIN TRY
   -- Existing KH Rentals organization uses Sri Lankan local calendar dates.
   -- Other organizations default to UTC until an approved tenant setting is
   -- configured; never infer timezone from a user's browser or a property.
-  UPDATE s
-  SET billing_timezone = CASE
-    WHEN t.slug = N'kh-rentals' THEN N'Asia/Colombo'
-    ELSE N'UTC'
-  END
-  FROM dbo.tenant_settings s
-  JOIN dbo.tenants t ON t.id = s.tenant_id
-  WHERE s.billing_timezone IS NULL;
+  -- CREATE/ALTER and UPDATE run as one .batch() in production. SQL Server
+  -- compiles ordinary UPDATE columns before ALTER executes, so defer the
+  -- reference to the newly created billing_timezone column until runtime.
+  EXEC sys.sp_executesql N'
+    UPDATE s
+    SET billing_timezone = CASE
+      WHEN t.slug = N''kh-rentals'' THEN N''Asia/Colombo''
+      ELSE N''UTC''
+    END
+    FROM dbo.tenant_settings s
+    JOIN dbo.tenants t ON t.id = s.tenant_id
+    WHERE s.billing_timezone IS NULL;
+  ';
 
   IF OBJECT_ID(N'dbo.invoice_payment_references', N'U') IS NULL
   BEGIN
