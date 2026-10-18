@@ -154,6 +154,25 @@ const assertSatisfied = async (inspection, message) => {
   if (!state.satisfied) throw new Error(`${message} (${state.detail})`);
 };
 
+const inspectInvoicePaymentReferences = async pool => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.invoice_payment_references', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN COL_LENGTH(N'dbo.tenant_settings', N'billing_timezone') IS NOT NULL THEN 1 ELSE 0 END AS timezone_exists,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id=OBJECT_ID(N'dbo.invoice_payment_references')
+          AND name=N'UX_invoice_payment_references_tenant_reference'
+          AND is_unique=1
+      ) THEN 1 ELSE 0 END AS unique_exists;
+  `);
+  const row = result.recordset?.[0] || {};
+  return {
+    satisfied: Boolean(row.table_exists && row.timezone_exists && row.unique_exists),
+    detail: `table=${row.table_exists?'present':'missing'}, timezone=${row.timezone_exists?'present':'missing'}, index=${row.unique_exists?'present':'missing'}`
+  };
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -207,6 +226,15 @@ const MIGRATIONS = [
     verify: async (pool) => assertSatisfied(
       inspectAuthStoreRuntimeColumns(pool),
       'Auth-store compatibility migration verification failed.'
+    )
+  },
+  {
+    id: '20261018_01_invoice_payment_references',
+    file: 'migrations/20261018_01_invoice_payment_references.sql',
+    inspect: inspectInvoicePaymentReferences,
+    verify: async pool => assertSatisfied(
+      inspectInvoicePaymentReferences(pool),
+      'Payment reference schema verification failed.'
     )
   }
 ];
