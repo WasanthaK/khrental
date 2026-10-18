@@ -9,6 +9,7 @@ import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billing
 import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
+import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
   PAYMENT_STATUS,
@@ -676,8 +677,24 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   const deliverIssuedInvoice = async (req, invoice) => {
     let outcome, provider = null;
     try {
-      const paymentInstructions = await loadIssuedPaymentInstructions(req.tenantId, invoice.id);
-      const result = await sendInvoiceEmail(makeInvoiceEmail({ ...invoice, paymentInstructions }));
+      // Re-read the authoritative invoice and only its own components.
+      // One PDF per controlled delivery attempt; failure happens before the
+      // external provider request and never sends an attachment-less invoice.
+      const [paymentInstructions, components, issuedInvoice] = await Promise.all([
+        loadIssuedPaymentInstructions(req.tenantId, invoice.id),
+        loadInvoiceComponents(req.tenantId, invoice.id),
+        loadInvoice(req.tenantId, invoice.id)
+      ]);
+      if (String(issuedInvoice.status).toLowerCase() === 'draft') {
+        throw createRequestError(409, 'Cannot attach a draft invoice.', 'INVOICE_PDF_GENERATION_FAILED');
+      }
+      const attachment = await createIssuedInvoicePdfAttachment({
+        invoice: issuedInvoice, components, paymentInstructions
+      });
+      const result = await sendInvoiceEmail({
+        ...makeInvoiceEmail({ ...issuedInvoice, paymentInstructions }),
+        attachments: [attachment]
+      });
       if (result?.accepted === false || result?.success === false) {
         throw createRequestError(502, 'Email provider did not accept this invoice.', 'EMAIL_PROVIDER_REJECTED');
       }
