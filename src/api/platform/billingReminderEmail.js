@@ -11,6 +11,24 @@ export const getBillingReminderPortalUrl = () => {
   return `${String(baseUrl).replace(/\/$/, '')}/rentee/invoices`;
 };
 
+// Invoice links must remain direct HTTPS portal links even if SendGrid's
+// account-level click-tracking link branding has an invalid TLS certificate.
+// Override both HTML and plain-text rewriting for transactional billing mail.
+// Provider acceptance/delivery evidence is tracked separately in lifecycle events.
+export const buildBillingSendGridPayload = ({ to, subject, text, html }) => ({
+  personalizations: [{ to: [{ email: to }] }],
+  from: getDefaultSender(),
+  subject,
+  content: [
+    ...(text ? [{ type: 'text/plain', value: text }] : []),
+    ...(html ? [{ type: 'text/html', value: html }] : [])
+  ],
+  tracking_settings: {
+    click_tracking: { enable: false, enable_text: false },
+    open_tracking: { enable: false }
+  }
+});
+
 export const sendBillingReminderEmail = async ({ to, subject, text, html }) => {
   const apiKey = getSendGridApiKey();
   if (!apiKey) {
@@ -26,15 +44,7 @@ export const sendBillingReminderEmail = async ({ to, subject, text, html }) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: getDefaultSender(),
-      subject,
-      content: [
-        ...(text ? [{ type: 'text/plain', value: text }] : []),
-        ...(html ? [{ type: 'text/html', value: html }] : [])
-      ]
-    })
+    body: JSON.stringify(buildBillingSendGridPayload({ to, subject, text, html }))
   });
 
   if (!response.ok) {
