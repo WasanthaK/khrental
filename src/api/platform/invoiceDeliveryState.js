@@ -12,7 +12,7 @@ export const deliveryOutcome = (eventType) => {
   return 'not_attempted';
 };
 export const classifyInvoiceEmailError = error => (
-  ['EMAIL_NOT_CONFIGURED', 'EMAIL_PROVIDER_REJECTED', 'REMINDER_DELIVERY_FAILED'].includes(error?.code)
+  ['EMAIL_NOT_CONFIGURED', 'EMAIL_PROVIDER_REJECTED', 'REMINDER_DELIVERY_FAILED', 'INVOICE_PDF_GENERATION_FAILED'].includes(error?.code)
     ? 'failed'
     : 'unknown'
 );

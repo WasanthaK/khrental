@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { PDFDocument } from 'pdf-lib';
+import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
+import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
 import {
   getAutomaticBillingPeriod,
@@ -601,7 +604,13 @@ test('invoice and payment reminder links bypass broken SendGrid click tracking',
   assert.equal(payload.content[1].value.includes(direct), true);
   assert.equal(payload.personalizations[0].to[0].email, 'tenant@example.invalid');
   assert.doesNotMatch(JSON.stringify(payload), /url6679\.quixo\.online/);
-  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*makeInvoiceEmail\s*\(\s*\{\s*\.\.\.invoice,\s*paymentInstructions\s*\}\s*\)\s*\)/);
+  // Billing now builds an itemized PDF from the issued, tenant-scoped invoice
+  // and passes it to the same SendGrid sender as an attachment.
+  assert.match(billingRouterSource, /makeInvoiceEmail\s*\(\s*\{\s*\.\.\.issuedInvoice,\s*rentee_email:\s*recipientEmail,\s*paymentInstructions\s*\}\s*\)/);
+  assert.match(billingRouterSource, /const recipientEmail = String\(invoice\.rentee_email/);
+  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*\{/);
+  assert.match(billingRouterSource, /attachments:\s*\[attachment\]/);
+  assert.match(billingRouterSource, /createIssuedInvoicePdfAttachment/);
   const adjustmentRouter = readFileSync(
     new URL('../src/api/platform/billingAdjustmentsRouter.js', import.meta.url), 'utf8');
   assert.match(adjustmentRouter, /sendBillingReminderEmail/);
@@ -679,4 +688,86 @@ test('issued invoice banking instructions escape HTML and preserve the invoice r
   assert.match(invoiceDetailsSource, /Payment instructions/);
   const renterInvoices = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
   assert.match(renterInvoices, /account.paymentInstructions/);
+});
+
+test('issued PDF renders immutable invoice components and payment account as attachment', async () => {
+  const invoice = {
+    id: '11111111-1111-4111-8111-111111111111',
+    tenant_id: '22222222-2222-4222-8222-222222222222',
+    renteeid: '33333333-3333-4333-8333-333333333333',
+    propertyid: '44444444-4444-4444-8444-444444444444',
+    status: 'pending', totalamount: 21000, billingperiod: '2026-11',
+    property_name: 'Unit 8', rentee_name: 'Tenant Test'
+  };
+  const components = [
+    { description:'Rent',amount:20000 },
+    { description:'Water',amount:1000 }
+  ];
+  const paymentInstructions = {
+    source:'property',bankName:'Test Bank',branch:'Main',accountNumber:'123456'
+  };
+  const attachment = await createIssuedInvoicePdfAttachment({invoice,components,paymentInstructions});
+  assert.match(attachment.filename,/^KH-Rentals-Invoice-.*\.pdf$/);
+  assert.equal(attachment.type,'application/pdf');
+  assert.equal(attachment.disposition,'attachment');
+  const bytes=Buffer.from(attachment.content,'base64');
+  assert.equal(bytes.subarray(0,5).toString('ascii'),'%PDF-');
+  const parsed=await PDFDocument.load(bytes);
+  assert.ok(parsed.getPageCount()>=1);
+  const payload=buildBillingSendGridPayload({
+    to:'test@example.invalid',subject:'Invoice',text:'See attached',
+    attachments:[attachment]
+  });
+  assert.equal(payload.attachments.length,1);
+  assert.equal(payload.attachments[0].content,attachment.content);
+  assert.deepEqual(payload.tracking_settings.click_tracking,{enable:false,enable_text:false});
+  assert.equal(normalizeIssuedInvoicePdf({invoice,components,paymentInstructions}).total,'LKR 21000.00');
+});
+
+test('issued invoice PDF fails closed on draft and mismatched line items', async () => {
+  const invoice={ id:'inv1',tenant_id:'t1',renteeid:'r1',propertyid:'p1',status:'pending',totalamount:21000 };
+  const rows=[{description:'Rent',amount:20000}];
+  await assert.rejects(() => createIssuedInvoicePdfAttachment({
+    invoice:{...invoice,status:'draft'},components:rows
+  }),error=>error.code==='INVOICE_PDF_GENERATION_FAILED');
+  await assert.rejects(() => createIssuedInvoicePdfAttachment({
+    invoice,components:rows
+  }),error=>error.code==='INVOICE_PDF_GENERATION_FAILED');
+  assert.match(billingRouterSource,/createIssuedInvoicePdfAttachment/);
+  assert.match(billingRouterSource,/attachments: \[attachment\]/);
+  assert.equal(classifyInvoiceEmailError({code:'INVOICE_PDF_GENERATION_FAILED'}),'failed');
+});
+
+test('authorized manual invoice resend has a separate confirmation and delivery audit', () => {
+  assert.match(billingRouterSource, /invoices\/:invoiceId\/resend/);
+  assert.match(billingRouterSource, /INVOICE_RESEND_REQUIRES_ACCEPTED_DELIVERY/);
+  assert.match(billingRouterSource, /INVOICE_RESEND_DUPLICATE/);
+  assert.match(billingRouterSource, /DELIVERY_EVENTS\.attempted/);
+  assert.match(billingRouterSource, /staff_requested_invoice_copy/);
+  assert.match(billingRouterSource, /invoiceRecipientEmail/);
+  assert.match(billingRouterSource, /recipientEmail = String\(invoice\.rentee_email/);
+  assert.match(billingRouterSource, /rentee_email: recipientEmail, paymentInstructions/);
+  assert.match(billingRouterSource, /deliverIssuedInvoice\(req/);
+  assert.doesNotMatch(billingRouterSource, /UPDATE invoices SET status='pending'[^;]*resend/);
+  const client = readFileSync(new URL('../src/services/platformClient.js',import.meta.url),'utf8');
+  assert.match(client, /resendIssuedInvoice/);
+  const ui = readFileSync(new URL('../src/pages/InvoiceDetails.jsx',import.meta.url),'utf8');
+  assert.match(ui, /Resend existing invoice/);
+  assert.match(ui, /window.confirm/);
+});
+
+test('issued PDF handles negative adjustment credit but rejects negative rent', async () => {
+  const invoice = { id:'inv-credit',tenant_id:'tenant-a',renteeid:'renter-a',
+    propertyid:'property-a',status:'pending',totalamount:900,billingperiod:'2026-11' };
+  const components = [
+    {description:'Rent',component_type:'rent',amount:1000},
+    {description:'Credit',component_type:'adjustment',amount:-100}
+  ];
+  const model = normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:null});
+  assert.equal(model.lines[1].amount,'LKR -100.00');
+  const pdf = await createIssuedInvoicePdfAttachment({invoice,components,paymentInstructions:null});
+  assert.equal(Buffer.from(pdf.content,'base64').subarray(0,5).toString('ascii'),'%PDF-');
+  await assert.rejects(() => createIssuedInvoicePdfAttachment({
+    invoice, components:[{...components[0], amount:900,component_type:'rent'},{...components[1],component_type:'rent'}]
+  }), error=>error.code==='INVOICE_PDF_GENERATION_FAILED');
 });

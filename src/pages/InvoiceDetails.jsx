@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { getInvoiceAccount, retryInvoiceDelivery } from '../services/platformClient';
+import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
@@ -131,6 +131,24 @@ const InvoiceDetails = () => {
     } finally { setWorking(false); }
   };
 
+  const handleResendIssuedInvoice = async () => {
+    if (!invoice || isDraft || working) return;
+    if (!window.confirm('Resend the existing invoice to its registered tenant email? No invoice values or payments will change.')) return;
+    const resendRequestId = crypto.randomUUID();
+    try {
+      setWorking(true); setError(null); setNotice(null);
+      const result = await resendIssuedInvoice(id, resendRequestId);
+      if (result.error) throw result.error;
+      setNotice(result.data?.delivery?.status === 'accepted'
+        ? 'Existing invoice email accepted by the provider. No invoice values changed.'
+        : 'Resend outcome is not confirmed. Check delivery status before attempting again.');
+      await loadAccount();
+    } catch (err) {
+      setError(err.message || 'Unable to resend existing invoice.');
+      await loadAccount();
+    } finally { setWorking(false); }
+  };
+
   const handleRecordReminder = async () => {
     try {
       setWorking(true);
@@ -251,6 +269,12 @@ const InvoiceDetails = () => {
                   ? 'Email outcome uncertain. Review provider logs before any manual resend.'
                   : 'Email delivery has not been attempted by this workflow.'}
           </p>
+          {emailDelivery.status === 'accepted' && (
+            <button type="button" disabled={working} onClick={handleResendIssuedInvoice}
+              className="mt-3 mr-2 rounded border border-blue-500 text-blue-700 px-3 py-2 text-sm disabled:opacity-50">
+              Resend existing invoice
+            </button>
+          )}
           {emailDelivery.canRetry && (
             <button type="button" disabled={working} onClick={handleRetryInvoiceEmail}
               className="mt-3 rounded border px-3 py-2 text-sm disabled:opacity-50">

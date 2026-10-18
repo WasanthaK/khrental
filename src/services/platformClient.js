@@ -288,6 +288,16 @@ export const issueInvoiceDraft = async (invoiceId) => {
   }
 };
 
+export const resendIssuedInvoice = async (invoiceId, resendRequestId) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/resend`, {
+      method: 'POST',
+      body: { confirmation: 'RESEND-ISSUED-INVOICE', resendRequestId }
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) { return { data: null, error }; }
+};
+
 export const retryInvoiceDelivery = async invoiceId => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/retry-delivery`, {

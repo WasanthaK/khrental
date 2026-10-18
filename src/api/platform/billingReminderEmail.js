@@ -15,7 +15,8 @@ export const getBillingReminderPortalUrl = () => {
 // account-level click-tracking link branding has an invalid TLS certificate.
 // Override both HTML and plain-text rewriting for transactional billing mail.
 // Provider acceptance/delivery evidence is tracked separately in lifecycle events.
-export const buildBillingSendGridPayload = ({ to, subject, text, html }) => ({
+export const buildBillingSendGridPayload = ({ to, subject, text, html, attachments = [] }) => ({
+
   personalizations: [{ to: [{ email: to }] }],
   from: getDefaultSender(),
   subject,
@@ -23,13 +24,19 @@ export const buildBillingSendGridPayload = ({ to, subject, text, html }) => ({
     ...(text ? [{ type: 'text/plain', value: text }] : []),
     ...(html ? [{ type: 'text/html', value: html }] : [])
   ],
+  ...(attachments.length ? { attachments: attachments.map(file => ({
+    content: file.content,
+    filename: file.filename,
+    type: file.type,
+    disposition: file.disposition
+  })) } : {}),
   tracking_settings: {
     click_tracking: { enable: false, enable_text: false },
     open_tracking: { enable: false }
   }
 });
 
-export const sendBillingReminderEmail = async ({ to, subject, text, html }) => {
+export const sendBillingReminderEmail = async ({ to, subject, text, html, attachments = [] }) => {
   const apiKey = getSendGridApiKey();
   if (!apiKey) {
     const error = new Error('Email delivery is not configured. TWILIO_SENDGRID_API_KEY is missing on the server.');
@@ -44,7 +51,7 @@ export const sendBillingReminderEmail = async ({ to, subject, text, html }) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify(buildBillingSendGridPayload({ to, subject, text, html }))
+    body: JSON.stringify(buildBillingSendGridPayload({ to, subject, text, html, attachments }))
   });
 
   if (!response.ok) {
