@@ -1889,3 +1889,24 @@ After each merged production change:
 2. Record the PR and deployed SHA in the completed-item block.
 3. Move exactly one next item into **ACTIVE** status.
 4. Add newly discovered non-critical work to the parked backlog or a future phase instead of starting it immediately.
+
+
+## SaaS backlog decision — Tenant-branded Invoice Designer (approved 2026-10-18)
+
+**Status: APPROVED FUTURE SaaS CAPABILITY / PARKED — not current release scope.** The release owner approved a configurable Invoice Designer direction while prioritizing the professional default invoice PDF in PR #332. This is a product/architecture decision only; no SaaS template editor, configuration persistence or production migration has been implemented.
+
+### Tenant-branding scope
+- Each SaaS tenant/property-management business is the issuer and owner of its invoice branding; KH Rentals is the software platform, not automatically the invoice issuer.
+- Begin with curated, printable templates (Modern, Classic, Minimal, Corporate), rather than arbitrary HTML, free-form drag-and-drop layout or untrusted user scripts.
+- Authorized business administrators can configure issuer business/legal name, logo, contact address, phone, email, website, applicable tax registration identifiers, primary colors and approved footer/terms. Property-level overrides may be supported by explicit policy.
+- Allow approved show/hide of optional fields, labels, paper format, date/currency format and approved payment instructions. Never allow template configuration to alter ledger totals, line items, tax calculations, recipient ownership, invoice authorization or issuance timestamps.
+- Keep country/jurisdiction-specific legal requirements and tax computation as a separately validated capability; no tax compliance is implied by a customizable tax-ID label.
+- Preview using synthetic invoice data; provide accessible PDF/print validation and controlled asset handling.
+
+### Immutable financial-document contract (mandatory before SaaS release)
+- On issuance, snapshot issuer identity, configured template ID/version, optional field values, bank recipient and the complete issued billing data; generate and retain the exact PDF bytes under the correct tenant/invoice ownership with a content hash and audit record.
+- Resend and historical download must use the exact retained issued PDF rather than render again from mutable templates or modified business profiles. Any subsequent change is a separately governed corrected invoice, not an unnoticed rewrite.
+- Tenant and property permissions apply both to configuration and PDF retrieval, with full audit trail for branding changes and resends, bounded file types/size for logo uploads and no publicly enumerable invoice URLs.
+- Missing banking details must remain explicitly missing; never substitute today's live property bank account into a historical invoice.
+
+**Implementation sequence:** (1) complete/accept PR #332 default PDF polish; (2) approved issuer identity and branding configuration plus tenant-owned logo; (3) curated templates and preview; (4) immutable PDF archive + version/hash/resend consistency; (5) optional broader invoice design controls as demand demonstrates. Do not treat this parked SaaS capability as a Phase 4 acceptance waiver or as authorization to change production financial records.
