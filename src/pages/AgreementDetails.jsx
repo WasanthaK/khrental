@@ -11,6 +11,10 @@ import {
 } from '../services/agreementService';
 import { deleteCancelledAgreement } from '../services/cancelledAgreementDeleteService';
 import { useAuthenticatedAgreementDocument } from '../hooks/useAuthenticatedAgreementDocument';
+import { useAuth } from '../hooks/useAuth';
+import { isAdministrator } from '../utils/accessModel';
+import { getEviaAuditTrailUrl } from '../utils/eviaAuditTrailLink';
+import AgreementDocument from '../components/agreements/AgreementDocument';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -38,11 +42,16 @@ const AgreementDetails = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
   const [signatories, setSignatories] = useState([]);
+  const [showAuditViewer, setShowAuditViewer] = useState(false);
+  const { user, membership, activeTenantId } = useAuth();
   const signedComplete = ['signed', 'completed', 'active'].includes(String(agreement?.status || '').toLowerCase())
     || ['signed', 'completed', 'signing_complete'].includes(String(agreement?.signature_status || '').toLowerCase());
   const retainedPdfUrl = [agreement?.signed_document_url, agreement?.signeddocumenturl, agreement?.signature_pdf_url]
     .find(url => typeof url === 'string' && url.includes('/storage/documents/tenants/') && url.includes('/signed/')) || null;
   const displayDocumentUrl = signedComplete ? retainedPdfUrl : (agreement?.pdfurl || agreement?.documenturl || null);
+  const auditTrailUrl = signedComplete && isAdministrator({ user, membership }) && agreement?.eviasignreference
+    ? getEviaAuditTrailUrl({ signedDocumentUrl: retainedPdfUrl, agreementId: agreement.id, tenantId: activeTenantId, origin: window.location.origin })
+    : null;
   const documentState = useAuthenticatedAgreementDocument(displayDocumentUrl);
 
   const fetchAgreementData = useCallback(async () => {
@@ -418,6 +427,9 @@ const AgreementDetails = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-medium">Agreement Document</h2>
+              {auditTrailUrl && (
+                <button type="button" onClick={() => setShowAuditViewer(true)} className="px-3 py-1 rounded border border-indigo-400 text-indigo-700 text-sm hover:bg-indigo-50">View Signing Audit</button>
+              )}
               {documentState.status === 'ready' && documentState.url && (
                 <div className="flex space-x-2">
                   <a
@@ -493,6 +505,9 @@ const AgreementDetails = () => {
         </div>
       )}
       
+      {showAuditViewer && auditTrailUrl && (
+        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} />
+      )}
       {/* Sign Confirmation Modal */}
       {showSignConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
