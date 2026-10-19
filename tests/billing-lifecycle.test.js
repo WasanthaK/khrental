@@ -676,12 +676,18 @@ test('invoice banking snapshot uses full unit override, then property and never 
 test('issued invoice banking instructions escape HTML and preserve the invoice reference', () => {
   const payment = buildInvoiceBankEmailSections({
     bankName: 'Bank & Co', branch: '<Branch>', accountNumber: '123456', source: 'property'
-  }, 'invoice-1');
+  }, '26101901');
   assert.match(payment.text, /Account number: 123456/);
-  assert.match(payment.text, /Payment reference: invoice-1/);
+  assert.match(payment.text, /Payment reference: 26101901/);
   assert.match(payment.html, /Bank &amp; Co/);
   assert.match(payment.html, /&lt;Branch&gt;/);
   assert.doesNotMatch(payment.html, /<Branch>/);
+  const historical = buildInvoiceBankEmailSections({
+    bankName: 'Approved Bank', branch: 'Main', accountNumber: '123456', source: 'property'
+  }, '11111111-1111-4111-8111-111111111111');
+  assert.match(historical.text, /Payment reference: Not assigned/);
+  assert.match(historical.html, /Payment reference: Not assigned/);
+  assert.doesNotMatch(historical.text, /11111111-1111-4111-8111-111111111111/);
   const missing = buildInvoiceBankEmailSections(null, 'invoice-1');
   assert.match(missing.text, /Confirm payment instructions/);
   assert.doesNotMatch(missing.text, /123456/);
@@ -798,6 +804,22 @@ test('redesigned issued PDF includes bank details without affecting invoice tota
   const pdf=await PDFDocument.load(Buffer.from(attachment.content,'base64'));
   assert.equal(pdf.getPageCount(),1,'short ordinary invoice should fit a single A4 sheet');
   assert.equal(normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:bank}).total,'LKR 21000.00');
+});
+
+test('issued PDF header shows the assigned bank reference, never the internal UUID', () => {
+  const invoice = {
+    id: '11111111-1111-4111-8111-111111111111', tenant_id: 't',
+    renteeid: 'r', propertyid: 'p', status: 'pending',
+    totalamount: 100, payment_reference: '26101901'
+  };
+  const components = [{ component_type: 'rent', amount: 100, description: 'Rent' }];
+  assert.equal(normalizeIssuedInvoicePdf({ invoice, components }).paymentReference, '26101901');
+  assert.equal(normalizeIssuedInvoicePdf({
+    invoice: { ...invoice, payment_reference: null }, components
+  }).paymentReference, null);
+  const src = readFileSync(new URL('../src/api/platform/issuedInvoicePdf.js', import.meta.url), 'utf8');
+  assert.match(src, /drawLines\(wrap\(model\.paymentReference \|\| 'Not assigned'/);
+  assert.doesNotMatch(src, /drawLines\(wrap\(model\.id,290,bold,10\)/);
 });
 
 test('numeric payment reference uses the tenant local day and accepts exactly 8 digits', () => {

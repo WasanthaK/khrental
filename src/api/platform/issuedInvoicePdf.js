@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { displayInvoicePaymentReference } from './invoicePaymentReference.js';
 
 // Render only the server-side, tenant-authorized issued invoice. The PDF is
 // attached to the controlled invoice email, never made into a public URL.
@@ -47,7 +48,7 @@ export const normalizeIssuedInvoicePdf = ({ invoice, components, paymentInstruct
     } : null;
   return {
     id: ascii(invoice.id, 80),
-    paymentReference: /^\d{8}$/.test(String(invoice.payment_reference || '')) ? invoice.payment_reference : null,
+    paymentReference: displayInvoicePaymentReference(invoice.payment_reference),
     billingPeriod: ascii(invoice.billingperiod || 'Not specified', 100),
     propertyName: ascii(invoice.property_name || 'Not specified', 160),
     renterName: ascii(invoice.rentee_name || 'Not specified', 160),
@@ -152,7 +153,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
 
     beginPage();
     page.drawText('INVOICE REFERENCE', {x:L,y,font:bold,size:8,color:grey});
-    drawLines(wrap(model.id,290,bold,10),L,y-20,{font:bold,size:10});
+    drawLines(wrap(model.paymentReference || 'Not assigned',290,bold,10),L,y-20,{font:bold,size:10});
     page.drawText('BILLING PERIOD', {x:L,y:y-51,font:bold,size:8,color:grey});
     page.drawText(model.billingPeriod,{x:L,y:y-69,font:bold,size:11,color:navy});
     page.drawText('ISSUED ON', {x:L+143,y:y-51,font:bold,size:8,color:grey});
