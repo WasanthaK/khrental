@@ -419,6 +419,35 @@ export const generateTenancyMonthlyInvoices = async (options = {}) => {
   }
 };
 
+
+const invoiceMasterRequest = (path = '', options = {}) => (
+  scopedRequest('/api/invoice-master', path, options)
+);
+export const getInvoiceIssuerProfile = async () => {
+  try { const result = await invoiceMasterRequest('/issuer'); return {data:result.data,error:null}; }
+  catch(error){ return {data:null,error}; }
+};
+export const saveInvoiceIssuerProfile = async profile => {
+  try { const result=await invoiceMasterRequest('/issuer',{method:'PUT',body:profile});return {data:result.data,error:null}; }
+  catch(error){return {data:null,error};}
+};
+export const getPropertyInvoiceBilling = async propertyId => {
+  try { const result=await invoiceMasterRequest(`/properties/${encodeURIComponent(propertyId)}/billing`);return {data:result.data,error:null}; }
+  catch(error){return {data:null,error};}
+};
+export const savePropertyInvoiceBilling = async(propertyId,data) => {
+  try { const result=await invoiceMasterRequest(`/properties/${encodeURIComponent(propertyId)}/billing`,{method:'PUT',body:data});return {data:result.data,error:null}; }
+  catch(error){return {data:null,error};}
+};
+export const getUnitInvoiceBilling = async(propertyId,unitId) => {
+  try { const result=await invoiceMasterRequest(`/properties/${encodeURIComponent(propertyId)}/units/${encodeURIComponent(unitId)}/billing`);return {data:result.data,error:null}; }
+  catch(error){return {data:null,error};}
+};
+export const saveUnitInvoiceBilling = async(propertyId,unitId,data) => {
+  try { const result=await invoiceMasterRequest(`/properties/${encodeURIComponent(propertyId)}/units/${encodeURIComponent(unitId)}/billing`,{method:'PUT',body:data});return {data:result.data,error:null}; }
+  catch(error){return {data:null,error};}
+};
+
 export {
   platformClient,
   platform,
