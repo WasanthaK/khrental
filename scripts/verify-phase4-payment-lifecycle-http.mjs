@@ -426,26 +426,28 @@ export async function verifyPhase4PaymentLifecycleHttp({
       await page.goto(origin + '/rentee/invoices', {
         waitUntil: 'domcontentloaded', timeout: 45000
       });
-      const shortId = invoiceId.slice(0, 8);
-      await page.waitForFunction(fragment =>
-        document.body.innerText.toLowerCase().includes('invoice #' + fragment),
-        { timeout: 30000 }, shortId
+      // Select by the immutable invoice ID in DOM metadata, not by an
+      // obsolete UUID-derived payment reference shown in the heading.
+      await page.waitForFunction(expectedId =>
+        [...document.querySelectorAll('[data-invoice-id]')].some(card =>
+          card.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
+        ),
+        { timeout: 30000 }, invoiceId
       );
-      const clicked = await page.evaluate(fragment => {
-        const card = [...document.querySelectorAll('div.relative')].find(element =>
-          element.innerText.toLowerCase().includes('invoice #' + fragment) &&
-          [...element.querySelectorAll('button')].some(button =>
-            button.textContent.trim() === 'Account & Receipts'
-          )
+      const selected = await page.evaluate(expectedId => {
+        const card = [...document.querySelectorAll('[data-invoice-id]')].find(element =>
+          element.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
         );
+        const heading = card?.querySelector('h3')?.textContent.trim() || null;
         const button = [...(card?.querySelectorAll('button') || [])].find(element =>
           element.textContent.trim() === 'Account & Receipts'
         );
-        if (!button) return false;
-        button.click();
-        return true;
-      }, shortId);
-      assert.equal(clicked, true, 'must click account for this paid invoice, not a different card');
+        if (button) button.click();
+        return { clicked: Boolean(button), heading };
+      }, invoiceId);
+      assert.equal(selected.heading, 'Invoice — reference not assigned',
+        'legacy issued invoice must not display an invented payment reference');
+      assert.equal(selected.clicked, true, 'must click account for this paid invoice, not a different card');
       await page.waitForFunction(number =>
         document.body.innerText.includes('Receipt ' + number),
         { timeout: 30000 }, receiptNumbers[0]
