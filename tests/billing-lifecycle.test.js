@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { invoiceReferenceDay, displayInvoicePaymentReference, resolveBillingTimezone } from '../src/api/platform/invoicePaymentReference.js';
+import { invoiceHeading } from '../src/utils/invoiceReference.js';
 import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
@@ -826,4 +827,31 @@ test('reference allocation remains separate from invoice UUID with SQL uniquenes
   assert.match(billingRouterSource,/allocateInvoicePaymentReference/);
   assert.match(billingRouterSource,/refs\.payment_reference/);
   assert.match(billingRouterSource,/buildInvoiceBankEmailSections\(invoice\.paymentInstructions, invoice\.payment_reference\)/);
+});
+
+
+test('all invoice UI headings use stored reference and never a UUID fragment', () => {
+  assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111', payment_reference: '26101901' }), 'Invoice #26101901');
+  assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111' }), 'Invoice — reference not assigned');
+  assert.equal(invoiceHeading({ payment_reference: '01234567-1111-4111-8111-111111111111' }), 'Invoice — reference not assigned');
+  const card = invoiceCardSource;
+  const renteeUI = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
+  const renteeProfile = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
+  for (const surface of [card, renteeUI, invoiceDetailsSource]) {
+    assert.match(surface, /invoiceHeading/);
+    assert.doesNotMatch(surface, /id\.substring\(0, 8\)/);
+  }
+  assert.match(renteeProfile, /payment_reference: invoice\.payment_reference/);
+});
+
+test('all invoice list APIs read tenant-scoped stored bank reference without backfilling legacy invoices', () => {
+  const repositories = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+  const list = repositories.slice(repositories.indexOf('export const listInvoices ='), repositories.indexOf('export const createInvoice ='));
+  assert.match(list, /refs\.invoice_id = invoices\.id AND refs\.tenant_id = invoices\.tenant_id/g);
+  assert.match(list, /AS payment_reference/g);
+  const renterList = billingRouterSource.slice(billingRouterSource.indexOf("router.get('/rentee/invoices'"), billingRouterSource.indexOf("router.get('/invoices/:invoiceId/account'"));
+  assert.match(renterList, /refs\.invoice_id = i\.id AND refs\.tenant_id = i\.tenant_id/);
+  assert.match(renterList, /i\.tenant_id = @tenantId AND i\.renteeid = @renteeId/);
+  const portal = readFileSync(new URL('../src/pages/rentee/RenteePortal.jsx', import.meta.url), 'utf8');
+  assert.match(portal, /await listRenteeInvoices\(\)/);
 });
