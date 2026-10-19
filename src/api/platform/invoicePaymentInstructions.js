@@ -1,3 +1,5 @@
+import { displayInvoicePaymentReference } from './invoicePaymentReference.js';
+
 // Immutable payment-destination metadata is captured when an invoice is issued.
 // Never show live property edits as if they were the original invoice instructions.
 const clean = value => typeof value === 'string'
@@ -44,13 +46,13 @@ const escapeHtml = value => clean(value).replace(/&/g, '&amp;')
   .replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-export const buildInvoiceBankEmailSections = (instructions, invoiceId) => {
+export const buildInvoiceBankEmailSections = (instructions, paymentReference) => {
   const bank = readIssuedInvoiceBankDetails({paymentInstructions:instructions});
   if (!bank) return {
     text: 'Bank transfer details are not on this invoice. Confirm payment instructions with your property manager before sending funds.',
     html: '<p>Bank transfer details are not on this invoice. Confirm payment instructions with your property manager before sending funds.</p>'
   };
-  const ref = clean(invoiceId);
+  const ref = displayInvoicePaymentReference(paymentReference) || 'Not assigned';
   return {
     text: [
       'BANK TRANSFER DETAILS',

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
+import { invoiceReferenceDay, displayInvoicePaymentReference, resolveBillingTimezone } from '../src/api/platform/invoicePaymentReference.js';
+import { invoiceHeading } from '../src/utils/invoiceReference.js';
 import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
@@ -674,12 +676,18 @@ test('invoice banking snapshot uses full unit override, then property and never 
 test('issued invoice banking instructions escape HTML and preserve the invoice reference', () => {
   const payment = buildInvoiceBankEmailSections({
     bankName: 'Bank & Co', branch: '<Branch>', accountNumber: '123456', source: 'property'
-  }, 'invoice-1');
+  }, '26101901');
   assert.match(payment.text, /Account number: 123456/);
-  assert.match(payment.text, /Payment reference: invoice-1/);
+  assert.match(payment.text, /Payment reference: 26101901/);
   assert.match(payment.html, /Bank &amp; Co/);
   assert.match(payment.html, /&lt;Branch&gt;/);
   assert.doesNotMatch(payment.html, /<Branch>/);
+  const historical = buildInvoiceBankEmailSections({
+    bankName: 'Approved Bank', branch: 'Main', accountNumber: '123456', source: 'property'
+  }, '11111111-1111-4111-8111-111111111111');
+  assert.match(historical.text, /Payment reference: Not assigned/);
+  assert.match(historical.html, /Payment reference: Not assigned/);
+  assert.doesNotMatch(historical.text, /11111111-1111-4111-8111-111111111111/);
   const missing = buildInvoiceBankEmailSections(null, 'invoice-1');
   assert.match(missing.text, /Confirm payment instructions/);
   assert.doesNotMatch(missing.text, /123456/);
@@ -796,4 +804,89 @@ test('redesigned issued PDF includes bank details without affecting invoice tota
   const pdf=await PDFDocument.load(Buffer.from(attachment.content,'base64'));
   assert.equal(pdf.getPageCount(),1,'short ordinary invoice should fit a single A4 sheet');
   assert.equal(normalizeIssuedInvoicePdf({invoice,components,paymentInstructions:bank}).total,'LKR 21000.00');
+});
+
+test('issued PDF header shows the assigned bank reference, never the internal UUID', () => {
+  const invoice = {
+    id: '11111111-1111-4111-8111-111111111111', tenant_id: 't',
+    renteeid: 'r', propertyid: 'p', status: 'pending',
+    totalamount: 100, payment_reference: '26101901'
+  };
+  const components = [{ component_type: 'rent', amount: 100, description: 'Rent' }];
+  assert.equal(normalizeIssuedInvoicePdf({ invoice, components }).paymentReference, '26101901');
+  assert.equal(normalizeIssuedInvoicePdf({
+    invoice: { ...invoice, payment_reference: null }, components
+  }).paymentReference, null);
+  const src = readFileSync(new URL('../src/api/platform/issuedInvoicePdf.js', import.meta.url), 'utf8');
+  assert.match(src, /drawLines\(wrap\(model\.paymentReference \|\| 'Not assigned'/);
+  assert.doesNotMatch(src, /drawLines\(wrap\(model\.id,290,bold,10\)/);
+});
+
+test('numeric payment reference uses the tenant local day and accepts exactly 8 digits', () => {
+  const instant = new Date('2026-10-18T20:00:00Z');
+  assert.equal(invoiceReferenceDay(instant,'Asia/Colombo'),'261019');
+  assert.equal(invoiceReferenceDay(instant,'UTC'),'261018');
+  assert.equal(resolveBillingTimezone(null),'UTC');
+  assert.equal(resolveBillingTimezone(''),'UTC');
+  assert.equal(resolveBillingTimezone('   '),'UTC');
+  assert.equal(resolveBillingTimezone('Asia/Colombo'),'Asia/Colombo');
+  assert.equal(displayInvoicePaymentReference('26101801'),'26101801');
+  assert.equal(displayInvoicePaymentReference('KR26101801'),null);
+  assert.equal(displayInvoicePaymentReference('261018001'),null);
+  assert.throws(() => invoiceReferenceDay(instant,'Invalid/Zone'),error => error.code==='BILLING_TIMEZONE_INVALID');
+});
+
+test('reference allocation remains separate from invoice UUID with SQL uniqueness and manual issue gate', () => {
+  const src = readFileSync(new URL('../src/api/platform/invoicePaymentReference.js',import.meta.url),'utf8');
+  const migration = readFileSync(new URL('../migrations/20261018_01_invoice_payment_references.sql',import.meta.url),'utf8');
+  const runner = readFileSync(new URL('../scripts/run-production-migrations.mjs',import.meta.url),'utf8');
+  assert.match(src,/sp_getapplock/);
+  assert.match(src,/INVOICE_REFERENCE_DAILY_LIMIT/);
+  assert.match(src,/invoice-reference:/);
+  assert.match(migration,/UNIQUE INDEX UX_invoice_payment_references_tenant_reference/);
+  assert.match(migration,/payment_reference CHAR\(8\)/);
+  assert.match(runner,/inspectInvoicePaymentReferences/);
+  assert.match(billingRouterSource,/allocateInvoicePaymentReference/);
+  assert.match(billingRouterSource,/refs\.payment_reference/);
+  assert.match(billingRouterSource,/buildInvoiceBankEmailSections\(invoice\.paymentInstructions, invoice\.payment_reference\)/);
+});
+
+
+test('all invoice UI headings use stored reference and never a UUID fragment', () => {
+  assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111', payment_reference: '26101901' }), 'Invoice #26101901');
+  assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111' }), 'Invoice — reference not assigned');
+  assert.equal(invoiceHeading({ payment_reference: '01234567-1111-4111-8111-111111111111' }), 'Invoice — reference not assigned');
+  const card = invoiceCardSource;
+  const renteeUI = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
+  const renteeProfile = readFileSync(new URL('../src/pages/RenteeDetails.jsx', import.meta.url), 'utf8');
+  for (const surface of [card, renteeUI, invoiceDetailsSource]) {
+    assert.match(surface, /invoiceHeading/);
+    assert.doesNotMatch(surface, /id\.substring\(0, 8\)/);
+  }
+  assert.match(renteeProfile, /payment_reference: invoice\.payment_reference/);
+});
+
+test('all invoice list APIs read tenant-scoped stored bank reference without backfilling legacy invoices', () => {
+  const repositories = readFileSync(new URL('../src/api/mssql/repositories.js', import.meta.url), 'utf8');
+  const list = repositories.slice(repositories.indexOf('export const listInvoices ='), repositories.indexOf('export const createInvoice ='));
+  assert.match(list, /refs\.invoice_id = invoices\.id AND refs\.tenant_id = invoices\.tenant_id/g);
+  assert.match(list, /AS payment_reference/g);
+  const renterList = billingRouterSource.slice(billingRouterSource.indexOf("router.get('/rentee/invoices'"), billingRouterSource.indexOf("router.get('/invoices/:invoiceId/account'"));
+  assert.match(renterList, /refs\.invoice_id = i\.id AND refs\.tenant_id = i\.tenant_id/);
+  assert.match(renterList, /i\.tenant_id = @tenantId AND i\.renteeid = @renteeId/);
+  const portal = readFileSync(new URL('../src/pages/rentee/RenteePortal.jsx', import.meta.url), 'utf8');
+  assert.match(portal, /await listRenteeInvoices\(\)/);
+});
+
+
+test('two-tenant browser acceptance selects invoices by internal ID, not an obsolete UUID heading', () => {
+  const browserScript = readFileSync(
+    new URL('../scripts/verify-phase4-payment-lifecycle-http.mjs', import.meta.url), 'utf8'
+  );
+  const renterUI = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
+  assert.match(renterUI, /data-invoice-id=\{invoice\.id\}/);
+  assert.match(browserScript, /querySelectorAll\('\[data-invoice-id\]'\)/);
+  assert.match(browserScript, /Invoice — reference not assigned/);
+  assert.doesNotMatch(browserScript, /invoiceId\.slice\(0, 8\)/);
+  assert.doesNotMatch(browserScript, /innerText\.toLowerCase\(\)\.includes\('invoice #' \+ fragment\)/);
 });

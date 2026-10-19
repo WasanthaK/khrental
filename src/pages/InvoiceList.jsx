@@ -86,6 +86,7 @@ const InvoiceList = () => {
 
     const matchesSearch =
       String(invoice.id || '').toLowerCase().includes(search) ||
+      String(invoice.payment_reference || '').includes(search) ||
       String(invoice.billingperiod || '').toLowerCase().includes(search) ||
       Boolean(property?.name?.toLowerCase().includes(search)) ||
       Boolean(rentee?.name?.toLowerCase().includes(search));
@@ -175,7 +176,7 @@ const InvoiceList = () => {
             <input
               type="text"
               id="search"
-              placeholder="Search by ID, property, or tenant"
+              placeholder="Search by reference, ID, property, or tenant"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}

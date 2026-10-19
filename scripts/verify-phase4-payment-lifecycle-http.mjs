@@ -143,6 +143,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const issuedA = assertResponse(await account(draftA, tokenA, a.tenantId), 200, 'issued renter account');
   assert.equal(issuedA.invoice.status, 'pending');
   assert.equal(issuedA.delivery.status, 'accepted');
+  assert.match(issuedA.invoice.payment_reference,/^\d{8}$/,
+    'newly created tenant without timezone setting must receive an 8-digit invoice reference');
 
   const draftB = await createDraft(b, '2026-12', 660);
   invoiceMailbox.rejectNext = true;
@@ -158,6 +160,26 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assertResponse(await retry(draftB, adminB, b.tenantId), 409, 'no duplicate accepted email');
   const issuedB = assertResponse(await account(draftB, tokenB, b.tenantId), 200, 'issued B account');
   assert.equal(issuedB.delivery.status, 'accepted');
+  assert.match(issuedB.invoice.payment_reference,/^\d{8}$/,
+    'second tenant must also receive a scoped reference');
+
+  // Both listing APIs must project the persisted reference, scoped to the
+  // authenticated tenant. Legacy issued fixtures must stay unassigned.
+  const renterListA = assertResponse(await call('/api/billing/rentee/invoices',
+    { token: tokenA, tenantId: a.tenantId }), 200, 'tenant A renter list');
+  const issuedInRenterList = renterListA.find(item => guid(item.id) === draftA);
+  const legacyInRenterList = renterListA.find(item => guid(item.id) === invoiceA);
+  assert.equal(issuedInRenterList?.payment_reference, issuedA.invoice.payment_reference);
+  assert.equal(legacyInRenterList?.payment_reference, null);
+  assert.ok(!renterListA.some(item => guid(item.id) === draftB), 'cross-tenant invoice hidden');
+
+  const staffListA = assertResponse(await call('/api/mssql/invoices',
+    { token: adminA, tenantId: a.tenantId }), 200, 'tenant A staff list');
+  assert.equal(staffListA.find(item => guid(item.id) === draftA)?.payment_reference,
+    issuedA.invoice.payment_reference);
+  assert.equal(staffListA.find(item => guid(item.id) === invoiceA)?.payment_reference, null);
+  assert.ok(!staffListA.some(item => guid(item.id) === draftB), 'cross-tenant staff invoice hidden');
+
 
   const ambiguousId = await createDraft(a, '2027-01', 700);
   invoiceMailbox.unknownNext = true;
@@ -404,26 +426,28 @@ export async function verifyPhase4PaymentLifecycleHttp({
       await page.goto(origin + '/rentee/invoices', {
         waitUntil: 'domcontentloaded', timeout: 45000
       });
-      const shortId = invoiceId.slice(0, 8);
-      await page.waitForFunction(fragment =>
-        document.body.innerText.toLowerCase().includes('invoice #' + fragment),
-        { timeout: 30000 }, shortId
+      // Select by the immutable invoice ID in DOM metadata, not by an
+      // obsolete UUID-derived payment reference shown in the heading.
+      await page.waitForFunction(expectedId =>
+        [...document.querySelectorAll('[data-invoice-id]')].some(card =>
+          card.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
+        ),
+        { timeout: 30000 }, invoiceId
       );
-      const clicked = await page.evaluate(fragment => {
-        const card = [...document.querySelectorAll('div.relative')].find(element =>
-          element.innerText.toLowerCase().includes('invoice #' + fragment) &&
-          [...element.querySelectorAll('button')].some(button =>
-            button.textContent.trim() === 'Account & Receipts'
-          )
+      const selected = await page.evaluate(expectedId => {
+        const card = [...document.querySelectorAll('[data-invoice-id]')].find(element =>
+          element.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
         );
+        const heading = card?.querySelector('h3')?.textContent.trim() || null;
         const button = [...(card?.querySelectorAll('button') || [])].find(element =>
           element.textContent.trim() === 'Account & Receipts'
         );
-        if (!button) return false;
-        button.click();
-        return true;
-      }, shortId);
-      assert.equal(clicked, true, 'must click account for this paid invoice, not a different card');
+        if (button) button.click();
+        return { clicked: Boolean(button), heading };
+      }, invoiceId);
+      assert.equal(selected.heading, 'Invoice — reference not assigned',
+        'legacy issued invoice must not display an invented payment reference');
+      assert.equal(selected.clicked, true, 'must click account for this paid invoice, not a different card');
       await page.waitForFunction(number =>
         document.body.innerText.includes('Receipt ' + number),
         { timeout: 30000 }, receiptNumbers[0]

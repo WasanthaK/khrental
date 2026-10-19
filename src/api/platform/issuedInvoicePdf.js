@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { displayInvoicePaymentReference } from './invoicePaymentReference.js';
 
 // Render only the server-side, tenant-authorized issued invoice. The PDF is
 // attached to the controlled invoice email, never made into a public URL.
@@ -47,6 +48,7 @@ export const normalizeIssuedInvoicePdf = ({ invoice, components, paymentInstruct
     } : null;
   return {
     id: ascii(invoice.id, 80),
+    paymentReference: displayInvoicePaymentReference(invoice.payment_reference),
     billingPeriod: ascii(invoice.billingperiod || 'Not specified', 100),
     propertyName: ascii(invoice.property_name || 'Not specified', 160),
     renterName: ascii(invoice.rentee_name || 'Not specified', 160),
@@ -151,7 +153,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
 
     beginPage();
     page.drawText('INVOICE REFERENCE', {x:L,y,font:bold,size:8,color:grey});
-    drawLines(wrap(model.id,290,bold,10),L,y-20,{font:bold,size:10});
+    drawLines(wrap(model.paymentReference || 'Not assigned',290,bold,10),L,y-20,{font:bold,size:10});
     page.drawText('BILLING PERIOD', {x:L,y:y-51,font:bold,size:8,color:grey});
     page.drawText(model.billingPeriod,{x:L,y:y-69,font:bold,size:11,color:navy});
     page.drawText('ISSUED ON', {x:L+143,y:y-51,font:bold,size:8,color:grey});
@@ -220,7 +222,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     ] : [];
     const second=bank ? [
       wrap(bank.accountNumber,innerWidth,regular,10),
-      wrap(model.id,innerWidth,regular,9)
+      wrap(model.paymentReference || 'Not assigned',innerWidth,regular,9)
     ] : [];
     const firstH=bank ? 34+14*Math.max(first[0].length,first[1].length):0;
     const secondH=bank ? 34+14*Math.max(second[0].length,second[1].length):0;

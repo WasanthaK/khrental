@@ -4,6 +4,7 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 import { INVOICE_STATUS } from '../../utils/constants';
 import { getInvoiceAccount, listRenteeInvoices } from '../../services/platformClient';
 import InvoiceCard from '../../components/invoices/InvoiceCard';
+import { invoiceHeading } from '../../utils/invoiceReference';
 import PaymentProofUpload from '../../components/invoices/PaymentProofUpload';
 
 const RenteeInvoices = () => {
@@ -165,7 +166,7 @@ const RenteeInvoices = () => {
             const property = properties.find((entry) => entry.id === invoice.propertyid);
             const canSubmit = [INVOICE_STATUS.PENDING, INVOICE_STATUS.OVERDUE, INVOICE_STATUS.REJECTED].includes(invoice.status);
             return (
-              <div key={invoice.id} className="relative">
+              <div key={invoice.id} data-invoice-id={invoice.id} className="relative">
                 <InvoiceCard
                   invoice={invoice}
                   property={property}
@@ -203,7 +204,7 @@ const RenteeInvoices = () => {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-semibold mb-2">Submit Payment Proof</h2>
             <p className="mb-4 text-sm text-gray-600">
-              Invoice #{selectedInvoice.id.substring(0, 8)} · {formatCurrency(selectedInvoice.totalamount || 0)} total
+              {invoiceHeading(account?.invoice || selectedInvoice)} · {formatCurrency(selectedInvoice.totalamount || 0)} total
             </p>
             <PaymentProofUpload
               invoiceId={selectedInvoice.id}
@@ -234,7 +235,7 @@ const RenteeInvoices = () => {
             <div className="flex justify-between items-start gap-4 mb-4">
               <div>
                 <h2 className="text-xl font-semibold">Invoice Account</h2>
-                <p className="text-sm text-gray-600">Invoice #{selectedInvoice.id.substring(0, 8)}</p>
+                <p className="text-sm text-gray-600">{invoiceHeading(account?.invoice || selectedInvoice)}</p>
               </div>
               <button type="button" onClick={() => { setAccount(null); setSelectedInvoice(null); }} className="text-gray-500 hover:text-gray-800">Close</button>
             </div>
@@ -256,7 +257,7 @@ const RenteeInvoices = () => {
                       <div><dt className="text-gray-500">Bank</dt><dd>{account.paymentInstructions.bankName}</dd></div>
                       <div><dt className="text-gray-500">Branch</dt><dd>{account.paymentInstructions.branch}</dd></div>
                       <div><dt className="text-gray-500">Account number</dt><dd>{account.paymentInstructions.accountNumber}</dd></div>
-                      <div><dt className="text-gray-500">Reference</dt><dd>{account.invoice.id}</dd></div>
+                      <div><dt className="text-gray-500">Reference</dt><dd>{account.invoice.payment_reference || 'Not assigned'}</dd></div>
                     </dl>
                   ) : <p className="text-sm text-amber-700">Bank details not recorded on this invoice. Contact the property manager before paying.</p>}
                   <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds.</p>

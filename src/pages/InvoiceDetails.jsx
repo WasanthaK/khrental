@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
+import { invoiceHeading } from '../utils/invoiceReference';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
 import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
@@ -174,7 +175,7 @@ const InvoiceDetails = () => {
         ? components.map((component) => `${component.description || component.component_type}: ${formatCurrency(component.amount)}`)
         : Object.entries(invoice.components || {}).map(([key, value]) => `${key}: ${formatCurrency(value)}`);
       const invoiceContent = [
-        `INVOICE #${invoice.id}`,
+        invoiceHeading(invoice),
         `Billing Period: ${invoice.billingperiod || 'N/A'}`,
         `Issued: ${formatDate(invoice.issued_at || invoice.createdat)}`,
         `Due Date: ${formatDate(invoice.duedate)}`,
@@ -193,7 +194,7 @@ const InvoiceDetails = () => {
           `Bank: ${paymentInstructions.bankName}`,
           `Branch: ${paymentInstructions.branch}`,
           `Account Number: ${paymentInstructions.accountNumber}`,
-          `Payment Reference: ${invoice.id}`
+          `Payment Reference: ${invoice.payment_reference || 'Not assigned'}`
         ] : ['Bank transfer details are not available on this invoice. Contact your property manager before paying.'])
       ].join('\n');
 
@@ -242,7 +243,7 @@ const InvoiceDetails = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <p className="text-sm text-gray-500">Billing account</p>
-          <h1 className="text-2xl font-semibold">Invoice #{invoice.id.substring(0, 8)}</h1>
+          <h1 className="text-2xl font-semibold">{invoiceHeading(invoice)}</h1>
         </div>
         <button onClick={() => navigate('/dashboard/invoices')} className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm">Back to Invoices</button>
       </div>
@@ -292,7 +293,7 @@ const InvoiceDetails = () => {
               <div><dt className="text-gray-500">Bank</dt><dd>{paymentInstructions.bankName}</dd></div>
               <div><dt className="text-gray-500">Branch</dt><dd>{paymentInstructions.branch}</dd></div>
               <div><dt className="text-gray-500">Account number</dt><dd>{paymentInstructions.accountNumber}</dd></div>
-              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.id}</dd></div>
+              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.payment_reference || 'Not assigned'}</dd></div>
             </dl>
           ) : <p className="text-sm text-amber-700">Bank transfer details are not available on this invoice. Confirm payment instructions with your property manager before paying.</p>}
           <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds. Changes to property banking details do not update issued invoice instructions.</p>
