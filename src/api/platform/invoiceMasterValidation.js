@@ -42,7 +42,7 @@ export const normalizeIssuerProfile = input => {
   return result;
 };
 const partyKeys=['managementMode','externalManagerName','externalManagerAddress',
-  'externalManagerEmail','externalManagerPhone','propertyOwnerName','propertyOwnerAddress',
+  'externalManagerEmail','externalManagerPhone','propertyOwnerName','propertyOwnerAddress','propertyOwnerEmail','propertyOwnerPhone',
   'issuerRole','issuerAuthorityConfirmed'];
 export const normalizePropertyParties = input => {
   assertKeys(input, partyKeys);
@@ -58,6 +58,8 @@ export const normalizePropertyParties = input => {
     externalManagerPhone: phone(input,'externalManagerPhone'),
     propertyOwnerName: contact(input,'propertyOwnerName',200),
     propertyOwnerAddress: contact(input,'propertyOwnerAddress',500),
+    propertyOwnerEmail: email(input,'propertyOwnerEmail'),
+    propertyOwnerPhone: phone(input,'propertyOwnerPhone'),
     issuerAuthorityConfirmed: input.issuerAuthorityConfirmed === true
   };
   if (input.issuerAuthorityConfirmed !== undefined && typeof input.issuerAuthorityConfirmed !== 'boolean') {
@@ -72,8 +74,9 @@ export const normalizePropertyParties = input => {
     throw fail('managementMode','Remove external manager details for organization-managed properties.');
   }
   if (issuerRole === 'manager' && managementMode !== 'outsourced') throw fail('issuerRole','Manager override requires outsourced management.');
-  if (issuerRole === 'owner' && (!result.propertyOwnerName || !result.propertyOwnerAddress)) {
-    throw fail('propertyOwnerName','Owner-issued invoices need the verified owner name and address.');
+  if (issuerRole === 'owner' && (!result.propertyOwnerName || !result.propertyOwnerAddress ||
+      (!result.propertyOwnerEmail && !result.propertyOwnerPhone))) {
+    throw fail('propertyOwnerName','Owner-issued invoices need the verified owner name, address and contact.');
   }
   if (issuerRole !== 'organization' && !result.issuerAuthorityConfirmed) {
     throw fail('issuerAuthorityConfirmed','Confirm contractual authority before selecting another invoice issuer.');

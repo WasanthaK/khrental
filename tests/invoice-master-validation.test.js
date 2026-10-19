@@ -52,3 +52,16 @@ test('reject unapproved fields, malformed email and arbitrary management types',
   assert.throws(()=>normalizePropertyParties({managementMode:'unverified'}),/Choose organization-managed/);
   assert.throws(()=>normalizeUnitBilling({tenant_id:'foreign'}),/not editable/);
 });
+
+test('owner-issued invoices require real owner contact information', () => {
+  assert.throws(()=>normalizePropertyParties({
+    issuerRole:'owner',issuerAuthorityConfirmed:true,
+    propertyOwnerName:'Verified owner',propertyOwnerAddress:'Recorded address'
+  }),/owner name, address and contact/);
+  const owner=normalizePropertyParties({
+    issuerRole:'owner',issuerAuthorityConfirmed:true,
+    propertyOwnerName:'Verified owner',propertyOwnerAddress:'Recorded address',
+    propertyOwnerEmail:'owner@example.test'
+  });
+  assert.equal(owner.propertyOwnerEmail,'owner@example.test');
+});

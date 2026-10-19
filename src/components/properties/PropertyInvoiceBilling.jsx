@@ -4,7 +4,7 @@ const EMPTY={
   beneficiaryName:'',billingContactName:'',billingContactEmail:'',billingContactPhone:'',
   parties:{managementMode:'tenant',issuerRole:'organization',externalManagerName:'',
     externalManagerAddress:'',externalManagerEmail:'',externalManagerPhone:'',
-    propertyOwnerName:'',propertyOwnerAddress:'',issuerAuthorityConfirmed:false}
+    propertyOwnerName:'',propertyOwnerAddress:'',propertyOwnerEmail:'',propertyOwnerPhone:'',issuerAuthorityConfirmed:false}
 };
 const inputs=[
   ['beneficiaryName','Verified bank account holder / beneficiary'],
@@ -20,7 +20,9 @@ const partyFields=[
 ];
 const ownerFields=[
   ['propertyOwnerName','Verified property owner name'],
-  ['propertyOwnerAddress','Property owner postal address']
+  ['propertyOwnerAddress','Property owner postal address'],
+  ['propertyOwnerEmail','Property owner contact email'],
+  ['propertyOwnerPhone','Property owner contact phone']
 ];
 export default function PropertyInvoiceBilling({propertyId}){
   const [data,setData]=useState(EMPTY),[loading,setLoading]=useState(true);
@@ -36,7 +38,18 @@ export default function PropertyInvoiceBilling({propertyId}){
     return ()=>{active=false;};
   },[propertyId]);
   const change=(key,value)=>setData(current=>({...current,[key]:value}));
-  const changeParty=(key,value)=>setData(current=>({...current,parties:{...current.parties,[key]:value}}));
+  const changeParty=(key,value)=>setData(current=>{
+    const next={...current.parties,[key]:value};
+    if(key==='managementMode' && value==='tenant'){
+      for(const k of ['externalManagerName','externalManagerAddress','externalManagerEmail','externalManagerPhone'])next[k]='';
+      if(next.issuerRole==='manager'){next.issuerRole='organization';next.issuerAuthorityConfirmed=false;}
+    }
+    if(key==='issuerRole'){
+      next.issuerAuthorityConfirmed=false;
+      if(value!=='owner')for(const k of ['propertyOwnerName','propertyOwnerAddress','propertyOwnerEmail','propertyOwnerPhone'])next[k]='';
+    }
+    return {...current,parties:next};
+  });
   const save=async(event)=>{
     event.preventDefault();setError('');setNotice('');setSaving(true);
     const result=await savePropertyInvoiceBilling(propertyId,data);

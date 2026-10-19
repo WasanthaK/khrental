@@ -40,3 +40,12 @@ test('payloads are allowlisted and complete',()=>{
   assert.match(api,/normalizeUnitBilling\(req\.body\)/);
   assert.match(api,/requireComplete\(req\.body/);
 });
+
+test('generic and legacy paths cannot bypass audited invoice master updates',()=>{
+  const modern=read('../src/api/platform/authorization.js');
+  const legacy=read('../server.js');
+  const guard=read('../src/api/platform/invoiceMasterMutationGuard.js');
+  assert.match(modern,/assertDedicatedInvoiceMasterMutation\(/);
+  assert.match(legacy,/assertDedicatedInvoiceMasterMutation\(/);
+  assert.match(guard,/INVOICE_MASTER_DEDICATED_API_REQUIRED/);
+});
