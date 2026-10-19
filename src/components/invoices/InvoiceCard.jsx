@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/helpers';
+import { invoiceHeading } from '../../utils/invoiceReference';
 
 const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatusActions = true }) => {
   const { id, status, createdat, totalamount, billingperiod, paymentdate } = invoice;
@@ -26,7 +27,7 @@ const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatus
       <div className="p-4">
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-lg font-semibold text-gray-900">
-            Invoice #{id.substring(0, 8)}
+            {invoiceHeading(invoice)}
           </h3>
           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor()}`}>
             {status.replace('_', ' ')}
