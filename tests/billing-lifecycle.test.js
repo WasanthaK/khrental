@@ -855,3 +855,16 @@ test('all invoice list APIs read tenant-scoped stored bank reference without bac
   const portal = readFileSync(new URL('../src/pages/rentee/RenteePortal.jsx', import.meta.url), 'utf8');
   assert.match(portal, /await listRenteeInvoices\(\)/);
 });
+
+
+test('two-tenant browser acceptance selects invoices by internal ID, not an obsolete UUID heading', () => {
+  const browserScript = readFileSync(
+    new URL('../scripts/verify-phase4-payment-lifecycle-http.mjs', import.meta.url), 'utf8'
+  );
+  const renterUI = readFileSync(new URL('../src/pages/rentee/RenteeInvoices.jsx', import.meta.url), 'utf8');
+  assert.match(renterUI, /data-invoice-id=\{invoice\.id\}/);
+  assert.match(browserScript, /querySelectorAll\('\[data-invoice-id\]'\)/);
+  assert.match(browserScript, /Invoice — reference not assigned/);
+  assert.doesNotMatch(browserScript, /invoiceId\.slice\(0, 8\)/);
+  assert.doesNotMatch(browserScript, /innerText\.toLowerCase\(\)\.includes\('invoice #' \+ fragment\)/);
+});
