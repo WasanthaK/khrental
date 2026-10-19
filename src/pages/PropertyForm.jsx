@@ -20,6 +20,7 @@ import PropertyAmenities from '../components/properties/PropertyAmenities';
 import PropertyAvailability from '../components/properties/PropertyAvailability';
 import PropertyMap from '../components/properties/PropertyMap';
 import PropertyUnits from '../components/properties/PropertyUnits';
+import PropertyInvoiceBilling from '../components/properties/PropertyInvoiceBilling';
 
 const PropertyForm = () => {
   const { id } = useParams();
@@ -1199,6 +1200,7 @@ const PropertyForm = () => {
         </div>
       </form>
       
+      {isEditMode && <PropertyInvoiceBilling propertyId={id} />}
       {/* Property Units Section (only for apartment type properties) */}
       {isEditMode && formData.propertytype === PROPERTY_TYPES.APARTMENT && (
         <PropertyUnits propertyId={id} propertyType={formData.propertytype} />

@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import usePlatformAdminStatus from '../hooks/usePlatformAdminStatus';
-import { getPortalLabel } from '../utils/accessPolicy.js';
+import { getPortalLabel, hasPermission, PERMISSIONS } from '../utils/accessPolicy.js';
+import InvoiceIssuerSettings from '../components/invoices/InvoiceIssuerSettings';
 
 const Settings = () => {
   const { user, membership, activeTenant, memberships } = useAuth();
@@ -42,6 +43,7 @@ const Settings = () => {
           </div>
         </section>
 
+        {hasPermission(subject, PERMISSIONS.TENANT_SETTINGS_MANAGE) && <InvoiceIssuerSettings />}
         <section className="app-panel">
           <div className="app-panel-header">
             <h2 className="text-lg font-semibold text-slate-900">Administration</h2>

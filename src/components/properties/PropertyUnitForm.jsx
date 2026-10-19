@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { insertData, updateData } from '../../services/platformClient';
 import FormInput from '../ui/FormInput';
 import FormTextarea from '../ui/FormTextarea';
+import UnitInvoiceBilling from './UnitInvoiceBilling';
 
 const PropertyUnitForm = ({ 
   propertyId, 
@@ -278,6 +279,7 @@ const PropertyUnitForm = ({
           </button>
         </div>
       </form>
+      {isEditMode && <UnitInvoiceBilling propertyId={propertyId} unitId={unit.id} />}
     </div>
   );
 };
