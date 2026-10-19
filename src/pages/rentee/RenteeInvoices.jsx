@@ -166,7 +166,7 @@ const RenteeInvoices = () => {
             const property = properties.find((entry) => entry.id === invoice.propertyid);
             const canSubmit = [INVOICE_STATUS.PENDING, INVOICE_STATUS.OVERDUE, INVOICE_STATUS.REJECTED].includes(invoice.status);
             return (
-              <div key={invoice.id} className="relative">
+              <div key={invoice.id} data-invoice-id={invoice.id} className="relative">
                 <InvoiceCard
                   invoice={invoice}
                   property={property}
