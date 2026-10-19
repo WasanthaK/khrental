@@ -372,10 +372,12 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       }
 
       const rows = await runQuery(
-        `SELECT i.*, p.id AS joined_property_id,
+        `SELECT i.*, refs.payment_reference, p.id AS joined_property_id,
                 p.name AS joined_property_name, p.address AS joined_property_address
          FROM invoices i
          LEFT JOIN properties p ON p.id = i.propertyid AND p.tenant_id = i.tenant_id
+         LEFT JOIN invoice_payment_references refs
+           ON refs.invoice_id = i.id AND refs.tenant_id = i.tenant_id
          WHERE i.tenant_id = @tenantId AND i.renteeid = @renteeId
            AND LOWER(i.status) <> 'draft'
          ORDER BY i.createdat DESC, i.id DESC`,
@@ -791,7 +793,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const completeInvoice = { ...issued, payment_reference: paymentReference, rentee_email: invoice.rentee_email,
         billingperiod: invoice.billingperiod, duedate: invoice.duedate };
       const delivery = await deliverIssuedInvoice(req, completeInvoice);
-      res.json({ data: { invoice: issued, delivery }, error: null });
+      res.json({ data: { invoice: { ...issued, payment_reference: paymentReference }, delivery }, error: null });
     } catch (error) { next(error); }
   });
 
