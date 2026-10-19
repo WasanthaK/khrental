@@ -1641,7 +1641,11 @@ export const listInvoices = async ({
   const direction = String(sortOrder || '').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = await paginateQuery({
-    baseQuery: `SELECT * FROM invoices ${whereClause}`,
+    baseQuery: `SELECT invoices.*,
+      (SELECT refs.payment_reference FROM dbo.invoice_payment_references refs
+       WHERE refs.invoice_id = invoices.id AND refs.tenant_id = invoices.tenant_id)
+       AS payment_reference
+      FROM invoices ${whereClause}`,
     orderBy: `${column} ${direction}, id ASC`,
     page,
     pageSize,
@@ -1653,7 +1657,10 @@ export const listInvoices = async ({
 
 export const getInvoiceById = async (id, tenantId) => {
   const row = await runSingleQuery(
-    `SELECT TOP 1 *
+    `SELECT TOP 1 invoices.*,
+       (SELECT refs.payment_reference FROM dbo.invoice_payment_references refs
+        WHERE refs.invoice_id = invoices.id AND refs.tenant_id = invoices.tenant_id)
+        AS payment_reference
      FROM invoices
      WHERE id = @id
        AND tenant_id = @tenantId`,
