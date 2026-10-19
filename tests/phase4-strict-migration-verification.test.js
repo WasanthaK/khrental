@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const runner = read('../scripts/run-production-migrations.mjs');
 const verifier = read('../scripts/run-production-migration-verify.sh');
+const preflight = read('../scripts/run-production-migration-preflight.sh');
 const workflow = read('../.github/workflows/verify-production-db-migration-executor.yml');
 
 test('strict verify mode refuses missing ledger, untracked migrations, schema drift and bad checksums', () => {
@@ -59,5 +60,22 @@ test('production verification uses an isolated execution, no persistent job upda
   assert.match(workflow, /properties\.template\.containers\[0\]\.image/);
   assert.doesNotMatch(workflow, /az containerapp job update/);
   assert.doesNotMatch(workflow, /run-production-migration-apply\.sh/);
+  assert.doesNotMatch(workflow, /--mode=apply/);
+});
+
+test('read-only executor preflight checks grants and all manifest states without substituting for strict acceptance', () => {
+  assert.match(preflight, /MSSQL_MIGRATION_DEDICATED_EXECUTOR/);
+  assert.match(preflight, /MSSQL_MIGRATION_USE_MANAGED_IDENTITY=true/);
+  assert.match(preflight, /--mode=preflight --through=all/);
+  assert.doesNotMatch(preflight, /--mode=apply/);
+  assert.match(runner, /mode === 'preflight'/);
+  assert.match(runner, /Read-only preflight requires the dedicated executor managed identity/);
+  assert.match(runner, /Read-only executor preflight passed for/);
+  assert.match(runner, /Already-applied migration .* has schema drift; refusing preflight/);
+  assert.match(workflow, /verification_script="scripts\/run-production-migration-preflight\.sh"/);
+  assert.match(workflow, /PREFLIGHT\[\[:space:\]\]/);
+  assert.match(workflow, /Preflight allows PENDING and SATISFIED_UNTRACKED/);
+  assert.match(workflow, /Strict read-only migration verification passed for 7 managed migrations/);
+  assert.doesNotMatch(workflow, /az containerapp job update/);
   assert.doesNotMatch(workflow, /--mode=apply/);
 });

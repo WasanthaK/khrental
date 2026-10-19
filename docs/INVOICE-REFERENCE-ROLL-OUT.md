@@ -11,16 +11,22 @@ Status: **preparation only**. Neither PR is approval to apply production schema.
    Verify the migration ledger, checksum, and all prior pending migrations.
    The production migration executor must be verified as a separate privileged
    identity, not the serving application's identity. No firewall opening or
-   DDL privilege escalation for the serving app.
+   DDL privilege escalation for the serving app. Use the existing
+   **Verify production database migration executor** workflow in `preflight`
+   mode before apply: it must prove the isolated identity, grants, checksum
+   alignment and each migration state, and must disclose PENDING or
+   SATISFIED_UNTRACKED rather than misreport them as already applied.
 3. Obtain explicit operator approval **separately** for production
    `20261018_01_invoice_payment_references` migration apply, using the
    canonical protected workflow `Run production database migrations`,
    target `20261018_01_invoice_payment_references`, confirmation
    `APPLY-PRODUCTION`. The selected `through` target includes earlier
    unapplied migrations; do not approve until their effects are reviewed.
-4. Run read-only post-apply verification of the ledger, table, unique index,
-   timezone column and runtime DB health; ensure the old app continues to
-   load invoices.
+4. After apply, run `strict` mode of the same executor verification workflow:
+   require all **seven** migration entries to be ledgered with matching
+   checksums and valid schema, including the adopted auth-store repair.
+   Also check table, unique index, timezone column and runtime DB health;
+   ensure the old app continues to load invoices.
 5. Only after schema verification, merge the **application PR #334** to
    release eight-digit `YYMMDDNN` bank references. Verify a disposable
    two-tenant billing suite and browser rendering against the released
