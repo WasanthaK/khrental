@@ -4,6 +4,7 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 import { INVOICE_STATUS } from '../../utils/constants';
 import { getInvoiceAccount, listRenteeInvoices } from '../../services/platformClient';
 import InvoiceCard from '../../components/invoices/InvoiceCard';
+import { invoiceHeading } from '../../utils/invoiceReference';
 import PaymentProofUpload from '../../components/invoices/PaymentProofUpload';
 
 const RenteeInvoices = () => {
@@ -203,7 +204,7 @@ const RenteeInvoices = () => {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-semibold mb-2">Submit Payment Proof</h2>
             <p className="mb-4 text-sm text-gray-600">
-              Invoice #{selectedInvoice.id.substring(0, 8)} · {formatCurrency(selectedInvoice.totalamount || 0)} total
+              {invoiceHeading(account?.invoice || selectedInvoice)} · {formatCurrency(selectedInvoice.totalamount || 0)} total
             </p>
             <PaymentProofUpload
               invoiceId={selectedInvoice.id}
@@ -234,7 +235,7 @@ const RenteeInvoices = () => {
             <div className="flex justify-between items-start gap-4 mb-4">
               <div>
                 <h2 className="text-xl font-semibold">Invoice Account</h2>
-                <p className="text-sm text-gray-600">Invoice #{selectedInvoice.id.substring(0, 8)}</p>
+                <p className="text-sm text-gray-600">{invoiceHeading(account?.invoice || selectedInvoice)}</p>
               </div>
               <button type="button" onClick={() => { setAccount(null); setSelectedInvoice(null); }} className="text-gray-500 hover:text-gray-800">Close</button>
             </div>
