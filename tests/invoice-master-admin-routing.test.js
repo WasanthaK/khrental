@@ -28,7 +28,9 @@ test('all property/unit writes enforce tenant, property and unit identities',()=
 });
 test('billing save is independent from generic property and unit saves',()=>{
   assert.match(props,/PropertyInvoiceBilling propertyId=\{id\}/);
+  assert.match(props,/isEditMode && canEditInvoiceMaster/);
   assert.match(units,/UnitInvoiceBilling propertyId=\{propertyId\} unitId=\{unit\.id\}/);
+  assert.match(units,/isEditMode && canEditInvoiceMaster/);
   assert.doesNotMatch(props,/propertyData\.bank_beneficiary_name/);
   assert.doesNotMatch(units,/processedData\.bank_beneficiary_name/);
 });

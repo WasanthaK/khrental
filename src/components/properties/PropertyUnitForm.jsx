@@ -3,6 +3,8 @@ import { insertData, updateData } from '../../services/platformClient';
 import FormInput from '../ui/FormInput';
 import FormTextarea from '../ui/FormTextarea';
 import UnitInvoiceBilling from './UnitInvoiceBilling';
+import { useAuth } from '../../hooks/useAuth';
+import { hasPermission, PERMISSIONS } from '../../utils/accessPolicy.js';
 
 const PropertyUnitForm = ({ 
   propertyId, 
@@ -11,6 +13,8 @@ const PropertyUnitForm = ({
   onCancel 
 }) => {
   const isEditMode = !!unit;
+  const { user, membership } = useAuth();
+  const canEditInvoiceMaster = hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
   
   // Initial form data
   const initialFormData = {
@@ -279,7 +283,7 @@ const PropertyUnitForm = ({
           </button>
         </div>
       </form>
-      {isEditMode && <UnitInvoiceBilling propertyId={propertyId} unitId={unit.id} />}
+      {isEditMode && canEditInvoiceMaster && <UnitInvoiceBilling propertyId={propertyId} unitId={unit.id} />}
     </div>
   );
 };
