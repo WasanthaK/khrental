@@ -268,7 +268,11 @@ const main = async () => {
 
     await testPool.request().batch(`
       CREATE TABLE dbo.properties (
-        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_properties_utility_migration_proof PRIMARY KEY
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_properties_utility_migration_proof PRIMARY KEY,
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        bank_name NVARCHAR(255) NULL,
+        bank_branch NVARCHAR(255) NULL,
+        bank_account_number NVARCHAR(255) NULL
       );
 
       CREATE TABLE dbo.utility_configs (
@@ -313,7 +317,7 @@ const main = async () => {
     const propertyId = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
     const tenantId = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
     await testPool.request().query(`
-      INSERT INTO dbo.properties (id) VALUES ('${propertyId}');
+      INSERT INTO dbo.properties (id, tenant_id) VALUES ('${propertyId}', '${tenantId}');
       INSERT INTO dbo.utility_configs (
         tenant_id, propertyid, utilitytype, billingtype, fixedamount
       ) VALUES (
@@ -493,14 +497,9 @@ const main = async () => {
     console.log(`PASS: ${PAYMENT_REF_MIGRATION_ID} SQL Server execution, idempotency, timezone setup, tenant-specific uniqueness`);
     // Verify additive issuer/beneficiary schema on real SQL Server, twice.
     // Existing payment-reference rows and bank settings must survive exactly.
+    // Reuse dbo.properties from the utility migration fixture; creating it a
+    // second time makes the five-value bank insert fail on SQL Server.
     await testPool.request().batch(`
-      CREATE TABLE dbo.properties (
-        id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-        tenant_id UNIQUEIDENTIFIER NOT NULL,
-        bank_name NVARCHAR(255) NULL,
-        bank_branch NVARCHAR(255) NULL,
-        bank_account_number NVARCHAR(255) NULL
-      );
       CREATE TABLE dbo.property_units (
         id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
         tenant_id UNIQUEIDENTIFIER NOT NULL,
@@ -509,7 +508,8 @@ const main = async () => {
         bank_branch NVARCHAR(255) NULL,
         bank_account_number NVARCHAR(255) NULL
       );
-      INSERT INTO dbo.properties VALUES
+      INSERT INTO dbo.properties
+        (id, tenant_id, bank_name, bank_branch, bank_account_number) VALUES
         ('aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Recorded Bank', 'Recorded Branch', '12345678');
     `);
     await testPool.request().batch(invoiceMasterSql);
