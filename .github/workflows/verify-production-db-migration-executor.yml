@@ -3,6 +3,14 @@ name: Verify production database migration executor
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Pre-apply read-only executor preflight or post-apply strict acceptance
+        required: true
+        type: choice
+        default: strict
+        options:
+          - preflight
+          - strict
       confirmation:
         description: Type VERIFY-MIGRATION-EXECUTOR exactly
         required: true
@@ -21,6 +29,7 @@ env:
   AZURE_RESOURCE_GROUP: khrental-prod-rg
   AZURE_CONTAINER_APP_NAME: khrental-app
   AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
+  VERIFICATION_MODE: ${{ inputs.mode }}
 
 jobs:
   verify:
@@ -36,6 +45,10 @@ jobs:
             echo "Verification requires confirmation text VERIFY-MIGRATION-EXECUTOR." >&2
             exit 1
           fi
+          case "$VERIFICATION_MODE" in
+            preflight|strict) ;;
+            *) echo "Unsupported verification mode; refusing execution." >&2; exit 1 ;;
+          esac
 
       - name: Sign in to Azure with OIDC
         uses: azure/login@v2
@@ -89,15 +102,23 @@ jobs:
             fi
           done
 
+          # Both entrypoints are read-only and require the isolated identity.
+          verification_script="scripts/run-production-migration-verify.sh"
+          verification_marker="Strict read-only migration verification passed for 7 managed migrations;"
+          if [ "$VERIFICATION_MODE" = "preflight" ]; then
+            verification_script="scripts/run-production-migration-preflight.sh"
+            verification_marker="Read-only executor preflight passed for 7 managed migrations;"
+          fi
+
           # Per-execution overrides do not change the resting job definition.
-          execution_name=$(az containerapp job start             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --container-name "$container_name"             --image "$image"             --cpu "$cpu"             --memory "$memory"             --command /bin/sh             --args scripts/run-production-migration-verify.sh             --env-vars               MSSQL_SERVER="$server"               MSSQL_DATABASE="$database"               MSSQL_MIGRATION_DEDICATED_EXECUTOR=true             --query name -o tsv)
+          execution_name=$(az containerapp job start             --name "$AZURE_MIGRATION_JOB_NAME"             --resource-group "$AZURE_RESOURCE_GROUP"             --container-name "$container_name"             --image "$image"             --cpu "$cpu"             --memory "$memory"             --command /bin/sh             --args "$verification_script"             --env-vars               MSSQL_SERVER="$server"               MSSQL_DATABASE="$database"               MSSQL_MIGRATION_DEDICATED_EXECUTOR=true             --query name -o tsv)
 
           if [ -z "$execution_name" ]; then
             echo "Azure did not return a verification execution name." >&2
             exit 1
           fi
 
-          echo "Read-only schema verification: $execution_name"
+          echo "Read-only executor $VERIFICATION_MODE verification: $execution_name"
           echo "Image: $image"
           echo "Ready serving revision: $ready_revision"
           echo "Dedicated executor identity: $principal_id"
@@ -118,7 +139,7 @@ jobs:
                 --container "$container_name" \
                 --tail 200 \
                 --format text > "$log_file" 2>/dev/null \
-                && grep -Fq 'Strict read-only migration verification passed for 7 managed migrations;' "$log_file"; then
+                && grep -Fq "$verification_marker" "$log_file"; then
                 found=1
                 break
               fi
@@ -126,7 +147,7 @@ jobs:
             done
 
             if [ "$found" -ne 1 ]; then
-              echo "Executor succeeded but strict seven-migration verification evidence was unavailable. Do not claim release acceptance." >&2
+              echo "Executor succeeded but required $VERIFICATION_MODE evidence was unavailable. Do not claim acceptance." >&2
               rm -f "$log_file"
               return 1
             fi
@@ -140,31 +161,44 @@ jobs:
             20261018_01_invoice_payment_references"
 
             for migration_id in $migration_ids; do
-              if ! grep -Eq "VERIFY[[:space:]]+$migration_id[[:space:]]+LEDGERED[[:space:]]+SCHEMA_OK([[:space:]]|$)" "$log_file"; then
-                echo "Missing successful ledger/schema evidence for $migration_id; refusing release-ready verification." >&2
+              if [ "$VERIFICATION_MODE" = "strict" ]; then
+                if ! grep -Eq "VERIFY[[:space:]]+$migration_id[[:space:]]+LEDGERED[[:space:]]+SCHEMA_OK([[:space:]]|$)" "$log_file"; then
+                  echo "Missing strict ledger/schema evidence for $migration_id." >&2
+                  rm -f "$log_file"
+                  return 1
+                fi
+              elif ! grep -Eq "PREFLIGHT[[:space:]]+$migration_id[[:space:]]+(LEDGERED|SATISFIED_UNTRACKED|PENDING)[[:space:]]" "$log_file"; then
+                echo "Missing read-only preflight state for $migration_id." >&2
                 rm -f "$log_file"
                 return 1
               fi
             done
 
             {
-              echo "### Production migration executor — strict read-only evidence"
+              echo "### Production migration executor — $VERIFICATION_MODE read-only evidence"
               echo
               echo "Execution: $execution_name"
               echo "Serving revision: $ready_revision"
               echo "Serving image: $image"
-              echo "Distinct managed executor identity checked; ledger checksums and SQL grants validated by strict runner."
+              echo "Dedicated executor identity and migration permissions checked."
               echo
-              echo "| Migration | Ledger | Schema |"
-              echo "| --- | --- | --- |"
-              for migration_id in $migration_ids; do
-                echo "| $migration_id | LEDGERED | SCHEMA_OK |"
-              done
-              echo
-              echo "**7/7 ledger/schema checks passed.** Raw Azure logs are not published."
+              if [ "$VERIFICATION_MODE" = "strict" ]; then
+                echo "| Migration | Ledger | Schema |"
+                echo "| --- | --- | --- |"
+                for migration_id in $migration_ids; do
+                  echo "| $migration_id | LEDGERED | SCHEMA_OK |"
+                done
+                echo
+                echo "**7/7 ledger/schema checks passed.** Raw Azure logs are not published."
+              else
+                echo "Pre-apply preflight inspected all seven migrations with no database writes."
+                echo "Preflight allows PENDING and SATISFIED_UNTRACKED. It does not certify an applied schema."
+                echo "Production apply still requires separate authorization; strict acceptance must follow apply."
+                echo "Raw Azure logs are not published."
+              fi
             } >> "$GITHUB_STEP_SUMMARY"
 
-            echo "Retained 7/7 redacted LEDGERED / SCHEMA_OK results for execution $execution_name."
+            echo "Retained seven redacted $VERIFICATION_MODE results for execution $execution_name."
             rm -f "$log_file"
           }
 
@@ -182,7 +216,7 @@ jobs:
               case "$status" in
                 Succeeded)
                   capture_verification_evidence
-                  echo "Strict read-only executor verification passed with seven retained ledger/schema results."
+                  echo "Read-only executor $VERIFICATION_MODE verification passed with seven retained migration results."
                   exit 0
                   ;;
                 Failed|Stopped)
