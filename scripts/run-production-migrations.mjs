@@ -252,12 +252,15 @@ const parseArgs = () => {
   const mode = values.mode || 'plan';
   const through = values.through || 'all';
 
-  if (!['plan', 'apply', 'verify'].includes(mode)) {
+  if (!['plan', 'apply', 'verify', 'preflight'].includes(mode)) {
     throw new Error(`Unsupported migration mode: ${mode}`);
   }
 
   if (mode === 'verify' && through !== 'all') {
     throw new Error('Strict migration verification must check all managed migrations.');
+  }
+  if (mode === 'preflight' && through !== 'all') {
+    throw new Error('Read-only preflight must check all managed migrations.');
   }
 
   if (through !== 'all' && !MIGRATIONS.some((migration) => migration.id === through)) {
@@ -426,6 +429,13 @@ const main = async () => {
   }
 
   if (
+    mode === 'preflight'
+    && (!envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY') || !envFlag('MSSQL_MIGRATION_DEDICATED_EXECUTOR'))
+  ) {
+    throw new Error('Read-only preflight requires the dedicated executor managed identity.');
+  }
+
+  if (
     mode === 'apply'
     && envFlag('MSSQL_MIGRATION_USE_MANAGED_IDENTITY')
     && !envFlag('MSSQL_MIGRATION_DEDICATED_EXECUTOR')
@@ -471,6 +481,32 @@ const main = async () => {
         throw new Error(`Strict migration verification failed for ${problems} managed migration(s); do not mark the executor or ledger production-ready.`);
       }
       console.log(`Strict read-only migration verification passed for ${planned.length} managed migrations; ledger checksums, schema state and executor grants are valid.`);
+      return;
+    }
+
+    if (mode === 'preflight') {
+      // Pre-apply readiness is not strict post-apply acceptance. Validate the
+      // isolated identity, all applied checksums and all managed schema states.
+      // No DDL, no ledger adoption, and no runtime-identity shortcut.
+      if (!hasLedger) {
+        throw new Error('Migration ledger is missing; executor preflight cannot establish a safe apply plan.');
+      }
+      await assertExecutorGrantReadiness(pool);
+      let pending = 0;
+      let satisfiedUntracked = 0;
+      for (const item of planned) {
+        const inspection = await item.migration.inspect(pool);
+        if (item.appliedRow && !inspection.satisfied) {
+          throw new Error(`Already-applied migration ${item.migration.id} has schema drift; refusing preflight.`);
+        }
+        const state = item.appliedRow
+          ? 'LEDGERED'
+          : inspection.satisfied ? 'SATISFIED_UNTRACKED' : 'PENDING';
+        if (state === 'PENDING') pending += 1;
+        if (state === 'SATISFIED_UNTRACKED') satisfiedUntracked += 1;
+        console.log(`PREFLIGHT  ${item.migration.id}  ${state}  ${inspection.detail}`);
+      }
+      console.log(`Read-only executor preflight passed for ${planned.length} managed migrations; pending=${pending}; satisfied_untracked=${satisfiedUntracked}; executor grants and applied checksums checked. No database changes made.`);
       return;
     }
 
