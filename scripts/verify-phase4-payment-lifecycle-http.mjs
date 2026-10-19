@@ -163,6 +163,24 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.match(issuedB.invoice.payment_reference,/^\d{8}$/,
     'second tenant must also receive a scoped reference');
 
+  // Both listing APIs must project the persisted reference, scoped to the
+  // authenticated tenant. Legacy issued fixtures must stay unassigned.
+  const renterListA = assertResponse(await call('/api/billing/rentee/invoices',
+    { token: tokenA, tenantId: a.tenantId }), 200, 'tenant A renter list');
+  const issuedInRenterList = renterListA.find(item => guid(item.id) === draftA);
+  const legacyInRenterList = renterListA.find(item => guid(item.id) === invoiceA);
+  assert.equal(issuedInRenterList?.payment_reference, issuedA.invoice.payment_reference);
+  assert.equal(legacyInRenterList?.payment_reference, null);
+  assert.ok(!renterListA.some(item => guid(item.id) === draftB), 'cross-tenant invoice hidden');
+
+  const staffListA = assertResponse(await call('/api/mssql/invoices',
+    { token: adminA, tenantId: a.tenantId }), 200, 'tenant A staff list');
+  assert.equal(staffListA.find(item => guid(item.id) === draftA)?.payment_reference,
+    issuedA.invoice.payment_reference);
+  assert.equal(staffListA.find(item => guid(item.id) === invoiceA)?.payment_reference, null);
+  assert.ok(!staffListA.some(item => guid(item.id) === draftB), 'cross-tenant staff invoice hidden');
+
+
   const ambiguousId = await createDraft(a, '2027-01', 700);
   invoiceMailbox.unknownNext = true;
   const uncertain = assertResponse(await issue(ambiguousId, adminA, a.tenantId), 200, 'uncertain transport');
