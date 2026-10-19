@@ -533,6 +533,51 @@ const main = async () => {
     assert.equal(invoiceMasterResult.recordset[0].beneficiary,null);
     assert.equal(invoiceMasterResult.recordset[0].original_bank,'Recorded Bank');
     assert.equal(invoiceMasterResult.recordset[0].json_guard,1);
+    const additionalMasterData = await testPool.request().query(`
+      SELECT
+        CASE WHEN COL_LENGTH(N'dbo.properties', N'invoice_party_overrides_json') IS NOT NULL THEN 1 ELSE 0 END AS party_column,
+        CASE WHEN COL_LENGTH(N'dbo.properties', N'billing_contact_name') IS NOT NULL
+          AND COL_LENGTH(N'dbo.properties', N'billing_contact_email') IS NOT NULL
+          AND COL_LENGTH(N'dbo.properties', N'billing_contact_phone') IS NOT NULL THEN 1 ELSE 0 END AS contact_columns,
+        CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints
+          WHERE parent_object_id=OBJECT_ID(N'dbo.properties')
+          AND name=N'CK_properties_invoice_party_overrides_json'
+          AND is_disabled=0 AND is_not_trusted=0) THEN 1 ELSE 0 END AS parties_guard,
+        CASE WHEN OBJECT_ID(N'dbo.invoice_master_data_audit', N'U') IS NOT NULL THEN 1 ELSE 0 END AS audit_table,
+        (SELECT COUNT(*) FROM sys.indexes
+         WHERE object_id=OBJECT_ID(N'dbo.invoice_master_data_audit')
+           AND name=N'IX_invoice_master_data_audit_tenant_created') AS audit_index,
+        (SELECT invoice_party_overrides_json FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS parties_before_admin,
+        (SELECT billing_contact_name FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS contact_before_admin;
+    `);
+    const fields = additionalMasterData.recordset[0];
+    assert.equal(fields.party_column,1);
+    assert.equal(fields.contact_columns,1);
+    assert.equal(fields.parties_guard,1);
+    assert.equal(fields.audit_table,1);
+    assert.equal(fields.audit_index,1);
+    assert.equal(fields.parties_before_admin,null);
+    assert.equal(fields.contact_before_admin,null);
+    await assert.rejects(testPool.request().query(`
+      UPDATE dbo.properties SET invoice_party_overrides_json='not json'
+      WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc';
+    `), 'invalid property party information must be rejected');
+    await testPool.request().query(`
+      INSERT INTO dbo.invoice_master_data_audit
+        (tenant_id,actor_user_id,resource_kind,resource_id,changed_fields_json,current_hash)
+      VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'property_billing','aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc',
+        '["bank_beneficiary_name"]',REPLICATE('a',64));
+    `);
+    await assert.rejects(testPool.request().query(`
+      INSERT INTO dbo.invoice_master_data_audit
+        (tenant_id,actor_user_id,resource_kind,changed_fields_json,current_hash)
+      VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'unrecognized','[]',REPLICATE('a',64));
+    `), 'invalid audit resource kind must fail closed');
+
     await assert.rejects(testPool.request().query(`
       UPDATE dbo.tenant_settings SET invoice_issuer_profile_json='not json'
       WHERE tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
