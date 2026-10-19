@@ -118,7 +118,7 @@ jobs:
                 --container "$container_name" \
                 --tail 200 \
                 --format text > "$log_file" 2>/dev/null \
-                && grep -Fq 'Strict read-only migration verification passed for 6 managed migrations;' "$log_file"; then
+                && grep -Fq 'Strict read-only migration verification passed for 7 managed migrations;' "$log_file"; then
                 found=1
                 break
               fi
@@ -126,7 +126,7 @@ jobs:
             done
 
             if [ "$found" -ne 1 ]; then
-              echo "Executor succeeded but strict six-migration verification evidence was unavailable. Do not claim release acceptance." >&2
+              echo "Executor succeeded but strict seven-migration verification evidence was unavailable. Do not claim release acceptance." >&2
               rm -f "$log_file"
               return 1
             fi
@@ -136,7 +136,8 @@ jobs:
             20260920_03_backfill_legacy_app_user_memberships
             20260926_01_add_rentee_property_unit_associations
             20261005_01_add_property_utility_configs
-            20261006_01_repair_auth_store_runtime_columns"
+            20261006_01_repair_auth_store_runtime_columns
+            20261018_01_invoice_payment_references"
 
             for migration_id in $migration_ids; do
               if ! grep -Eq "VERIFY[[:space:]]+$migration_id[[:space:]]+LEDGERED[[:space:]]+SCHEMA_OK([[:space:]]|$)" "$log_file"; then
@@ -160,10 +161,10 @@ jobs:
                 echo "| $migration_id | LEDGERED | SCHEMA_OK |"
               done
               echo
-              echo "**6/6 ledger/schema checks passed.** Raw Azure logs are not published."
+              echo "**7/7 ledger/schema checks passed.** Raw Azure logs are not published."
             } >> "$GITHUB_STEP_SUMMARY"
 
-            echo "Retained 6/6 redacted LEDGERED / SCHEMA_OK results for execution $execution_name."
+            echo "Retained 7/7 redacted LEDGERED / SCHEMA_OK results for execution $execution_name."
             rm -f "$log_file"
           }
 
@@ -181,7 +182,7 @@ jobs:
               case "$status" in
                 Succeeded)
                   capture_verification_evidence
-                  echo "Strict read-only executor verification passed with six retained ledger/schema results."
+                  echo "Strict read-only executor verification passed with seven retained ledger/schema results."
                   exit 0
                   ;;
                 Failed|Stopped)
