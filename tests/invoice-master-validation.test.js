@@ -34,7 +34,8 @@ test('manager as issuer requires confirmed authority and outsourced manager', ()
 test('owner issuer requires verified owner and explicit authority', () => {
   assert.throws(()=>normalizePropertyParties({issuerRole:'owner',issuerAuthorityConfirmed:true}),/owner name/);
   const a=normalizePropertyParties({issuerRole:'owner',issuerAuthorityConfirmed:true,
-    propertyOwnerName:'Verified owner',propertyOwnerAddress:'Recorded owner address'});
+    propertyOwnerName:'Verified owner',propertyOwnerAddress:'Recorded owner address',
+    propertyOwnerEmail:'owner@example.test'});
   assert.equal(a.issuerRole,'owner');
 });
 test('property beneficiary remains separate from management and invoice issuer', () => {
