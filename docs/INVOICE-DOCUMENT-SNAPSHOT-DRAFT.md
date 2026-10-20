@@ -74,3 +74,33 @@ implements guarded storage upload, byte verification, committed ledger insert
 and crash recovery. It is not a magic write-once property of R2 or local files;
 operators with direct object-storage write privileges could still modify bytes,
 so retrieval must continue to verify the exact committed SHA-256.
+
+
+## Guarded archive-writing coordinator — unconnected candidate
+
+\`issuedInvoiceArchiveWriteCandidate.js\` provides a bounded prototype
+for archive publishing, but no production worker or HTTP route invokes it.
+It requires **all three** externally provided, trusted adapters:
+an issuance ledger exposing the previously committed invoice and its exact
+snapshot hash, a transactional SQL archive ledger that locks/rechecks that
+issuance before a unique committed insert, and an object-storage adapter
+with real atomic create-if-absent semantics. The current general-purpose
+\`getStorageDriver().upload()\` cannot satisfy that contract because it can
+overwrite existing objects.
+
+The coordinator validates the normalized snapshot and tenant/invoice scope,
+verifies issuance, conditionally creates a content-addressed object, reads
+the object back and compares exact bytes, and only then requests SQL commit.
+It reads the authoritative ledger back afterward and checks the same bytes.
+Retries reuse an identical committed document; a storage object orphaned
+by a timeout can be revalidated and adopted only for matching issuance data.
+Conflicting archived documents, missing evidence and ambiguous writes fail
+closed. The worker does not send emails, expose objects, delete orphan objects,
+apply database migrations or grant invoice permissions.
+
+**Still required before runtime wiring:** native conditional object-store
+semantics (including interprocess concurrency); actual SQL transaction
+adapter that enforces issued snapshot and tenant scope under lock;
+durable reconciliation/retention policy for orphaned objects; actor audit
+and request authorization; and integration proof with real SQL Server plus
+R2/local storage. Existing invoice sending remains unchanged.
