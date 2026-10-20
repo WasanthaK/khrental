@@ -4,6 +4,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import sql from 'mssql';
+import os from 'node:os';
+import { createInvoiceDocumentPdfCandidate, normalizeInvoiceDocumentSnapshot } from '../src/api/platform/invoicePdfCandidate.js';
+import { publishIssuedInvoiceArchiveCandidate } from '../src/api/platform/issuedInvoiceArchiveWriteCandidate.js';
+import { createInvoiceArchiveSqlCandidateAdapters } from '../src/api/platform/invoiceArchiveSqlCandidateAdapters.js';
+import { createInvoiceArchiveLocalProofStore } from '../src/api/platform/invoiceArchiveLocalProofStore.js';
 
 const SQL_SERVER_IMAGE = process.env.MSSQL_TEST_IMAGE || 'mcr.microsoft.com/mssql/server:2022-latest';
 const MIGRATION_ID = '20260926_01_add_rentee_property_unit_associations';
@@ -16,6 +21,8 @@ const PAYMENT_REF_MIGRATION_ID = '20261018_01_invoice_payment_references';
 const PAYMENT_REF_MIGRATION_FILE = `migrations/${PAYMENT_REF_MIGRATION_ID}.sql`;
 const INVOICE_MASTER_MIGRATION_ID = '20261019_01_invoice_master_data';
 const INVOICE_MASTER_MIGRATION_FILE = `migrations/${INVOICE_MASTER_MIGRATION_ID}.sql`;
+const INVOICE_ARCHIVE_MIGRATION_ID = '20261020_01_immutable_invoice_pdf_archive';
+const INVOICE_ARCHIVE_MIGRATION_FILE = `migrations/${INVOICE_ARCHIVE_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
@@ -26,7 +33,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   PROPERTY_UTILITY_MIGRATION_ID,
   AUTH_STORE_MIGRATION_ID,
   PAYMENT_REF_MIGRATION_ID,
-  INVOICE_MASTER_MIGRATION_ID
+  INVOICE_MASTER_MIGRATION_ID,
+  INVOICE_ARCHIVE_MIGRATION_ID
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -152,6 +160,8 @@ const main = async () => {
   assert.match(paymentReferenceSql,/UX_invoice_payment_references_tenant_reference/);
   const invoiceMasterSql = fs.readFileSync(path.resolve(INVOICE_MASTER_MIGRATION_FILE), 'utf8');
   assert.match(invoiceMasterSql, /CK_tenant_settings_invoice_issuer_profile_json/);
+  const invoiceArchiveSql = fs.readFileSync(path.resolve(INVOICE_ARCHIVE_MIGRATION_FILE),'utf8');
+  assert.match(invoiceArchiveSql, /TR_invoice_pdf_archives_write_once/);
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
   const databaseName = `khrental_migration_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -589,6 +599,199 @@ const main = async () => {
       WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc';
     `);
     console.log(`PASS: ${INVOICE_MASTER_MIGRATION_ID} SQL Server additive schema, JSON guard, idempotency and no legacy backfill`);
+
+    // Write-once invoice archive ledger: executes real SQL Server DDL twice.
+    await testPool.request().batch(invoiceArchiveSql);
+    await testPool.request().batch(invoiceArchiveSql);
+    const archiveMeta = await testPool.request().query(`
+      SELECT
+        (SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=
+          OBJECT_ID(N'dbo.invoice_pdf_archives') AND is_disabled=0 AND is_not_trusted=0) AS guards,
+        (SELECT COUNT(*) FROM sys.triggers WHERE parent_id=
+          OBJECT_ID(N'dbo.invoice_pdf_archives') AND name=N'TR_invoice_pdf_archives_write_once'
+          AND is_disabled=0) AS trigger_active,
+        (SELECT COUNT(*) FROM sys.indexes WHERE object_id=
+          OBJECT_ID(N'dbo.invoice_pdf_archives') AND name=N'UX_invoice_pdf_archives_object_path'
+          AND is_unique=1) AS unique_path,
+        (SELECT COUNT(*) FROM dbo.invoice_pdf_archives) AS archives_before;
+    `);
+    assert.equal(archiveMeta.recordset[0].guards,5);
+    assert.equal(archiveMeta.recordset[0].trigger_active,1);
+    assert.equal(archiveMeta.recordset[0].unique_path,1);
+    assert.equal(archiveMeta.recordset[0].archives_before,0);
+
+    const ownedInvoiceId='11111111-1111-4111-8111-111111111111';
+    const tenantOwner='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const foreignInvoiceId='33333333-3333-4333-8333-333333333333';
+    const archivePath='tenants/'+tenantOwner+'/invoices/'+ownedInvoiceId+
+      '/issued/sha256-'+('a'.repeat(64))+'.pdf';
+    const snapshot=JSON.stringify({
+      kind:'invoice_issued',version:1,tenantId:tenantOwner,invoiceId:ownedInvoiceId,
+      issuer:{role:'organization',legalName:'Synthetic Business',postalAddress:'Example Street'},
+      renter:{name:'Synthetic Renter'},property:{name:'Synthetic Property'},
+      lines:[{description:'Rent',amountCents:200000}],totalCents:200000
+    });
+    const insertArchive=async ({
+      tenantId=tenantOwner, invoiceId=ownedInvoiceId,
+      objectPath=archivePath, pdfHash='a'.repeat(64),
+      snapshotValue=snapshot
+    }={}) => {
+      const req=testPool.request();
+      req.input('tenantId',sql.UniqueIdentifier,tenantId);
+      req.input('invoiceId',sql.UniqueIdentifier,invoiceId);
+      req.input('path',sql.NVarChar(512),objectPath);
+      req.input('pdfHash',sql.Char(64),pdfHash);
+      req.input('snapshot',sql.NVarChar(sql.MAX),snapshotValue);
+      return req.query(`
+        INSERT INTO dbo.invoice_pdf_archives
+          (tenant_id,invoice_id,archive_version,pdf_sha256,snapshot_sha256,
+           object_path,byte_length,issued_snapshot_json,archived_by)
+        VALUES(@tenantId,@invoiceId,1,@pdfHash,REPLICATE('b',64),
+          @path,1024,@snapshot,@tenantId);
+      `);
+    };
+    await insertArchive();
+    await assert.rejects(insertArchive(), 'second archive cannot replace the first');
+    await assert.rejects(testPool.request().query(`
+      UPDATE dbo.invoice_pdf_archives SET byte_length=2048 WHERE invoice_id='${ownedInvoiceId}';
+    `),'issued archive cannot be altered');
+    await assert.rejects(testPool.request().query(`
+      DELETE FROM dbo.invoice_pdf_archives WHERE invoice_id='${ownedInvoiceId}';
+    `),'issued archive cannot be deleted');
+    await assert.rejects(insertArchive({
+      tenantId:tenantOwner,invoiceId:foreignInvoiceId,
+      objectPath:'tenants/'+tenantOwner+'/invoices/'+foreignInvoiceId+
+        '/issued/sha256-'+('a'.repeat(64))+'.pdf'
+    }), 'cross-tenant invoice archive must fail');
+    await assert.rejects(insertArchive({
+      invoiceId:'22222222-2222-4222-8222-222222222222',
+      objectPath:'tenants/'+tenantOwner+'/invoices/22222222-2222-4222-8222-222222222222'+
+        '/issued/sha256-'+('z'.repeat(64))+'.pdf',
+      pdfHash:'z'.repeat(64)
+    }), 'invalid SHA-256 must fail');
+    const archived=await testPool.request().query(`
+      SELECT tenant_id,invoice_id,object_path,byte_length FROM dbo.invoice_pdf_archives;
+    `);
+    assert.equal(archived.recordset.length,1);
+    assert.equal(archived.recordset[0].object_path,archivePath);
+    assert.equal(archived.recordset[0].byte_length,1024);
+    const refsAfter=await testPool.request().query(`
+      SELECT COUNT(*) AS original_refs FROM dbo.invoice_payment_references;
+    `);
+    assert.equal(refsAfter.recordset[0].original_refs,2);
+    console.log(`PASS: ${INVOICE_ARCHIVE_MIGRATION_ID} SQL Server scope, write-once trigger, checks, and idempotency`);
+
+    // Exercise the draft coordinator against actual MSSQL transactions and a
+    // temporary filesystem with atomic, create-if-absent object publication.
+    // No production invoice or live storage is accessed.
+    const proofTenant='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const proofInvoice='22222222-2222-4222-8222-222222222222';
+    const proofSnapshot={
+      version:1,kind:'invoice_issued',
+      tenantId:proofTenant,invoiceId:proofInvoice,
+      paymentReference:'26102001',billingPeriod:'2026-10',
+      issuedAt:'2026-10-20',dueAt:'2026-11-05',
+      issuer:{role:'organization',legalName:'Synthetic Rent Management Ltd',
+        postalAddress:'Synthetic Road, Colombo'},
+      renter:{name:'Example Renter'},property:{name:'Example Property'},
+      lines:[{description:'October rent',amountCents:1900000},
+        {description:'Water',amountCents:100000}],
+      totalCents:2000000,payment:null
+    };
+    const generated=await createInvoiceDocumentPdfCandidate(proofSnapshot);
+    const issuedPdfBytes=Buffer.from(generated.content,'base64');
+    const canonicalSnapshot=normalizeInvoiceDocumentSnapshot(proofSnapshot);
+    assert.equal(generated.snapshotSha256,
+      crypto.createHash('sha256').update(JSON.stringify(canonicalSnapshot)).digest('hex'));
+    const issuedMetadata=JSON.stringify({
+      documentSnapshot:canonicalSnapshot,
+      documentSnapshotSha256:generated.snapshotSha256
+    });
+    await testPool.request().batch([
+      'ALTER TABLE dbo.invoices ADD status NVARCHAR(24) NULL;',
+      'CREATE TABLE dbo.billing_lifecycle_events (',
+      'id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),',
+      'tenant_id UNIQUEIDENTIFIER NOT NULL,',
+      'invoice_id UNIQUEIDENTIFIER NOT NULL,',
+      'event_type NVARCHAR(80) NOT NULL,',
+      'metadata NVARCHAR(MAX) NULL,',
+      'createdat DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME()',
+      ');'
+    ].join(' '));
+    await testPool.request()
+      .input('invoiceId',sql.UniqueIdentifier,proofInvoice)
+      .query("UPDATE dbo.invoices SET status='pending' WHERE id=@invoiceId");
+    await testPool.request()
+      .input('tenantId',sql.UniqueIdentifier,proofTenant)
+      .input('invoiceId',sql.UniqueIdentifier,proofInvoice)
+      .input('metadata',sql.NVarChar(sql.MAX),issuedMetadata)
+      .query("INSERT INTO dbo.billing_lifecycle_events (tenant_id,invoice_id,event_type,metadata) "+
+        "VALUES(@tenantId,@invoiceId,'invoice_issued',@metadata)");
+    const sqlAdapters=createInvoiceArchiveSqlCandidateAdapters({pool:testPool,sql});
+    const evidence=await sqlAdapters.issuanceLedger.loadIssued({
+      tenantId:proofTenant,invoiceId:proofInvoice
+    });
+    assert.equal(evidence.snapshotSha256,generated.snapshotSha256);
+    assert.equal(await sqlAdapters.issuanceLedger.loadIssued({
+      tenantId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',invoiceId:proofInvoice
+    }),null,'other tenants must not see issuance evidence');
+    assert.equal(await sqlAdapters.issuanceLedger.loadIssued({
+      tenantId:proofTenant,invoiceId:ownedInvoiceId
+    }),null,'historical invoice without issuance snapshot cannot qualify');
+
+    const proofDirectory=await fs.promises.mkdtemp(
+      path.join(os.tmpdir(),'kh-invoice-sql-storage-proof-'));
+    try {
+      const storage=createInvoiceArchiveLocalProofStore({rootDirectory:proofDirectory});
+      const publish=(overrides={})=>publishIssuedInvoiceArchiveCandidate({
+        snapshot:proofSnapshot,pdfBytes:issuedPdfBytes,actorUserId:proofTenant,
+        ...sqlAdapters,objectStorage:storage,...overrides
+      });
+      const first=await publish();
+      assert.equal(first.state,'committed');
+      assert.equal(first.archive.pdfSha256,generated.sha256);
+      assert.equal(first.archive.snapshotSha256,generated.snapshotSha256);
+      assert.deepEqual(
+        (await storage.getObject('invoices',first.archive.path)).body,
+        issuedPdfBytes);
+      const replay=await publish();
+      assert.equal(replay.state,'already_committed');
+      assert.equal(replay.archive.path,first.archive.path);
+
+      const revised=structuredClone(proofSnapshot);
+      revised.issuer.legalName='Different Issuer After Invoice';
+      await assert.rejects(publish({snapshot:revised}),
+        e=>e.code==='INVOICE_ARCHIVE_ISSUANCE_MISMATCH');
+
+      const exactRows=await testPool.request()
+        .input('tenantId',sql.UniqueIdentifier,proofTenant)
+        .input('invoiceId',sql.UniqueIdentifier,proofInvoice)
+        .query('SELECT COUNT(*) AS cnt FROM dbo.invoice_pdf_archives '+
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId');
+      assert.equal(exactRows.recordset[0].cnt,1,
+        'successful retry must keep one authoritative write-once archive row');
+
+      // Even after a PDF is archived, a changed/legacy issuance event must
+      // never be silently treated as new authoritative issue evidence.
+      await testPool.request()
+        .input('invoiceId',sql.UniqueIdentifier,proofInvoice)
+        .query("UPDATE dbo.billing_lifecycle_events SET metadata=N'{}' "+
+          "WHERE invoice_id=@invoiceId AND event_type='invoice_issued'");
+      await assert.rejects(publish(),
+        e=>e.code==='INVOICE_ARCHIVE_ISSUANCE_MISMATCH');
+      const stillStored=await sqlAdapters.archiveLedger.loadCommitted({
+        tenantId:proofTenant,invoiceId:proofInvoice
+      });
+      assert.equal(stillStored.pdfSha256,first.archive.pdfSha256);
+      assert.deepEqual(
+        (await storage.getObject('invoices',stillStored.path)).body,
+        issuedPdfBytes);
+
+      console.log('PASS: archive coordinator, real SQL Server serializable transaction, exact-byte local storage and replay');
+    } finally {
+      await fs.promises.rm(proofDirectory,{recursive:true,force:true});
+    }
+
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}
