@@ -104,3 +104,21 @@ adapter that enforces issued snapshot and tenant scope under lock;
 durable reconciliation/retention policy for orphaned objects; actor audit
 and request authorization; and integration proof with real SQL Server plus
 R2/local storage. Existing invoice sending remains unchanged.
+
+## Draft issuance-time legal identity capture
+
+The new isolated snapshot builder consumes transaction-scoped invoice, property,
+renter, tenant issuer profile, owner/manager authority, unit beneficiary and
+charge rows. It uses the existing, audited administrator inputs but does not
+claim independent government/business-registry verification. The selected
+legal issuer may be the organization, expressly authorized owner, or expressly
+authorized outsourced manager. Bank beneficiary is a separate decision: a
+partial unit override blocks issue rather than silently using the property
+account. Reconciled, exact-cent charge data is frozen into the normalized
+issued-document fingerprint; absent complete banking is explicitly absent.
+
+The separate SQL reader binds both tenant and invoice on every query under
+the caller's SQL transaction. This candidate cannot alter invoices, add audit
+events or send email. Runtime activation remains blocked on durable proof
+that the issuance event and its document snapshot are committed atomically,
+and that the exact PDF is archived before delivery.
