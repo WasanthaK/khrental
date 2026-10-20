@@ -313,6 +313,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.equal(pending.payment.status, 'pending');
   assert.equal(Number(pending.payment.amount), 400);
   assert.equal(pending.invoice.status, 'verification_pending');
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    409, 'pending proof blocks supplement even if reference was already assigned');
   const urlOfProof = pending.payment.proofurl;
   assert.ok(urlOfProof.toLowerCase().startsWith(('/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/').toLowerCase()));
   const proofRead = async (token, tenantId, url) => {
@@ -408,6 +410,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const completed = assertResponse(await verify(invoiceA, adminA, a.tenantId, true),
     200, 'approve remainder');
   assert.equal(completed.invoice.status, 'paid');
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    409, 'settled invoice cannot receive another reference');
   projection = assertResponse(await account(invoiceA, tokenA, a.tenantId), 200, 'paid account');
   assert.equal(Number(projection.outstandingBalance), 0);
   assert.equal(projection.receipts.length, 2);
@@ -421,6 +425,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
   );
   const events = ownEvents.map(row => row.event_type).sort();
   assert.deepEqual(events, [
+    'invoice_reference_supplemented',
     'payment_rejected', 'payment_submitted', 'payment_submitted',
     'payment_submitted', 'payment_verified', 'payment_verified'
   ]);
