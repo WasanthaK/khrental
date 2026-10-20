@@ -516,8 +516,16 @@ export async function verifyPhase4PaymentLifecycleHttp({
         if (button) button.click();
         return { clicked: Boolean(button), heading };
       }, invoiceId);
-      assert.equal(selected.heading, 'Invoice — reference not assigned',
-        'legacy issued invoice must not display an invented payment reference');
+      // Tenant A was explicitly supplemented above, while tenant B remains
+      // unassigned. Both cards must reflect their actual SQL reference state,
+      // not a fabricated UUID fragment or an obsolete shared expectation.
+      const expectedHeading = own.tenantId === a.tenantId
+        ? 'Invoice #' + assignedSupplement.payment_reference
+        : 'Invoice — reference not assigned';
+      assert.equal(selected.heading, expectedHeading,
+        own.tenantId === a.tenantId
+          ? 'renter must see the assigned audited numeric supplement'
+          : 'untouched historical renter invoice must remain unassigned');
       assert.equal(selected.clicked, true, 'must click account for this paid invoice, not a different card');
       await page.waitForFunction(number =>
         document.body.innerText.includes('Receipt ' + number),
