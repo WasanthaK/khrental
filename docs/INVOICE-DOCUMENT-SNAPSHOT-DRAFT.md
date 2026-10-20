@@ -31,3 +31,25 @@ These hashes are evidence only: **no archive or send is performed**.
    production cutover only after that acceptance.
 
 Legacy invoices are not backfilled or recomputed by this candidate.
+
+
+## Candidate exact-byte archive read contract (not connected to runtime)
+
+The new \`issuedInvoiceArchiveCandidate.js\` prepares a document descriptor
+from the authoritative issued snapshot and PDF bytes. Its path is scoped by
+tenant and invoice and includes a SHA-256 PDF fingerprint. It has no storage
+writes and cannot send mail.
+
+A separate read helper requires a caller-supplied committed ledger manifest
+with the exact tenant ID, invoice ID, canonical archive path, PDF hash, snapshot
+hash and byte length. It obtains bytes **only** from the stored object and
+rejects missing, changed, truncated or mismatched content. It does not
+re-render PDFs from current mutable organization or property data. The
+helper does not grant authorization on its own; the future route must first
+verify tenant membership, invoice/property ownership and the actual ledger.
+
+The \`committed\` state is **not** established by this draft helper. Content-
+addressed file paths alone are not write-once storage: ordinary storage upload
+can overwrite them. Production still needs a fenced, transactional SQL ledger,
+write-once/conditional object creation, archive reconciliation after crashes,
+object retention controls and exact-attachment byte-equality tests.
