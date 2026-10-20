@@ -298,6 +298,19 @@ export const resendIssuedInvoice = async (invoiceId, resendRequestId) => {
   } catch (error) { return { data: null, error }; }
 };
 
+
+export const assignLegacyInvoicePaymentReference = async (invoiceId, reason) => {
+  try {
+    const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/supplement-reference`, {
+      method: 'POST',
+      body: { confirmation: 'ASSIGN-LEGACY-INVOICE-REFERENCE', reason }
+    });
+    return { data: payload?.data || null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 export const retryInvoiceDelivery = async invoiceId => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/retry-delivery`, {

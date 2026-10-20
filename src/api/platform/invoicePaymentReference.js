@@ -23,6 +23,27 @@ export const invoiceReferenceDay = (date, timeZone) => ymd(date, timeZone);
 export const displayInvoicePaymentReference = (reference) =>
   /^\d{8}$/.test(String(reference || '')) ? String(reference) : null;
 
+
+/**
+ * Only a historical, issued, unpaid invoice with no active payment activity
+ * can receive an additional reference. A partial settlement or pending proof
+ * must be reviewed outside this workflow. Recheck with invoice and payment
+ * rows locked in the same serializable transaction before allocation.
+ */
+export const isLegacyInvoiceReferenceEligible = ({ invoice, payments = [], outstandingBalance }) => {
+  const status = String(invoice?.status || '').trim().toLowerCase();
+  const total = Number(invoice?.totalamount);
+  const outstanding = Number(outstandingBalance);
+  return ['pending', 'overdue'].includes(status)
+    && (invoice?.payment_reference == null || invoice?.payment_reference === '')
+    && Number.isFinite(total) && total > 0
+    && Number.isFinite(outstanding) && outstanding > 0
+    && Array.isArray(payments)
+    && !payments.some(payment => ['pending', 'verified'].includes(
+      String(payment?.status || '').trim().toLowerCase()
+    ));
+};
+
 // Tenants may be created after an additive schema migration, so the
 // billing timezone can be unset. UTC is the documented safe default;
 // an explicitly configured business timezone always takes precedence.

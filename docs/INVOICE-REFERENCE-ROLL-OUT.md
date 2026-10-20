@@ -36,6 +36,29 @@ Status: **preparation only**. Neither PR is approval to apply production schema.
    payment-instructions supplement is a separate change and requires
    its own acceptance/authorization.
 
+## Historical issued invoices — controlled numeric-reference supplement
+
+Historical invoices deliberately remain without a number until an authorized
+staff member selects an individual outstanding invoice and explicitly confirms
+a reason. Only `pending` or `overdue` invoices without an existing reference
+or active/verified payment may receive a supplement. This narrow condition
+avoids rewriting payment expectations for partial settlements or submitted
+payment proofs.
+
+The server rechecks tenant, property access, invoice state and payment rows under
+a serializable SQL transaction and allocates a new `YYMMDDNN` tenant-local
+reference using the existing daily-sequence application lock. In the same
+transaction it records `invoice_reference_supplemented` with actor, reason
+and outstanding balance. Duplicate assignments fail closed, and the per-tenant
+99-reference daily limit also applies.
+
+The original UUID, invoice amount, status, issue date, due date, payment and
+receipt history, and issued banking instructions do not change. The action
+does not send an email, recreate the invoice or backfill existing records.
+Missing historical bank instructions remain missing. Later presentations may
+show the supplementary reference, but this does not make historical sent
+documents retroactively different. No mass assignment is permitted.
+
 ## Stop conditions
 
 - Do not merge PR #334 before the production schema and ledger are verified.

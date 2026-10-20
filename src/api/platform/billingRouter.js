@@ -10,7 +10,7 @@ import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
 import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
-import { allocateInvoicePaymentReference } from './invoicePaymentReference.js';
+import { allocateInvoicePaymentReference, isLegacyInvoiceReferenceEligible } from './invoicePaymentReference.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
   PAYMENT_STATUS,
@@ -919,6 +919,83 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         invoice, delivery, action:'manual_resend', recipient:targetEmail
       }, error:null });
     } catch (error) { next(error); }
+  });
+
+
+  // Staff-authorized supplementary bank reference for one historical
+  // invoice. Does NOT reissue it, rewrite invoices/payments/receipts, adopt
+  // current banking settings, produce a PDF, or contact an email provider.
+  router.post('/invoices/:invoiceId/supplement-reference', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      const reason = String(req.body?.reason || '').trim();
+      if (req.body?.confirmation !== 'ASSIGN-LEGACY-INVOICE-REFERENCE'
+        || reason.length < 10 || reason.length > 500) {
+        throw createRequestError(400,
+          'Confirm assignment and provide a reason between 10 and 500 characters.',
+          'LEGACY_REFERENCE_CONFIRMATION_REQUIRED');
+      }
+
+      const transaction = new sql.Transaction(await getMssqlPool());
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const lockedInvoice = await singleTransaction(transaction,
+          'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: invoice.id });
+        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        requirePropertyScope(req, lockedInvoice.propertyid);
+
+        // Keep payment checks atomic with reference allocation. An invoice
+        // with pending proof or verified/partial payment cannot be supplemented.
+        const payments = await queryTransaction(transaction,
+          'SELECT amount, status FROM payments WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND invoiceid=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: lockedInvoice.id });
+        const existing = await singleTransaction(transaction,
+          'SELECT payment_reference FROM dbo.invoice_payment_references WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND invoice_id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: lockedInvoice.id });
+        const outstandingBalance = calculateOutstandingBalance(lockedInvoice.totalamount, payments);
+        if (!isLegacyInvoiceReferenceEligible({
+          invoice: { ...lockedInvoice, payment_reference: existing?.payment_reference || null },
+          payments,
+          outstandingBalance
+        })) {
+          throw createRequestError(409,
+            'This invoice is already referenced, paid, being paid, or otherwise ineligible.',
+            'LEGACY_REFERENCE_NOT_ELIGIBLE');
+        }
+
+        const paymentReference = await allocateInvoicePaymentReference({
+          transaction, sql, tenantId: req.tenantId, invoiceId: lockedInvoice.id,
+          actorUserId: req.user.id, source: 'manual_supplement'
+        });
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId, invoiceId: lockedInvoice.id,
+          eventType: 'invoice_reference_supplemented',
+          fromStatus: lockedInvoice.status, toStatus: lockedInvoice.status,
+          actorUserId: req.user.id,
+          metadata: {
+            paymentReference, source: 'manual_supplement', reason,
+            outstandingAtAssignment: outstandingBalance,
+            originalInvoiceUnchanged: true, notificationSent: false
+          }
+        });
+        await transaction.commit();
+        res.status(201).json({
+          data: {
+            invoiceId: lockedInvoice.id, payment_reference: paymentReference,
+            source: 'manual_supplement', notificationSent: false
+          },
+          error: null
+        });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.post('/invoices/:invoiceId/payment-proof', async (req, res, next) => {

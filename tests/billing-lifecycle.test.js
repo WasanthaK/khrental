@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
-import { invoiceReferenceDay, displayInvoicePaymentReference, resolveBillingTimezone } from '../src/api/platform/invoicePaymentReference.js';
+import { invoiceReferenceDay, displayInvoicePaymentReference, resolveBillingTimezone, isLegacyInvoiceReferenceEligible } from '../src/api/platform/invoicePaymentReference.js';
 import { invoiceHeading } from '../src/utils/invoiceReference.js';
 import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliveryState.js';
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
@@ -834,6 +834,51 @@ test('numeric payment reference uses the tenant local day and accepts exactly 8 
   assert.equal(displayInvoicePaymentReference('KR26101801'),null);
   assert.equal(displayInvoicePaymentReference('261018001'),null);
   assert.throws(() => invoiceReferenceDay(instant,'Invalid/Zone'),error => error.code==='BILLING_TIMEZONE_INVALID');
+});
+
+
+test('historical invoice supplement eligibility excludes drafts, payments, duplicates and settled invoices', () => {
+  const invoice = { status: 'pending', totalamount: 1500, payment_reference: null };
+  const eligible = (changes = {}) => isLegacyInvoiceReferenceEligible({
+    invoice: { ...invoice, ...changes.invoice },
+    payments: changes.payments || [],
+    outstandingBalance: changes.outstandingBalance ?? 1500
+  });
+  assert.equal(eligible(), true);
+  assert.equal(eligible({invoice: {status: 'overdue'}}), true);
+  for (const status of ['draft', 'paid', 'cancelled', 'rejected', 'verification_pending']) {
+    assert.equal(eligible({invoice: {status}}), false);
+  }
+  assert.equal(eligible({invoice: {payment_reference: '26102101'}}), false);
+  assert.equal(eligible({invoice: {totalamount: 0}}), false);
+  assert.equal(eligible({outstandingBalance: 0}), false);
+  assert.equal(eligible({payments: [{status: 'pending',amount: 1500}]}), false);
+  assert.equal(eligible({payments: [{status: 'verified',amount: 100}]}), false);
+  assert.equal(eligible({payments: [{status: 'rejected',amount: 100}]}), true);
+});
+
+test('legacy reference supplement is explicit, scoped, atomic and side-effect free', () => {
+  const match = billingRouterSource.match(/router\.post\('\/invoices\/:invoiceId\/supplement-reference',[\s\S]*?(?=router\.post\('\/invoices\/:invoiceId\/payment-proof')/);
+  assert.ok(match, 'legacy invoice route must exist');
+  const route = match[0];
+  assert.match(route, /requireInvoiceManage\(req\)/);
+  assert.match(route, /requirePropertyScope\(req, lockedInvoice\.propertyid\)/);
+  assert.match(route, /ASSIGN-LEGACY-INVOICE-REFERENCE/);
+  assert.match(route, /reason\.length < 10/);
+  assert.match(route, /ISOLATION_LEVEL\.SERIALIZABLE/);
+  assert.match(route, /invoices WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(route, /payments WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(route, /invoice_payment_references WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(route, /isLegacyInvoiceReferenceEligible/);
+  assert.match(route, /source: 'manual_supplement'/);
+  assert.match(route, /eventType: 'invoice_reference_supplemented'/);
+  assert.match(route, /notificationSent: false/);
+  assert.doesNotMatch(route, /sendInvoiceEmail|deliverIssuedInvoice|UPDATE invoices|UPDATE payments|createIssuedInvoicePdfAttachment/);
+  const client = readFileSync(new URL('../src/services/platformClient.js', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../src/pages/InvoiceDetails.jsx', import.meta.url), 'utf8');
+  assert.match(client, /assignLegacyInvoicePaymentReference/);
+  assert.match(ui, /Assign legacy payment reference/);
+  assert.match(ui, /assignLegacyInvoicePaymentReference/);
 });
 
 test('reference allocation remains separate from invoice UUID with SQL uniqueness and manual issue gate', () => {
