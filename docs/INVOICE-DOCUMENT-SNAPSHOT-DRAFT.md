@@ -53,3 +53,24 @@ addressed file paths alone are not write-once storage: ordinary storage upload
 can overwrite them. Production still needs a fenced, transactional SQL ledger,
 write-once/conditional object creation, archive reconciliation after crashes,
 object retention controls and exact-attachment byte-equality tests.
+
+
+## Additive SQL Server invoice archive ledger (draft, not applied)
+
+Migration `20261020_01_immutable_invoice_pdf_archive` creates the ledger `dbo.invoice_pdf_archives`
+with one committed document row per tenant/invoice, schema-checked SHA-256
+fingerprints, canonical object path, issued snapshot JSON and byte count.
+An insert trigger confirms the invoice belongs to the same tenant; subsequent
+UPDATE or DELETE is rejected, even for an application administrator. The schema
+is additive and never generates or backfills a historical invoice.
+
+Real SQL Server 2022 disposable tests check idempotency, tenant/invoice scope,
+uniqueness, invalid hashes, and attempted UPDATE/DELETE. The dedicated
+production migration executor's read-only verification list is extended to
+nine schema/ledger entries. **No production apply is authorized or performed.**
+
+The ledger only becomes authoritative when a future governed issuance worker
+implements guarded storage upload, byte verification, committed ledger insert
+and crash recovery. It is not a magic write-once property of R2 or local files;
+operators with direct object-storage write privileges could still modify bytes,
+so retrieval must continue to verify the exact committed SHA-256.

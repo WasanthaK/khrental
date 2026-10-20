@@ -206,6 +206,40 @@ const inspectInvoiceMasterData = async pool => {
   };
 };
 
+const inspectInvoicePdfArchive = async pool => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.invoice_pdf_archives', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'PK_invoice_pdf_archives') THEN 1 ELSE 0 END AS pk_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.foreign_keys
+        WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'FK_invoice_pdf_archives_invoice') THEN 1 ELSE 0 END AS invoice_fk,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
+        WHERE object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'UX_invoice_pdf_archives_object_path' AND is_unique=1)
+        THEN 1 ELSE 0 END AS unique_path,
+      (SELECT COUNT(*) FROM sys.check_constraints
+       WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+         AND is_disabled=0 AND is_not_trusted=0
+         AND name IN (N'CK_invoice_pdf_archives_version',N'CK_invoice_pdf_archives_size',
+                      N'CK_invoice_pdf_archives_snapshot',N'CK_invoice_pdf_archives_hashes',
+                      N'CK_invoice_pdf_archives_path')) AS checked_constraints,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.triggers
+        WHERE parent_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'TR_invoice_pdf_archives_write_once' AND is_disabled=0)
+        THEN 1 ELSE 0 END AS immutable_trigger;
+  `);
+  const row=result.recordset?.[0]||{};
+  const satisfied=Boolean(row.table_exists&&row.pk_exists&&row.invoice_fk&&row.unique_path
+    &&row.checked_constraints===5&&row.immutable_trigger);
+  return {
+    satisfied,
+    detail:`table=${row.table_exists}, pk=${row.pk_exists}, invoice_fk=${row.invoice_fk}, unique_path=${row.unique_path}, checks=${row.checked_constraints}, immutable_trigger=${row.immutable_trigger}`
+  };
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -276,6 +310,13 @@ const MIGRATIONS = [
     inspect: inspectInvoiceMasterData,
     verify: async pool => assertSatisfied(inspectInvoiceMasterData(pool),
       'Invoice master-data schema verification failed.')
+  },
+  {
+    id: '20261020_01_immutable_invoice_pdf_archive',
+    file: 'migrations/20261020_01_immutable_invoice_pdf_archive.sql',
+    inspect: inspectInvoicePdfArchive,
+    verify: async pool => assertSatisfied(inspectInvoicePdfArchive(pool),
+      'Issued PDF archive ledger schema verification failed.')
   }
 ];
 
