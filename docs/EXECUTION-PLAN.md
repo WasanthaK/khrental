@@ -1963,10 +1963,22 @@ Do **not** rerun production apply to recreate proof.
 
 ### Outstanding acceptance, in order of owner action
 
-1. **SendGrid invoice-mailbox proof — OWNER-HELD.** Separately approve
-   an isolated noncustomer test invoice and recipient. Retain redacted
-   provider accepted/delivered and billing-event evidence, and confirm
-   mailbox receipt. A provider acceptance response alone is not delivery.
+1. **Controlled invoice Gmail receipt — OWNER-CONFIRMED / PROVIDER TRACE OPEN.**
+   On 2026-10-20 the release owner supplied screenshots and explicitly
+   confirmed the invoice was deliberately issued to a test renter whose
+   Gmail mailbox they control, not an actual customer. Gmail displays
+   a sender labeled "Kubeira Property Admin", the subject
+   "KH Rentals invoice for 2027-02", and a readable PDF attachment.
+   Gmail's message details show an authenticated signing domain
+   `quixo.online`, a mailing subdomain `em3798.quixo.online`, and TLS.
+   The PDF displays reference 26101901, total LKR 23,340.00 and two pages.
+   **Controlled mailbox receipt and PDF readability: PASS (owner attested).**
+   Recipient address, raw headers, screenshots, bank account details and
+   invoice bytes are deliberately not committed to this public repository.
+   **Still OPEN:** authoritative invoice issue/delivery event correlation
+   with the SendGrid message ID and provider status. Gmail domain details
+   alone do not prove a particular SendGrid delivery event.
+   No second test invoice or email is needed merely to record this evidence.
 2. **Real Evia signer/callback/signed PDF — OWNER-HELD.** Separately
    approve a fenced test, verify callback, exact signed PDF bytes and audit
    and both allowed/denied retrieval. Canary remains OFF until approved.

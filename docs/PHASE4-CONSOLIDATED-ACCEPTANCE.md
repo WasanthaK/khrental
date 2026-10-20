@@ -201,7 +201,7 @@ external provider and business release gates open.
 | Production migrations **through October 18 (7 managed entries)** | [Apply #39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984), job 117848083384, dedicated execution khrental-db-migrator-ivffmmn: owner-confirmed apply through 20261018_01_invoice_payment_references, formerly untracked auth-store repair adopted after schema inspection. [Strict verify #39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663), job 117850452655, execution khrental-db-migrator-4mr0tpa: all **7/7 LEDGERED / SCHEMA_OK** checks and dedicated-executor identity checks passed. | **PASS** for exactly this baseline. Do not repeat privileged apply. |
 | Latest main deployment | SHA 3d4dcb10b49562c462815890debd74104c7ae823, [#39201496936](https://github.com/WasanthaK/khrental/actions/runs/39201496936): build/authorization and Azure Ready/public-build workflow gates passed on October 19. | **AUTOMATED DEPLOYMENT PASS**, not final physical acceptance. |
 | Invoice redesign drafts | PR #332 merged; [#338](https://github.com/WasanthaK/khrental/pull/338), [#339](https://github.com/WasanthaK/khrental/pull/339), [#340](https://github.com/WasanthaK/khrental/pull/340), [#341](https://github.com/WasanthaK/khrental/pull/341) open draft; isolated latest [test #39372706676](https://github.com/WasanthaK/khrental/actions/runs/39372706676) green. Invoice master and archive migrations dated October 19/20 are **not applied to production**. | **DRAFT ENGINEERING VALIDATED ONLY.** Future deployment/DDL needs separate authorization. |
-| Controlled SendGrid **invoice** delivery | No redacted controlled invoice mailbox/provider delivered receipt supplied. Earlier invitation-mail acceptance is not an invoice receipt. | **OWNER-HELD / OPEN.** |
+| Controlled SendGrid **invoice** delivery | On **2026-10-20**, the owner provided Gmail inbox, PDF viewer and message-detail screenshots and confirmed this was a deliberate test renter/mailbox under their control. Subject "KH Rentals invoice for 2027-02"; PDF reference **26101901**, total **LKR 23,340.00**, readable, **two pages**. Gmail displayed sender label "Kubeira Property Admin", mailing subdomain `em3798.quixo.online`, signing domain `quixo.online`, and TLS; no recipient address, raw message, image or bank details have been committed. **No authoritative `invoice_issued` / email-delivery ledger or SendGrid event/message ID correlation has yet been demonstrated.** | **MAILBOX RECEIPT + PDF READABILITY PASS (owner-attested). PROVIDER/LEDGER TRACE OPEN.** No additional invoice email is needed solely for this record. |
 | Controlled real Evia signing | Hardened signer/callback/retained document needs a separate real test; canary OFF. | **OWNER-HELD / OPEN.** |
 | Unknown manual/dynamic compatibility caller risk | Static census exists; operator usage disposition not signed. | **OPEN.** |
 | Final controlled business/security sign-off | No dated full release-owner approval and end-to-end journey acceptance. | **NOT APPROVED.** |
@@ -210,9 +210,14 @@ external provider and business release gates open.
 
 - [x] Verify seven managed production migrations from the original governed
       apply and independent strict verifier, with exact linked evidence.
-- [ ] Owner authorizes and independently confirms one controlled test
-      SendGrid invoice delivered to a test mailbox, with redacted proof.
-      No customer mail and no assistant access to personal inbox required.
+- [x] Owner confirmed on 2026-10-20 that invoice 26101901 was a
+      deliberately controlled test to a renter/mailbox under their control;
+      Gmail displayed the email, sender/domain/TLS details and its readable
+      two-page PDF. Screenshot artifacts remain in the conversation only.
+- [ ] Reconcile the existing invoice-issued and email-delivery records
+      to a redacted SendGrid provider message ID/status where available.
+      Avoid a new invoice or email merely to compensate for missing logs.
+      Provider-origin and delivery-event verification remain OPEN.
 - [ ] Owner approves and verifies one real fenced Evia signer/callback,
       signed PDF, audit and tenant-specific document retrieval. Canary OFF
       unless explicitly authorized.
