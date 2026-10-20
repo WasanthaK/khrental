@@ -31,6 +31,8 @@ jobs:
         run: node --test tests/invoice-archive-candidate.test.js
       - name: Validate guarded archive publishing and recovery
         run: node --test tests/invoice-archive-write-candidate.test.js
+      - name: Validate atomic local invoice archive storage
+        run: node --test tests/invoice-archive-local-proof.test.js
       - name: Validate authorization
         run: npm run test:authorization
       - name: Verify migrations on disposable SQL Server 2022
