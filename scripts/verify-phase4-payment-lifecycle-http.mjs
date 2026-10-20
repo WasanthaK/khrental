@@ -233,7 +233,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
     await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
     201, 'staff assigned one legacy reference');
   assert.equal(guid(assignedSupplement.invoiceId), invoiceA);
-  assert.match(assignedSupplement.payment_reference, /^\\d{8}$/);
+  assert.match(assignedSupplement.payment_reference, /^\d{8}$/);
   assert.equal(assignedSupplement.source, 'manual_supplement');
   assert.equal(assignedSupplement.notificationSent, false);
   assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
