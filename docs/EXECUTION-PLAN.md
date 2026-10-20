@@ -1,10 +1,12 @@
 # KH Rentals Execution Plan
 
-**Status date:** 2026-10-16  
+**Status date:** 2026-10-20  
 **Last verified behavior-changing application baseline:** `c2cedf0ae4787f688297d949d42f5f9a8acca484` (production deployment [#38874383888](https://github.com/WasanthaK/khrental/actions/runs/38874383888); Azure Ready revision `0000303`, exact public build SHA, MSSQL ready)  
 **Latest verified serving release-hardening SHA (tests/docs/contract only):** `0edeb80eb91840857a4d758d32360acbfa2fb231`, [main deployment #38899514979](https://github.com/WasanthaK/khrental/actions/runs/38899514979), Azure Ready revision `0000307`, exact public SHA, MSSQL ready; 568/568 authorization regression tests and build green.  
 **P0.1 completion production proof:** `b6af12bdd0ecefe870e8297c984a985cffa98dd7`  
 **Purpose:** This file is the single source of truth for what we work on next. It must be updated after every completed production change. Documentation-only commits may produce a newer build fingerprint without changing application behavior.
+
+**Controlling 2026-10-20 release status:** Production main deployment [#39201496936](https://github.com/WasanthaK/khrental/actions/runs/39201496936), SHA 3d4dcb10b49562c462815890debd74104c7ae823 passed build, authorization and Azure deployment/readiness validation on October 19. The dated 2026-10-16 serving-SHA entries elsewhere in this file are historical. See the new final section below for the active acceptance decision and the seven-migration evidence reconciliation.
 
 ## Operating rules
 
@@ -1910,3 +1912,73 @@ After each merged production change:
 - Missing banking details must remain explicitly missing; never substitute today's live property bank account into a historical invoice.
 
 **Implementation sequence:** (1) complete/accept PR #332 default PDF polish; (2) approved issuer identity and branding configuration plus tenant-owned logo; (3) curated templates and preview; (4) immutable PDF archive + version/hash/resend consistency; (5) optional broader invoice design controls as demand demonstrates. Do not treat this parked SaaS capability as a Phase 4 acceptance waiver or as authorization to change production financial records.
+
+## Canonical release gate — reconciled 2026-10-20 (controlling update)
+
+**Status:** Phase 0–3 COMPLETE; Phase 4 OPEN for operational and external acceptance;
+Phase 5 source/regression development COMPLETE but overall production release NOT APPROVED.
+The single active work item is **release-owner acceptance/evidence reconciliation**.
+This section supersedes previous 2026-10-16 statements that production migration
+apply and strict verification lacked independently retrievable evidence.
+
+### Seven-migration production gate — VERIFIED COMPLETE for its exact baseline
+
+- [Authorized production apply #39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984)
+  was successful October 19, with Production confirmation APPLY-PRODUCTION
+  and migration upper bound 20261018_01_invoice_payment_references.
+  Job 117848083384 used the isolated executor khrental-db-migrator-ivffmmn.
+  Its logs show adoption of the already-satisfied auth-store repair
+  20261006_01_repair_auth_store_runtime_columns without SQL replay, plus
+  application and verification of invoice payment references. Earlier
+  five migrations were already ledgered.
+- [Independent strict production verifier #39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663)
+  succeeded October 19. Job 117850452655, dedicated execution
+  khrental-db-migrator-4mr0tpa, checked the dedicated identity and
+  retained all seven LEDGERED / SCHEMA_OK inspection results.
+- [Latest verified main deployment #39201496936](https://github.com/WasanthaK/khrental/actions/runs/39201496936)
+  succeeded for SHA 3d4dcb10b49562c462815890debd74104c7ae823
+  with the normal authorization, build, Azure and public-build gates.
+
+**Decision:** seven-migration apply/strict evidence gate PASSED for the
+production baseline ending 20261018_01_invoice_payment_references.
+Do **not** rerun production apply to recreate proof.
+
+### Invoice enhancement — draft only, not production release evidence
+
+- [Default professional PDF PR #332](https://github.com/WasanthaK/khrental/pull/332)
+  is merged. The follow-up [readiness PR #338](https://github.com/WasanthaK/khrental/pull/338),
+  [issuer-schema PR #339](https://github.com/WasanthaK/khrental/pull/339),
+  [admin controls PR #340](https://github.com/WasanthaK/khrental/pull/340),
+  and [snapshot/archive PR #341](https://github.com/WasanthaK/khrental/pull/341)
+  remain unmerged drafts. PR #340 builds on #339 and #341 builds on #340.
+- [Draft appleserv run #39372706676](https://github.com/WasanthaK/khrental/actions/runs/39372706676)
+  is green at commit f38b35dd60ea285f191fe0ca1cd03f315b0000e6,
+  including the isolated invoice snapshot tests and disposable SQL Server proof.
+  This is not permission to activate live invoice issuance.
+- Proposed migrations 20261019_01_invoice_master_data and
+  20261020_01_immutable_invoice_pdf_archive are **not evidenced as
+  applied to production**. They require separate, future governed
+  application and verification if this invoice release is approved.
+  SaaS tenant-branded template customization remains PARKED.
+
+### Outstanding acceptance, in order of owner action
+
+1. **SendGrid invoice-mailbox proof — OWNER-HELD.** Separately approve
+   an isolated noncustomer test invoice and recipient. Retain redacted
+   provider accepted/delivered and billing-event evidence, and confirm
+   mailbox receipt. A provider acceptance response alone is not delivery.
+2. **Real Evia signer/callback/signed PDF — OWNER-HELD.** Separately
+   approve a fenced test, verify callback, exact signed PDF bytes and audit
+   and both allowed/denied retrieval. Canary remains OFF until approved.
+3. **Legacy/manual caller disposition — OWNER DECISION OPEN.**
+   Inventory and static checks are complete, but unknown operator and
+   dynamic usage requires an explicit risk decision. No legacy SQL script,
+   generic execution RPC or direct SQL command is an authorized alternative
+   production migration process.
+4. **Final controlled tenant/billing/maintenance/agreement acceptance and
+   dated security/business sign-off — OPEN.** Accept or reject with evidence.
+   Engineering CI and a green deployment do not imply a release approval.
+
+The earlier checklist is a historical record, not a reason to run migration
+apply again. This documentation-only change does not merge feature PRs,
+apply DDL, deploy a build, send invoices or start Evia signing.

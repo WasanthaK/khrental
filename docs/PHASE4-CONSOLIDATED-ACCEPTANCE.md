@@ -190,3 +190,41 @@ The preceding Package C table's “no actual production verification” must be 
 
 **Ownership and guardrails:** No additional GitHub workflow, migration, test-email credential connector, browser automation of the owner's inbox, real Evia canary, schema mutation or Phase 5 feature scope is authorized by this checklist. The owner can complete both parked provider tests on their own schedule. Preserve the verified application state in the meantime. Any future behavior-changing fix requires the existing exact-SHA deploy/health discipline.
 
+## Release evidence reconciliation — 2026-10-20 (controlling status)
+
+This newer update supersedes the 2026-10-16 **unverified production
+migration apply / strict verification** item, but leaves all independent
+external provider and business release gates open.
+
+| Gate | Evidence / limitation | Current verdict |
+| --- | --- | --- |
+| Production migrations **through October 18 (7 managed entries)** | [Apply #39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984), job 117848083384, dedicated execution khrental-db-migrator-ivffmmn: owner-confirmed apply through 20261018_01_invoice_payment_references, formerly untracked auth-store repair adopted after schema inspection. [Strict verify #39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663), job 117850452655, execution khrental-db-migrator-4mr0tpa: all **7/7 LEDGERED / SCHEMA_OK** checks and dedicated-executor identity checks passed. | **PASS** for exactly this baseline. Do not repeat privileged apply. |
+| Latest main deployment | SHA 3d4dcb10b49562c462815890debd74104c7ae823, [#39201496936](https://github.com/WasanthaK/khrental/actions/runs/39201496936): build/authorization and Azure Ready/public-build workflow gates passed on October 19. | **AUTOMATED DEPLOYMENT PASS**, not final physical acceptance. |
+| Invoice redesign drafts | PR #332 merged; [#338](https://github.com/WasanthaK/khrental/pull/338), [#339](https://github.com/WasanthaK/khrental/pull/339), [#340](https://github.com/WasanthaK/khrental/pull/340), [#341](https://github.com/WasanthaK/khrental/pull/341) open draft; isolated latest [test #39372706676](https://github.com/WasanthaK/khrental/actions/runs/39372706676) green. Invoice master and archive migrations dated October 19/20 are **not applied to production**. | **DRAFT ENGINEERING VALIDATED ONLY.** Future deployment/DDL needs separate authorization. |
+| Controlled SendGrid **invoice** delivery | No redacted controlled invoice mailbox/provider delivered receipt supplied. Earlier invitation-mail acceptance is not an invoice receipt. | **OWNER-HELD / OPEN.** |
+| Controlled real Evia signing | Hardened signer/callback/retained document needs a separate real test; canary OFF. | **OWNER-HELD / OPEN.** |
+| Unknown manual/dynamic compatibility caller risk | Static census exists; operator usage disposition not signed. | **OPEN.** |
+| Final controlled business/security sign-off | No dated full release-owner approval and end-to-end journey acceptance. | **NOT APPROVED.** |
+
+### Current release-owner checklist
+
+- [x] Verify seven managed production migrations from the original governed
+      apply and independent strict verifier, with exact linked evidence.
+- [ ] Owner authorizes and independently confirms one controlled test
+      SendGrid invoice delivered to a test mailbox, with redacted proof.
+      No customer mail and no assistant access to personal inbox required.
+- [ ] Owner approves and verifies one real fenced Evia signer/callback,
+      signed PDF, audit and tenant-specific document retrieval. Canary OFF
+      unless explicitly authorized.
+- [ ] Owner records explicit risk disposition on known manual SQL commands
+      and unproved dynamic callers; critical tenant isolation, signer
+      provenance, payment mutation and signed-document retention cannot
+      be waived.
+- [ ] Release owner records APPROVE or DO NOT APPROVE with date and
+      evidence for tenant, property, billing/receipts, maintenance/
+      notifications, agreements and security.
+
+**Canonical disposition:** Phase 4 remains OPEN, Phase 5 engineering scope
+is complete but combined production RELEASE SIGN-OFF IS BLOCKED. Do not
+backdate this evidence to October 16 or treat it as permission to apply
+the newer invoice migrations, merge feature branches, run Evia, or send mail.
