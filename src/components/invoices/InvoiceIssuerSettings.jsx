@@ -9,7 +9,7 @@ const fields=[
   ['supportPhone','Billing support phone'],
   ['website','Website (HTTPS)']
 ];
-const blank=()=>Object.fromEntries(fields.map(([k])=>[k,'']));
+const blank=()=>({...Object.fromEntries(fields.map(([k])=>[k,''])),logoPng:''});
 const normal=(data={})=>({...blank(),...data,design:{...DEFAULT_INVOICE_DESIGN,...data.design}});
 export default function InvoiceIssuerSettings(){
   const [profile,setProfile]=useState(normal);
@@ -20,7 +20,28 @@ export default function InvoiceIssuerSettings(){
   const [notice,setNotice]=useState('');
   const [error,setError]=useState('');
   const [previewError,setPreviewError]=useState('');
+  const [logoError,setLogoError]=useState('');
   const field=(key,value)=>setProfile(p=>({...p,[key]:value}));
+  const importLogo=event=>{
+    const file=event.target.files?.[0];
+    event.target.value='';
+    if(!file)return;
+    setLogoError('');
+    if(file.type!=='image/png'||file.size>128*1024||file.size<45){
+      setLogoError('Choose an RGB or RGBA PNG logo no larger than 128 KB.');
+      return;
+    }
+    const reader=new FileReader();
+    reader.onerror=()=>setLogoError('Unable to read the selected logo.');
+    reader.onload=()=>{
+      if(typeof reader.result!=='string'||!reader.result.startsWith('data:image/png;base64,')){
+        setLogoError('The selected file is not a supported PNG image.');
+        return;
+      }
+      field('logoPng',reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
   const design=(key,value)=>setProfile(p=>({...p,design:{...p.design,[key]:value}}));
   useEffect(()=>{
     let mounted=true;
@@ -75,6 +96,34 @@ export default function InvoiceIssuerSettings(){
                 className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
                 value={profile[key]||''} onChange={e=>field(key,e.target.value)}/>
             </label>)}
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-800">Business logo</div>
+            <div className="flex flex-wrap items-center gap-4">
+              {profile.logoPng ? (
+                <img src={profile.logoPng} alt="Uploaded invoice issuer logo"
+                  className="h-16 w-28 rounded-lg border border-slate-200 bg-white object-contain p-2"/>
+              ) : (
+                <div className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-400">
+                  No logo
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="block text-sm text-slate-700">Upload an RGB/RGBA PNG (maximum 128 KB)
+                  <input type="file" accept="image/png" onChange={importLogo}
+                    className="mt-1 block w-full text-xs"/>
+                </label>
+                {profile.logoPng && (
+                  <button type="button" className="text-xs underline"
+                    onClick={()=>{field('logoPng','');setLogoError('');}}>Remove logo</button>
+                )}
+              </div>
+            </div>
+            {logoError && <p className="mt-2 text-sm text-red-700" role="alert">{logoError}</p>}
+            <p className="mt-2 text-xs text-slate-500">
+              The logo is saved with this tenant's billing profile and captured in future
+              issued PDF snapshots. Previously issued invoices do not change.
+            </p>
           </div>
         </fieldset>
         <fieldset className="space-y-3">

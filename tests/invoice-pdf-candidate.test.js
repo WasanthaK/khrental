@@ -95,3 +95,20 @@ test('preview is visually marked and never alters the financial snapshot',async(
   assert.equal(pdf.pageCount,1);
   assert.deepEqual(sample,before);
 });
+
+test('branded issued PDF embeds tenant PNG logo and locks it into the immutable snapshot',async()=>{
+  const sample=invoice();
+  sample.issuer.logoPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  const branded=normalizeInvoiceDocumentSnapshot(sample);
+  assert.equal(branded.issuer.logoPng,sample.issuer.logoPng);
+  const withLogo=await createInvoiceDocumentPdfCandidate(sample);
+  const without=structuredClone(sample);
+  delete without.issuer.logoPng;
+  const withoutLogo=await createInvoiceDocumentPdfCandidate(without);
+  assert.notEqual(withLogo.sha256,withoutLogo.sha256);
+  assert.notEqual(withLogo.snapshotSha256,withoutLogo.snapshotSha256);
+  assert.ok(Buffer.from(withLogo.content,'base64').length>
+    Buffer.from(withoutLogo.content,'base64').length);
+  const pdf=await PDFDocument.load(Buffer.from(withLogo.content,'base64'));
+  assert.equal(pdf.getPageCount(),1);
+});

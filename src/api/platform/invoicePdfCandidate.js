@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { INVOICE_TEMPLATES, normalizeInvoiceDesign } from './invoiceDesign.js';
+import { normalizeInvoiceLogo, invoiceLogoBytes } from './invoiceLogo.js';
 
 // Draft-only renderer: accepts a complete, issue-time document snapshot.
 // Do not pass mutable tenant/property records to this renderer, or wire it
@@ -86,7 +87,8 @@ export const normalizeInvoiceDocumentSnapshot = source => {
       role: issuer.role, legalName, postalAddress,
       contactEmail: clean(issuer.contactEmail, 320),
       contactPhone: clean(issuer.contactPhone, 100),
-      authorityConfirmed: issuer.authorityConfirmed === true
+      authorityConfirmed: issuer.authorityConfirmed === true,
+      logoPng: normalizeInvoiceLogo(issuer.logoPng)
     },
     renter: { name: renterName },
     property: { name: propertyName, address: clean(source.property?.address, 320) },
@@ -109,6 +111,8 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
   pdf.setProducer('KH Rentals Invoice Renderer v1');
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const logoImage = model.issuer.logoPng
+    ? await pdf.embedPng(invoiceLogoBytes(model.issuer.logoPng)) : null;
   const W = 595.28, H = model.design.paperFormat === 'Letter' ? 792 : 841.89;
   const LEFT = 42, RIGHT = W - 42, BOTTOM = 69;
   const palette = INVOICE_TEMPLATES[model.design.template];
@@ -166,8 +170,16 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
     } else if (model.design.template === 'modern') {
       page.drawRectangle({x:LEFT,y:H-43,width:4,height:23,color:blue});
     }
+    if (logoImage) {
+      const scale=Math.min(42/logoImage.width,26/logoImage.height);
+      page.drawImage(logoImage,{
+        x:LEFT+3,y:H-51,
+        width:logoImage.width*scale,height:logoImage.height*scale
+      });
+    }
     draw(model.design.template === 'classic' ? 'STATEMENT OF RENT' : 'RENTAL INVOICE',
-      model.design.template === 'minimal' ? LEFT : LEFT+13,H-34,bold,15);
+      (model.design.template === 'minimal' ? LEFT : LEFT+13)+(logoImage ? 50 : 0),
+      H-34,bold,15);
     right(model.paymentReference,RIGHT,H-33,bold,10);
     if (continuation) draw('CHARGES CONTINUED',LEFT+13,H-51,regular,8.5,muted);
     line(H-62);

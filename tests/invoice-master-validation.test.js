@@ -96,3 +96,15 @@ test('issuer logo accepts bounded PNG and blocks scripts, remote links and overs
   assert.equal(normalizeInvoiceLogo('data:image/png;base64,'+validRgb),
     'data:image/png;base64,'+validRgb);
 });
+
+test('logo survives full issuer profile normalization and rejects external resources',()=>{
+  const logo='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  const profile=normalizeIssuerProfile({
+    legalName:'Registered Company',postalAddress:'Registered Road',
+    logoPng:logo,design:{template:'modern'}
+  });
+  assert.equal(profile.logoPng,logo);
+  assert.equal(profile.design.template,'modern');
+  assert.throws(()=>normalizeIssuerProfile({logoPng:'https://example.test/unsafe.svg'}),
+    /uploaded PNG/);
+});
