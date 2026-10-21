@@ -1994,3 +1994,32 @@ Do **not** rerun production apply to recreate proof.
 The earlier checklist is a historical record, not a reason to run migration
 apply again. This documentation-only change does not merge feature PRs,
 apply DDL, deploy a build, send invoices or start Evia signing.
+
+
+## Canonical work lock — reconciled release priorities, 2026-10-21
+
+**Supersedes the dated Phase 4/5 "active slice" instructions above.**
+Original canonical engineering and Phase 5 source regression are complete.
+The existing database **7/7** was applied and strictly verified October 19:
+[#39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984),
+[#39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663).
+The controlled invoice **26101901** arrived in the owner's Gmail with a readable
+PDF; Evia agreement **#47FDEA13** was displayed Completed with both signatories
+Signed; secure invitation was independently accepted. These functional tests
+must not be repeated solely to produce another checklist tick.
+
+The deployed production app is Azure Ready `0000318` serving merge
+`b2b9d66cbb7b098e9c5c52202fd7775af278318a`, MSSQL ready.
+[Read-only production plan #39582049166](https://github.com/WasanthaK/khrental/actions/runs/39582049166)
+attempt 2 showed **7 APPLIED / 2 PENDING** with no SQL mutation.
+The two new migrations belong to the separately authorized Invoice Designer,
+whose real financial-document release still requires governed schema and R2
+acceptance. Do not silently fold it into the original Phase 4 closeout.
+
+**Exactly one active independent task: C01 canonical evidence reconciliation**
+in `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. Then work C02 existing SendGrid
+event-to-ledger evidence; C03 existing Evia callback/audit/PDF retrieval
+evidence; C04 owner operational risk disposition; C05 final dated release
+decision. C02/C03 are *correlations on prior successful tests* rather than
+new live actions. I01–I03 remain separate Invoice Designer rollout gates.
+No new application scope or Production mutation is authorized by this note.

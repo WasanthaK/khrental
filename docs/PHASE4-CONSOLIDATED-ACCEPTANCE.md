@@ -233,3 +233,54 @@ external provider and business release gates open.
 is complete but combined production RELEASE SIGN-OFF IS BLOCKED. Do not
 backdate this evidence to October 16 or treat it as permission to apply
 the newer invoice migrations, merge feature branches, run Evia, or send mail.
+
+
+## Canonical release reconciliation and action register — 2026-10-21 (latest controlling status)
+
+**Source of authority:** original canonical Phase 4/5 acceptance criteria, not old
+dated "next package" text. This entry supersedes earlier claims that the
+original 7-migration apply, live controlled invoice mailbox, invitation
+acceptance or real Evia signing exercise still need to be performed.
+**Engineering-complete is not release-approved.** Phase 4 final operational
+sign-off remains OPEN; Phase 5 source regression development is COMPLETE.
+
+### Completed — retain existing proof; do not repeat successful operations
+
+| Gate | Evidence/status | Decision |
+| --- | --- | --- |
+| Original Phases 0–3 and bounded Phase 4 engineering | Existing merged canonical contracts; Package C source classification in `PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` | **ENGINEERING COMPLETE**, compatibility operational caller policy still needs owner disposition |
+| Phase 5 bounded security/regression development | PRs #314–#319 merged; cross-domain fixtures/authorization/build previously green | **SOURCE SCOPE COMPLETE**; final release sign-off is separate |
+| Production migrations **1–7** | Governed apply [#39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984) and dedicated strict seven-migration verification [#39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663), execution `khrental-db-migrator-4mr0tpa`, seven retained ledger/schema checks | **PASS** for existing seven; **do not reapply** |
+| Controlled invoice mailbox | Owner-confirmed Gmail receipt and readable two-page PDF on Oct 20, test reference **26101901**, LKR 23,340.00, subject "KH Rentals invoice for 2027-02". Details of recipient and bank account are deliberately not published | **REAL MAILBOX/PDF FUNCTIONAL PASS**; provider-to-ledger correlation still open |
+| Evia live signing | Owner-confirmed completed signer Oct 17; Oct 18 signed agreement **#47FDEA13** showed landlord and renter both Signed, agreement Completed, after PR #326. Source evidence is owner-provided application screenshots, documented in [draft PR #324](https://github.com/WasanthaK/khrental/pull/324) | **LIVE SIGNING/UI FUNCTIONAL PASS**; webhook, immutable PDF, audit object and access evidence still separately open |
+| Secure invitation | Owner independently tested and accepted invitation workflow Oct 18. The non-receivable dummy email on agreement #47FDEA13 remains correctly **Invitation not accepted**; that specific demonstration tenancy is not activated | **INVITATION WORKFLOW PASS**; no repeat invite or bypass |
+| Current application serving baseline | [Deployment #39582049206](https://github.com/WasanthaK/khrental/actions/runs/39582049206), merge [PR #345](https://github.com/WasanthaK/khrental/pull/345) commit `b2b9d66cbb7b098e9c5c52202fd7775af278318a`, Azure Ready revision `0000318`, exact public build fingerprint and live MSSQL health confirmed | **PASS** for deployment, not feature-flag or schema activation |
+| Latest read-only production database plan | [#39582049166](https://github.com/WasanthaK/khrental/actions/runs/39582049166), attempt 2 succeeded: seven `APPLIED` with matching checksums; migration eight/nine `PENDING`, no SQL changes | **READ-ONLY PASS**; new enhancements not yet applied |
+
+### Action register — original canonical release (only unresolved decisions)
+
+| ID | Owner/action | Exact closure evidence | State |
+| --- | --- | --- | --- |
+| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced, with no duplicate provider calls; review and merge this docs-only PR | **IN REVIEW** (reconciliation prepared; not yet merged) |
+| C02 | Operations — reconcile existing **invoice 26101901** issue/delivery ledger with a redacted SendGrid provider message/event ID and delivered result | Existing email and PDF receipt already pass; retain matching provider event and issue/attempt/accepted-or-delivered record, or state explicitly that historic telemetry is unavailable | **EVIDENCE OPEN**; never reissue a new invoice just for logs |
+| C03 | Operations — reconcile signed agreement **#47FDEA13** against Evia callback, retained signed PDF, `audit_trail.pdf`, and protected authorized/denied retrieval | Match existing agreement/attempt/document IDs and byte-provenance where available; record missing artifacts explicitly | **EVIDENCE OPEN**, not a repeat live signing test; fenced canary stays OFF |
+| C04 | Release owner — approve explicit restrictions for manual/dynamic legacy SQL/operator callers | Record that `npm run migrate`, `execute-sql`, direct `migrate:*` and historical scripts are **not governed production schema authority**. Retain unknown dynamic callers as accepted low-risk deferral only with owner/control, or flag material risk BLOCKED; no broad deletion | **OWNER DECISION OPEN** |
+| C05 | Release owner — final original canonical release decision | Review current tenant/property/unit, invoice/payment/receipt, agreement/signed PDF, maintenance/notification and security proof, unresolved C02–C04 or formally justified noncritical deferrals; record dated **APPROVE** or **DO NOT APPROVE** | **NOT SIGNED OFF** |
+
+**Interpretation:** C02 is *telemetry correlation*, not new SendGrid functional
+testing. C03 is *archival and audit evidence*, not another signer exercise.
+A reviewer must not mark C02/C03 full provider/audit PASS from UI screenshots.
+
+### Separate authorized Invoice Designer rollout — not an original canonical closure prerequisite
+
+| ID | Scope/decision | Current verified state |
+| --- | --- | --- |
+| I01 | Approve governed preflight, then separately approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by strict 9/9 | Both SQL migrations **PENDING** on Oct 21 production read-only plan. No apply or flag enablement approved |
+| I02 | Verify real private R2 conditional PUT/readback/immutability and controlled branding, PDF download/resend/customer journey after I01 | Invoice Designer code merged in PR #345 and deployed under `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` gate; production archive activation **NOT APPROVED** |
+| I03 | Before enabling customer use, resolve issuer Settings availability while migration eight is unapplied | Settings mounts Invoice Designer for authorized admins but the issuer-profile SQL column is absent until I01; treat unavailable UI as a bounded extra-scope rollout concern, not a reopened original Phase 4 program |
+
+**Rules:** Do not rerun original 7-migration apply, send a new invoice,
+ask signers to sign again, activate the Evia canary, change financial records,
+merge unrelated draft PRs, apply migrations eight/nine, or enable invoice
+archiving through this evidence-only update. Future runtime fixes require their
+normal exact-SHA tests and authorized release path.
