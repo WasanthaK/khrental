@@ -228,6 +228,14 @@ export const getInvoiceAccount = async (invoiceId) => {
   }
 };
 
+
+export const getIssuedInvoicePdf = async invoiceId => {
+  try {
+    const result = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/issued-document`);
+    return { data: result?.data || null, error: null };
+  } catch(error){ return {data:null,error}; }
+};
+
 export const updateInvoiceDraft = async (invoiceId, updates = {}) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/draft`, {

@@ -10,6 +10,9 @@ import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
 import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
+import { createInvoiceArchiveSqlCandidateAdapters } from './invoiceArchiveSqlCandidateAdapters.js';
+import { createIssuedInvoiceR2ArchiveStore } from './issuedInvoiceR2ArchiveStore.js';
+import { loadVerifiedIssuedInvoiceDocument } from './issuedInvoiceDocumentRead.js';
 import { allocateInvoicePaymentReference } from './invoicePaymentReference.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
@@ -407,14 +410,54 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       assertInvoiceAccess(req, invoice, false);
       const projection = await buildAccountProjection(req, invoice);
       const delivery = await loadInvoiceDelivery(req.tenantId, invoice.id);
+      let issuedDocument = { available: false };
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true' &&
+          String(invoice.status || '').toLowerCase() !== 'draft') {
+        const pool = await getMssqlPool();
+        const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+        const committed = await archiveLedger.loadCommitted({
+          tenantId:req.tenantId,invoiceId:invoice.id
+        });
+        issuedDocument = {
+          available: Boolean(committed),
+          ...(committed ? {sha256:committed.pdfSha256} : {})
+        };
+      }
       res.json({
-        data: { ...projection, delivery: isTenantRole({ user: req.user, membership: req.membership })
+        data: { ...projection, issuedDocument,
+          delivery: isTenantRole({ user: req.user, membership: req.membership })
           ? { status: delivery.status } : delivery },
         error: null
       });
     } catch (error) {
       next(error);
     }
+  });
+
+
+  // This is the ONLY customer-facing issued-PDF read entrypoint. Generic
+  // storage access rejects /invoices/{id}/issued, and the caller cannot choose
+  // a storage path. Distinct from the editable account-summary export.
+  router.get('/invoices/:invoiceId/issued-document', async (req, res, next) => {
+    try {
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED !== 'true') {
+        throw createRequestError(404,
+          'Issued PDF archives are not enabled for this workspace.',
+          'ISSUED_INVOICE_PDF_NOT_AVAILABLE');
+      }
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      assertInvoiceAccess(req, invoice, false);
+      assertInvoiceIssued(invoice);
+      const pool = await getMssqlPool();
+      const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+      const objectStorage = createIssuedInvoiceR2ArchiveStore();
+      const data = await loadVerifiedIssuedInvoiceDocument({
+        tenantId:req.tenantId,invoiceId:invoice.id,archiveLedger,objectStorage
+      });
+      res.set('Cache-Control','private, no-store');
+      res.set('X-Content-Type-Options','nosniff');
+      res.json({data,error:null});
+    } catch (error) { next(error); }
   });
 
   router.patch('/invoices/:invoiceId/draft', async (req, res, next) => {
