@@ -4,6 +4,7 @@ on:
     branches:
       - feature/invoice-admin-validation-20261019
       - feature/invoice-document-snapshot-20261020
+      - feature/customer-invoice-designer-20261021
 
 permissions:
   contents: read

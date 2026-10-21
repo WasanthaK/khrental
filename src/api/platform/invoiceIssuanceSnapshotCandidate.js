@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { normalizeIssuerProfile, normalizePropertyParties } from './invoiceMasterValidation.js';
 import { normalizeInvoiceDocumentSnapshot } from './invoicePdfCandidate.js';
+import { normalizeInvoiceDesign } from './invoiceDesign.js';
 
 // Draft only. Call within the same tenant-authorized SERIALIZABLE transaction
 // as an eventual invoice_issued event. No live router invokes this module.
@@ -130,7 +131,10 @@ export const buildInvoiceIssuanceSnapshotCandidate=({
       dueAt:invoice.duedate,issuer:selectIssuer(masterRow),
       renter:{name:masterRow.renter_name},
       property:{name:masterRow.property_name,address:masterRow.property_address||''},
-      lines,totalCents,payment:selectPayment(masterRow)
+      lines,totalCents,payment:selectPayment(masterRow),
+      design:normalizeInvoiceDesign(
+        stored(masterRow.invoice_issuer_profile_json,'issuer')?.design
+      )
     });
     return {
       documentSnapshot,

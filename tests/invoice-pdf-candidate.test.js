@@ -72,3 +72,26 @@ test('immutability fingerprint derives from canonical issued snapshot data',()=>
   const edited=invoice();edited.issuer.legalName='Another Business';
   assert.notDeepEqual(before,normalizeInvoiceDocumentSnapshot(edited));
 });
+
+
+test('curated invoice layout and versioned print design are part of the immutable snapshot',async()=>{
+  const sample=invoice();
+  sample.design={template:'classic',paperFormat:'Letter',primaryColor:'#30446b',
+    showPropertyAddress:false,showIssuerContact:false,footerText:'Questions? Contact our billing office.'};
+  const normalized=normalizeInvoiceDocumentSnapshot(sample);
+  assert.equal(normalized.design.template,'classic');
+  assert.equal(normalized.design.paperFormat,'Letter');
+  assert.equal(normalized.design.showPropertyAddress,false);
+  const result=await createInvoiceDocumentPdfCandidate(sample);
+  const pdf=await PDFDocument.load(Buffer.from(result.content,'base64'));
+  assert.equal(pdf.getPage(0).getHeight(),792);
+  const changed=invoice();changed.design={template:'modern'};
+  assert.notDeepEqual(normalized,normalizeInvoiceDocumentSnapshot(changed));
+});
+test('preview is visually marked and never alters the financial snapshot',async()=>{
+  const sample=invoice();
+  const before=structuredClone(sample);
+  const pdf=await createInvoiceDocumentPdfCandidate(sample,{preview:true});
+  assert.equal(pdf.pageCount,1);
+  assert.deepEqual(sample,before);
+});

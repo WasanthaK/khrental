@@ -26,7 +26,9 @@ const assertKeys = (data, keys) => {
   const extras = Object.keys(data).filter(key => !keys.includes(key));
   if (extras.length) throw fail(extras[0], 'Field is not editable in invoice master data.');
 };
-const issuerKeys=['legalName','postalAddress','supportEmail','supportPhone','website'];
+import { normalizeInvoiceDesign } from './invoiceDesign.js';
+
+const issuerKeys=['legalName','postalAddress','supportEmail','supportPhone','website','design'];
 export const normalizeIssuerProfile = input => {
   assertKeys(input, issuerKeys);
   const result = {
@@ -34,7 +36,8 @@ export const normalizeIssuerProfile = input => {
     postalAddress: contact(input,'postalAddress',500),
     supportEmail: email(input,'supportEmail'),
     supportPhone: phone(input,'supportPhone'),
-    website: contact(input,'website',300)
+    website: contact(input,'website',300),
+    design: normalizeInvoiceDesign(input.design)
   };
   if (result.website && !/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:[/?#][^\s]*)?$/i.test(result.website)) {
     throw fail('website','Use an HTTPS website URL.');

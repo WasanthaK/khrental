@@ -66,3 +66,16 @@ test('owner-issued invoices require real owner contact information', () => {
   });
   assert.equal(owner.propertyOwnerEmail,'owner@example.test');
 });
+
+
+test('tenant-owned invoice designer rejects unsafe/custom styles and preserves curated options',async()=>{
+  const { normalizeIssuerProfile }=await import('../src/api/platform/invoiceMasterValidation.js');
+  const profile={legalName:'Test business',postalAddress:'Test address',supportEmail:'billing@example.test',
+    supportPhone:'',website:'',design:{template:'corporate',paperFormat:'A4',primaryColor:'#23456a',
+      footerText:'Contact our office',showPropertyAddress:true,showIssuerContact:true}};
+  assert.deepEqual(normalizeIssuerProfile(profile).design,profile.design);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{template:'<script>'}}),/curated invoice layout/i);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{primaryColor:'#ffffff'}}),/darker color/i);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{footerText:'<script>alert(1)</script>',evil:true}}),
+    /Unsupported invoice design field/i);
+});

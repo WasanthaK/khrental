@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { INVOICE_TEMPLATES, normalizeInvoiceDesign } from './invoiceDesign.js';
 
 // Draft-only renderer: accepts a complete, issue-time document snapshot.
 // Do not pass mutable tenant/property records to this renderer, or wire it
@@ -89,21 +90,25 @@ export const normalizeInvoiceDocumentSnapshot = source => {
     },
     renter: { name: renterName },
     property: { name: propertyName, address: clean(source.property?.address, 320) },
-    lines, totalCents, payment
+    lines, totalCents, payment, design: normalizeInvoiceDesign(source.design)
   };
 };
 
 // The renderer is side-effect free. Archiving, authorization and immutable
 // resend/download are separate, required release gates.
-export const createInvoiceDocumentPdfCandidate = async issuedSnapshot => {
+export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { preview = false } = {}) => {
   const model = normalizeInvoiceDocumentSnapshot(issuedSnapshot);
   const documentHash = crypto.createHash('sha256').update(JSON.stringify(model)).digest('hex');
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const W = 595.28, H = 841.89, LEFT = 42, RIGHT = W - 42, BOTTOM = 69;
-  const navy = rgb(.10,.19,.32), blue = rgb(.14,.35,.58);
-  const muted = rgb(.38,.43,.49), pale = rgb(.96,.97,.99);
+  const W = 595.28, H = model.design.paperFormat === 'Letter' ? 792 : 841.89;
+  const LEFT = 42, RIGHT = W - 42, BOTTOM = 69;
+  const palette = INVOICE_TEMPLATES[model.design.template];
+  const color = hex => rgb(...[1,3,5].map(i => parseInt(hex.slice(i,i+2),16)/255));
+  const navy = color(palette.dark);
+  const blue = color(model.design.primaryColor || palette.accent);
+  const muted = rgb(.38,.43,.49), pale = color(palette.pale);
   const lineColor = rgb(.83,.86,.90), white = rgb(1,1,1);
   let page, y;
   const width = (str, font, size) => font.widthOfTextAtSize(str, size);
@@ -147,8 +152,15 @@ export const createInvoiceDocumentPdfCandidate = async issuedSnapshot => {
   });
   const header = continuation => {
     page = pdf.addPage([W,H]);
-    page.drawRectangle({x:LEFT,y:H-43,width:4,height:23,color:blue});
-    draw('RENTAL INVOICE',LEFT+13,H-34,bold,15);
+    if (model.design.template === 'corporate') {
+      page.drawRectangle({x:0,y:H-9,width:W,height:9,color:blue});
+    } else if (model.design.template === 'classic') {
+      page.drawLine({start:{x:LEFT,y:H-43},end:{x:RIGHT,y:H-43},thickness:2,color:blue});
+    } else if (model.design.template === 'modern') {
+      page.drawRectangle({x:LEFT,y:H-43,width:4,height:23,color:blue});
+    }
+    draw(model.design.template === 'classic' ? 'STATEMENT OF RENT' : 'RENTAL INVOICE',
+      model.design.template === 'minimal' ? LEFT : LEFT+13,H-34,bold,15);
     right(model.paymentReference,RIGHT,H-33,bold,10);
     if (continuation) draw('CHARGES CONTINUED',LEFT+13,H-51,regular,8.5,muted);
     line(H-62);
@@ -169,7 +181,9 @@ export const createInvoiceDocumentPdfCandidate = async issuedSnapshot => {
   draw('ISSUED BY',LEFT,y,bold,8,muted);
   draw('BILL TO',LEFT+270,y,bold,8,muted);
   const leftIssuer = [model.issuer.legalName,model.issuer.postalAddress,
-    [model.issuer.contactEmail,model.issuer.contactPhone].filter(Boolean).join('  |  ')].filter(Boolean);
+    model.design.showIssuerContact
+      ? [model.issuer.contactEmail,model.issuer.contactPhone].filter(Boolean).join('  |  ')
+      : ''].filter(Boolean);
   const leftHeight = leftIssuer.reduce((acc,val,i)=>acc+wrap(val,240,i===0?bold:regular,i===0?10:9).length*11,0);
   let yy=y-18;
   for (const [i,v] of leftIssuer.entries()) yy -= drawWrapped(v,LEFT,yy,240,i===0?bold:regular,i===0?10:9,11);
@@ -178,7 +192,7 @@ export const createInvoiceDocumentPdfCandidate = async issuedSnapshot => {
   line(y+8);
   draw('PROPERTY',LEFT,y-9,bold,8,muted);
   drawWrapped(model.property.name,LEFT,y-25,225,bold,10);
-  if (model.property.address) drawWrapped(model.property.address,LEFT,y-40,225,regular,8.5,10);
+  if (model.design.showPropertyAddress && model.property.address) drawWrapped(model.property.address,LEFT,y-40,225,regular,8.5,10);
   draw('BILLING PERIOD',LEFT+270,y-9,bold,8,muted);
   draw(model.billingPeriod,LEFT+270,y-25,bold,10);
   draw('ISSUED',LEFT+270,y-47,bold,8,muted);
@@ -240,8 +254,14 @@ export const createInvoiceDocumentPdfCandidate = async issuedSnapshot => {
   y -= paymentHeight;
   pdf.getPages().forEach((p,i,pages)=>{
     p.drawLine({start:{x:LEFT,y:49},end:{x:RIGHT,y:49},color:lineColor,thickness:.6});
-    p.drawText('Keep this issued invoice for your records.',{
-      x:LEFT,y:33,font:regular,size:8,color:muted});
+    p.drawText(model.design.footerText || 'Keep this issued invoice for your records.',{
+      x:LEFT,y:33,font:regular,size:7.3,color:muted});
+    if (preview) {
+      p.drawRectangle({x:RIGHT-143,y:H-86,width:143,height:16,color:blue});
+      p.drawText('SAMPLE - NOT ISSUED',{
+        x:RIGHT-136,y:H-81,font:bold,size:8.7,color:white
+      });
+    }
     const pageLabel='Page '+(i+1)+' of '+pages.length;
     p.drawText(pageLabel,{
       x:RIGHT-width(pageLabel,regular,8),y:33,font:regular,size:8,color:muted});
