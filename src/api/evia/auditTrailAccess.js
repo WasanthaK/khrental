@@ -33,7 +33,7 @@ export const authorizeFencedEviaAuditTrailRead = async ({
   const published = await loadPublishedArchive(target);
   if (!published || String(published.tenant_id || '').toLowerCase() !== target.tenantId.toLowerCase()
       || String(published.id || '').toLowerCase() !== target.agreementId.toLowerCase()
-      || String(published.status || '').toLowerCase() !== 'signed'
+      || !['signed', 'completed', 'active'].includes(String(published.status || '').toLowerCase())
       || String(published.signature_status || '').toLowerCase() !== 'completed'
       || !published.lease_processed) return deny('publication_unavailable');
   let proof;
@@ -83,7 +83,7 @@ export const authorizeHistoricEviaAuditTrailRead = async ({
   if (!agreement
       || String(agreement.id || '').toLowerCase() !== target.agreementId.toLowerCase()
       || String(agreement.tenant_id || '').toLowerCase() !== target.tenantId.toLowerCase()
-      || String(agreement.status || '').toLowerCase() !== 'signed'
+      || !['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
       || String(agreement.signature_status || '').toLowerCase() !== 'completed') {
     return deny('agreement_unavailable');
   }
