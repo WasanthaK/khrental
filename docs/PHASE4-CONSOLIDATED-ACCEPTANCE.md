@@ -284,3 +284,70 @@ ask signers to sign again, activate the Evia canary, change financial records,
 merge unrelated draft PRs, apply migrations eight/nine, or enable invoice
 archiving through this evidence-only update. Future runtime fixes require their
 normal exact-SHA tests and authorized release path.
+
+
+## C04 — production SQL and legacy caller operating policy for owner decision (2026-10-21)
+
+**Status: PROPOSED, NOT APPROVED.** This section is a release-owner decision
+record, not a claim that unknown operational callers were enumerated, a
+permission grant was changed, or any SQL command was executed.
+
+### Verified technical facts
+
+- `src/api/platform/authorization.js` includes `exec_sql` in the blocked
+  runtime RPC set. The normal serving application is not an authorized SQL
+  migration executor.
+- `npm run migrate` invokes `src/db/runMigration.js`, which attempts
+  `platformClient.rpc('exec_sql')`; it is a historical/manual entrypoint
+  and does not supply a governed production migration ledger.
+- `npm run execute-sql` (via `src/db/executeSql.js`), named `migrate:*`
+  commands and `run-fixes` can submit direct SQL batches when an operator
+  supplies a database connection. These commands do **not** enforce the
+  Production GitHub approval boundary or migration checksums.
+- Indexed Package C source census found no serving-startup authority for
+  those legacy commands, but it **does not certify the absence of dynamic,
+  external or operator-only invocations**. Keep those consumers unknown
+  until separately evidenced; do not characterize them as safely deleted.
+
+### Proposed operating rule (release-owner approval required)
+
+1. **Single permitted production schema path:** existing protected GitHub
+   **Run production database migrations** plan/preflight/apply workflow and
+   dedicated `khrental-db-migrator` managed identity. An apply requires
+   the GitHub Production environment and exact `APPLY-PRODUCTION`
+   confirmation. Verify through the existing strict read-only executor.
+2. **Explicitly prohibited against production:** `npm run migrate`,
+   `npm run execute-sql`, named `npm run migrate:*` scripts,
+   `run-fixes`, `src/db/executeSql.js`, `src/db/runMigration.js`,
+   historical `src/scripts/*` SQL/RPC repairs, browser SQL, and any
+   general-purpose `exec_sql`. These can remain as source artifacts
+   for separately controlled local/disposable tests; existence never grants
+   production authority. A change of production schema must not bypass the
+   governed workflow even for a one-off fix.
+3. **Credential boundary:** preserve separate serving and migration managed
+   identities. The serving identity is never granted DDL; do not reuse
+   privileged SQL credentials in developer workstations, general CI or
+   app/browser configuration. If privileges or identity cannot be verified,
+   STOP before executing a production schema change.
+4. **Unknown manual/dynamic callers:** retain existing fail-closed wrappers
+   and unproven exports; classify unknown callers as monitored operational
+   risk, not dead code. No blanket deletion or re-enabling legacy writes.
+   Any newly identified direct production SQL caller, cross-tenant bypass,
+   signer-provenance failure or unapproved financial mutation is a hard
+   release blocker, not an accepted low-risk deferral.
+5. **Governed exceptions:** do not introduce a generic break-glass path.
+   If a production correction is required, record the operator, change
+   reference, database target, SQL/checksum evidence, bounded approval and
+   verification under the existing governed authority before execution.
+
+### Decision still needed
+
+Release owner may mark **C04 APPROVED** only after accepting this operating
+rule and confirming whether any known current operators rely on the barred
+scripts against production. If no such known use exists, unproven historical
+callers remain an explicitly owned, non-authoritative monitoring item;
+that is not proof of no callers. If known ungoverned production use exists,
+C04 stays **BLOCKED** until the access path is contained.
+
+**No owner authorization or approval is inferred from preparing this text.**
+No C05 production release approval follows automatically.
