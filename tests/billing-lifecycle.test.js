@@ -610,7 +610,18 @@ test('invoice and payment reminder links bypass broken SendGrid click tracking',
   // and passes it to the same SendGrid sender as an attachment.
   assert.match(billingRouterSource, /makeInvoiceEmail\s*\(\s*\{\s*\.\.\.issuedInvoice,\s*rentee_email:\s*recipientEmail,\s*paymentInstructions\s*\}\s*\)/);
   assert.match(billingRouterSource, /const recipientEmail = String\(invoice\.rentee_email/);
-  assert.match(billingRouterSource, /sendInvoiceEmail\s*\(\s*\{/);
+  // Local invoice PDF and recipient validation must finish before invoking
+  // the sender. The provider-boundary flag marks the first potentially
+  // ambiguous external operation, not archive preparation.
+  const deliveryStart=billingRouterSource.indexOf('const deliverIssuedInvoice =');
+  const deliveryEnd=billingRouterSource.indexOf("router.post('/invoices/:invoiceId/issue'",deliveryStart);
+  assert.ok(deliveryStart>=0 && deliveryEnd>deliveryStart);
+  const deliveryBody=billingRouterSource.slice(deliveryStart,deliveryEnd);
+  const payloadAt=deliveryBody.indexOf('const emailPayload = {');
+  const markAt=deliveryBody.indexOf('providerRequestStarted = true;');
+  const sendAt=deliveryBody.indexOf('sendInvoiceEmail(emailPayload)');
+  assert.ok(payloadAt>=0 && markAt>payloadAt && sendAt>markAt);
+  assert.match(deliveryBody,/classifyInvoiceDeliveryAttemptError\(error, providerRequestStarted\)/);
   assert.match(billingRouterSource, /attachments:\s*\[attachment\]/);
   assert.match(billingRouterSource, /createIssuedInvoicePdfAttachment/);
   const adjustmentRouter = readFileSync(

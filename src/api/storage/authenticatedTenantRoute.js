@@ -6,6 +6,7 @@ import { authorizeFencedEviaAuditTrailRead, authorizeHistoricEviaAuditTrailRead 
 import { authorizeSignedAgreementDocumentRead } from '../evia/signedDocumentAccess.js';
 import { authorizePaymentProofAccess } from '../platform/paymentProofAccess.js';
 import { createStorageDeliveryHandler } from './index.js';
+import { isIssuedInvoiceArchivePath } from './invoiceArchiveStoragePolicy.js';
 
 // Production uses the existing real authentication, tenant, SQL and storage.
 // The same route accepts isolated dependencies for real HTTP security proofs.
@@ -64,6 +65,16 @@ export const createAuthenticatedTenantStorageRouter = ({
     async (req, res, next) => {
       try {
         const objectPath = String(req.params[0] || req.path || '').replace(/^\/+/, '');
+        // A tenant login alone is not permission to download issued invoices.
+        // The future invoice document route must check renter/property access
+        // and verify a committed write-once manifest before serving bytes.
+        if (isIssuedInvoiceArchivePath(req.params.bucket, objectPath)) {
+          res.status(403).json({
+            error: 'Issued invoice PDFs require the dedicated invoice document API.',
+            code: 'INVOICE_ARCHIVE_DEDICATED_API_REQUIRED'
+          });
+          return;
+        }
         const result = await authorizeFencedEviaAuditTrailRead({
           bucket: req.params.bucket,
           path: objectPath,

@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { invoiceHeading } from '../utils/invoiceReference';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice, assignLegacyInvoicePaymentReference } from '../services/platformClient';
+import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice, getIssuedInvoicePdf, assignLegacyInvoicePaymentReference } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
@@ -202,6 +202,39 @@ const InvoiceDetails = () => {
     } finally {
       setWorking(false);
     }
+  };
+
+
+  const handleDownloadIssuedPdf = async () => {
+    if (!account?.issuedDocument?.available || !invoice || working) return;
+    try {
+      setWorking(true); setError(null);
+      const result = await getIssuedInvoicePdf(id);
+      if (result.error) throw result.error;
+      const pdf = result.data;
+      if (pdf?.type !== 'application/pdf' || !pdf?.immutable ||
+          typeof pdf.content !== 'string') {
+        throw new Error('An original immutable issued invoice PDF is not available.');
+      }
+      const binary = atob(pdf.content);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      if (bytes.length < 100 || String.fromCharCode(...bytes.subarray(0,5)) !== '%PDF-') {
+        throw new Error('The issued invoice PDF could not be verified.');
+      }
+      const blobUrl = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+      try {
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'Invoice-' + id + '.pdf';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to retrieve the retained issued invoice PDF.');
+    } finally { setWorking(false); }
   };
 
   const handleDownloadInvoice = () => {
@@ -403,6 +436,12 @@ const InvoiceDetails = () => {
             )}
             {!isDraft && canManageInvoices && outstandingBalance > 0 && (
               <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">{working ? 'Sending…' : 'Send payment reminder'}</button>
+            )}
+            {account?.issuedDocument?.available && !isDraft && (
+              <button type="button" onClick={handleDownloadIssuedPdf} disabled={working}
+                className="w-full px-3 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 disabled:opacity-50">
+                Download original issued PDF
+              </button>
             )}
             <button type="button" onClick={handleDownloadInvoice} className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Download account summary</button>
           </div>

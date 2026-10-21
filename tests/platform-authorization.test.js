@@ -531,3 +531,40 @@ test('allows a scoped administrator business query', () => {
   assert.equal(result.table, 'properties');
   assert.equal(result.action, 'update');
 });
+
+test('requires the audited API for any invoice-master field mutation, even for administrators', () => {
+  const guarded = [
+    ['tenant_settings', 'invoice_issuer_profile_json'],
+    ['properties', 'bank_beneficiary_name'],
+    ['properties', 'billing_contact_email'],
+    ['properties', 'invoice_party_overrides_json'],
+    ['property_units', 'bank_beneficiary_name']
+  ];
+  for (const [table, field] of guarded) {
+    for (const action of ['insert', 'update', 'upsert']) {
+      expectAuthorizationError(
+        () => authorizePlatformQuery({
+          user: admin,
+          membership: activeMembership('admin'),
+          action,
+          table,
+          filters: [{ column: 'id', operator: 'eq', value: 'record-1' }],
+          payload: { [field]: 'Unauthorized direct write' }
+        }),
+        'INVOICE_MASTER_DEDICATED_API_REQUIRED'
+      );
+    }
+  }
+});
+
+test('continues to permit ordinary administrator property changes after the invoice-master guard', () => {
+  const result = authorizePlatformQuery({
+    user: admin,
+    membership: activeMembership('admin'),
+    action: 'update',
+    table: 'properties',
+    filters: [{ column: 'id', operator: 'eq', value: 'property-1' }],
+    payload: { name: 'Recorded property name' }
+  });
+  assert.equal(result.payload.name, 'Recorded property name');
+});

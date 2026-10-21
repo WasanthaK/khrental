@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { assertEviaEvidenceDeletionAllowed } from './eviaEvidenceRetention.js';
+import { assertGenericInvoiceArchiveMutationAllowed, assertGenericInvoiceArchiveBucketDeleteAllowed } from './invoiceArchiveStoragePolicy.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'public', 'storage');
 const DEFAULT_BUCKETS = ['images', 'files', 'documents', 'invoices', 'media', 'maintenance'];
@@ -67,6 +68,7 @@ class LocalStorageDriver {
   }
 
   async deleteBucket(bucket) {
+    assertGenericInvoiceArchiveBucketDeleteAllowed(bucket);
     assertEviaEvidenceDeletionAllowed(bucket);
     await fs.rm(path.join(STORAGE_ROOT, ensureBucketName(bucket)), { recursive: true, force: true });
   }
@@ -80,6 +82,7 @@ class LocalStorageDriver {
   async upload(bucket, relativePath, body) {
     const safeBucket = ensureBucketName(bucket);
     const safePath = normalizeStoragePath(relativePath);
+    assertGenericInvoiceArchiveMutationAllowed(safeBucket, safePath);
     const targetPath = path.join(STORAGE_ROOT, safeBucket, safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, body);
@@ -90,6 +93,7 @@ class LocalStorageDriver {
     assertEviaEvidenceDeletionAllowed(bucket, paths);
     const safeBucket = ensureBucketName(bucket);
     const safePaths = paths.map(normalizeStoragePath);
+    safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed(safeBucket, item));
     await Promise.all(safePaths.map((item) => fs.rm(path.join(STORAGE_ROOT, safeBucket, item), { force: true, recursive: true })));
     return safePaths.map((name) => ({ name }));
   }
@@ -119,7 +123,7 @@ const xmlValue = (xml, tag) => {
   return match ? xmlDecode(match[1]) : null;
 };
 
-class R2StorageDriver {
+export class R2StorageDriver {
   name = 'r2';
 
   constructor() {
@@ -224,6 +228,7 @@ class R2StorageDriver {
   }
 
   async deleteBucket(bucket) {
+    assertGenericInvoiceArchiveBucketDeleteAllowed(bucket);
     assertEviaEvidenceDeletionAllowed(bucket);
     const prefix = this.objectKey(bucket);
     const keys = await this.listAllKeys(prefix);
@@ -261,6 +266,7 @@ class R2StorageDriver {
 
   async upload(bucket, relativePath, body, contentType = 'application/octet-stream') {
     const safePath = normalizeStoragePath(relativePath);
+    assertGenericInvoiceArchiveMutationAllowed(bucket, safePath);
     await this.request('PUT', this.objectKey(bucket, safePath), { body, headers: { 'content-type': contentType } });
     return { path: safePath, fullPath: `${ensureBucketName(bucket)}/${safePath}` };
   }
@@ -268,8 +274,37 @@ class R2StorageDriver {
   async deleteObjects(bucket, paths = []) {
     assertEviaEvidenceDeletionAllowed(bucket, paths);
     const safePaths = paths.map(normalizeStoragePath);
+    safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed(bucket, item));
     await Promise.all(safePaths.map((item) => this.request('DELETE', this.objectKey(bucket, item))));
     return safePaths.map((name) => ({ name }));
+  }
+
+
+  // Candidate-only, conditional-create archive writer. No production route
+  // calls this yet. R2 evaluates If-None-Match:* atomically for PutObject.
+  async createIssuedInvoiceIfAbsent(bucket, relativePath, body) {
+    const safePath = normalizeStoragePath(relativePath);
+    const match = /^tenants\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/invoices\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/issued\/sha256-([0-9a-f]{64})\.pdf$/.exec(safePath);
+    if (bucket !== 'invoices' || !match || !Buffer.isBuffer(body) ||
+      body.length < 100 || body.length > 5 * 1024 * 1024 ||
+      body.subarray(0, 5).toString('ascii') !== '%PDF-' ||
+      sha256(body) !== match[3]) {
+      const error = new Error('Issued invoice object requires a canonical content-addressed PDF.');
+      error.status = 400;
+      error.code = 'INVALID_INVOICE_ARCHIVE_WRITE';
+      throw error;
+    }
+    try {
+      await this.request('PUT', this.objectKey(bucket, safePath), {
+        body, headers: { 'content-type': 'application/pdf', 'if-none-match': '*' }
+      });
+      return 'created';
+    } catch (error) {
+      // 412 is not success: the higher-level writer MUST read back and
+      // compare exact bytes before reconciling an interrupted SQL commit.
+      if (error?.status === 412) return 'exists';
+      throw error;
+    }
   }
 
   async getObject(bucket, relativePath) {

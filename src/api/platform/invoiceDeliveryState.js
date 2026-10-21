@@ -16,3 +16,9 @@ export const classifyInvoiceEmailError = error => (
     ? 'failed'
     : 'unknown'
 );
+
+// Only an error before the external sender is invoked proves that NO email
+// was requested. Errors after invocation retain the ambiguity of network
+// timeouts unless the provider definitively rejects the message.
+export const classifyInvoiceDeliveryAttemptError = (error, providerRequestStarted) =>
+  providerRequestStarted === true ? classifyInvoiceEmailError(error) : 'failed';
