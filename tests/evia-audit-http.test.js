@@ -91,6 +91,12 @@ test('actual HTTP storage router enforces credential, tenant, role and publicati
     }
     assert.equal(bytesRead, 0, 'unpublished audit bytes must never be accessed');
     published = publication;
+    for (const status of ['completed', 'active']) {
+      published = { ...publication, status };
+      const result = await request(url, { authorization: 'Bearer admin-A' });
+      assert.equal(result.status, 200, `finalized ${status} agreement should retain protected admin audit access`);
+    }
+    published = publication;
     for (const headers of [
       { authorization: 'Bearer admin-A' },
       { cookie: 'khrental_storage_session=admin-A' }
@@ -99,7 +105,7 @@ test('actual HTTP storage router enforces credential, tenant, role and publicati
       assert.equal(response.status, 200);
       assert.match(await response.text(), /^%PDF-test$/);
     }
-    assert.equal(bytesRead, 2);
+    assert.equal(bytesRead, 4);
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }

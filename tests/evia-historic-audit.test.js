@@ -1,6 +1,7 @@
 import test from 'node:test';
 import fs from 'node:fs';
 import { getEviaAuditTrailUrl } from '../src/utils/eviaAuditTrailLink.js';
+import { describeEviaAuditFetchFailure } from '../src/utils/eviaAuditFailure.js';
 import assert from 'node:assert/strict';
 import { parseHistoricEviaAuditTrailPath, authorizeHistoricEviaAuditTrailRead } from '../src/api/evia/auditTrailAccess.js';
 
@@ -39,8 +40,13 @@ test('historic audit access requires signed and completed retained agreement in 
   assert.deepEqual(await authorizeHistoricEviaAuditTrailRead({
     ...baseline, loadHistoricAgreement }), { applies: true, allowed: true });
   assert.equal(reads, 1);
+  for (const status of ['completed','active']) {
+    assert.deepEqual(await authorizeHistoricEviaAuditTrailRead({
+      ...baseline, loadHistoricAgreement: async () => ({ ...row, status })
+    }), { applies: true, allowed: true });
+  }
   for (const invalid of [
-    null, { ...row, status: 'active' }, { ...row, signature_status: 'in_progress' },
+    null, { ...row, status: 'cancelled' }, { ...row, status: 'draft' }, { ...row, signature_status: 'in_progress' },
     { ...row, tenant_id: '33333333-3333-4333-8333-333333333333' },
     { ...row, signed_document_url: null },
     { ...row, signed_document_url: '/storage/documents/other.pdf' },
@@ -82,5 +88,20 @@ test('audit viewer UI is admin-scoped, server enforced and reports unavailable b
   }
   assert.match(viewer, /useAuthenticatedAgreementDocument\(documentUrl\)/);
   assert.match(protectedReader, /buildRequestContextHeaders\(\)/);
-  assert.match(protectedReader, /Unable to retrieve this document/);
+  assert.match(protectedReader, /describeEviaAuditFetchFailure\(/);
+});
+
+
+test('audit retrieval failures distinguish protected access, absent bytes and invalid PDFs', () => {
+  const base = 'https://khrentals.example.invalid/storage/documents/tenants/' + tenantId
+    + '/agreements/' + agreementId + '/signed/';
+  const url = base + 'audit_trail.pdf';
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:url, status:403 }), /Access denied.*HTTP 403/);
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:url, status:404 }), /not found.*HTTP 404/);
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:url, status:500 }), /HTTP 500/);
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:url, status:401 }), /HTTP 401/);
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:url, invalidPdf:true }), /not a valid PDF/);
+  assert.match(describeEviaAuditFetchFailure({ documentUrl:base+'staged/33333333-3333-4333-8333-333333333333/audit_trail.pdf',status:404 }), /HTTP 404/);
+  assert.equal(describeEviaAuditFetchFailure({ documentUrl:base+'Signed.pdf',status:404 }), 'Unable to retrieve this document. Check access and try again.');
+  assert.equal(describeEviaAuditFetchFailure({ documentUrl:url }), 'Unable to retrieve this document. Check access and try again.');
 });

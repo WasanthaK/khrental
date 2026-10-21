@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { buildRequestContextHeaders } from '../services/requestContext';
+import { describeEviaAuditFetchFailure } from '../utils/eviaAuditFailure';
 
 // Authenticated object bytes, rather than embedding the protected storage URL
 // in an iframe that cannot attach the selected-tenant bearer headers.
@@ -37,13 +38,19 @@ export const useAuthenticatedAgreementDocument = documentUrl => {
     }
     setState({ status: 'loading', url: null, error: null });
     const load = async () => {
+      let failureStatus = null;
+      let invalidPdf = false;
       try {
         const response = await fetch(file, {
           headers: buildRequestContextHeaders()
         });
-        if (!response.ok) throw new Error('Protected storage denied the PDF request.');
+        if (!response.ok) {
+          failureStatus = response.status;
+          throw new Error('Protected storage denied the PDF request.');
+        }
         const pdf = await response.blob();
         if (pdf.size < 5 || String.fromCharCode(...new Uint8Array(await pdf.slice(0, 5).arrayBuffer())) !== '%PDF-') {
+          invalidPdf = true;
           throw new Error('Invalid or empty PDF received.');
         }
         if (cancelled) return;
@@ -51,7 +58,9 @@ export const useAuthenticatedAgreementDocument = documentUrl => {
         setState({ status: 'ready', url: temporaryUrl, error: null });
       } catch (_error) {
         if (!cancelled) {
-          setState({ status: 'error', url: null, error: 'Unable to retrieve this document. Check access and try again.' });
+          setState({ status: 'error', url: null, error: describeEviaAuditFetchFailure({
+            documentUrl: file, status: failureStatus, invalidPdf
+          }) });
         }
       }
     };
