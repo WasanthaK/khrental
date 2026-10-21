@@ -261,10 +261,10 @@ sign-off remains OPEN; Phase 5 source regression development is COMPLETE.
 
 | ID | Owner/action | Exact closure evidence | State |
 | --- | --- | --- | --- |
-| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced, with no duplicate provider calls; review and merge this docs-only PR | **IN REVIEW** (reconciliation prepared; not yet merged) |
+| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced in merged [PR #342](https://github.com/WasanthaK/khrental/pull/342) | **CLOSED** |
 | C02 | Operations — reconcile existing **invoice 26101901** issue/delivery ledger with a redacted SendGrid provider message/event ID and delivered result | Existing email and PDF receipt already pass; retain matching provider event and issue/attempt/accepted-or-delivered record, or state explicitly that historic telemetry is unavailable | **EVIDENCE OPEN**; never reissue a new invoice just for logs |
 | C03 | Operations — reconcile signed agreement **#47FDEA13** against Evia callback, retained signed PDF, `audit_trail.pdf`, and protected authorized/denied retrieval | Match existing agreement/attempt/document IDs and byte-provenance where available; record missing artifacts explicitly | **EVIDENCE OPEN**, not a repeat live signing test; fenced canary stays OFF |
-| C04 | Release owner — approve explicit restrictions for manual/dynamic legacy SQL/operator callers | Record that `npm run migrate`, `execute-sql`, direct `migrate:*` and historical scripts are **not governed production schema authority**. Retain unknown dynamic callers as accepted low-risk deferral only with owner/control, or flag material risk BLOCKED; no broad deletion | **OWNER DECISION OPEN** |
+| C04 | Owner-approved practical production SQL policy | Normal schema changes use the governed executor; keep app credentials limited; allow recorded admin direct SQL for exceptional recovery; keep legacy scripts available for nonproduction | **OWNER APPROVED / CLOSED 2026-10-21** — operating decision, not a new technical permission audit |
 | C05 | Release owner — final original canonical release decision | Review current tenant/property/unit, invoice/payment/receipt, agreement/signed PDF, maintenance/notification and security proof, unresolved C02–C04 or formally justified noncritical deferrals; record dated **APPROVE** or **DO NOT APPROVE** | **NOT SIGNED OFF** |
 
 **Interpretation:** C02 is *telemetry correlation*, not new SendGrid functional
@@ -284,3 +284,41 @@ ask signers to sign again, activate the Evia canary, change financial records,
 merge unrelated draft PRs, apply migrations eight/nine, or enable invoice
 archiving through this evidence-only update. Future runtime fixes require their
 normal exact-SHA tests and authorized release path.
+
+
+## C04 — approved practical database operating policy (2026-10-21)
+
+**Status: OWNER APPROVED / C04 POLICY DECISION CLOSED.** The owner agreed to
+a simple four-rule operating approach. This records the decision; it is
+**not** evidence of a database privilege change, credential audit,
+identification of every historical caller, production schema modification,
+or final C05 release sign-off.
+
+1. **Normal production schema changes:** use the existing governed
+   GitHub/Azure migration workflow with its confirmation and verification.
+   Do not treat the legacy `exec_sql` RPC or a local migration script
+   as a substitute for normal production migration operations.
+2. **Application credentials:** keep unrestricted database-administrator
+   privileges out of the running application. Maintain distinct operational
+   permissions for ordinary application use and migrations.
+3. **Exceptional production maintenance/recovery:** an explicitly
+   authorized database administrator may use direct SQL when genuinely
+   necessary, with the operator, purpose, target and resulting change
+   recorded and reviewed. This is an exception, not an everyday alternate
+   migration channel. No new emergency framework is required.
+4. **Development and disposable testing:** retain existing migration,
+   `execute-sql`, named `migrate:*` and diagnostic scripts for
+   authorized nonproduction use. Do not remove historical helpers
+   wholesale; unknown manual/dynamic callers stay unverified.
+
+**Risk boundary:** no one may bypass tenant isolation, modify financial
+records without authorization, bypass signer provenance or destroy retained
+documents. Material newly discovered direct production SQL use must be
+evaluated rather than silently accepted as safe. The existing
+runtime `exec_sql` denial remains unchanged.
+
+**C04 disposition:** The operating *policy decision* is complete. Its
+technical enforcement remains the existing production permissions and
+migration controls, to be verified through ordinary operational review;
+do not mark them newly audited by this docs-only change. **C05 remains
+pending a separate dated business/security release decision.**

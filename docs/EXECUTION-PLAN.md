@@ -2023,3 +2023,24 @@ evidence; C04 owner operational risk disposition; C05 final dated release
 decision. C02/C03 are *correlations on prior successful tests* rather than
 new live actions. I01–I03 remain separate Invoice Designer rollout gates.
 No new application scope or Production mutation is authorized by this note.
+
+## C04 owner-approved practical SQL operating decision — 2026-10-21
+
+**C04 CLOSED as an operating-policy decision**, not as a claim of exhaustive
+unknown-caller discovery or fresh database permission verification. The owner
+agreed to four proportionate rules: (1) normal production schema changes use
+the existing governed GitHub/Azure migrator, (2) application credentials do not
+have unrestricted database-administrator privileges, (3) explicitly authorized
+administrators may use direct SQL for exceptional production maintenance or
+recovery, with the activity recorded, and (4) historical SQL commands remain
+available for development and disposable tests. No new emergency framework or
+approval bureaucracy for every database operation is required.
+
+Runtime `exec_sql` remains blocked and no database privileges or SQL schema
+were changed by this decision. The authoritative wording is in
+`docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`.
+C01 was merged in [PR #342](https://github.com/WasanthaK/khrental/pull/342);
+C02 remains provider/ledger evidence-only; C03 remains signed-document/audit
+retention evidence-only after the signed-audit viewer merge
+[PR #327](https://github.com/WasanthaK/khrental/pull/327).
+**C05 final canonical release approval remains open.**
