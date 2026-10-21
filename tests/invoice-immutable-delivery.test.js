@@ -77,7 +77,8 @@ test('missing issuance evidence cannot publish or email',async()=>{
 });
 test('damaged committed PDF blocks resend and never replaces original',async()=>{
   const a=await setup();await a.invoke();a.corrupt();
-  await assert.rejects(a.invoke(),/invalid PDF|integrity/i);
+  await assert.rejects(a.invoke(),
+    error => error.code === 'INVOICE_ARCHIVE_INTEGRITY_FAILED');
   assert.deepEqual(a.metrics(),{created:1,published:1,renders:1});
 });
 test('conditional storage conflict or SQL failure forbids email acceptance',async()=>{
