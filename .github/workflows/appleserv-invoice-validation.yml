@@ -38,6 +38,8 @@ jobs:
         run: node --test tests/invoice-archive-r2-boundary.test.js
       - name: Validate tenant-scoped immutable issued PDF retrieval
         run: node --test tests/invoice-issued-document-read.test.js
+      - name: Validate immutable issued PDF publication before delivery
+        run: node --test tests/invoice-immutable-delivery.test.js
       - name: Validate transaction-scoped invoice legal issuer snapshot
         run: node --test tests/invoice-issuance-snapshot-candidate.test.js
       - name: Validate authorization

@@ -100,6 +100,13 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
   const model = normalizeInvoiceDocumentSnapshot(issuedSnapshot);
   const documentHash = crypto.createHash('sha256').update(JSON.stringify(model)).digest('hex');
   const pdf = await PDFDocument.create();
+  // A recovery attempt after a crash must render the *same PDF bytes*, not
+  // introduce a new wall-clock creation timestamp for the same issue event.
+  const issueDate = new Date(model.issuedAt + 'T00:00:00.000Z');
+  pdf.setCreationDate(issueDate);
+  pdf.setModificationDate(issueDate);
+  pdf.setCreator('KH Rentals Invoice Renderer v1');
+  pdf.setProducer('KH Rentals Invoice Renderer v1');
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const W = 595.28, H = model.design.paperFormat === 'Letter' ? 792 : 841.89;
