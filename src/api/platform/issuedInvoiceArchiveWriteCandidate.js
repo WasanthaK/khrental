@@ -4,9 +4,9 @@ import {
   readRetainedInvoiceArchiveCandidate
 } from './issuedInvoiceArchiveCandidate.js';
 
-// Draft-only orchestrator. Cannot be attached to the live delivery router:
-// production must supply a conditionally-created (NEVER overwrite) object-store
-// adapter plus a transactionally guarded issuance/archive SQL adapter.
+// Feature-gated orchestrator for issued invoices. The live delivery router
+// must provide a guarded conditional-create object store and a transactionally
+// fenced issuance/archive SQL adapter. Never overwrite an issued document.
 const fail = (code, message) => {
   const error = new Error(message);
   error.code = code;

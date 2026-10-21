@@ -24,6 +24,8 @@ jobs:
           persist-credentials: false
       - name: Install Node dependencies
         run: npm ci
+      - name: Build customer-facing Invoice Designer UI
+        run: npm run build
       - name: Validate invoice master controls
         run: npm run test:invoice-master
       - name: Validate candidate invoice PDF snapshots

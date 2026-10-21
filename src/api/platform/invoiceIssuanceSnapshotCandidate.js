@@ -3,8 +3,9 @@ import { normalizeIssuerProfile, normalizePropertyParties } from './invoiceMaste
 import { normalizeInvoiceDocumentSnapshot } from './invoicePdfCandidate.js';
 import { normalizeInvoiceDesign } from './invoiceDesign.js';
 
-// Draft only. Call within the same tenant-authorized SERIALIZABLE transaction
-// as an eventual invoice_issued event. No live router invokes this module.
+// Live invocation is gated by INVOICE_IMMUTABLE_ARCHIVE_ENABLED.
+// Call inside the same tenant-authorized SERIALIZABLE transaction as
+// invoice_issued. Fail closed rather than substituting mutable later data.
 const block=(field,message)=>{
   const e=new Error(message);e.status=409;
   e.code='INVOICE_ISSUANCE_SNAPSHOT_BLOCKED';e.details={field};throw e;

@@ -2,9 +2,9 @@ import crypto from 'node:crypto';
 import { normalizeInvoiceDocumentSnapshot } from './invoicePdfCandidate.js';
 import { issuedInvoiceArchivePath } from './issuedInvoiceArchiveCandidate.js';
 
-// Draft-only SQL adapter. The real invoice issuance path does not yet write a
-// canonical documentSnapshot + documentSnapshotSha256 to invoice_issued events.
-// Missing, inconsistent or legacy issuance events always fail closed.
+// Feature-gated SQL adapter for immutable invoice issuance and publication.
+// The live router supplies issue-time documentSnapshot and hash only when the
+// archive feature is enabled. Missing and legacy evidence fails closed.
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
 const error = (code,message) => {const e = new Error(message);e.code=code;throw e;};
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

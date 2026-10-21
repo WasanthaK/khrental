@@ -3,9 +3,9 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { INVOICE_TEMPLATES, normalizeInvoiceDesign } from './invoiceDesign.js';
 import { normalizeInvoiceLogo, invoiceLogoBytes } from './invoiceLogo.js';
 
-// Draft-only renderer: accepts a complete, issue-time document snapshot.
-// Do not pass mutable tenant/property records to this renderer, or wire it
-// into delivery until authoritative issuance capture and archived bytes exist.
+// Immutable renderer, invoked from issue-time evidence only under the
+// guarded archive feature. Never render from mutable tenant/property records
+// for a customer resend or an original-document download.
 const obj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clean = (v, max = 300) => typeof v === 'string'
   ? v.replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, max) : '';
