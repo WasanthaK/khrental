@@ -14,6 +14,8 @@ const AUTH_STORE_MIGRATION_ID = '20261006_01_repair_auth_store_runtime_columns';
 const AUTH_STORE_MIGRATION_FILE = `migrations/${AUTH_STORE_MIGRATION_ID}.sql`;
 const PAYMENT_REF_MIGRATION_ID = '20261018_01_invoice_payment_references';
 const PAYMENT_REF_MIGRATION_FILE = `migrations/${PAYMENT_REF_MIGRATION_ID}.sql`;
+const INVOICE_MASTER_MIGRATION_ID = '20261019_01_invoice_master_data';
+const INVOICE_MASTER_MIGRATION_FILE = `migrations/${INVOICE_MASTER_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
@@ -23,7 +25,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   MIGRATION_ID,
   PROPERTY_UTILITY_MIGRATION_ID,
   AUTH_STORE_MIGRATION_ID,
-  PAYMENT_REF_MIGRATION_ID
+  PAYMENT_REF_MIGRATION_ID,
+  INVOICE_MASTER_MIGRATION_ID
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -147,6 +150,8 @@ const main = async () => {
 
   const paymentReferenceSql = fs.readFileSync(path.resolve(PAYMENT_REF_MIGRATION_FILE),'utf8');
   assert.match(paymentReferenceSql,/UX_invoice_payment_references_tenant_reference/);
+  const invoiceMasterSql = fs.readFileSync(path.resolve(INVOICE_MASTER_MIGRATION_FILE), 'utf8');
+  assert.match(invoiceMasterSql, /CK_tenant_settings_invoice_issuer_profile_json/);
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
   const databaseName = `khrental_migration_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -263,7 +268,11 @@ const main = async () => {
 
     await testPool.request().batch(`
       CREATE TABLE dbo.properties (
-        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_properties_utility_migration_proof PRIMARY KEY
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_properties_utility_migration_proof PRIMARY KEY,
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        bank_name NVARCHAR(255) NULL,
+        bank_branch NVARCHAR(255) NULL,
+        bank_account_number NVARCHAR(255) NULL
       );
 
       CREATE TABLE dbo.utility_configs (
@@ -308,7 +317,7 @@ const main = async () => {
     const propertyId = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
     const tenantId = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
     await testPool.request().query(`
-      INSERT INTO dbo.properties (id) VALUES ('${propertyId}');
+      INSERT INTO dbo.properties (id, tenant_id) VALUES ('${propertyId}', '${tenantId}');
       INSERT INTO dbo.utility_configs (
         tenant_id, propertyid, utilitytype, billingtype, fixedamount
       ) VALUES (
@@ -486,6 +495,100 @@ const main = async () => {
         ('33333333-3333-4333-8333-333333333333','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','26101801','UTC','invoice_issue');
     `);
     console.log(`PASS: ${PAYMENT_REF_MIGRATION_ID} SQL Server execution, idempotency, timezone setup, tenant-specific uniqueness`);
+    // Verify additive issuer/beneficiary schema on real SQL Server, twice.
+    // Existing payment-reference rows and bank settings must survive exactly.
+    // Reuse dbo.properties from the utility migration fixture; creating it a
+    // second time makes the five-value bank insert fail on SQL Server.
+    await testPool.request().batch(`
+      CREATE TABLE dbo.property_units (
+        id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        propertyid UNIQUEIDENTIFIER NOT NULL,
+        bank_name NVARCHAR(255) NULL,
+        bank_branch NVARCHAR(255) NULL,
+        bank_account_number NVARCHAR(255) NULL
+      );
+      INSERT INTO dbo.properties
+        (id, tenant_id, bank_name, bank_branch, bank_account_number) VALUES
+        ('aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Recorded Bank', 'Recorded Branch', '12345678');
+    `);
+    await testPool.request().batch(invoiceMasterSql);
+    await testPool.request().batch(invoiceMasterSql);
+    const invoiceMasterResult = await testPool.request().query(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.invoice_payment_references) AS original_refs,
+        (SELECT invoice_issuer_profile_json FROM dbo.tenant_settings
+         WHERE tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') AS issuer_profile,
+        (SELECT bank_beneficiary_name FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS beneficiary,
+        (SELECT bank_name FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS original_bank,
+        (SELECT COUNT(*) FROM sys.check_constraints
+         WHERE parent_object_id=OBJECT_ID(N'dbo.tenant_settings')
+         AND name=N'CK_tenant_settings_invoice_issuer_profile_json'
+         AND is_disabled=0 AND is_not_trusted=0) AS json_guard;
+    `);
+    assert.equal(invoiceMasterResult.recordset[0].original_refs,2);
+    assert.equal(invoiceMasterResult.recordset[0].issuer_profile,null);
+    assert.equal(invoiceMasterResult.recordset[0].beneficiary,null);
+    assert.equal(invoiceMasterResult.recordset[0].original_bank,'Recorded Bank');
+    assert.equal(invoiceMasterResult.recordset[0].json_guard,1);
+    const additionalMasterData = await testPool.request().query(`
+      SELECT
+        CASE WHEN COL_LENGTH(N'dbo.properties', N'invoice_party_overrides_json') IS NOT NULL THEN 1 ELSE 0 END AS party_column,
+        CASE WHEN COL_LENGTH(N'dbo.properties', N'billing_contact_name') IS NOT NULL
+          AND COL_LENGTH(N'dbo.properties', N'billing_contact_email') IS NOT NULL
+          AND COL_LENGTH(N'dbo.properties', N'billing_contact_phone') IS NOT NULL THEN 1 ELSE 0 END AS contact_columns,
+        CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints
+          WHERE parent_object_id=OBJECT_ID(N'dbo.properties')
+          AND name=N'CK_properties_invoice_party_overrides_json'
+          AND is_disabled=0 AND is_not_trusted=0) THEN 1 ELSE 0 END AS parties_guard,
+        CASE WHEN OBJECT_ID(N'dbo.invoice_master_data_audit', N'U') IS NOT NULL THEN 1 ELSE 0 END AS audit_table,
+        (SELECT COUNT(*) FROM sys.indexes
+         WHERE object_id=OBJECT_ID(N'dbo.invoice_master_data_audit')
+           AND name=N'IX_invoice_master_data_audit_tenant_created') AS audit_index,
+        (SELECT invoice_party_overrides_json FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS parties_before_admin,
+        (SELECT billing_contact_name FROM dbo.properties
+         WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc') AS contact_before_admin;
+    `);
+    const fields = additionalMasterData.recordset[0];
+    assert.equal(fields.party_column,1);
+    assert.equal(fields.contact_columns,1);
+    assert.equal(fields.parties_guard,1);
+    assert.equal(fields.audit_table,1);
+    assert.equal(fields.audit_index,1);
+    assert.equal(fields.parties_before_admin,null);
+    assert.equal(fields.contact_before_admin,null);
+    await assert.rejects(testPool.request().query(`
+      UPDATE dbo.properties SET invoice_party_overrides_json='not json'
+      WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc';
+    `), 'invalid property party information must be rejected');
+    await testPool.request().query(`
+      INSERT INTO dbo.invoice_master_data_audit
+        (tenant_id,actor_user_id,resource_kind,resource_id,changed_fields_json,current_hash)
+      VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'property_billing','aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc',
+        '["bank_beneficiary_name"]',REPLICATE('a',64));
+    `);
+    await assert.rejects(testPool.request().query(`
+      INSERT INTO dbo.invoice_master_data_audit
+        (tenant_id,actor_user_id,resource_kind,changed_fields_json,current_hash)
+      VALUES('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'unrecognized','[]',REPLICATE('a',64));
+    `), 'invalid audit resource kind must fail closed');
+
+    await assert.rejects(testPool.request().query(`
+      UPDATE dbo.tenant_settings SET invoice_issuer_profile_json='not json'
+      WHERE tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    `), 'invalid invoice issuer JSON must be rejected');
+    await testPool.request().query(`
+      UPDATE dbo.tenant_settings SET invoice_issuer_profile_json=N'{"legalName":"Verified Ltd"}'
+      WHERE tenant_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      UPDATE dbo.properties SET bank_beneficiary_name=N'Verified beneficiary'
+      WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-cccccccccccc';
+    `);
+    console.log(`PASS: ${INVOICE_MASTER_MIGRATION_ID} SQL Server additive schema, JSON guard, idempotency and no legacy backfill`);
   } finally {
     if (testPool) {
       try { await testPool.close(); } catch {}

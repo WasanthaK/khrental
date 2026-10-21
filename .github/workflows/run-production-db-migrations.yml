@@ -32,6 +32,7 @@ on:
           - 20261005_01_add_property_utility_configs
           - 20261006_01_repair_auth_store_runtime_columns
           - 20261018_01_invoice_payment_references
+          - 20261019_01_invoice_master_data
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false
