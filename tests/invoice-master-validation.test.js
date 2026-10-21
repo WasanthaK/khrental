@@ -79,3 +79,17 @@ test('tenant-owned invoice designer rejects unsafe/custom styles and preserves c
   assert.throws(()=>normalizeIssuerProfile({...profile,design:{footerText:'<script>alert(1)</script>',evil:true}}),
     /Unsupported invoice design field/i);
 });
+
+test('issuer logo accepts bounded PNG and blocks scripts, remote links and oversized assets',async()=>{
+  const {normalizeInvoiceLogo}=await import('../src/api/platform/invoiceLogo.js');
+  const make = (bytes) => 'data:image/png;base64,'+bytes.toString('base64');
+  // Valid synthetic 1x1 RGBA PNG; not a customer's actual logo.
+  const image='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2QAAAABJRU5ErkJggg==';
+  // png color-type 4 (grayscale+alpha) is intentionally rejected: normalize
+  // uploaded PNGs to RGB/RGBA in the image tool before issuing.
+  assert.throws(()=>normalizeInvoiceLogo('https://example.org/logo.png'),/uploaded PNG/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/svg+xml;base64,PHN2Zy8+'),/uploaded PNG/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,NOT-BASE64'),/invalid PNG/);
+  assert.throws(()=>normalizeInvoiceLogo(make(Buffer.alloc(131073))),/128 KB/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,'+image),/RGB\/RGBA/);
+});

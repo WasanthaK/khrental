@@ -95,3 +95,8 @@ test('preview is visually marked and never alters the financial snapshot',async(
   assert.equal(pdf.pageCount,1);
   assert.deepEqual(sample,before);
 });
+
+test('issued logo snapshot never accepts external image URLs',()=>{
+  const sample=invoice();sample.issuer.logoPng='https://example.com/logo.png';
+  assert.throws(()=>normalizeInvoiceDocumentSnapshot(sample),/uploaded PNG/);
+});
