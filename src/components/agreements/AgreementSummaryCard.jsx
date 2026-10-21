@@ -5,6 +5,9 @@ import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriang
 import SignatureProgressTracker from '../ui/SignatureProgressTracker';
 import AgreementDocument from './AgreementDocument';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../../hooks/useAuth';
+import { isAdministrator } from '../../utils/accessModel';
+import { getEviaAuditTrailUrl } from '../../utils/eviaAuditTrailLink';
 import { reconcileEviaSignedDocument } from '../../services/eviaSignService';
 
 /**
@@ -15,6 +18,8 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const [cancelReason, setCancelReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [showAuditViewer, setShowAuditViewer] = useState(false);
+  const { user, membership, activeTenantId } = useAuth();
   const [resolvedSignedDocumentUrl, setResolvedSignedDocumentUrl] = useState(null);
   const [isResolvingSignedDocument, setIsResolvingSignedDocument] = useState(false);
   
@@ -39,6 +44,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
     agreement.signature_pdf_url
   ].find((value) => String(value || '').includes('/storage/')) || null;
   const signedDocumentUrl = resolvedSignedDocumentUrl || storedSignedDocumentUrl;
+  const auditTrailUrl = isAdministrator({ user, membership }) && agreement.eviasignreference
+    ? getEviaAuditTrailUrl({ signedDocumentUrl, agreementId: agreement.id, tenantId: activeTenantId, origin: window.location.origin })
+    : null;
   const documentUrlToView = isSignatureComplete
     ? signedDocumentUrl
     : (signedDocumentUrl || agreement.pdfurl || agreement.documenturl);
@@ -353,6 +361,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
             </button>
           )}
           
+          {isSignatureComplete && auditTrailUrl && (
+            <button type="button" onClick={() => setShowAuditViewer(true)} className="px-3 py-1 border border-indigo-400 text-indigo-700 rounded text-xs hover:bg-indigo-50">View Signing Audit</button>
+          )}
           {onCancelClick && !['active', 'closed'].includes(agreementState) && (
             <button
               onClick={handleCancelClick}
@@ -407,6 +418,9 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
         </div>
       )}
 
+      {showAuditViewer && auditTrailUrl && (
+        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} />
+      )}
       {showDocumentViewer && documentUrlToView && (
         <AgreementDocument 
           documentUrl={documentUrlToView} 

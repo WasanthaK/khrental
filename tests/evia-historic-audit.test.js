@@ -1,4 +1,6 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import { getEviaAuditTrailUrl } from '../src/utils/eviaAuditTrailLink.js';
 import assert from 'node:assert/strict';
 import { parseHistoricEviaAuditTrailPath, authorizeHistoricEviaAuditTrailRead } from '../src/api/evia/auditTrailAccess.js';
 
@@ -48,4 +50,37 @@ test('historic audit access requires signed and completed retained agreement in 
       ...baseline, loadHistoricAgreement: async () => invalid });
     assert.equal(result.allowed, false);
   }
+});
+
+test('retained signed document hint yields a same-tenant protected audit candidate', () => {
+  const origin = 'https://khrentals.example.invalid';
+  const base = '/storage/documents/tenants/' + tenantId + '/agreements/' + agreementId + '/signed/';
+  const context = { agreementId, tenantId, origin };
+  assert.equal(getEviaAuditTrailUrl({ ...context, signedDocumentUrl: base + 'Rental_Agreement.pdf' }), base + 'audit_trail.pdf');
+  const attempt = '33333333-3333-4333-8333-333333333333';
+  assert.equal(getEviaAuditTrailUrl({ ...context, signedDocumentUrl: base + 'staged/' + attempt + '/Signed.pdf' }), base + 'staged/' + attempt + '/audit_trail.pdf');
+  for (const signedDocumentUrl of [
+    null, 'https://evil.example.invalid' + base + 'Signed.pdf',
+    base.replace(tenantId, '44444444-4444-4444-8444-444444444444') + 'Signed.pdf',
+    base.replace(agreementId, '44444444-4444-4444-8444-444444444444') + 'Signed.pdf',
+    base + '../audit_trail.pdf', base + 'audit_trail.pdf', base + 'Signed.pdf?token=123',
+    '/storage/documents/tenants/' + tenantId + '/agreements/' + agreementId + '/pending/Signed.pdf'
+  ]) {
+    assert.equal(getEviaAuditTrailUrl({ ...context, signedDocumentUrl }), null);
+  }
+});
+
+test('audit viewer UI is admin-scoped, server enforced and reports unavailable bytes', () => {
+  const card = fs.readFileSync(new URL('../src/components/agreements/AgreementSummaryCard.jsx', import.meta.url), 'utf8');
+  const details = fs.readFileSync(new URL('../src/pages/AgreementDetails.jsx', import.meta.url), 'utf8');
+  const viewer = fs.readFileSync(new URL('../src/components/agreements/AgreementDocument.jsx', import.meta.url), 'utf8');
+  const protectedReader = fs.readFileSync(new URL('../src/hooks/useAuthenticatedAgreementDocument.js', import.meta.url), 'utf8');
+  for (const source of [card, details]) {
+    assert.match(source, /isAdministrator\(\{ user, membership \}\)/);
+    assert.match(source, /getEviaAuditTrailUrl/);
+    assert.match(source, /View Signing Audit/);
+  }
+  assert.match(viewer, /useAuthenticatedAgreementDocument\(documentUrl\)/);
+  assert.match(protectedReader, /buildRequestContextHeaders\(\)/);
+  assert.match(protectedReader, /Unable to retrieve this document/);
 });
