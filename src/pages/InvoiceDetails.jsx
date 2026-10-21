@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { invoiceHeading } from '../utils/invoiceReference';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice } from '../services/platformClient';
+import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice, assignLegacyInvoicePaymentReference } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
@@ -69,6 +69,11 @@ const InvoiceDetails = () => {
   const emailDelivery = account?.delivery || { status: 'not_attempted' };
   const outstandingBalance = Number(account?.outstandingBalance) || 0;
   const isDraft = String(invoice?.status || '').toLowerCase() === 'draft';
+  const canSupplementLegacyReference = canManageInvoices
+    && (invoice?.payment_reference == null || invoice?.payment_reference === '')
+    && ['pending', 'overdue'].includes(String(invoice?.status || '').toLowerCase())
+    && outstandingBalance > 0
+    && !payments.some(payment => ['pending', 'verified'].includes(String(payment.status || '').toLowerCase()));
   const pendingPayment = payments.find((payment) => String(payment.status).toLowerCase() === 'pending') || null;
   const paymentProofUrl = pendingPayment?.proofurl || invoice?.paymentproofurl || null;
 
@@ -148,6 +153,38 @@ const InvoiceDetails = () => {
       setError(err.message || 'Unable to resend existing invoice.');
       await loadAccount();
     } finally { setWorking(false); }
+  };
+
+
+  const handleAssignLegacyReference = async () => {
+    if (!canSupplementLegacyReference || working) return;
+    const input = window.prompt(
+      'Reason for assigning a reference to this historical invoice (10–500 characters):'
+    );
+    if (input === null) return;
+    const reason = input.trim();
+    if (reason.length < 10 || reason.length > 500) {
+      setError('Provide a reason between 10 and 500 characters.');
+      return;
+    }
+    if (!window.confirm(
+      'Assign the next 8-digit payment reference using today’s tenant billing date? ' +
+      'The original invoice, payments and issued bank details will not change. No email will be sent.'
+    )) return;
+    try {
+      setWorking(true);
+      setError(null);
+      setNotice(null);
+      const result = await assignLegacyInvoicePaymentReference(id, reason);
+      if (result.error) throw result.error;
+      setNotice(`Payment reference #${result.data.payment_reference} assigned and audited. No email was sent.`);
+      await loadAccount();
+    } catch (err) {
+      setError(err.message || 'Unable to assign a historical invoice reference.');
+      await loadAccount();
+    } finally {
+      setWorking(false);
+    }
   };
 
   const handleRecordReminder = async () => {
@@ -297,6 +334,20 @@ const InvoiceDetails = () => {
             </dl>
           ) : <p className="text-sm text-amber-700">Bank transfer details are not available on this invoice. Confirm payment instructions with your property manager before paying.</p>}
           <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds. Changes to property banking details do not update issued invoice instructions.</p>
+          {canSupplementLegacyReference && (
+            <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm text-amber-900">
+                This historical invoice has no assigned numeric payment reference.
+                A staff-authorized supplement preserves the issued invoice and records the reason.
+                It does not send a notification or supply missing original bank details.
+              </p>
+              <button type="button" disabled={working} onClick={handleAssignLegacyReference}
+                className="mt-3 rounded border border-amber-600 px-3 py-2 text-sm text-amber-950 disabled:opacity-50">
+                Assign legacy payment reference
+              </button>
+            </div>
+          )}
+
         </section>
       )}
 
