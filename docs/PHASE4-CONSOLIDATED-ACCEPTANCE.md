@@ -261,10 +261,10 @@ sign-off remains OPEN; Phase 5 source regression development is COMPLETE.
 
 | ID | Owner/action | Exact closure evidence | State |
 | --- | --- | --- | --- |
-| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced, with no duplicate provider calls; review and merge this docs-only PR | **IN REVIEW** (reconciliation prepared; not yet merged) |
+| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced in merged [PR #342](https://github.com/WasanthaK/khrental/pull/342) | **CLOSED** |
 | C02 | Operations — reconcile existing **invoice 26101901** issue/delivery ledger with a redacted SendGrid provider message/event ID and delivered result | Existing email and PDF receipt already pass; retain matching provider event and issue/attempt/accepted-or-delivered record, or state explicitly that historic telemetry is unavailable | **EVIDENCE OPEN**; never reissue a new invoice just for logs |
 | C03 | Operations — reconcile signed agreement **#47FDEA13** against Evia callback, retained signed PDF, `audit_trail.pdf`, and protected authorized/denied retrieval | Match existing agreement/attempt/document IDs and byte-provenance where available; record missing artifacts explicitly | **EVIDENCE OPEN**, not a repeat live signing test; fenced canary stays OFF |
-| C04 | Release owner — approve explicit restrictions for manual/dynamic legacy SQL/operator callers | Record that `npm run migrate`, `execute-sql`, direct `migrate:*` and historical scripts are **not governed production schema authority**. Retain unknown dynamic callers as accepted low-risk deferral only with owner/control, or flag material risk BLOCKED; no broad deletion | **OWNER DECISION OPEN** |
+| C04 | Owner-approved practical production SQL policy | Normal schema changes use the governed executor; keep app credentials limited; allow recorded admin direct SQL for exceptional recovery; keep legacy scripts available for nonproduction | **OWNER APPROVED / CLOSED 2026-10-21** — operating decision, not a new technical permission audit |
 | C05 | Release owner — final original canonical release decision | Review current tenant/property/unit, invoice/payment/receipt, agreement/signed PDF, maintenance/notification and security proof, unresolved C02–C04 or formally justified noncritical deferrals; record dated **APPROVE** or **DO NOT APPROVE** | **NOT SIGNED OFF** |
 
 **Interpretation:** C02 is *telemetry correlation*, not new SendGrid functional
@@ -286,68 +286,39 @@ archiving through this evidence-only update. Future runtime fixes require their
 normal exact-SHA tests and authorized release path.
 
 
-## C04 — production SQL and legacy caller operating policy for owner decision (2026-10-21)
+## C04 — approved practical database operating policy (2026-10-21)
 
-**Status: PROPOSED, NOT APPROVED.** This section is a release-owner decision
-record, not a claim that unknown operational callers were enumerated, a
-permission grant was changed, or any SQL command was executed.
+**Status: OWNER APPROVED / C04 POLICY DECISION CLOSED.** The owner agreed to
+a simple four-rule operating approach. This records the decision; it is
+**not** evidence of a database privilege change, credential audit,
+identification of every historical caller, production schema modification,
+or final C05 release sign-off.
 
-### Verified technical facts
+1. **Normal production schema changes:** use the existing governed
+   GitHub/Azure migration workflow with its confirmation and verification.
+   Do not treat the legacy `exec_sql` RPC or a local migration script
+   as a substitute for normal production migration operations.
+2. **Application credentials:** keep unrestricted database-administrator
+   privileges out of the running application. Maintain distinct operational
+   permissions for ordinary application use and migrations.
+3. **Exceptional production maintenance/recovery:** an explicitly
+   authorized database administrator may use direct SQL when genuinely
+   necessary, with the operator, purpose, target and resulting change
+   recorded and reviewed. This is an exception, not an everyday alternate
+   migration channel. No new emergency framework is required.
+4. **Development and disposable testing:** retain existing migration,
+   `execute-sql`, named `migrate:*` and diagnostic scripts for
+   authorized nonproduction use. Do not remove historical helpers
+   wholesale; unknown manual/dynamic callers stay unverified.
 
-- `src/api/platform/authorization.js` includes `exec_sql` in the blocked
-  runtime RPC set. The normal serving application is not an authorized SQL
-  migration executor.
-- `npm run migrate` invokes `src/db/runMigration.js`, which attempts
-  `platformClient.rpc('exec_sql')`; it is a historical/manual entrypoint
-  and does not supply a governed production migration ledger.
-- `npm run execute-sql` (via `src/db/executeSql.js`), named `migrate:*`
-  commands and `run-fixes` can submit direct SQL batches when an operator
-  supplies a database connection. These commands do **not** enforce the
-  Production GitHub approval boundary or migration checksums.
-- Indexed Package C source census found no serving-startup authority for
-  those legacy commands, but it **does not certify the absence of dynamic,
-  external or operator-only invocations**. Keep those consumers unknown
-  until separately evidenced; do not characterize them as safely deleted.
+**Risk boundary:** no one may bypass tenant isolation, modify financial
+records without authorization, bypass signer provenance or destroy retained
+documents. Material newly discovered direct production SQL use must be
+evaluated rather than silently accepted as safe. The existing
+runtime `exec_sql` denial remains unchanged.
 
-### Proposed operating rule (release-owner approval required)
-
-1. **Single permitted production schema path:** existing protected GitHub
-   **Run production database migrations** plan/preflight/apply workflow and
-   dedicated `khrental-db-migrator` managed identity. An apply requires
-   the GitHub Production environment and exact `APPLY-PRODUCTION`
-   confirmation. Verify through the existing strict read-only executor.
-2. **Explicitly prohibited against production:** `npm run migrate`,
-   `npm run execute-sql`, named `npm run migrate:*` scripts,
-   `run-fixes`, `src/db/executeSql.js`, `src/db/runMigration.js`,
-   historical `src/scripts/*` SQL/RPC repairs, browser SQL, and any
-   general-purpose `exec_sql`. These can remain as source artifacts
-   for separately controlled local/disposable tests; existence never grants
-   production authority. A change of production schema must not bypass the
-   governed workflow even for a one-off fix.
-3. **Credential boundary:** preserve separate serving and migration managed
-   identities. The serving identity is never granted DDL; do not reuse
-   privileged SQL credentials in developer workstations, general CI or
-   app/browser configuration. If privileges or identity cannot be verified,
-   STOP before executing a production schema change.
-4. **Unknown manual/dynamic callers:** retain existing fail-closed wrappers
-   and unproven exports; classify unknown callers as monitored operational
-   risk, not dead code. No blanket deletion or re-enabling legacy writes.
-   Any newly identified direct production SQL caller, cross-tenant bypass,
-   signer-provenance failure or unapproved financial mutation is a hard
-   release blocker, not an accepted low-risk deferral.
-5. **Governed exceptions:** do not introduce a generic break-glass path.
-   If a production correction is required, record the operator, change
-   reference, database target, SQL/checksum evidence, bounded approval and
-   verification under the existing governed authority before execution.
-
-### Decision still needed
-
-Release owner may mark **C04 APPROVED** only after accepting this operating
-rule and confirming whether any known current operators rely on the barred
-scripts against production. If no such known use exists, unproven historical
-callers remain an explicitly owned, non-authoritative monitoring item;
-that is not proof of no callers. If known ungoverned production use exists,
-C04 stays **BLOCKED** until the access path is contained.
-
-**No owner authorization or approval is inferred from preparing this text.**
-No C05 production release approval follows automatically.
+**C04 disposition:** The operating *policy decision* is complete. Its
+technical enforcement remains the existing production permissions and
+migration controls, to be verified through ordinary operational review;
+do not mark them newly audited by this docs-only change. **C05 remains
+pending a separate dated business/security release decision.**
