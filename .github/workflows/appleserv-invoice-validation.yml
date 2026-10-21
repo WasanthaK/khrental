@@ -34,6 +34,8 @@ jobs:
         run: node --test tests/invoice-archive-write-candidate.test.js
       - name: Validate atomic local invoice archive storage
         run: node --test tests/invoice-archive-local-proof.test.js
+      - name: Validate protected R2 invoice archive boundary
+        run: node --test tests/invoice-archive-r2-boundary.test.js
       - name: Validate transaction-scoped invoice legal issuer snapshot
         run: node --test tests/invoice-issuance-snapshot-candidate.test.js
       - name: Validate authorization
