@@ -67,6 +67,28 @@ test('resend reads archived PDF, never re-renders a changed tenant brand',async(
   assert.equal(subsequent.content,first.content);
   assert.deepEqual(a.metrics(),{created:1,published:1,renders:1});
 });
+test('a changed invoice-issued event cannot authorize resend of a different archived PDF',async()=>{
+  const a=await setup();
+  await a.invoke();
+  const archivedEvidence=await a.adapters.issuanceLedger.loadIssued();
+  const changed=structuredClone(archivedEvidence.snapshot);
+  changed.issuer.legalName='New Tenant Branding After Issue';
+  const crypto=(await import('node:crypto')).default;
+  const {normalizeInvoiceDocumentSnapshot}=await import('../src/api/platform/invoicePdfCandidate.js');
+  const canonical=normalizeInvoiceDocumentSnapshot(changed);
+  const modifiedAdapters={
+    ...a.adapters,
+    issuanceLedger:{loadIssued:async()=>({
+      issued:true,tenantId,invoiceId,snapshot:canonical,
+      snapshotSha256:crypto.createHash('sha256')
+        .update(JSON.stringify(canonical)).digest('hex')
+    })}
+  };
+  await assert.rejects(a.invoke({adapters:modifiedAdapters,render:async()=>{
+    throw Error('Re-rendering is forbidden');
+  }}),e=>e.code==='INVOICE_ARCHIVE_ISSUANCE_MISMATCH');
+  assert.deepEqual(a.metrics(),{created:1,published:1,renders:1});
+});
 test('missing issuance evidence cannot publish or email',async()=>{
   const a=await setup();
   await assert.rejects(a.invoke({adapters:{

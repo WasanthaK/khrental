@@ -23,6 +23,16 @@ export const prepareImmutableIssuedInvoiceAttachment = async ({
     throw error;
   }
   const existing=await adapters.archiveLedger.loadCommitted(ids);
+  // The SQL archive is immutable, and the authoritative invoice_issued event
+  // must still identify the same canonical issued document. If an event has
+  // been edited or replaced, do not mail an archive with disputed provenance.
+  if (existing && (existing.snapshotSha256 !== issued.snapshotSha256 ||
+      existing.issuedSnapshotJson !== JSON.stringify(issued.snapshot))) {
+    const error=new Error('Committed invoice PDF no longer matches issuance evidence.');
+    error.status=409;
+    error.code='INVOICE_ARCHIVE_ISSUANCE_MISMATCH';
+    throw error;
+  }
   if (!existing) {
     const pdf=await render(issued.snapshot);
     if (pdf.snapshotSha256 !== issued.snapshotSha256) {

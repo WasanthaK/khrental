@@ -79,3 +79,16 @@ test('read-only executor preflight checks grants and all manifest states without
   assert.doesNotMatch(workflow, /az containerapp job update/);
   assert.doesNotMatch(workflow, /--mode=apply/);
 });
+
+test('controlled production migration selection includes every governed migration target',()=>{
+  const workflow=read('../.github/workflows/run-production-db-migrations.yml');
+  const manifestIds=[...runner.matchAll(/^\s+id:\s*'(\d{8}_\d{2}_[^']+)'/gm)]
+    .map(match=>match[1]);
+  const dispatch=workflow.split('workflow_dispatch:')[1]?.split('\npermissions:')[0]||'';
+  const through=dispatch.split('through:')[1]?.split('confirmation:')[0]||'';
+  for(const id of manifestIds){
+    assert.ok(through.includes(`- ${id}`),`Missing explicitly selectable migration: ${id}`);
+  }
+  assert.match(workflow,/Automatic production migration runs are restricted to plan mode/);
+  assert.match(workflow,/APPLY-PRODUCTION/);
+});
