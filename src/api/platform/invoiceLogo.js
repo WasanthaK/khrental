@@ -21,7 +21,8 @@ export const normalizeInvoiceLogo = value => {
     reject('Invoice logo has invalid PNG bytes or exceeds 128 KB.');
   }
   const bytes = Buffer.from(encoded, 'base64');
-  if (bytes.length < 45 || bytes.length > MAX_BYTES ||
+  if (bytes.length > MAX_BYTES) reject('Invoice logo exceeds 128 KB.');
+  if (bytes.length < 45 ||
       bytes.toString('base64') !== encoded ||
       !bytes.subarray(0, 8).equals(SIGNATURE) ||
       bytes.readUInt32BE(8) !== 13 ||

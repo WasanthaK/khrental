@@ -92,4 +92,7 @@ test('issuer logo accepts bounded PNG and blocks scripts, remote links and overs
   assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,NOT-BASE64'),/invalid PNG/);
   assert.throws(()=>normalizeInvoiceLogo(make(Buffer.alloc(131073))),/128 KB/);
   assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,'+image),/RGB\/RGBA/);
+  const validRgb='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  assert.equal(normalizeInvoiceLogo('data:image/png;base64,'+validRgb),
+    'data:image/png;base64,'+validRgb);
 });

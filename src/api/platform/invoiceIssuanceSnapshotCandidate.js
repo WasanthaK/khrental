@@ -35,8 +35,7 @@ const selectIssuer=row=>{
     }
     return {role:'organization',legalName:issuer.legalName,
       postalAddress:issuer.postalAddress,
-      contactEmail:issuer.supportEmail,contactPhone:issuer.supportPhone,
-      logoPng:issuer.logoPng};
+      contactEmail:issuer.supportEmail,contactPhone:issuer.supportPhone};
   }
   if(party.issuerAuthorityConfirmed!==true){
     block('parties','Alternative issuer requires explicit administrator authority.');

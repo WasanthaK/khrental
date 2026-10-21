@@ -27,9 +27,8 @@ const assertKeys = (data, keys) => {
   if (extras.length) throw fail(extras[0], 'Field is not editable in invoice master data.');
 };
 import { normalizeInvoiceDesign } from './invoiceDesign.js';
-import { normalizeInvoiceLogo } from './invoiceLogo.js';
 
-const issuerKeys=['legalName','postalAddress','supportEmail','supportPhone','website','logoPng','design'];
+const issuerKeys=['legalName','postalAddress','supportEmail','supportPhone','website','design'];
 export const normalizeIssuerProfile = input => {
   assertKeys(input, issuerKeys);
   const result = {
@@ -38,7 +37,6 @@ export const normalizeIssuerProfile = input => {
     supportEmail: email(input,'supportEmail'),
     supportPhone: phone(input,'supportPhone'),
     website: contact(input,'website',300),
-    logoPng: normalizeInvoiceLogo(input.logoPng),
     design: normalizeInvoiceDesign(input.design)
   };
   if (result.website && !/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:[/?#][^\s]*)?$/i.test(result.website)) {
