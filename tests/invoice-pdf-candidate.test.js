@@ -72,3 +72,43 @@ test('immutability fingerprint derives from canonical issued snapshot data',()=>
   const edited=invoice();edited.issuer.legalName='Another Business';
   assert.notDeepEqual(before,normalizeInvoiceDocumentSnapshot(edited));
 });
+
+
+test('curated invoice layout and versioned print design are part of the immutable snapshot',async()=>{
+  const sample=invoice();
+  sample.design={template:'classic',paperFormat:'Letter',primaryColor:'#30446b',
+    showPropertyAddress:false,showIssuerContact:false,footerText:'Questions? Contact our billing office.'};
+  const normalized=normalizeInvoiceDocumentSnapshot(sample);
+  assert.equal(normalized.design.template,'classic');
+  assert.equal(normalized.design.paperFormat,'Letter');
+  assert.equal(normalized.design.showPropertyAddress,false);
+  const result=await createInvoiceDocumentPdfCandidate(sample);
+  const pdf=await PDFDocument.load(Buffer.from(result.content,'base64'));
+  assert.equal(pdf.getPage(0).getHeight(),792);
+  const changed=invoice();changed.design={template:'modern'};
+  assert.notDeepEqual(normalized,normalizeInvoiceDocumentSnapshot(changed));
+});
+test('preview is visually marked and never alters the financial snapshot',async()=>{
+  const sample=invoice();
+  const before=structuredClone(sample);
+  const pdf=await createInvoiceDocumentPdfCandidate(sample,{preview:true});
+  assert.equal(pdf.pageCount,1);
+  assert.deepEqual(sample,before);
+});
+
+test('branded issued PDF embeds tenant PNG logo and locks it into the immutable snapshot',async()=>{
+  const sample=invoice();
+  sample.issuer.logoPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  const branded=normalizeInvoiceDocumentSnapshot(sample);
+  assert.equal(branded.issuer.logoPng,sample.issuer.logoPng);
+  const withLogo=await createInvoiceDocumentPdfCandidate(sample);
+  const without=structuredClone(sample);
+  delete without.issuer.logoPng;
+  const withoutLogo=await createInvoiceDocumentPdfCandidate(without);
+  assert.notEqual(withLogo.sha256,withoutLogo.sha256);
+  assert.notEqual(withLogo.snapshotSha256,withoutLogo.snapshotSha256);
+  assert.ok(Buffer.from(withLogo.content,'base64').length>
+    Buffer.from(withoutLogo.content,'base64').length);
+  const pdf=await PDFDocument.load(Buffer.from(withLogo.content,'base64'));
+  assert.equal(pdf.getPageCount(),1);
+});

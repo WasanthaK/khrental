@@ -4,6 +4,7 @@ on:
     branches:
       - feature/invoice-admin-validation-20261019
       - feature/invoice-document-snapshot-20261020
+      - feature/customer-invoice-designer-20261021
 
 permissions:
   contents: read
@@ -23,6 +24,8 @@ jobs:
           persist-credentials: false
       - name: Install Node dependencies
         run: npm ci
+      - name: Build customer-facing Invoice Designer UI
+        run: npm run build
       - name: Validate invoice master controls
         run: npm run test:invoice-master
       - name: Validate candidate invoice PDF snapshots
@@ -33,6 +36,12 @@ jobs:
         run: node --test tests/invoice-archive-write-candidate.test.js
       - name: Validate atomic local invoice archive storage
         run: node --test tests/invoice-archive-local-proof.test.js
+      - name: Validate protected R2 invoice archive boundary
+        run: node --test tests/invoice-archive-r2-boundary.test.js
+      - name: Validate tenant-scoped immutable issued PDF retrieval
+        run: node --test tests/invoice-issued-document-read.test.js
+      - name: Validate immutable issued PDF publication before delivery
+        run: node --test tests/invoice-immutable-delivery.test.js
       - name: Validate transaction-scoped invoice legal issuer snapshot
         run: node --test tests/invoice-issuance-snapshot-candidate.test.js
       - name: Validate authorization

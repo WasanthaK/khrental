@@ -9,6 +9,8 @@ import { createInvoiceDocumentPdfCandidate, normalizeInvoiceDocumentSnapshot } f
 import { publishIssuedInvoiceArchiveCandidate } from '../src/api/platform/issuedInvoiceArchiveWriteCandidate.js';
 import { createInvoiceArchiveSqlCandidateAdapters } from '../src/api/platform/invoiceArchiveSqlCandidateAdapters.js';
 import { createInvoiceArchiveLocalProofStore } from '../src/api/platform/invoiceArchiveLocalProofStore.js';
+import { prepareImmutableIssuedInvoiceAttachment } from '../src/api/platform/immutableInvoiceEmailAttachment.js';
+import { loadVerifiedIssuedInvoiceDocument } from '../src/api/platform/issuedInvoiceDocumentRead.js';
 
 const SQL_SERVER_IMAGE = process.env.MSSQL_TEST_IMAGE || 'mcr.microsoft.com/mssql/server:2022-latest';
 const MIGRATION_ID = '20260926_01_add_rentee_property_unit_associations';
@@ -757,6 +759,37 @@ const main = async () => {
       const replay=await publish();
       assert.equal(replay.state,'already_committed');
       assert.equal(replay.archive.path,first.archive.path);
+
+
+      // Real SQL Server + temporary disk end-to-end proof for the same helper
+      // that prepares both first customer email and staff-controlled resends.
+      // The archive has already committed; a resend must read it with ZERO
+      // rendering, ZERO new archive inserts and ZERO object overwrites.
+      const historicalAttachment=await prepareImmutableIssuedInvoiceAttachment({
+        tenantId:proofTenant,invoiceId:proofInvoice,actorUserId:proofTenant,
+        adapters:sqlAdapters,store:storage,
+        render:async()=>{throw Error('Historical resend must never render from current branding');}
+      });
+      assert.equal(historicalAttachment.type,'application/pdf');
+      assert.equal(historicalAttachment.disposition,'attachment');
+      assert.deepEqual(Buffer.from(historicalAttachment.content,'base64'),issuedPdfBytes);
+      const download=await loadVerifiedIssuedInvoiceDocument({
+        tenantId:proofTenant,invoiceId:proofInvoice,
+        archiveLedger:sqlAdapters.archiveLedger,objectStorage:storage
+      });
+      assert.deepEqual(Buffer.from(download.content,'base64'),issuedPdfBytes);
+      await assert.rejects(loadVerifiedIssuedInvoiceDocument({
+        tenantId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',invoiceId:proofInvoice,
+        archiveLedger:sqlAdapters.archiveLedger,objectStorage:storage
+      }), e=>e.code==='ISSUED_INVOICE_PDF_NOT_ARCHIVED');
+      const countAfterRetrieval=await testPool.request()
+        .input('tenantId',sql.UniqueIdentifier,proofTenant)
+        .input('invoiceId',sql.UniqueIdentifier,proofInvoice)
+        .query('SELECT COUNT(*) AS count FROM dbo.invoice_pdf_archives '+
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId');
+      assert.equal(countAfterRetrieval.recordset[0].count,1,
+        'download and resend never modify or duplicate archive rows');
+      console.log('PASS: SQL-backed customer email attachment and download are identical to archived PDF bytes');
 
       const revised=structuredClone(proofSnapshot);
       revised.issuer.legalName='Different Issuer After Invoice';

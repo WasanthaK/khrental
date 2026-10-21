@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import { normalizeIssuerProfile, normalizePropertyParties } from './invoiceMasterValidation.js';
 import { normalizeInvoiceDocumentSnapshot } from './invoicePdfCandidate.js';
+import { normalizeInvoiceDesign } from './invoiceDesign.js';
 
-// Draft only. Call within the same tenant-authorized SERIALIZABLE transaction
-// as an eventual invoice_issued event. No live router invokes this module.
+// Live invocation is gated by INVOICE_IMMUTABLE_ARCHIVE_ENABLED.
+// Call inside the same tenant-authorized SERIALIZABLE transaction as
+// invoice_issued. Fail closed rather than substituting mutable later data.
 const block=(field,message)=>{
   const e=new Error(message);e.status=409;
   e.code='INVOICE_ISSUANCE_SNAPSHOT_BLOCKED';e.details={field};throw e;
@@ -34,7 +36,8 @@ const selectIssuer=row=>{
     }
     return {role:'organization',legalName:issuer.legalName,
       postalAddress:issuer.postalAddress,
-      contactEmail:issuer.supportEmail,contactPhone:issuer.supportPhone};
+      contactEmail:issuer.supportEmail,contactPhone:issuer.supportPhone,
+      logoPng:issuer.logoPng};
   }
   if(party.issuerAuthorityConfirmed!==true){
     block('parties','Alternative issuer requires explicit administrator authority.');
@@ -130,7 +133,10 @@ export const buildInvoiceIssuanceSnapshotCandidate=({
       dueAt:invoice.duedate,issuer:selectIssuer(masterRow),
       renter:{name:masterRow.renter_name},
       property:{name:masterRow.property_name,address:masterRow.property_address||''},
-      lines,totalCents,payment:selectPayment(masterRow)
+      lines,totalCents,payment:selectPayment(masterRow),
+      design:normalizeInvoiceDesign(
+        stored(masterRow.invoice_issuer_profile_json,'issuer')?.design
+      )
     });
     return {
       documentSnapshot,

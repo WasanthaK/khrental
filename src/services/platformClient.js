@@ -228,6 +228,14 @@ export const getInvoiceAccount = async (invoiceId) => {
   }
 };
 
+
+export const getIssuedInvoicePdf = async invoiceId => {
+  try {
+    const result = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/issued-document`);
+    return { data: result?.data || null, error: null };
+  } catch(error){ return {data:null,error}; }
+};
+
 export const updateInvoiceDraft = async (invoiceId, updates = {}) => {
   try {
     const payload = await billingRequest(`/invoices/${encodeURIComponent(invoiceId)}/draft`, {
@@ -423,6 +431,13 @@ export const generateTenancyMonthlyInvoices = async (options = {}) => {
 const invoiceMasterRequest = (path = '', options = {}) => (
   scopedRequest('/api/invoice-master', path, options)
 );
+
+export const previewInvoiceDesign = async profile => {
+  try {
+    const result = await invoiceMasterRequest('/preview',{method:'POST',body:{profile}});
+    return {data:result.data,error:null};
+  } catch(error){return {data:null,error};}
+};
 export const getInvoiceIssuerProfile = async () => {
   try { const result = await invoiceMasterRequest('/issuer'); return {data:result.data,error:null}; }
   catch(error){ return {data:null,error}; }

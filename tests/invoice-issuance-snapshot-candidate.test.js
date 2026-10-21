@@ -131,3 +131,30 @@ test('missing tenant-scoped SQL joins fail closed',async()=>{
     transaction:{},sql:{Request},tenantId,invoiceId,paymentReference:'26102001'
   }),e=>e.code==='INVOICE_ISSUANCE_SNAPSHOT_BLOCKED'&&e.details.field==='scope');
 });
+
+test('organization-issued invoice preserves the chosen logo and theme in issue-time evidence',()=>{
+  const sample=master();
+  sample.invoice_issuer_profile_json=JSON.stringify({
+    legalName:'Example Owner Ltd',postalAddress:'123 Example Lane',
+    supportEmail:'billing@example.test',
+    design:{template:'corporate',paperFormat:'Letter'}
+  });
+  const evidence=run({masterRow:sample});
+  assert.equal(evidence.documentSnapshot.design.template,'corporate');
+  assert.equal(evidence.documentSnapshot.design.paperFormat,'Letter');
+  assert.equal(evidence.documentSnapshot.issuer.legalName,'Example Owner Ltd');
+});
+
+test('organization issuer logo becomes part of canonical issued snapshot and its SHA-256',()=>{
+  const r=master();
+  r.invoice_issuer_profile_json=JSON.stringify({
+    legalName:'Example Owner Ltd',postalAddress:'123 Example Lane',
+    supportEmail:'billing@example.test',
+    logoPng:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC'
+  });
+  const branded=run({masterRow:r});
+  assert.equal(branded.documentSnapshot.issuer.logoPng,
+    JSON.parse(r.invoice_issuer_profile_json).logoPng);
+  const plain=run();
+  assert.notEqual(branded.documentSnapshotSha256,plain.documentSnapshotSha256);
+});

@@ -66,3 +66,45 @@ test('owner-issued invoices require real owner contact information', () => {
   });
   assert.equal(owner.propertyOwnerEmail,'owner@example.test');
 });
+
+
+test('tenant-owned invoice designer rejects unsafe/custom styles and preserves curated options',async()=>{
+  const { normalizeIssuerProfile }=await import('../src/api/platform/invoiceMasterValidation.js');
+  const profile={legalName:'Test business',postalAddress:'Test address',supportEmail:'billing@example.test',
+    supportPhone:'',website:'',design:{template:'corporate',paperFormat:'A4',primaryColor:'#23456a',
+      footerText:'Contact our office',showPropertyAddress:true,showIssuerContact:true}};
+  assert.deepEqual(normalizeIssuerProfile(profile).design,profile.design);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{template:'<script>'}}),/curated invoice layout/i);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{primaryColor:'#ffffff'}}),/darker color/i);
+  assert.throws(()=>normalizeIssuerProfile({...profile,design:{footerText:'<script>alert(1)</script>',evil:true}}),
+    /Unsupported invoice design field/i);
+});
+
+test('issuer logo accepts bounded PNG and blocks scripts, remote links and oversized assets',async()=>{
+  const {normalizeInvoiceLogo}=await import('../src/api/platform/invoiceLogo.js');
+  const make = (bytes) => 'data:image/png;base64,'+bytes.toString('base64');
+  // Valid synthetic 1x1 RGBA PNG; not a customer's actual logo.
+  const image='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2QAAAABJRU5ErkJggg==';
+  // png color-type 4 (grayscale+alpha) is intentionally rejected: normalize
+  // uploaded PNGs to RGB/RGBA in the image tool before issuing.
+  assert.throws(()=>normalizeInvoiceLogo('https://example.org/logo.png'),/uploaded PNG/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/svg+xml;base64,PHN2Zy8+'),/uploaded PNG/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,NOT-BASE64'),/invalid PNG/);
+  assert.throws(()=>normalizeInvoiceLogo(make(Buffer.alloc(131073))),/128 KB/);
+  assert.throws(()=>normalizeInvoiceLogo('data:image/png;base64,'+image),/RGB\/RGBA/);
+  const validRgb='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  assert.equal(normalizeInvoiceLogo('data:image/png;base64,'+validRgb),
+    'data:image/png;base64,'+validRgb);
+});
+
+test('logo survives full issuer profile normalization and rejects external resources',()=>{
+  const logo='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQjZwKAAGKAQQmQizaAAAAAElFTkSuQmCC';
+  const profile=normalizeIssuerProfile({
+    legalName:'Registered Company',postalAddress:'Registered Road',
+    logoPng:logo,design:{template:'modern'}
+  });
+  assert.equal(profile.logoPng,logo);
+  assert.equal(profile.design.template,'modern');
+  assert.throws(()=>normalizeIssuerProfile({logoPng:'https://example.test/unsafe.svg'}),
+    /uploaded PNG/);
+});

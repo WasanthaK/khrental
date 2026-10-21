@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express from 'express';
+import { createInvoiceDocumentPdfCandidate } from './invoicePdfCandidate.js';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
@@ -75,6 +76,34 @@ export const createInvoiceMasterAdminRouter = () => {
     requireUser:true,requireTenant:true,auditLabel:'invoice-master-admin'
   }));
   router.use((req,res,next)=>{try{assertAdmin(req);next();}catch(e){next(e);}});
+
+
+  // Read-only preview using synthetic financial and renter data. No production
+  // invoice ID, reference, payment account, mail, or storage mutation.
+  router.post('/preview',async(req,res,next)=>{
+    try {
+      const profile=normalizeIssuerProfile(req.body?.profile||{});
+      const previewSnapshot={
+        version:1,kind:'invoice_issued',
+        tenantId:'11111111-1111-4111-8111-111111111111',
+        invoiceId:'22222222-2222-4222-8222-222222222222',
+        paymentReference:'00000000',billingPeriod:'SAMPLE MONTH',
+        issuedAt:'2026-01-01T00:00:00Z',dueAt:'2026-01-14T00:00:00Z',
+        issuer:{role:'organization',legalName:profile.legalName||'SAMPLE BUSINESS',
+          postalAddress:profile.postalAddress||'Sample billing address',
+          contactEmail:profile.supportEmail,contactPhone:profile.supportPhone,
+          logoPng:profile.logoPng},
+        renter:{name:'SAMPLE RENTER'},
+        property:{name:'SAMPLE PROPERTY',address:'Sample property address'},
+        lines:[{description:'Sample monthly rent',amountCents:4500000},
+          {description:'Sample water service',amountCents:125000}],
+        totalCents:4625000,payment:null,design:profile.design
+      };
+      const pdf=await createInvoiceDocumentPdfCandidate(previewSnapshot,{preview:true});
+      respond(res,{content:pdf.content,type:pdf.type,pageCount:pdf.pageCount,
+        filename:'SAMPLE-invoice-design.pdf',isSample:true});
+    } catch(e) {next(e);}
+  });
 
   router.get('/issuer',async(req,res,next)=>{
     try{
