@@ -8,7 +8,7 @@ import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
 import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billingReminderEmail.js';
 import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
-import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
+import { DELIVERY_EVENTS, classifyInvoiceDeliveryAttemptError, deliveryOutcome } from './invoiceDeliveryState.js';
 import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
 import { captureInvoiceIssuanceSnapshotCandidate } from './invoiceIssuanceSnapshotCandidate.js';
 import { prepareImmutableIssuedInvoiceAttachment } from './immutableInvoiceEmailAttachment.js';
@@ -726,7 +726,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   // committing an attempted event leaves an UNKNOWN outcome, not a retryable
   // draft or an automatic duplicate invitation.
   const deliverIssuedInvoice = async (req, invoice) => {
-    let outcome, provider = null;
+    let outcome, provider = null, providerRequestStarted = false;
     try {
       // Re-read the authoritative invoice and only its own components.
       // One PDF per controlled delivery attempt; failure happens before the
@@ -754,17 +754,22 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
         throw createRequestError(409, 'No valid recipient for this issued invoice.', 'EMAIL_RECIPIENT_MISSING');
       }
-      const result = await sendInvoiceEmail({
+      // Finish every local operation before crossing the email provider
+      // boundary. A definite pre-send failure can be retried safely; a
+      // failed call after this point can have reached the recipient.
+      const emailPayload = {
         ...makeInvoiceEmail({ ...issuedInvoice, rentee_email: recipientEmail, paymentInstructions }),
         attachments: [attachment]
-      });
+      };
+      providerRequestStarted = true;
+      const result = await sendInvoiceEmail(emailPayload);
       if (result?.accepted === false || result?.success === false) {
         throw createRequestError(502, 'Email provider did not accept this invoice.', 'EMAIL_PROVIDER_REJECTED');
       }
       provider = result?.provider || null;
       outcome = 'accepted';
     } catch (error) {
-      outcome = classifyInvoiceEmailError(error);
+      outcome = classifyInvoiceDeliveryAttemptError(error, providerRequestStarted);
     }
     await appendInvoiceDeliveryEvent({
       tenantId: req.tenantId, invoiceId: invoice.id,
