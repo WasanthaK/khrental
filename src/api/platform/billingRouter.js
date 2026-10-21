@@ -10,6 +10,11 @@ import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
 import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
 import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
+import { captureInvoiceIssuanceSnapshotCandidate } from './invoiceIssuanceSnapshotCandidate.js';
+import { prepareImmutableIssuedInvoiceAttachment } from './immutableInvoiceEmailAttachment.js';
+import { createInvoiceArchiveSqlCandidateAdapters } from './invoiceArchiveSqlCandidateAdapters.js';
+import { createIssuedInvoiceR2ArchiveStore } from './issuedInvoiceR2ArchiveStore.js';
+import { loadVerifiedIssuedInvoiceDocument } from './issuedInvoiceDocumentRead.js';
 import { allocateInvoicePaymentReference, isLegacyInvoiceReferenceEligible } from './invoicePaymentReference.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
@@ -407,14 +412,54 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       assertInvoiceAccess(req, invoice, false);
       const projection = await buildAccountProjection(req, invoice);
       const delivery = await loadInvoiceDelivery(req.tenantId, invoice.id);
+      let issuedDocument = { available: false };
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true' &&
+          String(invoice.status || '').toLowerCase() !== 'draft') {
+        const pool = await getMssqlPool();
+        const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+        const committed = await archiveLedger.loadCommitted({
+          tenantId:req.tenantId,invoiceId:invoice.id
+        });
+        issuedDocument = {
+          available: Boolean(committed),
+          ...(committed ? {sha256:committed.pdfSha256} : {})
+        };
+      }
       res.json({
-        data: { ...projection, delivery: isTenantRole({ user: req.user, membership: req.membership })
+        data: { ...projection, issuedDocument,
+          delivery: isTenantRole({ user: req.user, membership: req.membership })
           ? { status: delivery.status } : delivery },
         error: null
       });
     } catch (error) {
       next(error);
     }
+  });
+
+
+  // This is the ONLY customer-facing issued-PDF read entrypoint. Generic
+  // storage access rejects /invoices/{id}/issued, and the caller cannot choose
+  // a storage path. Distinct from the editable account-summary export.
+  router.get('/invoices/:invoiceId/issued-document', async (req, res, next) => {
+    try {
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED !== 'true') {
+        throw createRequestError(404,
+          'Issued PDF archives are not enabled for this workspace.',
+          'ISSUED_INVOICE_PDF_NOT_AVAILABLE');
+      }
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      assertInvoiceAccess(req, invoice, false);
+      assertInvoiceIssued(invoice);
+      const pool = await getMssqlPool();
+      const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+      const objectStorage = createIssuedInvoiceR2ArchiveStore();
+      const data = await loadVerifiedIssuedInvoiceDocument({
+        tenantId:req.tenantId,invoiceId:invoice.id,archiveLedger,objectStorage
+      });
+      res.set('Cache-Control','private, no-store');
+      res.set('X-Content-Type-Options','nosniff');
+      res.json({data,error:null});
+    } catch (error) { next(error); }
   });
 
   router.patch('/invoices/:invoiceId/draft', async (req, res, next) => {
@@ -694,9 +739,14 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (String(issuedInvoice.status).toLowerCase() === 'draft') {
         throw createRequestError(409, 'Cannot attach a draft invoice.', 'INVOICE_PDF_GENERATION_FAILED');
       }
-      const attachment = await createIssuedInvoicePdfAttachment({
-        invoice: issuedInvoice, components, paymentInstructions
-      });
+      const attachment = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true'
+        ? await prepareImmutableIssuedInvoiceAttachment({
+            tenantId:req.tenantId, invoiceId:issuedInvoice.id,
+            actorUserId:req.user.id, pool:await getMssqlPool(), sql
+          })
+        : await createIssuedInvoicePdfAttachment({
+            invoice: issuedInvoice, components, paymentInstructions
+          });
       // The server-selected issue-time recipient must survive the fresh
       // invoice read. Otherwise an operator-approved historical resend could
       // silently target an edited renter email instead.
@@ -742,6 +792,10 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (!invoice.rentee_email) {
         throw createRequestError(409, 'A renter email is required.', 'INVOICE_RECIPIENT_EMAIL_REQUIRED');
       }
+      // Fail before any invoice change if durable write-once R2 is absent.
+      // The schema gate remains independently controlled by production rollout.
+      const immutableArchive = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true';
+      if (immutableArchive) createIssuedInvoiceR2ArchiveStore();
       const pool = await getMssqlPool();
       const tx = new sql.Transaction(pool);
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -776,10 +830,22 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE p.id=@propertyId AND p.tenant_id=@tenantId`,
           {tenantId:req.tenantId, propertyId:invoice.propertyid, agreementId:invoice.agreementid});
         const paymentInstructions = captureInvoiceBankDetails(configuredBank);
+        // Capture the full verified legal issuer, payee, charges and design
+        // within the same SERIALIZABLE invoice-issue transaction. Missing or
+        // inconsistent master data rolls the entire invoice issue back.
+        const documentEvidence = immutableArchive
+          ? await captureInvoiceIssuanceSnapshotCandidate({
+              transaction:tx,sql,tenantId:req.tenantId,
+              invoiceId:invoice.id,paymentReference
+            })
+          : null;
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
           eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
-          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount, paymentInstructions, paymentReference, invoiceRecipientEmail: invoice.rentee_email }
+          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount,
+            paymentInstructions, paymentReference,
+            invoiceRecipientEmail: invoice.rentee_email,
+            ...(documentEvidence || {}) }
         });
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,

@@ -11,6 +11,8 @@ import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboard
 import { createBillingRouter } from './src/api/platform/billingRouter.js';
 import { createMonthlyBillingRouter } from './src/api/platform/monthlyBillingRouter.js';
 import { createPropertyUtilityConfigRouter } from './src/api/platform/propertyUtilityConfigRouter.js';
+import { createInvoiceMasterAdminRouter } from './src/api/platform/invoiceMasterAdminRouter.js';
+import { assertDedicatedInvoiceMasterMutation } from './src/api/platform/invoiceMasterMutationGuard.js';
 import { createUtilityReviewRouter } from './src/api/platform/utilityReviewRouter.js';
 import { startAutomaticMonthlyBillingScheduler } from './src/api/platform/monthlyBillingScheduler.js';
 import { createBillingAdjustmentsRouter } from './src/api/platform/billingAdjustmentsRouter.js';
@@ -369,6 +371,14 @@ async function createServer() {
         res.status(409).json({ error: 'Tenancy closure must use the dedicated exit and settlement endpoint.', code: 'TENANCY_CLOSURE_REQUIRED' });
         return;
       }
+      // Legacy MSSQL admin routes must not bypass the invoice master-data audit.
+      const legacyTable=(/^\/(?:properties|property-units|tenant-settings)(?:\/|$)/.exec(req.path)||[])[0]?.split('/')[1];
+      if(legacyTable){
+        const normalizedTable={'property-units':'property_units','tenant-settings':'tenant_settings'}[legacyTable]||legacyTable;
+        try { assertDedicatedInvoiceMasterMutation({
+          table:normalizedTable,action:req.method.toLowerCase(),payload:req.body
+        }); } catch(e){ next(e); return; }
+      }
       if (isAdminRole({ user: req.user, membership: req.membership })) { next(); return; }
       const isAgreementTemplateRead = req.method === 'GET' && (req.path === '/agreement-templates' || req.path.startsWith('/agreement-templates/'));
       if (isAgreementTemplateRead) {
@@ -396,6 +406,7 @@ async function createServer() {
   app.use('/api/billing', createBillingAdjustmentsRouter());
   app.use('/api/billing', createMonthlyBillingRouter());
   app.use('/api/properties', createPropertyUtilityConfigRouter());
+  app.use('/api/invoice-master', createInvoiceMasterAdminRouter());
   app.use('/api/utility-reviews', createUtilityReviewRouter());
   app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
   app.use('/api/notifications', createNotificationSelfRouter());

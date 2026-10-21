@@ -173,6 +173,73 @@ const inspectInvoicePaymentReferences = async pool => {
   };
 };
 
+const inspectInvoiceMasterData = async pool => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN COL_LENGTH(N'dbo.tenant_settings', N'invoice_issuer_profile_json') IS NOT NULL THEN 1 ELSE 0 END AS issuer_profile_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.tenant_settings')
+          AND name = N'CK_tenant_settings_invoice_issuer_profile_json' AND is_disabled = 0 AND is_not_trusted = 0)
+        THEN 1 ELSE 0 END AS json_check_exists,
+      CASE WHEN COL_LENGTH(N'dbo.properties', N'bank_beneficiary_name') IS NOT NULL THEN 1 ELSE 0 END AS property_beneficiary_exists,
+      CASE WHEN COL_LENGTH(N'dbo.property_units', N'bank_beneficiary_name') IS NOT NULL THEN 1 ELSE 0 END AS unit_beneficiary_exists,
+      CASE WHEN COL_LENGTH(N'dbo.properties', N'invoice_party_overrides_json') IS NOT NULL THEN 1 ELSE 0 END AS property_parties_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.properties')
+          AND name=N'CK_properties_invoice_party_overrides_json'
+          AND is_disabled=0 AND is_not_trusted=0) THEN 1 ELSE 0 END AS parties_guard,
+      CASE WHEN COL_LENGTH(N'dbo.properties', N'billing_contact_name') IS NOT NULL
+        AND COL_LENGTH(N'dbo.properties', N'billing_contact_email') IS NOT NULL
+        AND COL_LENGTH(N'dbo.properties', N'billing_contact_phone') IS NOT NULL THEN 1 ELSE 0 END AS property_contact_exists,
+      CASE WHEN OBJECT_ID(N'dbo.invoice_master_data_audit', N'U') IS NOT NULL THEN 1 ELSE 0 END AS audit_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
+        WHERE object_id=OBJECT_ID(N'dbo.invoice_master_data_audit')
+          AND name=N'IX_invoice_master_data_audit_tenant_created') THEN 1 ELSE 0 END AS audit_index_exists;
+  `);
+  const row = result.recordset?.[0] || {};
+  return {
+    satisfied: Boolean(row.issuer_profile_exists && row.json_check_exists
+      && row.property_beneficiary_exists && row.unit_beneficiary_exists
+      && row.property_parties_exists && row.parties_guard
+      && row.property_contact_exists && row.audit_exists && row.audit_index_exists),
+    detail: `issuer_profile=${row.issuer_profile_exists?'present':'missing'}, json_constraint=${row.json_check_exists?'verified':'missing'}, property_beneficiary=${row.property_beneficiary_exists?'present':'missing'}, unit_beneficiary=${row.unit_beneficiary_exists?'present':'missing'}, property_parties=${row.property_parties_exists?'present':'missing'}, parties_guard=${row.parties_guard?'verified':'missing'}, contact=${row.property_contact_exists?'present':'missing'}, audit=${row.audit_exists?'present':'missing'}, audit_index=${row.audit_index_exists?'present':'missing'}`
+  };
+};
+
+const inspectInvoicePdfArchive = async pool => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.invoice_pdf_archives', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'PK_invoice_pdf_archives') THEN 1 ELSE 0 END AS pk_exists,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.foreign_keys
+        WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'FK_invoice_pdf_archives_invoice') THEN 1 ELSE 0 END AS invoice_fk,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
+        WHERE object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'UX_invoice_pdf_archives_object_path' AND is_unique=1)
+        THEN 1 ELSE 0 END AS unique_path,
+      (SELECT COUNT(*) FROM sys.check_constraints
+       WHERE parent_object_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+         AND is_disabled=0 AND is_not_trusted=0
+         AND name IN (N'CK_invoice_pdf_archives_version',N'CK_invoice_pdf_archives_size',
+                      N'CK_invoice_pdf_archives_snapshot',N'CK_invoice_pdf_archives_hashes',
+                      N'CK_invoice_pdf_archives_path')) AS checked_constraints,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.triggers
+        WHERE parent_id=OBJECT_ID(N'dbo.invoice_pdf_archives')
+          AND name=N'TR_invoice_pdf_archives_write_once' AND is_disabled=0)
+        THEN 1 ELSE 0 END AS immutable_trigger;
+  `);
+  const row=result.recordset?.[0]||{};
+  const satisfied=Boolean(row.table_exists&&row.pk_exists&&row.invoice_fk&&row.unique_path
+    &&row.checked_constraints===5&&row.immutable_trigger);
+  return {
+    satisfied,
+    detail:`table=${row.table_exists}, pk=${row.pk_exists}, invoice_fk=${row.invoice_fk}, unique_path=${row.unique_path}, checks=${row.checked_constraints}, immutable_trigger=${row.immutable_trigger}`
+  };
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -236,6 +303,20 @@ const MIGRATIONS = [
       inspectInvoicePaymentReferences(pool),
       'Payment reference schema verification failed.'
     )
+  },
+  {
+    id: '20261019_01_invoice_master_data',
+    file: 'migrations/20261019_01_invoice_master_data.sql',
+    inspect: inspectInvoiceMasterData,
+    verify: async pool => assertSatisfied(inspectInvoiceMasterData(pool),
+      'Invoice master-data schema verification failed.')
+  },
+  {
+    id: '20261020_01_immutable_invoice_pdf_archive',
+    file: 'migrations/20261020_01_immutable_invoice_pdf_archive.sql',
+    inspect: inspectInvoicePdfArchive,
+    verify: async pool => assertSatisfied(inspectInvoicePdfArchive(pool),
+      'Issued PDF archive ledger schema verification failed.')
   }
 ];
 
