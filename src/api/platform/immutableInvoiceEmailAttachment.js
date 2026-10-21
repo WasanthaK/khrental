@@ -1,6 +1,7 @@
 import { createInvoiceArchiveSqlCandidateAdapters } from './invoiceArchiveSqlCandidateAdapters.js';
 import { createIssuedInvoiceR2ArchiveStore } from './issuedInvoiceR2ArchiveStore.js';
-import { createInvoiceDocumentPdfCandidate } from './invoicePdfCandidate.js';
+import crypto from 'node:crypto';
+import { createInvoiceDocumentPdfCandidate, normalizeInvoiceDocumentSnapshot } from './invoicePdfCandidate.js';
 import { publishIssuedInvoiceArchiveCandidate } from './issuedInvoiceArchiveWriteCandidate.js';
 import { loadVerifiedIssuedInvoiceDocument } from './issuedInvoiceDocumentRead.js';
 
@@ -22,26 +23,39 @@ export const prepareImmutableIssuedInvoiceAttachment = async ({
     error.code='INVOICE_ISSUANCE_SNAPSHOT_MISSING';
     throw error;
   }
+  // Compare canonical issuance evidence, not the noncanonical JSON shape
+  // initially supplied by the issuer. The SQL adapter returns canonical
+  // snapshots; recovery and unit test adapters may supply equivalent input.
+  const canonical=normalizeInvoiceDocumentSnapshot(issued.snapshot);
+  const snapshotJson=JSON.stringify(canonical);
+  const computedSha256=crypto.createHash('sha256').update(snapshotJson).digest('hex');
+  if (computedSha256 !== issued.snapshotSha256 ||
+      canonical.tenantId.toLowerCase() !== String(tenantId).toLowerCase() ||
+      canonical.invoiceId.toLowerCase() !== String(invoiceId).toLowerCase()) {
+    const error=new Error('Issuance snapshot hash or scope is invalid.');
+    error.status=409;
+    error.code='INVOICE_ARCHIVE_ISSUANCE_MISMATCH';
+    throw error;
+  }
   const existing=await adapters.archiveLedger.loadCommitted(ids);
-  // The SQL archive is immutable, and the authoritative invoice_issued event
-  // must still identify the same canonical issued document. If an event has
-  // been edited or replaced, do not mail an archive with disputed provenance.
-  if (existing && (existing.snapshotSha256 !== issued.snapshotSha256 ||
-      existing.issuedSnapshotJson !== JSON.stringify(issued.snapshot))) {
+  // The SQL archive is immutable: altered issue evidence must never cause
+  // a resend, even when the original PDF object remains available.
+  if (existing && (existing.snapshotSha256 !== computedSha256 ||
+      existing.issuedSnapshotJson !== snapshotJson)) {
     const error=new Error('Committed invoice PDF no longer matches issuance evidence.');
     error.status=409;
     error.code='INVOICE_ARCHIVE_ISSUANCE_MISMATCH';
     throw error;
   }
   if (!existing) {
-    const pdf=await render(issued.snapshot);
+    const pdf=await render(canonical);
     if (pdf.snapshotSha256 !== issued.snapshotSha256) {
       const error=new Error('Issued snapshot hash does not match rendered PDF input.');
       error.code='INVOICE_ARCHIVE_ISSUANCE_MISMATCH';
       throw error;
     }
     await publish({
-      snapshot:issued.snapshot,
+      snapshot:canonical,
       pdfBytes:Buffer.from(pdf.content,'base64'),
       actorUserId,
       issuanceLedger:adapters.issuanceLedger,

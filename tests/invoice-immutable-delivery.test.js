@@ -89,6 +89,15 @@ test('a changed invoice-issued event cannot authorize resend of a different arch
   }}),e=>e.code==='INVOICE_ARCHIVE_ISSUANCE_MISMATCH');
   assert.deepEqual(a.metrics(),{created:1,published:1,renders:1});
 });
+test('forged issuance snapshot hash blocks email before rendering or storage',async()=>{
+  const a=await setup();
+  const valid=await a.adapters.issuanceLedger.loadIssued();
+  const forged={...valid,snapshotSha256:'b'.repeat(64)};
+  await assert.rejects(a.invoke({adapters:{
+    ...a.adapters,issuanceLedger:{loadIssued:async()=>forged}
+  }}),e=>e.code==='INVOICE_ARCHIVE_ISSUANCE_MISMATCH');
+  assert.deepEqual(a.metrics(),{created:0,published:0,renders:0});
+});
 test('missing issuance evidence cannot publish or email',async()=>{
   const a=await setup();
   await assert.rejects(a.invoke({adapters:{
