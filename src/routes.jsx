@@ -11,6 +11,7 @@ import {
   resolveLegacyTenantPath
 } from './utils/routePolicy.js';
 import NotFound from './pages/NotFound';
+import RouteRenderError from './pages/RouteRenderError';
 
 // Layout components
 import RootLayout from './components/layouts/RootLayout';
@@ -206,7 +207,7 @@ const routes = [
   {
     path: '/',
     element: <RootLayout />,
-    errorElement: <NotFound />,
+    errorElement: <RouteRenderError />,
     children: [
       { index: true, element: <Navigate to="/login" replace /> },
       { path: 'login', element: <PublicRoute><Login /></PublicRoute> },

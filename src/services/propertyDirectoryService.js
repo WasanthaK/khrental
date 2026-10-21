@@ -1,4 +1,5 @@
 import { requestMssqlApi } from './mssqlApiClient';
+import { normalizePropertyChecklist, normalizePropertyCoordinates } from '../utils/propertyDetailFields.js';
 
 const parseJsonValue = (value, fallback) => {
   if (value === null || value === undefined || value === '') {
@@ -31,7 +32,9 @@ const normalizeProperty = (property) => {
     amenities: Array.isArray(amenities) ? amenities : [],
     rentalvalues: rentalvalues && typeof rentalvalues === 'object' && !Array.isArray(rentalvalues)
       ? rentalvalues
-      : {}
+      : {},
+    checklistitems: normalizePropertyChecklist(property.checklistitems),
+    coordinates: normalizePropertyCoordinates(property.coordinates, property.latitude, property.longitude)
   };
 };
 

@@ -8,7 +8,15 @@ import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
 import { sendBillingReminderEmail, getBillingReminderPortalUrl } from './billingReminderEmail.js';
 import { getStorageDriver } from '../storage/index.js';
 import { verifyStoredPaymentProof } from './paymentProofAccess.js';
-import { DELIVERY_EVENTS, classifyInvoiceEmailError, deliveryOutcome } from './invoiceDeliveryState.js';
+import { DELIVERY_EVENTS, classifyInvoiceDeliveryAttemptError, deliveryOutcome } from './invoiceDeliveryState.js';
+import { createIssuedInvoicePdfAttachment } from './issuedInvoicePdf.js';
+import { captureInvoiceIssuanceSnapshotCandidate } from './invoiceIssuanceSnapshotCandidate.js';
+import { prepareImmutableIssuedInvoiceAttachment } from './immutableInvoiceEmailAttachment.js';
+import { createInvoiceArchiveSqlCandidateAdapters } from './invoiceArchiveSqlCandidateAdapters.js';
+import { createIssuedInvoiceR2ArchiveStore } from './issuedInvoiceR2ArchiveStore.js';
+import { loadVerifiedIssuedInvoiceDocument } from './issuedInvoiceDocumentRead.js';
+import { allocateInvoicePaymentReference, isLegacyInvoiceReferenceEligible } from './invoicePaymentReference.js';
+import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
 import {
   PAYMENT_STATUS,
   calculateOutstandingBalance,
@@ -63,7 +71,8 @@ const requirePropertyScope = (req, propertyId) => {
 const loadInvoice = async (tenantId, invoiceId) => {
   const invoice = await runSingleQuery(
     `SELECT TOP 1 i.*, a.status AS agreement_status, a.unitid, a.rentamount,
-            p.name AS property_name, au.name AS rentee_name, au.email AS rentee_email
+            p.name AS property_name, au.name AS rentee_name, au.email AS rentee_email,
+            refs.payment_reference
      FROM invoices i
      LEFT JOIN agreements a
        ON a.id = i.agreementid
@@ -74,6 +83,8 @@ const loadInvoice = async (tenantId, invoiceId) => {
      LEFT JOIN app_users au
        ON au.id = i.renteeid
       AND au.tenant_id = i.tenant_id
+     LEFT JOIN invoice_payment_references refs
+       ON refs.invoice_id = i.id AND refs.tenant_id = i.tenant_id
      WHERE i.tenant_id = @tenantId AND i.id = @invoiceId`,
     { tenantId, invoiceId }
   );
@@ -114,8 +125,16 @@ const assertInvoiceAccess = (req, invoice, manage = false) => {
   requirePropertyScope(req, invoice.propertyid);
 };
 
+const loadIssuedPaymentInstructions = async (tenantId, invoiceId) => {
+  const recorded = await runSingleQuery(
+    `SELECT TOP 1 metadata FROM billing_lifecycle_events
+     WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type='invoice_issued'
+     ORDER BY createdat DESC, id DESC`, {tenantId, invoiceId});
+  return readIssuedInvoiceBankDetails(recorded?.metadata);
+};
+
 const buildAccountProjection = async (req, invoice) => {
-  const [payments, receipts, components] = await Promise.all([
+  const [payments, receipts, components, paymentInstructions] = await Promise.all([
     loadPayments(req.tenantId, invoice.id),
     loadReceipts(req.tenantId, invoice.id),
     runQuery(
@@ -123,10 +142,11 @@ const buildAccountProjection = async (req, invoice) => {
        WHERE tenant_id = @tenantId AND invoice_id = @invoiceId
        ORDER BY createdat, component_type`,
       { tenantId: req.tenantId, invoiceId: invoice.id }
-    )
+    ),
+    loadIssuedPaymentInstructions(req.tenantId, invoice.id)
   ]);
   const outstandingBalance = calculateOutstandingBalance(invoice.totalamount, payments);
-  return { invoice, components, payments, receipts, outstandingBalance };
+  return { invoice, components, payments, receipts, paymentInstructions, outstandingBalance };
 };
 
 const loadInvoiceComponents = async (tenantId, invoiceId) => runQuery(
@@ -322,6 +342,7 @@ const appendInvoiceDeliveryEvent = async ({ tenantId, invoiceId, eventType, acto
 
 const makeInvoiceEmail = invoice => {
   const total = Number(invoice.totalamount || 0);
+  const payment = buildInvoiceBankEmailSections(invoice.paymentInstructions, invoice.payment_reference);
   const portalUrl = getBillingReminderPortalUrl();
   const billingPeriod = invoice.billingperiod || 'your tenancy';
   return {
@@ -331,11 +352,10 @@ const makeInvoiceEmail = invoice => {
       `Your KH Rentals invoice for ${billingPeriod} is ready.`,
       `Amount due: ${total.toFixed(2)}.`,
       invoice.duedate ? `Due date: ${new Date(invoice.duedate).toLocaleDateString('en-GB')}.` : null,
-      portalUrl ? `View your invoice: ${portalUrl}` : null
+      portalUrl ? `View your invoice: ${portalUrl}` : null,
+      payment.text
     ].filter(Boolean).join('\n'),
-    html: portalUrl
-      ? `<p>Your KH Rentals invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p><p><a href="${portalUrl}">View your invoice</a></p>`
-      : undefined
+    html: `<p>Your KH Rentals invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p>${payment.html}${portalUrl ? `<p><a href="${portalUrl}">View your invoice</a></p>` : ''}`
   };
 };
 
@@ -357,10 +377,12 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       }
 
       const rows = await runQuery(
-        `SELECT i.*, p.id AS joined_property_id,
+        `SELECT i.*, refs.payment_reference, p.id AS joined_property_id,
                 p.name AS joined_property_name, p.address AS joined_property_address
          FROM invoices i
          LEFT JOIN properties p ON p.id = i.propertyid AND p.tenant_id = i.tenant_id
+         LEFT JOIN invoice_payment_references refs
+           ON refs.invoice_id = i.id AND refs.tenant_id = i.tenant_id
          WHERE i.tenant_id = @tenantId AND i.renteeid = @renteeId
            AND LOWER(i.status) <> 'draft'
          ORDER BY i.createdat DESC, i.id DESC`,
@@ -390,14 +412,54 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       assertInvoiceAccess(req, invoice, false);
       const projection = await buildAccountProjection(req, invoice);
       const delivery = await loadInvoiceDelivery(req.tenantId, invoice.id);
+      let issuedDocument = { available: false };
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true' &&
+          String(invoice.status || '').toLowerCase() !== 'draft') {
+        const pool = await getMssqlPool();
+        const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+        const committed = await archiveLedger.loadCommitted({
+          tenantId:req.tenantId,invoiceId:invoice.id
+        });
+        issuedDocument = {
+          available: Boolean(committed),
+          ...(committed ? {sha256:committed.pdfSha256} : {})
+        };
+      }
       res.json({
-        data: { ...projection, delivery: isTenantRole({ user: req.user, membership: req.membership })
+        data: { ...projection, issuedDocument,
+          delivery: isTenantRole({ user: req.user, membership: req.membership })
           ? { status: delivery.status } : delivery },
         error: null
       });
     } catch (error) {
       next(error);
     }
+  });
+
+
+  // This is the ONLY customer-facing issued-PDF read entrypoint. Generic
+  // storage access rejects /invoices/{id}/issued, and the caller cannot choose
+  // a storage path. Distinct from the editable account-summary export.
+  router.get('/invoices/:invoiceId/issued-document', async (req, res, next) => {
+    try {
+      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED !== 'true') {
+        throw createRequestError(404,
+          'Issued PDF archives are not enabled for this workspace.',
+          'ISSUED_INVOICE_PDF_NOT_AVAILABLE');
+      }
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      assertInvoiceAccess(req, invoice, false);
+      assertInvoiceIssued(invoice);
+      const pool = await getMssqlPool();
+      const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
+      const objectStorage = createIssuedInvoiceR2ArchiveStore();
+      const data = await loadVerifiedIssuedInvoiceDocument({
+        tenantId:req.tenantId,invoiceId:invoice.id,archiveLedger,objectStorage
+      });
+      res.set('Cache-Control','private, no-store');
+      res.set('X-Content-Type-Options','nosniff');
+      res.json({data,error:null});
+    } catch (error) { next(error); }
   });
 
   router.patch('/invoices/:invoiceId/draft', async (req, res, next) => {
@@ -664,16 +726,50 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   // committing an attempted event leaves an UNKNOWN outcome, not a retryable
   // draft or an automatic duplicate invitation.
   const deliverIssuedInvoice = async (req, invoice) => {
-    let outcome, provider = null;
+    let outcome, provider = null, providerRequestStarted = false;
     try {
-      const result = await sendInvoiceEmail(makeInvoiceEmail(invoice));
+      // Re-read the authoritative invoice and only its own components.
+      // One PDF per controlled delivery attempt; failure happens before the
+      // external provider request and never sends an attachment-less invoice.
+      const [paymentInstructions, components, issuedInvoice] = await Promise.all([
+        loadIssuedPaymentInstructions(req.tenantId, invoice.id),
+        loadInvoiceComponents(req.tenantId, invoice.id),
+        loadInvoice(req.tenantId, invoice.id)
+      ]);
+      if (String(issuedInvoice.status).toLowerCase() === 'draft') {
+        throw createRequestError(409, 'Cannot attach a draft invoice.', 'INVOICE_PDF_GENERATION_FAILED');
+      }
+      const attachment = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true'
+        ? await prepareImmutableIssuedInvoiceAttachment({
+            tenantId:req.tenantId, invoiceId:issuedInvoice.id,
+            actorUserId:req.user.id, pool:await getMssqlPool(), sql
+          })
+        : await createIssuedInvoicePdfAttachment({
+            invoice: issuedInvoice, components, paymentInstructions
+          });
+      // The server-selected issue-time recipient must survive the fresh
+      // invoice read. Otherwise an operator-approved historical resend could
+      // silently target an edited renter email instead.
+      const recipientEmail = String(invoice.rentee_email || issuedInvoice.rentee_email || '').trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+        throw createRequestError(409, 'No valid recipient for this issued invoice.', 'EMAIL_RECIPIENT_MISSING');
+      }
+      // Finish every local operation before crossing the email provider
+      // boundary. A definite pre-send failure can be retried safely; a
+      // failed call after this point can have reached the recipient.
+      const emailPayload = {
+        ...makeInvoiceEmail({ ...issuedInvoice, rentee_email: recipientEmail, paymentInstructions }),
+        attachments: [attachment]
+      };
+      providerRequestStarted = true;
+      const result = await sendInvoiceEmail(emailPayload);
       if (result?.accepted === false || result?.success === false) {
         throw createRequestError(502, 'Email provider did not accept this invoice.', 'EMAIL_PROVIDER_REJECTED');
       }
       provider = result?.provider || null;
       outcome = 'accepted';
     } catch (error) {
-      outcome = classifyInvoiceEmailError(error);
+      outcome = classifyInvoiceDeliveryAttemptError(error, providerRequestStarted);
     }
     await appendInvoiceDeliveryEvent({
       tenantId: req.tenantId, invoiceId: invoice.id,
@@ -701,15 +797,24 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (!invoice.rentee_email) {
         throw createRequestError(409, 'A renter email is required.', 'INVOICE_RECIPIENT_EMAIL_REQUIRED');
       }
+      // Fail before any invoice change if durable write-once R2 is absent.
+      // The schema gate remains independently controlled by production rollout.
+      const immutableArchive = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true';
+      if (immutableArchive) createIssuedInvoiceR2ArchiveStore();
       const pool = await getMssqlPool();
       const tx = new sql.Transaction(pool);
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       let issued;
+      let paymentReference;
       try {
         const locked = await singleTransaction(tx,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
         assertDraftInvoice(locked);
+        paymentReference = await allocateInvoicePaymentReference({
+          transaction: tx, sql, tenantId: req.tenantId, invoiceId: invoice.id,
+          actorUserId: req.user.id, source: 'invoice_issue'
+        });
         issued = await singleTransaction(tx,
           `UPDATE invoices
            SET status='pending', totalamount=@totalAmount,
@@ -719,10 +824,33 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id=@tenantId AND id=@invoiceId AND status='draft'`,
           { tenantId: req.tenantId, invoiceId: invoice.id, totalAmount, issuedBy: req.user.id });
         if (!issued) throw createRequestError(409,'Invoice changed before issue.','INVOICE_STATE_CHANGED');
+        const configuredBank = await singleTransaction(tx,
+          `SELECT p.bank_name AS property_bank_name, p.bank_branch AS property_bank_branch,
+                  p.bank_account_number AS property_bank_account_number,
+                  u.bank_name AS unit_bank_name, u.bank_branch AS unit_bank_branch,
+                  u.bank_account_number AS unit_bank_account_number
+           FROM properties p
+           LEFT JOIN agreements a ON a.id=@agreementId AND a.tenant_id=p.tenant_id
+           LEFT JOIN property_units u ON u.id=a.unitid AND u.tenant_id=p.tenant_id AND u.propertyid=p.id
+           WHERE p.id=@propertyId AND p.tenant_id=@tenantId`,
+          {tenantId:req.tenantId, propertyId:invoice.propertyid, agreementId:invoice.agreementid});
+        const paymentInstructions = captureInvoiceBankDetails(configuredBank);
+        // Capture the full verified legal issuer, payee, charges and design
+        // within the same SERIALIZABLE invoice-issue transaction. Missing or
+        // inconsistent master data rolls the entire invoice issue back.
+        const documentEvidence = immutableArchive
+          ? await captureInvoiceIssuanceSnapshotCandidate({
+              transaction:tx,sql,tenantId:req.tenantId,
+              invoiceId:invoice.id,paymentReference
+            })
+          : null;
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
           eventType: 'invoice_issued', fromStatus:'draft', toStatus:'pending',
-          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount }
+          actorUserId: req.user.id, metadata: { componentCount: components.length, totalAmount,
+            paymentInstructions, paymentReference,
+            invoiceRecipientEmail: invoice.rentee_email,
+            ...(documentEvidence || {}) }
         });
         await insertLifecycleEvent(tx, {
           tenantId: req.tenantId, invoiceId: invoice.id,
@@ -733,10 +861,10 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         await tx.rollback().catch(() => {});
         throw error;
       }
-      const completeInvoice = { ...issued, rentee_email: invoice.rentee_email,
+      const completeInvoice = { ...issued, payment_reference: paymentReference, rentee_email: invoice.rentee_email,
         billingperiod: invoice.billingperiod, duedate: invoice.duedate };
       const delivery = await deliverIssuedInvoice(req, completeInvoice);
-      res.json({ data: { invoice: issued, delivery }, error: null });
+      res.json({ data: { invoice: { ...issued, payment_reference: paymentReference }, delivery }, error: null });
     } catch (error) { next(error); }
   });
 
@@ -777,6 +905,168 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const delivery = await deliverIssuedInvoice(req, invoice);
       res.json({ data: { invoice, delivery }, error: null });
     } catch (error) { next(error); }
+  });
+
+  // A manually requested second email for an already issued invoice, never
+  // a second invoice. Explicit action and per-command key prevent accidental
+  // double clicks; tenant/invoice authorization is server-side.
+  router.post('/invoices/:invoiceId/resend', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      assertInvoiceIssued(invoice);
+      const confirmation = String(req.body?.confirmation || '');
+      const resendRequestId = String(req.body?.resendRequestId || '');
+      if (confirmation !== 'RESEND-ISSUED-INVOICE'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resendRequestId)) {
+        throw createRequestError(400, 'Confirm the issued invoice resend with a unique request ID.', 'INVOICE_RESEND_CONFIRMATION_REQUIRED');
+      }
+      const tx = new sql.Transaction(await getMssqlPool());
+      await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      let targetEmail;
+      try {
+        const locked = await singleTransaction(tx,
+          'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: invoice.id });
+        if (!locked) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        assertInvoiceIssued(locked);
+
+        const duplicate = await singleTransaction(tx,
+          'SELECT TOP 1 id FROM billing_lifecycle_events ' +
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type=@attempted ' +
+          "AND ISJSON(metadata)=1 AND JSON_VALUE(metadata, '$.resendRequestId')=@resendRequestId",
+          { tenantId:req.tenantId, invoiceId:invoice.id,
+            attempted:DELIVERY_EVENTS.attempted, resendRequestId });
+        if (duplicate) throw createRequestError(409, 'This resend command was already processed.', 'INVOICE_RESEND_DUPLICATE');
+
+        const last = await singleTransaction(tx,
+          'SELECT TOP 1 event_type FROM billing_lifecycle_events ' +
+          'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId ' +
+          "AND event_type IN ('invoice_email_attempted','invoice_email_accepted'," +
+          "'invoice_email_failed','invoice_email_unknown') " +
+          'ORDER BY createdat DESC, id DESC',
+          { tenantId:req.tenantId,invoiceId:invoice.id });
+        if (last?.event_type !== DELIVERY_EVENTS.accepted) {
+          throw createRequestError(409,
+            'Resend requires a previously accepted invoice email. Resolve unknown delivery before resending; use retry for rejected emails.',
+            'INVOICE_RESEND_REQUIRES_ACCEPTED_DELIVERY');
+        }
+        const issuance = await singleTransaction(tx,
+          'SELECT TOP 1 metadata FROM billing_lifecycle_events ' +
+          "WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type='invoice_issued' " +
+          'ORDER BY createdat DESC, id DESC',
+          { tenantId:req.tenantId,invoiceId:invoice.id });
+        let issuanceMetadata = null;
+        try { issuanceMetadata = issuance?.metadata ? JSON.parse(issuance.metadata) : null; }
+        catch { /* historical issue without valid snapshot */ }
+        const issueEmail = String(issuanceMetadata?.invoiceRecipientEmail || '').trim();
+        // Historic issues lack a recipient snapshot. Use the linked tenant's
+        // current email, never a caller-supplied address.
+        targetEmail = issueEmail || String(invoice.rentee_email || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+          throw createRequestError(409, 'Invoice has no usable recipient email.', 'INVOICE_RESEND_RECIPIENT_MISSING');
+        }
+        await insertLifecycleEvent(tx, {
+          tenantId:req.tenantId,invoiceId:invoice.id,
+          eventType:DELIVERY_EVENTS.attempted,actorUserId:req.user.id,
+          metadata: {
+            action:'manual_resend',resendRequestId,
+            reason:'staff_requested_invoice_copy',
+            recipientSource:issueEmail ? 'issue_snapshot' : 'legacy_linked_renter'
+          }
+        });
+        await tx.commit();
+      } catch (error) {
+        await tx.rollback().catch(() => {});
+        throw error;
+      }
+      // Reuse the unchanged issued invoice, its itemization and its retained
+      // issue-time bank snapshot; only a new delivery attempt is appended.
+      const delivery = await deliverIssuedInvoice(req, {
+        ...invoice, rentee_email: targetEmail
+      });
+      res.json({ data: {
+        invoice, delivery, action:'manual_resend', recipient:targetEmail
+      }, error:null });
+    } catch (error) { next(error); }
+  });
+
+
+  // Staff-authorized supplementary bank reference for one historical
+  // invoice. Does NOT reissue it, rewrite invoices/payments/receipts, adopt
+  // current banking settings, produce a PDF, or contact an email provider.
+  router.post('/invoices/:invoiceId/supplement-reference', async (req, res, next) => {
+    try {
+      requireInvoiceManage(req);
+      const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
+      requirePropertyScope(req, invoice.propertyid);
+      const reason = String(req.body?.reason || '').trim();
+      if (req.body?.confirmation !== 'ASSIGN-LEGACY-INVOICE-REFERENCE'
+        || reason.length < 10 || reason.length > 500) {
+        throw createRequestError(400,
+          'Confirm assignment and provide a reason between 10 and 500 characters.',
+          'LEGACY_REFERENCE_CONFIRMATION_REQUIRED');
+      }
+
+      const transaction = new sql.Transaction(await getMssqlPool());
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      try {
+        const lockedInvoice = await singleTransaction(transaction,
+          'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: invoice.id });
+        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        requirePropertyScope(req, lockedInvoice.propertyid);
+
+        // Keep payment checks atomic with reference allocation. An invoice
+        // with pending proof or verified/partial payment cannot be supplemented.
+        const payments = await queryTransaction(transaction,
+          'SELECT amount, status FROM payments WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND invoiceid=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: lockedInvoice.id });
+        const existing = await singleTransaction(transaction,
+          'SELECT payment_reference FROM dbo.invoice_payment_references WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND invoice_id=@invoiceId',
+          { tenantId: req.tenantId, invoiceId: lockedInvoice.id });
+        const outstandingBalance = calculateOutstandingBalance(lockedInvoice.totalamount, payments);
+        if (!isLegacyInvoiceReferenceEligible({
+          invoice: { ...lockedInvoice, payment_reference: existing?.payment_reference || null },
+          payments,
+          outstandingBalance
+        })) {
+          throw createRequestError(409,
+            'This invoice is already referenced, paid, being paid, or otherwise ineligible.',
+            'LEGACY_REFERENCE_NOT_ELIGIBLE');
+        }
+
+        const paymentReference = await allocateInvoicePaymentReference({
+          transaction, sql, tenantId: req.tenantId, invoiceId: lockedInvoice.id,
+          actorUserId: req.user.id, source: 'manual_supplement'
+        });
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId, invoiceId: lockedInvoice.id,
+          eventType: 'invoice_reference_supplemented',
+          fromStatus: lockedInvoice.status, toStatus: lockedInvoice.status,
+          actorUserId: req.user.id,
+          metadata: {
+            paymentReference, source: 'manual_supplement', reason,
+            outstandingAtAssignment: outstandingBalance,
+            originalInvoiceUnchanged: true, notificationSent: false
+          }
+        });
+        await transaction.commit();
+        res.status(201).json({
+          data: {
+            invoiceId: lockedInvoice.id, payment_reference: paymentReference,
+            source: 'manual_supplement', notificationSent: false
+          },
+          error: null
+        });
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.post('/invoices/:invoiceId/payment-proof', async (req, res, next) => {

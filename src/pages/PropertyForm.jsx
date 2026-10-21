@@ -20,11 +20,16 @@ import PropertyAmenities from '../components/properties/PropertyAmenities';
 import PropertyAvailability from '../components/properties/PropertyAvailability';
 import PropertyMap from '../components/properties/PropertyMap';
 import PropertyUnits from '../components/properties/PropertyUnits';
+import PropertyInvoiceBilling from '../components/properties/PropertyInvoiceBilling';
+import { useAuth } from '../hooks/useAuth';
+import { hasPermission, PERMISSIONS } from '../utils/accessPolicy.js';
 
 const PropertyForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const { user, membership } = useAuth();
+  const canEditInvoiceMaster = hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
   
   // DND sensors setup - moved outside of render loop
   const sensors = useSensors(
@@ -1199,6 +1204,7 @@ const PropertyForm = () => {
         </div>
       </form>
       
+      {isEditMode && canEditInvoiceMaster && <PropertyInvoiceBilling propertyId={id} />}
       {/* Property Units Section (only for apartment type properties) */}
       {isEditMode && formData.propertytype === PROPERTY_TYPES.APARTMENT && (
         <PropertyUnits propertyId={id} propertyType={formData.propertytype} />

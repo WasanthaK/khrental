@@ -319,6 +319,7 @@ const RenteeDetails = () => {
             // Format invoices data with all required fields
             const formattedInvoices = invoicesData.map(invoice => ({
               id: invoice.id,
+              payment_reference: invoice.payment_reference,
               status: invoice.status || 'pending',
               createdat: invoice.createdat || invoice.created_at || new Date().toISOString(),
               totalamount: invoice.amount || invoice.totalamount || 0,

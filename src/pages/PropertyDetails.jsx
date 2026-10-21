@@ -27,11 +27,7 @@ const PropertyDetails = () => {
   const [organizedImages, setOrganizedImages] = useState([]);
   const [agreements, setAgreements] = useState([]);
 
-  const propertyCoordinates = property?.coordinates && typeof property.coordinates === 'object'
-    ? property.coordinates
-    : (property?.latitude != null && property?.longitude != null)
-      ? { lat: Number(property.latitude), lng: Number(property.longitude) }
-      : null;
+  const propertyCoordinates = property?.coordinates || null;
   
   // Function to organize images by category
   const organizeImagesByCategory = (images) => {

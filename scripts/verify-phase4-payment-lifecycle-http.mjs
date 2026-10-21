@@ -143,6 +143,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const issuedA = assertResponse(await account(draftA, tokenA, a.tenantId), 200, 'issued renter account');
   assert.equal(issuedA.invoice.status, 'pending');
   assert.equal(issuedA.delivery.status, 'accepted');
+  assert.match(issuedA.invoice.payment_reference,/^\d{8}$/,
+    'newly created tenant without timezone setting must receive an 8-digit invoice reference');
 
   const draftB = await createDraft(b, '2026-12', 660);
   invoiceMailbox.rejectNext = true;
@@ -158,6 +160,26 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assertResponse(await retry(draftB, adminB, b.tenantId), 409, 'no duplicate accepted email');
   const issuedB = assertResponse(await account(draftB, tokenB, b.tenantId), 200, 'issued B account');
   assert.equal(issuedB.delivery.status, 'accepted');
+  assert.match(issuedB.invoice.payment_reference,/^\d{8}$/,
+    'second tenant must also receive a scoped reference');
+
+  // Both listing APIs must project the persisted reference, scoped to the
+  // authenticated tenant. Legacy issued fixtures must stay unassigned.
+  const renterListA = assertResponse(await call('/api/billing/rentee/invoices',
+    { token: tokenA, tenantId: a.tenantId }), 200, 'tenant A renter list');
+  const issuedInRenterList = renterListA.find(item => guid(item.id) === draftA);
+  const legacyInRenterList = renterListA.find(item => guid(item.id) === invoiceA);
+  assert.equal(issuedInRenterList?.payment_reference, issuedA.invoice.payment_reference);
+  assert.equal(legacyInRenterList?.payment_reference, null);
+  assert.ok(!renterListA.some(item => guid(item.id) === draftB), 'cross-tenant invoice hidden');
+
+  const staffListA = assertResponse(await call('/api/mssql/invoices',
+    { token: adminA, tenantId: a.tenantId }), 200, 'tenant A staff list');
+  assert.equal(staffListA.find(item => guid(item.id) === draftA)?.payment_reference,
+    issuedA.invoice.payment_reference);
+  assert.equal(staffListA.find(item => guid(item.id) === invoiceA)?.payment_reference, null);
+  assert.ok(!staffListA.some(item => guid(item.id) === draftB), 'cross-tenant staff invoice hidden');
+
 
   const ambiguousId = await createDraft(a, '2027-01', 700);
   invoiceMailbox.unknownNext = true;
@@ -183,6 +205,72 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.deepEqual(initialA.payments, []);
   assertResponse(await account(invoiceB, tokenA, a.tenantId), 404, 'foreign invoice hidden');
   assertResponse(await account(invoiceA, null, a.tenantId), 401, 'anonymous denied');
+
+  // Actual authenticated HTTP/SQL proof of the new legacy supplement path.
+  // Keep the original invoice state, totals and payments unchanged; a
+  // reference supplement must not send a second invoice or alter its ledger.
+  const supplement = (invoiceId, token, tenantId, body) =>
+    send(invoiceId, '/supplement-reference', { token, tenantId, body });
+  const authorizedSupplement = {
+    confirmation: 'ASSIGN-LEGACY-INVOICE-REFERENCE',
+    reason: 'Staff approved a separate bank reference for this historical invoice'
+  };
+  const originalInvoiceA = await first(pool,
+    'SELECT id, status, totalamount, issued_at, duedate FROM invoices WHERE tenant_id=@tenantId AND id=@invoiceId',
+    { tenantId: a.tenantId, invoiceId: invoiceA });
+  const acceptedBeforeSupplement = invoiceMailbox.accepted.length;
+  const attemptsBeforeSupplement = invoiceMailbox.attempts.length;
+  assertResponse(await supplement(invoiceA, null, a.tenantId, authorizedSupplement),
+    401, 'unauthenticated reference supplement denied');
+  assertResponse(await supplement(invoiceA, tokenA, a.tenantId, authorizedSupplement),
+    403, 'renter cannot assign a legacy invoice reference');
+  assertResponse(await supplement(invoiceA, adminB, b.tenantId, authorizedSupplement),
+    404, 'foreign admin cannot supplement another tenant invoice');
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, {}),
+    400, 'missing staff confirmation and reason must be rejected');
+
+  const assignedSupplement = assertResponse(
+    await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    201, 'staff assigned one legacy reference');
+  assert.equal(guid(assignedSupplement.invoiceId), invoiceA);
+  assert.match(assignedSupplement.payment_reference, /^\d{8}$/);
+  assert.equal(assignedSupplement.source, 'manual_supplement');
+  assert.equal(assignedSupplement.notificationSent, false);
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    409, 'a reference cannot be assigned twice');
+  assertResponse(await supplement(draftA, adminA, a.tenantId, authorizedSupplement),
+    409, 'a newly issued and already referenced invoice cannot be supplemented');
+
+  const storedSupplement = await first(pool,
+    'SELECT payment_reference, source, assigned_by FROM invoice_payment_references WHERE tenant_id=@tenantId AND invoice_id=@invoiceId',
+    { tenantId: a.tenantId, invoiceId: invoiceA });
+  assert.equal(storedSupplement.payment_reference, assignedSupplement.payment_reference);
+  assert.equal(storedSupplement.source, 'manual_supplement');
+  assert.ok(storedSupplement.assigned_by, 'staff attribution persisted in SQL');
+  const supplementEvents = await query(pool,
+    "SELECT event_type, metadata, actor_user_id FROM billing_lifecycle_events WHERE tenant_id=@tenantId AND invoice_id=@invoiceId AND event_type='invoice_reference_supplemented'",
+    { tenantId: a.tenantId, invoiceId: invoiceA });
+  assert.equal(supplementEvents.length, 1, 'one atomic audit event must be recorded');
+  assert.equal(JSON.parse(supplementEvents[0].metadata).reason, authorizedSupplement.reason);
+  assert.equal(JSON.parse(supplementEvents[0].metadata).paymentReference,
+    assignedSupplement.payment_reference);
+  assert.ok(supplementEvents[0].actor_user_id, 'audit event retains staff identity');
+  const invoiceAfterSupplement = await first(pool,
+    'SELECT id, status, totalamount, issued_at, duedate FROM invoices WHERE tenant_id=@tenantId AND id=@invoiceId',
+    { tenantId: a.tenantId, invoiceId: invoiceA });
+  assert.deepEqual(invoiceAfterSupplement, originalInvoiceA,
+    'legacy supplement must not update the original invoice record');
+  assert.deepEqual(await query(pool,
+    'SELECT id FROM payments WHERE tenant_id=@tenantId AND invoiceid=@invoiceId',
+    { tenantId: a.tenantId, invoiceId: invoiceA }), []);
+  const accountAfterSupplement = assertResponse(
+    await account(invoiceA, tokenA, a.tenantId), 200, 'renter sees assigned reference');
+  assert.equal(accountAfterSupplement.invoice.payment_reference,
+    assignedSupplement.payment_reference);
+  assert.equal(invoiceMailbox.accepted.length, acceptedBeforeSupplement);
+  assert.equal(invoiceMailbox.attempts.length, attemptsBeforeSupplement);
+  console.log('PASS: staff-confirmed legacy supplement, tenant isolation, immutable invoice, duplicate denial and no email');
+
 
 
   // Exercise the real storage HTTP upload and object reader, not a fabricated
@@ -225,6 +313,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assert.equal(pending.payment.status, 'pending');
   assert.equal(Number(pending.payment.amount), 400);
   assert.equal(pending.invoice.status, 'verification_pending');
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    409, 'pending proof blocks supplement even if reference was already assigned');
   const urlOfProof = pending.payment.proofurl;
   assert.ok(urlOfProof.toLowerCase().startsWith(('/storage/invoices/tenants/' + a.tenantId + '/payment_proofs/' + invoiceA + '/').toLowerCase()));
   const proofRead = async (token, tenantId, url) => {
@@ -320,6 +410,8 @@ export async function verifyPhase4PaymentLifecycleHttp({
   const completed = assertResponse(await verify(invoiceA, adminA, a.tenantId, true),
     200, 'approve remainder');
   assert.equal(completed.invoice.status, 'paid');
+  assertResponse(await supplement(invoiceA, adminA, a.tenantId, authorizedSupplement),
+    409, 'settled invoice cannot receive another reference');
   projection = assertResponse(await account(invoiceA, tokenA, a.tenantId), 200, 'paid account');
   assert.equal(Number(projection.outstandingBalance), 0);
   assert.equal(projection.receipts.length, 2);
@@ -333,6 +425,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
   );
   const events = ownEvents.map(row => row.event_type).sort();
   assert.deepEqual(events, [
+    'invoice_reference_supplemented',
     'payment_rejected', 'payment_submitted', 'payment_submitted',
     'payment_submitted', 'payment_verified', 'payment_verified'
   ]);
@@ -404,26 +497,36 @@ export async function verifyPhase4PaymentLifecycleHttp({
       await page.goto(origin + '/rentee/invoices', {
         waitUntil: 'domcontentloaded', timeout: 45000
       });
-      const shortId = invoiceId.slice(0, 8);
-      await page.waitForFunction(fragment =>
-        document.body.innerText.toLowerCase().includes('invoice #' + fragment),
-        { timeout: 30000 }, shortId
+      // Select by the immutable invoice ID in DOM metadata, not by an
+      // obsolete UUID-derived payment reference shown in the heading.
+      await page.waitForFunction(expectedId =>
+        [...document.querySelectorAll('[data-invoice-id]')].some(card =>
+          card.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
+        ),
+        { timeout: 30000 }, invoiceId
       );
-      const clicked = await page.evaluate(fragment => {
-        const card = [...document.querySelectorAll('div.relative')].find(element =>
-          element.innerText.toLowerCase().includes('invoice #' + fragment) &&
-          [...element.querySelectorAll('button')].some(button =>
-            button.textContent.trim() === 'Account & Receipts'
-          )
+      const selected = await page.evaluate(expectedId => {
+        const card = [...document.querySelectorAll('[data-invoice-id]')].find(element =>
+          element.getAttribute('data-invoice-id')?.toLowerCase() === expectedId.toLowerCase()
         );
+        const heading = card?.querySelector('h3')?.textContent.trim() || null;
         const button = [...(card?.querySelectorAll('button') || [])].find(element =>
           element.textContent.trim() === 'Account & Receipts'
         );
-        if (!button) return false;
-        button.click();
-        return true;
-      }, shortId);
-      assert.equal(clicked, true, 'must click account for this paid invoice, not a different card');
+        if (button) button.click();
+        return { clicked: Boolean(button), heading };
+      }, invoiceId);
+      // Tenant A was explicitly supplemented above, while tenant B remains
+      // unassigned. Both cards must reflect their actual SQL reference state,
+      // not a fabricated UUID fragment or an obsolete shared expectation.
+      const expectedHeading = own.tenantId === a.tenantId
+        ? 'Invoice #' + assignedSupplement.payment_reference
+        : 'Invoice — reference not assigned';
+      assert.equal(selected.heading, expectedHeading,
+        own.tenantId === a.tenantId
+          ? 'renter must see the assigned audited numeric supplement'
+          : 'untouched historical renter invoice must remain unassigned');
+      assert.equal(selected.clicked, true, 'must click account for this paid invoice, not a different card');
       await page.waitForFunction(number =>
         document.body.innerText.includes('Receipt ' + number),
         { timeout: 30000 }, receiptNumbers[0]

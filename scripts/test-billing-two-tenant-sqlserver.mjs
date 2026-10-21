@@ -1667,6 +1667,7 @@ async function main() {
       '20260915_02_create_user_invitations.sql',
       '20260916_02_add_staff_permission_bundles.sql',
       '20260916_04_add_billing_payment_lifecycle.sql',
+      '20261018_01_invoice_payment_references.sql',
       // Routed maintenance detail/comments need their governed lifecycle DDL,
       // especially comments.is_internal and maintenance_lifecycle_events.
       '20260916_05_add_maintenance_lifecycle.sql',

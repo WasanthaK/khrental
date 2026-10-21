@@ -190,3 +190,97 @@ The preceding Package C table's “no actual production verification” must be 
 
 **Ownership and guardrails:** No additional GitHub workflow, migration, test-email credential connector, browser automation of the owner's inbox, real Evia canary, schema mutation or Phase 5 feature scope is authorized by this checklist. The owner can complete both parked provider tests on their own schedule. Preserve the verified application state in the meantime. Any future behavior-changing fix requires the existing exact-SHA deploy/health discipline.
 
+## Release evidence reconciliation — 2026-10-20 (controlling status)
+
+This newer update supersedes the 2026-10-16 **unverified production
+migration apply / strict verification** item, but leaves all independent
+external provider and business release gates open.
+
+| Gate | Evidence / limitation | Current verdict |
+| --- | --- | --- |
+| Production migrations **through October 18 (7 managed entries)** | [Apply #39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984), job 117848083384, dedicated execution khrental-db-migrator-ivffmmn: owner-confirmed apply through 20261018_01_invoice_payment_references, formerly untracked auth-store repair adopted after schema inspection. [Strict verify #39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663), job 117850452655, execution khrental-db-migrator-4mr0tpa: all **7/7 LEDGERED / SCHEMA_OK** checks and dedicated-executor identity checks passed. | **PASS** for exactly this baseline. Do not repeat privileged apply. |
+| Latest main deployment | SHA 3d4dcb10b49562c462815890debd74104c7ae823, [#39201496936](https://github.com/WasanthaK/khrental/actions/runs/39201496936): build/authorization and Azure Ready/public-build workflow gates passed on October 19. | **AUTOMATED DEPLOYMENT PASS**, not final physical acceptance. |
+| Invoice redesign drafts | PR #332 merged; [#338](https://github.com/WasanthaK/khrental/pull/338), [#339](https://github.com/WasanthaK/khrental/pull/339), [#340](https://github.com/WasanthaK/khrental/pull/340), [#341](https://github.com/WasanthaK/khrental/pull/341) open draft; isolated latest [test #39372706676](https://github.com/WasanthaK/khrental/actions/runs/39372706676) green. Invoice master and archive migrations dated October 19/20 are **not applied to production**. | **DRAFT ENGINEERING VALIDATED ONLY.** Future deployment/DDL needs separate authorization. |
+| Controlled SendGrid **invoice** delivery | On **2026-10-20**, the owner provided Gmail inbox, PDF viewer and message-detail screenshots and confirmed this was a deliberate test renter/mailbox under their control. Subject "KH Rentals invoice for 2027-02"; PDF reference **26101901**, total **LKR 23,340.00**, readable, **two pages**. Gmail displayed sender label "Kubeira Property Admin", mailing subdomain `em3798.quixo.online`, signing domain `quixo.online`, and TLS; no recipient address, raw message, image or bank details have been committed. **No authoritative `invoice_issued` / email-delivery ledger or SendGrid event/message ID correlation has yet been demonstrated.** | **MAILBOX RECEIPT + PDF READABILITY PASS (owner-attested). PROVIDER/LEDGER TRACE OPEN.** No additional invoice email is needed solely for this record. |
+| Controlled real Evia signing | Hardened signer/callback/retained document needs a separate real test; canary OFF. | **OWNER-HELD / OPEN.** |
+| Unknown manual/dynamic compatibility caller risk | Static census exists; operator usage disposition not signed. | **OPEN.** |
+| Final controlled business/security sign-off | No dated full release-owner approval and end-to-end journey acceptance. | **NOT APPROVED.** |
+
+### Current release-owner checklist
+
+- [x] Verify seven managed production migrations from the original governed
+      apply and independent strict verifier, with exact linked evidence.
+- [x] Owner confirmed on 2026-10-20 that invoice 26101901 was a
+      deliberately controlled test to a renter/mailbox under their control;
+      Gmail displayed the email, sender/domain/TLS details and its readable
+      two-page PDF. Screenshot artifacts remain in the conversation only.
+- [ ] Reconcile the existing invoice-issued and email-delivery records
+      to a redacted SendGrid provider message ID/status where available.
+      Avoid a new invoice or email merely to compensate for missing logs.
+      Provider-origin and delivery-event verification remain OPEN.
+- [ ] Owner approves and verifies one real fenced Evia signer/callback,
+      signed PDF, audit and tenant-specific document retrieval. Canary OFF
+      unless explicitly authorized.
+- [ ] Owner records explicit risk disposition on known manual SQL commands
+      and unproved dynamic callers; critical tenant isolation, signer
+      provenance, payment mutation and signed-document retention cannot
+      be waived.
+- [ ] Release owner records APPROVE or DO NOT APPROVE with date and
+      evidence for tenant, property, billing/receipts, maintenance/
+      notifications, agreements and security.
+
+**Canonical disposition:** Phase 4 remains OPEN, Phase 5 engineering scope
+is complete but combined production RELEASE SIGN-OFF IS BLOCKED. Do not
+backdate this evidence to October 16 or treat it as permission to apply
+the newer invoice migrations, merge feature branches, run Evia, or send mail.
+
+
+## Canonical release reconciliation and action register — 2026-10-21 (latest controlling status)
+
+**Source of authority:** original canonical Phase 4/5 acceptance criteria, not old
+dated "next package" text. This entry supersedes earlier claims that the
+original 7-migration apply, live controlled invoice mailbox, invitation
+acceptance or real Evia signing exercise still need to be performed.
+**Engineering-complete is not release-approved.** Phase 4 final operational
+sign-off remains OPEN; Phase 5 source regression development is COMPLETE.
+
+### Completed — retain existing proof; do not repeat successful operations
+
+| Gate | Evidence/status | Decision |
+| --- | --- | --- |
+| Original Phases 0–3 and bounded Phase 4 engineering | Existing merged canonical contracts; Package C source classification in `PHASE4-COMPATIBILITY-CLOSURE-MATRIX.md` | **ENGINEERING COMPLETE**, compatibility operational caller policy still needs owner disposition |
+| Phase 5 bounded security/regression development | PRs #314–#319 merged; cross-domain fixtures/authorization/build previously green | **SOURCE SCOPE COMPLETE**; final release sign-off is separate |
+| Production migrations **1–7** | Governed apply [#39185870984](https://github.com/WasanthaK/khrental/actions/runs/39185870984) and dedicated strict seven-migration verification [#39186676663](https://github.com/WasanthaK/khrental/actions/runs/39186676663), execution `khrental-db-migrator-4mr0tpa`, seven retained ledger/schema checks | **PASS** for existing seven; **do not reapply** |
+| Controlled invoice mailbox | Owner-confirmed Gmail receipt and readable two-page PDF on Oct 20, test reference **26101901**, LKR 23,340.00, subject "KH Rentals invoice for 2027-02". Details of recipient and bank account are deliberately not published | **REAL MAILBOX/PDF FUNCTIONAL PASS**; provider-to-ledger correlation still open |
+| Evia live signing | Owner-confirmed completed signer Oct 17; Oct 18 signed agreement **#47FDEA13** showed landlord and renter both Signed, agreement Completed, after PR #326. Source evidence is owner-provided application screenshots, documented in [draft PR #324](https://github.com/WasanthaK/khrental/pull/324) | **LIVE SIGNING/UI FUNCTIONAL PASS**; webhook, immutable PDF, audit object and access evidence still separately open |
+| Secure invitation | Owner independently tested and accepted invitation workflow Oct 18. The non-receivable dummy email on agreement #47FDEA13 remains correctly **Invitation not accepted**; that specific demonstration tenancy is not activated | **INVITATION WORKFLOW PASS**; no repeat invite or bypass |
+| Current application serving baseline | [Deployment #39582049206](https://github.com/WasanthaK/khrental/actions/runs/39582049206), merge [PR #345](https://github.com/WasanthaK/khrental/pull/345) commit `b2b9d66cbb7b098e9c5c52202fd7775af278318a`, Azure Ready revision `0000318`, exact public build fingerprint and live MSSQL health confirmed | **PASS** for deployment, not feature-flag or schema activation |
+| Latest read-only production database plan | [#39582049166](https://github.com/WasanthaK/khrental/actions/runs/39582049166), attempt 2 succeeded: seven `APPLIED` with matching checksums; migration eight/nine `PENDING`, no SQL changes | **READ-ONLY PASS**; new enhancements not yet applied |
+
+### Action register — original canonical release (only unresolved decisions)
+
+| ID | Owner/action | Exact closure evidence | State |
+| --- | --- | --- | --- |
+| C01 | Release documentation keeper — consolidate already-confirmed outcomes and old open drafts into this register | Existing 7/7, mail, Evia, invitation and serving proof cross-referenced, with no duplicate provider calls; review and merge this docs-only PR | **IN REVIEW** (reconciliation prepared; not yet merged) |
+| C02 | Operations — reconcile existing **invoice 26101901** issue/delivery ledger with a redacted SendGrid provider message/event ID and delivered result | Existing email and PDF receipt already pass; retain matching provider event and issue/attempt/accepted-or-delivered record, or state explicitly that historic telemetry is unavailable | **EVIDENCE OPEN**; never reissue a new invoice just for logs |
+| C03 | Operations — reconcile signed agreement **#47FDEA13** against Evia callback, retained signed PDF, `audit_trail.pdf`, and protected authorized/denied retrieval | Match existing agreement/attempt/document IDs and byte-provenance where available; record missing artifacts explicitly | **EVIDENCE OPEN**, not a repeat live signing test; fenced canary stays OFF |
+| C04 | Release owner — approve explicit restrictions for manual/dynamic legacy SQL/operator callers | Record that `npm run migrate`, `execute-sql`, direct `migrate:*` and historical scripts are **not governed production schema authority**. Retain unknown dynamic callers as accepted low-risk deferral only with owner/control, or flag material risk BLOCKED; no broad deletion | **OWNER DECISION OPEN** |
+| C05 | Release owner — final original canonical release decision | Review current tenant/property/unit, invoice/payment/receipt, agreement/signed PDF, maintenance/notification and security proof, unresolved C02–C04 or formally justified noncritical deferrals; record dated **APPROVE** or **DO NOT APPROVE** | **NOT SIGNED OFF** |
+
+**Interpretation:** C02 is *telemetry correlation*, not new SendGrid functional
+testing. C03 is *archival and audit evidence*, not another signer exercise.
+A reviewer must not mark C02/C03 full provider/audit PASS from UI screenshots.
+
+### Separate authorized Invoice Designer rollout — not an original canonical closure prerequisite
+
+| ID | Scope/decision | Current verified state |
+| --- | --- | --- |
+| I01 | Approve governed preflight, then separately approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by strict 9/9 | Both SQL migrations **PENDING** on Oct 21 production read-only plan. No apply or flag enablement approved |
+| I02 | Verify real private R2 conditional PUT/readback/immutability and controlled branding, PDF download/resend/customer journey after I01 | Invoice Designer code merged in PR #345 and deployed under `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` gate; production archive activation **NOT APPROVED** |
+| I03 | Before enabling customer use, resolve issuer Settings availability while migration eight is unapplied | Settings mounts Invoice Designer for authorized admins but the issuer-profile SQL column is absent until I01; treat unavailable UI as a bounded extra-scope rollout concern, not a reopened original Phase 4 program |
+
+**Rules:** Do not rerun original 7-migration apply, send a new invoice,
+ask signers to sign again, activate the Evia canary, change financial records,
+merge unrelated draft PRs, apply migrations eight/nine, or enable invoice
+archiving through this evidence-only update. Future runtime fixes require their
+normal exact-SHA tests and authorized release path.

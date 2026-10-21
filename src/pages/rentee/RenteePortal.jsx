@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMyTenancySummary, platform as platformClient } from '../../services/platformClient';
+import { getMyTenancySummary, listRenteeInvoices, platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
 import { isDevBypassEnabled } from '../../utils/env';
 import { formatCurrency, formatDate } from '../../utils/helpers';
@@ -75,11 +75,7 @@ const RenteePortal = () => {
         }
         setTenancies(tenancyResult.data?.tenancies || []);
 
-        const { data: invoicesData, error: invoicesError } = await platformClient
-          .from('invoices')
-          .select('*')
-          .eq('renteeid', appUserId)
-          .order('createdat', { ascending: false });
+        const { data: invoicesData, error: invoicesError } = await listRenteeInvoices();
 
         if (invoicesError) {
           throw invoicesError;

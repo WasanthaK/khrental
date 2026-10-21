@@ -1,3 +1,4 @@
+import { assertDedicatedInvoiceMasterMutation } from './invoiceMasterMutationGuard.js';
 import {
   PERMISSIONS,
   getRoleType,
@@ -496,6 +497,7 @@ export const authorizePlatformQuery = ({ action = 'select', table, filters = [],
   const normalizedAction = String(action || 'select').trim().toLowerCase();
   const normalizedTable = String(table || '').trim().toLowerCase();
   const request = { action: normalizedAction, table: normalizedTable, filters, payload, user, membership };
+  assertDedicatedInvoiceMasterMutation({table:normalizedTable,action:normalizedAction,payload});
 
   if (isAdminRole({ user, membership })) {
     return authorizeAdminQuery(request);

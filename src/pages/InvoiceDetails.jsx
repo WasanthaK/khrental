@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
+import { invoiceHeading } from '../utils/invoiceReference';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
-import { getInvoiceAccount, retryInvoiceDelivery } from '../services/platformClient';
+import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice, getIssuedInvoicePdf, assignLegacyInvoicePaymentReference } from '../services/platformClient';
 import { markInvoiceAsPaid, sendPaymentReminder } from '../services/paymentService';
 import PaymentVerification from '../components/invoices/PaymentVerification';
 import InvoiceDraftEditor from '../components/invoices/InvoiceDraftEditor';
@@ -64,9 +65,15 @@ const InvoiceDetails = () => {
   const payments = account?.payments || [];
   const receipts = account?.receipts || [];
   const components = account?.components || [];
+  const paymentInstructions = account?.paymentInstructions || null;
   const emailDelivery = account?.delivery || { status: 'not_attempted' };
   const outstandingBalance = Number(account?.outstandingBalance) || 0;
   const isDraft = String(invoice?.status || '').toLowerCase() === 'draft';
+  const canSupplementLegacyReference = canManageInvoices
+    && (invoice?.payment_reference == null || invoice?.payment_reference === '')
+    && ['pending', 'overdue'].includes(String(invoice?.status || '').toLowerCase())
+    && outstandingBalance > 0
+    && !payments.some(payment => ['pending', 'verified'].includes(String(payment.status || '').toLowerCase()));
   const pendingPayment = payments.find((payment) => String(payment.status).toLowerCase() === 'pending') || null;
   const paymentProofUrl = pendingPayment?.proofurl || invoice?.paymentproofurl || null;
 
@@ -130,6 +137,56 @@ const InvoiceDetails = () => {
     } finally { setWorking(false); }
   };
 
+  const handleResendIssuedInvoice = async () => {
+    if (!invoice || isDraft || working) return;
+    if (!window.confirm('Resend the existing invoice to its registered tenant email? No invoice values or payments will change.')) return;
+    const resendRequestId = crypto.randomUUID();
+    try {
+      setWorking(true); setError(null); setNotice(null);
+      const result = await resendIssuedInvoice(id, resendRequestId);
+      if (result.error) throw result.error;
+      setNotice(result.data?.delivery?.status === 'accepted'
+        ? 'Existing invoice email accepted by the provider. No invoice values changed.'
+        : 'Resend outcome is not confirmed. Check delivery status before attempting again.');
+      await loadAccount();
+    } catch (err) {
+      setError(err.message || 'Unable to resend existing invoice.');
+      await loadAccount();
+    } finally { setWorking(false); }
+  };
+
+
+  const handleAssignLegacyReference = async () => {
+    if (!canSupplementLegacyReference || working) return;
+    const input = window.prompt(
+      'Reason for assigning a reference to this historical invoice (10–500 characters):'
+    );
+    if (input === null) return;
+    const reason = input.trim();
+    if (reason.length < 10 || reason.length > 500) {
+      setError('Provide a reason between 10 and 500 characters.');
+      return;
+    }
+    if (!window.confirm(
+      'Assign the next 8-digit payment reference using today’s tenant billing date? ' +
+      'The original invoice, payments and issued bank details will not change. No email will be sent.'
+    )) return;
+    try {
+      setWorking(true);
+      setError(null);
+      setNotice(null);
+      const result = await assignLegacyInvoicePaymentReference(id, reason);
+      if (result.error) throw result.error;
+      setNotice(`Payment reference #${result.data.payment_reference} assigned and audited. No email was sent.`);
+      await loadAccount();
+    } catch (err) {
+      setError(err.message || 'Unable to assign a historical invoice reference.');
+      await loadAccount();
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const handleRecordReminder = async () => {
     try {
       setWorking(true);
@@ -147,6 +204,39 @@ const InvoiceDetails = () => {
     }
   };
 
+
+  const handleDownloadIssuedPdf = async () => {
+    if (!account?.issuedDocument?.available || !invoice || working) return;
+    try {
+      setWorking(true); setError(null);
+      const result = await getIssuedInvoicePdf(id);
+      if (result.error) throw result.error;
+      const pdf = result.data;
+      if (pdf?.type !== 'application/pdf' || !pdf?.immutable ||
+          typeof pdf.content !== 'string') {
+        throw new Error('An original immutable issued invoice PDF is not available.');
+      }
+      const binary = atob(pdf.content);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      if (bytes.length < 100 || String.fromCharCode(...bytes.subarray(0,5)) !== '%PDF-') {
+        throw new Error('The issued invoice PDF could not be verified.');
+      }
+      const blobUrl = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+      try {
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'Invoice-' + id + '.pdf';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to retrieve the retained issued invoice PDF.');
+    } finally { setWorking(false); }
+  };
+
   const handleDownloadInvoice = () => {
     if (!invoice) return;
 
@@ -155,7 +245,7 @@ const InvoiceDetails = () => {
         ? components.map((component) => `${component.description || component.component_type}: ${formatCurrency(component.amount)}`)
         : Object.entries(invoice.components || {}).map(([key, value]) => `${key}: ${formatCurrency(value)}`);
       const invoiceContent = [
-        `INVOICE #${invoice.id}`,
+        invoiceHeading(invoice),
         `Billing Period: ${invoice.billingperiod || 'N/A'}`,
         `Issued: ${formatDate(invoice.issued_at || invoice.createdat)}`,
         `Due Date: ${formatDate(invoice.duedate)}`,
@@ -167,7 +257,15 @@ const InvoiceDetails = () => {
         ...componentLines,
         '',
         `Total Amount: ${formatCurrency(invoice.totalamount)}`,
-        `Outstanding Balance: ${formatCurrency(outstandingBalance)}`
+        `Outstanding Balance: ${formatCurrency(outstandingBalance)}`,
+        '',
+        'PAYMENT INSTRUCTIONS:',
+        ...(paymentInstructions ? [
+          `Bank: ${paymentInstructions.bankName}`,
+          `Branch: ${paymentInstructions.branch}`,
+          `Account Number: ${paymentInstructions.accountNumber}`,
+          `Payment Reference: ${invoice.payment_reference || 'Not assigned'}`
+        ] : ['Bank transfer details are not available on this invoice. Contact your property manager before paying.'])
       ].join('\n');
 
       const blob = new Blob([invoiceContent], { type: 'text/plain' });
@@ -215,7 +313,7 @@ const InvoiceDetails = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <p className="text-sm text-gray-500">Billing account</p>
-          <h1 className="text-2xl font-semibold">Invoice #{invoice.id.substring(0, 8)}</h1>
+          <h1 className="text-2xl font-semibold">{invoiceHeading(invoice)}</h1>
         </div>
         <button onClick={() => navigate('/dashboard/invoices')} className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm">Back to Invoices</button>
       </div>
@@ -242,12 +340,47 @@ const InvoiceDetails = () => {
                   ? 'Email outcome uncertain. Review provider logs before any manual resend.'
                   : 'Email delivery has not been attempted by this workflow.'}
           </p>
+          {emailDelivery.status === 'accepted' && (
+            <button type="button" disabled={working} onClick={handleResendIssuedInvoice}
+              className="mt-3 mr-2 rounded border border-blue-500 text-blue-700 px-3 py-2 text-sm disabled:opacity-50">
+              Resend existing invoice
+            </button>
+          )}
           {emailDelivery.canRetry && (
             <button type="button" disabled={working} onClick={handleRetryInvoiceEmail}
               className="mt-3 rounded border px-3 py-2 text-sm disabled:opacity-50">
               Retry rejected invoice email
             </button>
           )}
+        </section>
+      )}
+
+      {!isDraft && (
+        <section className="rounded-lg border bg-white p-4" aria-label="Invoice payment instructions">
+          <h2 className="font-semibold mb-2">Payment instructions</h2>
+          {paymentInstructions ? (
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div><dt className="text-gray-500">Bank</dt><dd>{paymentInstructions.bankName}</dd></div>
+              <div><dt className="text-gray-500">Branch</dt><dd>{paymentInstructions.branch}</dd></div>
+              <div><dt className="text-gray-500">Account number</dt><dd>{paymentInstructions.accountNumber}</dd></div>
+              <div><dt className="text-gray-500">Payment reference</dt><dd>{invoice.payment_reference || 'Not assigned'}</dd></div>
+            </dl>
+          ) : <p className="text-sm text-amber-700">Bank transfer details are not available on this invoice. Confirm payment instructions with your property manager before paying.</p>}
+          <p className="text-xs text-gray-500 mt-2">Confirm the account holder name before transferring funds. Changes to property banking details do not update issued invoice instructions.</p>
+          {canSupplementLegacyReference && (
+            <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm text-amber-900">
+                This historical invoice has no assigned numeric payment reference.
+                A staff-authorized supplement preserves the issued invoice and records the reason.
+                It does not send a notification or supply missing original bank details.
+              </p>
+              <button type="button" disabled={working} onClick={handleAssignLegacyReference}
+                className="mt-3 rounded border border-amber-600 px-3 py-2 text-sm text-amber-950 disabled:opacity-50">
+                Assign legacy payment reference
+              </button>
+            </div>
+          )}
+
         </section>
       )}
 
@@ -303,6 +436,12 @@ const InvoiceDetails = () => {
             )}
             {!isDraft && canManageInvoices && outstandingBalance > 0 && (
               <button type="button" disabled={working} onClick={handleRecordReminder} className="w-full px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-300">{working ? 'Sending…' : 'Send payment reminder'}</button>
+            )}
+            {account?.issuedDocument?.available && !isDraft && (
+              <button type="button" onClick={handleDownloadIssuedPdf} disabled={working}
+                className="w-full px-3 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 disabled:opacity-50">
+                Download original issued PDF
+              </button>
             )}
             <button type="button" onClick={handleDownloadInvoice} className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Download account summary</button>
           </div>
