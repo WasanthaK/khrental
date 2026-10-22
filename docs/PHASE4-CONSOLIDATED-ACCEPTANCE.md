@@ -360,7 +360,10 @@ This block is the current status as of 2026-10-22:
   invoice archive path or a SQL manifest. Real invoice-specific R2/SQL
   publication, crash reconciliation, tenant-authorized original-PDF access,
   controlled branded invoice, provider trace and owner acceptance **remain
-  OPEN**. `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` is **OFF**; this result does not
+  OPEN**. Nonproduction real SQL Server archive crash/retry/corruption
+  acceptance has separately **PASSED** in [#39781098778](https://github.com/WasanthaK/khrental/actions/runs/39781098778)
+  ([PR #353](https://github.com/WasanthaK/khrental/pull/353)); this does not
+  prove live tenant SQL/R2 issuance or customer delivery. `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` is **OFF**; this result does not
   authorize invoice issue, mail, real archive creation, or feature activation.
 - **Original canonical C01/C04:** **CLOSED** by prior owner-approved evidence.
   **C02** remains original SendGrid delivery event-to-invoice ledger
