@@ -791,6 +791,92 @@ const main = async () => {
         'download and resend never modify or duplicate archive rows');
       console.log('PASS: SQL-backed customer email attachment and download are identical to archived PDF bytes');
 
+      // I02 crash-recovery acceptance on REAL SQL Server and disposable storage.
+      // No customer data, production R2 or public files are involved.
+      const stageSyntheticIssuedInvoice = async label => {
+        const invoiceId=crypto.randomUUID();
+        const candidate={...structuredClone(proofSnapshot),invoiceId};
+        const pdf=await createInvoiceDocumentPdfCandidate(candidate);
+        const bytes=Buffer.from(pdf.content,'base64');
+        const canonical=normalizeInvoiceDocumentSnapshot(candidate);
+        const metadata=JSON.stringify({
+          documentSnapshot:canonical,
+          documentSnapshotSha256:pdf.snapshotSha256
+        });
+        await testPool.request()
+          .input('invoiceId',sql.UniqueIdentifier,invoiceId)
+          .input('tenantId',sql.UniqueIdentifier,proofTenant)
+          .query("INSERT INTO dbo.invoices (id,tenant_id,status) VALUES (@invoiceId,@tenantId,'pending')");
+        await testPool.request()
+          .input('invoiceId',sql.UniqueIdentifier,invoiceId)
+          .input('tenantId',sql.UniqueIdentifier,proofTenant)
+          .input('metadata',sql.NVarChar(sql.MAX),metadata)
+          .query("INSERT INTO dbo.billing_lifecycle_events (tenant_id,invoice_id,event_type,metadata) "+
+            "VALUES (@tenantId,@invoiceId,'invoice_issued',@metadata)");
+        const descriptor=await import('../src/api/platform/issuedInvoiceArchiveCandidate.js')
+          .then(m=>m.prepareInvoiceArchiveCandidate({snapshot:candidate,pdfBytes:bytes}));
+        const count=async()=>Number((await testPool.request()
+          .input('invoiceId',sql.UniqueIdentifier,invoiceId)
+          .input('tenantId',sql.UniqueIdentifier,proofTenant)
+          .query("SELECT COUNT(*) AS cnt FROM dbo.invoice_pdf_archives "+
+            "WHERE tenant_id=@tenantId AND invoice_id=@invoiceId")).recordset[0].cnt);
+        assert.equal(await count(),0,label+' starts without an archived SQL record');
+        return {invoiceId,candidate,bytes,descriptor,count,publish:overrides=>
+          publishIssuedInvoiceArchiveCandidate({
+            snapshot:candidate,pdfBytes:bytes,actorUserId:proofTenant,
+            ...sqlAdapters,objectStorage:storage,...overrides
+          })};
+      };
+
+      // Crash immediately after conditional object creation. The real SQL
+      // adapter must reconcile the existing verified bytes, insert one row,
+      // reject cross-tenant lookup and preserve the original on replay.
+      const orphan=await stageSyntheticIssuedInvoice('orphaned object');
+      assert.equal(await storage.createIfAbsent('invoices',orphan.descriptor.path,
+        orphan.bytes),'created');
+      assert.equal(await orphan.count(),0);
+      const recovered=await orphan.publish();
+      assert.equal(recovered.state,'committed');
+      assert.equal(await orphan.count(),1);
+      assert.equal((await orphan.publish()).state,'already_committed');
+      assert.equal(await orphan.count(),1);
+      assert.deepEqual((await storage.getObject('invoices',orphan.descriptor.path)).body,
+        orphan.bytes);
+      assert.equal(await sqlAdapters.archiveLedger.loadCommitted({
+        tenantId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        invoiceId:orphan.invoiceId
+      }),null,'cross-tenant read must not locate recovered SQL archive');
+
+      // A failed/ambiguous SQL response must not silently claim success,
+      // delete the R2-equivalent object or manufacture an email success.
+      // The next explicit, guarded retry can reconcile using real SQL.
+      const interrupted=await stageSyntheticIssuedInvoice('ambiguous SQL result');
+      await assert.rejects(interrupted.publish({archiveLedger:{
+        ...sqlAdapters.archiveLedger,
+        commitIfAbsent:async()=>{throw Error('SIMULATED_SQL_COMMIT_TIMEOUT');}
+      }}),/SIMULATED_SQL_COMMIT_TIMEOUT/);
+      assert.equal(await interrupted.count(),0);
+      assert.deepEqual((await storage.getObject('invoices',interrupted.descriptor.path)).body,
+        interrupted.bytes);
+      assert.equal((await interrupted.publish()).state,'committed');
+      assert.equal(await interrupted.count(),1);
+      assert.equal((await interrupted.publish()).state,'already_committed');
+
+      // Existing but corrupted object can NEVER be adopted into the SQL
+      // ledger, even though create-if-absent correctly finds it.
+      const damaged=await stageSyntheticIssuedInvoice('damaged orphan');
+      const corrupted=Buffer.from(damaged.bytes);
+      corrupted[corrupted.length-16]^=1;
+      assert.equal(await storage.createIfAbsent('invoices',damaged.descriptor.path,
+        corrupted),'created');
+      await assert.rejects(damaged.publish(),
+        e=>e.code==='INVOICE_ARCHIVE_INTEGRITY_FAILED');
+      assert.equal(await damaged.count(),0);
+      assert.deepEqual((await storage.getObject('invoices',damaged.descriptor.path)).body,
+        corrupted);
+      console.log('PASS: real SQL archive recovery after orphaned write, ambiguous commit, '+
+        'idempotent retry, foreign tenant rejection, and corrupted object fail-closed');
+
       const revised=structuredClone(proofSnapshot);
       revised.issuer.legalName='Different Issuer After Invoice';
       await assert.rejects(publish({snapshot:revised}),
