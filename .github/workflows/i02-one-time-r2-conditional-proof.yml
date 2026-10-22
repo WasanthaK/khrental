@@ -1,0 +1,39 @@
+name: I02 one-time synthetic R2 conditional invoice PDF proof
+
+on:
+  push:
+    branches:
+      - proof/i02-r2-conditional-20261022
+
+permissions:
+  contents: read
+
+concurrency:
+  group: i02-production-r2-synthetic-conditional-proof
+  cancel-in-progress: false
+
+jobs:
+  synthetic-r2-proof:
+    if: github.repository == 'WasanthaK/khrental' && github.ref == 'refs/heads/proof/i02-r2-conditional-20261022'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify authorized single synthetic R2 conditional-write probe
+        env:
+          STORAGE_DRIVER: r2
+          I02_SYNTHETIC_R2_APPROVAL: APPROVED-ONE-TIME-2026-10-22
+          INVOICE_IMMUTABLE_ARCHIVE_ENABLED: 'false'
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || vars.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: node scripts/prove-r2-conditional-invoice-pdf-once.mjs
