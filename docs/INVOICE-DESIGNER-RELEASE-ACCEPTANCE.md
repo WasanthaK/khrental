@@ -154,3 +154,25 @@ cross-tenant retrieval, and exact-byte customer journey **still require
 separate I02 acceptance**. The probe-only branch and workflow must not be
 rerun as implicit authority for additional production objects.
 
+
+## I02 — real disposable SQL recovery verification (2026-10-22)
+
+**PASS — archive application/SQL recovery with nonproduction storage.**
+[PR #353](https://github.com/WasanthaK/khrental/pull/353) extended the
+existing SQL Server 2022 integration harness with synthetic invoices and
+real `invoice_pdf_archives` transactions. Dedicated
+[SQL proof #39781098778](https://github.com/WasanthaK/khrental/actions/runs/39781098778)
+verified successful adoption of a preexisting exact PDF object after a
+simulated crash before SQL commit; single committed archive and idempotent
+replay; safe handling and reconciliation of an ambiguous commit result;
+foreign-tenant denial; and rejection of corrupted bytes without a ledger
+insert. Build/authorization CI
+[#39781098801](https://github.com/WasanthaK/khrental/actions/runs/39781098801)
+also passed. All SQL and local storage were disposable, with **zero production
+financial writes and no email**.
+
+Combined with [live production R2 conditional-create proof #39772830467](https://github.com/WasanthaK/khrental/actions/runs/39772830467),
+this proves storage semantics and nonproduction SQL recovery separately. It
+does **not** prove a real tenant's complete R2+SQL publication, recipient mail,
+or authenticated customer download. **I02 remains OPEN.** Its canary feature
+and master settings must not be enabled without separate pilot authorization.
