@@ -98,3 +98,33 @@ verification, approve the master-settings UI rollout, build/deploy with the
 flag set, then verify the controlled customer journey while the immutable
 invoice archive flag remains OFF until its independent acceptance gates pass.
 Do not treat hiding the Settings form as evidence that migrations were applied.
+
+## I02 — controlled immutable archive tenant-scope safety gate
+
+**No automatic activation.** An application-wide
+`INVOICE_IMMUTABLE_ARCHIVE_ENABLED=true` alone is insufficient for a safe
+controlled production tenant trial. The new server-side
+`INVOICE_IMMUTABLE_ARCHIVE_CANARY_TENANTS` must contain one or more
+explicit, comma-separated **tenant UUIDs**. Empty values, wildcards and
+malformed allowlists fail closed; an incorrect entry invalidates the entire
+list. Both checks are enforced on account archive availability, issued-PDF
+retrieval, first issuance, and delivery/retry/resend attachment construction.
+The existing permissions and SQL/R2 archive safeguards still apply.
+
+The feature remains OFF in production. Only after the separately approved
+R2 acceptance and test-tenant authorization may an operator configure the
+controlled tenant allowlist and enable the feature flag; this deliberately
+does not constitute global rollout. Broad availability must be separately
+reviewed and implemented. Existing tenants not allowlisted continue using
+their existing invoice path.
+
+As of 2026-10-22, governed migration apply
+[#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286)
+and independent strict 9/9 check
+[#39762736411](https://github.com/WasanthaK/khrental/actions/runs/39762736411)
+both passed. Existing production R2 deployment probe confirms **generic**
+write/read and cleanup in
+[#39721498237](https://github.com/WasanthaK/khrental/actions/runs/39721498237).
+This does **not** prove the invoice archive's real conditional PUT or its
+read/duplicate/crash recovery behavior against R2; that remains I02 acceptance.
+No synthetic R2 object is created by this source change.

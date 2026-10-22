@@ -76,7 +76,7 @@ test('HTTP billing route requires invoice access and feature-gated signed archiv
   const api=readFileSync(new URL('../src/api/platform/billingRouter.js',import.meta.url),'utf8');
   const route=api.match(/router\.get\('\/invoices\/:invoiceId\/issued-document',[\s\S]*?(?=router\.patch\('\/invoices\/:invoiceId\/draft')/);
   assert.ok(route);
-  assert.match(route[0],/INVOICE_IMMUTABLE_ARCHIVE_ENABLED/);
+  assert.match(route[0],/isImmutableInvoiceArchiveEnabledForTenant\(req\.tenantId\)/);
   assert.match(route[0],/assertInvoiceAccess\(req, invoice, false\)/);
   assert.match(route[0],/assertInvoiceIssued\(invoice\)/);
   assert.match(route[0],/loadVerifiedIssuedInvoiceDocument/);
