@@ -351,11 +351,17 @@ This block is the current status as of 2026-10-22:
   is merged and deployed with the **default-OFF** master settings UI switch,
   `VITE_INVOICE_MASTER_SETTINGS_ENABLED`. I03 is **CLOSED** at source,
   deployment and default-visibility level. Do not implicitly enable it.
-- **Invoice Designer I02:** real private R2 conditional PUT/exact-byte
-  readback, immutable archive authorization, controlled branded-invoice
-  journey and owner acceptance are **OPEN**.
-  `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` remains **OFF**; schema application
-  does not authorize invoice archive activation, customer issuance, or sends.
+- **Invoice Designer I02:** **live synthetic R2 conditional-PUT primitive PASS**
+  in [#39772830467](https://github.com/WasanthaK/khrental/actions/runs/39772830467):
+  one noncustomer PDF created with `If-None-Match: *`, exact bytes/hash/type
+  read back, repeated and changed writes both refused with **412**, original
+  bytes preserved; scoped cleanup and **404** absence confirmed. The proof
+  used only a disposable `_healthchecks` object, **not** a canonical issued
+  invoice archive path or a SQL manifest. Real invoice-specific R2/SQL
+  publication, crash reconciliation, tenant-authorized original-PDF access,
+  controlled branded invoice, provider trace and owner acceptance **remain
+  OPEN**. `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` is **OFF**; this result does not
+  authorize invoice issue, mail, real archive creation, or feature activation.
 - **Original canonical C01/C04:** **CLOSED** by prior owner-approved evidence.
   **C02** remains original SendGrid delivery event-to-invoice ledger
   correlation for invoice `26101901`, without a resend.
