@@ -77,3 +77,24 @@ R2 conditional-write proof and SHA-256 comparison; test invoice and tenant
 identifiers held only in the authorized test environment; successful scoped
 staff/renter UI screenshots; provider event correlation; approval and
 production serving-fingerprint check.
+
+## I03 — pre-migration invoice-master UI rollout guard
+
+While production is still at **7/9** managed schema migrations, Invoice
+Designer profile and property/unit beneficiary forms must not query new SQL
+columns. The **default-off** build flag `VITE_INVOICE_MASTER_SETTINGS_ENABLED`
+gates all three customer UI entry points: Settings > Invoice Designer,
+Property > Invoice Billing and Unit > Invoice Billing.
+
+The default is OFF unless the Vite build is explicitly supplied the string
+`true`. This is an **application UI visibility safeguard only**, not
+a server endpoint authorization change or permission to use an unmigrated
+production database. The existing authenticated backend authorization stays
+in force and the invoice archive remains gated independently by
+`INVOICE_IMMUTABLE_ARCHIVE_ENABLED`.
+
+After separately authorized migrations eight/nine and strict **9/9**
+verification, approve the master-settings UI rollout, build/deploy with the
+flag set, then verify the controlled customer journey while the immutable
+invoice archive flag remains OFF until its independent acceptance gates pass.
+Do not treat hiding the Settings form as evidence that migrations were applied.

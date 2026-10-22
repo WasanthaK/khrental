@@ -49,3 +49,20 @@ test('generic and legacy paths cannot bypass audited invoice master updates',()=
   assert.match(legacy,/assertDedicatedInvoiceMasterMutation\(/);
   assert.match(guard,/INVOICE_MASTER_DEDICATED_API_REQUIRED/);
 });
+
+// The new master-data settings depend on two unapplied production migrations.
+// The browser must not mount SQL-backed admin panels until a separately
+// approved invoice master rollout deliberately enables the Vite build flag.
+test('invoice master UI is default-off and all entry points honor explicit rollout', async () => {
+  const { isInvoiceMasterUiEnabled } = await import('../src/utils/invoiceMasterRollout.js');
+  const feature = read('../src/utils/invoiceMasterRollout.js');
+  const settings = read('../src/pages/Settings.jsx');
+  assert.equal(isInvoiceMasterUiEnabled, false, 'Node/default environment is rollout-disabled');
+  assert.match(feature, /import\.meta\.env\?\.VITE_INVOICE_MASTER_SETTINGS_ENABLED === 'true'/);
+  assert.match(settings, /isInvoiceMasterUiEnabled && hasPermission\(subject, PERMISSIONS\.TENANT_SETTINGS_MANAGE\)/);
+  for (const source of [props, units]) {
+    assert.match(source, /canEditInvoiceMaster = isInvoiceMasterUiEnabled && hasPermission\(/);
+  }
+  assert.match(props, /isEditMode && canEditInvoiceMaster && <PropertyInvoiceBilling/);
+  assert.match(units, /isEditMode && canEditInvoiceMaster && <UnitInvoiceBilling/);
+});
