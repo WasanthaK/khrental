@@ -14,6 +14,7 @@ import { captureInvoiceIssuanceSnapshotCandidate } from './invoiceIssuanceSnapsh
 import { prepareImmutableIssuedInvoiceAttachment } from './immutableInvoiceEmailAttachment.js';
 import { createInvoiceArchiveSqlCandidateAdapters } from './invoiceArchiveSqlCandidateAdapters.js';
 import { createIssuedInvoiceR2ArchiveStore } from './issuedInvoiceR2ArchiveStore.js';
+import { isImmutableInvoiceArchiveEnabledForTenant } from './immutableInvoiceArchiveRollout.js';
 import { loadVerifiedIssuedInvoiceDocument } from './issuedInvoiceDocumentRead.js';
 import { allocateInvoicePaymentReference, isLegacyInvoiceReferenceEligible } from './invoicePaymentReference.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from './invoicePaymentInstructions.js';
@@ -413,7 +414,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const projection = await buildAccountProjection(req, invoice);
       const delivery = await loadInvoiceDelivery(req.tenantId, invoice.id);
       let issuedDocument = { available: false };
-      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true' &&
+      if (isImmutableInvoiceArchiveEnabledForTenant(req.tenantId) &&
           String(invoice.status || '').toLowerCase() !== 'draft') {
         const pool = await getMssqlPool();
         const {archiveLedger} = createInvoiceArchiveSqlCandidateAdapters({pool,sql});
@@ -442,7 +443,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   // a storage path. Distinct from the editable account-summary export.
   router.get('/invoices/:invoiceId/issued-document', async (req, res, next) => {
     try {
-      if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED !== 'true') {
+      if (!isImmutableInvoiceArchiveEnabledForTenant(req.tenantId)) {
         throw createRequestError(404,
           'Issued PDF archives are not enabled for this workspace.',
           'ISSUED_INVOICE_PDF_NOT_AVAILABLE');
@@ -739,7 +740,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (String(issuedInvoice.status).toLowerCase() === 'draft') {
         throw createRequestError(409, 'Cannot attach a draft invoice.', 'INVOICE_PDF_GENERATION_FAILED');
       }
-      const attachment = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true'
+      const attachment = isImmutableInvoiceArchiveEnabledForTenant(req.tenantId)
         ? await prepareImmutableIssuedInvoiceAttachment({
             tenantId:req.tenantId, invoiceId:issuedInvoice.id,
             actorUserId:req.user.id, pool:await getMssqlPool(), sql
@@ -799,7 +800,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       }
       // Fail before any invoice change if durable write-once R2 is absent.
       // The schema gate remains independently controlled by production rollout.
-      const immutableArchive = process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true';
+      const immutableArchive = isImmutableInvoiceArchiveEnabledForTenant(req.tenantId);
       if (immutableArchive) createIssuedInvoiceR2ArchiveStore();
       const pool = await getMssqlPool();
       const tx = new sql.Transaction(pool);

@@ -139,5 +139,5 @@ test('router writes snapshot evidence before email attempt and never emails pre-
     route.indexOf("router.post('/invoices/:invoiceId/issue'"));
   assert.match(delivery,/prepareImmutableIssuedInvoiceAttachment/);
   assert.ok(delivery.indexOf('prepareImmutableIssuedInvoiceAttachment')<delivery.indexOf('sendInvoiceEmail('));
-  assert.match(delivery,/INVOICE_IMMUTABLE_ARCHIVE_ENABLED/);
+  assert.match(delivery,/isImmutableInvoiceArchiveEnabledForTenant\(req\.tenantId\)/);
 });
