@@ -2044,3 +2044,31 @@ C02 remains provider/ledger evidence-only; C03 remains signed-document/audit
 retention evidence-only after the signed-audit viewer merge
 [PR #327](https://github.com/WasanthaK/khrental/pull/327).
 **C05 final canonical release approval remains open.**
+
+
+## Controlling checkpoint — 2026-10-22: migration eight/nine applied
+
+**Supersedes the October 21 `7 APPLIED / 2 PENDING` and Ready `0000318`
+baseline above.** Production currently serves Ready revision `0000321`
+(commit `e42ad6e0a59e3d5cb26e66ee2a0d2f27fa2f6649`, [deploy #39721498237](https://github.com/WasanthaK/khrental/actions/runs/39721498237)).
+Owner-approved migration apply [#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286)
+reports migrations 8/9 **applied and verified by the dedicated apply
+executor**; prior seven were skipped. Independent read-only **strict 9/9
+verification remains pending**, despite the earlier green preflight
+[#39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611).
+Do not reapply. Do not conflate apply success with strict acceptance.
+
+I03 invoice master settings safeguard is merged and live in
+[PR #348](https://github.com/WasanthaK/khrental/pull/348):
+`VITE_INVOICE_MASTER_SETTINGS_ENABLED` default OFF, with separate future
+approval needed for enabling Settings/Property/Unit invoice master forms.
+I02 R2 acceptance and `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` activation remain
+OPEN/OFF. C01 and C04 are CLOSED; C02 existing SendGrid correlation,
+C03 existing Evia archive retrieval, and C05 final original canonical
+release owner decision remain OPEN. Audit viewer fixes from
+[PR #347](https://github.com/WasanthaK/khrental/pull/347) are in production,
+but the actual historic audit PDF remains unproven.
+
+The authoritative up-to-date register is
+`docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. This entry is evidence-only and
+does not grant fresh production write, archive, mail or signing authority.
