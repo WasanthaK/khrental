@@ -275,7 +275,7 @@ A reviewer must not mark C02/C03 full provider/audit PASS from UI screenshots.
 
 | ID | Scope/decision | Current verified state |
 | --- | --- | --- |
-| I01 | Governed preflight and owner-approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by independent strict 9/9 | **APPLIED 2026-10-22** by [#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286) after read-only executor preflight [#39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611); independent **strict 9/9 NOT YET VERIFIED** |
+| I01 | Governed preflight and owner-approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by independent strict 9/9 | **APPLIED 2026-10-22** by [#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286) after read-only executor preflight [#39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611); independent **strict 9/9 VERIFIED 2026-10-22** in [#39762736411](https://github.com/WasanthaK/khrental/actions/runs/39762736411) |
 | I02 | Verify real private R2 conditional PUT/readback/immutability and controlled branding, PDF download/resend/customer journey after I01 | Invoice Designer code merged in PR #345 and deployed under `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` gate; production archive activation **NOT APPROVED** |
 | I03 | Gate invoice master-data UI independently until approved rollout | **CLOSED:** default-off `VITE_INVOICE_MASTER_SETTINGS_ENABLED` guard across Settings, Property and Unit, merged [PR #348](https://github.com/WasanthaK/khrental/pull/348), production-serving revision `0000321`; activation remains a separate later decision |
 
@@ -342,8 +342,11 @@ This block is the current status as of 2026-10-22:
   `20261019_01_invoice_master_data` and
   `20261020_01_immutable_invoice_pdf_archive` as **Applied and verified**.
   Earlier seven migrations were explicitly skipped as already applied.
-  **Independent read-only `strict` 9/9 verification remains OPEN.** Do not
-  call I01 independently accepted until the separate strict run passes.
+  Independent read-only **strict 9/9 verification PASSED** in [#39762736411](https://github.com/WasanthaK/khrental/actions/runs/39762736411)
+  on production serving revision `0000321`, dedicated execution
+  `khrental-db-migrator-0xj607n`. The workflow retained all nine
+  required `LEDGERED / SCHEMA_OK` results and passed executor identity/grant
+  checks without additional SQL mutation. **I01 CLOSED.**
 - **Invoice Designer I03:** [PR #348](https://github.com/WasanthaK/khrental/pull/348)
   is merged and deployed with the **default-OFF** master settings UI switch,
   `VITE_INVOICE_MASTER_SETTINGS_ENABLED`. I03 is **CLOSED** at source,
@@ -366,9 +369,10 @@ This block is the current status as of 2026-10-22:
   **C05** final original canonical release APPROVE/DO NOT APPROVE decision
   remains **NOT SIGNED OFF**.
 
-**Next sequence:** independently verify **strict 9/9** using the read-only
-migration executor workflow, then resolve C03/C02 with existing records,
-record a dated C05 decision, and complete the separately approved I02 R2
-and customer acceptance before any invoice archive flag activation.
+**Next sequence:** close original C03/C02 with existing archival/provider
+records and obtain the separately dated C05 decision. Advance I02 real R2
+object immutability, readback, tenant access and the controlled customer
+invoice acceptance only under separate approval before archive activation.
+Do not rerun completed migration apply or strict verification for evidence alone.
 No production SQL, R2 objects, financial records, signing or email activity
 were changed by this documentation reconciliation.
