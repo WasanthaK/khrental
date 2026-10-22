@@ -128,3 +128,29 @@ write/read and cleanup in
 This does **not** prove the invoice archive's real conditional PUT or its
 read/duplicate/crash recovery behavior against R2; that remains I02 acceptance.
 No synthetic R2 object is created by this source change.
+
+## I02 — production synthetic R2 conditional-PDF proof (2026-10-22)
+
+**PASS — live R2 conditional-create primitive, not full invoice activation.**
+The owner explicitly approved one disposable synthetic PDF probe. A dedicated,
+one-shot Production GitHub Actions run
+[#39772830467](https://github.com/WasanthaK/khrental/actions/runs/39772830467)
+used the existing R2 driver to write a single PDF under the dedicated
+`invoices/_healthchecks/i02-conditional-invoice-pdf/` namespace.
+
+The run independently verified that `If-None-Match: *` created the object,
+returned the exact PDF bytes and SHA-256 with `application/pdf`, rejected
+an identical retry and a changed-payload overwrite with HTTP **412**, and
+retained unchanged original bytes. Cleanup deleted **only** its unique
+synthetic object and a subsequent GET returned HTTP **404**. The job passed.
+
+This probe did **not** use the canonical
+`tenants/{tenantId}/invoices/{invoiceId}/issued/sha256-{digest}.pdf`
+archive namespace, insert SQL ledger rows, send mail, create/modify a customer
+invoice, or enable either rollout flag. It proves the underlying signed R2
+conditional storage primitive under real credentials; application archive
+publication, SQL write-once evidence, crash recovery, authorized/denied
+cross-tenant retrieval, and exact-byte customer journey **still require
+separate I02 acceptance**. The probe-only branch and workflow must not be
+rerun as implicit authority for additional production objects.
+
