@@ -275,9 +275,9 @@ A reviewer must not mark C02/C03 full provider/audit PASS from UI screenshots.
 
 | ID | Scope/decision | Current verified state |
 | --- | --- | --- |
-| I01 | Approve governed preflight, then separately approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by strict 9/9 | Both SQL migrations **PENDING** on Oct 21 production read-only plan. No apply or flag enablement approved |
+| I01 | Governed preflight and owner-approved apply of `20261019_01_invoice_master_data` and `20261020_01_immutable_invoice_pdf_archive`, followed by independent strict 9/9 | **APPLIED 2026-10-22** by [#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286) after read-only executor preflight [#39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611); independent **strict 9/9 NOT YET VERIFIED** |
 | I02 | Verify real private R2 conditional PUT/readback/immutability and controlled branding, PDF download/resend/customer journey after I01 | Invoice Designer code merged in PR #345 and deployed under `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` gate; production archive activation **NOT APPROVED** |
-| I03 | Before enabling customer use, resolve issuer Settings availability while migration eight is unapplied | Settings mounts Invoice Designer for authorized admins but the issuer-profile SQL column is absent until I01; treat unavailable UI as a bounded extra-scope rollout concern, not a reopened original Phase 4 program |
+| I03 | Gate invoice master-data UI independently until approved rollout | **CLOSED:** default-off `VITE_INVOICE_MASTER_SETTINGS_ENABLED` guard across Settings, Property and Unit, merged [PR #348](https://github.com/WasanthaK/khrental/pull/348), production-serving revision `0000321`; activation remains a separate later decision |
 
 **Rules:** Do not rerun original 7-migration apply, send a new invoice,
 ask signers to sign again, activate the Evia canary, change financial records,
@@ -322,3 +322,53 @@ technical enforcement remains the existing production permissions and
 migration controls, to be verified through ordinary operational review;
 do not mark them newly audited by this docs-only change. **C05 remains
 pending a separate dated business/security release decision.**
+
+
+## Latest controlling delivery status — 2026-10-22 (supersedes older dated baselines)
+
+The earlier October 21 sections are retained as **historical evidence**, not
+instructions to reapply already executed migrations or revert to revision 318.
+This block is the current status as of 2026-10-22:
+
+- **Application:** [deployment #39721498237](https://github.com/WasanthaK/khrental/actions/runs/39721498237)
+  confirms production Ready revision `0000321`, public serving fingerprint
+  `e42ad6e0a59e3d5cb26e66ee2a0d2f27fa2f6649`, and live MSSQL health.
+- **Invoice Designer I01:** the owner explicitly approved production
+  migrations 8 and 9. The separate [executor preflight #39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611)
+  inspected all nine with no SQL writes and verified dedicated migration
+  identity/permissions. The approved
+  [apply #39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286)
+  succeeded on the matching production commit; its executor logs identify
+  `20261019_01_invoice_master_data` and
+  `20261020_01_immutable_invoice_pdf_archive` as **Applied and verified**.
+  Earlier seven migrations were explicitly skipped as already applied.
+  **Independent read-only `strict` 9/9 verification remains OPEN.** Do not
+  call I01 independently accepted until the separate strict run passes.
+- **Invoice Designer I03:** [PR #348](https://github.com/WasanthaK/khrental/pull/348)
+  is merged and deployed with the **default-OFF** master settings UI switch,
+  `VITE_INVOICE_MASTER_SETTINGS_ENABLED`. I03 is **CLOSED** at source,
+  deployment and default-visibility level. Do not implicitly enable it.
+- **Invoice Designer I02:** real private R2 conditional PUT/exact-byte
+  readback, immutable archive authorization, controlled branded-invoice
+  journey and owner acceptance are **OPEN**.
+  `INVOICE_IMMUTABLE_ARCHIVE_ENABLED` remains **OFF**; schema application
+  does not authorize invoice archive activation, customer issuance, or sends.
+- **Original canonical C01/C04:** **CLOSED** by prior owner-approved evidence.
+  **C02** remains original SendGrid delivery event-to-invoice ledger
+  correlation for invoice `26101901`, without a resend.
+  **C03** remains original Evia callback/signed PDF/`audit_trail.pdf`
+  retrieval evidence for agreement `#47FDEA13`, without re-signing.
+  [PR #347](https://github.com/WasanthaK/khrental/pull/347) fixed finalized
+  agreement audit access consistency and introduced audit-specific HTTP
+  diagnostics, deployed in revision `0000320` and included in `0000321`.
+  An earlier owner screenshot still showed a generic retrieval failure;
+  successful historic audit PDF retrieval has **not** been confirmed.
+  **C05** final original canonical release APPROVE/DO NOT APPROVE decision
+  remains **NOT SIGNED OFF**.
+
+**Next sequence:** independently verify **strict 9/9** using the read-only
+migration executor workflow, then resolve C03/C02 with existing records,
+record a dated C05 decision, and complete the separately approved I02 R2
+and customer acceptance before any invoice archive flag activation.
+No production SQL, R2 objects, financial records, signing or email activity
+were changed by this documentation reconciliation.
