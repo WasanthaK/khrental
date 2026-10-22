@@ -2054,9 +2054,10 @@ baseline above.** Production currently serves Ready revision `0000321`
 Owner-approved migration apply [#39751158286](https://github.com/WasanthaK/khrental/actions/runs/39751158286)
 reports migrations 8/9 **applied and verified by the dedicated apply
 executor**; prior seven were skipped. Independent read-only **strict 9/9
-verification remains pending**, despite the earlier green preflight
-[#39748165611](https://github.com/WasanthaK/khrental/actions/runs/39748165611).
-Do not reapply. Do not conflate apply success with strict acceptance.
+verification PASSED** on 2026-10-22 in [#39762736411](https://github.com/WasanthaK/khrental/actions/runs/39762736411)
+under dedicated execution `khrental-db-migrator-0xj607n`: all nine
+`LEDGERED / SCHEMA_OK` proofs retained; executor identity/grant checks pass.
+**I01 CLOSED.** Do not reapply or repeat verification merely for evidence.
 
 I03 invoice master settings safeguard is merged and live in
 [PR #348](https://github.com/WasanthaK/khrental/pull/348):
