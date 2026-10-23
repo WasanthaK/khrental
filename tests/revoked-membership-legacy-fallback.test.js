@@ -13,83 +13,70 @@ const legacyUser = {
   tenant_id: 'tenant-old'
 };
 
-test('any revoked or inactive membership history prevents legacy tenant restoration', () => {
-  const result = selectActiveMembership({
-    requestedTenantId: null,
-    memberships: [],
-    user: legacyUser,
-    allowLegacyTenantFallback: false
-  });
-  assert.equal(result.tenantId, null);
-  assert.equal(result.membership, null);
-  assert.equal(result.resolution, 'none');
-});
-
-test('requesting revoked tenant id explicitly fails closed', () => {
-  assert.throws(
-    () => selectActiveMembership({
-      requestedTenantId: 'tenant-old',
-      memberships: [],
-      user: legacyUser,
-      allowLegacyTenantFallback: false
-    }),
-    (error) => error.status === 403 && error.code === 'TENANT_NOT_RESOLVED'
-  );
-});
-
-test('pre-membership legacy account may retain its matching tenant temporarily', () => {
-  const result = selectActiveMembership({
-    requestedTenantId: 'TENANT-OLD',
-    memberships: [],
-    user: legacyUser,
-    allowLegacyTenantFallback: true
-  });
-  assert.equal(result.resolution, 'legacy-user-tenant');
-  assert.equal(result.membership, null);
-  assert.equal(result.tenantId, 'TENANT-OLD');
-
-  assert.throws(
-    () => selectActiveMembership({
-      requestedTenantId: 'tenant-foreign',
-      memberships: [],
-      user: legacyUser,
-      allowLegacyTenantFallback: true
-    }),
-    (error) => error.status === 403 && error.code === 'TENANT_NOT_RESOLVED'
-  );
-});
-
-test('default resolver denies undocumented legacy fallback unless caller supplies evidence', () => {
-  const result = selectActiveMembership({
+test('historical tenant pointer never grants access without an active membership', () => {
+  const context = selectActiveMembership({
     requestedTenantId: null,
     memberships: [],
     user: legacyUser
   });
-  assert.equal(result.tenantId, null);
-  assert.equal(result.resolution, 'none');
+  assert.equal(context.tenantId, null);
+  assert.equal(context.membership, null);
+  assert.equal(context.resolution, 'none');
 });
 
-test('real currently-active membership remains authoritative for tenant selection', () => {
-  const result = selectActiveMembership({
+test('an explicit request for a tenant on a stale historical pointer fails closed', () => {
+  assert.throws(() => selectActiveMembership({
+    requestedTenantId: 'tenant-old',
+    memberships: [],
+    user: legacyUser
+  }), (error) => error.status === 403 && error.code === 'TENANT_NOT_RESOLVED');
+});
+
+test('legacy fallback cannot be reenabled through stale caller argument', () => {
+  const context = selectActiveMembership({
+    requestedTenantId: null,
+    memberships: [],
+    user: legacyUser,
+    allowLegacyTenantFallback: true
+  });
+  assert.equal(context.resolution, 'none');
+  assert.equal(context.tenantId, null);
+  assert.throws(() => selectActiveMembership({
+    requestedTenantId: 'tenant-old',
+    memberships: [],
+    user: legacyUser,
+    allowLegacyTenantFallback: true
+  }), (error) => error.status === 403);
+});
+
+test('active membership still grants only its own tenant', () => {
+  const context = selectActiveMembership({
     requestedTenantId: 'tenant-live',
     memberships: [{
-      id: 'membership-1', tenant_id: 'tenant-live', role: 'rentee',
-      status: 'active', is_default: true, tenant: { id: 'tenant-live', status: 'active' }
+      id: 'membership-1',
+      tenant_id: 'tenant-live',
+      role: 'rentee',
+      status: 'active',
+      is_default: true,
+      tenant: { id: 'tenant-live', status: 'active' }
     }],
-    user: legacyUser,
-    allowLegacyTenantFallback: false
+    user: legacyUser
   });
-  assert.equal(result.tenantId, 'tenant-live');
-  assert.equal(result.resolution, 'requested');
+  assert.equal(context.tenantId, 'tenant-live');
+  assert.equal(context.membership.role, 'rentee');
+  assert.throws(() => selectActiveMembership({
+    requestedTenantId: 'tenant-old',
+    memberships: [{
+      tenant_id: 'tenant-live', role: 'rentee', status: 'active',
+      tenant: { id: 'tenant-live', status: 'active' }
+    }],
+    user: legacyUser
+  }), (error) => error.status === 403 && error.code === 'TENANT_ACCESS_DENIED');
 });
 
-test('revocation evidence query reads every membership status and is applied by resolver', () => {
-  assert.match(source, /const hasRecordedTenantMembership = async \(appUserId\) =>/);
-  assert.match(source, /SELECT TOP 1 id FROM tenant_memberships WHERE app_user_id = @appUserId/);
-  assert.doesNotMatch(
-    source.split('const hasRecordedTenantMembership = async')[1]?.split('const listAssignedPropertyIdsForUser')[0] || '',
-    /tm\.status = 'active'/
-  );
-  assert.match(source, /&& !\(await hasRecordedTenantMembership\(resolvedUser\.id\)\)/);
-  assert.match(source, /selectActiveMembership\(\{ requestedTenantId, memberships, user, allowLegacyTenantFallback \}\)/);
+test('no legacy-user-tenant resolution or record-history compatibility branch remains', () => {
+  assert.doesNotMatch(source, /legacy-user-tenant/);
+  assert.doesNotMatch(source, /allowLegacyTenantFallback/);
+  assert.doesNotMatch(source, /hasRecordedTenantMembership/);
+  assert.match(source, /selectActiveMembership\(\{ requestedTenantId, memberships, user \}\)/);
 });
