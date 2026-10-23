@@ -121,7 +121,6 @@ test('all generic business and storage endpoints require tenant context', () => 
   for (const route of [
     "post('/query'",
     "post('/rpc/:name'",
-    "post('/auth/invite'",
     "get('/storage/buckets'",
     "post('/storage/buckets'",
     "delete('/storage/buckets/:bucket'",
@@ -131,6 +130,7 @@ test('all generic business and storage endpoints require tenant context', () => 
   ]) {
     assert.ok(platformSource.includes(`router.${route}, requireBusinessTenant`), `Missing tenant scope for ${route}`);
   }
+  assert.match(platformSource, /router\.post\('\/auth\/invite', requireAuthenticated, requireAdmin, requireBusinessTenant,/);
 });
 
 test('public credential and authenticated account-context routes remain independent of tenant membership', () => {
