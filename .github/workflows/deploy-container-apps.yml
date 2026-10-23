@@ -37,7 +37,7 @@ env:
   AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
   AZURE_RESOURCE_GROUP: khrental-prod-rg
   AZURE_CONTAINER_APP_NAME: khrental-app
-  PASSWORD_RESET_BASE_URL: https://khrental-app.proudpebble-f58b5187.southeastasia.azurecontainerapps.io
+  PASSWORD_RESET_BASE_URL: https://app.quixo.homes
 
 jobs:
   verify:
@@ -143,7 +143,7 @@ jobs:
         env:
           SENDGRID_API_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
           EMAIL_FROM: contact@quixo.online
-          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME || secrets.VITE_EMAIL_FROM_NAME || 'KH Rentals' }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME || secrets.VITE_EMAIL_FROM_NAME || 'Quixo.Homes' }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -173,6 +173,7 @@ jobs:
                 EMAIL_FROM_NAME="$EMAIL_FROM_NAME" \
                 VITE_USE_MSSQL_API=true \
                 PASSWORD_RESET_BASE_URL="$PASSWORD_RESET_BASE_URL" \
+                PUBLIC_APP_URL="$PASSWORD_RESET_BASE_URL" \
                 AUTO_MONTHLY_BILLING_ENABLED=true \
                 AUTO_MONTHLY_BILLING_DAY=5 \
                 AUTO_MONTHLY_BILLING_DUE_DAYS=14 \

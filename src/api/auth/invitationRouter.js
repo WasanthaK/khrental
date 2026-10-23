@@ -82,7 +82,7 @@ export const createInvitationRouter = () => {
       }
 
       res.status(409).json({
-        error: 'This email belongs to an existing KH Rentals user. Use the secure invitation link to set up the account.',
+        error: 'This email belongs to an existing Quixo.Homes user. Use the secure invitation link to set up the account.',
         code: 'INVITATION_REQUIRED'
       });
     } catch (error) {

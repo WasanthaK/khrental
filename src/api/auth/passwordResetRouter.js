@@ -12,12 +12,12 @@ const buildResetEmail = ({ resetLink, expiresAt }) => {
   const expiry = expiresAt ? new Date(expiresAt).toLocaleString() : '30 minutes';
 
   return {
-    subject: 'Reset your KH Rentals password',
-    text: `A password reset was requested for your KH Rentals account. Open this link to choose a new password: ${resetLink}\n\nThis link expires at ${expiry} and can be used only once. If you did not request this reset, ignore this email.`,
+    subject: 'Reset your Quixo.Homes password',
+    text: `A password reset was requested for your Quixo.Homes account. Open this link to choose a new password: ${resetLink}\n\nThis link expires at ${expiry} and can be used only once. If you did not request this reset, ignore this email.`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-        <h1 style="color: #4a90e2;">Reset your KH Rentals password</h1>
-        <p>A password reset was requested for your KH Rentals account.</p>
+        <h1 style="color: #4a90e2;">Reset your Quixo.Homes password</h1>
+        <p>A password reset was requested for your Quixo.Homes account.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a clicktracking=off href="${resetLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
             Choose a New Password

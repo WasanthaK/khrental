@@ -1,7 +1,7 @@
 {
-  "name": "KH Rentals",
-  "short_name": "KH Rentals",
-  "description": "Property Management System for KH Rentals",
+  "name": "Quixo.Homes",
+  "short_name": "Quixo.Homes",
+  "description": "Property Management System for Quixo.Homes",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

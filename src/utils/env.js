@@ -71,7 +71,7 @@ export const getAppBaseUrl = () => {
   
   // For development or test environments, always use the production URL to avoid localhost links
   console.log('[getAppBaseUrl] Using fallback production URL');
-  return 'https://khrentals.kubeira.com';
+  return 'https://app.quixo.homes';
 };
 
 // Export environment variables directly

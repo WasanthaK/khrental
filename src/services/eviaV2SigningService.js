@@ -40,7 +40,7 @@ export const buildV2CreateRequestPayload = ({
   AuditDetails: {
     AuthorType: 1,
     AuthorIPAddress: '',
-    Device: 'KH Rentals web application'
+    Device: 'Quixo.Homes web application'
   },
   Connections: []
 });

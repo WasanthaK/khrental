@@ -65,7 +65,7 @@ const RenteePortalLayout = () => {
 
       <div className="flex flex-col h-screen bg-gray-100 md:flex-row">
         <header className="bg-green-900 text-white p-4 flex justify-between items-center md:hidden">
-          <h1 className="text-xl font-bold">KH Rentals Tenant Portal</h1>
+          <h1 className="text-xl font-bold">Quixo.Homes Tenant Portal</h1>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2 rounded-md bg-green-800 hover:bg-green-700"
@@ -105,7 +105,7 @@ const RenteePortalLayout = () => {
 
         <div className="hidden md:block w-64 bg-gradient-to-b from-green-900 to-green-800 text-white shadow-xl h-screen overflow-y-auto flex-shrink-0">
           <div className="p-5 border-b border-green-700">
-            <h1 className="text-2xl font-bold text-white">KH Rentals Tenant Portal</h1>
+            <h1 className="text-2xl font-bold text-white">Quixo.Homes Tenant Portal</h1>
           </div>
           <div className="py-4 px-3">
             {navigationContent}

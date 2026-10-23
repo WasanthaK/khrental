@@ -45,7 +45,7 @@ const Register = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Register for KH Rentals
+            Register for Quixo.Homes
           </h2>
         </div>
         

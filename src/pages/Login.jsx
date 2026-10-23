@@ -106,7 +106,7 @@ const Login = () => {
     <div className="auth-shell flex items-center justify-center">
       <div className="auth-card space-y-8">
         <div>
-          <p className="page-kicker text-center">KH Rentals</p>
+          <p className="page-kicker text-center">Quixo.Homes</p>
           <h1 className="auth-title mt-3">
             Sign in to your workspace
           </h1>

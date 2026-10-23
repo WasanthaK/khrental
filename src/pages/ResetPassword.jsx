@@ -138,7 +138,7 @@ const ResetPassword = () => {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             {isRedeemMode
-              ? 'Enter a new password for your KH Rentals account.'
+              ? 'Enter a new password for your Quixo.Homes account.'
               : "Enter your email and we'll send you a secure password reset link."}
           </p>
         </div>

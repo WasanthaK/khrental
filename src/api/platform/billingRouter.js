@@ -348,15 +348,15 @@ const makeInvoiceEmail = invoice => {
   const billingPeriod = invoice.billingperiod || 'your tenancy';
   return {
     to: invoice.rentee_email,
-    subject: `KH Rentals invoice for ${billingPeriod}`,
+    subject: `Quixo.Homes invoice for ${billingPeriod}`,
     text: [
-      `Your KH Rentals invoice for ${billingPeriod} is ready.`,
+      `Your Quixo.Homes invoice for ${billingPeriod} is ready.`,
       `Amount due: ${total.toFixed(2)}.`,
       invoice.duedate ? `Due date: ${new Date(invoice.duedate).toLocaleDateString('en-GB')}.` : null,
       portalUrl ? `View your invoice: ${portalUrl}` : null,
       payment.text
     ].filter(Boolean).join('\n'),
-    html: `<p>Your KH Rentals invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p>${payment.html}${portalUrl ? `<p><a href="${portalUrl}">View your invoice</a></p>` : ''}`
+    html: `<p>Your Quixo.Homes invoice is ready.</p><p>Amount due: ${total.toFixed(2)}.</p>${payment.html}${portalUrl ? `<p><a href="${portalUrl}">View your invoice</a></p>` : ''}`
   };
 };
 

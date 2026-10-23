@@ -56,11 +56,11 @@ export const inviteRentee = async (email, name, renteeId) => {
     }
     
     // Send a custom email notification with more information
-    const subject = 'Welcome to KH Rentals - Complete Your Registration';
+    const subject = 'Welcome to Quixo.Homes - Complete Your Registration';
     const message = `
 Hello ${name},
 
-You have been registered as a rentee with KH Rentals. To complete your registration and access your rentee portal, please check your email for a password reset link to create your account.
+You have been registered as a rentee with Quixo.Homes. To complete your registration and access your rentee portal, please check your email for a password reset link to create your account.
 
 Once your account is set up, you will be able to:
 - View your rental agreements
@@ -71,7 +71,7 @@ Once your account is set up, you will be able to:
 If you have any questions, please contact your property manager.
 
 Regards,
-KH Rentals Team
+Quixo.Homes Team
     `;
     
     try {
@@ -147,18 +147,18 @@ export const inviteTeamMember = async (email, name, role, teamMemberId) => {
     }
     
     // Send a custom email notification with more information
-    const subject = 'Welcome to KH Rentals Staff Portal';
+    const subject = 'Welcome to Quixo.Homes Staff Portal';
     const message = `
 Hello ${name},
 
-You have been invited to join KH Rentals as a ${role}. To complete your registration and access the staff portal, please check your email for a password reset link to create your account.
+You have been invited to join Quixo.Homes as a ${role}. To complete your registration and access the staff portal, please check your email for a password reset link to create your account.
 
 Once your account is set up, you will be able to access all the features and tools necessary for your role.
 
 If you have any questions, please contact the admin team.
 
 Regards,
-KH Rentals Team
+Quixo.Homes Team
     `;
     
     try {
