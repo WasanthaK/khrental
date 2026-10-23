@@ -2120,3 +2120,13 @@ Its build and nine recovery tests pass locally; CI/deployment and live
 existing-audit retrieval remain pending. No re-signing, email, agreement
 status change or signed-PDF overwrite occurred during the failed attempt.
 C03 remains open until real existing provider audit retrieval/access is proven.
+
+## Quixo.Homes Stripe-only SaaS billing canonical decision — 2026-10-23
+
+**New product/architecture decision; supersedes any implicit earlier SaaS trial or internally managed tier proposal, but does not waive original Phase 4/5 acceptance.** Owner-approved SaaS price is **USD $5 per independently rentable dwelling per month**, **monthly only**, **no free trial**. Quixo.Homes B2B SaaS products, prices, invoices, subscription management and tax/payment configuration are managed in **Stripe**, not an application-side plan/pricing console. Rental seekers remain free; landlord/tenant rent invoices are a separate business/issuer domain.
+
+Authoritative new specification: [QUIXO-HOMES-STRIPE-SAAS-BILLING.md](QUIXO-HOMES-STRIPE-SAAS-BILLING.md). Decision gate **B01 CLOSED**. Stripe Managed Payments merchant-of-record eligibility, supported country tax coverage, dwelling counting/proration and organization self-service signup remain **B02–B04 OPEN**. Test-mode catalog/integration and pilot acceptance are **B05–B07 NOT STARTED/BLOCKED**, respectively. Current Stripe connector exposes Quixo, Inc. in test mode, but this document creates no Stripe objects and does not demonstrate Managed Payments eligibility. Do not create live prices or charges from this plan alone.
+
+**Critical signup correction:** existing public sign-up defaults new renter registration into the fixed `kh-rentals` tenant; that behavior is incompatible with public rental seekers and cross-region SaaS organization creation. Redesign global identity, seeker account, new organization membership and verified tenancy invitations before opening regional public signup. Stripe-billed dwelling quantities must be reconciled from server-verified inventory, not customer-edited freely in Stripe's portal.
+
+**Existing release fences remain intact:** C02 existing SendGrid event correlation, C03 automatic Evia signing audit acceptance, C05 final original release approval and I02 controlled immutable invoice archive remain independently open. No Stripe live writes, signed-PDF alterations, SQL migration, email send or existing tenant membership mutation is authorized by this planning entry.
