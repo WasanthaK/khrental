@@ -2099,3 +2099,24 @@ with agreement/request association and authorization preserved, without
 re-signing. C02 provider/ledger correlation, C03 complete audit evidence,
 I02 real invoice archive acceptance and C05 release decision remain OPEN.
 General invoice archive activation and invoice-master UI activation remain OFF.
+
+
+## Audit recovery deployment and acceptance checkpoint 2026-10-23
+
+[PR #358](https://github.com/WasanthaK/khrental/pull/358) passed all four PR
+checks and deployed as `e46a42b8911bbd8989f904c5539a6ba2ee27184f` in
+[workflow #39919876580](https://github.com/WasanthaK/khrental/actions/runs/39919876580).
+The verifier proved Ready revision **0000325**, matching public build SHA,
+and live MSSQL connectivity. The recovery action is visible on the existing
+agreement audit error. **Deployment PASS; live audit recovery NOT YET PASS.**
+
+The authenticated browser pilot on agreement **#47FDEA13** stopped before
+provider/storage activity with **Evia Sign authentication is required**.
+The client unnecessarily demanded a separate browser signing session,
+although recovery already supports the configured server-side Evia
+integration key. A narrow follow-up removes that client prerequisite and
+adds a regression proving server-key exchange and one expired-token retry.
+Its build and nine recovery tests pass locally; CI/deployment and live
+existing-audit retrieval remain pending. No re-signing, email, agreement
+status change or signed-PDF overwrite occurred during the failed attempt.
+C03 remains open until real existing provider audit retrieval/access is proven.
