@@ -86,7 +86,7 @@ test('audit viewer UI is admin-scoped, server enforced and reports unavailable b
     assert.match(source, /getEviaAuditTrailUrl/);
     assert.match(source, /View Signing Audit/);
   }
-  assert.match(viewer, /useAuthenticatedAgreementDocument\(documentUrl\)/);
+  assert.match(viewer, /useAuthenticatedAgreementDocument\(documentUrl, reloadKey\)/);
   assert.match(protectedReader, /buildRequestContextHeaders\(\)/);
   assert.match(protectedReader, /describeEviaAuditFetchFailure\(/);
 });

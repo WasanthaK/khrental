@@ -32,6 +32,7 @@ import { createAuthenticatedTenantStorageRouter } from './src/api/storage/authen
 import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
+import { createEviaAuditRecoveryRouter } from './src/api/evia/auditRecoveryRouter.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
 
 dotenv.config();
@@ -226,6 +227,17 @@ async function createServer() {
     auditLabel: 'evia-signed-document',
     auditUnsafeOnly: false
   });
+
+  app.use('/api/evia', createEviaAuditRecoveryRouter({
+    requireApiSession,
+    resolveTenantContext: resolveEviaSignedDocumentContext,
+    loadAgreement: (agreementId, tenantId) => runSingleQuery(
+      `SELECT TOP 1 id, tenant_id, status, signature_status, eviasignreference,
+       signed_document_url, signeddocumenturl, signature_pdf_url
+       FROM dbo.agreements WHERE id = @agreementId AND tenant_id = @tenantId`,
+      { agreementId, tenantId }
+    )
+  }));
 
   app.post('/api/evia/agreements/:agreementId/signed-document', requireApiSession, resolveEviaSignedDocumentContext, async (req, res, next) => {
     try {

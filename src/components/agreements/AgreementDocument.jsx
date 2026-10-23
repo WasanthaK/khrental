@@ -5,10 +5,24 @@ import { FiDownload, FiX } from 'react-icons/fi';
 /**
  * Component for viewing PDF documents in agreements
  */
-const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document' }) => {
+const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document', onRecover }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const documentState = useAuthenticatedAgreementDocument(documentUrl);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryError, setRecoveryError] = useState(null);
+  const documentState = useAuthenticatedAgreementDocument(documentUrl, reloadKey);
+  const recover = async () => {
+    if (recovering || !onRecover) return;
+    setRecovering(true); setRecoveryError(null);
+    try {
+      await onRecover();
+      setLoading(true);
+      setReloadKey(value => value + 1);
+    } catch (error) {
+      setRecoveryError(error?.message || 'Unable to recover the existing audit.');
+    } finally { setRecovering(false); }
+  };
   useEffect(() => { setLoading(true); setError(null); }, [documentUrl]);
   
   // Check if documentUrl is actually HTML content rather than a URL
@@ -82,6 +96,13 @@ const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document' 
                   <h3 className="text-lg font-medium mt-2">Document Error</h3>
                 </div>
                 <p role="alert">{viewerError}</p>
+                {recoveryError && <p role="alert" className="mt-2">{recoveryError}</p>}
+                {onRecover && (
+                  <button type="button" disabled={recovering} onClick={recover}
+                    className="mt-4 px-3 py-2 border rounded disabled:opacity-50">
+                    {recovering ? 'Recovering audit…' : 'Recover existing audit from Evia'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -103,4 +124,4 @@ const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document' 
   );
 };
 
-export default AgreementDocument; 
+export default AgreementDocument;

@@ -5,6 +5,14 @@ import { assertEviaEvidenceDeletionAllowed } from './eviaEvidenceRetention.js';
 import { assertGenericInvoiceArchiveMutationAllowed, assertGenericInvoiceArchiveBucketDeleteAllowed } from './invoiceArchiveStoragePolicy.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'public', 'storage');
+const validateAuditCreate = (bucket, relativePath, body) => {
+  const safePath = normalizeStoragePath(relativePath);
+  if (bucket !== 'documents' || !/^tenants\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/agreements\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/signed\/audit_trail\.pdf$/i.test(safePath)
+      || !Buffer.isBuffer(body) || body.length < 5 || body.length > 50 * 1024 * 1024 || body.subarray(0, 5).toString() !== '%PDF-') {
+    throw Object.assign(new Error('Audit creation requires a scoped historic audit PDF.'), { status: 400, code: 'INVALID_EVIA_AUDIT_WRITE' });
+  }
+  return safePath;
+};
 const DEFAULT_BUCKETS = ['images', 'files', 'documents', 'invoices', 'media', 'maintenance'];
 
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -87,6 +95,14 @@ class LocalStorageDriver {
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, body);
     return { path: safePath, fullPath: `${safeBucket}/${safePath}` };
+  }
+
+  async createEviaAuditIfAbsent(bucket, relativePath, body) {
+    const safePath = validateAuditCreate(bucket, relativePath, body);
+    const targetPath = path.join(STORAGE_ROOT, bucket, safePath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    try { await fs.writeFile(targetPath, body, { flag: 'wx' }); return 'created'; }
+    catch (error) { if (error.code === 'EEXIST') return 'exists'; throw error; }
   }
 
   async deleteObjects(bucket, paths = []) {
@@ -279,6 +295,16 @@ export class R2StorageDriver {
     return safePaths.map((name) => ({ name }));
   }
 
+
+  async createEviaAuditIfAbsent(bucket, relativePath, body) {
+    const safePath = validateAuditCreate(bucket, relativePath, body);
+    try {
+      await this.request('PUT', this.objectKey(bucket, safePath), {
+        body, headers: { 'content-type': 'application/pdf', 'if-none-match': '*' }
+      });
+      return 'created';
+    } catch (error) { if (error.status === 412) return 'exists'; throw error; }
+  }
 
   // Candidate-only, conditional-create archive writer. No production route
   // calls this yet. R2 evaluates If-None-Match:* atomically for PutObject.
