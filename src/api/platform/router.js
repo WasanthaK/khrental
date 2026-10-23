@@ -945,6 +945,10 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
 export const createPlatformRouter = () => {
   const router = express.Router();
   const requireAuthenticated = createTenantContextMiddleware({ requireUser: true });
+  // Global seeker identities may authenticate without belonging to any business.
+  // Generic business queries, RPCs and tenant storage must never inherit access
+  // solely from a global user role when the active tenant is absent.
+  const requireBusinessTenant = createTenantContextMiddleware({ requireUser: true, requireTenant: true });
   const requireAdmin = (req, res, next) => {
     if (String(req.user?.role || '').trim().toLowerCase() !== 'admin') {
       res.status(403).json({ error: 'Administrator access is required.', code: 'ADMIN_ACCESS_REQUIRED' });
@@ -964,7 +968,7 @@ export const createPlatformRouter = () => {
     });
   });
 
-  router.post('/query', requireAuthenticated, async (req, res, next) => {
+  router.post('/query', requireBusinessTenant, async (req, res, next) => {
     const { action = 'select', table, select, filters, order, limit, range, payload, head, count } = req.body || {};
 
     try {
@@ -1059,7 +1063,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/rpc/:name', requireAuthenticated, async (req, res, next) => {
+  router.post('/rpc/:name', requireBusinessTenant, async (req, res, next) => {
     try {
       const authorizedRpc = authorizePlatformRpc({
         name: req.params.name,
@@ -1177,7 +1181,7 @@ export const createPlatformRouter = () => {
     });
   });
 
-  router.post('/auth/invite', requireAuthenticated, requireAdmin, async (req, res, next) => {
+  router.post('/auth/invite', requireAuthenticated, requireAdmin, requireBusinessTenant, async (req, res, next) => {
     try {
       const { email, options = {} } = req.body || {};
       const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
@@ -1192,7 +1196,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.get('/storage/buckets', requireAuthenticated, async (_req, res, next) => {
+  router.get('/storage/buckets', requireBusinessTenant, async (_req, res, next) => {
     try {
       res.json({ data: await getStorageDriver().listBuckets() });
     } catch (error) {
@@ -1200,7 +1204,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/storage/buckets', requireAuthenticated, async (req, res, next) => {
+  router.post('/storage/buckets', requireBusinessTenant, async (req, res, next) => {
     try {
       const bucketName = req.body?.bucketName || req.body?.name;
       res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
@@ -1209,7 +1213,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/buckets/:bucket', requireAuthenticated, async (req, res, next) => {
+  router.delete('/storage/buckets/:bucket', requireBusinessTenant, async (req, res, next) => {
     try {
       await getStorageDriver().deleteBucket(req.params.bucket);
       res.json({ data: true });
@@ -1218,7 +1222,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.get('/storage/list', requireAuthenticated, async (req, res, next) => {
+  router.get('/storage/list', requireBusinessTenant, async (req, res, next) => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
       if (String(req.query.bucket).toLowerCase() === 'invoices' && relativePath.includes('/payment_proofs')) {
@@ -1233,7 +1237,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/storage/upload', requireAuthenticated, express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
+  router.post('/storage/upload', requireBusinessTenant, express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
       assertEviaGenericDocumentUploadAllowed(req.query.bucket, relativePath);
@@ -1250,7 +1254,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/objects', requireAuthenticated, async (req, res, next) => {
+  router.delete('/storage/objects', requireBusinessTenant, async (req, res, next) => {
     try {
       const pathsToDelete = Array.isArray(req.body?.paths) ? req.body.paths : [];
       const scopedPaths = pathsToDelete.map((item) => resolveTenantStoragePath(item, req.tenantId, { requireTenant: true }));

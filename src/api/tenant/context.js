@@ -588,3 +588,7 @@ export const serializeTenantContext = (context) => ({
   resolution: context?.resolution || 'none',
   requestedTenantId: context?.requestedTenantId || null
 });
+
+// Expose the pure resolver for account/membership contract regression tests.
+// It is not a public HTTP endpoint or an alternative authorization entry point.
+export const tenantContextInternals = Object.freeze({ selectActiveMembership });
