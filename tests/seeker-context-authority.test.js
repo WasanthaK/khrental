@@ -13,6 +13,7 @@ const authId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
 const fixture = () => ({
   authSession: { record: {
     authId, appUserId: userId, role: 'authenticated',
+    metadata: { global_email_verified: true },
     email: 'verified@example.invalid'
   } },
   user: {
@@ -73,6 +74,8 @@ test('missing or forged bearer/app identity never performs a membership query', 
     { authSession: { record: { ...current.authSession.record, authId: 'foreign-id' } } },
     { authSession: { record: { ...current.authSession.record, email: 'foreign@example.invalid' } } },
     { authSession: { record: { ...current.authSession.record, role: 'admin' } } },
+    { authSession: { record: { ...current.authSession.record, metadata: {} } } },
+    { authSession: { record: { ...current.authSession.record, metadata: { global_email_verified: 'true' } } } },
     { user: { ...current.user, id: 'foreign-id' } },
     { user: { ...current.user, auth_id: null } },
     { user: { ...current.user, role: 'admin' } },
