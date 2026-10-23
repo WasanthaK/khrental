@@ -77,13 +77,28 @@ jobs:
             --query "properties.template.containers[0].image" -o tsv)
           encoded=$(base64 -w0 scripts/inspect-i02-demo-tenant-readiness.mjs)
           read_command="cd /app && node -e \"eval(Buffer.from('$encoded','base64').toString('utf8'))\""
+          # JSON is valid YAML; supplying the complete template avoids the
+          # CLI's ambiguous parsing of a literal -c startup argument. Only
+          # this execution is overridden; the resting job stays plan-only.
+          template=$(mktemp --suffix=.yaml)
+          trap 'rm -f "$template"' EXIT
+          az containerapp job show --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.template -o json | \
+            jq --arg cmd "$read_command" --arg image "$image" \
+               --arg server "$server" --arg database "$database" \
+              '.containers[0].image=$image |
+               .containers[0].command=["/bin/sh"] |
+               .containers[0].args=["-c",$cmd] |
+               .containers[0].env=[
+                 {"name":"MSSQL_SERVER","value":$server},
+                 {"name":"MSSQL_DATABASE","value":$database},
+                 {"name":"MSSQL_AUTHENTICATION","value":"managed-identity"},
+                 {"name":"INVOICE_IMMUTABLE_ARCHIVE_ENABLED","value":"false"}
+               ]' > "$template"
           execution=$(az containerapp job start \
             --name "$AZURE_MIGRATION_JOB_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
-            --container-name "$name" --image "$image" --cpu "$cpu" --memory "$memory" \
-            --command /bin/sh --args=-c "$read_command" \
-            --env-vars MSSQL_SERVER="$server" MSSQL_DATABASE="$database" \
-              MSSQL_AUTHENTICATION=managed-identity INVOICE_IMMUTABLE_ARCHIVE_ENABLED=false \
-            --query name -o tsv)
+            --yaml "$template" --query name -o tsv)
           test -n "$execution"
           echo "I02 discovery execution: $execution"
           status=Unknown
