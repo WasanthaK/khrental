@@ -2073,3 +2073,29 @@ but the actual historic audit PDF remains unproven.
 The authoritative up-to-date register is
 `docs/PHASE4-CONSOLIDATED-ACCEPTANCE.md`. This entry is evidence-only and
 does not grant fresh production write, archive, mail or signing authority.
+
+
+## Invoice date correction production accepted 2026-10-23
+
+[PR #356](https://github.com/WasanthaK/khrental/pull/356) is deployed as
+`2b5a769c51c47d613affd80d37d3360982ab1690` through successful
+[workflow #39915623317](https://github.com/WasanthaK/khrental/actions/runs/39915623317).
+The workflow proved Ready revision **0000324**, an exact public build SHA,
+and MSSQL connection ready. PR regression and disposable two-tenant SQL
+billing acceptance passed; main verification/build also passed.
+
+Authenticated browser acceptance on existing demo invoice **26102301**
+confirmed the issue date **October 23, 2026** and due date **March 1, 2027**
+now match its previously validated PDF. A fresh downloaded text account
+summary contains those same dates. No invoice was reissued or email resent
+for this verification. **Date display correction CLOSED.**
+
+Evidence reconciliation [PR #357](https://github.com/WasanthaK/khrental/pull/357)
+is merged. C03 now has successful authenticated signed-agreement retrieval
+with both signatures visible; its local signing audit still returns HTTP
+404. The owner confirms that audit trails exist in Evia. The next bounded
+repair is independent retrieval/retention of the existing provider audit,
+with agreement/request association and authorization preserved, without
+re-signing. C02 provider/ledger correlation, C03 complete audit evidence,
+I02 real invoice archive acceptance and C05 release decision remain OPEN.
+General invoice archive activation and invoice-master UI activation remain OFF.
