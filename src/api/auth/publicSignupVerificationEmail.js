@@ -61,7 +61,7 @@ export const createPublicSignupVerificationEmail = ({ token, baseUrl, production
       '<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#222">',
       '<h1>Verify your Quixo.Homes email address</h1>',
       '<p>Verify your email address to create your Quixo.Homes account.</p>',
-      '<p><a href="' + link + '">Verify email</a></p>',
+      '<p><a clicktracking=off href="' + link + '">Verify email</a></p>',
       '<p>This link expires in 30 minutes and can be used only once.</p>',
       '<p>If you did not request this registration, ignore this message.</p>',
       '</div>'
