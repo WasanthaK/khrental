@@ -113,7 +113,7 @@ const DashboardLayout = () => {
     <div className="relative flex h-full flex-col">
       <div className="border-b border-white/10 p-4 sm:p-5">
         <p className="text-[11px] uppercase tracking-[0.28em] text-sky-200">Workspace</p>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">KH Rentals</h1>
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">Quixo.Homes</h1>
       </div>
 
       <div className="border-b border-white/10 bg-white/5 p-3 backdrop-blur-sm sm:p-4">
