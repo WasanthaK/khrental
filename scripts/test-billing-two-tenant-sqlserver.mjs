@@ -1713,6 +1713,129 @@ async function verifyPublicSignupLedgerAgainstDisposableSql(pool) {
   console.log('PASS: disposable B04 S3a signup-ledger DDL, idempotence, uniqueness, expiry, tenantlessness and rollback');
 }
 
+// S3b atomic account redemption uses only disposable SQL; no route is mounted.
+async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
+  const { createPublicSignupChallengeToken } = await import('../src/api/auth/publicSignupChallenge.js');
+  const { redeemPublicSignupChallenge } = await import('../src/api/auth/publicSignupRedemption.js');
+  const { findAuthRecordByEmail, verifyPasswordCredential } = await import('../src/api/auth/index.js');
+
+  const newFixture = async (prefix, { expired = false, revoked = false } = {}) => {
+    const email = prefix + '-' + crypto.randomBytes(8).toString('hex') + '@example.invalid';
+    const { token, tokenHash } = createPublicSignupChallengeToken();
+    const expiresAt = new Date(Date.now() + (expired ? -600000 : 600000));
+    const issuedAt = new Date(Date.now() + (expired ? -24 * 60 * 60 * 1000 : -1000));
+    await pool.request().input('email', email).input('hash', tokenHash)
+      .input('issuedAt', issuedAt).input('expiresAt', expiresAt)
+      .input('revoked', revoked).query(`
+        INSERT INTO dbo.public_signup_challenges
+          (email_normalized, display_name, token_hash, issued_at, expires_at, revoked_at)
+        VALUES (@email, N'Seeker Fixture', @hash, @issuedAt, @expiresAt,
+                CASE WHEN @revoked = 1 THEN SYSUTCDATETIME() ELSE NULL END)
+      `);
+    return { email, token, tokenHash };
+  };
+
+  const password = 'DisposableSecurePassword#2026';
+  const baselineTenants = Number((await first(pool, 'SELECT COUNT_BIG(*) AS n FROM dbo.tenants')).n);
+  const usable = await newFixture('s3b-valid');
+  const registered = await redeemPublicSignupChallenge({ token: usable.token, password });
+  assert.equal(registered.email, usable.email);
+  assert.equal(registered.tenantId, null);
+  assert.equal(registered.role, 'authenticated');
+  assert.equal(registered.userType, 'seeker');
+  const appUser = await first(pool, `
+    SELECT id, tenant_id, auth_id, user_type, role
+    FROM dbo.app_users WHERE email = @email
+  `, { email: usable.email });
+  assert.ok(appUser);
+  assert.equal(appUser.tenant_id, null);
+  assert.equal(appUser.user_type, 'seeker');
+  assert.equal(appUser.role, 'authenticated');
+  assert.equal(guid(appUser.id), guid(registered.appUserId));
+  assert.equal(guid(appUser.auth_id), guid(registered.authId));
+  const auth = await findAuthRecordByEmail(usable.email);
+  assert.ok(auth);
+  assert.equal(guid(auth.appUserId), guid(appUser.id));
+  assert.equal(guid(auth.authId), guid(appUser.auth_id));
+  assert.equal(await verifyPasswordCredential(auth, password), true);
+  const memberships = await query(pool,
+    'SELECT id FROM dbo.tenant_memberships WHERE app_user_id = @appUserId',
+    { appUserId: appUser.id });
+  assert.equal(memberships.length, 0);
+  const challenge = await first(pool,
+    'SELECT consumed_at FROM dbo.public_signup_challenges WHERE token_hash = @hash',
+    { hash: usable.tokenHash });
+  assert.ok(challenge.consumed_at);
+  await assert.rejects(redeemPublicSignupChallenge({ token: usable.token, password }),
+    e => e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE');
+
+  const expired = await newFixture('s3b-expired', { expired: true });
+  const revoked = await newFixture('s3b-revoked', { revoked: true });
+  for (const fixture of [expired, revoked]) {
+    await assert.rejects(redeemPublicSignupChallenge({ token: fixture.token, password }),
+      e => e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE');
+    assert.equal((await query(pool, 'SELECT id FROM dbo.app_users WHERE email=@email',
+      { email: fixture.email })).length, 0);
+  }
+
+  // Preexisting unclaimed app_users rows may belong to an invited renter.
+  // Public signup may not claim one using an email verification link.
+  const preexisting = await newFixture('s3b-existing');
+  await pool.request().input('email', preexisting.email).query(`
+    INSERT INTO dbo.app_users (email, name, role, user_type, tenant_id)
+    VALUES (@email, N'Existing Unclaimed Renter', N'rentee', N'rentee', NULL)
+  `);
+  await assert.rejects(redeemPublicSignupChallenge({ token: preexisting.token, password }),
+    e => e.code === 'SIGNUP_IDENTITY_ALREADY_EXISTS');
+  assert.equal((await query(pool,
+    'SELECT id FROM dbo.auth_users WHERE email = @email',
+    { email: preexisting.email })).length, 0);
+
+  // A failure after app/auth insertion, before challenge consumption, must roll back
+  // both user records and leave the original challenge usable for a safe retry.
+  const rollback = await newFixture('s3b-rollback');
+  await pool.request().batch(`
+    CREATE TRIGGER dbo.s3b_force_challenge_rollback
+    ON dbo.public_signup_challenges AFTER UPDATE AS
+    BEGIN
+      THROW 51401, 'Disposable signup rollback proof', 1;
+    END
+  `);
+  try {
+    await assert.rejects(redeemPublicSignupChallenge({ token: rollback.token, password }),
+      /Disposable signup rollback proof/);
+  } finally {
+    await pool.request().batch('DROP TRIGGER IF EXISTS dbo.s3b_force_challenge_rollback');
+  }
+  assert.equal((await query(pool, 'SELECT id FROM dbo.app_users WHERE email = @email',
+    { email: rollback.email })).length, 0);
+  assert.equal((await query(pool, 'SELECT id FROM dbo.auth_users WHERE email = @email',
+    { email: rollback.email })).length, 0);
+  assert.equal((await first(pool,
+    'SELECT consumed_at FROM dbo.public_signup_challenges WHERE token_hash = @hash',
+    { hash: rollback.tokenHash })).consumed_at, null);
+  const retried = await redeemPublicSignupChallenge({ token: rollback.token, password });
+  assert.equal(retried.email, rollback.email);
+  await assert.rejects(redeemPublicSignupChallenge({ token: rollback.token, password }),
+    e => e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE');
+
+  const concurrent = await newFixture('s3b-concurrent');
+  const outcomes = await Promise.allSettled([
+    redeemPublicSignupChallenge({ token: concurrent.token, password }),
+    redeemPublicSignupChallenge({ token: concurrent.token, password })
+  ]);
+  assert.equal(outcomes.filter(o => o.status === 'fulfilled').length, 1,
+    'only one simultaneous redemption can commit');
+  assert.equal((await query(pool, 'SELECT id FROM dbo.app_users WHERE email = @email',
+    { email: concurrent.email })).length, 1);
+  assert.equal((await query(pool, 'SELECT id FROM dbo.auth_users WHERE email = @email',
+    { email: concurrent.email })).length, 1);
+  assert.equal(Number((await first(pool, 'SELECT COUNT_BIG(*) AS n FROM dbo.tenants')).n),
+    baselineTenants, 'public signup cannot provision any organization');
+
+  console.log('PASS: B04 S3b atomic seeker registration, single global user, no membership, expired/revoked/replay denial, unclaimed renter protection, SQL rollback and concurrency');
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -1775,6 +1898,7 @@ async function main() {
     const { ensureAuthSchema } = await import('../src/api/auth/index.js');
     await ensureAuthSchema();
     await verifyPublicSignupLedgerAgainstDisposableSql(pool);
+    await verifyPublicSignupRedemptionAgainstDisposableSql(pool);
     await pool.request().batch(
       fs.readFileSync(path.resolve('migrations',
         '20260916_01_create_password_reset_tokens.sql'), 'utf8')

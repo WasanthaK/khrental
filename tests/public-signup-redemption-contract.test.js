@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createPublicSignupChallengeToken } from '../src/api/auth/publicSignupChallenge.js';
+import { redeemPublicSignupChallenge } from '../src/api/auth/publicSignupRedemption.js';
+
+const service = readFileSync(
+  new URL('../src/api/auth/publicSignupRedemption.js', import.meta.url), 'utf8'
+);
+const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+const identity = readFileSync(new URL('../src/api/auth/index.js', import.meta.url), 'utf8');
+
+test('global signup cannot redeem invalid tokens, including empty and malformed input', async () => {
+  for (const token of [null, undefined, '', 'short', 'bad/+/token']) {
+    await assert.rejects(
+      redeemPublicSignupChallenge({ token, password: 'A sufficiently long password' }),
+      e => e.status === 400 && e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE'
+    );
+  }
+});
+
+test('global signup requires bounded password length prior to DB transaction', async () => {
+  const { token } = createPublicSignupChallengeToken();
+  for (const password of [null, '', 'short', 'x'.repeat(257)]) {
+    await assert.rejects(
+      redeemPublicSignupChallenge({ token, password }),
+      e => e.status === 400 && e.code === 'SIGNUP_PASSWORD_INVALID'
+    );
+  }
+});
+
+test('redeem transaction enforces tenantless seeker and existing-account denial', () => {
+  assert.match(service, /transaction\.begin\(sql\.ISOLATION_LEVEL\.SERIALIZABLE\)/);
+  assert.match(service, /WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(service, /FROM dbo\.app_users WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(service, /FROM dbo\.auth_users WITH \(UPDLOCK, HOLDLOCK\)/);
+  assert.match(service, /if \(appUserMatches\.recordset\?\.length \|\| authMatches\.recordset\?\.length\)/);
+  assert.match(service, /NULL, @authId, @email, @name,\s*N'authenticated', N'seeker'/);
+  assert.match(service, /INSERT INTO dbo\.auth_users/);
+  assert.match(service, /consumed_at = SYSUTCDATETIME\(\)/);
+  assert.match(service, /await transaction\.commit\(\)/);
+  assert.match(service, /await transaction\.rollback\(\)/);
+  assert.doesNotMatch(service, /INSERT INTO dbo\.tenant_memberships/i);
+  assert.doesNotMatch(service, /INSERT INTO dbo\.tenants/i);
+  assert.doesNotMatch(service, /console\.(?:log|info|error|warn)/);
+});
+
+test('redeem implementation is not exposed by public legacy signup routes', () => {
+  assert.doesNotMatch(server, /createPublicSignupRouter|redeemPublicSignupChallenge/);
+  assert.doesNotMatch(identity, /signup-challenges|public-signup\/redeem/);
+  assert.ok(!server.includes('/api/public-signup'));
+});
