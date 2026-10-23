@@ -132,7 +132,7 @@ const WelcomeGuide = () => {
       case 2:
         return (
           <div className="p-6">
-            <h3 className="text-xl font-bold mb-4">Welcome to KH Rentals!</h3>
+            <h3 className="text-xl font-bold mb-4">Welcome to Quixo.Homes!</h3>
             <p className="mb-4">Your password has been updated successfully.</p>
 
             <h4 className="font-medium mt-6 mb-2">Here's what you can do next:</h4>
@@ -165,7 +165,7 @@ const WelcomeGuide = () => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
         <div className="bg-blue-600 text-white py-3 px-4 rounded-t-lg flex justify-between items-center">
-          <h2 className="text-lg font-bold">Welcome to KH Rentals</h2>
+          <h2 className="text-lg font-bold">Welcome to Quixo.Homes</h2>
           {step > 1 && (
             <button
               onClick={skipOnboarding}
