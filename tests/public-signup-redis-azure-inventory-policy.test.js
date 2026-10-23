@@ -29,3 +29,17 @@ test('inventory does not claim resource absence outside the approved production 
   assert.match(source, /not proof of same-VNet reachability/i);
   assert.match(source, /resource metadata only/);
 });
+
+test('the production inventory reports only sanitized read-only evidence to issue 388', () => {
+  assert.match(source, /issues: write/);
+  assert.match(source, /id: redis_audit/);
+  assert.match(source, /if: always\(\)/);
+  assert.match(source, /INVENTORY_OUTCOME: \$\{\{ steps\.redis_audit\.outcome \}\}/);
+  assert.match(source, /if \[ "\$INVENTORY_OUTCOME" = "success" \]/);
+  assert.match(source, /Result: UNKNOWN/);
+  assert.match(source, /No zero count or availability claim can be made/);
+  assert.match(source, /gh issue comment 388 --repo "\$GITHUB_REPOSITORY" --body-file redis-audit-issue\.md/);
+  assert.doesNotMatch(source, /gh issue (?:close|edit|delete)/);
+  assert.doesNotMatch(source, /gh secret|gh variable|gh auth login/);
+  assert.match(source, /Public signup remains OFF/);
+});
