@@ -483,7 +483,7 @@ export const createBillingAdjustmentsRouter = () => {
       });
 
       const portalUrl = getBillingReminderPortalUrl();
-      const subject = `KH Rentals payment reminder - ${invoice.billingperiod || 'invoice'}`;
+      const subject = `Quixo.Homes payment reminder - ${invoice.billingperiod || 'invoice'}`;
       const tenantName = invoice.rentee_name || 'Tenant';
       const propertyName = invoice.property_name || 'your property';
       const dueDate = invoice.duedate ? new Date(invoice.duedate).toLocaleDateString('en-GB') : 'the invoice due date';
@@ -491,16 +491,16 @@ export const createBillingAdjustmentsRouter = () => {
       const text = [
         `Dear ${tenantName},`,
         '',
-        `This is a payment reminder for your KH Rentals invoice for ${propertyName}.`,
+        `This is a payment reminder for your Quixo.Homes invoice for ${propertyName}.`,
         `Billing period: ${invoice.billingperiod || 'N/A'}`,
         `Outstanding balance: ${amountDue}`,
         `Due date: ${dueDate}`,
         '',
-        portalUrl ? `View your invoices: ${portalUrl}` : 'Please open the KH Rentals tenant portal to review your invoice.',
+        portalUrl ? `View your invoices: ${portalUrl}` : 'Please open the Quixo.Homes tenant portal to review your invoice.',
         '',
         'If you have already paid, please submit your payment proof in the tenant portal.',
         '',
-        'KH Rentals'
+        'Quixo.Homes'
       ].join('\n');
       const safeTenantName = escapeHtml(tenantName);
       const safePropertyName = escapeHtml(propertyName);
@@ -508,7 +508,7 @@ export const createBillingAdjustmentsRouter = () => {
       const safeDueDate = escapeHtml(dueDate);
       const safeAmountDue = escapeHtml(amountDue);
       const safePortalUrl = portalUrl ? escapeHtml(portalUrl) : null;
-      const html = `<p>Dear ${safeTenantName},</p><p>This is a payment reminder for your KH Rentals invoice for <strong>${safePropertyName}</strong>.</p><p><strong>Billing period:</strong> ${safeBillingPeriod}<br><strong>Outstanding balance:</strong> ${safeAmountDue}<br><strong>Due date:</strong> ${safeDueDate}</p>${safePortalUrl ? `<p><a href="${safePortalUrl}">View your invoices</a></p>` : '<p>Please open the KH Rentals tenant portal to review your invoice.</p>'}<p>If you have already paid, please submit your payment proof in the tenant portal.</p><p>KH Rentals</p>`;
+      const html = `<p>Dear ${safeTenantName},</p><p>This is a payment reminder for your Quixo.Homes invoice for <strong>${safePropertyName}</strong>.</p><p><strong>Billing period:</strong> ${safeBillingPeriod}<br><strong>Outstanding balance:</strong> ${safeAmountDue}<br><strong>Due date:</strong> ${safeDueDate}</p>${safePortalUrl ? `<p><a href="${safePortalUrl}">View your invoices</a></p>` : '<p>Please open the Quixo.Homes tenant portal to review your invoice.</p>'}<p>If you have already paid, please submit your payment proof in the tenant portal.</p><p>Quixo.Homes</p>`;
 
       try {
         const delivery = await sendBillingReminderEmail({
