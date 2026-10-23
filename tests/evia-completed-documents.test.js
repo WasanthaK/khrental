@@ -896,3 +896,20 @@ test('fenced lease attempt and publication journal is append-only and excluded f
   assert.match(source, /event_type NOT IN \(@reservedType, @reservedAttempt, @reservedPublication\)/);
   assert.ok(source.indexOf('const appendArchiveLedgerEvent') < source.indexOf('export const acquireEviaArchiveLease'));
 });
+
+
+test('provider nginx 404 HTML is not leaked into completed-document errors', async () => {
+  const fetchImpl = async () => ({
+    ok: false, status: 404,
+    headers: { get: () => 'text/html' },
+    text: async () => '<html><body>nginx/1.23.1</body></html>'
+  });
+  await assert.rejects(
+    retrieveAndStoreEviaCompletedDocuments({
+      requestId: 'request-404', tenantId: 'tenant-A', agreementId: 'agreement-1',
+      accessToken: 'token', fetchImpl
+    }),
+    error => error.status === 404 && error.code === 'EVIA_COMPLETED_DOCUMENT_LIST_FAILED'
+      && !error.message.includes('<html>') && !error.message.includes('nginx')
+  );
+});
