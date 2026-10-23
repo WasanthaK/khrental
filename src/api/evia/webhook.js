@@ -9,6 +9,7 @@ import { withEviaArchiveCapacity } from './archiveCapacity.js';
 import { isEviaFencedArchiveCanaryEligible } from './fencedCanaryPolicy.js';
 import { runDormantEviaFencedArchive, stageEviaDocumentsForFencedLease } from './archiveCoordinator.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
+import { retainEviaAuditForVerifiedRequest } from './auditRecovery.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'recalled']);
@@ -1026,6 +1027,35 @@ export const processEviaWebhook = async (payload = {}, {
           status: Number(error?.status) || null
         });
       }
+    }
+  }
+
+  // Inline completion callbacks may include only the signed PDF. Recover the
+  // audit independently, never using the full-document fallback after a signed
+  // PDF has been retained (that fallback can re-upload the signed PDF).
+  // A temporarily missing provider audit stays visible as pending evidence;
+  // it must not force a re-sign or roll back genuine signature completion.
+  if (finalState.signatureStatus === 'completed' && signedDocumentUrl && !auditTrailStored) {
+    try {
+      const audit = await retainEviaAuditForVerifiedRequest({
+        tenantId: agreement.tenant_id,
+        agreementId: agreement.id,
+        requestId: normalized.requestId,
+        signedDocumentUrl
+      });
+      auditTrailStored = true;
+      console.info('[EviaDiag] completed_audit_retained_independently', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(normalized.requestId),
+        newlyRecovered: audit.recovered
+      });
+    } catch (error) {
+      console.warn('[EviaDiag] completed_audit_retrieval_deferred', {
+        agreementId: shortId(agreement.id),
+        requestId: shortId(normalized.requestId),
+        code: error?.code || 'EVIA_AUDIT_RECOVERY_FAILED',
+        status: Number(error?.status) || null
+      });
     }
   }
 
