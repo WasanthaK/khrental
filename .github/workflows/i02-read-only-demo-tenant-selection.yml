@@ -80,7 +80,7 @@ jobs:
           execution=$(az containerapp job start \
             --name "$AZURE_MIGRATION_JOB_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
             --container-name "$name" --image "$image" --cpu "$cpu" --memory "$memory" \
-            --command /bin/sh --args "-c" "$read_command" \
+            --command /bin/sh --args=-c "$read_command" \
             --env-vars MSSQL_SERVER="$server" MSSQL_DATABASE="$database" \
               MSSQL_AUTHENTICATION=managed-identity INVOICE_IMMUTABLE_ARCHIVE_ENABLED=false \
             --query name -o tsv)
