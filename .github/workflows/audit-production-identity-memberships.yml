@@ -106,7 +106,7 @@ jobs:
             echo 'Read-only aggregate counts only; no accounts or credentials exported.'
             echo
             echo 'Running immutable revision:'
-            echo "`$ready_revision`"
+            printf '`%s`\n' "$ready_revision"
             echo
             echo '```text'
             sed -n '/IDENTITY_MEMBERSHIP_AUDIT_OK/,$p' identity-audit.txt
