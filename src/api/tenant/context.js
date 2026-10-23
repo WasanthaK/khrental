@@ -217,6 +217,23 @@ const listMembershipsForUser = async (appUserId) => {
   }
 };
 
+// Once a membership was recorded, a suspended, revoked, or inactive membership
+// must not regain tenant access through the legacy app_users.tenant_id fallback.
+// Only genuinely pre-membership records may retain that temporary compatibility.
+const hasRecordedTenantMembership = async (appUserId) => {
+  if (!appUserId || !(await tableExists('tenant_memberships'))) {
+    return false;
+  }
+
+  // Do not filter to active memberships: historical/revoked rows are evidence
+  // that authoritative membership state now owns the tenant relationship.
+  const row = await runSingleQuery(
+    `SELECT TOP 1 id FROM tenant_memberships WHERE app_user_id = @appUserId`,
+    { appUserId }
+  );
+  return Boolean(row?.id);
+};
+
 const listAssignedPropertyIdsForUser = async ({ appUserId, tenantId, user }) => {
   if (!appUserId || !tenantId) {
     return [];
@@ -285,7 +302,7 @@ const listAssignedRenteeIdsForProperties = async ({ tenantId, propertyIds }) => 
 const sameTenantId = (left, right) => Boolean(left && right)
   && String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
 
-const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
+const selectActiveMembership = ({ requestedTenantId, memberships, user, allowLegacyTenantFallback = false }) => {
   if (requestedTenantId) {
     const requestedMembership = memberships.find((entry) => sameTenantId(entry.tenant_id, requestedTenantId));
 
@@ -307,7 +324,7 @@ const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
       );
     }
 
-    if (sameTenantId(user?.tenant_id, requestedTenantId)) {
+    if (allowLegacyTenantFallback && sameTenantId(user?.tenant_id, requestedTenantId)) {
       return {
         tenantId: requestedTenantId,
         membership: null,
@@ -344,7 +361,7 @@ const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
       };
     }
 
-    if (memberships.length === 0) {
+    if (memberships.length === 0 && allowLegacyTenantFallback) {
       return {
         tenantId: user.tenant_id,
         membership: null,
@@ -491,8 +508,13 @@ export const resolveTenantContext = async (req) => {
         is_dev_bypass: true
       }
     : null);
+  // Any recorded membership, including one revoked or attached to an inactive
+  // organization, supersedes legacy tenant_id. Missing SQL evidence fails closed.
+  const allowLegacyTenantFallback = Boolean(resolvedUser?.tenant_id)
+    && memberships.length === 0
+    && !(await hasRecordedTenantMembership(resolvedUser.id));
   const selection = resolvedUser
-    ? selectActiveMembership({ requestedTenantId, memberships, user })
+    ? selectActiveMembership({ requestedTenantId, memberships, user, allowLegacyTenantFallback })
     : bypassSelection || {
         tenantId: requestedTenantId,
         membership: null,
