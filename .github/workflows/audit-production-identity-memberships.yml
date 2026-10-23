@@ -1,0 +1,114 @@
+name: Audit production identity memberships (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/audit-identity-memberships-readonly.mjs'
+      - 'scripts/identity-membership-audit-queries.mjs'
+      - '.github/workflows/audit-production-identity-memberships.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-identity-membership-readonly-audit
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  audit:
+    if: github.ref == 'refs/heads/main'
+    name: Inspect historical membership aggregates only
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 25
+    steps:
+      - name: Sign in to Azure with Production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify expected serving app revision and SQL connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          fqdn=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          test -n "$fqdn"
+
+          # A newly merged script must run in its exact immutable serving image.
+          serving=false
+          for attempt in $(seq 1 75); do
+            build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
+            if jq -e --arg sha "$GITHUB_SHA" '.buildSha == $sha' <<<"$build_info" >/dev/null 2>&1; then
+              serving=true
+              break
+            fi
+            echo "Awaiting exact production audit script commit (attempt ${attempt}/75)"
+            sleep 8
+          done
+          if [ "$serving" != true ]; then
+            echo "Audit refused: desired revision is not serving." >&2
+            exit 1
+          fi
+
+          sql_health=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/api/mssql/health")
+          if ! jq -e '.ok == true and .provider == "mssql" and .connection == "ready"' <<<"$sql_health" >/dev/null; then
+            echo "Audit refused: serving SQL connection is not ready." >&2
+            exit 1
+          fi
+          echo "Exact production revision and SQL health verified."
+
+      - name: Execute safe aggregate-only identity audit inside Container App
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready_revision=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.latestReadyRevisionName -o tsv)
+          test -n "$ready_revision"
+
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command 'node scripts/audit-identity-memberships-readonly.mjs'"
+          set +e
+          script -q -e -c "$exec_command" /dev/null | tee identity-audit.txt
+          exec_status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$exec_status" -ne 0 ]; then
+            echo "Identity audit Azure exec failed; no results accepted." >&2
+            exit 1
+          fi
+          if ! grep -Fq 'IDENTITY_MEMBERSHIP_AUDIT_OK' identity-audit.txt; then
+            echo "Identity audit did not report successful completion." >&2
+            exit 1
+          fi
+          if grep -Fq 'IDENTITY_MEMBERSHIP_AUDIT_FAILED' identity-audit.txt; then
+            echo "Identity audit reported a read-only query failure." >&2
+            exit 1
+          fi
+
+          {
+            echo '### Quixo.Homes B04 historical membership audit'
+            echo
+            echo 'Read-only aggregate counts only; no accounts or credentials exported.'
+            echo
+            echo 'Running immutable revision:'
+            echo "`$ready_revision`"
+            echo
+            echo '```text'
+            sed -n '/IDENTITY_MEMBERSHIP_AUDIT_OK/,$p' identity-audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
