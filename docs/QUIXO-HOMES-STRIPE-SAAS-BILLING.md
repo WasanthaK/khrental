@@ -93,3 +93,5 @@ References:
 **Boundary with existing execution plan:** preserve Phase 4 original C02/C03/C05 acceptance and Invoice Designer I02 default-off release separately. Existing tenant rent invoice PDFs and issuer details are not Stripe SaaS invoices. Current domain/marketing deployment work is independent.
 
 **Change control:** This document approves **requirements and architecture planning only**. It does not authorize live Stripe objects, real payments, invoice issuance, SQL writes, workflow feature activation or changes to historical financial records.
+
+**B02/B03 status note (2026-10-23):** See the detailed [merchant-readiness evidence and proposed dwelling/quantity lifecycle](QUIXO-STRIPE-B02-B03-READINESS.md). Stripe account screening is read-only and **not an eligibility approval**. B03 business rules are proposed only; no subscriptions, products, prices or transactions were created. B02 and B03 remain **OPEN** pending owner/Stripe decisions.
