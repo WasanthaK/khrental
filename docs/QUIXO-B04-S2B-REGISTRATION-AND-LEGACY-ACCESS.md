@@ -74,3 +74,12 @@ Read-only, aggregate-only Azure SQL inspection (no names/emails/secrets):
 - **Original Phase 4/5 release gates remain unchanged:** C02, C03, C05 and invoice I02.
 
 The objective is to advance toward global accounts **without granting any existing tenant, historic document, admin role, or Stripe paid entitlement by email registration**.
+
+
+## Post-audit S2b correction and retirement of legacy fallback (2026-10-23)
+
+**Verified production SQL snapshot:** [read-only audit #39970659512](https://github.com/WasanthaK/khrental/actions/runs/39970659512) succeeded on Azure Ready revision `0000333`. It returned 19 legacy-pointer accounts and **zero** accounts without membership history, zero with recorded history but no active membership, zero stale legacy pointers without an active matching membership, zero in each of the three auth-link discrepancy aggregates, and one tenantless global profile. No user identifiers or credentials were exported.
+
+**Decision:** The compatibility `legacy-user-tenant` resolver is no longer justified by observed production data. Remove both the fallback and `hasRecordedTenantMembership` exception; from this change forward only a current active `tenant_memberships` association to an active organization may produce a tenant context for a real user. If the table is absent, empty or a membership is revoked, private business operations fail closed. The historical `app_users.tenant_id` may still guide selection **among existing active memberships** but cannot independently confer access.
+
+**Scope:** Code/security release only. No SQL backfill, migration, current-user editing, email sends, Stripe action, listing publication or public signup activation. B04 S3 global verification-first registration remains the next functional implementation gate.
