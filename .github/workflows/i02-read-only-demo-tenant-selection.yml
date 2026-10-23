@@ -96,33 +96,13 @@ jobs:
                  {"name":"MSSQL_AUTHENTICATION","value":"managed-identity"},
                  {"name":"INVOICE_IMMUTABLE_ARCHIVE_ENABLED","value":"false"}
                ]' > "$template"
-          execution=$(az containerapp job start \
-            --name "$AZURE_MIGRATION_JOB_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
-            --yaml "$template" --query name -o tsv)
-          test -n "$execution"
-          echo "I02 discovery execution: $execution"
-          status=Unknown
-          for attempt in $(seq 1 36); do
-            status=$(az containerapp job execution show --name "$AZURE_MIGRATION_JOB_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" --job-execution-name "$execution" \
-              --query properties.status -o tsv)
-            case "$status" in Succeeded|Failed|Stopped) break;; esac
-            sleep 5
-          done
-          test "$status" = Succeeded || {
-            echo "I02 read-only selection failed, status=$status" >&2; exit 1;
-          }
-          proof=$(mktemp)
-          trap 'rm -f "$proof"' EXIT
-          for attempt in $(seq 1 12); do
-            az containerapp job logs show --name "$AZURE_MIGRATION_JOB_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" --execution "$execution" \
-              --container "$name" --tail 50 --format text > "$proof" 2>/dev/null || true
-            if grep -Fq I02_DEMO_TENANT_READ_ONLY_OK "$proof"; then break; fi
-            sleep 5
-          done
-          grep -Fq I02_DEMO_TENANT_READ_ONLY_OK "$proof" || {
-            echo 'No tenant selection proof returned.' >&2; exit 1;
-          }
-          grep -E 'I02_DEMO_TENANT_READ_ONLY_OK|tenant_id.*properties' "$proof" || true
-          echo "Read-only tenant selection completed via dedicated job $execution."
+          # Inspect only the already-failed execution. Do not start a new job.
+          execution=khrental-db-migrator-i0gtif7
+          name="$name"
+          log=$(mktemp)
+          trap 'rm -f "$log"' EXIT
+          az containerapp job logs show --name "$AZURE_MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" --execution "$execution" \
+            --container "$name" --tail 100 --format text > "$log"
+          grep -Ei 'failed|error|exception|syntax|missing|I02_DEMO|sqlserver|MODULE_NOT_FOUND|Cannot find|unexpected' "$log" | cut -c 1-400 | tail -30
+          echo "I02_PREVIOUS_FAILURE_LOG_INSPECTED"
