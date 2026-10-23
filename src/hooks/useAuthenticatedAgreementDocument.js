@@ -5,7 +5,7 @@ import { describeEviaAuditFetchFailure } from '../utils/eviaAuditFailure';
 // Authenticated object bytes, rather than embedding the protected storage URL
 // in an iframe that cannot attach the selected-tenant bearer headers.
 // Object URLs exist only in this tab and are revoked on closure or tenant swap.
-export const useAuthenticatedAgreementDocument = documentUrl => {
+export const useAuthenticatedAgreementDocument = (documentUrl, reloadKey = 0) => {
   const [state, setState] = useState({ status: 'idle', url: null, error: null });
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +69,6 @@ export const useAuthenticatedAgreementDocument = documentUrl => {
       cancelled = true;
       if (temporaryUrl) URL.revokeObjectURL(temporaryUrl);
     };
-  }, [documentUrl]);
+  }, [documentUrl, reloadKey]);
   return state;
 };

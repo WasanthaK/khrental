@@ -119,6 +119,21 @@ export async function reconcileEviaSignedDocument(agreementId) {
   return data;
 }
 
+export async function recoverEviaAuditTrail(agreementId) {
+  if (!agreementId) throw new Error('Agreement ID is required to recover its audit.');
+  const accessToken = await getActiveEviaAccessToken();
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
+      method: 'POST',
+      headers: buildRequestContextHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+      body: JSON.stringify({ accessToken })
+    }
+  );
+  const data = await response.json();
+  if (!response.ok || !data?.auditTrailUrl) throw new Error(data?.error || 'Unable to recover the existing Evia audit.');
+  return data;
+}
+
 export async function getEviaAgreementCallbackUrl(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required for Evia callback setup.');
   if (typeof window === 'undefined' || !window.location?.origin) {
