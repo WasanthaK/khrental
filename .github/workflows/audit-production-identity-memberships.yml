@@ -6,7 +6,6 @@ on:
     paths:
       - 'scripts/audit-identity-memberships-readonly.mjs'
       - 'scripts/identity-membership-audit-queries.mjs'
-      - '.github/workflows/audit-production-identity-memberships.yml'
   workflow_dispatch:
 
 permissions:
