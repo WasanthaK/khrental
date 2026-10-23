@@ -22,6 +22,7 @@ export const resolveVerifiedSeekerContext = async ({
       !sameId(record.authId, user?.auth_id) ||
       !normalize(record.email) || normalize(record.email) !== normalize(user?.email) ||
       normalize(record.role) !== 'authenticated' ||
+      record.metadata?.global_email_verified !== true ||
       normalize(user?.role) !== 'authenticated' ||
       normalize(user?.user_type) !== 'seeker' ||
       user?.tenant_id || user?.tenantId || user?.is_dev_bypass ||
