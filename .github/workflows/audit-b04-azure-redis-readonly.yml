@@ -1,0 +1,86 @@
+name: Audit B04 Azure Redis availability (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-b04-azure-redis-readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-b04-azure-redis-readonly
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  inventory:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Authenticate with existing scoped production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read-only Azure Redis inventory and app environment reference
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Extension installation affects only the ephemeral CI runner,
+          # NOT any Azure resource. All az resource commands below are reads.
+          az extension add --name redisenterprise --upgrade --yes >/dev/null
+
+          az redisenterprise list --resource-group "$AZURE_RESOURCE_GROUP" \
+            --output json > azure-managed-redis-inventory.json
+          az redis list --resource-group "$AZURE_RESOURCE_GROUP" \
+            --output json > azure-classic-redis-inventory.json
+          az containerapp show --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.environmentId' -o tsv > app-environment-id.txt
+
+          managed_count=$(jq 'length' azure-managed-redis-inventory.json)
+          classic_count=$(jq 'length' azure-classic-redis-inventory.json)
+          app_environment=$(cat app-environment-id.txt)
+          test -n "$app_environment"
+
+          {
+            echo '### B04 shared signup limiter: read-only Azure inventory'
+            echo
+            echo "Subscription scope: approved KH Rentals production subscription"
+            echo "Resource group: $AZURE_RESOURCE_GROUP"
+            echo "Container App environment ID: $app_environment"
+            echo
+            echo "Azure Managed Redis resources in resource group: **$managed_count**"
+            echo "Legacy Azure Cache for Redis resources in resource group: **$classic_count**"
+            echo
+            echo '#### Managed Redis (resource metadata only)'
+            echo '~~~json'
+            jq '[.[] | {name: .name, location: .location, sku: (.sku.name // null), state: (.properties.provisioningState // null), publicNetworkAccess: (.properties.publicNetworkAccess // null)}]' \
+              azure-managed-redis-inventory.json
+            echo '~~~'
+            echo
+            echo '#### Classic Redis (resource metadata only)'
+            echo '~~~json'
+            jq '[.[] | {name: .name, location: .location, sku: (.sku.name // null), state: (.provisioningState // null)}]' \
+              azure-classic-redis-inventory.json
+            echo '~~~'
+            echo
+            echo 'No host secrets, credentials, primary keys, database contents or customer records were queried.'
+            echo 'A resource in this list is NOT proof of same-VNet reachability or working atomic EVAL.'
+            echo 'A zero count applies only to this resource group, not the entire subscription.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "B04_REDIS_AZURE_INVENTORY_OK managed=$managed_count classic=$classic_count"
