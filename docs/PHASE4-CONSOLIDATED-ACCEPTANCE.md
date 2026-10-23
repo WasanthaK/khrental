@@ -418,8 +418,11 @@ neither enables general invoice archiving nor backfills historical documents.
   provenance or denied-access acceptance.
 - **C03 audit retrieval:** View Signing Audit for that same agreement
   returned the explicit error **Signing audit PDF not found (HTTP 404).
-  It may not have been retained in storage.** Audit retention/recovery and
-  callback/provenance evidence remain open. No re-signing was initiated.
+  It may not have been retained in storage.** The owner confirms the audit
+  trails are visible in Evia. This is an application retrieval/local-retention
+  gap, not evidence that the provider audit is absent. Recovery must retrieve
+  the existing provider artifact and verify its agreement/request association.
+  Callback/provenance evidence remains open. No re-signing was initiated.
 - **I02:** the supplied invoice PDF is functional document evidence, not
   proof of canonical R2/SQL archive publication, immutable readback or
   tenant-authorized original-PDF retrieval. The invoice account did not
