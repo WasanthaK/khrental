@@ -1,12 +1,11 @@
 // B04 S3c2c: same-origin bearer-bound read-only seeker certification.
 // Do not inherit x-tenant-id, dev-bypass headers or cookies. This endpoint
 // alone cannot grant a membership or enable public registration.
-import { getPlatformClient } from './platformClient.js';
 
 export const fetchVerifiedSeekerBrowserContext = async ({
   expectedAuthId,
   fetchImpl = globalThis.fetch,
-  getSession = () => getPlatformClient().auth.getSession()
+  getSession = null
 } = {}) => {
   const denied = { verified: false, eligible: false };
   if (typeof expectedAuthId !== 'string' || !expectedAuthId.trim() ||
