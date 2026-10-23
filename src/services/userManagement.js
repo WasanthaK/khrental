@@ -132,10 +132,10 @@ const sendWelcomeEmail = async (email, name, userType) => {
   
   return sendDirectEmail({
     to: email,
-    subject: `Welcome to KH Rentals - Your ${userTypeLabel} Account`,
+    subject: `Welcome to Quixo.Homes - Your ${userTypeLabel} Account`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Welcome to KH Rentals</h2>
+        <h2>Welcome to Quixo.Homes</h2>
         <p>Hello ${name},</p>
         <p>Your ${userTypeLabel.toLowerCase()} account has been created. Please set up your password to access the system.</p>
         <p>
@@ -146,7 +146,7 @@ const sendWelcomeEmail = async (email, name, userType) => {
         </p>
         <p>If the button above doesn't work, copy and paste this link into your browser:</p>
         <p>${resetLink}</p>
-        <p>Thank you,<br>KH Rentals Team</p>
+        <p>Thank you,<br>Quixo.Homes Team</p>
       </div>
     `
   });
