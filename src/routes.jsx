@@ -5,6 +5,8 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
 import { getPostLoginPath } from './utils/authRedirect.js';
+import { isPublicSeekerLandingEnabled } from './utils/env.js';
+import { VerifiedSeekerBoundary } from './components/auth/VerifiedSeekerBoundary';
 import {
   LEGACY_TENANT_ROUTE_ALIASES,
   resolveLegacyAdminPath,
@@ -100,6 +102,13 @@ const PublicRoute = ({ children }) => {
       user,
       membership: membership || user.membership || null
     });
+    // Only a server-verified global seeker can reach the seeker landing.
+    // Ignore tenant deep links rather than redirecting a seeker into business UI.
+    if (isPublicSeekerLandingEnabled() && defaultPath === '/unauthorized' &&
+        String(user.role || '').toLowerCase() === 'authenticated' &&
+        String(user.userType || user.profileType || '').toLowerCase() === 'seeker') {
+      return <VerifiedSeekerBoundary redirectOnly />;
+    }
     const targetPath = getPostLoginPath(location.state, defaultPath);
 
     return <Navigate to={targetPath} replace />;
@@ -220,6 +229,9 @@ const routes = [
       { path: 'auth/callback', element: <AuthCallback /> },
       { path: 'auth/evia-callback', element: <EviaAuthCallback /> },
       { path: 'unauthorized', element: <Unauthorized /> },
+      // With the flag OFF this resolves to /unauthorized. With the flag ON,
+      // the boundary still requires a fresh server-authenticated SQL proof.
+      { path: 'seeker', element: <VerifiedSeekerBoundary /> },
       { path: 'auth-debug', element: adminRoute(<AuthDebug />) },
       { path: 'digital-signature-test', element: adminRoute(<DigitalSignatureForm />) },
       {

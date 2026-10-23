@@ -75,8 +75,8 @@ test('seeker UI remains standalone with no tenant APIs, billing operations or li
   assert.match(page, /not currently linked to any rental organization/);
   assert.doesNotMatch(page, /fetch\(|requestMssqlApi|platformClient|localStorage|sessionStorage/);
   assert.doesNotMatch(page, /href="\/dashboard|href="\/rentee|\/api\/platform\/query|stripe/i);
-  assert.doesNotMatch(routes, /import SeekerHome/);
-  assert.doesNotMatch(routes, /path: 'seeker'/);
+  assert.match(routes, /VerifiedSeekerBoundary/);
+  assert.match(routes, /path: 'seeker', element: <VerifiedSeekerBoundary \/>/);
   const { transformWithEsbuild } = await import('vite');
   const result = await transformWithEsbuild(
     page, 'src/pages/SeekerHome.jsx', { loader: 'jsx', jsx: 'automatic' }

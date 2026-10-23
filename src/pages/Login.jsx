@@ -3,6 +3,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
 import { getPostLoginPath } from '../utils/authRedirect.js';
+import { isPublicSeekerLandingEnabled } from '../utils/env';
+import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
+import { getPlatformClient } from '../services/platformClient';
 import Button from '../components/ui/Button';
 import FormInput from '../components/ui/FormInput';
 
@@ -55,6 +58,19 @@ const Login = () => {
         return;
       }
       
+      // This server proof alone can route a new, tenantless seeker.
+      // Never honor a stale landlord/renter deep link for that identity.
+      if (isPublicSeekerLandingEnabled() && data?.user?.id) {
+        const proof = await fetchVerifiedSeekerBrowserContext({
+          expectedAuthId: data.user.id,
+          getSession: () => getPlatformClient().auth.getSession()
+        });
+        if (proof.verified && proof.eligible) {
+          navigate('/seeker', { replace: true });
+          return;
+        }
+      }
+
       const returnPath = getPostLoginPath(location.state, null);
       if (returnPath) {
         console.log('Login successful, returning to requested route:', returnPath);

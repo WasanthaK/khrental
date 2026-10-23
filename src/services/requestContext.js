@@ -1,7 +1,7 @@
 const SESSION_STORAGE_KEY = 'khrental.local.session';
 const ACTIVE_TENANT_STORAGE_KEY = 'khrental.activeTenantId';
 const DEV_BYPASS_ROLE_KEY = 'dev_bypass_role';
-const AUTH_FLOW_ISOLATED_PATHS = new Set(['/reset-password', '/accept-invite']);
+const AUTH_FLOW_ISOLATED_PATHS = new Set(['/reset-password', '/accept-invite', '/seeker']);
 const isBrowser = typeof window !== 'undefined';
 const fallbackStorage = new Map();
 
