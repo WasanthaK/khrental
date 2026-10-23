@@ -62,3 +62,6 @@ The current `selectActiveMembership` resolver already allows a user with `tenant
 **B02 and Stripe B05:** Stripe Managed Payments eligibility and operator account onboarding remain open; no live prices, subscriptions, charges or trial grants.
 
 **Change boundaries:** This document approves a bounded security correction only; no money movement, Stripe object creation, SQL writes, tenant membership migration, user email sends, historical PDF modifications, or public signup feature activation.
+
+
+**S2b legacy revocation safety and signup design (2026-10-23):** See [legacy membership fallback and verified-registration architecture](QUIXO-B04-S2B-REGISTRATION-AND-LEGACY-ACCESS.md). The tenant resolver checks historical membership evidence before grandfathering any `app_users.tenant_id` fallback: revoked/inactive membership cannot be revived by stale legacy data. A separate durable pending-email ledger followed by an atomic verified identity transaction is **proposed**, not enabled. Follow-on production read-only aggregate membership audit, schema/migration design and protected-route review are OPEN.
