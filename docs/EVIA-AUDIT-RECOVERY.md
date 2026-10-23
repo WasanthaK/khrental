@@ -5,10 +5,11 @@ retained signed PDF, its signing audit is missing from KH Rentals, and the
 audit exists in Evia. This does not initiate signing or resend invitations.
 
 An active tenant administrator opens View Signing Audit, then chooses
-Recover existing audit from Evia on the document error. The browser uses
-the existing Evia authentication flow. A successful recovery reloads the
+Recover existing audit from Evia on the document error. A successful recovery reloads the
 protected viewer so the audit can be inspected and downloaded.
 
+Recovery uses the deployment's existing server-side Evia integration key;
+it does not require a browser signing session. The key stays on the server.
 The server reads the agreement under the active tenant and uses its stored
 Evia request reference. Caller-supplied provider IDs and storage paths are
 not accepted. Recovery downloads only the request's single audit_trail.pdf,

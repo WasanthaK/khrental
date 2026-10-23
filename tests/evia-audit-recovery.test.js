@@ -55,6 +55,25 @@ test('recovers the missing audit independently and repeat recovery never contact
   assert.equal(f.calls.length, 2); assert.equal(f.counts().writes, 1);
 });
 
+test('server integration connection recovers without browser OAuth and refreshes an expired provider token once', async () => {
+  const f = fixture(); let exchanges = 0, lists = 0;
+  const normalFetch = f.args.fetchImpl;
+  const fetchImpl = async (request, options) => {
+    if (request.endsWith('/oauth/exchange')) {
+      assert.equal(options.headers['X-Api-Key'], 'server-key');
+      return response({ access_token: `integration-token-${++exchanges}` });
+    }
+    if (request.includes('/requests/stored-request/documents')) {
+      assert.equal(options.headers.Authorization, `Bearer integration-token-${exchanges}`);
+      if (++lists === 1) return response({ error: 'expired' }, 401);
+    }
+    return normalFetch(request, options);
+  };
+  const result = await recoverHistoricEviaAudit({ ...f.args, accessToken: '', apiKey: 'server-key', fetchImpl });
+  assert.equal(result.recovered, true); assert.equal(exchanges, 2); assert.equal(lists, 2);
+  assert.equal(f.counts().writes, 1);
+});
+
 test('denies unauthorized users before provider, storage or agreement lookup', async () => {
   for (const changes of [
     { user: null }, { membership: { role: 'rentee', status: 'active', tenant_id: tenantId } },

@@ -121,12 +121,13 @@ export async function reconcileEviaSignedDocument(agreementId) {
 
 export async function recoverEviaAuditTrail(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required to recover its audit.');
-  const accessToken = await getActiveEviaAccessToken();
+  // Recovery uses the existing server-side Evia integration connection.
+  // An unrelated browser signing session must not block archive recovery.
   const response = await fetch(
     `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
       method: 'POST',
       headers: buildRequestContextHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-      body: JSON.stringify({ accessToken })
+      body: JSON.stringify({})
     }
   );
   const data = await response.json();
