@@ -1,0 +1,77 @@
+name: Prepare Quixo.Homes root DNS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-quixo-marketing-dns.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: quixo-homes-marketing-dns
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 10
+    env:
+      AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_MARKETING_APP: quixo-homes-marketing
+      ROOT_DOMAIN: quixo.homes
+      EXPECTED_HOSTNAME: mango-grass-0314c0100.3.azurestaticapps.net
+    steps:
+      - name: Sign in to Azure with scoped production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Confirm dedicated marketing resource and prepare apex ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          hostname="$(az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query defaultHostname -o tsv)"
+          sku="$(az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query sku.name -o tsv)"
+          if [ "$hostname" != "$EXPECTED_HOSTNAME" ] || [ "$sku" != "Free" ]; then
+            echo "Marketing hosting identity mismatch. No domain operation performed." >&2
+            exit 1
+          fi
+          echo "MARKETING_TARGET=$hostname"
+          stable_ip="$(az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query stableInboundIP -o tsv)"
+          echo "ROOT_A_RECORD_FALLBACK=${stable_ip:-not-advertised} (use ALIAS/ANAME/flattening where possible)"
+
+          # For an apex, Azure Static Web Apps requires a DNS TXT challenge.
+          # --no-wait starts ownership validation without waiting for DNS changes.
+          if ! az staticwebapp hostname show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --hostname "$ROOT_DOMAIN" -o none 2>/dev/null; then
+            az staticwebapp hostname set -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" \
+              --hostname "$ROOT_DOMAIN" --validation-method dns-txt-token --no-wait \
+              --only-show-errors -o none
+          fi
+
+          token=""
+          for attempt in $(seq 1 12); do
+            token="$(az staticwebapp hostname show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" \
+              --hostname "$ROOT_DOMAIN" --query validationToken -o tsv 2>/dev/null || true)"
+            if [ -n "$token" ] && [ "$token" != "None" ]; then break; fi
+            sleep 5
+          done
+          if [ -z "$token" ] || [ "$token" = "None" ]; then
+            echo "TXT token not yet returned by Azure; use Static Web App Custom domains to generate ownership code." >&2
+            exit 1
+          fi
+          echo "ROOT_TXT_HOST=@"
+          echo "ROOT_TXT_VALUE=$token"
+          echo "ROOT_ALIAS_HOST=@"
+          echo "ROOT_ALIAS_TARGET=$hostname"
+          echo "WWW_CNAME_HOST=www"
+          echo "WWW_CNAME_TARGET=$hostname"
+          echo "TXT verification is pending DNS publication; do not claim root domain live."
