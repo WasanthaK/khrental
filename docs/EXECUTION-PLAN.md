@@ -2145,3 +2145,9 @@ Owner confirmed the eight previously summarized proposed rules: **1 standalone r
 ### B04 public account and owner signup architecture — 2026-10-23
 
 A bounded, **design-only** [B04 signup architecture](QUIXO-HOMES-B04-SIGNUP-ARCHITECTURE.md) records the distinct public rental seeker, subscription-owning organization and verified existing-tenant journeys. Current `/auth/sign-up` still creates a `rentee` linked to legacy `kh-rentals`, while current SQL `app_users.tenant_id` is nullable and many tenant routes still use legacy fallback. **No public marketplace registration is accepted as ready.** B04 design is documented; S1 caller/security audit, approved schema and explicit no-membership authorization proof come first. No code, migrations, customer signup, features or production changes were executed as part of the design review.
+
+### B04 S1 public signup caller audit and fail-closed claim defense — 2026-10-23
+
+The first bounded B04 work package documents [the server/browser signup and invitation caller map](QUIXO-B04-S1-SIGNUP-CALLER-AUDIT.md). The secure invitation router runs before the legacy platform signup handler, but its **preflight alone was not enough**: the shared `ensureAuthRecord()` helper still allowed an existing unclaimed app-user identity to be attached to a new credential by email. This slice adds default-deny claim checking inside the helper and tests, keeping the existing admin invite compatibility path separate and documenting it for later removal.
+
+**B04 remains OPEN.** The current public registration still auto-creates a `rentee` in legacy `kh-rentals`, so it is **not regional seeker signup**. Full transactional identity creation, email ownership proof, zero-membership authorization and organization self-provisioning remain independent follow-ons. Do not enable public marketplace signup, create live Stripe objects, or treat this security patch as B02/B04 rollout acceptance.
