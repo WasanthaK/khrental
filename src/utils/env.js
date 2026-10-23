@@ -40,6 +40,9 @@ export const isMssqlApiEnabled = () => getEnvVar('VITE_USE_MSSQL_API') === 'true
 // UI preparation only. API enforcement and migration gates remain authoritative.
 export const isPublicSignupUiEnabled = () => getEnvVar('VITE_PUBLIC_SIGNUP_UI_ENABLED') === 'true';
 
+// Separate, default-OFF seeker landing pilot; never grants API permissions.
+export const isPublicSeekerLandingEnabled = () => getEnvVar('VITE_PUBLIC_SEEKER_LANDING_ENABLED') === 'true';
+
 export const isDevBypassEnabled = () => {
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
     return true;
