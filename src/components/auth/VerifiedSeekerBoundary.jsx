@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
 import { fetchVerifiedSeekerBrowserContext } from '../../services/seekerContextClient';
+import { getPlatformClient } from '../../services/platformClient';
 import SeekerHome from '../../pages/SeekerHome';
 
 const enabled = isPublicSeekerLandingEnabled();
@@ -34,7 +35,10 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   useEffect(() => {
     if (!enabled || loading || !isAuthenticated || !candidate) return;
     let active = true;
-    fetchVerifiedSeekerBrowserContext({ expectedAuthId: user.id })
+    fetchVerifiedSeekerBrowserContext({
+      expectedAuthId: user.id,
+      getSession: () => getPlatformClient().auth.getSession()
+    })
       .then(result => {
         if (active) setStatus({
           key, eligible: result.verified === true && result.eligible === true
