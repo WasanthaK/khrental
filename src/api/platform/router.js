@@ -1181,7 +1181,7 @@ export const createPlatformRouter = () => {
     });
   });
 
-  router.post('/auth/invite', requireBusinessTenant, requireAdmin, async (req, res, next) => {
+  router.post('/auth/invite', requireAuthenticated, requireAdmin, requireBusinessTenant, async (req, res, next) => {
     try {
       const { email, options = {} } = req.body || {};
       const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
