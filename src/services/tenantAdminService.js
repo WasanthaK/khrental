@@ -64,10 +64,10 @@ export const inviteTenantAdministrator = async (tenantId, appUserId, user = {}) 
 
   const emailResult = await sendDirectEmail({
     to: email,
-    subject: 'Your KH Rentals administrator invitation',
+    subject: 'Your Quixo.Homes administrator invitation',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1f2937">
-        <h1 style="font-size:24px">KH Rentals administrator access</h1>
+        <h1 style="font-size:24px">Quixo.Homes administrator access</h1>
         <p>Hello ${displayName},</p>
         <p>You have been appointed as a tenant administrator. Use the secure link below to set up your account.</p>
         <p style="margin:28px 0"><a href="${inviteLink}" style="background:#2563eb;color:#fff;padding:12px 20px;text-decoration:none;border-radius:8px">Set up administrator account</a></p>
