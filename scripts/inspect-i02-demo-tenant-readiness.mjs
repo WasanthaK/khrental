@@ -5,9 +5,21 @@
   if (process.env.INVOICE_IMMUTABLE_ARCHIVE_ENABLED === 'true') {
     throw Error('Archive feature unexpectedly active; stop discovery.');
   }
-  const { getMssqlPool, closeMssqlPool } = await import('./src/api/mssql/pool.js');
+  const { getMssqlConfig } = await import('./src/api/mssql/config.js');
+  const { default: sql } = await import('mssql');
+  let pool;
   try {
-    const pool = await getMssqlPool();
+    const config = { ...getMssqlConfig(), connectionTimeout: 45000,
+      requestTimeout: 45000, pool: { max: 1, min: 0, idleTimeoutMillis: 8000 } };
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        pool = await new sql.ConnectionPool(config).connect();
+        break;
+      } catch (error) {
+        if (attempt === 2 || !/ETIMEOUT|failed to connect|timeout/i.test(String(error?.message || error))) throw error;
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      }
+    }
     const result = await pool.request().query(`
       SELECT TOP (12)
         LOWER(CONVERT(nvarchar(36), t.id)) AS tenant_id,
@@ -51,7 +63,7 @@
       note: 'Selected only; no invoice issued, email sent, tenant modified or archive flag enabled.'
     }));
   } finally {
-    await closeMssqlPool().catch(() => {});
+    if (pool) await pool.close().catch(() => {});
   }
 })().catch(e => {
   console.error('I02_DEMO_TENANT_READ_ONLY_FAILED: ' + (e?.message || String(e)));
