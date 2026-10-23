@@ -20,7 +20,7 @@ export const retainEviaAuditForVerifiedRequest = async ({
   const prefix = `/storage/documents/tenants/${tenantId}/agreements/${agreementId}/signed/`;
   const validSigned = typeof signedDocumentUrl === 'string'
     && signedDocumentUrl.toLowerCase().startsWith(prefix.toLowerCase())
-    && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\\.pdf$/i.test(signedDocumentUrl.slice(prefix.length))
+    && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.pdf$/i.test(signedDocumentUrl.slice(prefix.length))
     && !signedDocumentUrl.toLowerCase().endsWith('/audit_trail.pdf');
   if (!validSigned) throw failure('Only retained historic agreement audits can be recovered here.', 409, 'EVIA_AUDIT_RECOVERY_SCOPE');
   if (!String(requestId || '').trim()) throw failure('Agreement has no Evia request reference.', 409, 'EVIA_REQUEST_REFERENCE_MISSING');
@@ -75,7 +75,7 @@ export const recoverHistoricEviaAudit = async ({
   const prefix = `/storage/documents/tenants/${tenantId}/agreements/${agreementId}/signed/`;
   const signedDocumentUrl = [agreement.signed_document_url, agreement.signeddocumenturl, agreement.signature_pdf_url]
     .find(value => typeof value === 'string' && value.toLowerCase().startsWith(prefix.toLowerCase())
-      && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\\.pdf$/i.test(value.slice(prefix.length)));
+      && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.pdf$/i.test(value.slice(prefix.length)));
   return retainEviaAuditForVerifiedRequest({
     tenantId, agreementId, requestId: agreement.eviasignreference,
     signedDocumentUrl, accessToken, storageDriver, fetchImpl, apiKey
