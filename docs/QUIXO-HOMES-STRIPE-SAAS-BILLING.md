@@ -98,3 +98,6 @@ References:
 
 
 **B03 owner approval (2026-10-23):** The previous B02/B03 status note above predates approval of the eight summarized commercial dwelling rules. [B03 approval and remaining implementation details](QUIXO-STRIPE-B02-B03-READINESS.md#b03-owner-confirmation--approved-dwelling-charging-rules-2026-10-23) is controlling; **do not mark B03 implemented or close B02**.
+
+
+**B04 architecture review (2026-10-23):** See [secure seeker, owner and existing-renter registration design](QUIXO-HOMES-B04-SIGNUP-ARCHITECTURE.md). Existing public sign-up still auto-attaches new users to `kh-rentals`, and generic email linking requires explicit security remediation before public marketplace onboarding. B04 remains **OPEN / DESIGN-ONLY**.
