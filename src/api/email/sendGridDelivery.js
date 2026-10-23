@@ -77,6 +77,7 @@ export const sendViaSendGrid = async ({
   html,
   text,
   attachments = [],
+  disableTracking = false,
   fetchImpl = globalThis.fetch
 }) => {
   if (!apiKey) {
@@ -108,7 +109,11 @@ export const sendViaSendGrid = async ({
           ...(text ? [{ type: 'text/plain', value: text }] : []),
           ...(html ? [{ type: 'text/html', value: html }] : [])
         ],
-        ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {})
+        ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
+        ...(disableTracking === true ? { tracking_settings: {
+          click_tracking: { enable: false, enable_text: false },
+          open_tracking: { enable: false }
+        } } : {})
       })
     });
   } catch (_error) {
