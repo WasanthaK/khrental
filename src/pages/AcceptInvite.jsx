@@ -242,7 +242,7 @@ const AcceptInvite = () => {
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
           <p className="font-medium">Welcome{invitation?.name ? `, ${invitation.name}` : ''}!</p>
           <p className="text-sm text-gray-600">
-            You have been invited to {invitation?.tenantName || 'KH Rentals'} as {invitation?.intendedRole || invitation?.userType || 'a user'}.
+            You have been invited to {invitation?.tenantName || 'Quixo.Homes'} as {invitation?.intendedRole || invitation?.userType || 'a user'}.
           </p>
           {invitation?.expiresAt && (
             <p className="text-xs text-gray-500 mt-1">
