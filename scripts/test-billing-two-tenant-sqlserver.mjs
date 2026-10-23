@@ -1723,11 +1723,13 @@ async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
     const email = prefix + '-' + crypto.randomBytes(8).toString('hex') + '@example.invalid';
     const { token, tokenHash } = createPublicSignupChallengeToken();
     const expiresAt = new Date(Date.now() + (expired ? -600000 : 600000));
+    const issuedAt = new Date(Date.now() + (expired ? -24 * 60 * 60 * 1000 : -1000));
     await pool.request().input('email', email).input('hash', tokenHash)
-      .input('expiresAt', expiresAt).input('revoked', revoked).query(`
+      .input('issuedAt', issuedAt).input('expiresAt', expiresAt)
+      .input('revoked', revoked).query(`
         INSERT INTO dbo.public_signup_challenges
-          (email_normalized, display_name, token_hash, expires_at, revoked_at)
-        VALUES (@email, N'Seeker Fixture', @hash, @expiresAt,
+          (email_normalized, display_name, token_hash, issued_at, expires_at, revoked_at)
+        VALUES (@email, N'Seeker Fixture', @hash, @issuedAt, @expiresAt,
                 CASE WHEN @revoked = 1 THEN SYSUTCDATETIME() ELSE NULL END)
       `);
     return { email, token, tokenHash };
