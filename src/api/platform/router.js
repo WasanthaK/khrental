@@ -1,3 +1,4 @@
+import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
@@ -966,6 +967,33 @@ export const createPlatformRouter = () => {
         ...serializeTenantContext(req.tenantContext)
       }
     });
+  });
+
+  // Read-only, default-OFF context certification for global seekers. A
+  // tenantless browser profile is insufficient to prove database membership.
+  router.get('/auth/seeker-context', createTenantContextMiddleware({ requireUser: true }), async (req, res) => {
+    if (process.env.PUBLIC_SEEKER_CONTEXT_ENABLED !== 'true') {
+      res.status(404).json({ code: 'SEEKER_CONTEXT_DISABLED' });
+      return;
+    }
+    if (!req.authSession?.record?.appUserId) {
+      res.status(401).json({ code: 'AUTH_SESSION_REQUIRED' });
+      return;
+    }
+    try {
+      const verified = await resolveVerifiedSeekerContext({
+        authSession: req.authSession,
+        user: req.user,
+        tenantContext: req.tenantContext
+      });
+      res.set('Cache-Control', 'no-store, private');
+      res.set('Referrer-Policy', 'no-referrer');
+      res.json({ data: verified });
+    } catch {
+      // Missing schema, database unavailability or unknown verification failure
+      // must never be interpreted as an empty membership set.
+      res.status(503).json({ code: 'SEEKER_CONTEXT_NOT_READY' });
+    }
   });
 
   router.post('/query', requireBusinessTenant, async (req, res, next) => {
