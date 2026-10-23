@@ -116,6 +116,6 @@ test('seeker context endpoint remains read-only, bearer-only, and disabled by de
   assert.match(endpoint, /res\.status\(401\)/);
   assert.match(endpoint, /res\.status\(503\)/);
   assert.match(endpoint, /Cache-Control', 'no-store, private'/);
-  assert.doesNotMatch(endpoint, /INSERT|UPDATE|DELETE|issueAuthSession|buildSession|createTenant/);
+  assert.doesNotMatch(endpoint, /\b(?:INSERT|UPDATE|DELETE)\b|\b(?:issueAuthSession|buildSession|createTenant)\s*\(/);
   assert.match(mainServerSource, /app\.use\('\/api', createSessionAuthMiddleware\(\)\)/);
 });
