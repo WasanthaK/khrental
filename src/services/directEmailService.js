@@ -479,36 +479,36 @@ export const sendMagicLink = async (emailOrOptions, options = {}) => {
     
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Sign in to KH Rentals</h2>
+        <h2>Sign in to Quixo.Homes</h2>
         <p>Hello,</p>
-        <p>Click the button below to sign in to your KH Rentals account. This link will expire in 24 hours.</p>
+        <p>Click the button below to sign in to your Quixo.Homes account. This link will expire in 24 hours.</p>
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${magicLinkUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">Sign In to KH Rentals</a>
+          <a href="${magicLinkUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">Sign In to Quixo.Homes</a>
         </div>
         <p>If you didn't request this email, you can safely ignore it.</p>
-        <p>Best regards,<br>KH Rentals Team</p>
+        <p>Best regards,<br>Quixo.Homes Team</p>
       </div>
     `;
     
     const plainTextContent = `
-Sign in to KH Rentals
+Sign in to Quixo.Homes
 
 Hello,
 
-Click the link below to sign in to your KH Rentals account. This link will expire in 24 hours.
+Click the link below to sign in to your Quixo.Homes account. This link will expire in 24 hours.
 
 ${magicLinkUrl}
 
 If you didn't request this email, you can safely ignore it.
 
 Best regards,
-KH Rentals Team
+Quixo.Homes Team
     `;
     
     // Send the fallback email via SendGrid
     return sendDirectEmail({
       to: email,
-      subject: 'Sign in to KH Rentals',
+      subject: 'Sign in to Quixo.Homes',
       html: htmlContent,
       text: plainTextContent
     });
