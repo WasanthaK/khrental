@@ -37,6 +37,9 @@ export const getApiBaseUrl = () => {
 
 export const isMssqlApiEnabled = () => getEnvVar('VITE_USE_MSSQL_API') === 'true';
 
+// UI preparation only. API enforcement and migration gates remain authoritative.
+export const isPublicSignupUiEnabled = () => getEnvVar('VITE_PUBLIC_SIGNUP_UI_ENABLED') === 'true';
+
 export const isDevBypassEnabled = () => {
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
     return true;
