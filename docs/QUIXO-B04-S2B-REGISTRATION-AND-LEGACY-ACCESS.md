@@ -68,7 +68,7 @@ Read-only, aggregate-only Azure SQL inspection (no names/emails/secrets):
 
 - **S2a CLOSED:** generic platform tenantless API guards, 659/659 CI and Azure Ready 0000331.
 - **S2b security patch:** revoked/inactive membership cannot reactivate a stale legacy tenant pointer; unit tests and CI + Azure Ready verification required before marking delivered.
-- **S2b design:** durable pending verification ledger and post-verification atomic transaction approved as proposed engineering architecture, **implementation not started**.
+- **S2b design:** durable pending verification ledger and post-verification atomic transaction selected as the **recommended engineering design**, **implementation not started / acceptance pending**.
 - **S3/S4 OPEN:** new global email verification and seeker-only UX; owner self-provisioning and Stripe onboarding downstream.
 - **B02 OPEN:** Managed Payments account eligibility and country tax coverage; no Stripe Product/Price/Checkout created.
 - **Original Phase 4/5 release gates remain unchanged:** C02, C03, C05 and invoice I02.
