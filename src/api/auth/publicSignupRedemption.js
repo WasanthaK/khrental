@@ -53,12 +53,12 @@ export const redeemPublicSignupChallenge = async ({ token, password } = {}) => {
 
     const selected = await request(transaction, { tokenHash }).query(`
       SELECT TOP 1 id, email_normalized, display_name, expires_at,
-        consumed_at, revoked_at, verify_attempts
+        sent_at, consumed_at, revoked_at, verify_attempts
       FROM dbo.public_signup_challenges WITH (UPDLOCK, HOLDLOCK)
       WHERE token_hash = @tokenHash
     `);
     const challenge = selected.recordset?.[0];
-    if (!challenge || challenge.consumed_at || challenge.revoked_at ||
+    if (!challenge || !challenge.sent_at || challenge.consumed_at || challenge.revoked_at ||
         !challenge.expires_at || new Date(challenge.expires_at).getTime() <= Date.now() ||
         Number(challenge.verify_attempts) >= 10) {
       throw unavailable();
