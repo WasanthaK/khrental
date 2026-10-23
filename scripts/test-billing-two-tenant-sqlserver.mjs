@@ -1801,8 +1801,8 @@ async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
       .input('issuedAt', issuedAt).input('expiresAt', expiresAt)
       .input('revoked', revoked).query(`
         INSERT INTO dbo.public_signup_challenges
-          (email_normalized, display_name, token_hash, issued_at, expires_at, revoked_at)
-        VALUES (@email, N'Seeker Fixture', @hash, @issuedAt, @expiresAt,
+          (email_normalized, display_name, token_hash, issued_at, sent_at, expires_at, revoked_at)
+        VALUES (@email, N'Seeker Fixture', @hash, @issuedAt, DATEADD(second, 1, @issuedAt), @expiresAt,
                 CASE WHEN @revoked = 1 THEN SYSUTCDATETIME() ELSE NULL END)
       `);
     return { email, token, tokenHash };
@@ -1841,6 +1841,16 @@ async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
   assert.ok(challenge.consumed_at);
   await assert.rejects(redeemPublicSignupChallenge({ token: usable.token, password }),
     e => e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE');
+
+  const unsent = await newFixture('s3b-unsent');
+  await pool.request().input('hash', unsent.tokenHash).query(`
+    UPDATE dbo.public_signup_challenges SET sent_at = NULL WHERE token_hash = @hash
+  `);
+  await assert.rejects(redeemPublicSignupChallenge({ token: unsent.token, password }),
+    e => e.code === 'SIGNUP_VERIFICATION_UNAVAILABLE',
+    'unknown or failed provider delivery must not allow account redemption');
+  assert.equal((await query(pool, 'SELECT id FROM dbo.app_users WHERE email = @email',
+    { email: unsent.email })).length, 0);
 
   const expired = await newFixture('s3b-expired', { expired: true });
   const revoked = await newFixture('s3b-revoked', { revoked: true });
