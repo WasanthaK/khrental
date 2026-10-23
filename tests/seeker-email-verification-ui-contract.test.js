@@ -80,3 +80,11 @@ test('S3c forms post only to same-origin API; no browser session or tenant claim
   assert.doesNotMatch(page, /saveStoredSession|localStorage|sessionStorage|Authorization|x-tenant-id/);
   assert.doesNotMatch(page, /console\.(log|info|warn|error)/);
 });
+
+test('unmounted seeker page still compiles as JSX before it is ever activated', async () => {
+  const { transformWithEsbuild } = await import('vite');
+  const transformed = await transformWithEsbuild(
+    page, 'src/pages/VerifySeekerEmail.jsx', { loader: 'jsx', jsx: 'automatic' }
+  );
+  assert.match(transformed.code, /VerifySeekerEmail/);
+});
