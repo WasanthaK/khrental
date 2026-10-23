@@ -1638,6 +1638,81 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   };
 }
 
+// The new B04 S3a ledger is only exercised inside this disposable SQL Server.
+// A source-only schema assertion is not sufficient proof of SQL 2022 constraints.
+async function verifyPublicSignupLedgerAgainstDisposableSql(pool) {
+  const migration = fs.readFileSync(
+    path.resolve('migrations', '20261023_01_create_public_signup_challenges.sql'), 'utf8'
+  );
+  await pool.request().batch(migration);
+  await pool.request().batch(migration); // idempotent replay must not alter the schema
+
+  const columns = await query(pool, `
+    SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.public_signup_challenges')
+  `);
+  const names = new Set(columns.map(row => row.name));
+  for (const column of ['id', 'email_normalized', 'display_name', 'token_hash',
+    'issued_at', 'sent_at', 'expires_at', 'consumed_at', 'revoked_at',
+    'send_count', 'verify_attempts']) {
+    assert.ok(names.has(column), 'missing challenge ledger field: ' + column);
+  }
+  for (const forbidden of ['tenant_id', 'app_user_id', 'auth_id', 'password', 'credential_hash']) {
+    assert.equal(names.has(forbidden), false, 'challenge must not grant identity or membership');
+  }
+
+  const email = 's3a-disposable-' + crypto.randomBytes(7).toString('hex') + '@example.invalid';
+  const hash = crypto.randomBytes(32).toString('hex');
+  const insert = `
+    INSERT INTO dbo.public_signup_challenges
+      (email_normalized, display_name, token_hash, expires_at)
+    VALUES (@email, N'Disposable Seeker', @hash, DATEADD(minute, 10, SYSUTCDATETIME()))
+  `;
+  await query(pool, insert, { email, hash });
+  const record = await first(pool, `
+    SELECT email_normalized, token_hash, expires_at, consumed_at, revoked_at,
+           send_count, verify_attempts
+    FROM dbo.public_signup_challenges WHERE email_normalized = @email
+  `, { email });
+  assert.equal(record.email_normalized, email);
+  assert.equal(record.token_hash, hash);
+  assert.equal(record.consumed_at, null);
+  assert.equal(record.revoked_at, null);
+  assert.equal(record.send_count, 0);
+  assert.equal(record.verify_attempts, 0);
+
+  await assert.rejects(query(pool, insert, {
+    email: 'another-' + email, hash
+  }), /duplicate|unique/i, 'verification token digest must be globally unique');
+
+  await assert.rejects(query(pool, `
+    INSERT INTO dbo.public_signup_challenges
+      (email_normalized, display_name, token_hash, expires_at)
+    VALUES (@email, N'Expired fixture', @hash, DATEADD(minute, -10, SYSUTCDATETIME()))
+  `, { email: 'expired-' + email, hash: crypto.randomBytes(32).toString('hex') }),
+  /check|conflict/i, 'expiry must be later than issue timestamp');
+
+  const rolledBackEmail = 'rollback-' + email;
+  const rolledBackHash = crypto.randomBytes(32).toString('hex');
+  await pool.request().input('email', rolledBackEmail).input('hash', rolledBackHash)
+    .query(`
+      BEGIN TRANSACTION;
+      INSERT INTO dbo.public_signup_challenges
+        (email_normalized, display_name, token_hash, expires_at)
+      VALUES (@email, N'Rolled back fixture', @hash, DATEADD(minute, 10, SYSUTCDATETIME()));
+      ROLLBACK TRANSACTION;
+    `);
+  const rollbackRows = await query(pool,
+    'SELECT id FROM dbo.public_signup_challenges WHERE email_normalized = @email',
+    { email: rolledBackEmail });
+  assert.equal(rollbackRows.length, 0, 'failed global registration must leave no pending orphan');
+  assert.equal((await query(pool,
+    'SELECT id FROM dbo.public_signup_challenges WHERE email_normalized = @email',
+    { email })).length, 1, 'rollback must not erase earlier valid challenges');
+
+  await query(pool, 'DELETE FROM dbo.public_signup_challenges WHERE email_normalized = @email', { email });
+  console.log('PASS: disposable B04 S3a signup-ledger DDL, idempotence, uniqueness, expiry, tenantlessness and rollback');
+}
+
 async function main() {
   const name = 'khrental-billing-test-' + process.pid + '-' + Date.now();
   const password = 'SqlTest!' + crypto.randomBytes(18).toString('base64url') + '9a';
@@ -1699,6 +1774,7 @@ async function main() {
     // ensureAuthSchema() after its isolated SQL connection is configured.
     const { ensureAuthSchema } = await import('../src/api/auth/index.js');
     await ensureAuthSchema();
+    await verifyPublicSignupLedgerAgainstDisposableSql(pool);
     await pool.request().batch(
       fs.readFileSync(path.resolve('migrations',
         '20260916_01_create_password_reset_tokens.sql'), 'utf8')
