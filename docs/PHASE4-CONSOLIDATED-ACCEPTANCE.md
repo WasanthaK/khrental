@@ -385,3 +385,51 @@ invoice acceptance only under separate approval before archive activation.
 Do not rerun completed migration apply or strict verification for evidence alone.
 No production SQL, R2 objects, financial records, signing or email activity
 were changed by this documentation reconciliation.
+
+
+## Controlled browser acceptance checkpoint 2026-10-23
+
+This checkpoint records the owner's separately authorized one-invoice demo
+pilot and read-only checks of existing agreement artifacts. It supersedes
+older statements that authenticated application access was unavailable. It
+neither enables general invoice archiving nor backfills historical documents.
+
+- **Controlled demo invoice:** exactly one new draft for billing period
+  March 2027 was created, reviewed and issued through the authenticated
+  application. Its invoice reference is **26102301**. The application
+  reported provider acceptance; actual mailbox delivery is not independently
+  established by that status. The owner supplied the corresponding PDF;
+  its reference, renter/property, total, issue date and due date were
+  checked and the one-page PDF rendered legibly. No recipient address,
+  bank details, invoice bytes or screenshots are committed here.
+- **Date display defect:** the PDF retained October 23, 2026 and March 1,
+  2027, while the browser/text summary displayed the previous day. Root
+  cause is browser-local formatting versus the PDF's UTC calendar-date
+  normalization. [PR #356](https://github.com/WasanthaK/khrental/pull/356)
+  passed PR verification and disposable SQL billing acceptance and was
+  merged as `2b5a769c51c47d613affd80d37d3360982ab1690`.
+  Production workflow [#39915623317](https://github.com/WasanthaK/khrental/actions/runs/39915623317)
+  is still in progress at this checkpoint; runtime acceptance remains open.
+- **C03 signed agreement retrieval:** authenticated View Document for
+  existing agreement **#47FDEA13** succeeded. The downloaded one-page
+  PDF contains the matching agreement ID and Evia request reference and
+  visually shows both landlord and renter signatures. This establishes
+  authorized signed-document retrieval, not complete callback/storage
+  provenance or denied-access acceptance.
+- **C03 audit retrieval:** View Signing Audit for that same agreement
+  returned the explicit error **Signing audit PDF not found (HTTP 404).
+  It may not have been retained in storage.** The owner confirms the audit
+  trails are visible in Evia. This is an application retrieval/local-retention
+  gap, not evidence that the provider audit is absent. Recovery must retrieve
+  the existing provider artifact and verify its agreement/request association.
+  Callback/provenance evidence remains open. No re-signing was initiated.
+- **I02:** the supplied invoice PDF is functional document evidence, not
+  proof of canonical R2/SQL archive publication, immutable readback or
+  tenant-authorized original-PDF retrieval. The invoice account did not
+  expose Download original issued PDF during this pilot. General archive
+  activation remains off; I02 is not closed.
+
+C01/C04 and I01/I03 remain closed. C02 retains its original existing-invoice
+provider/ledger correlation scope; the new pilot does not replace it. C03,
+I02 and the final C05 release decision remain open. A further invoice or
+email must not be issued merely to repeat the successful functional checks.
