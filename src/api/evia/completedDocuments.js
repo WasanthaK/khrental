@@ -15,9 +15,11 @@ const createHttpError = (message, status, code) => {
 
 const parseJsonResponse = async (response, errorCode) => {
   const contentType = response.headers?.get?.('content-type') || '';
+  // Reverse proxies sometimes return an HTML nginx 404. Never forward HTML
+  // or provider internals to an authenticated tenant's document viewer.
   const payload = contentType.includes('application/json')
     ? await response.json()
-    : { error: await response.text() };
+    : { error: `Evia returned a non-JSON HTTP ${response.status} response.` };
 
   if (!response.ok) {
     throw createHttpError(

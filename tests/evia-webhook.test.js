@@ -379,3 +379,14 @@ test('only the verified and agreement-bound route can nominate a fenced canary',
   assert.match(processor, /withEviaArchiveCapacity\(/);
   assert.match(processor, /fencedCanaryRunner\(/);
 });
+
+
+test('completion independently attempts a missing audit after retaining the signed PDF', () => {
+  const webhook = readFileSync(new URL('../src/api/evia/webhook.js', import.meta.url), 'utf8');
+  const completion = webhook.slice(webhook.indexOf('const completeTerminal = '));
+  const attempt = completion.indexOf('retainEviaAuditForVerifiedRequest({');
+  const stateUpdate = completion.indexOf('const terminalUpdated = await runQuery(');
+  assert.ok(attempt > 0 && attempt < stateUpdate);
+  assert.match(completion, /completed_audit_retrieval_deferred/);
+  assert.match(completion, /if \(finalState\.signatureStatus === 'completed' && signedDocumentUrl && !auditTrailStored\)/);
+});
