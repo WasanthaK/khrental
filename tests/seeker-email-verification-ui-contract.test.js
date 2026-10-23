@@ -36,7 +36,7 @@ test('invalid and attacker-supplied fragments never produce a usable token', () 
     '#token=short',
     '#token=' + token + '&role=admin',
     '#token=' + token + '#extra',
-    '#token=' + encodeURIComponent(token),
+    '#token=%61' + token.slice(1),
     '#access_token=' + token,
     '#token=' + '<script>',
     '#token=' + token.slice(0, 20)
