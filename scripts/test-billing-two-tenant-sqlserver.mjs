@@ -1713,6 +1713,100 @@ async function verifyPublicSignupLedgerAgainstDisposableSql(pool) {
   console.log('PASS: disposable B04 S3a signup-ledger DDL, idempotence, uniqueness, expiry, tenantlessness and rollback');
 }
 
+// B04 shared rate limiter: real SQL Server 2022 proves cross-replica atomicity
+// in the same disposable Docker database, never production Azure SQL.
+async function verifySharedPublicSignupSqlLimiterAgainstDisposableSql(pool) {
+  const schema = fs.readFileSync(
+    path.resolve('migrations', '20261024_01_create_public_signup_rate_limits.sql'), 'utf8'
+  );
+  await pool.request().batch(schema);
+  await pool.request().batch(schema); // exactly idempotent, no data reset
+  const columns = await query(pool, `
+    SELECT name FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
+  `);
+  const names = new Set(columns.map(row => row.name));
+  for (const field of ['bucket_hash','window_start','request_count','updated_at']) {
+    assert.ok(names.has(field), 'missing SQL signup throttle field ' + field);
+  }
+  for (const forbidden of ['email','ip','tenant_id','auth_id','password']) {
+    assert.equal(names.has(forbidden), false, 'throttle table must store digests only');
+  }
+
+  const { createSqlPublicSignupLimiter } = await import(
+    '../src/api/auth/publicSignupSqlLimiter.js'
+  );
+  const { hashPublicSignupThrottleKey } = await import(
+    '../src/api/auth/publicSignupThrottleKey.js'
+  );
+  const secret = crypto.randomBytes(32).toString('hex');
+  const digest = (scope, id) => hashPublicSignupThrottleKey({
+    secret, scope, identifier: id
+  });
+  const key = digest('challenge-email',
+    's3d-' + crypto.randomBytes(7).toString('hex') + '@example.invalid');
+  const a = createSqlPublicSignupLimiter();
+  const b = createSqlPublicSignupLimiter();
+  const input = { key, scope: 'challenge-email', max: 4, windowSeconds: 3600 };
+  const outcomes = await Promise.all(Array.from({ length: 24 }, (_, i) => (
+    (i % 2 === 0 ? a : b).consume(input)
+  )));
+  assert.equal(outcomes.filter(Boolean).length, 4,
+    'two app replicas must share exactly four admissions');
+  assert.equal(outcomes.filter(value => !value).length, 20);
+  const row = await first(pool, `
+    SELECT bucket_hash, request_count, window_start, updated_at
+    FROM dbo.public_signup_rate_limits WHERE bucket_hash = @key
+  `, { key });
+  assert.ok(row);
+  assert.equal(row.bucket_hash, key);
+  assert.equal(row.request_count, 4);
+  assert.ok(row.updated_at >= row.window_start);
+  assert.equal(await a.consume(input), false,
+    'denials cannot restart the quota window');
+  const denied = await first(pool, `
+    SELECT request_count FROM dbo.public_signup_rate_limits WHERE bucket_hash = @key
+  `, { key });
+  assert.equal(denied.request_count, 4);
+
+  const ipKey = digest('challenge-ip', '192.0.2.8');
+  const redeemKey = digest('redeem-ip', '192.0.2.8');
+  assert.notEqual(ipKey, redeemKey);
+  assert.equal(await a.consume({
+    key: ipKey, scope: 'challenge-ip', max: 12, windowSeconds: 3600
+  }), true);
+  assert.equal(await b.consume({
+    key: redeemKey, scope: 'redeem-ip', max: 12, windowSeconds: 3600
+  }), true);
+
+  // Advance this one synthetic bucket only, proving server-clock refill.
+  await pool.request().input('key', key).query(`
+    UPDATE dbo.public_signup_rate_limits
+    SET window_start = DATEADD(second, -3601, SYSUTCDATETIME())
+    WHERE bucket_hash = @key
+  `);
+  assert.equal(await b.consume(input), true);
+  assert.equal((await first(pool, `
+    SELECT request_count FROM dbo.public_signup_rate_limits WHERE bucket_hash=@key
+  `, { key })).request_count, 1);
+
+  // Malformed digest never reaches the database; no string-PII persistence.
+  await assert.rejects(a.consume({
+    ...input, key: 'sensitive-person@example.invalid'
+  }), error => error.code === 'PUBLIC_SIGNUP_LIMITER_NOT_READY');
+
+  // A failed schema lookup must NEVER silently allow a request.
+  const failed = createSqlPublicSignupLimiter({
+    getPool: async () => { throw new Error('synthetic database outage'); }
+  });
+  await assert.rejects(failed.consume(input),
+    error => error.status === 503
+      && error.code === 'PUBLIC_SIGNUP_LIMITER_NOT_READY'
+      && !error.message.includes('synthetic database outage'));
+
+  console.log('PASS: SQL signup limiter additive DDL, idempotence, 24-way concurrent quota, privacy, independent scopes, TTL and outage deny');
+}
+
 // S3b atomic account redemption uses only disposable SQL; no route is mounted.
 // S3b2 remains unmounted: exercise real challenge issuance and provider-ack
 // bookkeeping only against the disposable, isolated SQL Server.
@@ -1981,6 +2075,7 @@ async function main() {
     const { ensureAuthSchema } = await import('../src/api/auth/index.js');
     await ensureAuthSchema();
     await verifyPublicSignupLedgerAgainstDisposableSql(pool);
+    await verifySharedPublicSignupSqlLimiterAgainstDisposableSql(pool);
     await verifyPublicSignupRedemptionAgainstDisposableSql(pool);
     await verifyPublicSignupChallengeIssuanceAgainstDisposableSql(pool);
     await pool.request().batch(
