@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { recoverHistoricEviaAudit } from '../src/api/evia/auditRecovery.js';
+import { recoverHistoricEviaAudit, retainEviaAuditForVerifiedRequest } from '../src/api/evia/auditRecovery.js';
 import { createEviaAuditRecoveryRouter } from '../src/api/evia/auditRecoveryRouter.js';
 import { R2StorageDriver } from '../src/api/storage/index.js';
 
@@ -161,4 +161,39 @@ test('HTTP recovery route requires session and tenant context and ignores caller
     assert.equal((await result.json()).auditTrailUrl, '/storage/documents/' + path);
     assert.equal(f.calls[0].includes('foreign-request'), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+
+test('newly completed signed PDF can retain its missing audit alone without touching the signed bytes', async () => {
+  const f = fixture();
+  const result = await retainEviaAuditForVerifiedRequest({
+    tenantId, agreementId, requestId: row.eviasignreference,
+    signedDocumentUrl: row.signed_document_url,
+    storageDriver: f.args.storageDriver, fetchImpl: f.args.fetchImpl, accessToken: 'test-token'
+  });
+  assert.equal(result.recovered, true);
+  assert.deepEqual(f.counts(), { writes: 1, reads: 0 });
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(await retainEviaAuditForVerifiedRequest({
+    tenantId, agreementId, requestId: row.eviasignreference,
+    signedDocumentUrl: row.signed_document_url,
+    storageDriver: f.args.storageDriver, fetchImpl: f.args.fetchImpl, accessToken: 'test-token'
+  }), { auditTrailUrl: '/storage/documents/' + path, recovered: false });
+  assert.equal(f.calls.length, 2);
+});
+
+test('independent completion rejects foreign, fenced and audit-object keys before contacting Evia', async () => {
+  const f = fixture();
+  for (const signedDocumentUrl of [
+    row.signed_document_url.replace(agreementId, tenantId),
+    row.signed_document_url.replace('/Signed.pdf', '/staged/attempt/Signed.pdf'),
+    row.signed_document_url.replace('/Signed.pdf', '/audit_trail.pdf')
+  ]) {
+    await assert.rejects(retainEviaAuditForVerifiedRequest({
+      tenantId, agreementId, requestId: row.eviasignreference,
+      signedDocumentUrl, storageDriver: f.args.storageDriver, fetchImpl: f.args.fetchImpl
+    }), { code: 'EVIA_AUDIT_RECOVERY_SCOPE' });
+  }
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.counts().writes, 0);
 });
