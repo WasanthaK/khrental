@@ -84,7 +84,7 @@ References:
 
 1. **B01 — Commercial decision (CLOSED):** USD 5 per dwelling monthly, no trial, Stripe-only plans, free seekers, subscriptions separate from rental payments.
 2. **B02 — Stripe merchant-of-record feasibility (OPEN):** confirm Quixo, Inc. account acceptance for Managed Payments, tax coverage for initial countries, supported subscription quantity changes, fees and disclosures. Stripe Tax/Billing fallback must be explicitly approved if Managed Payments is unavailable.
-3. **B03 — Billable dwelling policy (OPEN):** define unit counting, active/vacant/listed treatment, zero units, mid-cycle proration, operator downgrade, paused/nonpayment and cancellation expectations.
+3. **B03 — Billable dwelling policy (CORE RULES APPROVED; SECONDARY DETAILS/IMPLEMENTATION OPEN):** owner approved dwelling counting, vacant/listed treatment, prorated increases, reductions at renewal, 7-day payment-failure grace and preserving historic documents on cancellation. See the controlling approval in `QUIXO-STRIPE-B02-B03-READINESS.md`; zero units, proration invoice timing and detailed cancellation/write-access behavior need explicit completion.
 4. **B04 — Public/organization signup redesign (OPEN):** secure seeker, renter and owner/admin journeys with verified tenant isolation and no auto-attach of public seekers to `kh-rentals`; handle payment-pending organizations without an implicit trial.
 5. **B05 — Stripe test-mode catalog and integration (NOT STARTED):** after B02/B03 decisions, configure Stripe test Product and Price using Stripe-owned configuration, Checkout, portal settings, webhooks and customer linkage; prove no live keys/charges.
 6. **B06 — Two-organization quantity and failure acceptance (NOT STARTED):** same identity in multiple organizations, per-org subscription isolation, count change, duplicate events, retries, tax-region cases, cancellation and no destructive data loss.
@@ -95,3 +95,6 @@ References:
 **Change control:** This document approves **requirements and architecture planning only**. It does not authorize live Stripe objects, real payments, invoice issuance, SQL writes, workflow feature activation or changes to historical financial records.
 
 **B02/B03 status note (2026-10-23):** See the detailed [merchant-readiness evidence and proposed dwelling/quantity lifecycle](QUIXO-STRIPE-B02-B03-READINESS.md). Stripe account screening is read-only and **not an eligibility approval**. B03 business rules are proposed only; no subscriptions, products, prices or transactions were created. B02 and B03 remain **OPEN** pending owner/Stripe decisions.
+
+
+**B03 owner approval (2026-10-23):** The previous B02/B03 status note above predates approval of the eight summarized commercial dwelling rules. [B03 approval and remaining implementation details](QUIXO-STRIPE-B02-B03-READINESS.md#b03-owner-confirmation--approved-dwelling-charging-rules-2026-10-23) is controlling; **do not mark B03 implemented or close B02**.

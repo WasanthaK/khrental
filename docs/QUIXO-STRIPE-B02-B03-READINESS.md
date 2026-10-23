@@ -108,3 +108,23 @@ Quixo's existing schema supports both `dbo.properties` (with `propertytype`, `st
 **B02 = REVIEWED / ACCOUNT ACTIVATION AND TAX COVERAGE OPEN.** Stripe US account-type screening and public product support are encouraging; test-account collection readiness is false; acceptance is not established.  
 **B03 = ARCHITECTURAL RECOMMENDATIONS DRAFTED / OWNER APPROVAL OPEN.** No changes to billing quantities, Stripe objects, app behavior or existing financial documents.  
 **B04/B05 remain BLOCKED from production execution by verified signup and Stripe merchant decisions.**
+
+
+## B03 owner confirmation — approved dwelling charging rules (2026-10-23)
+
+**Approval:** The owner answered **"okay"** to the direct request to approve the eight summarized dwelling-billing rules in the 2026-10-23 B02/B03 review. This section is the **controlling decision** for exactly those rules. Earlier draft/proposal language in this file remains historical design rationale, not a reason to classify these eight items as unapproved.
+
+| Rule | Owner-approved policy |
+| --- | --- |
+| Unit counting | One standalone residential house counts as **1** dwelling; a parent apartment property containing 12 separately rentable apartment units counts as **12, not 13**. Do not count parent and child together |
+| Vacancy | A vacant **actively managed** dwelling remains billable |
+| Publication | Unpublishing or relisting a dwelling on the public marketplace does **not** alter its SaaS billability |
+| Mid-cycle addition | An additional actively managed dwelling increases the subscription quantity with **proration** |
+| Mid-cycle removal | Record an authorized cessation of management immediately, but **reduce the billed quantity at the next renewal** rather than issuing an immediate current-period credit |
+| Payment failure | Apply a **7-day renewal-payment grace period** before restricting new paid-management operations, with Stripe retries and verified status |
+| Cancellation | Preserve historical records, signed documents, retained invoices and renter access; never delete due to subscription cancellation |
+| Price/period/trial | The previously approved **USD 5 per billable dwelling, monthly only, no trial** contract remains unchanged |
+
+**Implementation detail not yet approved:** How to handle a newly registered organization with zero managed dwellings; whether proration is invoiced immediately or at renewal; exact archival/status definition for ceasing management, billing-cycle cutoffs, post-cancellation paid-write/read-only rights and reactivation, tax behavior, and whether/how nonresidential units are eventually offered. These decisions require contract language and test-mode proof before paid production activation.
+
+The above is **a policy sign-off, not proof of implemented Stripe Billing behavior**. B03's **eight core business rules are approved**; B03 technical delivery and the listed secondary policy details remain OPEN. B02 Stripe Managed Payments/onboarding is still OPEN. No live or test Stripe mutation, tenant/invoice update, or production feature activation is authorized by this document.
