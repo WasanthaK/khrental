@@ -8,6 +8,7 @@ import {
   updateAppUser
 } from '../mssql/repositories.js';
 import { isMssqlConfigured } from '../mssql/config.js';
+import { rejectPublicSignupForExistingAppUser } from '../auth/publicSignupPolicy.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
 import {
   createAuthRecord,
@@ -307,7 +308,7 @@ const resolveSelfRegistrationTenant = async () => {
   return tenant.id;
 };
 
-const ensureAuthRecord = async ({ email, password, role = 'authenticated', metadata = {} }) => {
+const ensureAuthRecord = async ({ email, password, role = 'authenticated', metadata = {}, allowExistingAppUser = false }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (!normalizedEmail) {
     throw new Error('Email is required.');
@@ -320,6 +321,11 @@ const ensureAuthRecord = async ({ email, password, role = 'authenticated', metad
 
   const authId = crypto.randomUUID();
   let appUser = await findAppUserByEmail(normalizedEmail);
+  // Server-side defense in depth: the earlier invitation-router preflight
+  // cannot be the only protection against a concurrent account-claim race.
+  if (!allowExistingAppUser) {
+    rejectPublicSignupForExistingAppUser(appUser);
+  }
   if (!appUser) {
     const tenantId = await resolveSelfRegistrationTenant();
     appUser = await createAppUser({
@@ -1177,7 +1183,9 @@ export const createPlatformRouter = () => {
       const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
       const role = requestedRole === 'staff' ? 'staff' : 'rentee';
       const metadata = { ...(options?.data || {}), role, user_type: role, invited: true };
-      const { record } = await ensureAuthRecord({ email, password: crypto.randomUUID(), role, metadata: { ...metadata, invited: true } });
+      // Legacy admin invite path only. This is not public registration; the
+      // canonical secure invitation route is mounted ahead of this route.
+      const { record } = await ensureAuthRecord({ email, password: crypto.randomUUID(), role, metadata: { ...metadata, invited: true }, allowExistingAppUser: true });
       res.json({ data: { user: buildAuthUser(record) } });
     } catch (error) {
       next(error);
