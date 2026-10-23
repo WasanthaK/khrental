@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  issues: write  # publish nonsecret aggregate inventory only to B04 blocker #388
 
 concurrency:
   group: khrental-b04-azure-redis-readonly
@@ -35,6 +36,7 @@ jobs:
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Read-only Azure Redis inventory and app environment reference
+        id: redis_audit
         shell: bash
         run: |
           set -euo pipefail
@@ -84,3 +86,46 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "B04_REDIS_AZURE_INVENTORY_OK managed=$managed_count classic=$classic_count"
+
+      - name: Report nonsecret inventory result to blocker issue 388
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INVENTORY_OUTCOME: ${{ steps.redis_audit.outcome }}
+        run: |
+          set -euo pipefail
+          {
+            echo '### Automated B04 Redis inventory checkpoint'
+            echo
+            echo "Azure source: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "Read-only resource-group scope: ${AZURE_RESOURCE_GROUP}"
+            echo
+            if [ "$INVENTORY_OUTCOME" = "success" ] &&
+               [ -s azure-managed-redis-inventory.json ] &&
+               [ -s azure-classic-redis-inventory.json ]; then
+              managed_count=$(jq 'length' azure-managed-redis-inventory.json)
+              classic_count=$(jq 'length' azure-classic-redis-inventory.json)
+              echo "**Result: VERIFIED inventory command success.**"
+              echo "Azure Managed Redis resources: **$managed_count**"
+              echo "Classic Redis resources: **$classic_count**"
+              echo
+              echo 'Managed Redis resource metadata:'
+              echo '~~~json'
+              jq -c '[.[] | {name: .name, location: .location, sku: (.sku.name // null), provisioningState: (.properties.provisioningState // null)}]' azure-managed-redis-inventory.json
+              echo '~~~'
+              echo
+              echo 'Classic Redis resource metadata:'
+              echo '~~~json'
+              jq -c '[.[] | {name: .name, location: .location, sku: (.sku.name // null), provisioningState: (.provisioningState // null)}]' azure-classic-redis-inventory.json
+              echo '~~~'
+            else
+              echo '**Result: UNKNOWN — Azure inventory did not complete successfully.**'
+              echo 'No zero count or availability claim can be made.'
+            fi
+            echo
+            echo 'This lists resource metadata only in the named resource group.'
+            echo 'It does not validate Redis private connectivity, authentication, atomic EVAL or cross-replica quotas.'
+            echo 'No Azure resource was modified. Public signup remains OFF.'
+          } > redis-audit-issue.md
+          gh issue comment 388 --repo "$GITHUB_REPOSITORY" --body-file redis-audit-issue.md
