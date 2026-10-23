@@ -1,0 +1,97 @@
+name: Deploy Quixo.Homes marketing website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'marketing/**'
+      - '.github/workflows/deploy-quixo-homes-marketing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: quixo-homes-marketing
+  cancel-in-progress: false
+
+jobs:
+  deploy-marketing:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 30
+    env:
+      AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_MARKETING_APP: quixo-homes-marketing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate marketing assets and destination boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s marketing/index.html
+          test -s marketing/styles.css
+          grep -Fq 'data-site="quixo-homes-marketing"' marketing/index.html
+          grep -Fq 'https://app.quixo.homes/login' marketing/index.html
+          if grep -Rq 'khrental-app.proudpebble' marketing; then
+            echo 'Marketing site must not use the legacy application origin.' >&2
+            exit 1
+          fi
+
+      - name: Sign in to Azure with production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision only the independent Free marketing host
+        shell: bash
+        run: |
+          set -euo pipefail
+          if az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --only-show-errors -o none 2>/dev/null; then
+            echo 'Existing marketing Static Web App found; preserving hosting settings.'
+          else
+            az staticwebapp create -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" -l eastasia --sku Free --only-show-errors -o none
+          fi
+          sku="$(az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query sku.name -o tsv)"
+          if [ "$sku" != 'Free' ]; then
+            echo "Expected Free marketing resource; found $sku. No deployment performed." >&2
+            exit 1
+          fi
+          hostname="$(az staticwebapp show -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query defaultHostname -o tsv)"
+          if [ -z "$hostname" ]; then echo 'Missing marketing hostname' >&2; exit 1; fi
+          echo "Azure marketing hostname: $hostname"
+          echo "MARKETING_HOSTNAME=$hostname" >> "$GITHUB_ENV"
+
+      - name: Fetch scoped deployment token without exposing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(az staticwebapp secrets list -n "$AZURE_MARKETING_APP" -g "$AZURE_RESOURCE_GROUP" --query properties.apiKey -o tsv)"
+          if [ -z "$token" ]; then echo 'No Static Web Apps deployment key returned.' >&2; exit 1; fi
+          echo "::add-mask::$token"
+          echo "SWA_CLI_DEPLOYMENT_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Publish isolated static site
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes @azure/static-web-apps-cli@2.0.2 deploy ./marketing --env production
+
+      - name: Verify independent public site
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(curl --fail --silent --show-error --retry 10 --retry-delay 8 --retry-all-errors "https://$MARKETING_HOSTNAME/")"
+          printf '%s' "$page" | grep -Fq 'data-site="quixo-homes-marketing"'
+          printf '%s' "$page" | grep -Fq 'https://app.quixo.homes/login'
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 "https://$MARKETING_HOSTNAME/styles.css" >/dev/null
+          echo "Marketing website independently published at https://$MARKETING_HOSTNAME/"
+          echo "Root quixo.homes and www DNS remain untouched pending registrar records and custom-domain verification."
