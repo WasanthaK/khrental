@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatInvoiceDate } from '../utils/invoiceDate.js';
 import { invoiceHeading } from '../utils/invoiceReference';
 import { PERMISSIONS, hasPermission } from '../utils/accessPolicy.js';
 import { getInvoiceAccount, retryInvoiceDelivery, resendIssuedInvoice, getIssuedInvoicePdf, assignLegacyInvoicePaymentReference } from '../services/platformClient';
@@ -247,8 +248,8 @@ const InvoiceDetails = () => {
       const invoiceContent = [
         invoiceHeading(invoice),
         `Billing Period: ${invoice.billingperiod || 'N/A'}`,
-        `Issued: ${formatDate(invoice.issued_at || invoice.createdat)}`,
-        `Due Date: ${formatDate(invoice.duedate)}`,
+        `Issued: ${formatInvoiceDate(invoice.issued_at || invoice.createdat)}`,
+        `Due Date: ${formatInvoiceDate(invoice.duedate)}`,
         `Status: ${invoice.status}`,
         `Property: ${invoice.property_name || 'N/A'}`,
         `Tenant: ${invoice.rentee_name || 'N/A'}`,
@@ -400,8 +401,8 @@ const InvoiceDetails = () => {
           <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 mb-5">
             <div><span className="text-gray-500">Property:</span> <strong>{invoice.property_name || 'N/A'}</strong></div>
             <div><span className="text-gray-500">Tenant:</span> <strong>{invoice.rentee_name || 'N/A'}</strong></div>
-            <div><span className="text-gray-500">Issued:</span> <strong>{formatDate(invoice.issued_at || invoice.createdat)}</strong></div>
-            <div><span className="text-gray-500">Due:</span> <strong>{formatDate(invoice.duedate)}</strong></div>
+            <div><span className="text-gray-500">Issued:</span> <strong>{formatInvoiceDate(invoice.issued_at || invoice.createdat)}</strong></div>
+            <div><span className="text-gray-500">Due:</span> <strong>{formatInvoiceDate(invoice.duedate)}</strong></div>
           </div>
 
           <h3 className="font-medium mb-2">Components</h3>

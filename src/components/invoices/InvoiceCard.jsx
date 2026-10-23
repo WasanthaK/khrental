@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/helpers';
+import { formatInvoiceDate } from '../../utils/invoiceDate.js';
 import { invoiceHeading } from '../../utils/invoiceReference';
 
 const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatusActions = true }) => {
@@ -56,7 +57,7 @@ const InvoiceCard = ({ invoice, property, rentee, showDetails = true, showStatus
 
           <p className="text-sm">
             <span className="text-gray-500">Date: </span>
-            <span className="text-gray-900">{formatDate(createdat)}</span>
+            <span className="text-gray-900">{formatInvoiceDate(invoice.issued_at || createdat)}</span>
           </p>
 
           {paymentdate && (
