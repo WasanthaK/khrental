@@ -29,3 +29,15 @@ test('inventory does not claim resource absence outside the approved production 
   assert.match(source, /not proof of same-VNet reachability/i);
   assert.match(source, /resource metadata only/);
 });
+
+test('subscription-wide scan uses only read-only resource metadata operations', () => {
+  assert.match(source, /az resource list --subscription/);
+  assert.match(source, /--resource-type Microsoft\.Cache\/redisEnterprise/);
+  assert.match(source, /--resource-type Microsoft\.Cache\/Redis/);
+  assert.match(source, /--query location -o tsv/);
+  assert.match(source, /B04_REDIS_SUBSCRIPTION_INVENTORY_OK/);
+  assert.doesNotMatch(source, /az resource (?:create|update|delete|invoke-action)/);
+  assert.doesNotMatch(source, /az redisenterprise (?:create|update|delete)/);
+  assert.doesNotMatch(source, /az redis (?:create|update|delete)/);
+  assert.doesNotMatch(source, /(?:list-keys|connectionString|primaryKey|secondaryKey)/i);
+});

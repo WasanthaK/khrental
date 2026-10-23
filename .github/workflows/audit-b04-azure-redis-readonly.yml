@@ -84,3 +84,41 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "B04_REDIS_AZURE_INVENTORY_OK managed=$managed_count classic=$classic_count"
+
+      - name: Read-only subscription-wide Redis search and app region
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Enumerate cache metadata only. This is a subscription-wide READ,
+          # not a cache creation or credentials query.
+          az resource list --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-type Microsoft.Cache/redisEnterprise \
+            --output json > subscription-managed-redis.json
+          az resource list --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-type Microsoft.Cache/Redis \
+            --output json > subscription-classic-redis.json
+          app_region=$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query location -o tsv)
+          test -n "$app_region"
+          managed_count=$(jq 'length' subscription-managed-redis.json)
+          classic_count=$(jq 'length' subscription-classic-redis.json)
+          {
+            echo '### B04 Azure subscription Redis inventory (read-only)'
+            echo
+            echo "Application region: $app_region"
+            echo "Managed Redis resources in authorized subscription: **$managed_count**"
+            echo "Legacy Redis resources in authorized subscription: **$classic_count**"
+            echo
+            echo 'Resources (name, resource group, region only):'
+            echo '~~~json'
+            jq -sc '[.[][] | {name: .name, resourceGroup: .resourceGroup, location: .location, type: .type}]' \
+              subscription-managed-redis.json subscription-classic-redis.json
+            echo '~~~'
+            echo
+            echo 'No Redis keys, connection strings, cache contents or client data accessed.'
+            echo 'Subscription inventory does not prove resource compatibility or connectivity.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "B04_REDIS_SUBSCRIPTION_INVENTORY_OK managed=$managed_count classic=$classic_count appRegion=$app_region"
