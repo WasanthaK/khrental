@@ -1714,6 +1714,79 @@ async function verifyPublicSignupLedgerAgainstDisposableSql(pool) {
 }
 
 // S3b atomic account redemption uses only disposable SQL; no route is mounted.
+// S3b2 remains unmounted: exercise real challenge issuance and provider-ack
+// bookkeeping only against the disposable, isolated SQL Server.
+async function verifyPublicSignupChallengeIssuanceAgainstDisposableSql(pool) {
+  const {
+    beginPublicSignupChallenge,
+    completePublicSignupChallengeDelivery
+  } = await import('../src/api/auth/publicSignupChallengeService.js');
+  const email = 's3b2-' + crypto.randomBytes(8).toString('hex') + '@example.invalid';
+  const firstIssue = await beginPublicSignupChallenge({ email, name: '  Synthetic Seeker  ' });
+  assert.ok(firstIssue?.token);
+  assert.ok(firstIssue?.challengeId);
+  assert.equal(firstIssue.email, email);
+  const stored = await first(pool, `
+    SELECT email_normalized, display_name, token_hash, sent_at, consumed_at, revoked_at
+    FROM dbo.public_signup_challenges WHERE id = @id
+  `, { id: firstIssue.challengeId });
+  assert.equal(stored.email_normalized, email);
+  assert.equal(stored.display_name, 'Synthetic Seeker');
+  assert.notEqual(stored.token_hash, firstIssue.token);
+  assert.equal(stored.sent_at, null);
+  assert.equal(stored.consumed_at, null);
+  assert.equal(stored.revoked_at, null);
+  assert.equal(await beginPublicSignupChallenge({ email, name: 'Seeker Again' }), null,
+    'immediate resend must not mint another link');
+  assert.equal(await completePublicSignupChallengeDelivery({
+    challengeId: firstIssue.challengeId, providerAccepted: true
+  }), true);
+  assert.equal(await completePublicSignupChallengeDelivery({
+    challengeId: firstIssue.challengeId, providerAccepted: true
+  }), false, 'duplicate provider accept must not increment sends twice');
+  const accepted = await first(pool, `
+    SELECT sent_at, send_count FROM dbo.public_signup_challenges WHERE id = @id
+  `, { id: firstIssue.challengeId });
+  assert.ok(accepted.sent_at);
+  assert.equal(accepted.send_count, 1);
+
+  // After the bounded cooldown, a new verification request revokes the older
+  // accepted but unconsumed link (never resends the same raw token).
+  await pool.request().input('id', firstIssue.challengeId).query(`
+    UPDATE dbo.public_signup_challenges
+    SET issued_at = DATEADD(minute, -3, SYSUTCDATETIME())
+    WHERE id = @id
+  `);
+  const second = await beginPublicSignupChallenge({ email, name: 'Synthetic Seeker' });
+  assert.ok(second?.token);
+  assert.notEqual(second.token, firstIssue.token);
+  assert.ok((await first(pool, `
+    SELECT revoked_at FROM dbo.public_signup_challenges WHERE id = @id
+  `, { id: firstIssue.challengeId })).revoked_at,
+  'requesting a fresh link must revoke old accepted link');
+  assert.equal(await completePublicSignupChallengeDelivery({
+    challengeId: second.challengeId, providerAccepted: false
+  }), true);
+  assert.ok((await first(pool, `
+    SELECT revoked_at FROM dbo.public_signup_challenges WHERE id = @id
+  `, { id: second.challengeId })).revoked_at,
+  'unknown or failed provider acknowledgment revokes pending link');
+
+  // A previously invited/unclaimed renter must not be issued a seeker token.
+  const claimedEmail = 's3b2-existing-' + crypto.randomBytes(8).toString('hex') + '@example.invalid';
+  await pool.request().input('email', claimedEmail).query(`
+    INSERT INTO dbo.app_users (email, name, role, user_type, tenant_id)
+    VALUES (@email, N'Invited Renter', N'rentee', N'rentee', NULL)
+  `);
+  assert.equal(await beginPublicSignupChallenge({
+    email: claimedEmail, name: 'Not An Account Claim'
+  }), null);
+  assert.equal((await query(pool,
+    'SELECT id FROM dbo.public_signup_challenges WHERE email_normalized=@email',
+    { email: claimedEmail })).length, 0);
+  console.log('PASS: S3b2 challenge issue, hashed storage, resend cooldown/revocation, provider accept/failure and existing-identity containment');
+}
+
 async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
   const { createPublicSignupChallengeToken } = await import('../src/api/auth/publicSignupChallenge.js');
   const { redeemPublicSignupChallenge } = await import('../src/api/auth/publicSignupRedemption.js');
@@ -1899,6 +1972,7 @@ async function main() {
     await ensureAuthSchema();
     await verifyPublicSignupLedgerAgainstDisposableSql(pool);
     await verifyPublicSignupRedemptionAgainstDisposableSql(pool);
+    await verifyPublicSignupChallengeIssuanceAgainstDisposableSql(pool);
     await pool.request().batch(
       fs.readFileSync(path.resolve('migrations',
         '20260916_01_create_password_reset_tokens.sql'), 'utf8')
