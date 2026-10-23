@@ -38,6 +38,7 @@ test('redeem transaction enforces tenantless seeker and existing-account denial'
   assert.match(service, /NULL, @authId, @email, @name,\s*N'authenticated', N'seeker'/);
   assert.match(service, /INSERT INTO dbo\.auth_users/);
   assert.match(service, /consumed_at = SYSUTCDATETIME\(\)/);
+  assert.match(service, /!challenge\.sent_at/);
   assert.match(service, /await transaction\.commit\(\)/);
   assert.match(service, /await transaction\.rollback\(\)/);
   assert.doesNotMatch(service, /INSERT INTO dbo\.tenant_memberships/i);
