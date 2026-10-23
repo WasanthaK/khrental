@@ -45,4 +45,12 @@ This is a proposed **separate cloud service with recurring Azure cost**, not an 
 - [ ] Two-org browser/identity acceptance and explicit release go/no-go.
 - [ ] Public signup flag changed only after every prerequisite is accepted.
 
+## Non-mutating Azure inventory now staged
+
+The KH Rentals repository already has scoped **GitHub Production OIDC** access for Azure diagnostics. This PR also stages `.github/workflows/audit-b04-azure-redis-readonly.yml`, a new **read-only inventory workflow** triggered by the workflow file being merged into `main` (and independently by manual dispatch). It lists Managed Redis and classic Redis resources **only in the approved `khrental-prod-rg` resource group** and reads the existing Container App environment ID. It prints metadata and aggregate counts only—no keys, passwords, customer data or cloud writes. The source workflow is validated by a negative authorization test that forbids mutating Azure commands.
+
+**Execution status:** The read-only inventory has NOT run yet; a green PR test is not proof that Azure Redis exists. After the workflow merges, use its actual Production OIDC logs and `B04_REDIS_AZURE_INVENTORY_OK` marker to determine whether a shared resource already exists. An empty inventory does not rule out a Redis resource in a different Azure resource group. Failures of OIDC/permissions or Azure CLI MUST be reported as **unknown**, never as zero resources.
+
+**If no suitable approved Redis exists:** Create a costed provisioning plan for Azure Managed Redis, then receive explicit approval before cloud creation. Do not enable public signup merely from this inventory.
+
 **Canonical state:** B04 rate-limiter **source adapter** ready for CI, actual shared-rate-limiter **operational blocker OPEN** until the checklist is proven. Avoid declaring success on a source-only test.
