@@ -20,10 +20,10 @@ export const consumeSeekerVerificationFragment = ({
 
   // This must succeed before any page can use the token. Avoid placing tokens
   // in query strings, history state, session storage or application logs.
-  if (rawHash) {
+  if (rawHash || search) {
     if (typeof history?.replaceState !== 'function') return null;
     try {
-      history.replaceState(history.state ?? null, '', '/verify-email' + search);
+      history.replaceState(history.state ?? null, '', '/verify-email');
     } catch {
       return null;
     }
