@@ -240,81 +240,6 @@ const inspectInvoicePdfArchive = async pool => {
   };
 };
 
-// B04: read-only evidence for pending challenge and shared HMAC-only quota
-// tables. Never assume an empty/partial schema means the release is ready.
-const inspectPublicSignupChallenges = async pool => {
-  const result = await pool.request().query(`
-    SELECT
-      CASE WHEN OBJECT_ID(N'dbo.app_users', N'U') IS NOT NULL AND
-                OBJECT_ID(N'dbo.auth_users', N'U') IS NOT NULL AND
-                OBJECT_ID(N'dbo.public_signup_challenges', N'U') IS NOT NULL
-        THEN 1 ELSE 0 END AS tables_ok,
-      (SELECT COUNT(*) FROM sys.columns WHERE object_id =
-        OBJECT_ID(N'dbo.public_signup_challenges') AND name IN (
-          N'id', N'email_normalized', N'display_name', N'token_hash',
-          N'issued_at', N'sent_at', N'expires_at', N'consumed_at',
-          N'revoked_at', N'send_count', N'verify_attempts'
-        )) AS columns_ok,
-      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
-        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_challenges')
-          AND name = N'UQ_public_signup_challenges_token_hash'
-          AND type = 'UQ') THEN 1 ELSE 0 END AS token_unique,
-      (SELECT COUNT(*) FROM sys.check_constraints
-       WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_challenges')
-         AND is_disabled = 0 AND is_not_trusted = 0
-         AND name IN (N'CK_public_signup_challenges_expiry',
-                      N'CK_public_signup_challenges_counts',
-                      N'CK_public_signup_challenges_finished_once',
-                      N'CK_public_signup_challenges_normalized_email')) AS checks_ok,
-      (SELECT COUNT(*) FROM sys.indexes
-        WHERE object_id = OBJECT_ID(N'dbo.public_signup_challenges')
-          AND name IN (N'IX_public_signup_challenges_email_state',
-                       N'IX_public_signup_challenges_expiry')) AS indexes_ok;
-  `);
-  const row = result.recordset?.[0] || {};
-  const satisfied = Boolean(row.tables_ok && row.columns_ok === 11 &&
-    row.token_unique && row.checks_ok === 4 && row.indexes_ok === 2);
-  return {
-    satisfied,
-    detail: `tables=${row.tables_ok || 0}, columns=${row.columns_ok || 0}/11, unique=${row.token_unique || 0}, checks=${row.checks_ok || 0}/4, indexes=${row.indexes_ok || 0}/2`
-  };
-};
-
-const inspectPublicSignupRateLimits = async pool => {
-  const result = await pool.request().query(`
-    SELECT
-      CASE WHEN OBJECT_ID(N'dbo.public_signup_challenges', N'U') IS NOT NULL
-        AND OBJECT_ID(N'dbo.public_signup_rate_limits', N'U') IS NOT NULL
-        THEN 1 ELSE 0 END AS tables_ok,
-      (SELECT COUNT(*) FROM sys.columns WHERE object_id =
-        OBJECT_ID(N'dbo.public_signup_rate_limits') AND name IN (
-          N'bucket_hash', N'window_start', N'request_count', N'updated_at'
-        )) AS columns_ok,
-      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
-        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
-          AND name = N'PK_public_signup_rate_limits' AND type = 'PK')
-        THEN 1 ELSE 0 END AS primary_key_ok,
-      (SELECT COUNT(*) FROM sys.check_constraints
-        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
-          AND name IN (N'CK_public_signup_rate_limits_count',
-                       N'CK_public_signup_rate_limits_window')
-          AND is_disabled = 0 AND is_not_trusted = 0) AS checks_ok,
-      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
-        WHERE object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
-          AND name = N'IX_public_signup_rate_limits_updated')
-        THEN 1 ELSE 0 END AS index_ok,
-      CASE WHEN COL_LENGTH(N'dbo.public_signup_rate_limits', N'bucket_hash') = 64
-        THEN 1 ELSE 0 END AS digest_width_ok;
-  `);
-  const row = result.recordset?.[0] || {};
-  const satisfied = Boolean(row.tables_ok && row.columns_ok === 4 &&
-    row.primary_key_ok && row.checks_ok === 2 && row.index_ok && row.digest_width_ok);
-  return {
-    satisfied,
-    detail: `tables=${row.tables_ok || 0}, columns=${row.columns_ok || 0}/4, pk=${row.primary_key_ok || 0}, checks=${row.checks_ok || 0}/2, index=${row.index_ok || 0}, digest64=${row.digest_width_ok || 0}`
-  };
-};
-
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -392,20 +317,6 @@ const MIGRATIONS = [
     inspect: inspectInvoicePdfArchive,
     verify: async pool => assertSatisfied(inspectInvoicePdfArchive(pool),
       'Issued PDF archive ledger schema verification failed.')
-  },
-  {
-    id: '20261023_01_create_public_signup_challenges',
-    file: 'migrations/20261023_01_create_public_signup_challenges.sql',
-    inspect: inspectPublicSignupChallenges,
-    verify: async pool => assertSatisfied(inspectPublicSignupChallenges(pool),
-      'Signup challenge table migration verification failed.')
-  },
-  {
-    id: '20261024_01_create_public_signup_rate_limits',
-    file: 'migrations/20261024_01_create_public_signup_rate_limits.sql',
-    inspect: inspectPublicSignupRateLimits,
-    verify: async pool => assertSatisfied(inspectPublicSignupRateLimits(pool),
-      'Signup SQL atomic limiter migration verification failed.')
   }
 ];
 
