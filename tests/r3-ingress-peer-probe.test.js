@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { observeR3IngressPeer } from '../src/api/auth/r3IngressPeerProbe.js';
 
 const secret = 'a'.repeat(43);
@@ -79,4 +80,10 @@ test('the ingress observer fails closed when temporary probe expiry has passed',
     PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) - 1
   });
   assert.equal(res.code, 404);
+});
+
+test('server passes only req/res to observer, never Express next as config', () => {
+  const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  assert.match(server, /app\.post\('\/api\/internal\/r3-ingress-peer', \(req, res\) => observeR3IngressPeer\(req, res\)\)/);
+  assert.doesNotMatch(server, /app\.post\('\/api\/internal\/r3-ingress-peer', observeR3IngressPeer\)/);
 });

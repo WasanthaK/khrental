@@ -89,7 +89,7 @@ async function createServer() {
   app.use('/api/public-signup', createPublicSignupRuntime());
   // Credential-gated, temporarily enabled read-only R3 ingress peer attestation.
   // Absent its one-time environment secret this route always responds 404.
-  app.post('/api/internal/r3-ingress-peer', observeR3IngressPeer);
+  app.post('/api/internal/r3-ingress-peer', (req, res) => observeR3IngressPeer(req, res));
   app.use(express.json({
     limit: '10mb',
     verify: (req, _res, buffer) => {

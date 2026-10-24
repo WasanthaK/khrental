@@ -1,6 +1,7 @@
 name: R3 B04 ingress socket peer live attestation
 
 # Controlled, one-time, zero-business-write ingress proof.
+# One bounded rerun after fixing Express's injected third next argument.
 on:
   push:
     branches: [main]
