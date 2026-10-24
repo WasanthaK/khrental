@@ -5,6 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const source = readFileSync(new URL('../scripts/r3-b04-limiter-physical-acceptance.mjs', import.meta.url), 'utf8');
+const singleReplica = readFileSync(new URL('../scripts/r3-b04-limiter-single-replica-race.mjs', import.meta.url), 'utf8');
+const workflow = readFileSync(new URL('../.github/workflows/r3-b04-limiter-physical-acceptance.yml', import.meta.url), 'utf8');
 
 test('R3 live SQL acceptance never touches real accounts or tenant records', () => {
   assert.match(source, /PUBLIC_SIGNUP_ENABLED !== 'false'/);
@@ -46,4 +48,28 @@ test('production probe is syntactically valid and refuses accidental local use b
   });
   assert.equal(denied.status, 1);
   assert.match(denied.stderr, /R3_LIMITER_ACCEPTANCE_FAILED/);
+});
+
+test('one Azure replica races separate Node processes under a single Azure console', () => {
+  assert.match(singleReplica, /spawn\(process\.execPath/);
+  assert.match(singleReplica, /Promise\.all\(\[/);
+  assert.match(singleReplica, /execute\('preflight', nonce\)/);
+  assert.match(singleReplica, /execute\('finalize', nonce\)/);
+  assert.match(singleReplica, /R3_SQL_EXACT_SYNTHETIC_BUCKET_CLEANUP=PASS/);
+  assert.match(singleReplica, /R3_SQL_PHYSICAL_LIMITER_CROSS_REPLICA=NOT_YET_TESTED/);
+  assert.match(workflow, /CROSS_PROCESS_ONE_REPLICA/);
+  assert.match(workflow, /r3-b04-limiter-single-replica-race\.mjs/);
+  assert.doesNotMatch(singleReplica, /app_users|tenant_memberships|sendViaSendGrid/);
+});
+
+test('one-console acceptance files parse as Node and reject execution outside production', () => {
+  const path = fileURLToPath(new URL('../scripts/r3-b04-limiter-single-replica-race.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const denied = spawnSync(process.execPath, [path], { env: {
+    ...process.env, NODE_ENV: 'test', PUBLIC_SIGNUP_ENABLED: 'false',
+    PUBLIC_SIGNUP_PILOT_APPROVED: 'false', VITE_PUBLIC_SIGNUP_UI_ENABLED: 'false'
+  }, encoding: 'utf8' });
+  assert.equal(denied.status, 1);
+  assert.match(denied.stderr, /R3_SQL_PHYSICAL_BLOCKED=PRODUCTION_FLAGS_NOT_DISABLED/);
 });
