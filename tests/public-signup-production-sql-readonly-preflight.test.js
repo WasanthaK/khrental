@@ -33,7 +33,7 @@ test('migration ledger queries are read-only and limited to exactly two B04 IDs'
   assert.match(workflow, /git merge-base --is-ancestor/);
   assert.match(workflow, /git diff --name-only/);
   assert.match(workflow, /parity_ok=false/);
-  assert.match(workflow, /docs\/\*\|\*\.md\|tests\/\*\|\.github\/workflows\/\*/);
+  assert.match(workflow, /docs\/\*\|\*\.md\|tests\/\*\|\.github\/workflows\/diagnose-production-schema\.yml/);
   assert.match(workflow, /Production did not begin serving/);
 
   assert.match(workflow, /node scripts\/check-production-schema\.mjs/);
