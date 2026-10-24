@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/check-production-schema.mjs'
       - '.github/workflows/diagnose-production-schema.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
