@@ -13,7 +13,11 @@ export const observeR3IngressPeer = (req, res, config = process.env) => {
   res.set('X-Content-Type-Options', 'nosniff');
   const disabled = () => res.status(404).json({ code: 'NOT_FOUND' });
   const secret = config.PUBLIC_SIGNUP_INGRESS_PROBE_SECRET;
-  if (typeof secret !== 'string' || !SECRET_FORMAT.test(secret)) return disabled();
+  // Expire automatically if the CI runner dies before removing Azure config.
+  const expiry = Number(config.PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT);
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof secret !== 'string' || !SECRET_FORMAT.test(secret) ||
+      !Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 3600) return disabled();
   const auth = req.headers?.authorization;
   if (req.method !== 'POST' || req.originalUrl !== '/api/internal/r3-ingress-peer' ||
       typeof auth !== 'string' || !auth.startsWith('Bearer ') ||
