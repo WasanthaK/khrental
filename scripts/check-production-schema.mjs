@@ -91,6 +91,33 @@ const main = async () => {
     asBoolean(signup?.throttle_index) &&
     asBoolean(signup?.throttle_hash_width));
 
+  // Only metadata for the two exact B04 migration IDs is read. A ledger
+  // marker alone is NOT checksum verification and never authorizes apply.
+  const b04Ledger = asBoolean(schema?.schema_migrations)
+    ? await runSingleQuery(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.schema_migrations
+         WHERE migration_id = N'20261023_01_create_public_signup_challenges')
+          AS challenge_ledger,
+        (SELECT COUNT(*) FROM dbo.schema_migrations
+         WHERE migration_id = N'20261024_01_create_public_signup_rate_limits')
+          AS limiter_ledger;
+    `)
+    : null;
+  const challengeLedgered = Number(b04Ledger?.challenge_ledger || 0) === 1;
+  const limiterLedgered = Number(b04Ledger?.limiter_ledger || 0) === 1;
+  const schemaState = (exists, valid, ledgered) => !exists
+    ? 'ABSENT_OR_NOT_VISIBLE'
+    : !valid ? 'PRESENT_BUT_INCOMPLETE'
+      : !ledgered ? 'STRUCTURE_PRESENT_NOT_LEDGERED'
+        : 'STRUCTURE_AND_LEDGER_PRESENT_CHECKSUM_UNVERIFIED';
+  const challengeState = schemaState(
+    asBoolean(signup?.challenge_table), challengesPresent, challengeLedgered
+  );
+  const limiterState = schemaState(
+    asBoolean(signup?.throttle_table), throttlePresent, limiterLedgered
+  );
+
   const output = {
     database: process.env.MSSQL_DATABASE || null,
     checks: {
@@ -100,12 +127,19 @@ const main = async () => {
       schema_migrations_table_exists: asBoolean(schema?.schema_migrations),
       legacy_users_missing_tenant_membership: missingLegacyMemberships,
       b04_signup_challenge_schema_valid: challengesPresent,
-      b04_signup_sql_limiter_schema_valid: throttlePresent
+      b04_signup_sql_limiter_schema_valid: throttlePresent,
+      b04_signup_challenge_table_exists: asBoolean(signup?.challenge_table),
+      b04_signup_sql_limiter_table_exists: asBoolean(signup?.throttle_table),
+      b04_signup_challenge_ledgered: challengeLedgered,
+      b04_signup_sql_limiter_ledgered: limiterLedgered,
+      b04_signup_challenge_status: challengeState,
+      b04_signup_sql_limiter_status: limiterState
     }
   };
 
   console.log('SCHEMA_DIAGNOSTIC_OK');
   console.log('B04_SIGNUP_SQL_SCHEMA ' + (challengesPresent && throttlePresent ? 'PRESENT_NOT_LEDGER_VERIFIED' : 'MISSING_OR_INCOMPLETE'));
+  console.log('B04_SIGNUP_METADATA challenge=' + challengeState + ' limiter=' + limiterState);
   console.log(JSON.stringify(output, null, 2));
 };
 
