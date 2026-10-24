@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const source = readFileSync(new URL('../scripts/r3-b04-limiter-physical-acceptance.mjs', import.meta.url), 'utf8');
 
@@ -32,4 +34,16 @@ test('R3 test scope is bounded, on the same server-side limiter and fixed window
   assert.match(source, /const \[mode, nonce, epochString\]/);
   assert.match(source, /\^\[a-f0-9\]\{32\}\$/);
   assert.doesNotMatch(source, /public-signup\/challenge|public-signup\/redeem|sendViaSendGrid/);
+});
+
+test('production probe is syntactically valid and refuses accidental local use before DB access', () => {
+  const cli = fileURLToPath(new URL('../scripts/r3-b04-limiter-physical-acceptance.mjs', import.meta.url));
+  const syntax = spawnSync(process.execPath, ['--check', cli], { encoding: 'utf8' });
+  assert.equal(syntax.status, 0, syntax.stderr);
+  const denied = spawnSync(process.execPath, [cli, 'worker', '0'.repeat(32), '0'], {
+    env: { ...process.env, NODE_ENV: 'test', PUBLIC_SIGNUP_ENABLED: 'false', PUBLIC_SIGNUP_PILOT_APPROVED: 'false' },
+    encoding: 'utf8'
+  });
+  assert.equal(denied.status, 1);
+  assert.match(denied.stderr, /R3_LIMITER_ACCEPTANCE_FAILED/);
 });
