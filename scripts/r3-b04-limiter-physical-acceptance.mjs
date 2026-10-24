@@ -12,7 +12,7 @@ const fail = text => { throw new Error('R3_LIMITER_ACCEPTANCE_BLOCKED: ' + text)
 
 const main = async () => {
   const [mode, nonce, epochString] = process.argv.slice(2);
-  if (!['worker', 'finalize'].includes(mode) ||
+  if (!['worker', 'finalize', 'preflight'].includes(mode) ||
       typeof nonce !== 'string' || !/^[a-f0-9]{32}$/.test(nonce)) {
     fail('invalid mode or synthetic nonce');
   }
@@ -37,6 +37,10 @@ const main = async () => {
       Number(rights.recordset?.[0]?.can_select) !== 1) {
     fail('test row cleanup/read permission absent; no writes attempted');
   }
+  if (mode === 'preflight') {
+    console.log('R3_SQL_LIMITER_READONLY_PREFLIGHT=PASS');
+    return;
+  }
   if (mode === 'worker') {
     const epoch = Number(epochString);
     const now = Math.floor(Date.now() / 1000);
@@ -52,6 +56,8 @@ const main = async () => {
       })
     ));
     if (outcomes.some(result => result.status !== 'fulfilled')) {
+      console.error('R3_SQL_TRANSACTION_RESULTS=REJECTED count=' +
+        outcomes.filter(result => result.status !== 'fulfilled').length);
       fail('one or more independently executed SQL transactions failed');
     }
     const allowed = outcomes.filter(result => result.value === true).length;
@@ -77,13 +83,14 @@ const main = async () => {
     const removed = await pool.request().input('bucketHash', sql.Char(64), key).query(
       'DELETE FROM dbo.public_signup_rate_limits WHERE bucket_hash = @bucketHash'
     );
-    if (removed.rowsAffected?.[0] === 1) {
-      const leftover = await pool.request().input('bucketHash', sql.Char(64), key).query(
-        'SELECT COUNT(*) AS remaining FROM dbo.public_signup_rate_limits ' +
-        'WHERE bucket_hash = @bucketHash'
-      );
-      erased = Number(leftover.recordset?.[0]?.remaining) === 0;
-    }
+    const leftover = await pool.request().input('bucketHash', sql.Char(64), key).query(
+      'SELECT COUNT(*) AS remaining FROM dbo.public_signup_rate_limits ' +
+      'WHERE bucket_hash = @bucketHash'
+    );
+    erased = Number(leftover.recordset?.[0]?.remaining) === 0 &&
+      (removed.rowsAffected?.[0] === 1 || removed.rowsAffected?.[0] === 0);
+    console.log('R3_LIMITER_OBSERVED_REQUEST_COUNT=' +
+      (Number.isSafeInteger(used) ? used : 'NONE'));
     console.log('R3_LIMITER_SYNTHETIC_BUCKET_REMOVED=' + (erased ? 'PASS' : 'FAIL'));
   }
   if (!erased || used !== LIMIT) {
