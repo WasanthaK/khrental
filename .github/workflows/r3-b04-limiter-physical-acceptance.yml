@@ -99,6 +99,40 @@ jobs:
             exit "$result"
           }
           trap cleanup EXIT
+          # One Azure replica cannot reliably support two simultaneous exec
+          # consoles. For the observed single-replica topology, open ONE
+          # console and spawn TWO independent Node/SQL worker processes there.
+          # The standalone orchestration script always finalizes its own
+          # exact synthetic bucket and reports cleanup separately from count.
+          if [[ "$R3_MODE" == CROSS_PROCESS_ONE_REPLICA ]]; then
+            command="az containerapp exec -n '$APP' -g '$RG' --revision '$R3_REV' --replica '$R3_REP_A' --command 'node scripts/r3-b04-limiter-single-replica-race.mjs'"
+            rc=0
+            script -q -e -c "$command" /dev/null > "$scratch/single.log" 2>&1 || rc=$?
+            # Log only explicit, allowlisted status markers; never dump raw
+            # console output (which can contain connection details).
+            grep -Eo 'R3_SQL_[A-Z_]+(=|:)[A-Z0-9_= a-z-]+' "$scratch/single.log" | tail -12 || true
+            if (( rc != 0 )) ||
+               ! grep -Fq 'R3_SQL_EXACT_SYNTHETIC_BUCKET_CLEANUP=PASS' "$scratch/single.log" ||
+               ! grep -Fq 'R3_SQL_TWO_INDEPENDENT_PROCESSES=PASS admitted=5 denied=11' "$scratch/single.log"; then
+              echo 'R3_BLOCKED: single-replica physical SQL limiter result/cleanup not accepted' >&2
+              exit 1
+            fi
+            {
+              echo '### R3 production SQL rate-limit proof'
+              echo
+              echo '| Criterion | Result |'
+              echo '| --- | --- |'
+              echo '| Exact source Ready | PASS |'
+              echo '| Signup switches | OFF |'
+              echo '| Concurrent independent Node processes | 2 |'
+              echo '| Serialized SQL requests | 16 |'
+              echo '| Allowed / denied | 5 / 11 |'
+              echo '| Synthetic HMAC bucket removed | PASS |'
+              echo '| Distinct Azure replicas | NOT VERIFIED — only one was running |'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo 'R3_SINGLE_REPLICA_TWO_PROCESS_SQL_LIMITER=PASS'
+            exit 0
+          fi
           execute_worker() {
             name="$1"
             outfile="$2"
