@@ -29,7 +29,7 @@ test('R3 ingress observation is never available to anonymous/invalid tokens', ()
   for (const token of ['', 'Bearer ' + 'b'.repeat(43), 'Bearer badly-formed']) {
     const res = response();
     observeR3IngressPeer(req({ authorization: token }), res,
-      { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret });
+      { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret, PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) + 900 });
     assert.equal(res.code, 404);
   }
 });
@@ -37,7 +37,7 @@ test('R3 ingress observation is never available to anonymous/invalid tokens', ()
 test('a verified probe returns the socket peer and the rightmost XFF, not spoofed leftmost', () => {
   const r = response();
   observeR3IngressPeer(req({ xff: '192.0.2.66, 203.0.113.13' }), r,
-    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret });
+    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret, PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) + 900 });
   assert.equal(r.code, 200);
   assert.deepEqual(r.body, {
     peer: '10.0.0.5',
@@ -53,7 +53,7 @@ test('R3 observation performs no body parsing and rejects payloads', () => {
   const r = response();
   const input = req();
   input.headers['content-length'] = '15';
-  observeR3IngressPeer(input, r, { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret });
+  observeR3IngressPeer(input, r, { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret, PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) + 900 });
   assert.equal(r.code, 400);
   assert.equal(r.body.code, 'NO_BODY');
 });
@@ -61,13 +61,22 @@ test('R3 observation performs no body parsing and rejects payloads', () => {
 test('R3 observation rejects malformed request method and missing XFF without admitting signup', () => {
   const r = response();
   observeR3IngressPeer(req({ method: 'GET' }), r,
-    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret });
+    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret, PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) + 900 });
   assert.equal(r.code, 404);
   const r2 = response();
   const noXff = req();
   noXff.rawHeaders = ['Host', 'app.quixo.homes'];
   observeR3IngressPeer(noXff, r2,
-    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret });
+    { PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret, PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) + 900 });
   assert.equal(r2.code, 200);
   assert.equal(r2.body.rightmost, null);
+});
+
+test('the ingress observer fails closed when temporary probe expiry has passed', () => {
+  const res = response();
+  observeR3IngressPeer(req(), res, {
+    PUBLIC_SIGNUP_INGRESS_PROBE_SECRET: secret,
+    PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT: Math.floor(Date.now() / 1000) - 1
+  });
+  assert.equal(res.code, 404);
 });
