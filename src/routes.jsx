@@ -226,7 +226,9 @@ const routes = [
       // Dedicated global seeker flow. Both screens fail closed under the
       // VITE_PUBLIC_SIGNUP_UI_ENABLED default-OFF flag; legacy stays intact.
       { path: 'seeker-sign-up', element: <PublicRoute><SeekerSignUp /></PublicRoute> },
-      { path: 'verify-email', element: <PublicRoute><VerifySeekerEmail /></PublicRoute> },
+      // Verification must remain accessible without switching a different
+      // already signed-in browser account. It never stores the new session.
+      { path: 'verify-email', element: <VerifySeekerEmail /> },
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'setup-account', element: <PublicRoute><SetupAccount /></PublicRoute> },
       { path: 'accept-invite', element: <AcceptInvite /> },
