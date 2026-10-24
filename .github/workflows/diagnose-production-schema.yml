@@ -28,6 +28,11 @@ jobs:
     environment: Production
     timeout-minutes: 20
     steps:
+      - name: Checkout diagnostic source for strict revision parity
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Sign in to Azure with OIDC
         uses: azure/login@v2
         with:
@@ -51,12 +56,35 @@ jobs:
           serving=false
           for attempt in $(seq 1 75); do
             build_info=$(curl --max-time 20 --fail --silent --show-error "https://${fqdn}/build-info.json" 2>/dev/null || true)
-            if echo "$build_info" | grep -Fq "\"buildSha\":\"${GITHUB_SHA}\""; then
+            serving_sha=$(jq -r '.buildSha // empty' <<<"$build_info" 2>/dev/null || true)
+            if [ "$serving_sha" = "$GITHUB_SHA" ]; then
               echo "Serving revision matches ${GITHUB_SHA}."
               serving=true
               break
             fi
-            echo "Waiting for production to serve ${GITHUB_SHA} (attempt ${attempt}/75)..."
+
+            # A CI/docs-only GitHub commit does not redeploy the container.
+            # Accept an ancestor only after verifying EVERY changed file is
+            # non-runtime; application/SQL/migration changes stay fail-closed.
+            if [[ "$serving_sha" =~ ^[a-f0-9]{40}$ ]] && \
+               git cat-file -e "${serving_sha}^{commit}" 2>/dev/null && \
+               git merge-base --is-ancestor "$serving_sha" "$GITHUB_SHA"; then
+              parity_ok=true
+              while IFS= read -r changed_file; do
+                [ -z "$changed_file" ] && continue
+                case "$changed_file" in
+                  docs/*|*.md|tests/*|.github/workflows/diagnose-production-schema.yml) ;;
+                  *) parity_ok=false; break ;;
+                esac
+              done < <(git diff --name-only "$serving_sha" "$GITHUB_SHA")
+              if [ "$parity_ok" = "true" ]; then
+                echo "Read-only diagnostic verified serving SHA ${serving_sha} as an ancestor with CI/docs-only changes to ${GITHUB_SHA}."
+                serving=true
+                break
+              fi
+            fi
+
+            echo "Waiting for verified non-drift production revision (attempt ${attempt}/75)..."
             sleep 8
           done
 
