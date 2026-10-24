@@ -122,5 +122,5 @@ test('security adapter remains unmounted, and protected SQL verification stays u
   assert.doesNotMatch(server, /publicSignupIngressGuard|createAzureSignupClientAddress/);
   assert.doesNotMatch(router, /publicSignupIngressGuard|checkPublicSignupBrowserRequest/);
   assert.match(server, /express\.json\(\{\s*limit: '10mb'/);
-  assert.match(verify, /Strict read-only migration verification passed for 9 managed migrations/);
+  assert.match(verify, /Strict read-only migration verification passed for 11 managed migrations/);
 });
