@@ -25,10 +25,6 @@ const INVOICE_MASTER_MIGRATION_ID = '20261019_01_invoice_master_data';
 const INVOICE_MASTER_MIGRATION_FILE = `migrations/${INVOICE_MASTER_MIGRATION_ID}.sql`;
 const INVOICE_ARCHIVE_MIGRATION_ID = '20261020_01_immutable_invoice_pdf_archive';
 const INVOICE_ARCHIVE_MIGRATION_FILE = `migrations/${INVOICE_ARCHIVE_MIGRATION_ID}.sql`;
-const SIGNUP_CHALLENGE_MIGRATION_ID = '20261023_01_create_public_signup_challenges';
-const SIGNUP_CHALLENGE_MIGRATION_FILE = `migrations/${SIGNUP_CHALLENGE_MIGRATION_ID}.sql`;
-const SIGNUP_LIMIT_MIGRATION_ID = '20261024_01_create_public_signup_rate_limits';
-const SIGNUP_LIMIT_MIGRATION_FILE = `migrations/${SIGNUP_LIMIT_MIGRATION_ID}.sql`;
 const ALREADY_PRODUCTION_APPLIED_MIGRATION_IDS = new Set([
   '20260920_01_add_tenancy_billing_adjustments',
   '20260920_02_create_platform_admins',
@@ -40,9 +36,7 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   AUTH_STORE_MIGRATION_ID,
   PAYMENT_REF_MIGRATION_ID,
   INVOICE_MASTER_MIGRATION_ID,
-  INVOICE_ARCHIVE_MIGRATION_ID,
-  SIGNUP_CHALLENGE_MIGRATION_ID,
-  SIGNUP_LIMIT_MIGRATION_ID
+  INVOICE_ARCHIVE_MIGRATION_ID
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -170,10 +164,6 @@ const main = async () => {
   assert.match(invoiceMasterSql, /CK_tenant_settings_invoice_issuer_profile_json/);
   const invoiceArchiveSql = fs.readFileSync(path.resolve(INVOICE_ARCHIVE_MIGRATION_FILE),'utf8');
   assert.match(invoiceArchiveSql, /TR_invoice_pdf_archives_write_once/);
-  const signupChallengeSql = fs.readFileSync(path.resolve(SIGNUP_CHALLENGE_MIGRATION_FILE),'utf8');
-  const signupLimitSql = fs.readFileSync(path.resolve(SIGNUP_LIMIT_MIGRATION_FILE),'utf8');
-  assert.match(signupChallengeSql, /UQ_public_signup_challenges_token_hash/);
-  assert.match(signupLimitSql, /PK_public_signup_rate_limits/);
   const containerName = `khrental-migration-proof-${process.pid}-${Date.now()}`;
   const password = `CiSql!${crypto.randomBytes(18).toString('base64url')}9aA`;
   const databaseName = `khrental_migration_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -459,32 +449,6 @@ const main = async () => {
     assert.equal(Number(authRows.recordset[0].revoked_rows), 1);
 
     console.log(`PASS: ${AUTH_STORE_MIGRATION_ID} repaired stale auth runtime columns/indexes and reran idempotently on SQL Server 2022.`);
-
-    // B04: proof for BOTH governed signup schemas; these are also executed
-    // in the independent two-tenant Docker acceptance harness.
-    await testPool.request().batch(signupChallengeSql);
-    await testPool.request().batch(signupChallengeSql);
-    await testPool.request().batch(signupLimitSql);
-    await testPool.request().batch(signupLimitSql);
-    const signupMeta = await testPool.request().query(`
-      SELECT
-        (SELECT COUNT(*) FROM sys.columns WHERE object_id =
-          OBJECT_ID(N'dbo.public_signup_challenges')) AS challenge_fields,
-        (SELECT COUNT(*) FROM sys.check_constraints
-          WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_challenges')
-            AND is_disabled = 0 AND is_not_trusted = 0) AS challenge_checks,
-        (SELECT COUNT(*) FROM sys.columns WHERE object_id =
-          OBJECT_ID(N'dbo.public_signup_rate_limits')) AS limiter_fields,
-        (SELECT COUNT(*) FROM sys.check_constraints
-          WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
-            AND is_disabled = 0 AND is_not_trusted = 0) AS limiter_checks;
-    `);
-    assert.equal(signupMeta.recordset[0].challenge_fields, 11);
-    assert.equal(signupMeta.recordset[0].challenge_checks, 4);
-    assert.equal(signupMeta.recordset[0].limiter_fields, 4);
-    assert.equal(signupMeta.recordset[0].limiter_checks, 2);
-    console.log('PASS: governed B04 challenge + SQL limiter migrations execute and replay idempotently on disposable SQL Server');
-
 
     // Execute the exact additive invoice reference migration on disposable
     // SQL Server, including second-run idempotency and a real unique index
