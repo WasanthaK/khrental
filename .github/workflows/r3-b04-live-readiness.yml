@@ -1,0 +1,140 @@
+name: R3 B04 live signup readiness (read only)
+
+# A single bounded production-provider acceptance probe, not a signup rollout.
+# No SendGrid email, DB write, user create, rate-limit consumption, or flag flip.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-live-readiness.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: r3-b04-live-readiness
+  cancel-in-progress: false
+
+jobs:
+  evidence:
+    name: Observe B04 provider and ingress readiness
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    env:
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+      AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      SENDGRID_READ_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
+    steps:
+      - name: Sign in to existing production Azure OIDC (read-only inspection)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read active Azure revision and disabled signup settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          app="$(mktemp)"
+          trap 'rm -f "$app"' EXIT
+          az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$app"
+          latest="$(jq -r '.properties.latestRevisionName // ""' "$app")"
+          ready="$(jq -r '.properties.latestReadyRevisionName // ""' "$app")"
+          external="$(jq -r '.properties.configuration.ingress.external // false' "$app")"
+          port="$(jq -r '.properties.configuration.ingress.targetPort // 0' "$app")"
+          env_json="$(jq '.properties.template.containers[0].env // []' "$app")"
+          flag_value() { jq -r --arg key "$1" '[.[] | select(.name == $key) | .value] | first // ""' <<<"$env_json"; }
+          has_field() { jq -r --arg key "$1" '[.[] | select(.name == $key)] | length > 0' <<<"$env_json"; }
+          api_flag="$(flag_value PUBLIC_SIGNUP_ENABLED)"
+          pilot_flag="$(flag_value PUBLIC_SIGNUP_PILOT_APPROVED)"
+          sender_present="$(has_field PUBLIC_SIGNUP_SENDER_EMAIL)"
+          sender_value="$(flag_value PUBLIC_SIGNUP_SENDER_EMAIL)"
+          sender_domain="not-configured"
+          if [[ "$sender_value" == *"@quixo.homes" ]]; then sender_domain="configured-quixo-homes"; fi
+          ingress_peer_config="$(has_field PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS)"
+          verification_origin="$(flag_value PUBLIC_SIGNUP_VERIFICATION_ORIGIN)"
+          origin_approved="false"
+          if [[ "$verification_origin" == "https://app.quixo.homes" ]]; then origin_approved="true"; fi
+          mail_config="$(has_field PUBLIC_SIGNUP_SENDGRID_API_KEY)"
+          limiter_config="$(has_field PUBLIC_SIGNUP_THROTTLE_SECRET)"
+          serving="$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json | jq -r '.buildSha // ""')"
+          health="$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/api/mssql/health | jq -r '.connection // ""')"
+          if [[ -z "$latest" || "$ready" != "$latest" || "$health" != ready || ! "$serving" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'R3_AZURE_PRECHECK_BLOCKED: ready serving app/SQL/SHA not independently matched' >&2
+            exit 1
+          fi
+          {
+            echo '### R3 B04 — existing production environment (read-only)'
+            echo
+            echo "| Check | Observed state |"
+            echo "| --- | --- |"
+            echo "| Azure latest = Ready revision | PASS |"
+            echo "| Azure ingress external / target port | $external / $port |"
+            echo "| Public served Git SHA | $serving |"
+            echo "| App MSSQL ready | PASS |"
+            echo "| Server public signup enabled | $([[ "$api_flag" == true ]] && echo ON || echo OFF) |"
+            echo "| Server approved pilot enabled | $([[ "$pilot_flag" == true ]] && echo ON || echo OFF) |"
+            echo "| Signup sender setting present | $sender_present |"
+            echo "| Signup sender matches required domain | $sender_domain |"
+            echo "| Signup-specific mail key field present | $mail_config |"
+            echo "| Verification origin is pinned | $origin_approved |"
+            echo "| Signup throttle secret field present | $limiter_config |"
+            echo "| Trusted ingress peer allowlist field present | $ingress_peer_config |"
+            echo "| Actual inbound socket peer identity | NOT OBSERVED (ARM metadata cannot prove it) |"
+            echo "| Live cross-replica SQL quota / real signup | NOT EXECUTED |"
+            echo
+            echo 'The app is not ready for public signup merely because Azure ingress and DNS exist.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "R3_AZURE_CONFIGURATION_OBSERVED ready=true signupEnabled=$([[ "$api_flag" == true ]] && echo true || echo false) pilotEnabled=$([[ "$pilot_flag" == true ]] && echo true || echo false) peerProven=false"
+
+      - name: Read SendGrid authorized sender/domain metadata (no sends)
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf "$temp_dir"' EXIT
+          if [[ -z "$SENDGRID_READ_KEY" ]]; then
+            {
+              echo
+              echo '### R3 B04 SendGrid'
+              echo 'No existing SendGrid API key available to this Production workflow: account sender proof BLOCKED.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "R3_SENDGRID_DOMAIN_STATUS=UNVERIFIED no-key"
+            exit 0
+          fi
+          # GET only. Never log provider responses: these include account identities.
+          domain_http="$(curl --silent --show-error -o "$temp_dir/domains.json" -w '%{http_code}' \
+            --max-time 20 -H "Authorization: Bearer $SENDGRID_READ_KEY" \
+            'https://api.sendgrid.com/v3/whitelabel/domains?domain=quixo.homes&limit=100' || true)"
+          sender_http="$(curl --silent --show-error -o "$temp_dir/senders.json" -w '%{http_code}' \
+            --max-time 20 -H "Authorization: Bearer $SENDGRID_READ_KEY" \
+            'https://api.sendgrid.com/v3/verified_senders?limit=100' || true)"
+          domains="indeterminate"
+          senders="indeterminate"
+          if [[ "$domain_http" == 200 ]]; then
+            domains="$(jq -r 'if type == "array" then ([.[] | select(.domain == "quixo.homes" and .valid == true)] | length | tostring) else "invalid-response" end' "$temp_dir/domains.json" 2>/dev/null || echo invalid-response)"
+          fi
+          if [[ "$sender_http" == 200 ]]; then
+            senders="$(jq -r 'if (.results | type) == "array" then ([.results[] | select(.verified == true and (.from_email | type == "string") and (.from_email | ascii_downcase | endswith("@quixo.homes")))] | length | tostring) else "invalid-response" end' "$temp_dir/senders.json" 2>/dev/null || echo invalid-response)"
+          fi
+          {
+            echo
+            echo '### R3 B04 — authenticated SendGrid provider metadata (read-only)'
+            echo
+            echo '| Check | Result |'
+            echo '| --- | --- |'
+            echo "| Domain API HTTP status | $domain_http |"
+            echo "| Verified senders API HTTP status | $sender_http |"
+            echo "| Valid authenticated quixo.homes domains | $domains |"
+            echo "| Verified @quixo.homes sender identities | $senders |"
+            echo
+            echo 'A 401/403 or malformed response means NOT VERIFIED, not that the domain is definitely unverified.'
+            echo 'These results do not prove an exact configured sender, mailbox delivery, Azure socket peer, or public signup acceptance.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "R3_SENDGRID_OBSERVED domainHttp=$domain_http verifiedDomainCount=$domains senderHttp=$sender_http verifiedDomainSenderCount=$senders"
