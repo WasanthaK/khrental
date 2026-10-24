@@ -34,8 +34,6 @@ on:
           - 20261018_01_invoice_payment_references
           - 20261019_01_invoice_master_data
           - 20261020_01_immutable_invoice_pdf_archive
-          - 20261023_01_create_public_signup_challenges
-          - 20261024_01_create_public_signup_rate_limits
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false
