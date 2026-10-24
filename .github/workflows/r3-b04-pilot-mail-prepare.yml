@@ -1,0 +1,157 @@
+name: R3 B04 prepare disabled signup mail and limiter
+
+# A bounded R3 sender and stable limiter preparation, not a public release.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-pilot-mail-prepare.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-r3-b04-mail-prepare
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    env:
+      SENDGRID_API_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
+    steps:
+      - name: Validate authenticated SendGrid sending domain (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SENDGRID_API_KEY" || { echo 'R3_BLOCKED: existing SendGrid key unavailable'; exit 1; }
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          http="$(curl --silent --show-error --max-time 20 \
+            -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer $SENDGRID_API_KEY" \
+            'https://api.sendgrid.com/v3/whitelabel/domains?domain=quixo.homes&limit=100')"
+          if [[ "$http" != 200 ]] || ! jq -e '
+            type == "array" and
+            any(.[]; .domain == "quixo.homes" and .valid == true)
+          ' "$tmp" >/dev/null; then
+            echo "R3_BLOCKED: Sender-domain authentication not verified in this account (HTTP=$http)." >&2
+            exit 1
+          fi
+          echo 'R3_SENDGRID_AUTHENTICATED_DOMAIN=PASS'
+
+      - name: Authenticate existing production Azure OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision additive B04 sender and durable throttle key with signup OFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          # Reuse the production SendGrid secret; never provision another mail key.
+          secrets="$(az containerapp secret list \
+            -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --query '[].name' -o tsv)"
+          if ! grep -Fxq 'sendgrid-api-key' <<<"$secrets"; then
+            echo 'R3_BLOCKED: production SendGrid secret reference is missing.' >&2
+            exit 1
+          fi
+          if ! grep -Fxq 'public-signup-throttle-secret' <<<"$secrets"; then
+            # A 256-bit, stable SQL HMAC bucket key across deployments/replicas.
+            throttle_secret="$(openssl rand -hex 32)"
+            az containerapp secret set \
+              -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+              --secrets "public-signup-throttle-secret=$throttle_secret" \
+              -o none >/dev/null
+            unset throttle_secret
+            echo 'R3_PERSISTENT_THROTTLE_KEY=CREATED'
+          else
+            echo 'R3_PERSISTENT_THROTTLE_KEY=REUSED'
+          fi
+          # Existing landlord EMAIL_FROM/TWILIO_SENDGRID_API_KEY remain intact.
+          # Every signup switch is kept explicitly OFF; ingress peer is unproven.
+          az containerapp update \
+            -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --set-env-vars \
+              PUBLIC_SIGNUP_SENDGRID_API_KEY=secretref:sendgrid-api-key \
+              PUBLIC_SIGNUP_SENDER_EMAIL=noreply@quixo.homes \
+              PUBLIC_SIGNUP_SENDER_NAME=Quixo.Homes \
+              PUBLIC_SIGNUP_VERIFICATION_ORIGIN=https://app.quixo.homes \
+              PUBLIC_SIGNUP_THROTTLE_SECRET=secretref:public-signup-throttle-secret \
+              PUBLIC_SIGNUP_ENABLED=false \
+              PUBLIC_SIGNUP_PILOT_APPROVED=false \
+              PUBLIC_SEEKER_CONTEXT_ENABLED=false \
+              VITE_PUBLIC_SIGNUP_UI_ENABLED=false \
+              VITE_PUBLIC_SEEKER_LANDING_ENABLED=false \
+            -o none >/dev/null
+          echo 'R3_MAIL_SENDER_AND_ORIGIN=CONFIGURED_NO_MAIL_SENT'
+          echo 'R3_PUBLIC_SIGNUP_FLAG=OFF'
+
+      - name: Verify B04 config and Ready revision without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(mktemp)"
+          trap 'rm -f "$app"' EXIT
+          verified=false
+          for attempt in $(seq 1 30); do
+            az containerapp show -g "$AZURE_RESOURCE_GROUP" \
+              -n "$AZURE_CONTAINER_APP_NAME" -o json > "$app"
+            if jq -e '
+              (.properties.latestRevisionName == .properties.latestReadyRevisionName) and
+              (.properties.latestReadyRevisionName != null) and
+              ((.properties.template.containers[0].env // []) as $vars |
+                def val($name): [$vars[] | select(.name == $name) | .value] | first;
+                def ref($name): [$vars[] | select(.name == $name) | .secretRef] | first;
+                val("PUBLIC_SIGNUP_ENABLED") == "false" and
+                val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+                val("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false" and
+                val("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false" and
+                val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false" and
+                val("PUBLIC_SIGNUP_SENDER_EMAIL") == "noreply@quixo.homes" and
+                val("PUBLIC_SIGNUP_VERIFICATION_ORIGIN") == "https://app.quixo.homes" and
+                ref("PUBLIC_SIGNUP_SENDGRID_API_KEY") == "sendgrid-api-key" and
+                ref("PUBLIC_SIGNUP_THROTTLE_SECRET") == "public-signup-throttle-secret")
+            ' "$app" >/dev/null; then verified=true; break; fi
+            sleep 8
+          done
+          if [[ "$verified" != true ]]; then
+            echo 'R3_BLOCKED: B04 configuration not Ready or not safely disabled' >&2
+            exit 1
+          fi
+          fqdn="$(jq -r '.properties.configuration.ingress.fqdn' "$app")"
+          build_http="$(curl --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' "https://$fqdn/build-info.json" || true)"
+          if [[ "$build_http" != 200 ]]; then
+            echo "R3_BLOCKED: Azure origin build endpoint HTTP=$build_http" >&2
+            exit 1
+          fi
+          {
+            echo '### R3 B04 mail/limiter prerequisites (not a public release)'
+            echo
+            echo '| Check | Outcome |'
+            echo '| --- | --- |'
+            echo '| SendGrid quixo.homes domain authentication | PASS |'
+            echo '| Dedicated signup from address | noreply@quixo.homes |'
+            echo '| Verified email origin | https://app.quixo.homes |'
+            echo '| Existing SendGrid secret reference | Reused |'
+            echo '| Shared stable SQL HMAC key | Present, redacted |'
+            echo '| Server signup/pilot and browser flags | All OFF |'
+            echo '| Latest Azure revision Ready | PASS |'
+            echo '| Native Azure build endpoint | 200 |'
+            echo '| Backend ingress socket peer observed | NOT YET |'
+            echo '| Real email / registration / two-replica acceptance | NOT EXECUTED |'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'R3_SIGNUP_MAIL_PREPARED_DEFAULT_OFF=PASS'
