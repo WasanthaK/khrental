@@ -30,6 +30,67 @@ const main = async () => {
     missingLegacyMemberships = Number(result?.missing_memberships || 0);
   }
 
+  // B04: read-only presence and integrity inspection. This is NOT a DDL
+  // migration, does not inspect customer records, and is NOT proof that the
+  // migration ledger contains the two governed B04 IDs.
+  const signup = await runSingleQuery(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.public_signup_challenges', N'U') IS NOT NULL
+        THEN 1 ELSE 0 END AS challenge_table,
+      (SELECT COUNT(*) FROM sys.columns WHERE object_id =
+        OBJECT_ID(N'dbo.public_signup_challenges') AND name IN
+          (N'id',N'email_normalized',N'display_name',N'token_hash',
+           N'issued_at',N'sent_at',N'expires_at',N'consumed_at',
+           N'revoked_at',N'send_count',N'verify_attempts')) AS challenge_columns,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_challenges')
+          AND name = N'UQ_public_signup_challenges_token_hash' AND type = 'UQ')
+        THEN 1 ELSE 0 END AS challenge_unique,
+      (SELECT COUNT(*) FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_challenges')
+          AND is_disabled = 0 AND is_not_trusted = 0
+          AND name IN (N'CK_public_signup_challenges_expiry',
+                       N'CK_public_signup_challenges_counts',
+                       N'CK_public_signup_challenges_finished_once',
+                       N'CK_public_signup_challenges_normalized_email')) AS challenge_checks,
+      (SELECT COUNT(*) FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.public_signup_challenges')
+          AND name IN (N'IX_public_signup_challenges_email_state',
+                       N'IX_public_signup_challenges_expiry')) AS challenge_indexes,
+      CASE WHEN OBJECT_ID(N'dbo.public_signup_rate_limits', N'U') IS NOT NULL
+        THEN 1 ELSE 0 END AS throttle_table,
+      (SELECT COUNT(*) FROM sys.columns WHERE object_id =
+        OBJECT_ID(N'dbo.public_signup_rate_limits') AND name IN
+          (N'bucket_hash',N'window_start',N'request_count',N'updated_at')) AS throttle_columns,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
+          AND name = N'PK_public_signup_rate_limits' AND type = 'PK')
+        THEN 1 ELSE 0 END AS throttle_pk,
+      (SELECT COUNT(*) FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
+          AND is_disabled = 0 AND is_not_trusted = 0
+          AND name IN (N'CK_public_signup_rate_limits_count',
+                       N'CK_public_signup_rate_limits_window')) AS throttle_checks,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.public_signup_rate_limits')
+          AND name = N'IX_public_signup_rate_limits_updated')
+        THEN 1 ELSE 0 END AS throttle_index,
+      CASE WHEN COL_LENGTH(N'dbo.public_signup_rate_limits', N'bucket_hash') = 64
+        THEN 1 ELSE 0 END AS throttle_hash_width;
+  `);
+
+  const challengesPresent = Boolean(asBoolean(signup?.challenge_table) &&
+    Number(signup?.challenge_columns) === 11 &&
+    asBoolean(signup?.challenge_unique) &&
+    Number(signup?.challenge_checks) === 4 &&
+    Number(signup?.challenge_indexes) === 2);
+  const throttlePresent = Boolean(asBoolean(signup?.throttle_table) &&
+    Number(signup?.throttle_columns) === 4 &&
+    asBoolean(signup?.throttle_pk) &&
+    Number(signup?.throttle_checks) === 2 &&
+    asBoolean(signup?.throttle_index) &&
+    asBoolean(signup?.throttle_hash_width));
+
   const output = {
     database: process.env.MSSQL_DATABASE || null,
     checks: {
@@ -37,11 +98,14 @@ const main = async () => {
       platform_admins_table_exists: asBoolean(schema?.platform_admins),
       tenant_memberships_table_exists: asBoolean(schema?.tenant_memberships),
       schema_migrations_table_exists: asBoolean(schema?.schema_migrations),
-      legacy_users_missing_tenant_membership: missingLegacyMemberships
+      legacy_users_missing_tenant_membership: missingLegacyMemberships,
+      b04_signup_challenge_schema_valid: challengesPresent,
+      b04_signup_sql_limiter_schema_valid: throttlePresent
     }
   };
 
   console.log('SCHEMA_DIAGNOSTIC_OK');
+  console.log('B04_SIGNUP_SQL_SCHEMA ' + (challengesPresent && throttlePresent ? 'PRESENT_NOT_LEDGER_VERIFIED' : 'MISSING_OR_INCOMPLETE'));
   console.log(JSON.stringify(output, null, 2));
 };
 
