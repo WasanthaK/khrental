@@ -18,7 +18,11 @@ const envVars = [
   'VITE_ENABLE_DEV_BYPASS',
   'VITE_EMAIL_FROM',
   'VITE_EMAIL_FROM_NAME',
-  'VITE_APP_BASE_URL'
+  'VITE_APP_BASE_URL',
+  // Browser availability follows the separately approved server pilot.
+  // The application generates these at startup; absent values stay OFF.
+  'VITE_PUBLIC_SIGNUP_UI_ENABLED',
+  'VITE_PUBLIC_SEEKER_LANDING_ENABLED'
 ];
 
 // Create the window._env_ object content

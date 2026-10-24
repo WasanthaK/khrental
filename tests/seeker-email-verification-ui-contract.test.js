@@ -64,7 +64,7 @@ test('failed browser-history scrub must refuse redemption', () => {
 test('S3c UI routes are connected but screens remain disabled unless explicitly enabled', () => {
   assert.match(env, /isPublicSignupUiEnabled = \(\) => getEnvVar\('VITE_PUBLIC_SIGNUP_UI_ENABLED'\) === 'true'/);
   assert.match(page, /const permitted = isPublicSignupUiEnabled\(\);/);
-  assert.match(routes, /path: 'verify-email', element: <PublicRoute><VerifySeekerEmail \/><\/PublicRoute>/);
+  assert.match(routes, /path: 'verify-email', element: <VerifySeekerEmail \/>/);
   assert.match(routes, /path: 'seeker-sign-up', element: <PublicRoute><SeekerSignUp \/><\/PublicRoute>/);
 });
 

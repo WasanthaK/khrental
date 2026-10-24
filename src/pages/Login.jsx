@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
 import { getPostLoginPath } from '../utils/authRedirect.js';
-import { isPublicSeekerLandingEnabled } from '../utils/env';
+import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
 import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
 import { getPlatformClient } from '../services/platformClient';
 import Button from '../components/ui/Button';
@@ -60,9 +60,9 @@ const Login = () => {
       
       // This server proof alone can route a new, tenantless seeker.
       // Never honor a stale landlord/renter deep link for that identity.
-      if (isPublicSeekerLandingEnabled() && data?.user?.id) {
+      if (isPublicSeekerLandingEnabled() && result?.data?.user?.id) {
         const proof = await fetchVerifiedSeekerBrowserContext({
-          expectedAuthId: data.user.id,
+          expectedAuthId: result.data.user.id,
           getSession: () => getPlatformClient().auth.getSession()
         });
         if (proof.verified && proof.eligible) {
@@ -180,6 +180,11 @@ const Login = () => {
               <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
                 Create account
               </Link>
+              {isPublicSignupUiEnabled() && (
+                <Link to="/seeker-sign-up" className="ml-3 font-medium text-blue-600 hover:text-blue-500">
+                  Create seeker account
+                </Link>
+              )}
             </div>
             <div className="text-sm">
               <Link to="/reset-password" className="font-medium text-blue-600 hover:text-blue-500">

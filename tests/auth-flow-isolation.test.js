@@ -8,10 +8,11 @@ const welcomeGuideSource = readFileSync(new URL('../src/components/WelcomeGuide.
 const acceptInviteSource = readFileSync(new URL('../src/pages/AcceptInvite.jsx', import.meta.url), 'utf8');
 
 test('credential bootstrap and recovery routes are explicitly isolated from the authenticated app shell', () => {
-  assert.match(requestContextSource, /AUTH_FLOW_ISOLATED_PATHS = new Set\(\['\/reset-password', '\/accept-invite', '\/seeker'\]\)/);
+  assert.match(requestContextSource, /AUTH_FLOW_ISOLATED_PATHS = new Set\(\['\/reset-password', '\/accept-invite', '\/seeker', '\/seeker-sign-up', '\/verify-email'\]\)/);
   assert.match(rootLayoutSource, /isAuthFlowIsolatedPath\(location\.pathname\)/);
   assert.match(rootLayoutSource, /if \(isAuthFlowIsolated\) \{\s*return <Outlet \/>;\s*\}/);
   assert.match(rootLayoutSource, /if \(isAuthFlowIsolated \|\| loading\) return;/);
+  assert.match(requestContextSource, /'\/seeker-sign-up', '\/verify-email'/);
 });
 
 test('legacy authenticated onboarding does not infer invitation state from URL tokens', () => {
