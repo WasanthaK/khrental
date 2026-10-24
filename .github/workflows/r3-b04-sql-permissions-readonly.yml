@@ -1,0 +1,79 @@
+name: R3 B04 inspect SQL application permissions (read only)
+# One-shot check to diagnose whether test-only DELETE privilege is absent.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-sql-permissions-readonly.yml']
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: khrental-r3-permissions-readonly
+  cancel-in-progress: false
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Existing production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+      - name: Wait for exact new read-only source revision with disabled signup
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          fqdn="$(az containerapp show -n "$APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          [[ "$fqdn" == *.azurecontainerapps.io ]] || exit 1
+          for i in $(seq 1 105); do
+            sha="$(curl -fsS --max-time 15 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
+            app="$(az containerapp show -n "$APP" -g "$RG" -o json)"
+            rev="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            if [[ "$sha" == "$GITHUB_SHA" && -n "$rev" && "$rev" == "$latest" ]]; then
+              jq -e '
+                (.properties.template.containers[0].env // []) as $v |
+                def val($n): [$v[] | select(.name == $n) | .value] | first;
+                val("PUBLIC_SIGNUP_ENABLED") == "false" and
+                val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false"
+              ' <<<"$app" >/dev/null || { echo 'R3_READONLY_BLOCKED: signup unexpectedly enabled'; exit 1; }
+              echo "R3_REV=$rev" >> "$GITHUB_ENV"
+              echo 'R3_SQL_READONLY_SOURCE_AND_FLAGS=PASS'
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'R3_READONLY_BLOCKED: exact deployment source not Ready' >&2
+          exit 1
+      - name: Read limiter grants using serving app identity only
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          command="az containerapp exec -n '$APP' -g '$RG' --revision '$R3_REV' --command 'node scripts/r3-b04-sql-permissions-readonly.mjs'"
+          script -q -e -c "$command" /dev/null > "$log" 2>&1 || {
+            echo 'R3_SQL_READONLY_PERMISSION_PROBE=BLOCKED_EXEC' >&2
+            exit 1
+          }
+          grep -E '^.*R3_SQL_(PERMISSION_READONLY table=|RUNTIME_MINIMUM_PERMISSIONS=|READONLY_DIAGNOSTIC_NO_DATA_MUTATION=)' "$log" |
+            sed -E 's/^.*(R3_SQL_)/\1/' || true
+          grep -Fq 'R3_SQL_READONLY_DIAGNOSTIC_NO_DATA_MUTATION=PASS' "$log" || {
+            echo 'R3_SQL_READONLY_PERMISSION_PROBE=NO_ACCEPTANCE_MARKER' >&2; exit 1
+          }
+          {
+            echo '### R3 live SQL application-principal permissions (read only)'
+            echo
+            echo 'The observed SQL grants are printed as non-sensitive yes/no values in this job log.'
+            echo 'A DELETE privilege is not required by the runtime rate limiter, but was required by the prior test-only cleanup.'
+            echo 'No customer read, account created, SQL write, paid resource or registration rollout.'
+          } >> "$GITHUB_STEP_SUMMARY"
