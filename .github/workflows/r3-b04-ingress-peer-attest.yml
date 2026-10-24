@@ -115,7 +115,7 @@ jobs:
             echo 'R3_BLOCKED: stale ingress probe secret; refusing overwrite' >&2
             exit 1
           fi
-          key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\\n')"
+          key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' | tr -d '\n')"
           [[ "$key" =~ ^[a-zA-Z0-9_-]{43}$ ]] || exit 1
           expiry="$(( $(date +%s) + 2400 ))"
           az containerapp secret set -g "$RG" -n "$APP" \
