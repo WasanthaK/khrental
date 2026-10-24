@@ -26,6 +26,7 @@ import { authorizePermission, authorizePlatformQuery } from './src/api/platform/
 import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js';
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
+import { createPublicSignupRuntime } from './src/api/auth/publicSignupRuntime.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
 import { createAuthenticatedTenantStorageRouter } from './src/api/storage/authenticatedTenantRoute.js';
@@ -81,6 +82,10 @@ async function createServer() {
   });
 
   app.use(cors({ origin: isProduction ? (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)) : true }));
+  // R3 global seeker registration is mounted before the general 10 MB body
+  // parser with its own 8 KB/Origin/trusted-ingress checks. Default OFF: 404.
+  // Never use the legacy renter /auth/sign-up as global registration.
+  app.use('/api/public-signup', createPublicSignupRuntime());
   app.use(express.json({
     limit: '10mb',
     verify: (req, _res, buffer) => {
