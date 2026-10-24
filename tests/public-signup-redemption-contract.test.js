@@ -46,8 +46,9 @@ test('redeem transaction enforces tenantless seeker and existing-account denial'
   assert.doesNotMatch(service, /console\.(?:log|info|error|warn)/);
 });
 
-test('redeem implementation is not exposed by public legacy signup routes', () => {
+test('redemption is isolated in the dedicated default-off signup route, never legacy credentials', () => {
   assert.doesNotMatch(server, /createPublicSignupRouter|redeemPublicSignupChallenge/);
+  assert.match(server, /createPublicSignupRuntime/);
+  assert.match(server, /app\.use\('\/api\/public-signup', createPublicSignupRuntime\(\)\)/);
   assert.doesNotMatch(identity, /signup-challenges|public-signup\/redeem/);
-  assert.ok(!server.includes('/api/public-signup'));
 });

@@ -101,8 +101,11 @@ test('throttle keys reject missing configuration and unsafe identifiers', () => 
   }
 });
 
-test('verification helpers remain inert: no public signup routing or sending', () => {
+test('verification helpers remain isolated from landlord routes; public signup mounts behind gated runtime', () => {
   assert.ok(!server.includes('createPublicSignupVerificationEmail('));
   assert.ok(!server.includes('hashPublicSignupThrottleKey('));
-  assert.ok(!server.includes("app.use('/api/public-signup'"));
+  assert.ok(server.includes("app.use('/api/public-signup', createPublicSignupRuntime())"));
+  const runtime = readFileSync(new URL('../src/api/auth/publicSignupRuntime.js', import.meta.url), 'utf8');
+  assert.match(runtime, /PUBLIC_SIGNUP_PILOT_APPROVED === 'true'/);
+  assert.match(runtime, /PUBLIC_SIGNUP_ENABLED === 'true'/);
 });

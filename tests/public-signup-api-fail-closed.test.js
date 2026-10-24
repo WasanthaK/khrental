@@ -159,8 +159,9 @@ test('post-verification session is scoped to linked tenantless seeker only', asy
   });
 });
 
-test('current production server has no new signup route or anonymous credential bypass', () => {
-  assert.doesNotMatch(serverSource, /createPublicSignupRouter\(/);
-  assert.doesNotMatch(serverSource, /app\.use\(['"]\/api\/public-signup/);
+test('server mounts separate default-off signup before the global parser; no legacy credential bypass', () => {
+  assert.match(serverSource, /app\.use\('\/api\/public-signup', createPublicSignupRuntime\(\)\)/);
+  assert.ok(serverSource.indexOf("app.use('/api/public-signup'") <
+    serverSource.indexOf("app.use(express.json({"));
   assert.doesNotMatch(authSource, /POST \/api\/public-signup\/redeem/);
 });

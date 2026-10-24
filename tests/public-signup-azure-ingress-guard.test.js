@@ -118,9 +118,15 @@ test('browser signup rejects cross-site or ambiguous requests', () => {
     { allowed: false, status: 403 });
 });
 
-test('security adapter remains unmounted, and protected SQL verification stays unchanged', () => {
-  assert.doesNotMatch(server, /publicSignupIngressGuard|createAzureSignupClientAddress/);
-  assert.doesNotMatch(router, /publicSignupIngressGuard|checkPublicSignupBrowserRequest/);
+test('integrated API uses separate pre-parser ingress controls and keeps SQL verifier intact', () => {
+  const runtime = readFileSync(new URL('../src/api/auth/publicSignupRuntime.js', import.meta.url), 'utf8');
+  assert.match(server, /app\.use\('\/api\/public-signup', createPublicSignupRuntime\(\)\)/);
+  assert.ok(server.indexOf("app.use('/api/public-signup'") < server.indexOf("app.use(express.json({"));
+  assert.match(runtime, /createAzureSignupClientAddress/);
+  assert.match(runtime, /checkPublicSignupBrowserRequest\(req\)/);
+  assert.match(runtime, /express\.json\(\{ limit: '8kb', strict: true, inflate: false \}\)/);
+  assert.match(runtime, /PUBLIC_SIGNUP_ENABLED === 'true'/);
+  assert.match(runtime, /PUBLIC_SIGNUP_PILOT_APPROVED === 'true'/);
   assert.match(server, /express\.json\(\{\s*limit: '10mb'/);
   assert.match(verify, /Strict read-only migration verification passed for 11 managed migrations/);
 });

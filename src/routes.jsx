@@ -23,6 +23,8 @@ import RenteePortalLayout from './components/layouts/RenteePortalLayout';
 // Auth pages
 import Login from './pages/Login';
 import Register from './pages/Register';
+import SeekerSignUp from './pages/SeekerSignUp';
+import VerifySeekerEmail from './pages/VerifySeekerEmail';
 import AuthCallback from './pages/AuthCallback';
 import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
@@ -221,6 +223,10 @@ const routes = [
       { index: true, element: <Navigate to="/login" replace /> },
       { path: 'login', element: <PublicRoute><Login /></PublicRoute> },
       { path: 'register', element: <PublicRoute><Register /></PublicRoute> },
+      // Dedicated global seeker flow. Both screens fail closed under the
+      // VITE_PUBLIC_SIGNUP_UI_ENABLED default-OFF flag; legacy stays intact.
+      { path: 'seeker-sign-up', element: <PublicRoute><SeekerSignUp /></PublicRoute> },
+      { path: 'verify-email', element: <PublicRoute><VerifySeekerEmail /></PublicRoute> },
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'setup-account', element: <PublicRoute><SetupAccount /></PublicRoute> },
       { path: 'accept-invite', element: <AcceptInvite /> },
