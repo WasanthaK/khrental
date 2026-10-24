@@ -138,6 +138,14 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
   assert.match(boundary, /if \(redirectOnly\) return <Navigate to="\/seeker" replace \/>/);
   assert.match(login, /if \(proof\.verified && proof\.eligible\)/);
   assert.match(login, /navigate\('\/seeker', \{ replace: true \}\)/);
+  // The real hook returns { data }, not an in-scope data variable in Login.
+  assert.match(login, /isPublicSeekerLandingEnabled\(\) && result\?\.data\?\.user\?\.id/);
+  assert.match(login, /expectedAuthId: result\.data\.user\.id/);
+  assert.match(login, /isPublicSignupUiEnabled\(\) &&/);
+  assert.match(login, /to="\/seeker-sign-up"/);
+  const config = readFileSync(new URL('../scripts/generate-env-config.js', import.meta.url), 'utf8');
+  assert.match(config, /'VITE_PUBLIC_SIGNUP_UI_ENABLED'/);
+  assert.match(config, /'VITE_PUBLIC_SEEKER_LANDING_ENABLED'/);
   assert.match(request, /AUTH_FLOW_ISOLATED_PATHS.*'\/seeker'/);
   assert.match(root, /if \(isAuthFlowIsolated\) \{\s*return <Outlet \/>;\s*\}/);
   assert.match(protectedRoute, /requiredPermissions/);
