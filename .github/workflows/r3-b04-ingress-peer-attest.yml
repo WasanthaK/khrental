@@ -1,0 +1,190 @@
+name: R3 B04 ingress socket peer live attestation
+
+# Controlled, one-time, zero-business-write ingress proof.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-ingress-peer-attest.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: kh-r3-ingress-attest
+  cancel-in-progress: false
+
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+
+jobs:
+  attest:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Azure production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+
+      - name: Wait for exact Ready revision from this commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          fqdn="$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)"
+          [[ "$fqdn" == *.azurecontainerapps.io ]] || exit 1
+          echo "R3_NATIVE_FQDN=$fqdn" >> "$GITHUB_ENV"
+          for try in $(seq 1 105); do
+            sha="$(curl -fsS --max-time 12 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
+            app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ "$sha" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]]; then
+              echo "R3_EXACT_BUILD_READY=PASS"
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'R3_BLOCKED: live source/deployment parity missing; no probe enabled' >&2
+          exit 1
+
+      - name: Briefly enable credential-only ingress probe, observe and fully disable
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          armed=false
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if [[ "$armed" == true ]]; then
+              echo 'R3_TEMPORARY_PROBE_CLEANUP=STARTED'
+              if ! az containerapp update -g "$RG" -n "$APP" \
+                --remove-env-vars PUBLIC_SIGNUP_INGRESS_PROBE_SECRET PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT \
+                -o none >/dev/null; then
+                echo 'R3_BLOCKED: temporary probe env removal failed' >&2
+                rc=1
+              fi
+              removed=false
+              for try in $(seq 1 40); do
+                az containerapp show -g "$RG" -n "$APP" -o json > "$tmp/final.json" || true
+                if jq -e '
+                  (.properties.latestRevisionName == .properties.latestReadyRevisionName) and
+                  ((.properties.template.containers[0].env // []) |
+                    all(.[]; .name != "PUBLIC_SIGNUP_INGRESS_PROBE_SECRET" and
+                             .name != "PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT"))
+                ' "$tmp/final.json" >/dev/null 2>&1; then
+                  removed=true; break
+                fi
+                sleep 7
+              done
+              if [[ "$removed" != true ]]; then
+                echo 'R3_BLOCKED: probe env not confirmed removed from Ready revision' >&2
+                rc=1
+              else
+                echo 'R3_TEMPORARY_PROBE_ENV_REMOVED_AND_READY=PASS'
+                if az containerapp secret remove -g "$RG" -n "$APP" \
+                  --secret-names r3-ingress-attestation -o none >/dev/null 2>&1; then
+                  echo 'R3_TEMPORARY_PROBE_SECRET_REMOVED=PASS'
+                else
+                  echo 'R3_TEMPORARY_PROBE_SECRET_REMOVAL=UNVERIFIED (env gone; token expires automatically)'
+                fi
+              fi
+            fi
+            rm -rf "$tmp"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+
+          app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+          jq -e '
+            (.properties.template.containers[0].env // []) |
+            [.[] | select(.name == "PUBLIC_SIGNUP_ENABLED" or .name == "PUBLIC_SIGNUP_PILOT_APPROVED" or
+              .name == "VITE_PUBLIC_SIGNUP_UI_ENABLED" or .name == "VITE_PUBLIC_SEEKER_LANDING_ENABLED")] |
+            length == 4 and all(.[]; .value == "false")
+          ' <<<"$app" >/dev/null || { echo 'R3_BLOCKED: a signup gate is enabled'; exit 1; }
+          if az containerapp secret list -g "$RG" -n "$APP" --query '[].name' -o tsv |
+              grep -Fxq 'r3-ingress-attestation'; then
+            echo 'R3_BLOCKED: stale ingress probe secret; refusing overwrite' >&2
+            exit 1
+          fi
+          key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' | tr -d '\n')"
+          [[ "$key" =~ ^[a-zA-Z0-9_-]{43}$ ]] || exit 1
+          expiry="$(( $(date +%s) + 2400 ))"
+          az containerapp secret set -g "$RG" -n "$APP" \
+            --secrets "r3-ingress-attestation=$key" -o none >/dev/null
+          armed=true
+          az containerapp update -g "$RG" -n "$APP" \
+            --set-env-vars \
+              PUBLIC_SIGNUP_INGRESS_PROBE_SECRET=secretref:r3-ingress-attestation \
+              PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT="$expiry" \
+              PUBLIC_SIGNUP_ENABLED=false PUBLIC_SIGNUP_PILOT_APPROVED=false \
+            -o none >/dev/null
+
+          ready=false
+          for try in $(seq 1 45); do
+            app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            serving="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ -n "$latest" && "$latest" == "$serving" ]]; then ready=true; break; fi
+            sleep 7
+          done
+          [[ "$ready" == true ]] || { echo 'R3_BLOCKED: observer revision not Ready'; exit 1; }
+
+          # Never send a body, customer email or signup request.
+          probe() {
+            host="$1"
+            file="$2"
+            if [[ "$3" == spoof ]]; then
+              curl -fsS --max-time 25 --retry 2 --retry-all-errors -X POST \
+                -H "Authorization: Bearer $key" \
+                -H 'X-Forwarded-For: 198.51.100.66' \
+                "https://$host/api/internal/r3-ingress-peer" > "$tmp/$file.json"
+            else
+              curl -fsS --max-time 25 --retry 2 --retry-all-errors -X POST \
+                -H "Authorization: Bearer $key" \
+                "https://$host/api/internal/r3-ingress-peer" > "$tmp/$file.json"
+            fi
+            jq -e '
+              .source == "server_socket_and_raw_headers" and
+              (.peer | type == "string") and (.rightmost | type == "string") and
+              .xffHeaders == 1 and .xffHops >= 1 and .forwardedProto == "https"
+            ' "$tmp/$file.json" >/dev/null
+          }
+          probe app.quixo.homes custom-clean clean
+          probe app.quixo.homes custom-spoof spoof
+          probe "$R3_NATIVE_FQDN" native-clean clean
+          probe "$R3_NATIVE_FQDN" native-spoof spoof
+
+          for host in custom native; do
+            right="$(jq -r '.rightmost' "$tmp/$host-spoof.json")"
+            hop="$(jq -r '.xffHops' "$tmp/$host-spoof.json")"
+            if [[ "$right" == '198.51.100.66' || "$hop" -lt 2 ]]; then
+              echo "R3_BLOCKED: $host spoofed client IP was not safely appended" >&2
+              exit 1
+            fi
+          done
+
+          {
+            echo '### R3 canonical live Azure socket peer observation'
+            echo
+            echo '| Host / request | Socket peer | Azure-appended rightmost XFF | XFF hops |'
+            echo '| --- | --- | --- | --- |'
+            for host in custom native; do
+              for mode in clean spoof; do
+                file="$tmp/$host-$mode.json"
+                echo "| $host / $mode | $(jq -r '.peer' "$file") | $(jq -r '.rightmost' "$file") | $(jq -r '.xffHops' "$file") |"
+              done
+            done
+            echo
+            echo 'Peer observation is not automatic permission for public signup; flags remain OFF.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'R3_REAL_INGRESS_XFF_SPOOF_RESISTANCE=PASS'
+          echo 'R3_BACKEND_SOCKET_PEERS_OBSERVED=PASS'
