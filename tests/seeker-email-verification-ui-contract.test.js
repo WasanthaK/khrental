@@ -61,11 +61,11 @@ test('failed browser-history scrub must refuse redemption', () => {
   }), null);
 });
 
-test('S3c UI remains unmounted and disabled unless an explicit rollout flag is set', () => {
+test('S3c UI routes are connected but screens remain disabled unless explicitly enabled', () => {
   assert.match(env, /isPublicSignupUiEnabled = \(\) => getEnvVar\('VITE_PUBLIC_SIGNUP_UI_ENABLED'\) === 'true'/);
   assert.match(page, /const permitted = isPublicSignupUiEnabled\(\);/);
-  assert.doesNotMatch(routes, /VerifySeekerEmail/);
-  assert.doesNotMatch(routes, /path: 'verify-email'/);
+  assert.match(routes, /path: 'verify-email', element: <PublicRoute><VerifySeekerEmail \/><\/PublicRoute>/);
+  assert.match(routes, /path: 'seeker-sign-up', element: <PublicRoute><SeekerSignUp \/><\/PublicRoute>/);
 });
 
 test('S3c forms post only to same-origin API; no browser session or tenant claim', () => {
