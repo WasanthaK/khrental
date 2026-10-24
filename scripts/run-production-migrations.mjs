@@ -240,6 +240,89 @@ const inspectInvoicePdfArchive = async pool => {
   };
 };
 
+// B04 S3a/S3d: independent read-only schema integrity checks. Existing
+// historical migrations retain their order and checksums.
+const inspectSignupChallenges = async pool => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.app_users',N'U') IS NOT NULL
+             AND OBJECT_ID(N'dbo.auth_users',N'U') IS NOT NULL
+             AND OBJECT_ID(N'dbo.public_signup_challenges',N'U') IS NOT NULL
+           THEN 1 ELSE 0 END AS tables_ok,
+      (SELECT COUNT(*) FROM sys.columns
+       WHERE object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+         AND name IN (N'id',N'email_normalized',N'display_name',
+           N'token_hash',N'issued_at',N'sent_at',N'expires_at',
+           N'consumed_at',N'revoked_at',N'send_count',N'verify_attempts'))
+          AS columns_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+          WHERE parent_object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+            AND name=N'PK_public_signup_challenges' AND type='PK')
+          THEN 1 ELSE 0 END AS pk_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+          WHERE parent_object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+            AND name=N'UQ_public_signup_challenges_token_hash' AND type='UQ')
+          THEN 1 ELSE 0 END AS token_unique,
+      (SELECT COUNT(*) FROM sys.check_constraints
+       WHERE parent_object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+         AND is_disabled=0 AND is_not_trusted=0
+         AND name IN (N'CK_public_signup_challenges_expiry',
+           N'CK_public_signup_challenges_counts',
+           N'CK_public_signup_challenges_finished_once',
+           N'CK_public_signup_challenges_normalized_email')) AS checks_ok,
+      (SELECT COUNT(*) FROM sys.indexes
+       WHERE object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+         AND name IN (N'IX_public_signup_challenges_email_state',
+                      N'IX_public_signup_challenges_expiry')
+         AND is_disabled=0) AS indexes_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.columns
+         WHERE object_id=OBJECT_ID(N'dbo.public_signup_challenges')
+           AND name=N'token_hash' AND max_length=64
+           AND collation_name=N'Latin1_General_100_BIN2')
+         THEN 1 ELSE 0 END AS hash_format_ok;
+  `);
+  const r = result.recordset?.[0] || {};
+  const satisfied=Boolean(r.tables_ok && r.columns_ok===11 && r.pk_ok
+    && r.token_unique && r.checks_ok===4 && r.indexes_ok===2
+    && r.hash_format_ok);
+  return {satisfied,detail:`tables=${r.tables_ok||0}, columns=${r.columns_ok||0}/11, pk=${r.pk_ok||0}, token_unique=${r.token_unique||0}, checks=${r.checks_ok||0}/4, indexes=${r.indexes_ok||0}/2, hash=${r.hash_format_ok||0}`};
+};
+
+const inspectSignupLimits = async pool => {
+  const result=await pool.request().query(`
+    SELECT
+      CASE WHEN OBJECT_ID(N'dbo.public_signup_challenges',N'U') IS NOT NULL
+             AND OBJECT_ID(N'dbo.public_signup_rate_limits',N'U') IS NOT NULL
+           THEN 1 ELSE 0 END AS tables_ok,
+      (SELECT COUNT(*) FROM sys.columns
+       WHERE object_id=OBJECT_ID(N'dbo.public_signup_rate_limits')
+         AND name IN (N'bucket_hash',N'window_start',N'request_count',
+                      N'updated_at')) AS columns_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints
+         WHERE parent_object_id=OBJECT_ID(N'dbo.public_signup_rate_limits')
+           AND name=N'PK_public_signup_rate_limits' AND type='PK')
+         THEN 1 ELSE 0 END AS pk_ok,
+      (SELECT COUNT(*) FROM sys.check_constraints
+       WHERE parent_object_id=OBJECT_ID(N'dbo.public_signup_rate_limits')
+         AND is_disabled=0 AND is_not_trusted=0
+         AND name IN (N'CK_public_signup_rate_limits_count',
+           N'CK_public_signup_rate_limits_window')) AS checks_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.indexes
+         WHERE object_id=OBJECT_ID(N'dbo.public_signup_rate_limits')
+           AND name=N'IX_public_signup_rate_limits_updated'
+           AND is_disabled=0) THEN 1 ELSE 0 END AS index_ok,
+      CASE WHEN EXISTS (SELECT 1 FROM sys.columns
+         WHERE object_id=OBJECT_ID(N'dbo.public_signup_rate_limits')
+           AND name=N'bucket_hash' AND max_length=64
+           AND collation_name=N'Latin1_General_100_BIN2')
+         THEN 1 ELSE 0 END AS hash_format_ok;
+  `);
+  const r=result.recordset?.[0]||{};
+  const satisfied=Boolean(r.tables_ok && r.columns_ok===4 && r.pk_ok
+    && r.checks_ok===2 && r.index_ok && r.hash_format_ok);
+  return {satisfied,detail:`tables=${r.tables_ok||0}, columns=${r.columns_ok||0}/4, pk=${r.pk_ok||0}, checks=${r.checks_ok||0}/2, index=${r.index_ok||0}, hash=${r.hash_format_ok||0}`};
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -317,6 +400,20 @@ const MIGRATIONS = [
     inspect: inspectInvoicePdfArchive,
     verify: async pool => assertSatisfied(inspectInvoicePdfArchive(pool),
       'Issued PDF archive ledger schema verification failed.')
+  },
+  {
+    id: '20261023_01_create_public_signup_challenges',
+    file: 'migrations/20261023_01_create_public_signup_challenges.sql',
+    inspect: inspectSignupChallenges,
+    verify: async pool => assertSatisfied(inspectSignupChallenges(pool),
+      'B04 signup challenge schema verification failed.')
+  },
+  {
+    id: '20261024_01_create_public_signup_rate_limits',
+    file: 'migrations/20261024_01_create_public_signup_rate_limits.sql',
+    inspect: inspectSignupLimits,
+    verify: async pool => assertSatisfied(inspectSignupLimits(pool),
+      'B04 atomic SQL rate-limit schema verification failed.')
   }
 ];
 
