@@ -1,0 +1,124 @@
+name: R3 B04 production disabled-boundary acceptance
+
+# Independent R3 no-mailbox/no-data-write gate: production must deny
+# anonymous seeker context and both disabled public signup endpoints.
+# No registration, SQL mutation, email, token or tenant is created.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/r3-b04-production-disabled-boundary.yml'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: kh-r3-disabled-public-boundary
+  cancel-in-progress: false
+
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+
+jobs:
+  accept:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Existing Azure Production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+
+      - name: Validate live default-OFF feature gates and Ready serving origins
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+          latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+          ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+          fqdn="$(jq -r '.properties.configuration.ingress.fqdn // ""' <<<"$app")"
+          [[ -n "$latest" && "$latest" == "$ready" && "$fqdn" == *.azurecontainerapps.io ]] || {
+            echo 'R3_BOUNDARY_BLOCKED: Azure revision is not Ready' >&2
+            exit 1
+          }
+          jq -e '
+            (.properties.template.containers[0].env // []) as $v |
+            def field($n): [$v[] | select(.name == $n) | .value] | first;
+            field("PUBLIC_SIGNUP_ENABLED") == "false" and
+            field("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+            field("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false" and
+            field("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false" and
+            field("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false"
+          ' <<<"$app" >/dev/null || {
+            echo 'R3_BOUNDARY_BLOCKED: one or more disabled production gates are not false' >&2
+            exit 1
+          }
+          native_sha="$(curl --fail --silent --show-error --max-time 20 "https://$fqdn/build-info.json" |
+            jq -r '.buildSha // ""')"
+          custom_sha="$(curl --fail --silent --show-error --max-time 20 "https://app.quixo.homes/build-info.json" |
+            jq -r '.buildSha // ""')"
+          [[ "$native_sha" =~ ^[a-f0-9]{40}$ && "$native_sha" == "$custom_sha" ]] || {
+            echo 'R3_BOUNDARY_BLOCKED: native/custom domain source parity failed' >&2
+            exit 1
+          }
+          echo "R3_NATIVE_HOST=$fqdn" >> "$GITHUB_ENV"
+          echo 'R3_PRODUCTION_DISABLED_FLAGS_READY=PASS'
+          echo 'R3_PRODUCTION_ORIGIN_SOURCE_PARITY=PASS'
+
+      - name: Verify anonymous signup and tenantless context are denied, without a request body
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder="$(mktemp -d)"
+          trap 'rm -rf "$folder"' EXIT
+          for host in app.quixo.homes "$R3_NATIVE_HOST"; do
+            # Only empty-body POSTs, after independently confirming both
+            # server flags are OFF. No email/identifier/credential is supplied.
+            for endpoint in challenge redeem; do
+              output="$folder/$endpoint.json"
+              status="$(curl --silent --show-error --max-time 20 \
+                -X POST -H 'Origin: https://app.quixo.homes' \
+                -H 'Content-Type: application/json' \
+                -o "$output" -w '%{http_code}' \
+                "https://$host/api/public-signup/$endpoint")"
+              if [[ "$status" != '404' ]] ||
+                 ! jq -e '.code == "PUBLIC_SIGNUP_DISABLED"' "$output" >/dev/null; then
+                echo "R3_BOUNDARY_BLOCKED: signup endpoint $endpoint did not deny on $host (HTTP=$status)" >&2
+                exit 1
+              fi
+            done
+            # Forge a tenant selector and forwarded IP but provide NO
+            # Authorization/cookie. Neither is authority for seeker context.
+            output="$folder/seeker.json"
+            status="$(curl --silent --show-error --max-time 20 \
+              -H 'X-Tenant-Id: untrusted-synthetic-tenant' \
+              -H 'X-Forwarded-For: 198.51.100.88' \
+              -o "$output" -w '%{http_code}' \
+              "https://$host/api/platform/auth/seeker-context")"
+            if [[ "$status" != '401' ]] ||
+               ! jq -e '.code == "AUTH_CONTEXT_REQUIRED"' "$output" >/dev/null; then
+              echo "R3_BOUNDARY_BLOCKED: anonymous seeker context was not denied on $host (HTTP=$status)" >&2
+              exit 1
+            fi
+          done
+          {
+            echo '### R3 B04 — production signed-out denial (no mailbox required)'
+            echo
+            echo '| Acceptance check | Result |'
+            echo '| --- | --- |'
+            echo '| Existing Azure revision Ready | PASS |'
+            echo '| Custom/native SHA match | PASS |'
+            echo '| All five public signup/seeker gates OFF | PASS |'
+            echo '| Custom and native signup challenge | 404 DISABLED |'
+            echo '| Custom and native signup redeem | 404 DISABLED |'
+            echo '| Anonymous seeker context with forged tenant/IP | 401 DENIED |'
+            echo '| Customer data/email/credential/SQL write | NONE |'
+            echo '| Authenticated two-org isolation and live verification | STILL UNVERIFIED |'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'R3_SIGNED_OUT_PRODUCTION_NEGATIVE_ACCEPTANCE=PASS'
