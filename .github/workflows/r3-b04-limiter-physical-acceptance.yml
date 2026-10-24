@@ -1,0 +1,152 @@
+name: R3 B04 physical Azure SQL limiter acceptance
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-limiter-physical-acceptance.yml']
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: khrental-r3-physical-sql-limiter
+  cancel-in-progress: false
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+jobs:
+  test:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Log in with established production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+      - name: Verify exact Ready source, default-OFF flags and existing replica inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          fqdn="$(az containerapp show -n "$APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          [[ "$fqdn" == *.azurecontainerapps.io ]] || exit 1
+          accepted=false
+          for n in $(seq 1 90); do
+            served="$(curl -fsS --max-time 12 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
+            app="$(az containerapp show -n "$APP" -g "$RG" -o json)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ "$served" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]]; then
+              accepted=true
+              break
+            fi
+            sleep 8
+          done
+          [[ "$accepted" == true ]] || { echo 'R3_BLOCKED: exact Ready build unavailable'; exit 1; }
+          jq -e '
+            (.properties.template.containers[0].env // []) as $v |
+            def field($n): [$v[] | select(.name == $n) | .value] | first;
+            field("PUBLIC_SIGNUP_ENABLED") == "false" and
+            field("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+            field("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false"
+          ' <<<"$app" >/dev/null || { echo 'R3_BLOCKED: signup not explicitly OFF'; exit 1; }
+          tmp="$(mktemp)"
+          az containerapp replica list -n "$APP" -g "$RG" --revision "$ready" -o json > "$tmp"
+          count="$(jq 'length' "$tmp")"
+          [[ "$count" -ge 1 ]] || { rm -f "$tmp"; echo 'R3_BLOCKED: no live replica'; exit 1; }
+          rep_a="$(jq -r '.[0].name' "$tmp")"
+          rep_b="$(jq -r '.[1].name // .[0].name' "$tmp")"
+          rm -f "$tmp"
+          mode=CROSS_PROCESS_ONE_REPLICA
+          if [[ "$rep_a" != "$rep_b" ]]; then mode=TWO_AZURE_REPLICAS; fi
+          echo "R3_REV=$ready" >> "$GITHUB_ENV"
+          echo "R3_REP_A=$rep_a" >> "$GITHUB_ENV"
+          echo "R3_REP_B=$rep_b" >> "$GITHUB_ENV"
+          echo "R3_MODE=$mode" >> "$GITHUB_ENV"
+          echo "R3_SQL_REPLICA_INVENTORY_OK count=$count mode=$mode"
+
+      - name: Exercise independent limiter processes on actual Azure SQL and clean synthetic key
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          nonce="$(openssl rand -hex 16)"
+          [[ "$nonce" =~ ^[a-f0-9]{32}$ ]] || exit 1
+          armed=false
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if [[ "$armed" == true ]]; then
+              echo 'R3_SQL_LIMITER_FINALIZE_CLEANUP_STARTED'
+              finish="az containerapp exec -n '$APP' -g '$RG' --revision '$R3_REV' --replica '$R3_REP_A' --command 'node scripts/r3-b04-limiter-physical-acceptance.mjs finalize $nonce'"
+              if script -q -e -c "$finish" /dev/null > "$scratch/final.log" 2>&1; then
+                if grep -Fq 'R3_LIMITER_SYNTHETIC_BUCKET_REMOVED=PASS' "$scratch/final.log" &&
+                   grep -Fq 'R3_LIMITER_PERSISTED_ATOMIC_LIMIT=PASS consumed=5' "$scratch/final.log"; then
+                  echo 'R3_SQL_LIMITER_PERSISTED_ATOMIC_AND_EXACT_CLEANUP=PASS'
+                else
+                  echo 'R3_BLOCKED: persisted count or cleanup was not verified' >&2
+                  result=1
+                fi
+              else
+                echo 'R3_BLOCKED: SQL finalizer did not complete' >&2
+                result=1
+              fi
+            fi
+            rm -rf "$scratch"
+            exit "$result"
+          }
+          trap cleanup EXIT
+          execute_worker() {
+            name="$1"
+            outfile="$2"
+            command="az containerapp exec -n '$APP' -g '$RG' --revision '$R3_REV' --replica '$name' --command 'node scripts/r3-b04-limiter-physical-acceptance.mjs worker $nonce $start'"
+            script -q -e -c "$command" /dev/null > "$outfile" 2>&1
+          }
+          start="$(( $(date +%s) + 70 ))"
+          armed=true
+          execute_worker "$R3_REP_A" "$scratch/a.log" &
+          a_pid=$!
+          execute_worker "$R3_REP_B" "$scratch/b.log" &
+          b_pid=$!
+          a_rc=0
+          b_rc=0
+          wait "$a_pid" || a_rc=$?
+          wait "$b_pid" || b_rc=$?
+          if [[ "$a_rc" -ne 0 || "$b_rc" -ne 0 ]]; then
+            echo "R3_BLOCKED: independent SQL workers failed (a=$a_rc b=$b_rc)" >&2
+            exit 1
+          fi
+          parse() {
+            log="$1"
+            [[ "$(grep -c 'R3_LIMITER_WORKER_DONE allowed=' "$log")" == 1 ]] || return 1
+            grep -o 'R3_LIMITER_WORKER_DONE allowed=[0-9]* denied=[0-9]* requests=8' "$log" |
+              sed -E 's/.*allowed=([0-9]+) denied=([0-9]+).*/\1 \2/'
+          }
+          read -r a_pass a_deny <<<"$(parse "$scratch/a.log")"
+          read -r b_pass b_deny <<<"$(parse "$scratch/b.log")"
+          (( a_pass + a_deny == 8 )) || exit 1
+          (( b_pass + b_deny == 8 )) || exit 1
+          (( a_pass + b_pass == 5 )) || { echo 'R3_BLOCKED: SQL over-admitted rate limit'; exit 1; }
+          (( a_deny + b_deny == 11 )) || exit 1
+          echo 'R3_SQL_LIMITER_TWO_PROCESSES_ATOMIC=PASS allowed=5 denied=11'
+          {
+            echo '### R3 live Azure SQL limiter (actual production SQL)'
+            echo
+            echo "| Worker deployment | $R3_MODE |"
+            echo '| --- | --- |'
+            echo '| Independent app processes | 2 |'
+            echo '| HMAC synthetic bucket | 1, no personal data |'
+            echo '| Limit | 5 |'
+            echo '| Total concurrent transactions | 16 |'
+            echo '| Accepted | 5 |'
+            echo '| Denied | 11 |'
+            echo '| Public signup | OFF |'
+            if [[ "$R3_MODE" == TWO_AZURE_REPLICAS ]]; then
+              echo '| Cross-replica test | PASSED, pending exact row cleanup |'
+            else
+              echo '| Cross-replica test | NOT RUN: only one existing replica; no auto scale-up |'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
