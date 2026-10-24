@@ -61,12 +61,14 @@ jobs:
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
           command="az containerapp exec -n '$APP' -g '$RG' --revision '$R3_REV' --command 'node scripts/r3-b04-sql-permissions-readonly.mjs'"
-          script -q -e -c "$command" /dev/null > "$log" 2>&1 || {
-            echo 'R3_SQL_READONLY_PERMISSION_PROBE=BLOCKED_EXEC' >&2
-            exit 1
-          }
+          exec_rc=0
+          script -q -e -c "$command" /dev/null > "$log" 2>&1 || exec_rc=$?
           grep -E '^.*R3_SQL_(PERMISSION_READONLY table=|RUNTIME_MINIMUM_PERMISSIONS=|READONLY_DIAGNOSTIC_NO_DATA_MUTATION=)' "$log" |
             sed -E 's/^.*(R3_SQL_)/\1/' || true
+          if (( exec_rc != 0 )); then
+            echo "R3_SQL_READONLY_EXEC_STATUS=BLOCKED exit=$exec_rc" >&2
+            exit 1
+          fi
           grep -Fq 'R3_SQL_READONLY_DIAGNOSTIC_NO_DATA_MUTATION=PASS' "$log" || {
             echo 'R3_SQL_READONLY_PERMISSION_PROBE=NO_ACCEPTANCE_MARKER' >&2; exit 1
           }
