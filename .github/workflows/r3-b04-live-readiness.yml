@@ -63,21 +63,60 @@ jobs:
           if [[ "$verification_origin" == "https://app.quixo.homes" ]]; then origin_approved="true"; fi
           mail_config="$(has_field PUBLIC_SIGNUP_SENDGRID_API_KEY)"
           limiter_config="$(has_field PUBLIC_SIGNUP_THROTTLE_SECRET)"
-          serving="$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json | jq -r '.buildSha // ""')"
-          health="$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/api/mssql/health | jq -r '.connection // ""')"
-          if [[ -z "$latest" || "$ready" != "$latest" || "$health" != ready || ! "$serving" =~ ^[a-f0-9]{40}$ ]]; then
-            echo 'R3_AZURE_PRECHECK_BLOCKED: ready serving app/SQL/SHA not independently matched' >&2
-            exit 1
+          # Independently sample both trusted Azure hostname and custom domain.
+          # HTTP failures must not short-circuit the report or skip SendGrid GET.
+          fqdn="$(jq -r '.properties.configuration.ingress.fqdn // ""' "$app")"
+          probe_dir="$(mktemp -d)"
+          trap 'rm -f "$app"; rm -rf "$probe_dir"' EXIT
+          probe() {
+            local url="$1" output="$2"
+            curl --silent --show-error --max-time 20 --retry 2 --retry-delay 2 \
+              --retry-all-errors -o "$output" -w '%{http_code}' "$url" 2>/dev/null || true
+          }
+          custom_build_http="$(probe https://app.quixo.homes/build-info.json "$probe_dir/custom-build")"
+          custom_health_http="$(probe https://app.quixo.homes/api/mssql/health "$probe_dir/custom-health")"
+          azure_build_http="not-probed"
+          azure_health_http="not-probed"
+          if [[ -n "$fqdn" && "$fqdn" == *.azurecontainerapps.io ]]; then
+            azure_build_http="$(probe "https://$fqdn/build-info.json" "$probe_dir/azure-build")"
+            azure_health_http="$(probe "https://$fqdn/api/mssql/health" "$probe_dir/azure-health")"
+          fi
+          serving=""
+          health=""
+          azure_serving=""
+          azure_health=""
+          if [[ "$custom_build_http" == 200 ]]; then
+            serving="$(jq -r '.buildSha // ""' "$probe_dir/custom-build" 2>/dev/null || true)"
+          fi
+          if [[ "$custom_health_http" == 200 ]]; then
+            health="$(jq -r '.connection // ""' "$probe_dir/custom-health" 2>/dev/null || true)"
+          fi
+          if [[ "$azure_build_http" == 200 ]]; then
+            azure_serving="$(jq -r '.buildSha // ""' "$probe_dir/azure-build" 2>/dev/null || true)"
+          fi
+          if [[ "$azure_health_http" == 200 ]]; then
+            azure_health="$(jq -r '.connection // ""' "$probe_dir/azure-health" 2>/dev/null || true)"
+          fi
+          ready_ok=false
+          if [[ -n "$latest" && "$ready" == "$latest" && "$health" == ready &&
+                "$azure_health" == ready && "$serving" =~ ^[a-f0-9]{40}$ &&
+                "$azure_serving" == "$serving" ]]; then
+            ready_ok=true
           fi
           {
             echo '### R3 B04 — existing production environment (read-only)'
             echo
             echo "| Check | Observed state |"
             echo "| --- | --- |"
-            echo "| Azure latest = Ready revision | PASS |"
+            echo "| Azure latest = Ready revision | $([[ -n \"$latest\" && \"$latest\" == \"$ready\" ]] && echo PASS || echo BLOCKED) |"
             echo "| Azure ingress external / target port | $external / $port |"
-            echo "| Public served Git SHA | $serving |"
-            echo "| App MSSQL ready | PASS |"
+            echo "| Custom domain public build HTTP | $custom_build_http |"
+            echo "| Azure default domain build HTTP | $azure_build_http |"
+            echo "| Custom domain MSSQL HTTP | $custom_health_http |"
+            echo "| Azure default domain MSSQL HTTP | $azure_health_http |"
+            echo "| Public served Git SHA | ${serving:-UNVERIFIED} |"
+            echo "| Azure default domain SHA | ${azure_serving:-UNVERIFIED} |"
+            echo "| App MSSQL ready on both domains | $ready_ok |"
             echo "| Server public signup enabled | $([[ "$api_flag" == true ]] && echo ON || echo OFF) |"
             echo "| Server approved pilot enabled | $([[ "$pilot_flag" == true ]] && echo ON || echo OFF) |"
             echo "| Signup sender setting present | $sender_present |"
@@ -91,9 +130,14 @@ jobs:
             echo
             echo 'The app is not ready for public signup merely because Azure ingress and DNS exist.'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "R3_AZURE_CONFIGURATION_OBSERVED ready=true signupEnabled=$([[ "$api_flag" == true ]] && echo true || echo false) pilotEnabled=$([[ "$pilot_flag" == true ]] && echo true || echo false) peerProven=false"
+          echo "R3_AZURE_CONFIGURATION_OBSERVED ready=$ready_ok customBuildHttp=$custom_build_http azureBuildHttp=$azure_build_http customHealthHttp=$custom_health_http azureHealthHttp=$azure_health_http peerProven=false"
+          if [[ "$ready_ok" != true ]]; then
+            echo "R3_CUSTOM_ORIGIN_READINESS_BLOCKED: production peer and custom origin disagree or are unhealthy." >&2
+            exit 1
+          fi
 
       - name: Read SendGrid authorized sender/domain metadata (no sends)
+        if: ${{ success() || failure() }}
         shell: bash
         run: |
           set -euo pipefail
