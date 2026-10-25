@@ -68,6 +68,12 @@ const main = async () => {
       ' R3_SQL_COUNT=' + (count || 'UNKNOWN') +
       ' R3_SQL_REJECTION_A=' + a.stderr.includes('R3_SQL_TRANSACTION_RESULTS=REJECTED') +
       ' R3_SQL_REJECTION_B=' + b.stderr.includes('R3_SQL_TRANSACTION_RESULTS=REJECTED'));
+    const classFor = worker => {
+      const match = /R3_SQL_FAILURE_CATEGORIES=([A-Z0-9_,:]+)/.exec(worker.stderr);
+      return match?.[1] || 'NONE';
+    };
+    console.error('R3_SQL_CATEGORIES_A=' + classFor(a) +
+      ' R3_SQL_CATEGORIES_B=' + classFor(b));
     safe('RACE_NOT_ACCEPTED');
     return;
   }
