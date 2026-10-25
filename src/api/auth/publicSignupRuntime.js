@@ -27,8 +27,16 @@ export const createApprovedSignupPeerPredicate = (source) => {
 };
 
 export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
+  // R3 canary is *always* single-recipient in production. Neither rollout
+  // flag can open the public endpoint without a normalized mailbox fence.
+  const candidate = config.PUBLIC_SIGNUP_PILOT_EMAIL;
+  const pilotEmail = typeof candidate === 'string' &&
+    candidate === candidate.trim().toLowerCase() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) &&
+    candidate.length <= 320 ? candidate : null;
   const enabled = config.PUBLIC_SIGNUP_ENABLED === 'true' &&
-    config.PUBLIC_SIGNUP_PILOT_APPROVED === 'true';
+    config.PUBLIC_SIGNUP_PILOT_APPROVED === 'true' &&
+    (config.NODE_ENV !== 'production' || pilotEmail !== null);
   // This deployment-mode assertion must be set via the separately verified
   // ACA HTTP ingress OIDC gate. Never infer proxy trust from request headers.
   // In other environments keep the existing exact-socket predicate.
@@ -54,6 +62,7 @@ export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
   }
   const registration = createPublicSignupRouter({
     enabled,
+    pilotEmail: config.NODE_ENV === 'production' ? pilotEmail : null,
     limiter: enabled ? createSqlPublicSignupLimiter() : null,
     clientAddress: address,
     throttleSecret: config.PUBLIC_SIGNUP_THROTTLE_SECRET || '',
