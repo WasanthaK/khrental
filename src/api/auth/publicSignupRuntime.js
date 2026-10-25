@@ -29,8 +29,14 @@ export const createApprovedSignupPeerPredicate = (source) => {
 export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
   const enabled = config.PUBLIC_SIGNUP_ENABLED === 'true' &&
     config.PUBLIC_SIGNUP_PILOT_APPROVED === 'true';
+  // This deployment-mode assertion must be set via the separately verified
+  // ACA HTTP ingress OIDC gate. Never infer proxy trust from request headers.
+  // In other environments keep the existing exact-socket predicate.
+  const acaMode = config.NODE_ENV === 'production' &&
+    config.PUBLIC_SIGNUP_INGRESS_MODE === 'azure-container-apps-http';
   const address = createAzureSignupClientAddress({
-    isTrustedIngressPeer: createApprovedSignupPeerPredicate(config.PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS)
+    isTrustedIngressPeer: createApprovedSignupPeerPredicate(config.PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS),
+    azureManagedHttpIngress: acaMode
   });
   let mail = null;
   if (enabled) {

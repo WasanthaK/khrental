@@ -38,20 +38,34 @@ export const normalizePublicSignupIp = normalizeIp;
  * Container Apps adds only its observed peer as the RIGHTMOST XFF element.
  * Client-controlled entries to the left are never authoritative.
  *
- * This resolver MUST be given an independently checked ingress-peer predicate.
- * The caller must first establish that the socket is reachable only through
- * the approved Azure ingress/proxy, then allowlist/verify the peer. Do NOT use
- * req.ip, trust-proxy=true, the leftmost XFF value or an unconditional predicate
- * in production. Without a verified peer, resolution returns null.
+ * Two explicitly distinct trust modes:
+ * (1) Exact socket allowlist, retained for proxy deployments with stable peers.
+ * (2) Only AFTER independent Azure Container Apps HTTP-ingress verification,
+ *     the Azure-managed edge mode trusts the RIGHTMOST XFF entry appended by
+ *     that managed ingress. Azure documents that client-supplied entries are
+ *     only to its left and overwrites X-Forwarded-Proto. Dynamic Envoy socket
+ *     peers are not identity and MUST NOT be pinned as a stable one-IP proxy.
+ *
+ * The managed mode is unsafe when the application port is independently
+ * reachable without Azure Envoy; it must be configured only by a governed
+ * Azure ingress/configuration acceptance, never by an HTTP request header.
+ * Neither mode uses req.ip, Express trust proxy, or leftmost XFF.
  */
-export const createAzureSignupClientAddress = ({ isTrustedIngressPeer } = {}) => {
-  if (typeof isTrustedIngressPeer !== 'function') {
+export const createAzureSignupClientAddress = ({
+  isTrustedIngressPeer, azureManagedHttpIngress = false
+} = {}) => {
+  if (!azureManagedHttpIngress && typeof isTrustedIngressPeer !== 'function') {
     return () => null;
   }
   return req => {
     try {
       const peer = normalizeIp(req?.socket?.remoteAddress);
-      if (!peer || isTrustedIngressPeer(peer, req) !== true) return null;
+      if (!peer) return null;
+      if (azureManagedHttpIngress) {
+        // ACA's ingress overwrites this value even when supplied by a client.
+        // This check is an additional sanity condition, NOT proxy identity.
+        if (req?.headers?.['x-forwarded-proto'] !== 'https') return null;
+      } else if (isTrustedIngressPeer(peer, req) !== true) return null;
       if (!Array.isArray(req?.rawHeaders)) return null;
       const xffOccurrences = [];
       for (let i = 0; i < req.rawHeaders.length - 1; i += 2) {

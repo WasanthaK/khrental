@@ -70,6 +70,32 @@ test('missing peer attestation, forged headers, duplicate XFF and port suffix fa
   assert.equal(throws(raw('10.0.0.5', '192.0.2.1')), null);
 });
 
+
+test('ACA platform-managed HTTP ingress mode selects only Azure-appended rightmost XFF despite rotating socket peers', () => {
+  const managed = createAzureSignupClientAddress({ azureManagedHttpIngress: true });
+  const request = (peer, forwarded, proto = 'https') => ({
+    ...raw(peer, forwarded), headers: {
+      ...raw(peer, forwarded).headers, 'x-forwarded-proto': proto
+    }
+  });
+  assert.equal(managed(request('10.20.0.11', '203.0.113.88')), '203.0.113.88');
+  assert.equal(managed(request('10.20.0.99', '198.51.100.66, 203.0.113.88')),
+    '203.0.113.88', 'untrusted leftmost address must never alter quota key');
+  assert.equal(managed(request('10.20.0.11', '203.0.113.88', 'http')), null);
+  assert.equal(managed(request('10.20.0.11', '203.0.113.88', undefined)), '203.0.113.88');
+  const missing = request('10.20.0.11', '203.0.113.88');
+  delete missing.headers['x-forwarded-proto'];
+  assert.equal(managed(missing), null);
+  assert.equal(managed(request('not-an-ip', '203.0.113.88')), null);
+  assert.equal(managed({ ...request('10.20.0.11', '203.0.113.88'), rawHeaders: [] }), null);
+  assert.equal(managed({ ...request('10.20.0.11', '203.0.113.88'), rawHeaders: [
+    'X-Forwarded-For', '203.0.113.88',
+    'x-forwarded-for', '198.51.100.66'
+  ] }), null);
+  assert.equal(createAzureSignupClientAddress()(request('10.20.0.11', '203.0.113.88')), null,
+    'managed mode cannot be implicitly selected');
+});
+
 const good = () => ({
   method: 'POST',
   originalUrl: '/api/public-signup/challenge',
