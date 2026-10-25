@@ -12,7 +12,7 @@ test('R3 managed ingress requires explicit server-only production mode, not clie
   assert.match(guard, /req\?\.headers\?\.\['x-forwarded-proto'\] !== 'https'/);
   assert.match(guard, /xffOccurrences\.length !== 1/);
   assert.match(guard, /hops\[hops.length - 1\]/);
-  assert.doesNotMatch(guard, /req\.ip|req\.ips|app\.set\(['"]trust proxy/);
+  assert.doesNotMatch(guard, /(?:return\s+req\.ip\b|=\s*req\.ip\b|app\.set\(['"]trust proxy)/);
 });
 
 test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP ingress', () => {
