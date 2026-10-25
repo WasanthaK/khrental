@@ -45,7 +45,10 @@ test('link paths stay inside the draft country page structure',()=>{
     const root=page==='home'?'../':'../../';
     assert.ok(html.includes('href="'+root+'styles.css"'));
     assert.ok(html.includes('href="'+within+'search/?type=residential"'));
-    assert.ok(html.includes('href="'+root+'bn/"'));
+    const targetSuffix = PAGE_TYPES[page] ? PAGE_TYPES[page]+'/' : '';
+    assert.ok(html.includes('href="'+root+'bn/'+targetSuffix+'"'), 'Country switch must preserve page '+page);
+    assert.ok(html.includes('href="'+within+'how-it-works/#help"'));
+    assert.match(html,/Choose country; current country: Sri Lanka/);
     assert.ok(html.includes('href="https://app.quixo.homes/login"'));
   }
 });
