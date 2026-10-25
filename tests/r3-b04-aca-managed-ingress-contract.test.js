@@ -18,7 +18,7 @@ test('R3 managed ingress requires explicit server-only production mode, not clie
 test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP ingress', () => {
   for (const field of [
     '$ing.external == true',
-    '$ing.transport == "auto"',
+    'index(($ing.transport | ascii_downcase))',
     '$ing.targetPort == 5174',
     '$ing.allowInsecure == false',
     '$ing.additionalPortMappings',
@@ -39,17 +39,15 @@ test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP i
   assert.doesNotMatch(job, /az sql db update|az containerapp scale|--min-replicas|GRANT DELETE|trust proxy=true/);
 });
 
-test('R3 Azure HTTP/2 is a documented managed HTTP transport, TCP remains rejected', () => {
-  assert.match(job, /managedHttpTransport: \(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\)/);
-  assert.match(job, /\(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\) and/);
-  assert.match(job, /R3_INGRESS_READONLY_TRANSPORT=/);
-  assert.doesNotMatch(job, /\(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2" or \$ing\.transport == "tcp"\) and/);
-});
-
-test('R3 absent ACA transport resolves only to documented auto, never unknown explicit or TCP', () => {
+test('R3 ACA transport is normalized only for documented HTTP variants, TCP rejected', () => {
+  assert.match(job, /managedHttpTransport: \(\$ing\.transport == null or/);
+  assert.match(job, /\(\$ing\.transport \| type\) == "string" and/);
+  assert.match(job, /index\(\(\$ing\.transport \| ascii_downcase\)\)/);
+  assert.match(job, /\["auto", "http", "http2"\]/);
   assert.match(job, /R3_INGRESS_READONLY_TRANSPORT=/);
   assert.match(job, /absent-default-auto/);
-  assert.match(job, /unknown-explicit/);
-  assert.match(job, /elif \$transport == "auto" or \$transport == "http" or \$transport == "http2" or \$transport == "tcp"/);
-  assert.doesNotMatch(job, /\(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2" or \$ing\.transport == "tcp"\) and/);
+  assert.match(job, /unrecognized-value-format/);
+  assert.match(job, /test\("\^\[A-Za-z0-9_\.\/-\]\+\$"\)/);
+  assert.doesNotMatch(job, /\["auto", "http", "http2", "tcp"\]/);
+  assert.doesNotMatch(job, /az containerapp ingress update|--transport tcp|trust proxy=true/);
 });
