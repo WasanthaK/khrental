@@ -40,8 +40,16 @@ test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP i
 });
 
 test('R3 Azure HTTP/2 is a documented managed HTTP transport, TCP remains rejected', () => {
-  assert.match(job, /managedHttpTransport: \(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\)/);
-  assert.match(job, /\(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\) and/);
+  assert.match(job, /managedHttpTransport: \(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\)/);
+  assert.match(job, /\(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\) and/);
   assert.match(job, /R3_INGRESS_READONLY_TRANSPORT=/);
   assert.doesNotMatch(job, /\(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2" or \$ing\.transport == "tcp"\) and/);
+});
+
+test('R3 absent ACA transport resolves only to documented auto, never unknown explicit or TCP', () => {
+  assert.match(job, /R3_INGRESS_READONLY_TRANSPORT=/);
+  assert.match(job, /absent-default-auto/);
+  assert.match(job, /unknown-explicit/);
+  assert.match(job, /elif \$transport == "auto" or \$transport == "http" or \$transport == "http2" or \$transport == "tcp"/);
+  assert.doesNotMatch(job, /\(\$ing\.transport == null or \$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2" or \$ing\.transport == "tcp"\) and/);
 });

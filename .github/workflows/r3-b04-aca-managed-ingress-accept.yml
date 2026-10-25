@@ -64,7 +64,7 @@ jobs:
             def val($key): [$vars[] | select(.name == $key) | .value] | first;
             {
               externalHttpsIngress: ($ing.external == true),
-              managedHttpTransport: ($ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2"),
+              managedHttpTransport: ($ing.transport == null or $ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2"),
               expectedTargetPort: ($ing.targetPort == 5174),
               noInsecureIngress: ($ing.allowInsecure == false or $ing.allowInsecure == null),
               noAdditionalPorts: (($ing.additionalPortMappings // []) | length == 0),
@@ -82,8 +82,9 @@ jobs:
           jq -r '
             .properties.configuration.ingress.transport as $transport |
             "R3_INGRESS_READONLY_TRANSPORT=" +
-            (if $transport == "auto" or $transport == "http" or $transport == "http2" or $transport == "tcp"
-              then $transport else "unknown" end)
+            (if $transport == null then "absent-default-auto"
+             elif $transport == "auto" or $transport == "http" or $transport == "http2" or $transport == "tcp"
+              then $transport else "unknown-explicit" end)
           ' <<<"$app"
           echo 'R3_INGRESS_READONLY_DIAGNOSTIC_NO_MUTATION=PASS'
           jq -e '
@@ -91,7 +92,7 @@ jobs:
             (.properties.template.containers[0].env // []) as $vars |
             def val($key): [$vars[] | select(.name == $key) | .value] | first;
             $ing.external == true and
-            ($ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2") and
+            ($ing.transport == null or $ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2") and
             $ing.targetPort == 5174 and
             ($ing.allowInsecure == false or $ing.allowInsecure == null) and
             (($ing.additionalPortMappings // []) | length == 0) and
