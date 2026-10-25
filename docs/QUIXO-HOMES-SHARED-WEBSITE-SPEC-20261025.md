@@ -47,3 +47,12 @@ Local `node validate.mjs` **PASS** for 10 country pages, local paths, per-market
 4. **Separately** authorize code integration, production marketing deployment, country page indexing, R3 signup release, Azure scaling or Stripe payments. The current `marketing/lk` and `marketing/bn` branch HTML are historical landlord-only drafts, still held from merge to main. No automatic Azure Static Web Apps publishing was invoked.
 
 **Canonical status:** Design/adaptation scope APPROVED and delivered as an offline review prototype; browser visual acceptance OPEN; public website merge/publication NOT AUTHORIZED; all R3 rollout flags remain OFF and the current one-replica conditional release ceiling remains in force.
+
+
+## Owner visual approval — 2026-10-25
+
+Following receipt of the offline LK/BN ten-page ZIP, the owner replied **“looks good to me”**. This is recorded as **visual concept/direction ACCEPTED BY OWNER** for the shared brand and page layouts (including the corrected wordmark); it is **not** an independently executed 320–390px/mobile/browser accessibility test. Preserve the explicit technical unknowns, image licensing, country copy, and feature-truth checks. Do not repeat or redesign the approved visuals without a concrete defect.
+
+**Next engineering stage:** stage a single shared, country-aware public website contract and non-live page integration on this isolated R4 branch. No `main` merge, Azure marketing publish, applicant or tenant registration, live listings, enquiry submission, Stripe checkout or paid cloud capacity is authorized by this design approval. Source PR, preview QA, release review and explicit go/no-go must precede publication.
+
+**State:** R4 visual design OWNER ACCEPTED; R4 implementation staging IN PROGRESS; R4 publication HOLD.
