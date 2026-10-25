@@ -57,6 +57,9 @@ test('one Azure replica races separate Node processes under a single Azure conso
   assert.match(singleReplica, /execute\('finalize', nonce\)/);
   assert.match(singleReplica, /R3_SQL_EXACT_SYNTHETIC_BUCKET_CLEANUP=PASS/);
   assert.match(singleReplica, /R3_SQL_PHYSICAL_LIMITER_CROSS_REPLICA=NOT_YET_TESTED/);
+  assert.match(source, /R3_SQL_FAILURE_CATEGORIES=/);
+  assert.match(singleReplica, /R3_SQL_CATEGORIES_A=/);
+  assert.match(singleReplica, /R3_SQL_CATEGORIES_B=/);
   assert.match(workflow, /CROSS_PROCESS_ONE_REPLICA/);
   assert.match(workflow, /r3-b04-limiter-single-replica-race\.mjs/);
   assert.doesNotMatch(singleReplica, /app_users|tenant_memberships|sendViaSendGrid/);
