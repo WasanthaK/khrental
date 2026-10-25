@@ -64,7 +64,7 @@ jobs:
             def val($key): [$vars[] | select(.name == $key) | .value] | first;
             {
               externalHttpsIngress: ($ing.external == true),
-              managedHttpTransport: ($ing.transport == "auto" or $ing.transport == "http"),
+              managedHttpTransport: ($ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2"),
               expectedTargetPort: ($ing.targetPort == 5174),
               noInsecureIngress: ($ing.allowInsecure == false or $ing.allowInsecure == null),
               noAdditionalPorts: (($ing.additionalPortMappings // []) | length == 0),
@@ -77,13 +77,21 @@ jobs:
               seekerLandingDisabled: (val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false")
             } | to_entries[] | "R3_INGRESS_READONLY_CHECK_\(.key)=\(.value)"
           ' <<<"$app"
+          # Reveal only the non-sensitive protocol enum for audit. Unsupported
+          # values still fail closed in the topology predicate below.
+          jq -r '
+            .properties.configuration.ingress.transport as $transport |
+            "R3_INGRESS_READONLY_TRANSPORT=" +
+            (if $transport == "auto" or $transport == "http" or $transport == "http2" or $transport == "tcp"
+              then $transport else "unknown" end)
+          ' <<<"$app"
           echo 'R3_INGRESS_READONLY_DIAGNOSTIC_NO_MUTATION=PASS'
           jq -e '
             (.properties.configuration.ingress // {}) as $ing |
             (.properties.template.containers[0].env // []) as $vars |
             def val($key): [$vars[] | select(.name == $key) | .value] | first;
             $ing.external == true and
-            ($ing.transport == "auto" or $ing.transport == "http") and
+            ($ing.transport == "auto" or $ing.transport == "http" or $ing.transport == "http2") and
             $ing.targetPort == 5174 and
             ($ing.allowInsecure == false or $ing.allowInsecure == null) and
             (($ing.additionalPortMappings // []) | length == 0) and
