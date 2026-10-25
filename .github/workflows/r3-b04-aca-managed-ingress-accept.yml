@@ -51,6 +51,30 @@ jobs:
           # ACA HTTP ingress always routes through managed Envoy, and
           # Microsoft explicitly documents that only its rightmost XFF is
           # authoritative. Refuse this mode for custom proxies/TCP/direct port.
+          # Report only literal contract predicates, not the Azure app
+          # resource JSON (which also holds secret references and metadata).
+          # A failed condition is an evidenced BLOCKER, not permission to
+          # relax a security requirement or enable public registration.
+          jq -r '
+            (.properties.configuration.ingress // {}) as $ing |
+            (.properties.template.containers[0].env // []) as $vars |
+            def val($key): [$vars[] | select(.name == $key) | .value] | first;
+            {
+              externalHttpsIngress: ($ing.external == true),
+              managedHttpTransport: ($ing.transport == "auto" or $ing.transport == "http"),
+              expectedTargetPort: ($ing.targetPort == 5174),
+              noInsecureIngress: ($ing.allowInsecure == false or $ing.allowInsecure == null),
+              noAdditionalPorts: (($ing.additionalPortMappings // []) | length == 0),
+              customHostBound: (($ing.customDomains // []) | any(.[]; .name == "app.quixo.homes")),
+              managedModeNotPreviouslyEnabled: (val("PUBLIC_SIGNUP_INGRESS_MODE") == null or val("PUBLIC_SIGNUP_INGRESS_MODE") == ""),
+              signupDisabled: (val("PUBLIC_SIGNUP_ENABLED") == "false"),
+              pilotDisabled: (val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false"),
+              seekerContextDisabled: (val("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false"),
+              seekerUiDisabled: (val("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false"),
+              seekerLandingDisabled: (val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false")
+            } | to_entries[] | "R3_INGRESS_READONLY_CHECK_\(.key)=\(.value)"
+          ' <<<"$app"
+          echo 'R3_INGRESS_READONLY_DIAGNOSTIC_NO_MUTATION=PASS'
           jq -e '
             (.properties.configuration.ingress // {}) as $ing |
             (.properties.template.containers[0].env // []) as $vars |
