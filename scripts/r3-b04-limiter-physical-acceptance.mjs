@@ -55,9 +55,21 @@ const main = async () => {
         key, scope: 'redeem-ip', max: LIMIT, windowSeconds: WINDOW_SECONDS
       })
     ));
-    if (outcomes.some(result => result.status !== 'fulfilled')) {
-      console.error('R3_SQL_TRANSACTION_RESULTS=REJECTED count=' +
-        outcomes.filter(result => result.status !== 'fulfilled').length);
+    const rejected = outcomes.filter(result => result.status === 'rejected');
+    if (rejected.length > 0) {
+      // Categories are fixed strings from the limiter. Never print raw SQL
+      // errors, stack traces, SQL connections, secrets or HMAC keys.
+      const categories = new Map();
+      for (const item of rejected) {
+        const category = item.reason?.diagnosticCategory;
+        const safe = typeof category === 'string' && /^[A-Z_]+$/.test(category)
+          ? category : 'UNCLASSIFIED';
+        categories.set(safe, (categories.get(safe) || 0) + 1);
+      }
+      const summary = [...categories.entries()].sort(([a], [b]) => a.localeCompare(b))
+        .map(([category, count]) => category + ':' + count).join(',');
+      console.error('R3_SQL_TRANSACTION_RESULTS=REJECTED count=' + rejected.length);
+      console.error('R3_SQL_FAILURE_CATEGORIES=' + summary);
       fail('one or more independently executed SQL transactions failed');
     }
     const allowed = outcomes.filter(result => result.value === true).length;
