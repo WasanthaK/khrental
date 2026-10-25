@@ -205,30 +205,30 @@ jobs:
           # At most two observed exact peers for the current single-replica
           # ingress topology. No wildcard, CIDR, localhost or link-local.
           python3 - "$tmp" <<'PY'
-import ipaddress, json, pathlib, sys
-p = pathlib.Path(sys.argv[1])
-peers = []
-trusted = [ipaddress.ip_network(x) for x in
-           ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]
-for name in ("custom", "native"):
-    clean = json.loads((p / (name + "-clean.json")).read_text())
-    spoof = json.loads((p / (name + "-spoof.json")).read_text())
-    if clean["peer"] != spoof["peer"]:
-        raise SystemExit("R3_BLOCKED: backend socket peer changed in paired probes")
-    if clean["rightmost"] != spoof["rightmost"]:
-        raise SystemExit("R3_BLOCKED: spoof changed ingress-attested client address")
-    if spoof["xffHops"] < 2 or clean["xffHeaders"] != 1 or spoof["xffHeaders"] != 1:
-        raise SystemExit("R3_BLOCKED: ingress XFF shape not stable")
-    address = ipaddress.ip_address(clean["peer"])
-    if not any(address in network for network in trusted):
-        raise SystemExit("R3_BLOCKED: socket peer is not a strict private ingress address")
-    peers.append(str(address))
-peers = sorted(set(peers))
-if not 1 <= len(peers) <= 2:
-    raise SystemExit("R3_BLOCKED: observed ingress peer inventory is unexpectedly broad")
-(p / "approved-peers.txt").write_text(",".join(peers), encoding="utf-8")
-print("R3_EXACT_SOCKET_PEER_ATTESTATION=PASS count=" + str(len(peers)))
-PY
+          import ipaddress, json, pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          peers = []
+          trusted = [ipaddress.ip_network(x) for x in
+                     ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]
+          for name in ("custom", "native"):
+              clean = json.loads((p / (name + "-clean.json")).read_text())
+              spoof = json.loads((p / (name + "-spoof.json")).read_text())
+              if clean["peer"] != spoof["peer"]:
+                  raise SystemExit("R3_BLOCKED: backend socket peer changed in paired probes")
+              if clean["rightmost"] != spoof["rightmost"]:
+                  raise SystemExit("R3_BLOCKED: spoof changed ingress-attested client address")
+              if spoof["xffHops"] < 2 or clean["xffHeaders"] != 1 or spoof["xffHeaders"] != 1:
+                  raise SystemExit("R3_BLOCKED: ingress XFF shape not stable")
+              address = ipaddress.ip_address(clean["peer"])
+              if not any(address in network for network in trusted):
+                  raise SystemExit("R3_BLOCKED: socket peer is not a strict private ingress address")
+              peers.append(str(address))
+          peers = sorted(set(peers))
+          if not 1 <= len(peers) <= 2:
+              raise SystemExit("R3_BLOCKED: observed ingress peer inventory is unexpectedly broad")
+          (p / "approved-peers.txt").write_text(",".join(peers), encoding="utf-8")
+          print("R3_EXACT_SOCKET_PEER_ATTESTATION=PASS count=" + str(len(peers)))
+          PY
           installed_peers="$(cat "$tmp/approved-peers.txt")"
           [[ -n "$installed_peers" ]] || { echo 'R3_BLOCKED: no verified peer'; exit 1; }
           # This is the ONLY persistent change. Feature flags stay OFF,
