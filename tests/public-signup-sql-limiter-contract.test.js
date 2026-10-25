@@ -78,3 +78,34 @@ test('invalid dependency is rejected before route can be enabled', () => {
   assert.throws(() => createSqlPublicSignupLimiter({ getPool: null }),
     e => e.code === 'PUBLIC_SIGNUP_LIMITER_NOT_READY');
 });
+
+test('SQL failures remain fail-closed with fixed diagnostic classes and no raw driver detail', async () => {
+  const input = {
+    key: randomBytes(32).toString('hex'),
+    scope: 'redeem-ip',
+    max: 5,
+    windowSeconds: 3600
+  };
+  for (const [errorFields, expected] of [
+    [{ number: 1205 }, 'DEADLOCK'],
+    [{ number: 1222 }, 'LOCK_TIMEOUT'],
+    [{ number: 40501 }, 'SQL_THROTTLED'],
+    [{ code: 'ETIMEOUT' }, 'TIMEOUT'],
+    [{ code: 'ESOCKET' }, 'CONNECTION'],
+    [{ code: 'UNKNOWN' }, 'UNCLASSIFIED']
+  ]) {
+    const limiter = createSqlPublicSignupLimiter({
+      getPool: async () => {
+        throw Object.assign(new Error('private connection detail and SQL text'), errorFields);
+      }
+    });
+    await assert.rejects(limiter.consume(input), error =>
+      error.status === 503 &&
+      error.code === 'PUBLIC_SIGNUP_LIMITER_NOT_READY' &&
+      error.diagnosticCategory === expected &&
+      error.message === 'Public signup abuse protection is unavailable.' &&
+      !JSON.stringify({ message: error.message, category: error.diagnosticCategory })
+        .includes('private connection')
+    );
+  }
+});
