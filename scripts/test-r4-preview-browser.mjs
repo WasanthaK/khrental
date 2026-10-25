@@ -54,12 +54,25 @@ try{
             forms:document.querySelectorAll('form').length,
             liveEnabled:document.querySelectorAll('button:not([disabled])').length,
             overflow:el.scrollWidth>window.innerWidth+2,
+            headingCount:document.querySelectorAll('h1').length,
+            countryLabel:document.querySelector('.country summary')?.getAttribute('aria-label'),
+            countryTargets:[...document.querySelectorAll('.country-menu a')].map(a=>({name:a.textContent.trim(),url:a.href})),
+            helpLink:[...document.querySelectorAll('nav a[href*="#help"]')].length > 0,
+            previewTabLabels:[...document.querySelectorAll('nav.search-tabs')].map(n=>n.getAttribute('aria-label')),
             linkPaths:[...document.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')).filter(h=>h&&!h.startsWith('https:')&&!h.startsWith('#'))
           };
         });
         check(m.main&&m.styleCount>=1&&m.robots==='noindex,nofollow'&&m.draft&&m.country===market.toUpperCase(),market+'/'+page+' '+width+' source metadata');
         check(!m.overflow,market+'/'+page+' '+width+' horizontal overflow '+m.scrollWidth+' > '+m.width);
         check(m.forms===0&&m.liveEnabled===0,market+'/'+page+' '+width+' unsafe interactive controls');
+        check(m.headingCount===1&&m.helpLink,market+'/'+page+' '+width+' heading or help navigation');
+        check(m.countryLabel?.includes(MARKETS[market].name),market+'/'+page+' '+width+' country chooser not accessible');
+        const suffix=segment?segment+'/':'';
+        for(const entry of m.countryTargets){
+          const dest=new URL(entry.url);
+          check(dest.pathname.endsWith('/'+suffix),market+'/'+page+' '+width+' country switch loses page context');
+        }
+        if(page==='search')check(m.previewTabLabels.every(x=>x?.includes('not filtered')),market+'/'+page+' '+width+' misleading filter semantics');
         check(remote.length===0,market+'/'+page+' '+width+' leaked external asset network request');
         for(const link of m.linkPaths){
           const destination=new URL(link,url);
@@ -73,11 +86,21 @@ try{
           await tab.screenshot({path:path.resolve('artifacts/r4-browser/'+market+'-'+page+'-'+width+'.png'),fullPage:true});
         }
         if(width===390){
+          await tab.keyboard.press('Tab');
+          const firstFocus=await tab.evaluate(()=>document.activeElement?.className);
+          check(firstFocus==='skip',market+'/'+page+' first keyboard focus must be skip link');
           const menu=await tab.$('.mobile-menu summary');
           check(!!menu,market+'/'+page+' missing mobile navigation');
-          await menu.click();
+          await menu.focus();
+          await tab.keyboard.press('Enter');
           const expanded=await tab.$eval('.mobile-menu',el=>el.open);
-          check(expanded,market+'/'+page+' mobile menu failed');
+          check(expanded,market+'/'+page+' keyboard mobile menu failed');
+          await tab.keyboard.press('Escape');
+          const select=await tab.$('.country summary');
+          check(!!select,market+'/'+page+' country picker missing');
+          await select.focus();
+          await tab.keyboard.press('Enter');
+          check(await tab.$eval('.country',el=>el.open),market+'/'+page+' keyboard country chooser failed');
         }
         await tab.close();
         passed++;
