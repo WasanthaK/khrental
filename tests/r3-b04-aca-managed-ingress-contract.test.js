@@ -38,3 +38,10 @@ test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP i
   assert.match(job, /PUBLIC_SIGNUP_INGRESS_MODE=azure-container-apps-http/);
   assert.doesNotMatch(job, /az sql db update|az containerapp scale|--min-replicas|GRANT DELETE|trust proxy=true/);
 });
+
+test('R3 Azure HTTP/2 is a documented managed HTTP transport, TCP remains rejected', () => {
+  assert.match(job, /managedHttpTransport: \(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\)/);
+  assert.match(job, /\(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2"\) and/);
+  assert.match(job, /R3_INGRESS_READONLY_TRANSPORT=/);
+  assert.doesNotMatch(job, /\(\$ing\.transport == "auto" or \$ing\.transport == "http" or \$ing\.transport == "http2" or \$ing\.transport == "tcp"\) and/);
+});
