@@ -6,9 +6,26 @@ import { getMssqlPool, sql } from '../mssql/pool.js';
 const HASH = /^[a-f0-9]{64}$/;
 const SCOPES = new Set(['challenge-ip', 'challenge-email', 'redeem-ip']);
 
-const unavailable = () => Object.assign(
+// Keep diagnostic categories fixed and non-sensitive: never propagate SQL
+// statements, keys, identifiers, connection details or driver messages.
+const diagnosticCategory = error => {
+  const code = String(error?.code || error?.originalError?.code || '').toUpperCase();
+  const number = Number(error?.number ?? error?.originalError?.number ??
+    error?.originalError?.info?.number);
+
+  if (number === 1205) return 'DEADLOCK';
+  if (number === 1222) return 'LOCK_TIMEOUT';
+  if ([40501, 10928, 10929, 49918, 49919, 49920].includes(number)) return 'SQL_THROTTLED';
+  if (code === 'ETIMEOUT') return 'TIMEOUT';
+  if (['ECONNCLOSED', 'ESOCKET', 'ELOGIN', 'EINSTLOOKUP', 'ENOCONN'].includes(code)) {
+    return 'CONNECTION';
+  }
+  return 'UNCLASSIFIED';
+};
+
+const unavailable = (diagnostic = 'UNCLASSIFIED') => Object.assign(
   new Error('Public signup abuse protection is unavailable.'),
-  { status: 503, code: 'PUBLIC_SIGNUP_LIMITER_NOT_READY' }
+  { status: 503, code: 'PUBLIC_SIGNUP_LIMITER_NOT_READY', diagnosticCategory: diagnostic }
 );
 
 export const createSqlPublicSignupLimiter = ({ getPool = getMssqlPool } = {}) => {
@@ -79,12 +96,14 @@ export const createSqlPublicSignupLimiter = ({ getPool = getMssqlPool } = {}) =>
         await transaction.commit();
         active = false;
         return allowed === 1;
-      } catch {
+      } catch (error) {
+        // A failed or uncertain transaction remains denied, including
+        // deadlocks and timeouts. Categorization is diagnostics-only.
+        const category = diagnosticCategory(error);
         if (active) {
           try { await transaction.rollback(); } catch { /* deny on uncertainty */ }
         }
-        // DB outage, invalid DDL, timeouts and deadlocks all deny, never allow.
-        throw unavailable();
+        throw unavailable(category);
       }
     }
   });
