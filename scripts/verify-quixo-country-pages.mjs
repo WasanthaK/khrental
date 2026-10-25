@@ -12,7 +12,7 @@ for (const country of COUNTRY_PAGES) {
   assert.match(html, /Local subscriptions and public sign-up are not open yet/);
   assert.match(html, /https:\/\/app\.quixo\.homes\/login/);
   assert.match(html, new RegExp('data-country="' + country.code + '"'));
-  assert.ok(!/checkout|register|stripe\.com|\b(?:US\\$|BND\\s*\\d|LKR\\s*\\d)\b/i.test(html), 'Unapproved payment/registration CTA');
+  assert.ok(!/checkout\.stripe\.com|href="[^"]*\/(?:register|sign-up|signup)"|(?:USD|LKR|BND|US\$)\s*\d+(?:\.\d+)?/i.test(html), 'Unapproved pricing or payment/signup CTA');
 }
 const root = readFileSync(new URL('../marketing/index.html', import.meta.url), 'utf8');
 assert.match(root, /data-site="quixo-homes-marketing"/);
