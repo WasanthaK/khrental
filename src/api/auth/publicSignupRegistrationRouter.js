@@ -29,6 +29,7 @@ const noStore = (_req, res, next) => {
 
 export const createPublicSignupRouter = ({
   enabled = false,
+  pilotEmail = null,
   limiter = null,
   clientAddress = null,
   throttleSecret = '',
@@ -90,6 +91,11 @@ export const createPublicSignupRouter = ({
         return;
       }
       const details = normalizePublicSignupDetails(req.body);
+      // An unapproved mailbox gets the same generic response: no challenge,
+      // no SendGrid mail, no account/identity existence disclosure.
+      if (pilotEmail && details?.email !== pilotEmail) {
+        res.json(GENERIC); return;
+      }
       if (!details) {
         res.json(GENERIC); return;
       }
@@ -133,7 +139,8 @@ export const createPublicSignupRouter = ({
         return;
       }
       const result = await redeem({
-        token: req.body?.token, password: req.body?.password
+        token: req.body?.token, password: req.body?.password,
+        ...(pilotEmail ? { expectedEmail: pilotEmail } : {})
       });
       if (result.tenantId !== null || result.role !== 'authenticated' ||
           result.userType !== 'seeker') {
