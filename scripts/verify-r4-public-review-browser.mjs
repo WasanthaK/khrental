@@ -1,0 +1,74 @@
+// Review-only site smoke test. Serves marketing/ on localhost; never visits production.
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import {fileURLToPath} from 'node:url';
+import assert from 'node:assert/strict';
+import puppeteer from 'puppeteer';
+const base=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../marketing');
+const sitePaths=['/',...['lk','bn'].flatMap(c=>['', 'search/','property/','owners/','how-it-works/'].map(x=>'/'+c+'/'+x))];
+const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain'};
+const app=http.createServer((req,res)=>{
+  try{
+    const u=new URL(req.url,'http://127.0.0.1'),suffix=decodeURIComponent(u.pathname);
+    const file=path.resolve(base,'.'+suffix+(suffix.endsWith('/')?'index.html':''));
+    if(!file.startsWith(base+path.sep)||!/\.(html|css|svg|txt)$/.test(file)) {res.writeHead(404);return res.end();}
+    const content=fs.readFileSync(file);res.writeHead(200,{'Content-Type':types[path.extname(file)]});res.end(content);
+  }catch{res.writeHead(404);res.end();}
+});
+let browser,passes=0;
+try{
+  await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+app.address().port;
+  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-networking']});
+  for(const p of sitePaths)for(const width of [320,390,768,1280]){
+    const page=await browser.newPage(),remote=[];
+    page.on('request',r=>{if(!r.url().startsWith(origin+'/'))remote.push(r.url())});
+    await page.setViewport({width,height:900,deviceScaleFactor:1});
+    const response=await page.goto(origin+p,{waitUntil:'networkidle0',timeout:15000});
+    assert.equal(response.status(),200,p+' '+width+' HTTP');
+    const data=await page.evaluate(()=>({
+      site:document.body.dataset.site,
+      robots:document.querySelector('meta[name="robots"]')?.content,
+      h1:document.querySelectorAll('h1').length,
+      main:!!document.querySelector('main#main'),
+      logo:document.querySelector('.approved-wordmark')?.getAttribute('src'),
+      scrollWidth:document.documentElement.scrollWidth,
+      links:[...document.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')),
+      forms:document.querySelectorAll('form').length,
+      script:document.querySelectorAll('script').length,
+      enabledButtons:document.querySelectorAll('button:not([disabled])').length,
+      liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW')
+    }));
+    assert.equal(data.site,'quixo-homes-marketing',p);
+    assert.equal(data.robots,'noindex,nofollow',p);
+    assert.equal(data.h1,1,p+' needs exactly one h1');
+    assert.ok(data.main&&data.logo&&data.liveWarnings,p+' structure/logo/disclaimer');
+    assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
+    assert.ok(!data.forms&&!data.script&&!data.enabledButtons,p+' unsafe live actions');
+    assert.ok(data.links.includes('https://app.quixo.homes/login'),p+' existing sign-in');
+    assert.equal(remote.length,0,p+' external network requests');
+    for(const l of data.links){
+      if(l.startsWith('#')||l.startsWith('https://'))continue;
+      const u=new URL(l,origin+p);
+      assert.equal(u.origin,origin,p+' unexpected origin '+l);
+      const file=path.resolve(base,'.'+u.pathname+(u.pathname.endsWith('/')?'index.html':''));
+      assert.ok(file.startsWith(base+path.sep)&&fs.existsSync(file),p+' broken internal link '+l);
+    }
+    if(width===390){
+      await page.keyboard.press('Tab');
+      const focused=await page.evaluate(()=>document.activeElement?.className);
+      assert.equal(focused,'skip',p+' first focus');
+      const menu=await page.$('.mobile-menu summary');assert.ok(menu,p+' mobile menu');
+      await menu.focus();await page.keyboard.press('Enter');
+      assert.ok(await page.$eval('.mobile-menu',e=>e.open),p+' keyboard menu');
+    }
+    await page.close();passes++;
+  }
+  const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
+  assert.ok(logo.includes('fill="#3B8DCC"')&&logo.includes('fill="#22C55E"'));
+  const robots=fs.readFileSync(path.join(base,'robots.txt'),'utf8');
+  assert.ok(robots.includes('Disallow: /'));
+  console.log('QUIXO_R4_PUBLIC_REVIEW_BROWSER=PASS checked='+passes+' pages='+sitePaths.length+' viewports=4 liveActions=0');
+}catch(e){console.error('QUIXO_R4_PUBLIC_REVIEW_BROWSER=FAIL '+e.stack);process.exitCode=1;
+}finally{if(browser)await browser.close();if(app.listening)await new Promise(r=>app.close(r))}
