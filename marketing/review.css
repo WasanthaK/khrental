@@ -1,0 +1,24 @@
+/* Public site proofreading only: shared R4 CSS overrides, no live UI behavior. */
+.approved-wordmark{display:block;width:174px;height:auto;aspect-ratio:993/194;object-fit:contain}
+.footer-wordmark{width:142px}
+.home-hero{min-height:575px;background:radial-gradient(ellipse at 85% 10%,#236589 0%,transparent 48%),linear-gradient(132deg,#06274a,#0B2545 57%,#125a62)}
+.home-hero .hero-inner{padding-top:85px;padding-bottom:75px}
+.home-hero h1{max-width:940px;font-size:clamp(48px,6.3vw,84px)}
+.home-hero .hero-line{max-width:670px;line-height:1.55}
+.review-market-box{max-width:740px;margin-top:34px;padding:24px;border-radius:16px;background:white;color:var(--navy);box-shadow:0 22px 52px #00152e66}
+.review-market-caption{margin:0 0 14px;font-size:13px;font-weight:800}
+.review-market-actions{display:flex;gap:12px;flex-wrap:wrap}
+.review-secondary{background:#eaf2f9;color:var(--navy);border:1px solid #c0d5e4}
+.review-market-box>p:last-child{margin:14px 0 0;font-size:12px;color:var(--muted);line-height:1.6}
+.review-section-intro{max-width:720px;font-size:16px;color:var(--muted);line-height:1.6}
+.review-markets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:27px}
+.review-market-card{min-height:265px;display:flex;flex-direction:column;padding:29px;border-radius:16px;background:linear-gradient(134deg,#ecf6fb,#b7dbea);transition:box-shadow .2s}
+.review-market-card.bn{background:linear-gradient(134deg,#eaf9f0,#b5dfc4)}
+.review-market-card:hover{box-shadow:0 12px 25px #0b254528;text-decoration:none}
+.review-flag{font-size:29px}
+.review-small{margin:18px 0 8px;font-size:12px;font-weight:750;color:#34556f}
+.review-market-card strong{font-size:clamp(23px,2.8vw,34px);line-height:1.18;letter-spacing:-.03em}
+.review-more{margin-top:auto;padding-top:25px;font-size:13px;font-weight:800}
+.draft-banner{background:#e8f3ff;color:#153a5a}
+@media(max-width:750px){.review-markets{grid-template-columns:1fr}.review-market-card{min-height:210px}.home-hero .hero-inner{padding-top:55px;padding-bottom:44px}.home-hero h1{font-size:clamp(43px,8vw,62px)}}
+@media(max-width:420px){.approved-wordmark{width:143px}.review-market-box{padding:18px}.review-market-actions .button{width:100%}.footer-wordmark{width:126px}}
