@@ -98,9 +98,10 @@ jobs:
           for try in $(seq 1 48); do
             app="$(az containerapp show -n "$APP" -g "$RG" -o json)"
             if jq -e '
-              .properties.latestReadyRevisionName == .properties.latestRevisionName and
-              (.properties.template.containers[0].env // []) as $vars |
+              . as $app |
+              ($app.properties.template.containers[0].env // []) as $vars |
               def val($key): [$vars[] | select(.name == $key) | .value] | first;
+              ($app.properties.latestReadyRevisionName == $app.properties.latestRevisionName) and
               val("PUBLIC_SIGNUP_INGRESS_MODE") == "azure-container-apps-http" and
               val("PUBLIC_SIGNUP_ENABLED") == "false" and
               val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
