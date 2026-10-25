@@ -7,6 +7,7 @@ on:
       - 'marketing/r4-preview/**'
       - 'marketing/r4-site-contract.mjs'
       - 'tests/r4-*.test.mjs'
+      - 'scripts/test-r4-preview-browser.mjs'
       - '.github/workflows/verify-r4-marketing-preview.yml'
   workflow_dispatch:
 
@@ -43,3 +44,27 @@ jobs:
         run: |
           echo 'R4_SOURCE_TESTS_COMPLETED: source only; production marketing not published.'
           echo 'Public registration, real listings, enquiries and payments remain disabled.'
+
+  responsive-browser:
+    name: Localhost-only Chromium viewport smoke
+    needs: r4-preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install repository's existing Puppeteer dependency
+        run: npm ci
+      - name: Verify ten draft pages at four viewport widths
+        run: node scripts/test-r4-preview-browser.mjs
+      - name: Store illustrative screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-unpublished-viewport-screenshots
+          path: artifacts/r4-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
