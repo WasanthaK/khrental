@@ -16,6 +16,9 @@ concurrency:
 env:
   RG: khrental-prod-rg
   APP: khrental-app
+  # Pinned deployed application source from successful #40148017055.
+  # A workflow-only merge does not produce a new container image.
+  EXPECTED_SERVING_SHA: '4d65380492f3a4eaf8e5f6aebc77b2c8f47bb2ed'
   SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
 jobs:
   accept:
@@ -42,11 +45,11 @@ jobs:
             observed="$(curl -fsS --max-time 15 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
             latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
             ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
-            if [[ "$observed" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]]; then break; fi
+            if [[ "$observed" == "$EXPECTED_SERVING_SHA" && -n "$latest" && "$latest" == "$ready" ]]; then break; fi
             sleep 8
           done
-          [[ "$observed" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]] || {
-            echo 'R3_BLOCKED: new runtime source not exactly Ready'; exit 1;
+          [[ "$observed" == "$EXPECTED_SERVING_SHA" && -n "$latest" && "$latest" == "$ready" ]] || {
+            echo 'R3_BLOCKED: pinned deployed runtime source not exactly Ready'; exit 1;
           }
           # ACA HTTP ingress always routes through managed Envoy, and
           # Microsoft explicitly documents that only its rightmost XFF is
@@ -99,7 +102,7 @@ jobs:
           }
           native_sha="$(curl -fsS --max-time 15 "https://$fqdn/build-info.json" | jq -r '.buildSha // ""')"
           custom_sha="$(curl -fsS --max-time 15 "https://app.quixo.homes/build-info.json" | jq -r '.buildSha // ""')"
-          [[ "$native_sha" == "$GITHUB_SHA" && "$custom_sha" == "$GITHUB_SHA" ]] || {
+          [[ "$native_sha" == "$EXPECTED_SERVING_SHA" && "$custom_sha" == "$EXPECTED_SERVING_SHA" ]] || {
             echo 'R3_BLOCKED: host-to-Ready source parity missing'; exit 1;
           }
           echo 'R3_ACA_MANAGED_HTTP_INGRESS_TOPOLOGY=PASS'
