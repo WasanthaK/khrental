@@ -1,0 +1,261 @@
+name: R3 B04 install attested exact Azure ingress peers
+
+# Controlled, one-time, zero-business-write ingress proof.
+# One bounded allowlist installation; never enable registration.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-ingress-allowlist-accept.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: kh-r3-ingress-allowlist
+  cancel-in-progress: false
+
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+
+jobs:
+  attest:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Azure production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+
+      - name: Verify live deployed ingress probe and Ready source
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          fqdn="$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)"
+          [[ "$fqdn" == *.azurecontainerapps.io ]] || exit 1
+          echo "R3_NATIVE_FQDN=$fqdn" >> "$GITHUB_ENV"
+          for try in $(seq 1 105); do
+            sha="$(curl -fsS --max-time 12 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
+            app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ "$sha" =~ ^[a-f0-9]{40}$ && -n "$latest" && "$latest" == "$ready" ]]; then
+              echo "R3_VALID_SERVING_BUILD_READY=PASS"
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'R3_BLOCKED: live source/Ready evidence missing; no probe enabled' >&2
+          exit 1
+
+      - name: Briefly attest exact Azure socket peers, install narrow allowlist, and disable probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          armed=false
+          installed_peers=""
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if [[ "$armed" == true ]]; then
+              echo 'R3_TEMPORARY_PROBE_CLEANUP=STARTED'
+              if ! az containerapp update -g "$RG" -n "$APP" \
+                --remove-env-vars PUBLIC_SIGNUP_INGRESS_PROBE_SECRET PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT \
+                -o none >/dev/null; then
+                echo 'R3_BLOCKED: temporary probe env removal failed' >&2
+                rc=1
+              fi
+              removed=false
+              for try in $(seq 1 40); do
+                az containerapp show -g "$RG" -n "$APP" -o json > "$tmp/final.json" || true
+                if jq -e '
+                  (.properties.latestRevisionName == .properties.latestReadyRevisionName) and
+                  ((.properties.template.containers[0].env // []) |
+                    all(.[]; .name != "PUBLIC_SIGNUP_INGRESS_PROBE_SECRET" and
+                             .name != "PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT"))
+                ' "$tmp/final.json" >/dev/null 2>&1; then
+                  removed=true; break
+                fi
+                sleep 7
+              done
+              if [[ "$removed" == true && -n "$installed_peers" ]]; then
+                if ! jq -e --arg expected "$installed_peers" '
+                  (.properties.template.containers[0].env // []) as $vars |
+                  def val($n): [$vars[] | select(.name == $n) | .value] | first;
+                  val("PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS") == $expected and
+                  val("PUBLIC_SIGNUP_ENABLED") == "false" and
+                  val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+                  val("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false" and
+                  val("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false" and
+                  val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false"
+                ' "$tmp/final.json" >/dev/null; then
+                  echo 'R3_BLOCKED: exact allowlist/default-OFF not accepted on final Ready revision' >&2
+                  rc=1
+                else
+                  echo 'R3_EXACT_INGRESS_PEERS_CONFIGURED_AND_READY=PASS'
+                fi
+              fi
+              if [[ "$removed" != true ]]; then
+                echo 'R3_BLOCKED: probe env not confirmed removed from Ready revision' >&2
+                rc=1
+              else
+                echo 'R3_TEMPORARY_PROBE_ENV_REMOVED_AND_READY=PASS'
+                if az containerapp secret remove -g "$RG" -n "$APP" \
+                  --secret-names r3-ingress-attestation -o none >/dev/null 2>&1; then
+                  echo 'R3_TEMPORARY_PROBE_SECRET_REMOVED=PASS'
+                else
+                  echo 'R3_TEMPORARY_PROBE_SECRET_REMOVAL=UNVERIFIED (env gone; token expires automatically)'
+                fi
+              fi
+            fi
+            rm -rf "$tmp"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+
+          app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+          jq -e '
+            (.properties.template.containers[0].env // []) |
+            [.[] | select(.name == "PUBLIC_SIGNUP_ENABLED" or .name == "PUBLIC_SIGNUP_PILOT_APPROVED" or
+              .name == "PUBLIC_SEEKER_CONTEXT_ENABLED" or
+              .name == "VITE_PUBLIC_SIGNUP_UI_ENABLED" or .name == "VITE_PUBLIC_SEEKER_LANDING_ENABLED")] |
+            length == 5 and all(.[]; .value == "false")
+          ' <<<"$app" >/dev/null || { echo 'R3_BLOCKED: a signup gate is enabled'; exit 1; }
+          if jq -e '
+            any((.properties.template.containers[0].env // [])[];
+                .name == "PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS" and
+                (.value // "" | length > 0))
+          ' <<<"$app" >/dev/null; then
+            echo 'R3_BLOCKED: an ingress allowlist already exists; no overwrite' >&2
+            exit 1
+          fi
+          if az containerapp secret list -g "$RG" -n "$APP" --query '[].name' -o tsv |
+              grep -Fxq 'r3-ingress-attestation'; then
+            echo 'R3_BLOCKED: stale ingress probe secret; refusing overwrite' >&2
+            exit 1
+          fi
+          key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' | tr -d '\n')"
+          [[ "$key" =~ ^[a-zA-Z0-9_-]{43}$ ]] || exit 1
+          expiry="$(( $(date +%s) + 2400 ))"
+          az containerapp secret set -g "$RG" -n "$APP" \
+            --secrets "r3-ingress-attestation=$key" -o none >/dev/null
+          armed=true
+          az containerapp update -g "$RG" -n "$APP" \
+            --set-env-vars \
+              PUBLIC_SIGNUP_INGRESS_PROBE_SECRET=secretref:r3-ingress-attestation \
+              PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT="$expiry" \
+              PUBLIC_SIGNUP_ENABLED=false PUBLIC_SIGNUP_PILOT_APPROVED=false \
+            -o none >/dev/null
+
+          ready=false
+          for try in $(seq 1 45); do
+            app="$(az containerapp show -g "$RG" -n "$APP" -o json)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            serving="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ -n "$latest" && "$latest" == "$serving" ]]; then ready=true; break; fi
+            sleep 7
+          done
+          [[ "$ready" == true ]] || { echo 'R3_BLOCKED: observer revision not Ready'; exit 1; }
+
+          # Never send a body, customer email or signup request.
+          probe() {
+            host="$1"
+            file="$2"
+            if [[ "$3" == spoof ]]; then
+              curl -fsS --max-time 25 --retry 2 --retry-all-errors -X POST \
+                -H "Authorization: Bearer $key" \
+                -H 'X-Forwarded-For: 198.51.100.66' \
+                "https://$host/api/internal/r3-ingress-peer" > "$tmp/$file.json"
+            else
+              curl -fsS --max-time 25 --retry 2 --retry-all-errors -X POST \
+                -H "Authorization: Bearer $key" \
+                "https://$host/api/internal/r3-ingress-peer" > "$tmp/$file.json"
+            fi
+            jq -e '
+              .source == "server_socket_and_raw_headers" and
+              (.peer | type == "string") and (.rightmost | type == "string") and
+              .xffHeaders == 1 and .xffHops >= 1 and .forwardedProto == "https"
+            ' "$tmp/$file.json" >/dev/null
+          }
+          probe app.quixo.homes custom-clean clean
+          probe app.quixo.homes custom-spoof spoof
+          probe "$R3_NATIVE_FQDN" native-clean clean
+          probe "$R3_NATIVE_FQDN" native-spoof spoof
+
+          for host in custom native; do
+            right="$(jq -r '.rightmost' "$tmp/$host-spoof.json")"
+            hop="$(jq -r '.xffHops' "$tmp/$host-spoof.json")"
+            if [[ "$right" == '198.51.100.66' || "$hop" -lt 2 ]]; then
+              echo "R3_BLOCKED: $host spoofed client IP was not safely appended" >&2
+              exit 1
+            fi
+          done
+
+          # Verify actual backend socket peers, not proxy-submitted headers.
+          # Accept only literal RFC1918 IPv4 or IPv6 ULA socket identities.
+          # At most two observed exact peers for the current single-replica
+          # ingress topology. No wildcard, CIDR, localhost or link-local.
+          python3 - "$tmp" <<'PY'
+          import ipaddress, json, pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          peers = []
+          trusted = [ipaddress.ip_network(x) for x in
+                     ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]
+          for name in ("custom", "native"):
+              clean = json.loads((p / (name + "-clean.json")).read_text())
+              spoof = json.loads((p / (name + "-spoof.json")).read_text())
+              if clean["peer"] != spoof["peer"]:
+                  raise SystemExit("R3_BLOCKED: backend socket peer changed in paired probes")
+              if clean["rightmost"] != spoof["rightmost"]:
+                  raise SystemExit("R3_BLOCKED: spoof changed ingress-attested client address")
+              if spoof["xffHops"] < 2 or clean["xffHeaders"] != 1 or spoof["xffHeaders"] != 1:
+                  raise SystemExit("R3_BLOCKED: ingress XFF shape not stable")
+              address = ipaddress.ip_address(clean["peer"])
+              if not any(address in network for network in trusted):
+                  raise SystemExit("R3_BLOCKED: socket peer is not a strict private ingress address")
+              peers.append(str(address))
+          peers = sorted(set(peers))
+          if not 1 <= len(peers) <= 2:
+              raise SystemExit("R3_BLOCKED: observed ingress peer inventory is unexpectedly broad")
+          (p / "approved-peers.txt").write_text(",".join(peers), encoding="utf-8")
+          print("R3_EXACT_SOCKET_PEER_ATTESTATION=PASS count=" + str(len(peers)))
+          PY
+          installed_peers="$(cat "$tmp/approved-peers.txt")"
+          [[ -n "$installed_peers" ]] || { echo 'R3_BLOCKED: no verified peer'; exit 1; }
+          # This is the ONLY persistent change. Feature flags stay OFF,
+          # normal customer/business data and Azure pricing untouched.
+          az containerapp update -g "$RG" -n "$APP" \
+            --set-env-vars \
+              PUBLIC_SIGNUP_TRUSTED_INGRESS_PEERS="$installed_peers" \
+              PUBLIC_SIGNUP_ENABLED=false PUBLIC_SIGNUP_PILOT_APPROVED=false \
+              PUBLIC_SEEKER_CONTEXT_ENABLED=false \
+              VITE_PUBLIC_SIGNUP_UI_ENABLED=false \
+              VITE_PUBLIC_SEEKER_LANDING_ENABLED=false \
+            -o none >/dev/null
+          echo 'R3_EXACT_INGRESS_PEERS_APPLIED_DEFAULT_OFF=PASS'
+
+          {
+            echo '### R3 B04 trusted Azure ingress configuration (signup OFF)'
+            echo
+            echo '| Host / request | Socket peer | Azure-appended rightmost XFF | XFF hops |'
+            echo '| --- | --- | --- | --- |'
+            for host in custom native; do
+              for mode in clean spoof; do
+                file="$tmp/$host-$mode.json"
+                echo "| $host / $mode | $(jq -r '.peer' "$file") | $(jq -r '.rightmost' "$file") | $(jq -r '.xffHops' "$file") |"
+              done
+            done
+            echo
+            echo 'Literal private socket peers are retained in the narrow server allowlist; **public signup, seeker context and both browser gates remain OFF**. Physical signup/SQL/email acceptance still required.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'R3_REAL_INGRESS_XFF_SPOOF_RESISTANCE=PASS'
+          echo 'R3_BACKEND_SOCKET_PEERS_ATTESTED_AND_ALLOWLIST_STAGED=PASS'
