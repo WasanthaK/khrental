@@ -75,3 +75,14 @@ test('two pilot flags cannot bypass trusted ingress, origin or verified sender',
     });
   });
 });
+
+test('production signup pilot flags alone cannot open registration without one mailbox', async () => {
+  await serve(createPublicSignupRuntime({ config: {
+    NODE_ENV: 'production', PUBLIC_SIGNUP_ENABLED: 'true',
+    PUBLIC_SIGNUP_PILOT_APPROVED: 'true'
+  } }), async origin => {
+    const r = await fetch(origin + '/api/public-signup/challenge', { method: 'POST' });
+    assert.equal(r.status, 404);
+    assert.equal((await r.json()).code, 'PUBLIC_SIGNUP_DISABLED');
+  });
+});

@@ -28,7 +28,13 @@ const isUniqueConflict = error => [2601, 2627].includes(
 // Caller must establish the real user-facing verification flow and bounded
 // abuse controls separately. This service never accepts a tenant, role,
 // app-user ID, Stripe ID or organization ID from the browser.
-export const redeemPublicSignupChallenge = async ({ token, password } = {}) => {
+export const redeemPublicSignupChallenge = async ({ token, password, expectedEmail = null } = {}) => {
+  if (expectedEmail !== null &&
+      (typeof expectedEmail !== 'string' ||
+       expectedEmail !== expectedEmail.trim().toLowerCase() ||
+       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(expectedEmail))) {
+    throw unavailable();
+  }
   let tokenHash;
   try {
     tokenHash = hashPublicSignupChallengeToken(token);
@@ -65,6 +71,9 @@ export const redeemPublicSignupChallenge = async ({ token, password } = {}) => {
     }
 
     const email = String(challenge.email_normalized || '');
+    // Enforce the R3 canary recipient under the same serializable SQL lock,
+    // before any global app/auth identity can be created.
+    if (expectedEmail !== null && email !== expectedEmail) throw unavailable();
     const name = String(challenge.display_name || '').trim();
     if (!email || email !== email.trim().toLowerCase() || email.length > 320 ||
         !name || name.length > 255) {
