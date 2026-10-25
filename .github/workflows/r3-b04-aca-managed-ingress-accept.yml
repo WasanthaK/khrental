@@ -1,0 +1,141 @@
+name: R3 B04 accept platform-managed Azure HTTPS ingress
+
+# One bounded ACA ingress contract assertion. Managed Envoy rotates its socket
+# IPs: trust ONLY ACA's documented rightmost appended XFF after Azure config proof.
+# Public signup and all seeker browser switches remain deliberately OFF.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/r3-b04-aca-managed-ingress-accept.yml']
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: kh-r3-aca-managed-ingress
+  cancel-in-progress: false
+env:
+  RG: khrental-prod-rg
+  APP: khrental-app
+  SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
+jobs:
+  accept:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Existing Azure production OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.SUB }}
+      - name: Verify exact deployed source and Azure-owned HTTP ingress contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          fqdn="$(az containerapp show -n "$APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          [[ "$fqdn" == *.azurecontainerapps.io ]] || exit 1
+          for attempt in $(seq 1 90); do
+            app="$(az containerapp show -n "$APP" -g "$RG" -o json)"
+            observed="$(curl -fsS --max-time 15 "https://$fqdn/build-info.json" 2>/dev/null | jq -r '.buildSha // ""' 2>/dev/null || true)"
+            latest="$(jq -r '.properties.latestRevisionName // ""' <<<"$app")"
+            ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$app")"
+            if [[ "$observed" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]]; then break; fi
+            sleep 8
+          done
+          [[ "$observed" == "$GITHUB_SHA" && -n "$latest" && "$latest" == "$ready" ]] || {
+            echo 'R3_BLOCKED: new runtime source not exactly Ready'; exit 1;
+          }
+          # ACA HTTP ingress always routes through managed Envoy, and
+          # Microsoft explicitly documents that only its rightmost XFF is
+          # authoritative. Refuse this mode for custom proxies/TCP/direct port.
+          jq -e '
+            (.properties.configuration.ingress // {}) as $ing |
+            (.properties.template.containers[0].env // []) as $vars |
+            def val($key): [$vars[] | select(.name == $key) | .value] | first;
+            $ing.external == true and
+            ($ing.transport == "auto" or $ing.transport == "http") and
+            $ing.targetPort == 5174 and
+            ($ing.allowInsecure == false or $ing.allowInsecure == null) and
+            (($ing.additionalPortMappings // []) | length == 0) and
+            (($ing.customDomains // []) |
+              any(.[]; .name == "app.quixo.homes")) and
+            (val("PUBLIC_SIGNUP_INGRESS_MODE") == null or
+             val("PUBLIC_SIGNUP_INGRESS_MODE") == "") and
+            val("PUBLIC_SIGNUP_ENABLED") == "false" and
+            val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+            val("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false" and
+            val("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false" and
+            val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false"
+          ' <<<"$app" >/dev/null || {
+            echo 'R3_BLOCKED: managed HTTPS ingress topology or default-OFF flags unverified; no config changes';
+            exit 1;
+          }
+          native_sha="$(curl -fsS --max-time 15 "https://$fqdn/build-info.json" | jq -r '.buildSha // ""')"
+          custom_sha="$(curl -fsS --max-time 15 "https://app.quixo.homes/build-info.json" | jq -r '.buildSha // ""')"
+          [[ "$native_sha" == "$GITHUB_SHA" && "$custom_sha" == "$GITHUB_SHA" ]] || {
+            echo 'R3_BLOCKED: host-to-Ready source parity missing'; exit 1;
+          }
+          echo 'R3_ACA_MANAGED_HTTP_INGRESS_TOPOLOGY=PASS'
+          echo 'R3_ACA_CUSTOM_NATIVE_SOURCE_PARITY=PASS'
+      - name: Set only explicitly bounded ingress mode, never enable public signup
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This is NOT an allow-all trust-proxy setting. The runtime reads
+          # only the Azure-overwritten HTTPS/XFF metadata after this
+          # platform-owned topology has been verified independently.
+          az containerapp update -g "$RG" -n "$APP" \
+            --set-env-vars \
+              PUBLIC_SIGNUP_INGRESS_MODE=azure-container-apps-http \
+              PUBLIC_SIGNUP_ENABLED=false PUBLIC_SIGNUP_PILOT_APPROVED=false \
+              PUBLIC_SEEKER_CONTEXT_ENABLED=false \
+              VITE_PUBLIC_SIGNUP_UI_ENABLED=false \
+              VITE_PUBLIC_SEEKER_LANDING_ENABLED=false -o none
+          accepted=false
+          for try in $(seq 1 48); do
+            app="$(az containerapp show -n "$APP" -g "$RG" -o json)"
+            if jq -e '
+              .properties.latestReadyRevisionName == .properties.latestRevisionName and
+              (.properties.template.containers[0].env // []) as $vars |
+              def val($key): [$vars[] | select(.name == $key) | .value] | first;
+              val("PUBLIC_SIGNUP_INGRESS_MODE") == "azure-container-apps-http" and
+              val("PUBLIC_SIGNUP_ENABLED") == "false" and
+              val("PUBLIC_SIGNUP_PILOT_APPROVED") == "false" and
+              val("PUBLIC_SEEKER_CONTEXT_ENABLED") == "false" and
+              val("VITE_PUBLIC_SIGNUP_UI_ENABLED") == "false" and
+              val("VITE_PUBLIC_SEEKER_LANDING_ENABLED") == "false"
+            ' <<<"$app" >/dev/null; then accepted=true; break; fi
+            sleep 8
+          done
+          [[ "$accepted" == true ]] || {
+            echo 'R3_BLOCKED: managed ingress asserted but final Ready/config not proven; signup stays OFF';
+            exit 1;
+          }
+          for host in app.quixo.homes "$(jq -r '.properties.configuration.ingress.fqdn' <<<"$app")"; do
+            for route in challenge redeem; do
+              f="$(mktemp)"
+              response="$(curl -sS --max-time 20 -X POST -o "$f" -w '%{http_code}' \
+                "https://$host/api/public-signup/$route")"
+              if [[ "$response" != 404 ]] || ! jq -e '.code == "PUBLIC_SIGNUP_DISABLED"' "$f" >/dev/null; then
+                rm -f "$f"
+                echo "R3_BLOCKED: disabled boundary changed on $host"; exit 1
+              fi
+              rm -f "$f"
+            done
+          done
+          echo 'R3_ACA_MANAGED_INGRESS_ASSERTED_READY_DISABLED=PASS'
+          {
+            echo '### R3 B04 managed ACA HTTP ingress acceptance'
+            echo
+            echo '| Boundary | Result |'
+            echo '| --- | --- |'
+            echo '| Azure-owned HTTPS HTTP ingress, no additional TCP ports | PASS |'
+            echo '| Custom/native origin build fingerprint | Exact source parity |'
+            echo '| Server-only managed ingress mode | Configured |'
+            echo '| All five rollout flags | OFF |'
+            echo '| Challenge/redeem on both origins | 404 DISABLED |'
+            echo '| Live signup/limiter/email acceptance | STILL OPEN |'
+          } >> "$GITHUB_STEP_SUMMARY"
