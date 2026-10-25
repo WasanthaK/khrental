@@ -1,0 +1,70 @@
+name: Verify unpublished R4 Quixo.Homes website preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'marketing/r4-preview/**'
+      - 'marketing/r4-site-contract.mjs'
+      - 'tests/r4-*.test.mjs'
+      - 'scripts/test-r4-preview-browser.mjs'
+      - '.github/workflows/verify-r4-marketing-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name }}-r4-marketing-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  r4-preview:
+    name: Node 22 source, generator and no-live-action tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout source only
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check marketing/r4-site-contract.mjs
+          node --check marketing/r4-preview/build.mjs
+          node --check tests/r4-marketing-site-contract.test.mjs
+          node --check tests/r4-preview-generated-pages.test.mjs
+      - name: Enforce exact shared-page generation
+        run: node marketing/r4-preview/build.mjs --check
+      - name: Execute both R4 focused regression suites
+        run: node --test tests/r4-marketing-site-contract.test.mjs tests/r4-preview-generated-pages.test.mjs
+      - name: Mark scope boundary
+        run: |
+          echo 'R4_SOURCE_TESTS_COMPLETED: source only; production marketing not published.'
+          echo 'Public registration, real listings, enquiries and payments remain disabled.'
+
+  responsive-browser:
+    name: Localhost-only Chromium viewport smoke
+    needs: r4-preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install repository's existing Puppeteer dependency
+        run: npm ci
+      - name: Verify ten draft pages at four viewport widths
+        run: node scripts/test-r4-preview-browser.mjs
+      - name: Store illustrative screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-unpublished-viewport-screenshots
+          path: artifacts/r4-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
