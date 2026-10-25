@@ -165,3 +165,22 @@ test('server mounts separate default-off signup before the global parser; no leg
     serverSource.indexOf("app.use(express.json({"));
   assert.doesNotMatch(authSource, /POST \/api\/public-signup\/redeem/);
 });
+
+test('single-mailbox canary refuses other addresses without email or account actions', async () => {
+  const harness = createHarness();
+  const pilotEmail = 'synthetic@example.invalid';
+  await withHttp(createPublicSignupRouter({ ...harness.adapters, pilotEmail }), async post => {
+    const other = await post('/challenge', { email: 'other@example.invalid', name: 'Other' });
+    assert.equal(other.status, 200);
+    assert.equal(other.body.data.accepted, true);
+    assert.equal(harness.calls.filter(c => c.kind === 'issue' || c.kind === 'send').length, 0);
+
+    const allowed = await post('/challenge', { email: ' SYNTHETIC@EXAMPLE.INVALID ', name: 'Pilot' });
+    assert.equal(allowed.status, 200);
+    assert.equal(harness.calls.filter(c => c.kind === 'send').length, 1);
+
+    const redeemed = await post('/redeem', { token: 'synthetic-token', password: 'SyntheticStrongPassword#123' });
+    assert.equal(redeemed.status, 201);
+    assert.equal(harness.calls.find(c => c.kind === 'redeem').expectedEmail, pilotEmail);
+  });
+});
