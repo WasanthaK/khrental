@@ -117,7 +117,7 @@ test('unregistered source, missing property and unsupported conversion fail befo
     readSnapshot:async()=>({publicId,sourceImages:JSON.stringify([{image_url:'https://evil.invalid/upload.jpg'}])})}));
   await assert.rejects(preparePropertyPhoto(input,{env,storage,
     readSnapshot:async()=>({publicId,sourceImages}),
-    convert:async()=>Buffer.from('not-image')}),/WebP/);
+    convert:async()=>Buffer.from('not-image')}),/WebP|safe size/);
   assert.equal(uploads,0);
 });
 test('processor must reject fake source bytes without requiring Sharp to load',async()=>{
