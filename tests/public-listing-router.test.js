@@ -40,6 +40,34 @@ test('public read returns only allowlisted data for eligible listings',async()=>
  assert.equal(JSON.stringify(ok.body).includes('redacted_by_contract'),false);
  assert.equal((await makeCall(router,'GET','/?country=US')).status,400);
 });
+test('country filter discards foreign-market rows even if database list is mis-scoped',async()=>{
+  const mixed=[row,{...row,country_code:'BN',public_id:'66666666-6666-4666-8666-666666666666'}];
+  const router=createPublicListingsRouter({
+    env:{PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'},
+    rateLimit:async()=>true,list:async()=>mixed
+  });
+  const sriLanka=await makeCall(router,'GET','/?country=LK');
+  const brunei=await makeCall(router,'GET','/?country=BN');
+  assert.equal(sriLanka.status,200);
+  assert.equal(sriLanka.body.data.length,1);
+  assert.equal(sriLanka.body.data[0].country,'LK');
+  assert.equal(brunei.body.data.length,1);
+  assert.equal(brunei.body.data[0].country,'BN');
+});
+
+test('listing details cannot be opened through the wrong country',async()=>{
+  const router=createPublicListingsRouter({
+    env:{PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'},
+    rateLimit:async()=>true,find:async()=>row
+  });
+  assert.equal((await makeCall(router,'GET','/'+publicId)).status,400);
+  assert.equal((await makeCall(router,'GET','/'+publicId+'?country=US')).status,400);
+  assert.equal((await makeCall(router,'GET','/'+publicId+'?country=BN')).status,404);
+  const result=await makeCall(router,'GET','/'+publicId+'?country=LK');
+  assert.equal(result.status,200);
+  assert.equal(result.body.data.country,'LK');
+});
+
 test('shared limiter blocks browsing before querying listings',async()=>{
  let count=0;
  const router=createPublicListingsRouter({env:{PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'},
