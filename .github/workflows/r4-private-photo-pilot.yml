@@ -1,0 +1,99 @@
+name: R4 administrator-only photo pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Enable private administrator photo controls or disable after test
+        required: true
+        type: choice
+        options: [enable, disable]
+        default: disable
+      expected_build:
+        description: Exact deployed application commit SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type PRIVATE-PHOTO-PILOT exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+  PILOT_MODE: ${{ inputs.mode }}
+  EXPECTED_BUILD: ${{ inputs.expected_build }}
+  CONFIRMATION: ${{ inputs.confirmation }}
+
+jobs:
+  configure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Validate private rollout request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = PRIVATE-PHOTO-PILOT
+          [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
+          case "$PILOT_MODE" in enable|disable) ;; *) exit 1 ;; esac
+          build=$(curl --fail --silent --show-error https://app.quixo.homes/build-info.json)
+          test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure private controls with anonymous publication OFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          enabled=false
+          if [ "$PILOT_MODE" = enable ]; then enabled=true; fi
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --set-env-vars \
+              PUBLIC_LISTING_READ_ENABLED=false \
+              PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=false \
+              PUBLIC_LISTING_MEDIA_ENABLED=false \
+              PUBLIC_LISTING_IMAGE_PROCESSOR_READY=false \
+              PUBLIC_LISTING_MANAGEMENT_ENABLED="$enabled" \
+              PUBLIC_LISTING_IMAGE_PREPARE_ENABLED="$enabled" \
+              PUBLIC_LISTING_MEDIA_REVIEW_ENABLED="$enabled" \
+              PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS=https://app.quixo.homes,https://khrental-app.proudpebble-f58b5187.southeastasia.azurecontainerapps.io \
+            --output none
+          latest=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestRevisionName -o tsv)
+          ready=''
+          for attempt in $(seq 1 40); do
+            ready=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestReadyRevisionName -o tsv)
+            if [ "$ready" = "$latest" ]; then break; fi
+            sleep 6
+          done
+          test "$ready" = "$latest"
+          # Read only the named pilot booleans, never export application secrets.
+          settings=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --query "properties.template.containers[0].env[?starts_with(name, 'PUBLIC_LISTING_')].{name:name,value:value}" -o json)
+          for name in PUBLIC_LISTING_READ_ENABLED PUBLIC_LISTING_SHARED_RATE_LIMIT_READY PUBLIC_LISTING_MEDIA_ENABLED PUBLIC_LISTING_IMAGE_PROCESSOR_READY; do
+            test "$(jq -r --arg n "$name" '.[] | select(.name==$n) | .value' <<<"$settings")" = false
+          done
+          for name in PUBLIC_LISTING_MANAGEMENT_ENABLED PUBLIC_LISTING_IMAGE_PREPARE_ENABLED PUBLIC_LISTING_MEDIA_REVIEW_ENABLED; do
+            test "$(jq -r --arg n "$name" '.[] | select(.name==$n) | .value' <<<"$settings")" = "$enabled"
+          done
+          build=$(curl --fail --silent --show-error https://app.quixo.homes/build-info.json)
+          test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+          test "$(curl --silent --show-error -o /dev/null -w '%{http_code}' 'https://app.quixo.homes/api/public-listings?country=LK')" = 404
+          echo "R4_PRIVATE_PHOTO_CONTROLS=$PILOT_MODE; ANONYMOUS_PUBLICATION=OFF; BUILD_MATCH=PASS; REVISION_READY=PASS"
+          echo "Administrator photo controls: $PILOT_MODE. Anonymous listing and media delivery remain OFF." >> "$GITHUB_STEP_SUMMARY"
