@@ -315,11 +315,11 @@ try{
   assert.equal((await query('SELECT country_code FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(1)})).recordset[0].country_code,'BN');
   await assertVisible([publicOf(4),publicOf(7),publicOf(8)],[publicOf(1),publicOf(2)]);
   await query("UPDATE dbo.properties SET country_code='LK' WHERE id=@pid",{pid:id(1)});
-  const created=await query(`DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+  const createdProperty=await query(`DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
     INSERT dbo.properties(id,tenant_id,status,country_code)
       OUTPUT INSERTED.id INTO @changed VALUES(@id,@tenant,N'available','AU');
     SELECT p.country_code FROM dbo.properties p JOIN @changed c ON c.id=p.id;`,{id:id(11),tenant:A});
-  assert.equal(created.recordset[0].country_code,'AU');
+  assert.equal(createdProperty.recordset[0].country_code,'AU');
   assert.equal((await query('SELECT country_code FROM dbo.public_listing_preferences WHERE property_id=@id',{id:id(11)})).recordset[0].country_code,null);
   // An inconsistent/stale preference must never override property country.
   await query("UPDATE dbo.public_listing_preferences SET country_code='BN' WHERE property_id=@pid",{pid:id(1)});
