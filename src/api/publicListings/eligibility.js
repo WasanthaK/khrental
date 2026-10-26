@@ -4,7 +4,7 @@ export const AVAILABLE_PARENT_STATES=Object.freeze(['active','available']);
 export const ELIGIBLE_UNIT_STATES=Object.freeze(['available']);
 export const SUPPRESSED_PARENT_STATES=Object.freeze(['reserved','maintenance','inactive','occupied']);
 export const PUBLIC_MARKETS=Object.freeze({LK:'LKR',BN:'BND'});
-export const PUBLIC_TYPES=Object.freeze({house:'residential',apartment:'residential',condo:'residential',commercial:'commercial'});
+export const PUBLIC_TYPES=Object.freeze({house:'residential',apartment:'residential',condo:'residential',commercial:'commercial',land:'land'});
 const norm=value=>String(value??'').trim().toLowerCase();
 
 export const publicationEligibility=({
@@ -29,9 +29,7 @@ export const publicationEligibility=({
   const country=String(countryCode||'').toUpperCase();
   if(!Object.hasOwn(PUBLIC_MARKETS,country))
     return {eligible:false,reason:'public_country_missing'};
-  if(!Object.hasOwn(PUBLIC_TYPES,norm(propertyType)))
-    return {eligible:false,reason:'unsupported_property_type'};
-  return {eligible:true,reason:'available_for_rent',country,category:PUBLIC_TYPES[norm(propertyType)]};
+  return {eligible:true,reason:'available_for_rent',country,category:PUBLIC_TYPES[norm(propertyType)]||'other'};
 };
 
 export const PUBLIC_LISTING_ENABLED = env =>
