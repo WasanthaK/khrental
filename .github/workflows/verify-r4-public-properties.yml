@@ -6,6 +6,7 @@ on:
       - 'src/api/publicListings/**'
       - 'tests/public-listing*.test.js'
       - 'migrations/20261026_01_public_listing_preferences.sql'
+      - 'scripts/test-public-listings-sqlserver.mjs'
       - 'server.js'
       - '.github/workflows/verify-r4-public-properties.yml'
   workflow_dispatch:
@@ -15,7 +16,7 @@ jobs:
   availability-and-opt-out:
     name: Default-public visibility and privacy boundary
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 16
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,6 +34,10 @@ jobs:
           node --check src/api/publicListings/rateLimit.js
       - name: Public eligibility and API isolation tests
         run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js
+      - name: Verify migration, tenant isolation, availability and opt-out on disposable SQL Server
+        env:
+          MSSQL_TEST_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
+        run: node scripts/test-public-listings-sqlserver.mjs
       - name: Show default-OFF flags
         run: |
           echo "PUBLIC_LISTING_READ_ENABLED default OFF"
