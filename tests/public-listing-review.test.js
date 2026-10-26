@@ -140,8 +140,8 @@ test('changed image source, malformed derivative and unowned review all fail clo
 test('source and transaction SQL both bind actor, tenant, property and image to an active admin',()=>{
   for(const field of ['@actorId','@tenantId','@propertyId','@mediaId'])
     assert.ok(REVIEW_SOURCE_SQL.includes(field)&&REVIEW_LOCKED_SQL.includes(field));
-  assert.match(REVIEW_SOURCE_SQL,/membership.status=N'active'/);
-  assert.match(REVIEW_SOURCE_SQL,/membership.role=N'admin'/);
+  assert.match(REVIEW_SOURCE_SQL,/member.status=N'active'/);
+  assert.match(REVIEW_SOURCE_SQL,/member.role=N'admin'/);
   assert.match(REVIEW_LOCKED_SQL,/WITH\(UPDLOCK,HOLDLOCK\)/);
 });
 test('photo withdrawal requires review gate, active admin and no arbitrary media state',async()=>{
