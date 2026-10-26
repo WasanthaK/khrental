@@ -58,7 +58,7 @@ export const PUBLIC_MEDIA_ELIGIBILITY_SQL=PUBLIC_LISTING_ELIGIBILITY_SQL.replace
   'FROM dbo.public_listing_preferences pref',
   'FROM dbo.public_listing_media m JOIN dbo.public_listing_preferences pref ON pref.public_id=m.listing_public_id'
 );
-export const findReadyPublicMedia=async({listingId,mediaId,country})=>runSingleQuery(`
+export const PUBLIC_MEDIA_DETAIL_SQL=`
  SELECT TOP(1)
   m.media_id AS mediaId,m.listing_public_id AS listingPublicId,
   m.image_bytes AS imageBytes,m.derivative_sha256 AS derivativeSha256
@@ -66,7 +66,10 @@ export const findReadyPublicMedia=async({listingId,mediaId,country})=>runSingleQ
  AND pref.public_id=@listingId AND m.media_id=@mediaId
    AND pref.country_code=@country AND m.media_status=N'ready'
    AND m.rights_confirmed=1 AND m.privacy_reviewed=1
- ORDER BY m.display_order`,{listingId,mediaId,country});
+ ORDER BY m.display_order`;
+
+export const findReadyPublicMedia=({listingId,mediaId,country})=>
+  runSingleQuery(PUBLIC_MEDIA_DETAIL_SQL,{listingId,mediaId,country});
 
 export const listReadyPublicMedia=async(publicIds=[])=>{
   const ids=[...new Set(publicIds.map(String))].filter(isId).slice(0,50);
