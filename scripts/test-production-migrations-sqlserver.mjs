@@ -999,6 +999,13 @@ const main = async () => {
     // Canonical properties.images is NVARCHAR(MAX); this utility fixture predates it.
     await testPool.request().query('ALTER TABLE dbo.properties ADD images NVARCHAR(MAX) NULL');
     const listingSql=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
+    // The old utility fixture has an orphan tenant pointer. Prove migration
+    // rejects it atomically, then complete that disposable fixture's parent.
+    await assert.rejects(testPool.request().batch(listingSql),/Reconcile orphan property tenant references/);
+    assert.equal((await testPool.request().query("SELECT OBJECT_ID('dbo.public_listing_preferences','U') AS id")).recordset[0].id,null);
+    await testPool.request().query(`INSERT dbo.tenants(id,slug)
+      SELECT DISTINCT p.tenant_id,N'legacy-fixture-'+CONVERT(NVARCHAR(36),p.tenant_id)
+      FROM dbo.properties p WHERE NOT EXISTS(SELECT 1 FROM dbo.tenants t WHERE t.id=p.tenant_id)`);
     await testPool.request().batch(listingSql);
     await testPool.request().batch(listingSql);
     const saved=(await testPool.request().input('id',sql.UniqueIdentifier,firstProperty).query(`

@@ -9,6 +9,8 @@ BEGIN TRY
  IF COL_LENGTH(N'dbo.properties',N'country_code') IS NULL
    OR OBJECT_ID(N'dbo.iso_property_countries',N'U') IS NULL
    THROW 51003, 'Apply governed property ISO country migration before listing preferences.', 1;
+ IF EXISTS(SELECT 1 FROM dbo.properties p LEFT JOIN dbo.tenants t ON t.id=p.tenant_id WHERE t.id IS NULL)
+   THROW 51004, 'Reconcile orphan property tenant references before listing preferences.', 1;
  IF OBJECT_ID(N'dbo.public_listing_preferences', N'U') IS NULL
  BEGIN
   CREATE TABLE dbo.public_listing_preferences (
