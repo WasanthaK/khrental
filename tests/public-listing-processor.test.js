@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import path from 'node:path';
+import {resolveLocalStoragePath} from '../src/api/storage/index.js';
 import {resolveRegisteredPhoto,sanitizePhotoAlt} from '../src/api/publicListings/sourceImages.js';
 import {preparePropertyPhoto,imagePreparationEnabled,convertPropertyPhoto} from '../src/api/publicListings/processor.js';
 
@@ -16,6 +18,19 @@ const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
 const input={tenantId:tenant,actorId:actor,propertyId,imageIndex:0,altText:'Modern living room'};
 const env={PUBLIC_LISTING_IMAGE_PREPARE_ENABLED:'true'};
 const sourceImages=JSON.stringify([{image_url:safeUrl,image_type:'interior'}]);
+
+test('local public derivatives never map beneath express static public root',()=>{
+  const stored=resolveLocalStoragePath('media','public-listings/'+publicId+'/'+actor+'.webp');
+  assert.ok(stored.startsWith(path.resolve(process.cwd(),'.private')+path.sep));
+  assert.equal(stored.startsWith(path.resolve(process.cwd(),'public')+path.sep),false);
+  const original=resolveLocalStoragePath('images','tenants/'+tenant+'/properties/living-room-photo.webp');
+  assert.ok(original.startsWith(path.resolve(process.cwd(),'public','storage','images')));
+  for(const p of [
+    'public-listings/'+publicId+'/../../secret.webp',
+    'public-listings/'+publicId+'/unapproved.svg',
+    'public-listings/arbitrary-image',
+  ])assert.throws(()=>resolveLocalStoragePath('media',p));
+});
 
 test('photo source parser only accepts tenant-owned registered property images',()=>{
   assert.deepEqual(resolveRegisteredPhoto(sourceImages,0,tenant),{
