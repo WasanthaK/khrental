@@ -39,8 +39,7 @@ export const REVIEW_SOURCE_SQL=`
    AND (t.status IS NULL OR t.status=N'active')
    AND (actor.status IS NULL OR actor.status=N'active')`;
 
-export const loadPhotoForReview=async(args,{tx}={})=>{
-  if(tx)return (await readWithin(tx,REVIEW_SOURCE_SQL+' WITHHOLD_PLACEHOLDER',args))[0];
+export const loadPhotoForReview=async args=>{
   const {runSingleQuery}=await import('../mssql/query.js');
   return runSingleQuery(REVIEW_SOURCE_SQL,args);
 };
