@@ -39,8 +39,8 @@ const rows=async(country)=>(
 ).recordset.map(toPublicDTO).filter(Boolean);
 const assertVisible=async(expectedLK,expectedBN)=>{
   const lk=await rows('LK'),bn=await rows('BN');
-  assert.deepEqual(lk.map(x=>x.id).sort(),expectedLK.sort(),'Sri Lanka eligibility');
-  assert.deepEqual(bn.map(x=>x.id).sort(),expectedBN.sort(),'Brunei eligibility');
+  assert.deepEqual(lk.map(x=>x.id.toLowerCase()).sort(),expectedLK.sort(),'Sri Lanka eligibility');
+  assert.deepEqual(bn.map(x=>x.id.toLowerCase()).sort(),expectedBN.sort(),'Brunei eligibility');
   assert.ok(lk.every(x=>x.country==='LK'&&x.currency==='LKR'));
   assert.ok(bn.every(x=>x.country==='BN'&&x.currency==='BND'));
   for(const r of [...lk,...bn]){
