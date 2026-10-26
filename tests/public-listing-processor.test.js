@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {resolveLocalStoragePath} from '../src/api/storage/index.js';
-import {resolveRegisteredPhoto,sanitizePhotoAlt} from '../src/api/publicListings/sourceImages.js';
+import {resolveRegisteredPhoto,sanitizePhotoAlt,trustedPhotoOrigins} from '../src/api/publicListings/sourceImages.js';
 import {preparePropertyPhoto,imagePreparationEnabled,convertPropertyPhoto} from '../src/api/publicListings/processor.js';
 
 const tenant='11111111-1111-4111-8111-111111111111';
@@ -30,6 +30,25 @@ test('local public derivatives never map beneath express static public root',()=
     'public-listings/'+publicId+'/unapproved.svg',
     'public-listings/arbitrary-image',
   ])assert.throws(()=>resolveLocalStoragePath('media',p));
+});
+
+test('only explicitly configured HTTPS app origins can supply registered photos',()=>{
+  const configured=trustedPhotoOrigins({
+    PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:'https://khrental-app.example.azurecontainerapps.io,https://app.quixo.homes'
+  });
+  assert.deepEqual(configured,[
+    'https://app.quixo.homes','https://khrental-app.example.azurecontainerapps.io'
+  ]);
+  const url='https://khrental-app.example.azurecontainerapps.io/storage/images/tenants/'+tenant+'/properties/'+filename;
+  assert.deepEqual(resolveRegisteredPhoto(JSON.stringify([url]),0,tenant,{allowedOrigins:configured}),{
+    bucket:'images',path:'tenants/'+tenant+'/properties/'+filename
+  });
+  assert.throws(()=>resolveRegisteredPhoto(JSON.stringify([url]),0,tenant));
+  for(const raw of ['http://unsafe.example','https://any.example/private','https://user:pass@any.example'])
+    assert.throws(()=>trustedPhotoOrigins({PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:raw}));
+  assert.throws(()=>trustedPhotoOrigins({
+    PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:'https://*.example.com'
+  }));
 });
 
 test('photo source parser only accepts tenant-owned registered property images',()=>{
