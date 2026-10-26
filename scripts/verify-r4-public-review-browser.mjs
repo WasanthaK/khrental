@@ -66,7 +66,7 @@ try{
     assert.ok(data.main&&data.logo&&data.liveWarnings,p+' structure/logo/disclaimer');
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
-    const expectedListingPanel=/(?:\\/lk\\/|\\/bn\\/)(?:search\\/)?$/.test(p);
+    const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
     assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
     if(expectedListingPanel)assert.equal(data.livePanel,'false',p+' live property visibility must remain disabled');
     assert.ok(data.links.includes('https://app.quixo.homes/login'),p+' existing sign-in');
