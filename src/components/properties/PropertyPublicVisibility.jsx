@@ -28,7 +28,7 @@ const PropertyPublicVisibility=({propertyId})=>{
       .catch(err=>{if(active&&err.status!==404)setError(err.message||'Unable to read public listing settings.');})
       .finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
-  },[admin,propertyId,membership?.tenant_id]);
+  },[admin,propertyId,membership?.tenant_id,user?.id]);
   if(!admin||loading||!draft)return null;
   const update=(field,value)=>setDraft(prev=>({...prev,[field]:value}));
   const save=async()=>{

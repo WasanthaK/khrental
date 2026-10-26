@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
+import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import puppeteer from 'puppeteer';
 
@@ -32,9 +33,13 @@ test('photo UI prepares privately, requires preview and both attestations, then 
       window.mount('property-a');
     `}});
   const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
+  const server=await new Promise(resolve=>{
+    const s=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end('<div id="root"></div>');});
+    s.listen(0,'127.0.0.1',()=>resolve(s));
+  });
   try{
     const page=await browser.newPage();
-    await page.setContent('<div id="root"></div>');
+    await page.goto('http://127.0.0.1:'+server.address().port);
     await page.addScriptTag({content:bundle.outputFiles[0].text});
     await page.waitForSelector('#photo-selection');
     const button=async text=>page.evaluate(text=>{
@@ -79,5 +84,5 @@ test('photo UI prepares privately, requires preview and both attestations, then 
     await page.waitForFunction(()=>window.calls.some(c=>c.url.includes('property-b')));
     assert.equal(await page.$('img[src^="blob:"]'),null);
     assert.ok(await page.evaluate(()=>window.revoked.length)>revoked,'context change revokes private preview');
-  }finally{await browser.close();}
+  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 });
