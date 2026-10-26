@@ -83,6 +83,28 @@ BEGIN TRY
     ON dbo.public_listing_media(listing_public_id,display_order)
     WHERE media_status IN(N'withheld',N'ready');
  END;
+ -- Durable evidence for explicit public-photo rights/privacy acceptance and withdrawal.
+ IF OBJECT_ID(N'dbo.public_listing_media_reviews',N'U') IS NULL
+ BEGIN
+  CREATE TABLE dbo.public_listing_media_reviews(
+   review_id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_public_listing_media_reviews PRIMARY KEY DEFAULT NEWID(),
+   media_id UNIQUEIDENTIFIER NOT NULL,
+   listing_public_id UNIQUEIDENTIFIER NOT NULL,
+   actor_user_id UNIQUEIDENTIFIER NOT NULL,
+   decision NVARCHAR(20) NOT NULL,
+   rights_attested BIT NOT NULL,
+   privacy_attested BIT NOT NULL,
+   derivative_sha256 CHAR(64) NOT NULL,
+   decided_at DATETIME2 NOT NULL CONSTRAINT DF_public_listing_media_reviews_at DEFAULT SYSUTCDATETIME(),
+   CONSTRAINT FK_public_listing_media_reviews_media FOREIGN KEY(media_id)
+     REFERENCES dbo.public_listing_media(media_id),
+   CONSTRAINT CK_public_listing_media_reviews_decision CHECK(decision IN(N'approved',N'withdrawn')),
+   CONSTRAINT CK_public_listing_media_reviews_approval CHECK(
+      (decision=N'approved' AND rights_attested=1 AND privacy_attested=1)
+      OR decision=N'withdrawn')
+  );
+  CREATE INDEX IX_public_listing_media_reviews_media ON dbo.public_listing_media_reviews(media_id,decided_at DESC);
+ END;
  -- When an owner removes/replaces a registered property image, old public derivatives
  -- become ineligible at the DB boundary even if a bucket object still exists.
  IF OBJECT_ID(N'dbo.trg_public_listing_media_source_changed',N'TR') IS NULL
