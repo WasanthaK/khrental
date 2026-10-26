@@ -12,6 +12,14 @@
 - **Market:** LK and BN must use explicit, trusted country assignment, not guessed private address parsing. The current properties table has no dedicated country code; this is a one-time classification/data-readiness requirement before live activation. It is not an individual publication approval. Do not silently assign the wrong country/currency.
 - **Property types:** Do not exclude available app properties merely for an unexpected property type. Map recognized types to residential, commercial and land; use a generic property category until a valid public type is assigned.
 
+## Country-first browsing UX — owner confirmation 26 October 2026
+
+**Country is the primary visible browsing filter**, for user experience rather than a per-property publication approval. A visitor explicitly chooses **Sri Lanka** or **Brunei** from the homepage or country switch, and sees only the eligible listings belonging to that country. The chosen market determines the public page, currency (LKR or BND), and relevant content. Switching markets from search should retain a supported residential/commercial choice, not arbitrary URL parameters or private account data.
+
+Country-specific browsing must be enforced **server-side as well as in the user interface**. The collection endpoint must reject absent or unsupported markets and must discard any mismatched-country record even if its SQL query regresses. Direct public listing details also require a selected country and must return 404 for a listing belonging to another market. Do not infer a market from IP location, browser language, or personal profile; the visitor makes an explicit, changeable choice.
+
+The original visual design remains accepted, so this is a compact country filter/navigation improvement rather than a website redesign. Actual app property country assignment must be reliable before its public availability can be enabled. No new live listing release flags are authorized by this clarification.
+
 ## Security, images and data boundary
 
 Public anonymous queries use a strict allowlist/projection. Never return the source property row or internal property IDs, tenant IDs, private addresses, tenants, agreements, invoices, payments, bank details, internal documents, original image URLs or signed/credentialed storage links. Public title and generalized location can be separately curated; avoid exposing a private address by default. Use an opaque public listing identifier.
