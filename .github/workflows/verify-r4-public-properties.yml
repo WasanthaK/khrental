@@ -1,0 +1,41 @@
+name: Verify R4 default-public listings
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/publicListings/**'
+      - 'tests/public-listing*.test.js'
+      - 'migrations/20261026_01_public_listing_preferences.sql'
+      - 'server.js'
+      - '.github/workflows/verify-r4-public-properties.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  availability-and-opt-out:
+    name: Default-public visibility and privacy boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax validation
+        run: |
+          node --check server.js
+          node --check src/api/publicListings/contract.js
+          node --check src/api/publicListings/eligibility.js
+          node --check src/api/publicListings/store.js
+          node --check src/api/publicListings/router.js
+          node --check src/api/publicListings/rateLimit.js
+      - name: Public eligibility and API isolation tests
+        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js
+      - name: Show default-OFF flags
+        run: |
+          echo "PUBLIC_LISTING_READ_ENABLED default OFF"
+          echo "PUBLIC_LISTING_SHARED_RATE_LIMIT_READY default OFF"
+          echo "PUBLIC_LISTING_MANAGEMENT_ENABLED default OFF"
+          echo "No data migration applied; no real property was published."
