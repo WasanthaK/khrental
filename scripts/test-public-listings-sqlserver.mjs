@@ -12,6 +12,7 @@ import sql from 'mssql';
 import {PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL,PUBLIC_MEDIA_DETAIL_SQL} from '../src/api/publicListings/media.js';
+import {REVIEW_SOURCE_SQL,REVIEW_LOCKED_SQL} from '../src/api/publicListings/review.js';
 
 const image=process.env.MSSQL_TEST_IMAGE||'mcr.microsoft.com/mssql/server:2022-latest';
 const migration=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
@@ -79,6 +80,14 @@ try{
       createdat DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME(),
       bank_account_number NVARCHAR(255) NULL,
       FOREIGN KEY(tenant_id) REFERENCES dbo.tenants(id)
+    );
+    CREATE TABLE dbo.app_users (
+      id UNIQUEIDENTIFIER PRIMARY KEY,status NVARCHAR(50) NOT NULL DEFAULT N'active'
+    );
+    CREATE TABLE dbo.tenant_memberships (
+      id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER NOT NULL,
+      app_user_id UNIQUEIDENTIFIER NOT NULL,role NVARCHAR(50) NOT NULL,
+      status NVARCHAR(50) NOT NULL DEFAULT N'active'
     );
     CREATE TABLE dbo.property_units (
       id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER NOT NULL,
@@ -190,6 +199,31 @@ try{
     VALUES (@mediaId,@listingId,0,N'New source photo',@hash,@hash,N'sharp-webp-v1',256)`,
     {mediaId:'77777777-7777-4777-8777-777777777777',listingId:publicOf(1),hash:'a'.repeat(64)});
   assert.equal((await detail('LK')).length,0,'newly prepared derivative is withheld by default');
+  // Execute the exact runtime photo-review source and locked authorization SQL
+  // against two actual fixture tenants, including cross-tenant and revoked access.
+  const reviewer='88888888-8888-4888-8888-888888888888';
+  const reviewerMember='99999999-9999-4999-8999-999999999999';
+  await query("INSERT INTO dbo.app_users(id,status) VALUES(@id,N'active')",{id:reviewer});
+  await query(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,role,status)
+    VALUES(@membershipId,@tenantId,@actorId,N'admin',N'active')`,
+    {membershipId:reviewerMember,tenantId:A,actorId:reviewer});
+  const reviewLookup={tenantId:A,propertyId:id(1),actorId:reviewer,mediaId:reviewMedia};
+  const selected=(await query(REVIEW_SOURCE_SQL,reviewLookup)).recordset;
+  assert.equal(selected.length,1,'admin may inspect a review record for own property');
+  assert.equal(String(selected[0].mediaStatus).toLowerCase(),'withheld');
+  assert.equal((await query(REVIEW_LOCKED_SQL,reviewLookup)).recordset.length,1,
+    'transaction-locked review source query is valid SQL');
+  assert.equal((await query(REVIEW_SOURCE_SQL,{...reviewLookup,tenantId:B})).recordset.length,0,
+    'foreign tenant never gains access to photo review');
+  assert.equal((await query(REVIEW_SOURCE_SQL,{...reviewLookup,actorId:B})).recordset.length,0,
+    'a foreign or unrecognized actor never gains access to photo review');
+  await query("UPDATE dbo.tenant_memberships SET status=N'inactive' WHERE id=@id",{id:reviewerMember});
+  assert.equal((await query(REVIEW_SOURCE_SQL,reviewLookup)).recordset.length,0,
+    'revoked admin membership immediately denies photo review');
+  await query("UPDATE dbo.tenant_memberships SET status=N'active' WHERE id=@id",{id:reviewerMember});
+  assert.equal((await query(REVIEW_SOURCE_SQL,reviewLookup)).recordset.length,1,
+    'reinstated active administrator may review again');
+
   const approvals=await query(`
     UPDATE dbo.public_listing_media SET rights_confirmed=1,privacy_reviewed=1,media_status=N'ready'
       OUTPUT INSERTED.media_id
@@ -265,7 +299,7 @@ try{
   await assertVisible([publicOf(1),publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
-  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; optout; lease; vacancy; country; redaction');
+  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; membership-revocation; optout; lease; vacancy; country; redaction');
 }finally{
   if(pool)await pool.close().catch(()=>{});
   if(master)await master.close().catch(()=>{});
