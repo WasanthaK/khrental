@@ -92,6 +92,11 @@ try{
       status NVARCHAR(50) NOT NULL DEFAULT N'draft'
     );
   `);
+  // A preexisting tenant/property is backfilled without guessing its country.
+  await pool.request().query(`INSERT INTO dbo.tenants(id,status)
+    VALUES ('${A}',N'active');`);
+  await pool.request().query(`INSERT INTO dbo.properties(id,tenant_id,status,propertytype,rentalvalues)
+    VALUES ('${id(9)}','${A}',N'available',N'house',N'{"rent":2300}');`);
   await pool.request().batch(migration);
   await pool.request().batch(migration);
   const schema=await query(`
@@ -104,7 +109,7 @@ try{
   const m=schema.recordset[0];
   for(const [k,v] of Object.entries(m))assert.equal(v,1,'SQL migration component '+k);
   // Rows registered after migration must get the default preference automatically.
-  await query('INSERT INTO dbo.tenants(id,status) VALUES (@a,N\'active\'),(@b,N\'active\')',{a:A,b:B});
+  await query('INSERT INTO dbo.tenants(id,status) VALUES (@b,N\'active\')',{b:B});
   const property=async(n,tenant,status='available',type='house')=>query(`
     INSERT INTO dbo.properties(id,tenant_id,status,propertytype,rentalvalues,bank_account_number)
     VALUES(@pid,@tenant,@status,@type,N'{"rent":2300}',N'SECRET BANK')`,
@@ -118,7 +123,11 @@ try{
   await property(7,A,'rented','apartment'); // one free unit -> displayed
   await property(8,B); // LK in different tenant -> displayed via public only
   const count=(await query('SELECT COUNT(*) AS c FROM dbo.public_listing_preferences')).recordset[0].c;
-  assert.equal(count,8,'default rows from trigger, no manual publishing');
+  assert.equal(count,9,'one legacy backfill plus eight new trigger rows without manual publishing');
+  const legacy=(await query('SELECT country_code,opted_out FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(9)})).recordset;
+  assert.equal(legacy.length,1,'legacy property should receive an idempotent preference record');
+  assert.equal(legacy[0].country_code,null,'legacy country must not be guessed from a private address');
+  assert.equal(legacy[0].opted_out,false,'legacy properties are not silently opted out');
   const setCountry=async(n,country)=>query(`
     UPDATE dbo.public_listing_preferences SET country_code=@country,location_label=N'General district'
     WHERE property_id=@pid`,{pid:id(n),country});
@@ -153,7 +162,7 @@ try{
   await assertVisible([publicOf(1),publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
-  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=8; optout; lease; vacancy; country; redaction');
+  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; optout; lease; vacancy; country; redaction');
 }finally{
   if(pool)await pool.close().catch(()=>{});
   if(master)await master.close().catch(()=>{});
