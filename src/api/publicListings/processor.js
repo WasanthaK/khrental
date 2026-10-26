@@ -3,7 +3,7 @@ import {getMssqlPool,sql} from '../mssql/pool.js';
 import {runSingleQuery} from '../mssql/query.js';
 import {getStorageDriver} from '../storage/index.js';
 import {verifySafeWebp,mediaObjectPath} from './media.js';
-import {resolveRegisteredPhoto,sanitizePhotoAlt} from './sourceImages.js';
+import {resolveRegisteredPhoto,sanitizePhotoAlt,trustedPhotoOrigins} from './sourceImages.js';
 import {isId} from './contract.js';
 
 const MAX_SOURCE_BYTES=10*1024*1024;
@@ -128,7 +128,9 @@ export const preparePropertyPhoto=async({
   const snapshot=await readSnapshot({tenantId,propertyId,actorId});
   if(!snapshot?.publicId||!isId(snapshot.publicId))
     throw error(404,'IMAGE_PROPERTY_UNAVAILABLE','Property is unavailable for image preparation.');
-  const source=resolveRegisteredPhoto(snapshot.sourceImages,imageIndex,tenantId,{allowedOrigins});
+  const source=resolveRegisteredPhoto(snapshot.sourceImages,imageIndex,tenantId,{
+    allowedOrigins:allowedOrigins||trustedPhotoOrigins(env)
+  });
   const original=await storage.getObject(source.bucket,source.path);
   const originalBytes=original?.body;
   if(!Buffer.isBuffer(originalBytes)||originalBytes.length>MAX_SOURCE_BYTES)
