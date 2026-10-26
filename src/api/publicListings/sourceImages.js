@@ -14,7 +14,7 @@ export const trustedPhotoOrigins=env=>{
   if(candidates.length>8)throw new Error('Too many trusted application origins.');
   return [...new Set(candidates.map(value=>{
     const url=new URL(value);
-    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
+    if(url.protocol!=='https:'||url.host.includes('*')||url.username||url.password||url.search||url.hash||
        (url.pathname!=='/'&&url.pathname!==''))
       throw new Error('Only exact HTTPS application origins are supported.');
     return url.origin;
