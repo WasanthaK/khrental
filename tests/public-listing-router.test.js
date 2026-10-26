@@ -102,3 +102,51 @@ test('tenant admin may opt out and restore eligibility without manual publicatio
  assert.equal((await makeCall(router,'PATCH','/'+property,{optedOut:false},actor)).status,200);
  assert.deepEqual(seen,[true,false]);
 });
+
+test('market readiness is private, disabled by default and scoped to active administrator',async()=>{
+  let readCount=0;
+  const off=createPublicListingPreferencesRouter({
+    env:{},context:(req,res,next)=>next(),
+    listReadiness:async()=>{readCount++;return {counts:{},records:[]};}
+  });
+  assert.equal((await makeCall(off,'GET','/market-readiness',undefined,actor)).status,404);
+  const on=createPublicListingPreferencesRouter({
+    env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'},
+    context:(req,res,next)=>next(),
+    listReadiness:async(...args)=>{
+      readCount++;
+      assert.equal(args[0],tenant);
+      assert.deepEqual(args[1],{offset:0,limit:50});
+      return {
+        counts:{total:2,assigned:1,unassigned:1,optedOut:0},
+        records:[{propertyId:property,propertyName:'Country missing',availabilityStatus:'available',
+          countryCode:null,optedOut:false}],offset:0,limit:50
+      };
+    }
+  });
+  for(const identity of [undefined,{...actor,user:{id:user,role:'staff'},membership:{...actor.membership,role:'staff'}},
+    {...actor,membership:{...actor.membership,status:'inactive'}},
+    {...actor,membership:{...actor.membership,tenant_id:'55555555-5555-4555-8555-555555555555'}}]){
+    assert.equal((await makeCall(on,'GET','/market-readiness',undefined,identity)).status,403);
+  }
+  assert.equal(readCount,0,'unauthorized requests never reach SQL');
+  const ok=await makeCall(on,'GET','/market-readiness',undefined,actor);
+  assert.equal(ok.status,200);
+  assert.equal(readCount,1);
+  assert.equal(ok.body.data.counts.unassigned,1);
+  assert.equal(ok.body.data.records[0].countryCode,null);
+  assert.ok(!JSON.stringify(ok.body).includes('SECRET'));
+});
+
+test('market readiness clamps pagination rather than accepting unbounded page scans',async()=>{
+  let called;
+  const router=createPublicListingPreferencesRouter({
+    env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'},
+    context:(req,res,next)=>next(),
+    listReadiness:async(tenantId,query)=>{called={tenantId,query};return {records:[],counts:{}};}
+  });
+  const result=await makeCall(router,'GET','/market-readiness?limit=5000&offset=-4',undefined,actor);
+  assert.equal(result.status,200);
+  assert.equal(called.tenantId,tenant);
+  assert.deepEqual(called.query,{offset:0,limit:100});
+});
