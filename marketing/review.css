@@ -22,3 +22,29 @@
 .draft-banner{background:#e8f3ff;color:#153a5a}
 @media(max-width:750px){.review-markets{grid-template-columns:1fr}.review-market-card{min-height:210px}.home-hero .hero-inner{padding-top:55px;padding-bottom:44px}.home-hero h1{font-size:clamp(43px,8vw,62px)}}
 @media(max-width:420px){.approved-wordmark{width:143px}.review-market-box{padding:18px}.review-market-actions .button{width:100%}.footer-wordmark{width:126px}}
+
+/* Source: owner-provided Quixo.Homes image mockups. Low-res static proofreading assets only. */
+.hero:not(.home-hero){background:linear-gradient(90deg,rgba(5,28,46,.9),rgba(11,37,69,.62)),url('/assets/hero-house.webp') center/cover no-repeat;color:white}
+.home-hero{background:linear-gradient(100deg,rgba(5,26,46,.88),rgba(11,37,69,.58)),url('/assets/hero-house.webp') center/cover no-repeat;color:white}
+.category-grid a{background-size:cover!important;background-position:center!important;position:relative;isolation:isolate;overflow:hidden;min-height:185px;color:white}
+.category-grid a::before{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,25,35,.8),rgba(2,25,35,.08));z-index:-1}
+.category-grid a span{color:#e9f2fc}
+.category-grid a:nth-child(1){background-image:url('/assets/hero-house.webp')!important}
+.category-grid a:nth-child(2){background-image:url('/assets/hero-commercial.webp')!important}
+.category-grid a:nth-child(3){background-image:url('/assets/commercial-office.webp')!important}
+.review-market-card{isolation:isolate;position:relative;overflow:hidden;color:white;background:url('/assets/hero-house.webp') center/cover no-repeat}
+.review-market-card.bn{background:url('/assets/hero-commercial.webp') center/cover no-repeat}
+.review-market-card::before{position:absolute;content:"";inset:0;background:linear-gradient(0deg,rgba(5,25,49,.92),rgba(5,25,49,.23));z-index:-1}
+.review-market-card .review-small{color:#eef8ff}
+.preview-photo{display:block;width:100%;height:180px;object-fit:cover;background:#d7e8f2}
+.detail-gallery .preview-photo{height:285px;object-fit:cover;border-radius:8px}
+.owner-hero{background:linear-gradient(95deg,rgba(232,246,235,.94),rgba(232,246,235,.76)),url('/assets/hero-commercial.webp') center/cover no-repeat}
+.home-sample{margin-top:35px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.home-sample article{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:white}
+.home-sample img{display:block;width:100%;height:180px;object-fit:cover}
+.home-sample article>div{padding:16px}
+.home-sample h3{font-size:18px;margin:7px 0}
+.home-sample p{font-size:13px;color:var(--muted);line-height:1.55}
+.home-sample small{font-size:11px;color:#305875;font-weight:750}
+@media(max-width:750px){.home-sample{grid-template-columns:1fr 1fr}.detail-gallery .preview-photo{height:220px}}
+@media(max-width:420px){.home-sample{grid-template-columns:1fr}.home-sample img{height:190px}}
