@@ -33,3 +33,47 @@ All public reads use the same SQL store of authoritative app inventory and statu
 The R4 foundation is staged in GitHub branch `r4/public-property-projection-foundation-20261026`. It covers automatic eligibility semantics, SQL preference/opt-out schema, strictly projected read-only API and tests. The schema migration is **not applied**, the public site is **not yet connected to real app properties**, and `PUBLIC_LISTING_READ_ENABLED`, `PUBLIC_LISTING_SHARED_RATE_LIMIT_READY`, `PUBLIC_LISTING_MANAGEMENT_ENABLED` remain disabled by default. The owner approved the linking direction and default-public policy, but live data exposure must wait for security testing, market metadata readiness, private-image isolation and review of the first real records. No external user records were exposed by documenting this decision.
 
 **Next milestones:** Test SQL migration against representative multi-tenant data, implement reliable property country assignment and easy opt-out in the app, verify active tenancy/units and fast takedown, create public-safe photograph derivatives, connect LK/BN website search to the API, and perform a controlled end-to-end pilot before enabling anonymous visibility.
+
+## Governed publication migration after app-only rollout — 2026-10-26
+
+PR #431 deployed the app country/photo correction and the governed
+`20261026_02_property_iso_country` schema. Authenticated demo acceptance proved
+country persistence and original-photo display. The publication schema remains
+unapplied and all public flags remain disabled.
+
+The draft publication migration now explicitly depends on that country schema.
+It never copies listing-preference country back into the canonical property.
+The governed runner places `20261026_01_public_listing_preferences` AFTER the
+already-deployed `_02_property_iso_country` entry despite filename numbering;
+manifest order is authoritative. Executor target selection and strict evidence
+cover all 13 managed entries. This is source readiness, not production apply.
+
+Disposable verification must execute both migrations in that order, apply the
+publication migration twice, preserve an explicitly saved property country,
+backfill unknown legacy countries without guessing, create no public media or
+review approvals, and retain existing two-tenant availability/opt-out/lease,
+photo withdrawal and authorization proofs. A rejected precondition must roll
+back without leaving a partial publication table.
+
+Before release, complete the administrator photo-preparation/review workflow,
+verify deployed source-origin/storage configuration and controlled removal,
+and obtain the separate public pilot/release-switch authorization. No live
+public inventory or source photograph is enabled by this source checkpoint.
+# Administrator photo controls — 2026-10-26
+
+Source-only addition to draft #430: one photo section on the existing property
+page, with Prepare private copy, Preview and approve, and Withdraw actions.
+Preparation stays withheld; approval requires a successfully loaded private
+preview and separate rights/privacy confirmations. Replacing a copy resets
+review. Private object URLs are revoked on close or property/tenant/account
+change. Withdrawal reports any remaining object cleanup failure.
+
+The private manifest and preview routes require the management gate plus current
+tenant-administrator access. Preview additionally requires the review gate,
+verifies derivative integrity and rechecks access/state after the storage read.
+Manifest SQL independently binds the active actor, tenant and property. Neither
+route activates anonymous reads or returns raw original-photo/storage references.
+No new dashboard, property Publish button or change to default-public eligibility.
+All public release flags remain OFF. Actual storage/withdrawal acceptance and
+the owner-controlled pilot remain release work; this source milestone does not
+authorize production migration, deployment or real-photo approval.

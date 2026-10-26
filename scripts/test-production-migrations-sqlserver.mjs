@@ -44,7 +44,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   INVOICE_ARCHIVE_MIGRATION_ID,
   SIGNUP_CHALLENGE_MIGRATION_ID,
   SIGNUP_LIMIT_MIGRATION_ID,
-  '20261026_02_property_iso_country'
+  '20261026_02_property_iso_country',
+  '20261026_01_public_listing_preferences'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -991,6 +992,33 @@ const main = async () => {
     assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n,beforeCountry);
     assert.equal((await testPool.request().query("SELECT COUNT(*) AS n FROM sys.tables WHERE name='public_listing_preferences'")).recordset[0].n,0);
     console.log('PASS: app-only ISO country migration double apply; 249 codes; legacy unknown; invalid code rejection; rollback compatibility; no public inventory schema');
+    // Run listing schema after the exact deployed country schema, preserving the
+    // explicit country assignment made by the prior app-only rollout.
+    await testPool.request().input('id',sql.UniqueIdentifier,firstProperty)
+      .query("UPDATE dbo.properties SET country_code='LK' WHERE id=@id");
+    // Canonical properties.images is NVARCHAR(MAX); this utility fixture predates it.
+    await testPool.request().query('ALTER TABLE dbo.properties ADD images NVARCHAR(MAX) NULL');
+    const listingSql=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
+    // The old utility fixture has an orphan tenant pointer. Prove migration
+    // rejects it atomically, then complete that disposable fixture's parent.
+    await assert.rejects(testPool.request().batch(listingSql),/Reconcile orphan property tenant references/);
+    assert.equal((await testPool.request().query("SELECT OBJECT_ID('dbo.public_listing_preferences','U') AS id")).recordset[0].id,null);
+    await testPool.request().query(`INSERT dbo.tenants(id,slug)
+      SELECT DISTINCT p.tenant_id,N'legacy-fixture-'+CONVERT(NVARCHAR(36),p.tenant_id)
+      FROM dbo.properties p WHERE NOT EXISTS(SELECT 1 FROM dbo.tenants t WHERE t.id=p.tenant_id)`);
+    await testPool.request().batch(listingSql);
+    await testPool.request().batch(listingSql);
+    const saved=(await testPool.request().input('id',sql.UniqueIdentifier,firstProperty).query(`
+      SELECT p.country_code AS property_country,pref.country_code AS public_market,pref.opted_out
+      FROM dbo.properties p JOIN dbo.public_listing_preferences pref ON pref.property_id=p.id
+        AND pref.tenant_id=p.tenant_id WHERE p.id=@id`)).recordset[0];
+    assert.equal(saved.property_country,'LK');
+    assert.equal(saved.public_market,'LK');
+    assert.equal(saved.opted_out,false);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media')).recordset[0].n,0);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media_reviews')).recordset[0].n,0);
+    console.log('PASS: governed public projection migration after deployed country schema; double apply; saved country preserved; zero public photos or approvals');
+
 
   } finally {
     if (testPool) {

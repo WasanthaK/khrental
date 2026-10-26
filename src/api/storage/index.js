@@ -42,6 +42,29 @@ const ensureBucketName = (bucket) => {
   return value;
 };
 
+// Quixo.Homes public-listing derivatives are kept outside the web static root.
+// Regular tenant storage remains in its current location, unchanged.
+const PRIVATE_LISTING_MEDIA_ROOT=path.resolve(process.cwd(),'.private','quixo-listing-derivatives');
+const PUBLIC_MEDIA_PREFIX='public-listings';
+const guidFragment=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const validGuidPart=value=>typeof value==='string' && guidFragment.exec(value)?.[0]===value;
+export const resolveLocalStoragePath=(bucket,relativePath='')=>{
+  const safeBucket=ensureBucketName(bucket);
+  const safePath=normalizeStoragePath(relativePath);
+  const chunks=safePath.split('/').filter(Boolean);
+  if(safeBucket==='media' && chunks[0]===PUBLIC_MEDIA_PREFIX){
+    const approved=chunks.length===1 ||
+      (chunks.length===2 && validGuidPart(chunks[1])) ||
+      (chunks.length===3 && validGuidPart(chunks[1]) &&
+        chunks[2].endsWith('.webp') && validGuidPart(chunks[2].slice(0,-5)));
+    if(!approved)throw Object.assign(new Error('Invalid public derivative path.'),{
+      status:400,code:'INVALID_PUBLIC_MEDIA_PATH'
+    });
+    return path.join(PRIVATE_LISTING_MEDIA_ROOT,...chunks.slice(1));
+  }
+  return path.join(STORAGE_ROOT,safeBucket,safePath);
+};
+
 const getLogicalBuckets = () => {
   const configured = String(process.env.STORAGE_BUCKETS || '').split(',').map((item) => item.trim()).filter(Boolean);
   return configured.length > 0 ? configured.map(ensureBucketName) : DEFAULT_BUCKETS;
@@ -82,7 +105,7 @@ class LocalStorageDriver {
   }
 
   async list(bucket, relativePath = '') {
-    const targetPath = path.join(STORAGE_ROOT, ensureBucketName(bucket), normalizeStoragePath(relativePath));
+    const targetPath = resolveLocalStoragePath(bucket,relativePath);
     const entries = await fs.readdir(targetPath, { withFileTypes: true }).catch(() => []);
     return Promise.all(entries.map((entry) => mapLocalEntry(targetPath, entry)));
   }
@@ -91,7 +114,7 @@ class LocalStorageDriver {
     const safeBucket = ensureBucketName(bucket);
     const safePath = normalizeStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(safeBucket, safePath);
-    const targetPath = path.join(STORAGE_ROOT, safeBucket, safePath);
+    const targetPath = resolveLocalStoragePath(safeBucket,safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, body);
     return { path: safePath, fullPath: `${safeBucket}/${safePath}` };
@@ -110,7 +133,7 @@ class LocalStorageDriver {
     const safeBucket = ensureBucketName(bucket);
     const safePaths = paths.map(normalizeStoragePath);
     safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed(safeBucket, item));
-    await Promise.all(safePaths.map((item) => fs.rm(path.join(STORAGE_ROOT, safeBucket, item), { force: true, recursive: true })));
+    await Promise.all(safePaths.map((item) => fs.rm(resolveLocalStoragePath(safeBucket,item), { force: true, recursive: true })));
     return safePaths.map((name) => ({ name }));
   }
 
@@ -122,7 +145,7 @@ class LocalStorageDriver {
       error.code = 'STORAGE_OBJECT_NOT_FOUND';
       throw error;
     }
-    const body = await fs.readFile(path.join(STORAGE_ROOT, ensureBucketName(bucket), safePath));
+    const body = await fs.readFile(resolveLocalStoragePath(bucket,safePath));
     return { body, contentType: 'application/octet-stream', etag: null };
   }
 }

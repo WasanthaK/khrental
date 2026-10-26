@@ -27,6 +27,7 @@ import { PERMISSIONS, isAdminRole } from './src/api/platform/permissionEngine.js
 import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createPublicSignupRuntime } from './src/api/auth/publicSignupRuntime.js';
+import { createPublicListingsRouter, createPublicListingPreferencesRouter } from './src/api/publicListings/router.js';
 import { observeR3IngressPeer } from './src/api/auth/r3IngressPeerProbe.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
@@ -87,6 +88,8 @@ async function createServer() {
   // parser with its own 8 KB/Origin/trusted-ingress checks. Default OFF: 404.
   // Never use the legacy renter /auth/sign-up as global registration.
   app.use('/api/public-signup', createPublicSignupRuntime());
+  // R4 marketplace: public-safe availability projection; dual release-gate defaults 404.
+  app.use('/api/public-listings', createPublicListingsRouter());
   // Credential-gated, temporarily enabled read-only R3 ingress peer attestation.
   // Absent its one-time environment secret this route always responds 404.
   app.post('/api/internal/r3-ingress-peer', (req, res) => observeR3IngressPeer(req, res));
@@ -421,6 +424,8 @@ async function createServer() {
   };
 
   app.use('/api/mssql', guardBillingMssqlCompatibility, guardMssqlCompatibilityRoutes, createMssqlRouter());
+  // Owner-controlled exclusion / country classification. Requires active tenant admin and separate OFF-by-default switch.
+  app.use('/api/public-listing-preferences', createPublicListingPreferencesRouter());
   app.use('/api/property-assignments', createPropertyAssignmentsRouter());
   app.use('/api/tenancies', createTenancyOnboardingRouter());
   app.use('/api/billing', createBillingRouter());

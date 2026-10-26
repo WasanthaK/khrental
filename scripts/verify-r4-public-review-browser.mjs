@@ -7,12 +7,12 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 const base=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../marketing');
 const sitePaths=['/',...['lk','bn'].flatMap(c=>['', 'search/','property/','owners/','how-it-works/'].map(x=>'/'+c+'/'+x))];
-const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain','.webp':'image/webp','.ico':'image/x-icon'};
+const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain','.webp':'image/webp','.ico':'image/x-icon','.mjs':'text/javascript'};
 const app=http.createServer((req,res)=>{
   try{
     const u=new URL(req.url,'http://127.0.0.1'),suffix=decodeURIComponent(u.pathname);
     const file=path.resolve(base,'.'+suffix+(suffix.endsWith('/')?'index.html':''));
-    if(!file.startsWith(base+path.sep)||!/\.(html|css|svg|txt|webp|ico)$/.test(file)) {res.writeHead(404);return res.end();}
+    if(!file.startsWith(base+path.sep)||!/\.(html|css|svg|txt|webp|ico|mjs)$/.test(file)) {res.writeHead(404);return res.end();}
     const content=fs.readFileSync(file);res.writeHead(200,{'Content-Type':types[path.extname(file)]});res.end(content);
   }catch{res.writeHead(404);res.end();}
 });
@@ -53,7 +53,8 @@ try{
       scrollWidth:document.documentElement.scrollWidth,
       links:[...document.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')),
       forms:document.querySelectorAll('form').length,
-      script:document.querySelectorAll('script').length,
+      scripts:[...document.querySelectorAll('script')].map(x=>x.getAttribute('src')), 
+      livePanel:document.querySelector('[data-public-listing-market]')?.dataset.publicListingEnabled,
       enabledButtons:document.querySelectorAll('button:not([disabled])').length,
       liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW'),
       photos:[...document.querySelectorAll('img.preview-photo,img.approved-wordmark,img[src$=".webp"]')].map(i=>({src:i.getAttribute('src'),width:i.naturalWidth,loaded:i.complete})),
@@ -64,7 +65,21 @@ try{
     assert.equal(data.h1,1,p+' needs exactly one h1');
     assert.ok(data.main&&data.logo&&data.liveWarnings,p+' structure/logo/disclaimer');
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
-    assert.ok(!data.forms&&!data.script&&!data.enabledButtons,p+' unsafe live actions');
+    assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
+    const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
+    assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
+    if(expectedListingPanel)assert.equal(data.livePanel,'false',p+' live property visibility must remain disabled');
+    if(p.endsWith('/search/')){
+      const actual=await page.$eval('[data-country-filter]',n=>({
+        selected:n.dataset.countryFilter,
+        current:[...n.querySelectorAll('[aria-current="page"]')].map(a=>a.dataset.countrySwitch),
+        markets:[...n.querySelectorAll('[data-country-switch]')].map(a=>a.dataset.countrySwitch)
+      }));
+      const market=p.startsWith('/lk/')?'LK':'BN';
+      assert.equal(actual.selected,market,p+' search country marker');
+      assert.deepEqual(actual.current,[market],p+' only the chosen country is selected');
+      assert.deepEqual(actual.markets,['LK','BN'],p+' both market choices available');
+    }
     assert.ok(data.links.includes('https://app.quixo.homes/login'),p+' existing sign-in');
     assert.equal(remote.length,0,p+' external network requests');
     assert.equal(failedResources.length,0,p+' failed assets: '+failedResources.join('; '));
@@ -87,6 +102,23 @@ try{
       assert.ok(await page.$eval('.mobile-menu',e=>e.open),p+' keyboard menu');
     }
     await page.close();passes++;
+  }
+  // Country changes retain the selected rental category, without carrying arbitrary query data.
+  for(const [from,to] of [['lk','bn'],['bn','lk']]){
+    const tab=await browser.newPage();
+    await tab.goto(origin+'/'+from+'/search/?type=commercial&privateKey=never',{waitUntil:'networkidle0'});
+    const targets=await tab.evaluate(()=>({
+      explicit:document.querySelector('[data-country-switch="'+document.body.dataset.country+'"]')?.getAttribute('aria-current'),
+      other:document.querySelector('[data-country-switch="'+(document.body.dataset.country==='LK'?'BN':'LK')+'"]')?.getAttribute('href'),
+      header:[...document.querySelectorAll('.country-menu a')].find(a=>a.getAttribute('href')?.includes('/'+(document.body.dataset.country==='LK'?'bn':'lk')+'/search/'))?.getAttribute('href')
+    }));
+    assert.equal(targets.explicit,'page',from+' selected country');
+    assert.equal(targets.other,'/'+to+'/search/?type=commercial',from+' category-preserving switch');
+    assert.ok(targets.header?.includes('?type=commercial'),from+' header switch category');
+    assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
+    await tab.goto(origin+targets.other,{waitUntil:'domcontentloaded'});
+    assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
+    await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
   assert.ok(logo.includes('fill="#3B8DCC"')&&logo.includes('fill="#22C55E"'));

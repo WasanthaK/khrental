@@ -104,10 +104,10 @@ jobs:
 
           # Both entrypoints are read-only and require the isolated identity.
           verification_script="scripts/run-production-migration-verify.sh"
-          verification_marker="Strict read-only migration verification passed for 12 managed migrations;"
+          verification_marker="Strict read-only migration verification passed for 13 managed migrations;"
           if [ "$VERIFICATION_MODE" = "preflight" ]; then
             verification_script="scripts/run-production-migration-preflight.sh"
-            verification_marker="Read-only executor preflight passed for 12 managed migrations;"
+            verification_marker="Read-only executor preflight passed for 13 managed migrations;"
           fi
 
           # Per-execution overrides do not change the resting job definition.
@@ -163,7 +163,8 @@ jobs:
             20261020_01_immutable_invoice_pdf_archive
             20261023_01_create_public_signup_challenges
             20261024_01_create_public_signup_rate_limits
-            20261026_02_property_iso_country"
+            20261026_02_property_iso_country
+            20261026_01_public_listing_preferences"
 
             for migration_id in $migration_ids; do
               if [ "$VERIFICATION_MODE" = "strict" ]; then
@@ -194,9 +195,9 @@ jobs:
                   echo "| $migration_id | LEDGERED | SCHEMA_OK |"
                 done
                 echo
-                echo "**12/12 ledger/schema checks passed.** Raw Azure logs are not published."
+                echo "**13/13 ledger/schema checks passed.** Raw Azure logs are not published."
               else
-                echo "Pre-apply preflight inspected all twelve migrations with no database writes."
+                echo "Pre-apply preflight inspected all thirteen migrations with no database writes."
                 echo "Preflight allows PENDING and SATISFIED_UNTRACKED. It does not certify an applied schema."
                 echo "Production apply still requires separate authorization; strict acceptance must follow apply."
                 echo "Raw Azure logs are not published."

@@ -25,6 +25,7 @@ export const requestMssqlApi = async (path, options = {}) => {
     method = 'GET',
     headers = {},
     body,
+    responseType,
     ...rest
   } = options;
 
@@ -56,6 +57,8 @@ export const requestMssqlApi = async (path, options = {}) => {
   if (response.status === 204) {
     return null;
   }
+
+  if (responseType === 'blob') return response.blob();
 
   const contentType = response.headers.get('content-type') || '';
 

@@ -341,6 +341,24 @@ const inspectPropertyCountry = async (pool) => {
     detail:`country_column=${row.country_column}, trusted_fk=${row.trusted_fk}, ISO_codes=${codeCount}`};
 };
 
+const inspectPublicListingProjection = async (pool) => {
+  const result=await pool.request().query(`
+    SELECT
+      (SELECT COUNT(*) FROM sys.tables WHERE schema_id=SCHEMA_ID('dbo') AND name IN(
+        'public_listing_preferences','public_listing_read_buckets','public_listing_media','public_listing_media_reviews')) AS tables_ready,
+      (SELECT COUNT(*) FROM sys.triggers WHERE is_disabled=0 AND name IN(
+        'trg_public_listing_preferences_property_insert','trg_public_listing_property_country_changed','trg_public_listing_media_source_changed')) AS triggers_ready,
+      (SELECT COUNT(*) FROM sys.foreign_keys WHERE is_disabled=0 AND is_not_trusted=0 AND name IN(
+        'FK_public_listing_preferences_property','FK_public_listing_preferences_tenant',
+        'FK_public_listing_media_listing','FK_public_listing_media_reviews_media')) AS trusted_fks,
+      (SELECT COUNT(*) FROM sys.indexes WHERE is_disabled=0 AND name IN(
+        'IX_public_listing_preferences_market','UX_public_listing_media_current_slot','IX_public_listing_media_reviews_media')) AS indexes_ready;
+  `);
+  const row=result.recordset?.[0] || {};
+  return {satisfied:row.tables_ready===4 && row.triggers_ready===3 && row.trusted_fks===4 && row.indexes_ready===3,
+    detail:`tables=${row.tables_ready}/4, triggers=${row.triggers_ready}/3, trusted_fks=${row.trusted_fks}/4, indexes=${row.indexes_ready}/3`};
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -438,6 +456,12 @@ const MIGRATIONS = [
     file: 'migrations/20261026_02_property_iso_country.sql',
     inspect: inspectPropertyCountry,
     verify: async pool => assertSatisfied(inspectPropertyCountry(pool), 'Property ISO country schema verification failed.')
+  },
+  {
+    id: '20261026_01_public_listing_preferences',
+    file: 'migrations/20261026_01_public_listing_preferences.sql',
+    inspect: inspectPublicListingProjection,
+    verify: async pool => assertSatisfied(inspectPublicListingProjection(pool), 'Public listing projection schema verification failed.')
   }
 ];
 

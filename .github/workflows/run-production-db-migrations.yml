@@ -37,6 +37,7 @@ on:
           - 20261023_01_create_public_signup_challenges
           - 20261024_01_create_public_signup_rate_limits
           - 20261026_02_property_iso_country
+          - 20261026_01_public_listing_preferences
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false

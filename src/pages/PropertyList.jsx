@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { listTenantProperties } from '../services/propertyDirectoryService';
 import PropertyCard from '../components/properties/PropertyCard';
+import PropertyMarketReadiness from '../components/properties/PropertyMarketReadiness';
 import { useAuth } from '../hooks/useAuth';
 
 const PropertyList = () => {
@@ -79,6 +80,8 @@ const PropertyList = () => {
         </Link>
       </div>
       
+      <PropertyMarketReadiness />
+
       {/* Search and Filter */}
       <div className="bg-white p-4 rounded-lg shadow mb-6">
         <div className="flex flex-col md:flex-row gap-4">
