@@ -11,7 +11,7 @@ import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
 import {PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
-import {PUBLIC_MEDIA_ELIGIBILITY_SQL} from '../src/api/publicListings/media.js';
+import {PUBLIC_MEDIA_ELIGIBILITY_SQL,PUBLIC_MEDIA_DETAIL_SQL} from '../src/api/publicListings/media.js';
 
 const image=process.env.MSSQL_TEST_IMAGE||'mcr.microsoft.com/mssql/server:2022-latest';
 const migration=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
@@ -161,12 +161,18 @@ try{
     UPDATE dbo.public_listing_media SET media_status=N'ready',rights_confirmed=1,privacy_reviewed=1
     WHERE media_id=@mediaId`,{mediaId:safeMediaId});
   assert.equal((await mediaVisible('LK')).length,1,'only verified processed derivative is image-eligible');
+  const detail=async country=>(await query(PUBLIC_MEDIA_DETAIL_SQL,{
+    listingId:publicOf(1),mediaId:safeMediaId,country})).recordset;
+  assert.equal((await detail('LK')).length,1,'actual production media-detail SQL returns an eligible derivative');
+  assert.equal((await detail('BN')).length,0,'actual production media-detail SQL rejects the wrong country');
   assert.equal((await mediaVisible('BN')).length,0,'wrong market never serves image');
   await query('UPDATE dbo.public_listing_preferences SET opted_out=1 WHERE property_id=@property',{property:id(1)});
   assert.equal((await mediaVisible('LK')).length,0,'opt-out immediately revokes derivative');
+  assert.equal((await detail('LK')).length,0,'exact media-detail query also honors opt-out');
   await query('UPDATE dbo.public_listing_preferences SET opted_out=0 WHERE property_id=@property',{property:id(1)});
   await query("UPDATE dbo.properties SET status=N'reserved' WHERE id=@property",{property:id(1)});
   assert.equal((await mediaVisible('LK')).length,0,'reserved property derivative hidden');
+  assert.equal((await detail('LK')).length,0,'exact media-detail query denies reserved properties');
   await query("UPDATE dbo.properties SET status=N'available' WHERE id=@property",{property:id(1)});
   assert.equal((await mediaVisible('LK')).length,1,'returning to available recovers eligible derivative');
   await query("UPDATE dbo.properties SET images=N'[{\\\"image_url\\\":\\\"removed\\\"}]' WHERE id=@property",{property:id(1)});
@@ -174,6 +180,13 @@ try{
   assert.equal(withdrawn.media_status,'withdrawn','changed source photo triggers hard withdrawal');
   assert.ok(withdrawn.withdrawn_at,'withdrawal time recorded');
   assert.equal((await mediaVisible('LK')).length,0,'old image cannot reappear without reconversion');
+  assert.equal((await detail('LK')).length,0,'exact media-detail query denies source-changed derivatives');
+  // Withdrawn media can be superseded without leaking old URLs or violating slot uniqueness.
+  await query(`INSERT INTO dbo.public_listing_media(media_id,listing_public_id,display_order,alt_text,
+      source_sha256,derivative_sha256,processor_version,image_bytes)
+    VALUES (@mediaId,@listingId,0,N'New source photo',@hash,@hash,N'sharp-webp-v1',256)`,
+    {mediaId:'77777777-7777-4777-8777-777777777777',listingId:publicOf(1),hash:'a'.repeat(64)});
+  assert.equal((await detail('LK')).length,0,'newly prepared derivative is withheld by default');
 
   await assertVisible([publicOf(1),publicOf(7),publicOf(8)],[publicOf(2)]);
   // A whole-property active lease immediately suppresses an otherwise "available" row.
