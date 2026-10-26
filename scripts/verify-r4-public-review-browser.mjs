@@ -42,6 +42,8 @@ try{
     await page.setViewport({width,height:900,deviceScaleFactor:1});
     const response=await page.goto(origin+p,{waitUntil:'networkidle0',timeout:15000});
     assert.equal(response.status(),200,p+' '+width+' HTTP');
+    // Force below-fold lazy imagery to load before asserting its decoded dimensions.
+    await page.evaluate(async()=>{await Promise.all([...document.images].map(async img=>{img.loading='eager';await img.decode();}));});
     const data=await page.evaluate(()=>({
       site:document.body.dataset.site,
       robots:document.querySelector('meta[name="robots"]')?.content,
