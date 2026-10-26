@@ -12,6 +12,7 @@ import { listAgreementsByProperty, listAgreementsByUnitIds } from '../services/a
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
+import PropertyPublicVisibility from '../components/properties/PropertyPublicVisibility';
 
 const PropertyDetails = () => {
   const { id } = useParams();
@@ -642,6 +643,9 @@ const PropertyDetails = () => {
             </div>
           </div>
           
+          {/* Public marketplace opt-out and market metadata; hidden until backend release gate is enabled. */}
+          <PropertyPublicVisibility propertyId={id} />
+
           {/* Terms */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Terms</h2>
