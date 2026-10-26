@@ -21,6 +21,19 @@ try{
   await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
   const origin='http://127.0.0.1:'+app.address().port;
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-networking']});
+  const imageNames=['hero-house','hero-commercial','residential-interior','residential-villa','commercial-office','commercial-retail'];
+  const assetPage=await browser.newPage();
+  const imageProbes=await assetPage.evaluate(async(baseUrl,names)=>{
+    return await Promise.all(names.map(async name=>{
+      const image=new Image();
+      image.src=baseUrl+'/assets/'+name+'.webp';
+      try{await image.decode();return {name,ok:image.naturalWidth>0,width:image.naturalWidth};}
+      catch(e){return {name,ok:false,error:String(e)};}
+    }));
+  },origin,imageNames);
+  await assetPage.close();
+  console.log('QUIXO_R4_IMAGE_DECODING='+JSON.stringify(imageProbes));
+  assert.deepEqual(imageProbes.filter(x=>!x.ok).map(x=>x.name),[],'All owner-approved sample photos must decode');
   for(const p of sitePaths)for(const width of [320,390,768,1280]){
     const page=await browser.newPage(),remote=[],failedResources=[];
     page.on('request',r=>{if(!r.url().startsWith(origin+'/'))remote.push(r.url())});
