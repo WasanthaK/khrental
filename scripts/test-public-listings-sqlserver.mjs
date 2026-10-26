@@ -108,6 +108,10 @@ try{
     VALUES ('${A}',N'active');`);
   await pool.request().query(`INSERT INTO dbo.properties(id,tenant_id,status,propertytype,rentalvalues)
     VALUES ('${id(9)}','${A}',N'available',N'house',N'{"rent":2300}');`);
+  await assert.rejects(pool.request().batch(migration),/Apply governed property ISO country migration/);
+  assert.equal((await query("SELECT OBJECT_ID('dbo.public_listing_preferences','U') AS id")).recordset[0].id,null);
+  const countryMigration=fs.readFileSync(path.resolve('migrations/20261026_02_property_iso_country.sql'),'utf8');
+  await pool.request().batch(countryMigration);
   await pool.request().batch(migration);
   await pool.request().batch(migration);
   const schema=await query(`

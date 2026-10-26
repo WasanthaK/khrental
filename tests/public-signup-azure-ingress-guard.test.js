@@ -154,5 +154,5 @@ test('integrated API uses separate pre-parser ingress controls and keeps SQL ver
   assert.match(runtime, /PUBLIC_SIGNUP_ENABLED === 'true'/);
   assert.match(runtime, /PUBLIC_SIGNUP_PILOT_APPROVED === 'true'/);
   assert.match(server, /express\.json\(\{\s*limit: '10mb'/);
-  assert.match(verify, /Strict read-only migration verification passed for 11 managed migrations/);
+  assert.match(verify, /Strict read-only migration verification passed for 13 managed migrations/);
 });

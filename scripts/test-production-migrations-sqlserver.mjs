@@ -1,3 +1,4 @@
+import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -42,7 +43,9 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   INVOICE_MASTER_MIGRATION_ID,
   INVOICE_ARCHIVE_MIGRATION_ID,
   SIGNUP_CHALLENGE_MIGRATION_ID,
-  SIGNUP_LIMIT_MIGRATION_ID
+  SIGNUP_LIMIT_MIGRATION_ID,
+  '20261026_02_property_iso_country',
+  '20261026_01_public_listing_preferences'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -963,6 +966,52 @@ const main = async () => {
     } finally {
       await fs.promises.rm(proofDirectory,{recursive:true,force:true});
     }
+
+
+    const countrySql=fs.readFileSync(path.resolve('migrations/20261026_02_property_iso_country.sql'),'utf8');
+    const beforeCountry=(await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n;
+    await testPool.request().batch(countrySql);
+    await testPool.request().batch(countrySql);
+    const codes=(await testPool.request().query('SELECT code FROM dbo.iso_property_countries')).recordset.map(row=>row.code).sort();
+    assert.deepEqual(codes,PROPERTY_COUNTRIES.map(country=>country.code).sort());
+    const legacyCountries=(await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties WHERE country_code IS NULL')).recordset[0].n;
+    assert.equal(legacyCountries,beforeCountry,'migration never guesses a legacy country');
+    const firstProperty=(await testPool.request().query('SELECT TOP(1) id FROM dbo.properties')).recordset[0].id;
+    for(const country of ['LK','BN','AU']) {
+      const result=await testPool.request().input('id',sql.UniqueIdentifier,firstProperty).input('country',sql.VarChar(2),country)
+        .query('UPDATE dbo.properties SET country_code=@country OUTPUT INSERTED.country_code WHERE id=@id');
+      assert.equal(result.recordset[0].country_code,country);
+    }
+    for(const country of ['XX','lk']) {
+      await assert.rejects(testPool.request().input('id',sql.UniqueIdentifier,firstProperty).input('country',sql.VarChar(2),country)
+        .query('UPDATE dbo.properties SET country_code=@country WHERE id=@id'));
+    }
+    // An old app revision can still save rows during deployment/rollback.
+    await testPool.request().input('id',sql.UniqueIdentifier,firstProperty)
+      .query('UPDATE dbo.properties SET country_code=NULL WHERE id=@id');
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n,beforeCountry);
+    assert.equal((await testPool.request().query("SELECT COUNT(*) AS n FROM sys.tables WHERE name='public_listing_preferences'")).recordset[0].n,0);
+    console.log('PASS: app-only ISO country migration double apply; 249 codes; legacy unknown; invalid code rejection; rollback compatibility; no public inventory schema');
+    // Run listing schema after the exact deployed country schema, preserving the
+    // explicit country assignment made by the prior app-only rollout.
+    await testPool.request().input('id',sql.UniqueIdentifier,firstProperty)
+      .query("UPDATE dbo.properties SET country_code='LK' WHERE id=@id");
+    // Canonical properties.images is NVARCHAR(MAX); this utility fixture predates it.
+    await testPool.request().query('ALTER TABLE dbo.properties ADD images NVARCHAR(MAX) NULL');
+    const listingSql=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
+    await testPool.request().batch(listingSql);
+    await testPool.request().batch(listingSql);
+    const saved=(await testPool.request().input('id',sql.UniqueIdentifier,firstProperty).query(`
+      SELECT p.country_code AS property_country,pref.country_code AS public_market,pref.opted_out
+      FROM dbo.properties p JOIN dbo.public_listing_preferences pref ON pref.property_id=p.id
+        AND pref.tenant_id=p.tenant_id WHERE p.id=@id`)).recordset[0];
+    assert.equal(saved.property_country,'LK');
+    assert.equal(saved.public_market,'LK');
+    assert.equal(saved.opted_out,false);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media')).recordset[0].n,0);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media_reviews')).recordset[0].n,0);
+    console.log('PASS: governed public projection migration after deployed country schema; double apply; saved country preserved; zero public photos or approvals');
+
 
   } finally {
     if (testPool) {
