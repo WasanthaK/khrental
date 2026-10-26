@@ -9,7 +9,6 @@ const ELEGIBILITY=`
   JOIN dbo.tenants t ON t.id=p.tenant_id
   WHERE pref.opted_out=0
     AND (t.status IS NULL OR t.status=N'active')
-    AND LOWER(COALESCE(p.propertytype,N'')) IN (N'house',N'apartment',N'condo',N'commercial')
     AND LOWER(COALESCE(p.status,N'')) IN (N'active',N'available',N'rented')
     AND NOT EXISTS(
       SELECT 1 FROM dbo.agreements a
