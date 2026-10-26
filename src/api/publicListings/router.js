@@ -28,13 +28,18 @@ export const createPublicListingsRouter=({
     if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});
     if(!await rateLimit(country))return res.status(429).json({code:'PUBLIC_RATE_LIMIT',error:'Please try again later.'});
     const rows=await list(country);
-    return res.json({country,data:rows.map(toPublicDTO).filter(Boolean)});
+    // Defense in depth: a storage/query regression must never mix markets.
+    const data=rows.map(toPublicDTO).filter(item=>item&&item.country===country);
+    return res.json({country,data});
   }));
   router.get('/:publicId',asyncRoute(async(req,res)=>{
+    const country=parseCountry(req.query?.country);
+    if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});
     if(!isId(req.params.publicId))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
     if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
     const item=toPublicDTO(await find(req.params.publicId));
-    if(!item)return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    // A direct link cannot bypass the selected country even if an ID is known.
+    if(!item||item.country!==country)return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
     res.json({data:item});
   }));
   return router;
