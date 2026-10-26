@@ -3,7 +3,7 @@ import {getMssqlPool,sql} from '../mssql/pool.js';
 import {getStorageDriver} from '../storage/index.js';
 import {isId} from './contract.js';
 import {mediaObjectPath,verifySafeWebp} from './media.js';
-import {resolveRegisteredPhoto} from './sourceImages.js';
+import {resolveRegisteredPhoto,trustedPhotoOrigins} from './sourceImages.js';
 
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const problem=(status,code,message)=>Object.assign(new Error(message),{status,code});
@@ -95,7 +95,9 @@ export const reviewPreparedPhoto=async({
   if(!source)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');
   if(source.mediaStatus!=='withheld')
     throw problem(409,'PHOTO_REVIEW_STATE_CHANGED','Only withheld images may be approved.');
-  const image=resolveRegisteredPhoto(source.sourceImages,Number(source.imageIndex),tenantId);
+  const image=resolveRegisteredPhoto(source.sourceImages,Number(source.imageIndex),tenantId,{
+    allowedOrigins:trustedPhotoOrigins(env)
+  });
   const original=await storage.getObject(image.bucket,image.path);
   if(!Buffer.isBuffer(original?.body)||sha(original.body)!==String(source.sourceSha256).toLowerCase())
     throw problem(409,'PHOTO_REVIEW_SOURCE_CHANGED','The registered source photo no longer matches.');
