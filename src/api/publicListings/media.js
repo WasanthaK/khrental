@@ -63,8 +63,7 @@ export const findReadyPublicMedia=async({listingId,mediaId,country})=>runSingleQ
   m.media_id AS mediaId,m.listing_public_id AS listingPublicId,
   m.image_bytes AS imageBytes,m.derivative_sha256 AS derivativeSha256
  ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
- AND m.listing_public_id=pref.public_id
- WHERE pref.public_id=@listingId AND m.media_id=@mediaId
+ AND pref.public_id=@listingId AND m.media_id=@mediaId
    AND pref.country_code=@country AND m.media_status=N'ready'
    AND m.rights_confirmed=1 AND m.privacy_reviewed=1
  ORDER BY m.display_order`,{listingId,mediaId,country});
@@ -77,10 +76,17 @@ export const listReadyPublicMedia=async(publicIds=[])=>{
  SELECT TOP(150)
   m.media_id AS mediaId,m.listing_public_id AS listingPublicId,
   m.alt_text AS alt
- FROM dbo.public_listing_media m
- INNER JOIN dbo.public_listing_preferences pref ON pref.public_id=m.listing_public_id
- INNER JOIN OPENJSON(@ids) WITH (id UNIQUEIDENTIFIER '$') req ON req.id=pref.public_id
- WHERE m.media_status=N'ready' AND m.rights_confirmed=1 AND m.privacy_reviewed=1
+ ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
+ AND m.listing_public_id IN (SELECT id FROM OPENJSON(@ids) WITH (id UNIQUEIDENTIFIER '
+ ORDER BY m.listing_public_id,m.display_order`,{ids:JSON.stringify(ids)});
+};
+
+export const readPublicDerivative=async({listingId,mediaId,meta,driver=getStorageDriver()})=>{
+  const object=await driver.getObject('media',mediaObjectPath(listingId,mediaId));
+  return verifySafeWebp(object?.body,meta);
+};
+))
+ AND m.media_status=N'ready' AND m.rights_confirmed=1 AND m.privacy_reviewed=1
  ORDER BY m.listing_public_id,m.display_order`,{ids:JSON.stringify(ids)});
 };
 
