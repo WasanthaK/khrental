@@ -71,23 +71,20 @@ export const findReadyPublicMedia=async({listingId,mediaId,country})=>runSingleQ
 export const listReadyPublicMedia=async(publicIds=[])=>{
   const ids=[...new Set(publicIds.map(String))].filter(isId).slice(0,50);
   if(!ids.length)return [];
-  // Parameterized JSON array; no concatenated untrusted IDs or storage paths.
+  // JSON array is a single bound parameter. Recheck exact property eligibility.
   return runQuery(`
- SELECT TOP(150)
-  m.media_id AS mediaId,m.listing_public_id AS listingPublicId,
-  m.alt_text AS alt
- ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
- AND m.listing_public_id IN (SELECT id FROM OPENJSON(@ids) WITH (id UNIQUEIDENTIFIER '
- ORDER BY m.listing_public_id,m.display_order`,{ids:JSON.stringify(ids)});
-};
-
-export const readPublicDerivative=async({listingId,mediaId,meta,driver=getStorageDriver()})=>{
-  const object=await driver.getObject('media',mediaObjectPath(listingId,mediaId));
-  return verifySafeWebp(object?.body,meta);
-};
-))
- AND m.media_status=N'ready' AND m.rights_confirmed=1 AND m.privacy_reviewed=1
- ORDER BY m.listing_public_id,m.display_order`,{ids:JSON.stringify(ids)});
+    SELECT TOP(150)
+      m.media_id AS mediaId,m.listing_public_id AS listingPublicId,
+      m.alt_text AS alt
+    ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
+      AND EXISTS(
+        SELECT 1 FROM OPENJSON(@ids) AS requested
+        WHERE TRY_CONVERT(UNIQUEIDENTIFIER,requested.value)=m.listing_public_id
+      )
+      AND m.media_status=N'ready'
+      AND m.rights_confirmed=1 AND m.privacy_reviewed=1
+    ORDER BY m.listing_public_id,m.display_order`,
+    {ids:JSON.stringify(ids)});
 };
 
 export const readPublicDerivative=async({listingId,mediaId,meta,driver=getStorageDriver()})=>{
