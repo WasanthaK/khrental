@@ -70,7 +70,7 @@ BEGIN TRY
    withdrawn_at DATETIME2 NULL,
    CONSTRAINT FK_public_listing_media_listing FOREIGN KEY(listing_public_id)
      REFERENCES dbo.public_listing_preferences(public_id),
-   CONSTRAINT UQ_public_listing_media_order UNIQUE(listing_public_id,display_order),
+   prepared_by UNIQUEIDENTIFIER NULL,
    CONSTRAINT CK_public_listing_media_status CHECK(media_status IN(N'withheld',N'ready',N'withdrawn')),
    CONSTRAINT CK_public_listing_media_bytes CHECK(image_bytes BETWEEN 1 AND 2097152),
    CONSTRAINT CK_public_listing_media_order CHECK(display_order BETWEEN 0 AND 49)
@@ -78,6 +78,10 @@ BEGIN TRY
   CREATE INDEX IX_public_listing_media_ready
     ON dbo.public_listing_media(listing_public_id,media_status,display_order)
     INCLUDE (rights_confirmed,privacy_reviewed);
+  -- Historical withdrawn derivatives do not block a new prepared version at the same slot.
+  CREATE UNIQUE INDEX UX_public_listing_media_current_slot
+    ON dbo.public_listing_media(listing_public_id,display_order)
+    WHERE media_status IN(N'withheld',N'ready');
  END;
  -- When an owner removes/replaces a registered property image, old public derivatives
  -- become ineligible at the DB boundary even if a bucket object still exists.
