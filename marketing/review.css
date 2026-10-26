@@ -48,3 +48,13 @@
 .home-sample small{font-size:11px;color:#305875;font-weight:750}
 @media(max-width:750px){.home-sample{grid-template-columns:1fr 1fr}.detail-gallery .preview-photo{height:220px}}
 @media(max-width:420px){.home-sample{grid-template-columns:1fr}.home-sample img{height:190px}}
+
+/* Country-first rental search: always show the explicitly selected market. */
+.listing-country-filter{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding-top:20px;padding-bottom:5px}
+.listing-country-caption{font-size:16px;font-weight:800;color:var(--navy)}
+.listing-country-caption small{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-top:4px}
+.listing-country-options{display:flex;gap:8px;flex-wrap:wrap}
+.listing-country-options a{display:inline-flex;justify-content:center;align-items:center;min-height:42px;padding:9px 15px;border:1px solid #a9c2d2;border-radius:9px;background:#fff;color:#0B2545;font-size:13px;font-weight:750}
+.listing-country-options a:hover,.listing-country-options a:focus-visible{background:#e9f4fa}
+.listing-country-options a.selected{background:#0B2545;color:#fff;border-color:#0B2545}
+@media(max-width:420px){.listing-country-filter{align-items:stretch}.listing-country-options{width:100%}.listing-country-options a{flex:1;padding:9px}}
