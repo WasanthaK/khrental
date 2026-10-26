@@ -5,6 +5,22 @@ const FILE_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/;
 
 // Never fetch arbitrary stored image_url values over HTTP. Reconstruct a private
 // tenant-scoped object-storage key after strict URL + ownership validation.
+// A stored source link is untrusted input. Trust only explicitly configured app
+// origins; this accommodates the existing Azure Container Apps origin without
+// trusting arbitrary websites or guessing from stored URLs.
+export const trustedPhotoOrigins=env=>{
+  const raw=String(env?.PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS||'').trim();
+  const candidates=['https://app.quixo.homes',...raw.split(',').map(x=>x.trim()).filter(Boolean)];
+  if(candidates.length>8)throw new Error('Too many trusted application origins.');
+  return [...new Set(candidates.map(value=>{
+    const url=new URL(value);
+    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
+       (url.pathname!=='/'&&url.pathname!==''))
+      throw new Error('Only exact HTTPS application origins are supported.');
+    return url.origin;
+  }))];
+};
+
 export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
   allowedOrigins=['https://app.quixo.homes']
 }={})=>{
