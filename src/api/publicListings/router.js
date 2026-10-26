@@ -49,6 +49,7 @@ export const createPublicListingPreferencesRouter=({
   env=process.env,
   context=createTenantContextMiddleware({requireUser:true,requireTenant:true,auditLabel:'public-listing-optout'}),
   get=store.getPreference,
+  listReadiness=store.listMarketReadiness,
   put=store.updatePreference
 }={})=>{
   const router=express.Router();
@@ -67,6 +68,13 @@ export const createPublicListingPreferencesRouter=({
     if(isId(req.params.propertyId))return true;
     res.status(404).json({code:'PROPERTY_NOT_FOUND'});return false;
   };
+  router.get('/market-readiness',asyncRoute(async(req,res)=>{
+    // Readiness stays tenant-private and must be unavailable while management flag is off.
+    const offset=Math.max(0,Math.min(100000,Number.parseInt(req.query?.offset,10)||0));
+    const limit=Math.max(1,Math.min(100,Number.parseInt(req.query?.limit,10)||50));
+    const data=await listReadiness(req.tenantId,{offset,limit});
+    res.json({data});
+  }));
   router.get('/:propertyId',asyncRoute(async(req,res)=>{
     if(!validId(req,res))return;
     const pref=await get(req.tenantId,req.params.propertyId);
