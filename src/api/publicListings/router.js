@@ -6,6 +6,7 @@ import {isId,parsePreferenceInput,toPublicDTO} from './contract.js';
 import * as store from './store.js';
 import {consumeReadBudget} from './rateLimit.js';
 import * as media from './media.js';
+import {preparePropertyPhoto,imagePreparationEnabled} from './processor.js';
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const hidden=res=>res.status(404).json({code:'PUBLIC_LISTINGS_DISABLED',error:'Public listings are not enabled.'});
 const publicOrigins=new Set(['https://mango-grass-0314c0100.3.azurestaticapps.net','https://quixo.homes','https://www.quixo.homes']);
@@ -99,7 +100,8 @@ export const createPublicListingPreferencesRouter=({
   context=createTenantContextMiddleware({requireUser:true,requireTenant:true,auditLabel:'public-listing-optout'}),
   get=store.getPreference,
   listReadiness=store.listMarketReadiness,
-  put=store.updatePreference
+  put=store.updatePreference,
+  prepareImage=preparePropertyPhoto
 }={})=>{
   const router=express.Router();
   router.use((req,res,next)=>String(env.PUBLIC_LISTING_MANAGEMENT_ENABLED||'').toLowerCase()==='true'?next():hidden(res));
@@ -132,6 +134,21 @@ export const createPublicListingPreferencesRouter=({
       publicId:pref.public_id,countryCode:pref.country_code,
       optedOut:Boolean(pref.opted_out),headline:pref.public_headline,locationLabel:pref.location_label
     }});
+  }));
+  router.post('/:propertyId/media/prepare',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    if(!imagePreparationEnabled(env))return hidden(res);
+    const input=req.body;
+    if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['imageIndex','altText'].includes(k)))
+      return res.status(400).json({code:'UNAPPROVED_IMAGE_FIELD'});
+    if(!Number.isInteger(input.imageIndex)||input.imageIndex<0||input.imageIndex>49||
+       typeof input.altText!=='string'||!input.altText.trim())
+      return res.status(400).json({code:'INVALID_IMAGE_SELECTION'});
+    const result=await prepareImage({
+      tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
+      imageIndex:input.imageIndex,altText:input.altText
+    },{env});
+    return res.status(202).json({data:result});
   }));
   router.patch('/:propertyId',asyncRoute(async(req,res)=>{
     if(!validId(req,res))return;
