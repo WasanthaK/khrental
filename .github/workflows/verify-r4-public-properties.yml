@@ -38,9 +38,11 @@ jobs:
           node --check src/api/publicListings/media.js
           node --check src/api/publicListings/sourceImages.js
           node --check src/api/publicListings/processor.js
+          node --check src/api/publicListings/review.js
+          node --check src/api/storage/index.js
           node --check marketing/assets/public-listing-client.mjs
       - name: Public eligibility and API isolation tests
-        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js tests/public-listing-media.test.js tests/public-listing-processor.test.js
+        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js tests/public-listing-media.test.js tests/public-listing-processor.test.js tests/public-listing-review.test.js
       - name: Verify real native JPEG to WebP metadata stripping
         run: node --test tests/public-listing-sharp.test.js
       - name: Verify migration, tenant isolation, availability and opt-out on disposable SQL Server
