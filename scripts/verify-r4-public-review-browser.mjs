@@ -7,12 +7,12 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 const base=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../marketing');
 const sitePaths=['/',...['lk','bn'].flatMap(c=>['', 'search/','property/','owners/','how-it-works/'].map(x=>'/'+c+'/'+x))];
-const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain','.webp':'image/webp'};
+const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain','.webp':'image/webp','.ico':'image/x-icon'};
 const app=http.createServer((req,res)=>{
   try{
     const u=new URL(req.url,'http://127.0.0.1'),suffix=decodeURIComponent(u.pathname);
     const file=path.resolve(base,'.'+suffix+(suffix.endsWith('/')?'index.html':''));
-    if(!file.startsWith(base+path.sep)||!/\.(html|css|svg|txt|webp)$/.test(file)) {res.writeHead(404);return res.end();}
+    if(!file.startsWith(base+path.sep)||!/\.(html|css|svg|txt|webp|ico)$/.test(file)) {res.writeHead(404);return res.end();}
     const content=fs.readFileSync(file);res.writeHead(200,{'Content-Type':types[path.extname(file)]});res.end(content);
   }catch{res.writeHead(404);res.end();}
 });
