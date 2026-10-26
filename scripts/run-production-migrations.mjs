@@ -323,6 +323,24 @@ const inspectSignupLimits = async pool => {
   return {satisfied,detail:`tables=${r.tables_ok||0}, columns=${r.columns_ok||0}/4, pk=${r.pk_ok||0}, checks=${r.checks_ok||0}/2, index=${r.index_ok||0}, hash=${r.hash_format_ok||0}`};
 };
 
+const inspectPropertyCountry = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT
+      CASE WHEN COL_LENGTH(N'dbo.properties',N'country_code') IS NOT NULL THEN 1 ELSE 0 END AS country_column,
+      CASE WHEN OBJECT_ID(N'dbo.iso_property_countries',N'U') IS NOT NULL THEN 1 ELSE 0 END AS codes_table,
+      CASE WHEN EXISTS(SELECT 1 FROM sys.foreign_keys
+        WHERE name=N'FK_properties_iso_country' AND parent_object_id=OBJECT_ID(N'dbo.properties')
+          AND is_disabled=0 AND is_not_trusted=0) THEN 1 ELSE 0 END AS trusted_fk;
+  `);
+  const row=result.recordset?.[0] || {};
+  let codeCount=0;
+  if(row.codes_table) {
+    codeCount=Number((await pool.request().query('SELECT COUNT(*) AS n FROM dbo.iso_property_countries')).recordset[0].n);
+  }
+  return {satisfied:Boolean(row.country_column && row.trusted_fk && codeCount===249),
+    detail:`country_column=${row.country_column}, trusted_fk=${row.trusted_fk}, ISO_codes=${codeCount}`};
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -414,6 +432,12 @@ const MIGRATIONS = [
     inspect: inspectSignupLimits,
     verify: async pool => assertSatisfied(inspectSignupLimits(pool),
       'B04 atomic SQL rate-limit schema verification failed.')
+  },
+  {
+    id: '20261026_02_property_iso_country',
+    file: 'migrations/20261026_02_property_iso_country.sql',
+    inspect: inspectPropertyCountry,
+    verify: async pool => assertSatisfied(inspectPropertyCountry(pool), 'Property ISO country schema verification failed.')
   }
 ];
 

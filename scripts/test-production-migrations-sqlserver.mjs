@@ -1,3 +1,4 @@
+import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -42,7 +43,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   INVOICE_MASTER_MIGRATION_ID,
   INVOICE_ARCHIVE_MIGRATION_ID,
   SIGNUP_CHALLENGE_MIGRATION_ID,
-  SIGNUP_LIMIT_MIGRATION_ID
+  SIGNUP_LIMIT_MIGRATION_ID,
+  '20261026_02_property_iso_country'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -963,6 +965,32 @@ const main = async () => {
     } finally {
       await fs.promises.rm(proofDirectory,{recursive:true,force:true});
     }
+
+
+    const countrySql=fs.readFileSync(path.resolve('migrations/20261026_02_property_iso_country.sql'),'utf8');
+    const beforeCountry=(await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n;
+    await testPool.request().batch(countrySql);
+    await testPool.request().batch(countrySql);
+    const codes=(await testPool.request().query('SELECT code FROM dbo.iso_property_countries')).recordset.map(row=>row.code).sort();
+    assert.deepEqual(codes,PROPERTY_COUNTRIES.map(country=>country.code).sort());
+    const legacyCountries=(await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties WHERE country_code IS NULL')).recordset[0].n;
+    assert.equal(legacyCountries,beforeCountry,'migration never guesses a legacy country');
+    const firstProperty=(await testPool.request().query('SELECT TOP(1) id FROM dbo.properties')).recordset[0].id;
+    for(const country of ['LK','BN','AU']) {
+      const result=await testPool.request().input('id',sql.UniqueIdentifier,firstProperty).input('country',sql.VarChar(2),country)
+        .query('UPDATE dbo.properties SET country_code=@country OUTPUT INSERTED.country_code WHERE id=@id');
+      assert.equal(result.recordset[0].country_code,country);
+    }
+    for(const country of ['XX','lk']) {
+      await assert.rejects(testPool.request().input('id',sql.UniqueIdentifier,firstProperty).input('country',sql.VarChar(2),country)
+        .query('UPDATE dbo.properties SET country_code=@country WHERE id=@id'));
+    }
+    // An old app revision can still save rows during deployment/rollback.
+    await testPool.request().input('id',sql.UniqueIdentifier,firstProperty)
+      .query('UPDATE dbo.properties SET country_code=NULL WHERE id=@id');
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n,beforeCountry);
+    assert.equal((await testPool.request().query("SELECT COUNT(*) AS n FROM sys.tables WHERE name='public_listing_preferences'")).recordset[0].n,0);
+    console.log('PASS: app-only ISO country migration double apply; 249 codes; legacy unknown; invalid code rejection; rollback compatibility; no public inventory schema');
 
   } finally {
     if (testPool) {
