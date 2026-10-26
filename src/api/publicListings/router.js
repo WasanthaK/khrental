@@ -7,6 +7,7 @@ import * as store from './store.js';
 import {consumeReadBudget} from './rateLimit.js';
 import * as media from './media.js';
 import {preparePropertyPhoto,imagePreparationEnabled} from './processor.js';
+import {photoReviewEnabled,reviewPreparedPhoto,withdrawPreparedPhoto} from './review.js';
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const hidden=res=>res.status(404).json({code:'PUBLIC_LISTINGS_DISABLED',error:'Public listings are not enabled.'});
 const publicOrigins=new Set(['https://mango-grass-0314c0100.3.azurestaticapps.net','https://quixo.homes','https://www.quixo.homes']);
@@ -101,7 +102,9 @@ export const createPublicListingPreferencesRouter=({
   get=store.getPreference,
   listReadiness=store.listMarketReadiness,
   put=store.updatePreference,
-  prepareImage=preparePropertyPhoto
+  prepareImage=preparePropertyPhoto,
+  reviewImage=reviewPreparedPhoto,
+  withdrawImage=withdrawPreparedPhoto
 }={})=>{
   const router=express.Router();
   router.use((req,res,next)=>String(env.PUBLIC_LISTING_MANAGEMENT_ENABLED||'').toLowerCase()==='true'?next():hidden(res));
@@ -149,6 +152,33 @@ export const createPublicListingPreferencesRouter=({
       imageIndex:input.imageIndex,altText:input.altText
     },{env});
     return res.status(202).json({data:result});
+  }));
+  router.post('/:propertyId/media/:mediaId/review',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    if(!photoReviewEnabled(env))return hidden(res);
+    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    const body=req.body;
+    if(!body||typeof body!=='object'||Array.isArray(body)||
+       Object.keys(body).some(key=>!['confirmRights','confirmPrivacy'].includes(key))||
+       body.confirmRights!==true||body.confirmPrivacy!==true)
+      return res.status(400).json({code:'PHOTO_REVIEW_ATTESTATION_REQUIRED'});
+    const result=await reviewImage({
+      tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
+      mediaId:req.params.mediaId,confirmRights:true,confirmPrivacy:true
+    },{env});
+    res.json({data:result});
+  }));
+  router.post('/:propertyId/media/:mediaId/withdraw',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    if(!photoReviewEnabled(env))return hidden(res);
+    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(req.body && (typeof req.body!=='object'||Array.isArray(req.body)||Object.keys(req.body).length))
+      return res.status(400).json({code:'UNAPPROVED_PHOTO_WITHDRAW_FIELD'});
+    const result=await withdrawImage({
+      tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
+      mediaId:req.params.mediaId
+    },{env});
+    res.json({data:result});
   }));
   router.patch('/:propertyId',asyncRoute(async(req,res)=>{
     if(!validId(req,res))return;
