@@ -46,7 +46,9 @@ export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
      parts[4]!=='properties'||!FILE_NAME.test(parts[5])||!SUPPORTED_EXT.test(parts[5])||
      parts[5]==='.'||parts[5]==='..')
     throw new Error('Property photo must belong to this tenant and property storage folder.');
-  return {bucket:'images',path:'tenants/'+tenantId.toLowerCase()+'/properties/'+parts[5]};
+  // SQL GUID identity is case-insensitive; R2 object keys are not. After
+  // checking ownership above, retain the registered folder's exact spelling.
+  return {bucket:'images',path:'tenants/'+parts[3]+'/properties/'+parts[5]};
 };
 
 export const sanitizePhotoAlt=value=>{
