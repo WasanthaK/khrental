@@ -13,6 +13,7 @@ BEGIN TRY
    tenant_id UNIQUEIDENTIFIER NOT NULL,
    country_code CHAR(2) NULL,
    location_label NVARCHAR(120) NULL,
+   public_headline NVARCHAR(150) NULL,
    opted_out BIT NOT NULL CONSTRAINT DF_public_listing_preferences_opt_out DEFAULT (0),
    opted_out_at DATETIME2 NULL,
    updated_by UNIQUEIDENTIFIER NULL,
