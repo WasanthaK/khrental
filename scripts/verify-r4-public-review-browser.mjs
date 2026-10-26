@@ -69,6 +69,17 @@ try{
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
     assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
     if(expectedListingPanel)assert.equal(data.livePanel,'false',p+' live property visibility must remain disabled');
+    if(p.endsWith('/search/')){
+      const actual=await page.$eval('[data-country-filter]',n=>({
+        selected:n.dataset.countryFilter,
+        current:[...n.querySelectorAll('[aria-current="page"]')].map(a=>a.dataset.countrySwitch),
+        markets:[...n.querySelectorAll('[data-country-switch]')].map(a=>a.dataset.countrySwitch)
+      }));
+      const market=p.startsWith('/lk/')?'LK':'BN';
+      assert.equal(actual.selected,market,p+' search country marker');
+      assert.deepEqual(actual.current,[market],p+' only the chosen country is selected');
+      assert.deepEqual(actual.markets,['LK','BN'],p+' both market choices available');
+    }
     assert.ok(data.links.includes('https://app.quixo.homes/login'),p+' existing sign-in');
     assert.equal(remote.length,0,p+' external network requests');
     assert.equal(failedResources.length,0,p+' failed assets: '+failedResources.join('; '));
@@ -91,6 +102,23 @@ try{
       assert.ok(await page.$eval('.mobile-menu',e=>e.open),p+' keyboard menu');
     }
     await page.close();passes++;
+  }
+  // Country changes retain the selected rental category, without carrying arbitrary query data.
+  for(const [from,to] of [['lk','bn'],['bn','lk']]){
+    const tab=await browser.newPage();
+    await tab.goto(origin+'/'+from+'/search/?type=commercial&privateKey=never',{waitUntil:'networkidle0'});
+    const targets=await tab.evaluate(()=>({
+      explicit:document.querySelector('[data-country-switch="'+document.body.dataset.country+'"]')?.getAttribute('aria-current'),
+      other:document.querySelector('[data-country-switch="'+(document.body.dataset.country==='LK'?'BN':'LK')+'"]')?.getAttribute('href'),
+      header:[...document.querySelectorAll('.country-menu a')].find(a=>a.getAttribute('href')?.includes('/'+(document.body.dataset.country==='LK'?'bn':'lk')+'/search/'))?.getAttribute('href')
+    }));
+    assert.equal(targets.explicit,'page',from+' selected country');
+    assert.equal(targets.other,'/'+to+'/search/?type=commercial',from+' category-preserving switch');
+    assert.ok(targets.header?.includes('?type=commercial'),from+' header switch category');
+    assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
+    await tab.goto(origin+targets.other,{waitUntil:'domcontentloaded'});
+    assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
+    await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
   assert.ok(logo.includes('fill="#3B8DCC"')&&logo.includes('fill="#22C55E"'));
