@@ -1,43 +1,64 @@
-// Quixo.Homes public catalog renderer. Pure read-only. Absolutely no credentials or source property fields.
-// The page flag stays FALSE until the app SQL/schema, rate-limit and visibility acceptance gate is signed off.
-// Country choice is explicit, never guessed from IP, browser locale or tenant data.
-// When moving between country-specific search pages, preserve only a supported
-// rental category; never carry any private URL/query parameters across markets.
-if (location.pathname.endsWith('/search/')) {
-  const kind=new URLSearchParams(location.search).get('type');
-  if(kind==='residential'||kind==='commercial'){
-    for(const link of document.querySelectorAll('.country-menu a,[data-country-switch]')){
-      const destination=new URL(link.getAttribute('href'),location.origin);
-      if(/^\/(lk|bn)\/search\/$/.test(destination.pathname)){
-        destination.searchParams.set('type',kind);
-        link.setAttribute('href',destination.pathname+destination.search);
-      }
+// Quixo.Homes read-only catalog display. No credentials and no private property fields.
+// It is always dormant until the independent static-site review flag is enabled.
+const apiOrigin='https://app.quixo.homes';
+const previewArea=document.querySelector('[data-public-listing-market]');
+
+const selectedKind=new URLSearchParams(location.search).get('type');
+if(location.pathname.endsWith('/search/')&&['residential','commercial'].includes(selectedKind)){
+  for(const link of document.querySelectorAll('.country-menu a,[data-country-switch]')){
+    const destination=new URL(link.getAttribute('href'),location.origin);
+    if(/^\/(lk|bn)\/search\/$/.test(destination.pathname)){
+      destination.searchParams.set('type',selectedKind);
+      link.setAttribute('href',destination.pathname+destination.search);
     }
   }
 }
 
-const apiOrigin='https://app.quixo.homes';
-const previewArea=document.querySelector('[data-public-listing-market]');
-if(previewArea && previewArea.dataset.publicListingEnabled==='true'){
+const safePublicMediaURL=(entry,listingId,market)=>{
+  if(!entry||typeof entry.url!=='string'||typeof listingId!=='string')return null;
+  const listingPath='/api/public-listings/'+encodeURIComponent(listingId)+'/media/';
+  const url=new URL(entry.url,apiOrigin);
+  if(url.origin!==apiOrigin||!url.pathname.startsWith(listingPath))return null;
+  const id=url.pathname.slice(listingPath.length);
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return null;
+  if(url.searchParams.get('country')!==market||[...url.searchParams.keys()].length!==1)return null;
+  if(url.hash)return null;
+  return url.href;
+};
+
+if(previewArea?.dataset.publicListingEnabled==='true'){
   const market=previewArea.dataset.publicListingMarket;
   if(market==='LK'||market==='BN'){
     const endpoint=new URL('/api/public-listings',apiOrigin);
     endpoint.searchParams.set('country',market);
-    const render=(items)=>{
+    const render=items=>{
       const list=previewArea.querySelector('[data-public-listing-cards]');
       if(!list)return;
       list.replaceChildren();
       const heading=previewArea.querySelector('[data-public-listing-heading]');
       if(heading)heading.textContent='Available registered rentals';
-      if(!Array.isArray(items)||items.length===0){
+      if(!Array.isArray(items)||!items.length){
         const msg=document.createElement('p');
         msg.textContent='No available registered rental properties are currently listed.';
-        list.append(msg);previewArea.hidden=false;return;
+        list.append(msg);
+        previewArea.hidden=false;
+        return;
       }
       for(const item of items.slice(0,50)){
         if(item.country!==market||typeof item.title!=='string'||typeof item.id!=='string')continue;
         const article=document.createElement('article');
         article.className='listing';
+        const imageEntry=Array.isArray(item.images)?item.images[0]:null;
+        const imageURL=safePublicMediaURL(imageEntry,item.id,market);
+        if(imageURL){
+          const photo=document.createElement('img');
+          photo.loading='lazy';
+          photo.className='preview-photo';
+          photo.alt=typeof imageEntry.alt==='string'&&imageEntry.alt.trim()
+            ?imageEntry.alt.slice(0,180):'Rental property photograph';
+          photo.src=imageURL;
+          article.append(photo);
+        }
         const panel=document.createElement('div');
         panel.className='listing-copy';
         const type=document.createElement('small');
@@ -48,117 +69,29 @@ if(previewArea && previewArea.dataset.publicListingEnabled==='true'){
         loc.textContent=item.location||'Location available on request';
         const price=document.createElement('p');
         price.className='rent';
-        price.textContent=Number.isFinite(item.monthlyRent) && item.monthlyRent>0
-          ? new Intl.NumberFormat(market==='LK'?'en-LK':'en-BN',{style:'currency',currency:market==='LK'?'LKR':'BND',
+        price.textContent=Number.isFinite(item.monthlyRent)&&item.monthlyRent>0
+          ?new Intl.NumberFormat(market==='LK'?'en-LK':'en-BN',{
+            style:'currency',currency:market==='LK'?'LKR':'BND',
             maximumFractionDigits:0}).format(item.monthlyRent)+' / month'
           :'Rent on request';
         panel.append(type,title,loc,price);
-        // Only the opaque, same-API public derivative route is allowed. Never load an
-        // original /storage/*, cross-origin URL, signed token or raw property.image_url.
-        const imageEntry=Array.isArray(item.images)?item.images[0]:null;
-        if(imageEntry&&typeof imageEntry.url==='string'){
-          const safeId=encodeURIComponent(item.id);
-          const match=new RegExp('^/api/public-listings/'+safeId+'/media/[0-9a-f-]{36}\\?country='+market+'
+        article.append(panel);
+        list.append(article);
       }
       previewArea.hidden=false;
       const examples=document.querySelector('.results .cards');
       if(examples)examples.hidden=true;
     };
-    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
-      headers:{Accept:'application/json'}})
-      .then(async response=>{
-        if(!response.ok)throw new Error('Listing feed unavailable');
-        const data=await response.json();
-        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
-        render(data.data);
-      })
-      .catch(()=>{
-        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
-        // Existing illustrative design remains while listing release is disabled/unavailable.
-      });
-  }
-}
-,'i');
-          if(match.test(imageEntry.url)){
-            const photo=document.createElement('img');
-            photo.loading='lazy';
-            photo.className='preview-photo';
-            photo.alt=typeof imageEntry.alt==='string'&&imageEntry.alt.trim()
-              ?imageEntry.alt.slice(0,180):'Rental property photograph';
-            photo.src=apiOrigin+imageEntry.url;
-            article.append(photo);
-          }
-        }
-        // Property detail URLs remain disconnected until reviewed.
-        article.append(panel);list.append(article);
-      }
-      previewArea.hidden=false;
-      const examples=document.querySelector('.results .cards');
-      if(examples)examples.hidden=true;
-    };
-    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
-      headers:{Accept:'application/json'}})
-      .then(async response=>{
-        if(!response.ok)throw new Error('Listing feed unavailable');
-        const data=await response.json();
-        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
-        render(data.data);
-      })
-      .catch(()=>{
-        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
-        // Existing illustrative design remains while listing release is disabled/unavailable.
-      });
-  }
-}
-,'i');
-      }
-      previewArea.hidden=false;
-      const examples=document.querySelector('.results .cards');
-      if(examples)examples.hidden=true;
-    };
-    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
-      headers:{Accept:'application/json'}})
-      .then(async response=>{
-        if(!response.ok)throw new Error('Listing feed unavailable');
-        const data=await response.json();
-        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
-        render(data.data);
-      })
-      .catch(()=>{
-        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
-        // Existing illustrative design remains while listing release is disabled/unavailable.
-      });
-  }
-}
-,'i');
-          if(match.test(imageEntry.url)){
-            const photo=document.createElement('img');
-            photo.loading='lazy';
-            photo.className='preview-photo';
-            photo.alt=typeof imageEntry.alt==='string'&&imageEntry.alt.trim()
-              ?imageEntry.alt.slice(0,180):'Rental property photograph';
-            photo.src=apiOrigin+imageEntry.url;
-            article.append(photo);
-          }
-        }
-        // Property detail URLs remain disconnected until reviewed.
-        article.append(panel);list.append(article);
-      }
-      previewArea.hidden=false;
-      const examples=document.querySelector('.results .cards');
-      if(examples)examples.hidden=true;
-    };
-    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
-      headers:{Accept:'application/json'}})
-      .then(async response=>{
-        if(!response.ok)throw new Error('Listing feed unavailable');
-        const data=await response.json();
-        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
-        render(data.data);
-      })
-      .catch(()=>{
-        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
-        // Existing illustrative design remains while listing release is disabled/unavailable.
-      });
+    fetch(endpoint.toString(),{
+      method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+      headers:{Accept:'application/json'}
+    }).then(async response=>{
+      if(!response.ok)throw new Error('Listing feed unavailable');
+      const data=await response.json();
+      if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
+      render(data.data);
+    }).catch(()=>{
+      // Fail-closed: never fall back to app-private storage or fabricated inventory.
+    });
   }
 }
