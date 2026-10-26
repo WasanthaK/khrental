@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'src/api/publicListings/**'
+      - 'src/utils/constants.js'
+      - 'src/pages/PropertyForm.jsx'
+      - 'src/api/platform/router.js'
       - 'package.json'
       - 'package-lock.json'
       - 'marketing/assets/public-listing-client.mjs'
@@ -42,7 +45,7 @@ jobs:
           node --check src/api/storage/index.js
           node --check marketing/assets/public-listing-client.mjs
       - name: Public eligibility and API isolation tests
-        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js tests/public-listing-media.test.js tests/public-listing-processor.test.js tests/public-listing-review.test.js
+        run: node --test tests/property-country.test.js tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js tests/public-listing-media.test.js tests/public-listing-processor.test.js tests/public-listing-review.test.js
       - name: Verify real native JPEG to WebP metadata stripping
         run: node --test tests/public-listing-sharp.test.js
       - name: Verify migration, tenant isolation, availability and opt-out on disposable SQL Server

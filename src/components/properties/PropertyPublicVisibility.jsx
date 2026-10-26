@@ -1,3 +1,4 @@
+import {PROPERTY_COUNTRIES} from '../../utils/constants.js';
 import {useEffect,useState} from 'react';
 import {useAuth} from '../../hooks/useAuth';
 import {isAdministrator} from '../../utils/accessModel';
@@ -33,7 +34,7 @@ const PropertyPublicVisibility=({propertyId})=>{
   const save=async()=>{
     try{
       setSaving(true);setError('');
-      const values={countryCode:draft.countryCode||null,optedOut:draft.optedOut,
+      const values={...(draft.countryCode ? {countryCode:draft.countryCode} : {}),optedOut:draft.optedOut,
         headline:draft.headline.trim()||null,locationLabel:draft.locationLabel.trim()||null};
       const data=await requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId),
         {method:'PATCH',body:values});
@@ -46,15 +47,16 @@ const PropertyPublicVisibility=({propertyId})=>{
   return <section className="bg-white rounded-lg shadow p-6 mt-6" aria-labelledby="public-visibility-title">
     <h2 id="public-visibility-title" className="text-lg font-semibold mb-2">Quixo.Homes public listing</h2>
     <p className="text-sm text-gray-600 mb-4">
-      Available rentals appear publicly by default when their country is set. Rented or reserved properties are hidden automatically.
+      Available rentals in supported markets appear publicly by default when their country is set. Rented or reserved properties are hidden automatically.
       You can opt out at any time. Private contact details, invoices, agreements and original attachments are never public.
     </p>
-    <label className="block text-sm font-medium mb-2" htmlFor="public-country">Public listing country</label>
+    <label className="block text-sm font-medium mb-2" htmlFor="public-country">Property country</label>
     <select id="public-country" value={draft.countryCode} onChange={e=>update('countryCode',e.target.value)}
       className="w-full border rounded p-2 mb-4" disabled={saving}>
-      <option value="">Select market</option>
-      <option value="LK">Sri Lanka · LKR/month</option>
-      <option value="BN">Brunei Darussalam · BND/month</option>
+      <option value="">Select country</option>
+      {[...PROPERTY_COUNTRIES].sort((a,b)=>a.name.localeCompare(b.name)).map(country=>(
+        <option key={country.code} value={country.code}>{country.name} ({country.code})</option>
+      ))}
     </select>
     <label className="block text-sm font-medium mb-2" htmlFor="public-title">Public headline (optional)</label>
     <input id="public-title" maxLength={150} value={draft.headline}
@@ -73,7 +75,8 @@ const PropertyPublicVisibility=({propertyId})=>{
     <p className="text-xs text-gray-500 mb-3">
       {draft.optedOut?'Owner opt-out is selected; listing is hidden.':
         !draft.countryCode?'Choose a country before the listing can appear in the right market.':
-          'Property will appear when availability and website release checks allow it.'}
+          !['LK','BN'].includes(draft.countryCode)?'This country is not yet supported on the public website.':
+            'Property will appear when availability and website release checks allow it.'}
     </p>
     {error&&<p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
     <button type="button" onClick={save} disabled={saving}

@@ -1,3 +1,4 @@
+import { PROPERTY_COUNTRIES } from '../utils/constants.js';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { deleteData, updateData } from '../services/platformClient';
@@ -583,6 +584,10 @@ const PropertyDetails = () => {
             <h2 className="text-lg font-medium mb-4">Property Details</h2>
             
             <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-500">Country</p>
+                <p className="font-medium">{PROPERTY_COUNTRIES.find(country => country.code === property.country_code)?.name || 'Country required'}{property.country_code ? ` (${property.country_code})` : ''}</p>
+              </div>
               <div>
                 <p className="text-sm text-gray-500">Address</p>
                 <p className="font-medium">{property.address || 'No address provided'}</p>

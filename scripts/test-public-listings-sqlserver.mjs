@@ -12,6 +12,7 @@ import sql from 'mssql';
 import {PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL,PUBLIC_MEDIA_DETAIL_SQL} from '../src/api/publicListings/media.js';
+import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import {REVIEW_SOURCE_SQL,REVIEW_LOCKED_SQL} from '../src/api/publicListings/review.js';
 
 const image=process.env.MSSQL_TEST_IMAGE||'mcr.microsoft.com/mssql/server:2022-latest';
@@ -123,14 +124,15 @@ try{
   // Rows registered after migration must get the default preference automatically.
   await query('INSERT INTO dbo.tenants(id,status) VALUES (@b,N\'active\')',{b:B});
   const property=async(n,tenant,status='available',type='house')=>query(`
-    INSERT INTO dbo.properties(id,tenant_id,status,propertytype,rentalvalues,bank_account_number)
-    VALUES(@pid,@tenant,@status,@type,N'{"rent":2300}',N'SECRET BANK')`,
-    {pid:id(n),tenant,status,type});
+    INSERT INTO dbo.properties(id,tenant_id,status,propertytype,rentalvalues,bank_account_number,country_code)
+    VALUES(@pid,@tenant,@status,@type,N'{"rent":2300}',N'SECRET BANK',@country)`,
+    {pid:id(n),tenant,status,type,country:n===2?'BN':'LK'});
   await property(1,A); // LK, displayed
   await property(2,B); // BN, displayed
   await property(3,A,'reserved'); // filtered
   await property(4,A); // opted out
-  await property(5,A); // country missing -> filtered
+  await property(5,A); // valid unsupported market -> filtered
+  await query("UPDATE dbo.properties SET country_code='AU' WHERE id=@pid",{pid:id(5)});
   await property(6,A,'rented'); // fully rented -> filtered
   await property(7,A,'rented','apartment'); // one free unit -> displayed
   await property(8,B); // LK in different tenant -> displayed via public only
@@ -141,8 +143,8 @@ try{
   assert.equal(legacy[0].country_code,null,'legacy country must not be guessed from a private address');
   assert.equal(legacy[0].opted_out,false,'legacy properties are not silently opted out');
   const setCountry=async(n,country)=>query(`
-    UPDATE dbo.public_listing_preferences SET country_code=@country,location_label=N'General district'
-    WHERE property_id=@pid`,{pid:id(n),country});
+    UPDATE dbo.properties SET country_code=@country WHERE id=@pid;
+    UPDATE dbo.public_listing_preferences SET location_label=N'General district' WHERE property_id=@pid`,{pid:id(n),country});
   for(const n of [1,3,4,6,7,8])await setCountry(n,'LK');
   await setCountry(2,'BN');
   await query('UPDATE dbo.public_listing_preferences SET opted_out=1 WHERE property_id=@pid',{pid:id(4)});
@@ -297,6 +299,32 @@ try{
   const cross=await query("UPDATE dbo.public_listing_preferences SET opted_out=1 WHERE property_id=@pid AND tenant_id=@tenant",{pid:id(1),tenant:B});
   assert.equal(cross.rowsAffected[0],0,'foreign tenant cannot change source property');
   await assertVisible([publicOf(1),publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
+  // Every ISO country is supported by the property model, but only LK/BN are public markets.
+  const dbCountries=(await query('SELECT code FROM dbo.iso_property_countries')).recordset.map(r=>r.code).sort();
+  assert.deepEqual(dbCountries,PROPERTY_COUNTRIES.map(c=>c.code).sort());
+  await assert.rejects(query("INSERT dbo.properties(id,tenant_id,status) VALUES(@id,@tenant,N'available')",{id:id(10),tenant:A}));
+  assert.equal((await query('SELECT COUNT(*) AS n FROM dbo.properties WHERE id=@id',{id:id(10)})).recordset[0].n,0);
+  await assert.rejects(query("UPDATE dbo.properties SET country_code='XX' WHERE id=@pid",{pid:id(1)}));
+  await assert.rejects(query("UPDATE dbo.properties SET country_code='lk' WHERE id=@pid",{pid:id(1)}));
+  await assert.rejects(query("UPDATE dbo.properties SET country_code=NULL WHERE id=@pid",{pid:id(1)}));
+  // Trigger-compatible OUTPUT INTO matches the property mutation API's SQL pattern.
+  const changed=await query(`DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+    UPDATE dbo.properties SET country_code='BN' OUTPUT INSERTED.id INTO @changed WHERE id=@pid;
+    SELECT p.country_code FROM dbo.properties p JOIN @changed c ON c.id=p.id;`,{pid:id(1)});
+  assert.equal(changed.recordset[0].country_code,'BN');
+  assert.equal((await query('SELECT country_code FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(1)})).recordset[0].country_code,'BN');
+  await assertVisible([publicOf(4),publicOf(7),publicOf(8)],[publicOf(1),publicOf(2)]);
+  await query("UPDATE dbo.properties SET country_code='LK' WHERE id=@pid",{pid:id(1)});
+  const created=await query(`DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+    INSERT dbo.properties(id,tenant_id,status,country_code)
+      OUTPUT INSERTED.id INTO @changed VALUES(@id,@tenant,N'available','AU');
+    SELECT p.country_code FROM dbo.properties p JOIN @changed c ON c.id=p.id;`,{id:id(11),tenant:A});
+  assert.equal(created.recordset[0].country_code,'AU');
+  assert.equal((await query('SELECT country_code FROM dbo.public_listing_preferences WHERE property_id=@id',{id:id(11)})).recordset[0].country_code,null);
+  // An inconsistent/stale preference must never override property country.
+  await query("UPDATE dbo.public_listing_preferences SET country_code='BN' WHERE property_id=@pid",{pid:id(1)});
+  await assertVisible([publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
+  await query("UPDATE dbo.properties SET country_code='LK' WHERE id=@pid",{pid:id(1)});
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
   console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; membership-revocation; optout; lease; vacancy; country; redaction');

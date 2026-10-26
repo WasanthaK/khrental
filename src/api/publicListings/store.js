@@ -8,6 +8,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
   JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
   JOIN dbo.tenants t ON t.id=p.tenant_id
   WHERE pref.opted_out=0
+    AND p.country_code COLLATE DATABASE_DEFAULT=pref.country_code
     AND (t.status IS NULL OR t.status=N'active')
     AND LOWER(COALESCE(p.status,N'')) IN (N'active',N'available',N'rented')
     AND NOT EXISTS(
@@ -39,7 +40,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
 // JSON rent extraction does NOT pass through banking/term/image JSON.
 // Numeric rent from existing app properties.rentalvalues.rent is optional.
 export const PUBLIC_LISTING_SELECT_SQL=`
-  pref.public_id,pref.country_code,pref.opted_out,pref.public_headline,pref.location_label,p.propertytype,
+  pref.public_id,p.country_code,pref.opted_out,pref.public_headline,pref.location_label,p.propertytype,
   TRY_CONVERT(DECIMAL(18,2),CASE WHEN ISJSON(p.rentalvalues)=1
     THEN COALESCE(JSON_VALUE(p.rentalvalues,'$.rent'),JSON_VALUE(p.rentalvalues,'$.monthlyRent'))
     ELSE NULL END) AS monthly_rent`;
@@ -63,8 +64,8 @@ export const listMarketReadiness=async(tenantId,{offset=0,limit=50}={})=>{
   const [summary,records]=await Promise.all([
     runSingleQuery(`
       SELECT COUNT_BIG(*) AS total,
-        COALESCE(SUM(CASE WHEN pref.country_code IS NULL THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS unassigned,
-        COALESCE(SUM(CASE WHEN pref.country_code IN('LK','BN') THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS assigned,
+        COALESCE(SUM(CASE WHEN p.country_code IS NULL THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS unassigned,
+        COALESCE(SUM(CASE WHEN p.country_code IS NOT NULL THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS assigned,
         COALESCE(SUM(CASE WHEN pref.opted_out=1 THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS optedOut
       FROM dbo.properties p
       LEFT JOIN dbo.public_listing_preferences pref
@@ -72,11 +73,11 @@ export const listMarketReadiness=async(tenantId,{offset=0,limit=50}={})=>{
       WHERE p.tenant_id=@tenantId`,{tenantId}),
     runQuery(`
       SELECT p.id AS propertyId,p.name AS propertyName,p.status AS availabilityStatus,
-        pref.country_code AS countryCode,pref.opted_out AS optedOut
+        p.country_code AS countryCode,pref.opted_out AS optedOut
       FROM dbo.properties p
       LEFT JOIN dbo.public_listing_preferences pref
         ON pref.property_id=p.id AND pref.tenant_id=p.tenant_id
-      WHERE p.tenant_id=@tenantId AND pref.country_code IS NULL
+      WHERE p.tenant_id=@tenantId AND p.country_code IS NULL
       ORDER BY p.createdat DESC,p.id DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,params)
   ]);
@@ -97,7 +98,7 @@ export const listMarketReadiness=async(tenantId,{offset=0,limit=50}={})=>{
 };
 
 export const getPreference=(tenantId,propertyId)=>runSingleQuery(`
- SELECT TOP(1) pref.public_id,pref.country_code,pref.opted_out,
+ SELECT TOP(1) pref.public_id,p.country_code,pref.opted_out,
    pref.public_headline,pref.location_label
  FROM dbo.public_listing_preferences pref
  JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
@@ -129,12 +130,17 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
       JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
       WHERE pref.tenant_id=@tenantId AND pref.property_id=@propertyId`,args);
     if(!pref.length)throw Object.assign(new Error('Property not found in this tenant.'),{status:404,code:'PROPERTY_NOT_FOUND'});
+    if(Object.hasOwn(changes,'countryCode')){
+      await query(`UPDATE dbo.properties SET country_code=@countryCode
+        WHERE id=@propertyId AND tenant_id=@tenantId`,{...args,countryCode:changes.countryCode});
+    }
     const assignments=[],params={...args};
     const setters={
       optedOut:['opted_out','optedOut'],countryCode:['country_code','countryCode'],
       headline:['public_headline','headline'],locationLabel:['location_label','locationLabel']
     };
     for(const [key,value] of Object.entries(changes)){
+      if(key==='countryCode'){continue;} // already updated on the canonical property
       const [field,param]=setters[key];
       assignments.push(`${field}=@${param}`);
       params[param]=value;
@@ -143,11 +149,15 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
       assignments.push('opted_out_at=CASE WHEN @optedOut=1 THEN SYSUTCDATETIME() ELSE NULL END');
     }
     assignments.push('updated_by=@actorId','updated_at=SYSUTCDATETIME()');
-    const result=await query(`
+    await query(`
       UPDATE dbo.public_listing_preferences SET ${assignments.join(',')}
       OUTPUT INSERTED.public_id,INSERTED.country_code,INSERTED.opted_out,
         INSERTED.public_headline,INSERTED.location_label
       WHERE tenant_id=@tenantId AND property_id=@propertyId`,params);
+    const result=await query(`SELECT pref.public_id,p.country_code,pref.opted_out,
+      pref.public_headline,pref.location_label FROM dbo.public_listing_preferences pref
+      JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
+      WHERE pref.property_id=@propertyId AND pref.tenant_id=@tenantId`,args);
     await tx.commit();
     return result[0];
   }catch(error){await tx.rollback().catch(()=>{});throw error;}

@@ -1,3 +1,4 @@
+import {normalizePropertyCountry} from '../../utils/constants.js';
 import {PUBLIC_MARKETS,PUBLIC_TYPES,parseCountry} from './eligibility.js';
 
 export const ID_REGEX=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -24,12 +25,7 @@ export const parsePreferenceInput=(input={})=>{
     result.optedOut=input.optedOut;
   }
   if(Object.hasOwn(input,'countryCode')){
-    if(input.countryCode===null)result.countryCode=null;
-    else{
-      const value=parseCountry(input.countryCode);
-      if(!value)throw reject('INVALID_COUNTRY','Market must be LK or BN.');
-      result.countryCode=value;
-    }
+    result.countryCode=normalizePropertyCountry(input.countryCode);
   }
   if(Object.hasOwn(input,'headline'))result.headline=text(input.headline,150,'headline');
   if(Object.hasOwn(input,'locationLabel'))result.locationLabel=text(input.locationLabel,120,'locationLabel');
