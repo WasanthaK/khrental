@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'src/api/publicListings/**'
+      - 'marketing/assets/public-listing-client.mjs'
       - 'tests/public-listing*.test.js'
       - 'migrations/20261026_01_public_listing_preferences.sql'
       - 'scripts/test-public-listings-sqlserver.mjs'
@@ -32,8 +33,10 @@ jobs:
           node --check src/api/publicListings/store.js
           node --check src/api/publicListings/router.js
           node --check src/api/publicListings/rateLimit.js
+          node --check src/api/publicListings/media.js
+          node --check marketing/assets/public-listing-client.mjs
       - name: Public eligibility and API isolation tests
-        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js
+        run: node --test tests/public-listing-eligibility.test.js tests/public-listing-projection.test.js tests/public-listing-router.test.js tests/public-listing-media.test.js
       - name: Verify migration, tenant isolation, availability and opt-out on disposable SQL Server
         env:
           MSSQL_TEST_IMAGE: mcr.microsoft.com/mssql/server:2022-latest

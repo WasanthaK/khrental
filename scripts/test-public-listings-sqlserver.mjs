@@ -11,6 +11,7 @@ import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
 import {PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
+import {PUBLIC_MEDIA_ELIGIBILITY_SQL} from '../src/api/publicListings/media.js';
 
 const image=process.env.MSSQL_TEST_IMAGE||'mcr.microsoft.com/mssql/server:2022-latest';
 const migration=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
@@ -74,7 +75,7 @@ try{
     CREATE TABLE dbo.properties (
       id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER NOT NULL,
       status NVARCHAR(50) NOT NULL DEFAULT N'available',
-      propertytype NVARCHAR(100) NULL,rentalvalues NVARCHAR(MAX) NULL,
+      propertytype NVARCHAR(100) NULL,rentalvalues NVARCHAR(MAX) NULL,images NVARCHAR(MAX) NULL,
       createdat DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME(),
       bank_account_number NVARCHAR(255) NULL,
       FOREIGN KEY(tenant_id) REFERENCES dbo.tenants(id)
@@ -104,7 +105,9 @@ try{
       CASE WHEN OBJECT_ID('dbo.public_listing_preferences','U') IS NULL THEN 0 ELSE 1 END AS pref,
       CASE WHEN OBJECT_ID('dbo.public_listing_read_buckets','U') IS NULL THEN 0 ELSE 1 END AS bucket,
       CASE WHEN OBJECT_ID('dbo.trg_public_listing_preferences_property_insert','TR') IS NULL THEN 0 ELSE 1 END AS trigger_exists,
-      CASE WHEN COL_LENGTH('dbo.public_listing_preferences','public_headline') IS NULL THEN 0 ELSE 1 END AS public_title
+      CASE WHEN COL_LENGTH('dbo.public_listing_preferences','public_headline') IS NULL THEN 0 ELSE 1 END AS public_title,
+      CASE WHEN OBJECT_ID('dbo.public_listing_media','U') IS NULL THEN 0 ELSE 1 END AS public_media,
+      CASE WHEN OBJECT_ID('dbo.trg_public_listing_media_source_changed','TR') IS NULL THEN 0 ELSE 1 END AS source_change_trigger
   `);
   const m=schema.recordset[0];
   for(const [k,v] of Object.entries(m))assert.equal(v,1,'SQL migration component '+k);
@@ -138,6 +141,40 @@ try{
     {u1:unitId(1),u2:unitId(2),tenant:A,property:id(7)});
   const publicIds=Object.fromEntries((await query('SELECT CONVERT(VARCHAR(36),property_id) AS pid,CONVERT(VARCHAR(36),public_id) AS publicid FROM dbo.public_listing_preferences')).recordset.map(x=>[x.pid.toLowerCase(),x.publicid.toLowerCase()]));
   const publicOf=n=>publicIds[id(n)];
+  // Public derivative manifest starts empty even though properties and source images exist.
+  const initial=(await query('SELECT COUNT(*) AS count FROM dbo.public_listing_media')).recordset[0].count;
+  assert.equal(initial,0,'migration never copies a private property image into public storage');
+  const safeMediaId='66666666-6666-4666-8666-666666666666';
+  await query(`
+    INSERT INTO dbo.public_listing_media(media_id,listing_public_id,display_order,alt_text,
+      source_sha256,derivative_sha256,processor_version,image_bytes,media_status)
+    VALUES(@mediaId,@listingId,0,N'Illustrative living area',
+      @hash,@hash,N'review-only-test',128,N'withheld')`,
+    {mediaId:safeMediaId,listingId:publicOf(1),hash:'f'.repeat(64)});
+  const mediaVisible=async country=>(await query(`
+    SELECT m.media_id,m.listing_public_id
+    ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
+    AND pref.country_code=@country AND m.media_status=N'ready'
+    AND m.rights_confirmed=1 AND m.privacy_reviewed=1`,{country})).recordset;
+  assert.equal((await mediaVisible('LK')).length,0,'not ready/rights/privacy verified defaults hidden');
+  await query(`
+    UPDATE dbo.public_listing_media SET media_status=N'ready',rights_confirmed=1,privacy_reviewed=1
+    WHERE media_id=@mediaId`,{mediaId:safeMediaId});
+  assert.equal((await mediaVisible('LK')).length,1,'only verified processed derivative is image-eligible');
+  assert.equal((await mediaVisible('BN')).length,0,'wrong market never serves image');
+  await query('UPDATE dbo.public_listing_preferences SET opted_out=1 WHERE property_id=@property',{property:id(1)});
+  assert.equal((await mediaVisible('LK')).length,0,'opt-out immediately revokes derivative');
+  await query('UPDATE dbo.public_listing_preferences SET opted_out=0 WHERE property_id=@property',{property:id(1)});
+  await query("UPDATE dbo.properties SET status=N'reserved' WHERE id=@property",{property:id(1)});
+  assert.equal((await mediaVisible('LK')).length,0,'reserved property derivative hidden');
+  await query("UPDATE dbo.properties SET status=N'available' WHERE id=@property",{property:id(1)});
+  assert.equal((await mediaVisible('LK')).length,1,'returning to available recovers eligible derivative');
+  await query("UPDATE dbo.properties SET images=N'[{\\\"image_url\\\":\\\"removed\\\"}]' WHERE id=@property",{property:id(1)});
+  const withdrawn=(await query('SELECT media_status,withdrawn_at FROM dbo.public_listing_media WHERE media_id=@mediaId',{mediaId:safeMediaId})).recordset[0];
+  assert.equal(withdrawn.media_status,'withdrawn','changed source photo triggers hard withdrawal');
+  assert.ok(withdrawn.withdrawn_at,'withdrawal time recorded');
+  assert.equal((await mediaVisible('LK')).length,0,'old image cannot reappear without reconversion');
+
   await assertVisible([publicOf(1),publicOf(7),publicOf(8)],[publicOf(2)]);
   // A whole-property active lease immediately suppresses an otherwise "available" row.
   await query("INSERT INTO dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(@aid,@t,@p,NULL,N'active')",
@@ -162,7 +199,7 @@ try{
   await assertVisible([publicOf(1),publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
-  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; optout; lease; vacancy; country; redaction');
+  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; optout; lease; vacancy; country; redaction');
 }finally{
   if(pool)await pool.close().catch(()=>{});
   if(master)await master.close().catch(()=>{});

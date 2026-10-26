@@ -49,6 +49,53 @@ BEGIN TRY
    CONSTRAINT CK_public_listing_read_buckets_bucket CHECK(bucket IN('LK','BN','DETAIL'))
   );
  END;
+ -- Separate opaque, approved, processed PUBLIC-image manifest.
+ -- No private source path, source tenant UUID or original SAS URL is made public.
+ -- Existing properties/photos are NOT automatically copied or published by migration.
+ IF OBJECT_ID(N'dbo.public_listing_media',N'U') IS NULL
+ BEGIN
+  CREATE TABLE dbo.public_listing_media (
+   media_id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_public_listing_media PRIMARY KEY DEFAULT NEWID(),
+   listing_public_id UNIQUEIDENTIFIER NOT NULL,
+   display_order INT NOT NULL,
+   alt_text NVARCHAR(180) NOT NULL,
+   source_sha256 CHAR(64) NOT NULL,
+   derivative_sha256 CHAR(64) NOT NULL,
+   processor_version NVARCHAR(50) NOT NULL,
+   image_bytes INT NOT NULL,
+   rights_confirmed BIT NOT NULL CONSTRAINT DF_public_listing_media_rights DEFAULT 0,
+   privacy_reviewed BIT NOT NULL CONSTRAINT DF_public_listing_media_privacy DEFAULT 0,
+   media_status NVARCHAR(20) NOT NULL CONSTRAINT DF_public_listing_media_status DEFAULT N'withheld',
+   created_at DATETIME2 NOT NULL CONSTRAINT DF_public_listing_media_created DEFAULT SYSUTCDATETIME(),
+   withdrawn_at DATETIME2 NULL,
+   CONSTRAINT FK_public_listing_media_listing FOREIGN KEY(listing_public_id)
+     REFERENCES dbo.public_listing_preferences(public_id),
+   CONSTRAINT UQ_public_listing_media_order UNIQUE(listing_public_id,display_order),
+   CONSTRAINT CK_public_listing_media_status CHECK(media_status IN(N'withheld',N'ready',N'withdrawn')),
+   CONSTRAINT CK_public_listing_media_bytes CHECK(image_bytes BETWEEN 1 AND 2097152),
+   CONSTRAINT CK_public_listing_media_order CHECK(display_order BETWEEN 0 AND 49)
+  );
+  CREATE INDEX IX_public_listing_media_ready
+    ON dbo.public_listing_media(listing_public_id,media_status,display_order)
+    INCLUDE (rights_confirmed,privacy_reviewed);
+ END;
+ -- When an owner removes/replaces a registered property image, old public derivatives
+ -- become ineligible at the DB boundary even if a bucket object still exists.
+ IF OBJECT_ID(N'dbo.trg_public_listing_media_source_changed',N'TR') IS NULL
+ EXEC(N'CREATE TRIGGER dbo.trg_public_listing_media_source_changed ON dbo.properties
+ AFTER UPDATE AS
+ BEGIN
+   SET NOCOUNT ON;
+   IF NOT UPDATE(images) RETURN;
+   UPDATE m SET media_status=N''withdrawn'',withdrawn_at=SYSUTCDATETIME()
+   FROM dbo.public_listing_media m
+   INNER JOIN dbo.public_listing_preferences pref ON pref.public_id=m.listing_public_id
+   INNER JOIN inserted i ON i.id=pref.property_id AND i.tenant_id=pref.tenant_id
+   INNER JOIN deleted d ON d.id=i.id AND d.tenant_id=i.tenant_id
+   WHERE m.media_status <> N''withdrawn''
+     AND (i.images <> d.images OR (i.images IS NULL AND d.images IS NOT NULL)
+         OR (i.images IS NOT NULL AND d.images IS NULL));
+ END');
  COMMIT TRANSACTION;
 END TRY
 BEGIN CATCH
