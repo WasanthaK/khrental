@@ -41,8 +41,8 @@ export const PUBLIC_FIELDS=Object.freeze(['id','country','category','title','loc
 export const toPublicDTO=row=>{
   if(!row)return null;
   const country=parseCountry(row.country_code);
-  const category=PUBLIC_TYPES[String(row.propertytype||'').toLowerCase()];
-  if(!country||!category||row.opted_out===true||row.opted_out===1)return null;
+  const category=PUBLIC_TYPES[String(row.propertytype||'').toLowerCase()]||'other';
+  if(!country||row.opted_out===true||row.opted_out===1)return null;
   const rent=Number(row.monthly_rent);
   const obj={
     id:String(row.public_id),country,category,
