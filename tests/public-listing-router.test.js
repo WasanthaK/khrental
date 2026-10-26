@@ -150,3 +150,45 @@ test('market readiness clamps pagination rather than accepting unbounded page sc
   assert.equal(called.tenantId,tenant);
   assert.deepEqual(called.query,{offset:0,limit:100});
 });
+
+test('image preparation requires both management and independent preparation switches',async()=>{
+  let invoked=0;
+  const make=(env)=>createPublicListingPreferencesRouter({
+    env,context:(req,res,next)=>next(),prepareImage:async()=>{invoked++;return {status:'withheld'};}
+  });
+  const route='/'+property+'/media/prepare';
+  const request={imageIndex:0,altText:'Living room'};
+  assert.equal((await makeCall(make({}), 'POST',route,request,actor)).status,404);
+  assert.equal((await makeCall(make({PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'}),'POST',route,request,actor)).status,404);
+  assert.equal((await makeCall(make({PUBLIC_LISTING_IMAGE_PREPARE_ENABLED:'true'}),'POST',route,request,actor)).status,404);
+  assert.equal(invoked,0,'defaults may never read private image source bytes');
+});
+
+test('tenant admin may prepare withheld photos, but cannot mass-assign readiness, paths or rights',async()=>{
+  const args=[];
+  const router=createPublicListingPreferencesRouter({
+    env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true',PUBLIC_LISTING_IMAGE_PREPARE_ENABLED:'true'},
+    context:(req,res,next)=>next(),
+    prepareImage:async(...input)=>{args.push(input);return {mediaId:publicId,status:'withheld'};}
+  });
+  const route='/'+property+'/media/prepare';
+  for(const payload of [
+    {imageIndex:0,altText:'Living room',media_status:'ready'},
+    {imageIndex:0,altText:'Living room',bucket:'images'},
+    {imageIndex:0,altText:'Living room',rightsConfirmed:true},
+    {imageIndex:0,altText:'Living room',sourceUrl:'https://example.com/private.jpg'},
+    {imageIndex:-1,altText:'Living room'}
+  ])assert.equal((await makeCall(router,'POST',route,payload,actor)).status,400);
+  for(const identity of [undefined,{...actor,membership:{...actor.membership,status:'inactive'}},
+    {...actor,membership:{...actor.membership,tenant_id:'55555555-5555-4555-8555-555555555555'}}])
+    assert.equal((await makeCall(router,'POST',route,{imageIndex:0,altText:'Living room'},identity)).status,403);
+  assert.equal(args.length,0);
+  const ok=await makeCall(router,'POST',route,{imageIndex:0,altText:'Living room'},actor);
+  assert.equal(ok.status,202);
+  assert.equal(ok.body.data.status,'withheld');
+  assert.equal(args.length,1);
+  assert.deepEqual(args[0][0],{
+    tenantId:tenant,propertyId:property,actorId:user,imageIndex:0,altText:'Living room'
+  });
+  assert.equal(args[0][1].env.PUBLIC_LISTING_IMAGE_PREPARE_ENABLED,'true');
+});
