@@ -75,6 +75,25 @@ test('photo description strips whitespace and rejects unsafe markup/control',()=
   for(const bad of ['','<img src=x>','X'.repeat(181),null,123,'bad\nalt'])
     assert.throws(()=>sanitizePhotoAlt(bad));
 });
+test('tenant ownership ignores GUID casing while private object reads preserve the exact registered key',async()=>{
+  const upperTenant='ABCDEF12-ABCD-4ABC-8ABC-ABCDEF123456';
+  const registered='tenants/'+upperTenant+'/properties/Exterior-Photo.webp';
+  const images=JSON.stringify([{image_url:'https://app.quixo.homes/storage/images/'+registered}]);
+  assert.equal(resolveRegisteredPhoto(images,0,upperTenant.toLowerCase()).path,registered);
+  assert.throws(()=>resolveRegisteredPhoto(images,0,actor));
+  const result=await preparePropertyPhoto({...input,tenantId:upperTenant.toLowerCase()},{
+    env,readSnapshot:async()=>({sourceImages:images,publicId}),convert:async()=>photo,
+    storage:{
+      getObject:async(bucket,key)=>{
+        assert.equal(bucket,'images');assert.equal(key,registered,'R2 lookup must not lowercase the tenant folder or filename');
+        return {body:photo};
+      },
+      upload:async()=>{},deleteObjects:async()=>{}
+    },
+    writeManifest:async receipt=>({mediaId:receipt.mediaId,status:'withheld'})
+  });
+  assert.equal(result.status,'withheld');
+});
 test('processing gate is off unless explicitly enabled',async()=>{
   assert.equal(imagePreparationEnabled({}),false);
   assert.equal(imagePreparationEnabled({PUBLIC_LISTING_IMAGE_PREPARE_ENABLED:'true'}),true);
