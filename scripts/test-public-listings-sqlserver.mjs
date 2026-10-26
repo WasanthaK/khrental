@@ -181,12 +181,65 @@ try{
   assert.ok(withdrawn.withdrawn_at,'withdrawal time recorded');
   assert.equal((await mediaVisible('LK')).length,0,'old image cannot reappear without reconversion');
   assert.equal((await detail('LK')).length,0,'exact media-detail query denies source-changed derivatives');
+  // The exact rights/privacy review table is append-only audit evidence. A staged
+  // derivative does not become public merely because a listing is available.
+  const reviewMedia='77777777-7777-4777-8777-777777777777';
   // Withdrawn media can be superseded without leaking old URLs or violating slot uniqueness.
   await query(`INSERT INTO dbo.public_listing_media(media_id,listing_public_id,display_order,alt_text,
       source_sha256,derivative_sha256,processor_version,image_bytes)
     VALUES (@mediaId,@listingId,0,N'New source photo',@hash,@hash,N'sharp-webp-v1',256)`,
     {mediaId:'77777777-7777-4777-8777-777777777777',listingId:publicOf(1),hash:'a'.repeat(64)});
   assert.equal((await detail('LK')).length,0,'newly prepared derivative is withheld by default');
+  const approvals=await query(`
+    UPDATE dbo.public_listing_media SET rights_confirmed=1,privacy_reviewed=1,media_status=N'ready'
+      OUTPUT INSERTED.media_id
+    WHERE media_id=@mediaId AND listing_public_id=@listingId AND media_status=N'withheld'`,
+    {mediaId:reviewMedia,listingId:publicOf(1)});
+  assert.equal(approvals.rowsAffected[0],1);
+  await query(`
+    INSERT INTO dbo.public_listing_media_reviews
+      (media_id,listing_public_id,actor_user_id,decision,rights_attested,privacy_attested,derivative_sha256)
+    VALUES (@mediaId,@listingId,@actorId,N'approved',1,1,@hash)`,
+    {mediaId:reviewMedia,listingId:publicOf(1),actorId:A,hash:'a'.repeat(64)});
+  const reviewRow=(await query(`
+    SELECT decision,rights_attested,privacy_attested FROM dbo.public_listing_media_reviews
+    WHERE media_id=@mediaId`,{mediaId:reviewMedia})).recordset[0];
+  assert.equal(reviewRow.decision,'approved');
+  assert.equal(reviewRow.rights_attested,true);
+  assert.equal(reviewRow.privacy_attested,true);
+  await assert.rejects(query(`
+    INSERT INTO dbo.public_listing_media_reviews
+      (media_id,listing_public_id,actor_user_id,decision,rights_attested,privacy_attested,derivative_sha256)
+    VALUES (@mediaId,@listingId,@actorId,N'approved',0,1,@hash)`,
+    {mediaId:reviewMedia,listingId:publicOf(1),actorId:A,hash:'a'.repeat(64)}),
+    'database must reject an unconfirmed photo-rights approval');
+  assert.equal((await detail('LK')).length,0,'old image identifier remains withdrawn');
+  // A new media identifier can be reviewed for the same image position.
+  const newDetail=(await query(`
+    SELECT TOP 1 m.media_status AS status
+    ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
+    AND m.media_id=@mediaId AND pref.country_code=N'LK'
+      AND m.media_status=N'ready' AND m.rights_confirmed=1 AND m.privacy_reviewed=1`,
+    {mediaId:reviewMedia})).recordset;
+  assert.equal(newDetail.length,1,'approved replacement derivative becomes eligible');
+  await query(`
+    UPDATE dbo.public_listing_media SET media_status=N'withdrawn',withdrawn_at=SYSUTCDATETIME()
+    WHERE media_id=@mediaId`,{mediaId:reviewMedia});
+  await query(`
+    INSERT INTO dbo.public_listing_media_reviews
+      (media_id,listing_public_id,actor_user_id,decision,rights_attested,privacy_attested,derivative_sha256)
+    VALUES (@mediaId,@listingId,@actorId,N'withdrawn',0,0,@hash)`,
+    {mediaId:reviewMedia,listingId:publicOf(1),actorId:A,hash:'a'.repeat(64)});
+  const decisions=(await query(`
+    SELECT decision FROM dbo.public_listing_media_reviews WHERE media_id=@mediaId
+    ORDER BY decided_at,review_id`,{mediaId:reviewMedia})).recordset.map(x=>x.decision);
+  assert.deepEqual(decisions.sort(),['approved','withdrawn']);
+  assert.equal((await query(`
+    SELECT COUNT(*) AS count
+    ${PUBLIC_MEDIA_ELIGIBILITY_SQL}
+    AND m.media_id=@mediaId AND m.media_status=N'ready'`,
+    {mediaId:reviewMedia})).recordset[0].count,0,'withdrawn reviewed media must not be eligible');
+
 
   await assertVisible([publicOf(1),publicOf(7),publicOf(8)],[publicOf(2)]);
   // A whole-property active lease immediately suppresses an otherwise "available" row.
@@ -212,7 +265,7 @@ try{
   await assertVisible([publicOf(1),publicOf(4),publicOf(7),publicOf(8)],[publicOf(2)]);
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
-  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; optout; lease; vacancy; country; redaction');
+  console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; optout; lease; vacancy; country; redaction');
 }finally{
   if(pool)await pool.close().catch(()=>{});
   if(master)await master.close().catch(()=>{});
