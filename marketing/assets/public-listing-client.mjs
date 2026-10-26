@@ -110,3 +110,55 @@ if(previewArea && previewArea.dataset.publicListingEnabled==='true'){
       });
   }
 }
+,'i');
+      }
+      previewArea.hidden=false;
+      const examples=document.querySelector('.results .cards');
+      if(examples)examples.hidden=true;
+    };
+    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+      headers:{Accept:'application/json'}})
+      .then(async response=>{
+        if(!response.ok)throw new Error('Listing feed unavailable');
+        const data=await response.json();
+        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
+        render(data.data);
+      })
+      .catch(()=>{
+        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
+        // Existing illustrative design remains while listing release is disabled/unavailable.
+      });
+  }
+}
+,'i');
+          if(match.test(imageEntry.url)){
+            const photo=document.createElement('img');
+            photo.loading='lazy';
+            photo.className='preview-photo';
+            photo.alt=typeof imageEntry.alt==='string'&&imageEntry.alt.trim()
+              ?imageEntry.alt.slice(0,180):'Rental property photograph';
+            photo.src=apiOrigin+imageEntry.url;
+            article.append(photo);
+          }
+        }
+        // Property detail URLs remain disconnected until reviewed.
+        article.append(panel);list.append(article);
+      }
+      previewArea.hidden=false;
+      const examples=document.querySelector('.results .cards');
+      if(examples)examples.hidden=true;
+    };
+    fetch(endpoint.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+      headers:{Accept:'application/json'}})
+      .then(async response=>{
+        if(!response.ok)throw new Error('Listing feed unavailable');
+        const data=await response.json();
+        if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
+        render(data.data);
+      })
+      .catch(()=>{
+        // No automatic fallback to app-private storage, source SQL rows or fabricated inventory.
+        // Existing illustrative design remains while listing release is disabled/unavailable.
+      });
+  }
+}
