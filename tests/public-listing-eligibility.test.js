@@ -31,7 +31,8 @@ test('active whole-property agreement hides a listing even if status is stale',(
 });
 test('unclassified market and unsupported type require metadata, not false market guesses',()=>{
   assert.equal(publicationEligibility({...base,countryCode:null}).reason,'public_country_missing');
-  assert.equal(publicationEligibility({...base,propertyType:'land'}).reason,'unsupported_property_type');
+  assert.equal(publicationEligibility({...base,propertyType:'land'}).category,'land');
+  assert.equal(publicationEligibility({...base,propertyType:'unrecognized'}).category,'other');
   assert.equal(parseCountry('lk'),'LK');
   assert.equal(parseCountry('XX'),null);
   assert.equal(PUBLIC_TYPES.commercial,'commercial');
