@@ -1,3 +1,4 @@
+import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { PROPERTY_COUNTRIES } from '../utils/constants.js';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -450,7 +451,7 @@ const PropertyDetails = () => {
                         
                         return (
                           <img 
-                            src={imageUrl} 
+                            src={propertyImageDisplayUrl(imageUrl, {tenantId: property.tenant_id}) || DEFAULT_IMAGE}
                             alt={property.name} 
                             className="w-full h-full object-contain"
                             onError={(e) => { 
@@ -484,7 +485,7 @@ const PropertyDetails = () => {
                                   }`}
                                 >
                                   <img 
-                                    src={imageUrl} 
+                                    src={propertyImageDisplayUrl(imageUrl, {tenantId: property.tenant_id}) || DEFAULT_IMAGE}
                                     alt={`Thumbnail ${index + 1}`} 
                                     className="w-full h-full object-cover"
                                     onError={(e) => { 

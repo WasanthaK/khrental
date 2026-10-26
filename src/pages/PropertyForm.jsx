@@ -1,3 +1,5 @@
+import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
+import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
@@ -632,7 +634,7 @@ const PropertyForm = () => {
         className="relative group aspect-square overflow-hidden rounded-lg border border-gray-200"
       >
         <img
-          src={imageUrl}
+          src={propertyImageDisplayUrl(imageUrl, {tenantId: getActiveTenantId()}) || undefined}
           alt={`Property image ${index + 1}`}
           className="w-full h-full object-cover"
         />
