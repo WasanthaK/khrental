@@ -1,5 +1,21 @@
 // Quixo.Homes public catalog renderer. Pure read-only. Absolutely no credentials or source property fields.
 // The page flag stays FALSE until the app SQL/schema, rate-limit and visibility acceptance gate is signed off.
+// Country choice is explicit, never guessed from IP, browser locale or tenant data.
+// When moving between country-specific search pages, preserve only a supported
+// rental category; never carry any private URL/query parameters across markets.
+if (location.pathname.endsWith('/search/')) {
+  const kind=new URLSearchParams(location.search).get('type');
+  if(kind==='residential'||kind==='commercial'){
+    for(const link of document.querySelectorAll('.country-menu a,[data-country-switch]')){
+      const destination=new URL(link.getAttribute('href'),location.origin);
+      if(/^\/(lk|bn)\/search\/$/.test(destination.pathname)){
+        destination.searchParams.set('type',kind);
+        link.setAttribute('href',destination.pathname+destination.search);
+      }
+    }
+  }
+}
+
 const apiOrigin='https://app.quixo.homes';
 const previewArea=document.querySelector('[data-public-listing-market]');
 if(previewArea && previewArea.dataset.publicListingEnabled==='true'){
