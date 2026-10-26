@@ -3,7 +3,7 @@ import {runQuery,runSingleQuery} from '../mssql/query.js';
 
 // Authenticated SQL is the truth for current vacancy; no cached "published" bit can
 // outlive a reservation, active tenancy or opt-out. Every query rechecks status.
-const ELEGIBILITY=`
+export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
   FROM dbo.public_listing_preferences pref
   JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
   JOIN dbo.tenants t ON t.id=p.tenant_id
@@ -38,21 +38,21 @@ const ELEGIBILITY=`
 
 // JSON rent extraction does NOT pass through banking/term/image JSON.
 // Numeric rent from existing app properties.rentalvalues.rent is optional.
-const SELECT=`
+export const PUBLIC_LISTING_SELECT_SQL=`
   pref.public_id,pref.country_code,pref.opted_out,pref.public_headline,pref.location_label,p.propertytype,
   TRY_CONVERT(DECIMAL(18,2),CASE WHEN ISJSON(p.rentalvalues)=1
     THEN COALESCE(JSON_VALUE(p.rentalvalues,'$.rent'),JSON_VALUE(p.rentalvalues,'$.monthlyRent'))
     ELSE NULL END) AS monthly_rent`;
 
 export const listEligible=country=>runQuery(`
- SELECT TOP(50) ${SELECT}
- ${ELEGIBILITY}
+ SELECT TOP(50) ${PUBLIC_LISTING_SELECT_SQL}
+ ${PUBLIC_LISTING_ELIGIBILITY_SQL}
    AND pref.country_code=@country
  ORDER BY p.createdat DESC,p.id DESC`,{country});
 
 export const findEligible=publicId=>runSingleQuery(`
- SELECT TOP(1) ${SELECT}
- ${ELEGIBILITY}
+ SELECT TOP(1) ${PUBLIC_LISTING_SELECT_SQL}
+ ${PUBLIC_LISTING_ELIGIBILITY_SQL}
    AND pref.public_id=@publicId`,{publicId});
 
 export const getPreference=(tenantId,propertyId)=>runSingleQuery(`
