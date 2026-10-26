@@ -8,6 +8,7 @@ import {consumeReadBudget} from './rateLimit.js';
 import * as media from './media.js';
 import {preparePropertyPhoto,imagePreparationEnabled} from './processor.js';
 import {photoReviewEnabled,reviewPreparedPhoto,withdrawPreparedPhoto} from './review.js';
+import {listAdminPhotos,previewAdminPhoto} from './adminPhotos.js';
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const hidden=res=>res.status(404).json({code:'PUBLIC_LISTINGS_DISABLED',error:'Public listings are not enabled.'});
 const publicOrigins=new Set(['https://mango-grass-0314c0100.3.azurestaticapps.net','https://quixo.homes','https://www.quixo.homes']);
@@ -104,7 +105,9 @@ export const createPublicListingPreferencesRouter=({
   put=store.updatePreference,
   prepareImage=preparePropertyPhoto,
   reviewImage=reviewPreparedPhoto,
-  withdrawImage=withdrawPreparedPhoto
+  withdrawImage=withdrawPreparedPhoto,
+  adminPhotos=listAdminPhotos,
+  previewPhoto=previewAdminPhoto
 }={})=>{
   const router=express.Router();
   router.use((req,res,next)=>String(env.PUBLIC_LISTING_MANAGEMENT_ENABLED||'').toLowerCase()==='true'?next():hidden(res));
@@ -137,6 +140,21 @@ export const createPublicListingPreferencesRouter=({
       publicId:pref.public_id,countryCode:pref.country_code,
       optedOut:Boolean(pref.opted_out),headline:pref.public_headline,locationLabel:pref.location_label
     }});
+  }));
+  router.get('/:propertyId/media',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    res.json({data:await adminPhotos({tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id},{env})});
+  }));
+  router.get('/:propertyId/media/:mediaId/preview',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    if(!photoReviewEnabled(env))return hidden(res);
+    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    const photo=await previewPhoto({tenantId:req.tenantId,propertyId:req.params.propertyId,
+      actorId:req.user.id,mediaId:req.params.mediaId},{env});
+    res.set('Cache-Control','private, no-store, max-age=0');
+    res.set('X-Content-Type-Options','nosniff');
+    res.set('Content-Disposition','inline; filename="private-photo-review.webp"');
+    res.type('image/webp').send(photo.body);
   }));
   router.post('/:propertyId/media/prepare',asyncRoute(async(req,res)=>{
     if(!validId(req,res))return;

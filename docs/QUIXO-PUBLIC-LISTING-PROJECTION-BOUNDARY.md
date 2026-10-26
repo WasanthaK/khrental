@@ -59,3 +59,21 @@ Before release, complete the administrator photo-preparation/review workflow,
 verify deployed source-origin/storage configuration and controlled removal,
 and obtain the separate public pilot/release-switch authorization. No live
 public inventory or source photograph is enabled by this source checkpoint.
+# Administrator photo controls — 2026-10-26
+
+Source-only addition to draft #430: one photo section on the existing property
+page, with Prepare private copy, Preview and approve, and Withdraw actions.
+Preparation stays withheld; approval requires a successfully loaded private
+preview and separate rights/privacy confirmations. Replacing a copy resets
+review. Private object URLs are revoked on close or property/tenant/account
+change. Withdrawal reports any remaining object cleanup failure.
+
+The private manifest and preview routes require the management gate plus current
+tenant-administrator access. Preview additionally requires the review gate,
+verifies derivative integrity and rechecks access/state after the storage read.
+Manifest SQL independently binds the active actor, tenant and property. Neither
+route activates anonymous reads or returns raw original-photo/storage references.
+No new dashboard, property Publish button or change to default-public eligibility.
+All public release flags remain OFF. Actual storage/withdrawal acceptance and
+the owner-controlled pilot remain release work; this source milestone does not
+authorize production migration, deployment or real-photo approval.

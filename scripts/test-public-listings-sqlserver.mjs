@@ -14,6 +14,7 @@ import {toPublicDTO} from '../src/api/publicListings/contract.js';
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL,PUBLIC_MEDIA_DETAIL_SQL} from '../src/api/publicListings/media.js';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import {REVIEW_SOURCE_SQL,REVIEW_LOCKED_SQL} from '../src/api/publicListings/review.js';
+import {ADMIN_PHOTOS_SQL} from '../src/api/publicListings/adminPhotos.js';
 
 const image=process.env.MSSQL_TEST_IMAGE||'mcr.microsoft.com/mssql/server:2022-latest';
 const migration=fs.readFileSync(path.resolve('migrations/20261026_01_public_listing_preferences.sql'),'utf8');
@@ -217,6 +218,11 @@ try{
   const selected=(await query(REVIEW_SOURCE_SQL,reviewLookup)).recordset;
   assert.equal(selected.length,1,'admin may inspect a review record for own property');
   assert.equal(String(selected[0].mediaStatus).toLowerCase(),'withheld');
+  const manifest=(await query(ADMIN_PHOTOS_SQL,reviewLookup)).recordset;
+  assert.equal(manifest.length,1,'admin photo manifest includes current withheld derivative');
+  assert.equal(String(manifest[0].mediaId).toLowerCase(),reviewMedia);
+  assert.equal((await query(ADMIN_PHOTOS_SQL,{...reviewLookup,tenantId:B})).recordset.length,0);
+  assert.equal((await query(ADMIN_PHOTOS_SQL,{...reviewLookup,actorId:B})).recordset.length,0);
   assert.equal((await query(REVIEW_LOCKED_SQL,reviewLookup)).recordset.length,1,
     'transaction-locked review source query is valid SQL');
   assert.equal((await query(REVIEW_SOURCE_SQL,{...reviewLookup,tenantId:B})).recordset.length,0,
@@ -224,6 +230,7 @@ try{
   assert.equal((await query(REVIEW_SOURCE_SQL,{...reviewLookup,actorId:B})).recordset.length,0,
     'a foreign or unrecognized actor never gains access to photo review');
   await query("UPDATE dbo.tenant_memberships SET status=N'inactive' WHERE id=@id",{id:reviewerMember});
+  assert.equal((await query(ADMIN_PHOTOS_SQL,reviewLookup)).recordset.length,0,'revoked admin cannot list private photo reviews');
   assert.equal((await query(REVIEW_SOURCE_SQL,reviewLookup)).recordset.length,0,
     'revoked admin membership immediately denies photo review');
   await query("UPDATE dbo.tenant_memberships SET status=N'active' WHERE id=@id",{id:reviewerMember});

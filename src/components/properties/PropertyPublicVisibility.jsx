@@ -3,13 +3,13 @@ import {useEffect,useState} from 'react';
 import {useAuth} from '../../hooks/useAuth';
 import {isAdministrator} from '../../utils/accessModel';
 import {requestMssqlApi} from '../../services/mssqlApiClient';
+import PropertyPhotoReview from './PropertyPhotoReview';
 
 // The server may return 404 when public-listing management is not enabled.
 // Do not present a misleading opt-out that cannot be persisted.
 const PropertyPublicVisibility=({propertyId})=>{
   const {user,membership}=useAuth();
   const admin=isAdministrator({user,membership}) && String(membership?.status||'active')==='active';
-  const [model,setModel]=useState(null);
   const [draft,setDraft]=useState(null);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -17,9 +17,9 @@ const PropertyPublicVisibility=({propertyId})=>{
   useEffect(()=>{
     let active=true;
     if(!admin||!propertyId){setLoading(false);return()=>{active=false;};}
-    setLoading(true);
+    setLoading(true);setDraft(null);setError('');
     requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId))
-      .then(data=>{if(active){setModel(data);setDraft({
+      .then(data=>{if(active){setDraft({
         countryCode:data.countryCode||'',
         optedOut:Boolean(data.optedOut),
         headline:data.headline||'',
@@ -28,7 +28,7 @@ const PropertyPublicVisibility=({propertyId})=>{
       .catch(err=>{if(active&&err.status!==404)setError(err.message||'Unable to read public listing settings.');})
       .finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
-  },[admin,propertyId]);
+  },[admin,propertyId,membership?.tenant_id]);
   if(!admin||loading||!draft)return null;
   const update=(field,value)=>setDraft(prev=>({...prev,[field]:value}));
   const save=async()=>{
@@ -38,7 +38,6 @@ const PropertyPublicVisibility=({propertyId})=>{
         headline:draft.headline.trim()||null,locationLabel:draft.locationLabel.trim()||null};
       const data=await requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId),
         {method:'PATCH',body:values});
-      setModel(data);
       setDraft({countryCode:data.countryCode||'',optedOut:Boolean(data.optedOut),
         headline:data.headline||'',locationLabel:data.locationLabel||''});
     }catch(err){setError(err.message||'Unable to save public listing preferences.');}
@@ -83,6 +82,7 @@ const PropertyPublicVisibility=({propertyId})=>{
       className="px-4 py-2 bg-blue-800 text-white rounded disabled:opacity-50">
       {saving?'Saving…':'Save public listing preferences'}
     </button>
+    <PropertyPhotoReview key={String(user?.id)+':'+String(membership?.tenant_id)+':'+propertyId} propertyId={propertyId}/>
   </section>;
 };
 export default PropertyPublicVisibility;
