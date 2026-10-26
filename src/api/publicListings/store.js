@@ -55,6 +55,47 @@ export const findEligible=publicId=>runSingleQuery(`
  ${PUBLIC_LISTING_ELIGIBILITY_SQL}
    AND pref.public_id=@publicId`,{publicId});
 
+// Authenticated administrator-only country readiness; never returned by anonymous catalog.
+export const listMarketReadiness=async(tenantId,{offset=0,limit=50}={})=>{
+  const safeOffset=Math.min(Math.max(Number(offset)||0,0),100000);
+  const safeLimit=Math.min(Math.max(Number(limit)||50,1),100);
+  const params={tenantId,offset:safeOffset,limit:safeLimit};
+  const [summary,records]=await Promise.all([
+    runSingleQuery(`
+      SELECT COUNT_BIG(*) AS total,
+        COALESCE(SUM(CASE WHEN pref.country_code IS NULL THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS unassigned,
+        COALESCE(SUM(CASE WHEN pref.country_code IN('LK','BN') THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS assigned,
+        COALESCE(SUM(CASE WHEN pref.opted_out=1 THEN CONVERT(BIGINT,1) ELSE 0 END),0) AS optedOut
+      FROM dbo.properties p
+      LEFT JOIN dbo.public_listing_preferences pref
+        ON pref.property_id=p.id AND pref.tenant_id=p.tenant_id
+      WHERE p.tenant_id=@tenantId`,{tenantId}),
+    runQuery(`
+      SELECT p.id AS propertyId,p.name AS propertyName,p.status AS availabilityStatus,
+        pref.country_code AS countryCode,pref.opted_out AS optedOut
+      FROM dbo.properties p
+      LEFT JOIN dbo.public_listing_preferences pref
+        ON pref.property_id=p.id AND pref.tenant_id=p.tenant_id
+      WHERE p.tenant_id=@tenantId AND pref.country_code IS NULL
+      ORDER BY p.createdat DESC,p.id DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,params)
+  ]);
+  return {
+    counts:{
+      total:Number(summary?.total||0),unassigned:Number(summary?.unassigned||0),
+      assigned:Number(summary?.assigned||0),optedOut:Number(summary?.optedOut||0)
+    },
+    records:records.map(row=>({
+      propertyId:String(row.propertyId),
+      propertyName:String(row.propertyName||'Unnamed property'),
+      availabilityStatus:String(row.availabilityStatus||'unknown'),
+      countryCode:row.countryCode||null,
+      optedOut:Boolean(row.optedOut)
+    })),
+    offset:safeOffset,limit:safeLimit
+  };
+};
+
 export const getPreference=(tenantId,propertyId)=>runSingleQuery(`
  SELECT TOP(1) pref.public_id,pref.country_code,pref.opted_out,
    pref.public_headline,pref.location_label
