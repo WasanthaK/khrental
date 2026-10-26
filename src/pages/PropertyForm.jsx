@@ -1,9 +1,11 @@
+import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
+import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
 import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import { generateTempId } from '../utils/helpers';
-import { PROPERTY_TYPES } from '../utils/constants';
+import { PROPERTY_TYPES, PROPERTY_COUNTRIES, normalizePropertyCountry } from '../utils/constants';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
 import { toast } from 'react-hot-toast';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -42,6 +44,7 @@ const PropertyForm = () => {
   const initialFormData = {
     name: '',
     address: '',
+    country_code: '',
     bank_name: '',
     bank_branch: '',
     bank_account_number: '',
@@ -118,6 +121,7 @@ const PropertyForm = () => {
             setFormData({
               name: property.name || '',
               address: property.address || '',
+              country_code: property.country_code || '',
               bank_name: property.bank_name || '',
               bank_branch: property.bank_branch || '',
               bank_account_number: property.bank_account_number || '',
@@ -630,7 +634,7 @@ const PropertyForm = () => {
         className="relative group aspect-square overflow-hidden rounded-lg border border-gray-200"
       >
         <img
-          src={imageUrl}
+          src={propertyImageDisplayUrl(imageUrl, {tenantId: getActiveTenantId()}) || undefined}
           alt={`Property image ${index + 1}`}
           className="w-full h-full object-cover"
         />
@@ -714,6 +718,7 @@ const PropertyForm = () => {
         // Ensure all required fields are present and properly formatted
         name: formData.name?.trim(),
         address: formData.address?.trim(),
+        country_code: normalizePropertyCountry(formData.country_code),
         bank_name: formData.bank_name?.trim(),
         bank_branch: formData.bank_branch?.trim(),
         bank_account_number: formData.bank_account_number?.trim(),
@@ -839,6 +844,18 @@ const PropertyForm = () => {
               placeholder="Full property address"
               required
             />
+
+            <div className="mb-4">
+              <label htmlFor="country_code" className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
+              <select id="country_code" name="country_code" value={formData.country_code}
+                onChange={handleInputChange} required
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                <option value="">Select country</option>
+                {[...PROPERTY_COUNTRIES].sort((a, b) => a.name.localeCompare(b.name)).map(country => (
+                  <option key={country.code} value={country.code}>{country.name} ({country.code})</option>
+                ))}
+              </select>
+            </div>
 
             {/* Banking Details Section */}
             <div className="mt-6">

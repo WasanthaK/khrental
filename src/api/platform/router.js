@@ -1,3 +1,4 @@
+import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
 import express from 'express';
 import crypto from 'node:crypto';
@@ -722,6 +723,7 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
   const inserted = [];
 
   for (const row of rows) {
+    if (safeTable === 'properties') {row.country_code = normalizePropertyCountry(row.country_code);}
     const entries = Object.entries(row || {}).filter(([key, value]) => IDENTIFIER_REGEX.test(key) && value !== undefined);
     if (entries.length === 0) {continue;}
 
@@ -736,7 +738,11 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
     });
 
     const result = await runQuery(
-      `INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.* VALUES (${values.join(', ')})`,
+      safeTable === 'properties'
+        ? `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+           INSERT INTO properties (${columns.join(', ')}) OUTPUT INSERTED.id INTO @changed VALUES (${values.join(', ')});
+           SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`
+        : `INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.* VALUES (${values.join(', ')})`,
       params
     );
     inserted.push(...result.map(mapRow));
@@ -748,6 +754,9 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
 const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const scopedPayload = getScopedPayload({ table: safeTable, payload, tenantId });
+  if (safeTable === 'properties' && Object.hasOwn(scopedPayload || {}, 'country_code')) {
+    scopedPayload.country_code = normalizePropertyCountry(scopedPayload.country_code);
+  }
   const entries = Object.entries(scopedPayload || {}).filter(([key, value]) => IDENTIFIER_REGEX.test(key) && value !== undefined);
   if (entries.length === 0) {
     return executeSelect({ table, filters, tenantId });
@@ -768,7 +777,11 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
 
   try {
     rows = await runQuery(
-      `UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.* ${whereClause}`,
+      safeTable === 'properties'
+        ? `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+           UPDATE properties SET ${assignments.join(', ')} OUTPUT INSERTED.id INTO @changed ${whereClause};
+           SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`
+        : `UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.* ${whereClause}`,
       params
     );
   } catch (error) {

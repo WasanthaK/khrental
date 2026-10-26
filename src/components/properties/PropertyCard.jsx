@@ -1,3 +1,4 @@
+import { propertyImageDisplayUrl } from '../../utils/propertyDetailFields.js';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../utils/helpers';
 import { DEFAULT_IMAGE } from '../../utils/constants';
@@ -70,7 +71,7 @@ const PropertyCard = ({ property }) => {
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="h-48 overflow-hidden relative">
         <img 
-          src={imageUrl} 
+          src={propertyImageDisplayUrl(imageUrl, {tenantId: property.tenant_id}) || DEFAULT_IMAGE}
           alt={name} 
           className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
           onError={(e) => {

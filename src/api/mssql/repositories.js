@@ -1400,11 +1400,11 @@ export const updatePropertyById = async (id, payload = {}, tenantId) => {
   }
 
   const rows = await runQuery(
-    `UPDATE properties
-     SET ${assignments.join(', ')}
-     OUTPUT INSERTED.*
-     WHERE id = @id
-       AND tenant_id = @tenantId`,
+    `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
+     UPDATE properties SET ${assignments.join(', ')}
+     OUTPUT INSERTED.id INTO @changed
+     WHERE id = @id AND tenant_id = @tenantId;
+     SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`,
     params
   );
 
