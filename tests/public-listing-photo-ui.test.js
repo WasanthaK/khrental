@@ -22,14 +22,14 @@ test('photo UI prepares privately, requires preview and both attestations, then 
         window.calls.push({url,...options});
         if(url.endsWith('/preview'))return new Blob([photo],{type:'image/webp'});
         if(url.endsWith('/prepare')){
-          prepared=[{mediaId:'fixture-media',imageIndex:0,altText:options.body.altText,status:'withheld'}];return {};
+          prepared=[{mediaId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',imageIndex:0,altText:options.body.altText,status:'withheld'}];return {};
         }
         if(url.endsWith('/review')){prepared[0].status='ready';return {};}
         if(url.endsWith('/withdraw')){prepared=[];return {storageDeletionSucceeded:false};}
         return {photos:[{imageIndex:0}],prepared:structuredClone(prepared),canPrepare:true,canReview:true};
       };
       const root=createRoot(document.getElementById('root'));
-      window.mount=id=>root.render(<PhotoReview key={id} propertyId={id} request={request}/>);
+      window.mount=id=>root.render(<PhotoReview key={id} propertyId={id} publicPreview={id==='property-a'?{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',country:'LK',category:'residential',title:'Example rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',privateAddress:'NEVER COPY'}:null} request={request}/>);
       window.mount('property-a');
     `}});
   const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
@@ -63,6 +63,11 @@ test('photo UI prepares privately, requires preview and both attestations, then 
     await boxes[1].click();
     assert.equal(await button('Approve reviewed photo'),false);
     await page.waitForFunction(()=>document.body.textContent.includes('Photo approved.'));
+    await page.waitForSelector('#pilot-release-configuration');
+    const config=await page.$eval('#pilot-release-configuration',el=>({readOnly:el.readOnly,data:JSON.parse(el.value)}));
+    assert.equal(config.readOnly,true);
+    assert.equal(config.data.images[0].url,'/api/public-listings/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/media/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?country=LK');
+    assert.equal(JSON.stringify(config.data).includes('NEVER COPY'),false);
     const calls=await page.evaluate(()=>window.calls);
     assert.deepEqual(calls.find(c=>c.url.endsWith('/review')).body,{confirmRights:true,confirmPrivacy:true});
     assert.ok(calls.find(c=>c.url.endsWith('/preview')).responseType==='blob');
@@ -70,6 +75,7 @@ test('photo UI prepares privately, requires preview and both attestations, then 
     await button('Withdraw photo 1');
     await page.waitForFunction(()=>document.body.textContent.includes('Stored copy cleanup needs administrator attention.'));
     assert.equal(await page.evaluate(()=>document.body.textContent.includes('Awaiting review')),false);
+    assert.equal(await page.$('#pilot-release-configuration'),null,'withdrawal removes release configuration');
     // Freshly prepared photo must never inherit approval or private preview.
     await button('Prepare private copy');
     await page.waitForFunction(()=>document.body.textContent.includes('Awaiting review'));
