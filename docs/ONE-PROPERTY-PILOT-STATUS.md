@@ -16,6 +16,12 @@ If a future separately authorized test temporarily adds replicas, remove the ext
 
 [Disabled-state verification #40533333116](https://github.com/WasanthaK/khrental/actions/runs/40533333116) PASS: exact serving build, app/SQL health and LK/BN anonymous inventory denied. Earlier #40532918290 stopped on an HTTP 503 before cloud login/mutation and remains failed evidence. A direct subsequent MSSQL check and independent release audit returned ready. The underlying reason for that transient response is not established.
 
+## Independent billing readiness — 2026-10-27
+
+[Fresh read-only billing checkpoint](BILLING-READINESS-20261027.md): connected supplemental sandbox Price still matches the approved USD 5/month licensed dwelling contract. Tax settings now report active, superseding the older pending observation for that sandbox, but tax registrations and webhook endpoints are both empty. Existing portal quantity edits remain disabled. No Stripe mutation or live-mode access occurred.
+
+Canonical sandbox selection remains an owner decision: the connected supplemental environment differs from the originally designated account. No silent account substitution. B02 merchant/tax/MoR acceptance and B04-owner/B05 implementation remain OPEN. Cloudflare plugin discovery returned no matching integration; prior browser sign-in limitation remains, so human ownership/recovery is still open. Scaling remains deferred.
+
 ## Execution queue
 
 | Priority | Work | Status |
