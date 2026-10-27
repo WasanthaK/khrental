@@ -2,6 +2,12 @@
 
 **Owner's controlling business decision (26 October 2026):** Every eligible property **registered in the KH Rentals application is listed on the public Quixo.Homes website by default**, **unless it is rented, reserved, or the owner/tenant administrator has opted it out**. This supersedes the earlier opt-in/publish-each-property assumption.
 
+## Private preview acceptance status — 2026-10-27
+
+The authenticated administrator preview and prepared-photo review for the selected pilot passed. The production eligibility check and permitted-field projection were reviewed privately, and the loaded derivative was approved using the existing owner-confirmed rights/privacy scope. No private property details, identifiers, projected values or image references are added to this document.
+
+Temporary administrator controls were shut down successfully; anonymous listing/media publication remains OFF. The approved copy remains gated. Exact pilot scoping, operational storage/account readiness, website feed configuration, rollback and separately authorized anonymous country/media/cache/takedown acceptance remain release prerequisites. See the master plan for current priority; this status does not activate publication.
+
 ## Authoritative visibility rules
 
 - **Default:** Public advertising is ON for available registered rental properties after their country is reliably identified. Registration does not require an extra individual “Publish” operation.
