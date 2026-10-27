@@ -83,10 +83,11 @@ jobs:
           # Emergency shutdown must work even when the app/build endpoint is unhealthy.
           if [ "$PILOT_MODE" != rollback ]; then
             [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
-            build=$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json)
+            build=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-max-time 120 --max-time 20 https://app.quixo.homes/build-info.json)
             test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
             for endpoint in health mssql/health; do
-              health=$(curl --fail --silent --show-error --max-time 20 "https://app.quixo.homes/api/$endpoint")
+              echo "Checking required runtime endpoint: $endpoint"
+              health=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-max-time 120 --max-time 20 "https://app.quixo.homes/api/$endpoint")
               test "$(jq -r .ok <<<"$health")" = true
             done
             node scripts/verify-one-property-pilot.mjs disabled
@@ -172,8 +173,12 @@ jobs:
             --set-env-vars PUBLIC_LISTING_READ_ENABLED=true PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=true \
               PUBLIC_LISTING_MEDIA_ENABLED=true PUBLIC_LISTING_IMAGE_PROCESSOR_READY=true --output none
           wait_ready
-          build=$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json)
+          build=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-max-time 120 --max-time 20 https://app.quixo.homes/build-info.json)
           test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
           verify_flags true
+          # A fresh revision may need its first SQL connection before catalog reads.
+          # Retry HTTP unavailability within a fixed budget; never relax ok/build/data checks.
+          health=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-max-time 120 --max-time 20 https://app.quixo.homes/api/mssql/health)
+          test "$(jq -r .ok <<<"$health")" = true
           node scripts/verify-one-property-pilot.mjs active
           echo 'ONE_PROPERTY_API_PILOT=PASS; static live feed remains independently gated' >> "$GITHUB_STEP_SUMMARY"
