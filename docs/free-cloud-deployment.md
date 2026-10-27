@@ -1,5 +1,7 @@
 # Free-cloud deployment
 
+For existing-resource ownership, credential custody, Cloudflare access recovery and read-only public-domain audit, use [Infrastructure handover](INFRASTRUCTURE-HANDOVER.md). Do not recreate the working bucket to recover access. Missing ownership/audit evidence remains explicitly unverified.
+
 KH Rentals can run within the free allowances of Azure Container Apps, Azure SQL Database, GitHub Actions/Packages, and Cloudflare R2. Free allowances are usage-limited; configure Azure cost alerts before production use.
 
 ## Runtime architecture

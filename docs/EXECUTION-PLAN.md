@@ -1,5 +1,28 @@
 # KH Rentals Execution Plan
 
+## Infrastructure access recovery correction — 2026-10-27
+
+Owner identified an incomplete operational handover: existing R2 credentials work,
+but the inspected records do not establish Cloudflare account owner/login/recovery
+or current direct public-domain access. This is an access/documentation gap, not
+evidence of storage failure. Working object checks do not close that gap.
+
+Bounded corrective package: [Infrastructure handover](INFRASTRUCTURE-HANDOVER.md)
+records verified Azure/R2/GitHub provisioning and credential references, explicitly
+unconfirmed ownership and recovery custodians, normal owner-led recovery, and a
+read-only R2 managed/custom-domain audit. The audit uses a separate authorized
+management token; existing S3 object credentials are never exposed or substituted.
+PASS requires both direct access mechanisms disabled; missing/denied/incomplete
+evidence is BLOCKED. It does not certify Workers/proxy/cache behavior.
+
+Source/local tests are prepared; CI/live audit and account recovery are not yet
+accepted. No provider account, role, token, bucket, public setting or production
+resource is changed by this source package. Existing private-photo acceptance and
+shutdown remain closed. R2 invoice archive deferral is unchanged. Real-listing
+activation remains OFF pending this operational acceptance and separate public
+pilot approval.
+
+
 ## Controlling R4 advance — private acceptance complete; bounded public pilot preparation (2026-10-27)
 
 **Supersedes the pending private approval/shutdown statements below.** All four owner-authorized private steps are complete: administrator controls enabled by [#40481489814](https://github.com/WasanthaK/khrental/actions/runs/40481489814); SOLACE RESIDENCE (`DAE78C13-B571-42CB-A8EC-9C2C656B5B0B`, third-floor apartment, LKR 60,000/month) assigned the owner-confirmed Sri Lanka `LK` through the country-specific control; its registered exterior photo prepared, loaded privately at **733×1200**, rights/privacy confirmed under the owner's explicit confirmation, approved successfully, then withdrawn. UI reported no remaining public-delivery eligibility and no cleanup failure. Original image still loaded at **768×1258**. No change to property type, rent, occupancy or agreement.
