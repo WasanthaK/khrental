@@ -57,6 +57,16 @@ jobs:
           echo "Latest revision: $latest_revision"
           echo "Latest ready revision: $ready_revision"
 
+          echo "Read-only scaling and active revision inventory:"
+          az containerapp show \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "{revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas}" -o json
+          az containerapp revision list \
+            --name "$AZURE_CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "[].{name:name,active:properties.active,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" -o json
+
           az containerapp revision show \
             --name "$AZURE_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
