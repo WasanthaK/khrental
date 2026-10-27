@@ -108,6 +108,7 @@ export const createPublicListingPreferencesRouter=({
   env=process.env,
   context=createTenantContextMiddleware({requireUser:true,requireTenant:true,auditLabel:'public-listing-optout'}),
   get=store.getPreference,
+  preview=store.findEligibleForProperty,
   listReadiness=store.listMarketReadiness,
   put=store.updatePreference,
   prepareImage=preparePropertyPhoto,
@@ -147,6 +148,18 @@ export const createPublicListingPreferencesRouter=({
       publicId:pref.public_id,countryCode:pref.country_code,
       optedOut:Boolean(pref.opted_out),headline:pref.public_headline,locationLabel:pref.location_label
     }});
+  }));
+  // Read-only private release preview; does not enable anonymous publication.
+  router.get('/:propertyId/pilot-preview',asyncRoute(async(req,res)=>{
+    if(!validId(req,res))return;
+    const pref=await get(req.tenantId,req.params.propertyId);
+    if(!pref||!isId(pref.public_id))return res.status(404).json({code:'PROPERTY_NOT_FOUND'});
+    const item=toPublicDTO(await preview(req.tenantId,req.params.propertyId));
+    const matches=item&&item.id.toLowerCase()===String(pref.public_id).toLowerCase()
+      &&item.country===pref.country_code;
+    if(item&&!matches)return res.status(409).json({code:'PUBLIC_PREVIEW_MISMATCH'});
+    res.json({data:{publicId:String(pref.public_id),eligible:Boolean(matches),
+      publicPreview:matches?item:null}});
   }));
   router.get('/:propertyId/media',asyncRoute(async(req,res)=>{
     if(!validId(req,res))return;

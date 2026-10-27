@@ -40,6 +40,16 @@
 
 **Authorization for this reconciliation:** update planning/supporting documentation and priorities. No new public exposure, signup, property change, invoice/email/signature, SQL apply, payment or infrastructure scaling is authorized by this update.
 
+### One-property pilot review screen — bounded follow-on, 2026-10-27
+
+GitHub authentication recovered. Existing [private workflow #40510702814](https://github.com/WasanthaK/khrental/actions/runs/40510702814) passed against actual serving build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`, enabling administrator controls with anonymous publication OFF. After a transient startup SQL timeout, the live MSSQL health endpoint returned ready and authenticated KH Rentals property access resumed. No database/schema change was performed.
+
+For the selected Solace property, saved private settings show LK, no public headline/location overrides and opt-out unselected. A fresh registered-photo derivative with description “Exterior of the apartment building” was prepared and the private preview loaded. The new copy remains **withheld / awaiting review**, not publicly approved or published; the earlier completed approval/withdrawal acceptance remains closed. A separate disable workflow was dispatched after preparation; its final result must be retained before claiming shutdown complete.
+
+**Concrete release-preparation gap:** existing administrator UI discards the opaque public ID and has no authoritative eligibility preview, so public activation would require an unreviewed identifier/projection. [PR #436](https://github.com/WasanthaK/khrental/pull/436) adds only a private, management-gated GET and visible saved public fields/reference. SQL reuses the existing eligibility predicate with authenticated tenant AND exact source-property constraints. No new schema, anonymous route, signup or billing behavior. Tests cover default-off/revoked/staff/foreign-tenant denial, mismatched public ID/country, safe output and the exact preview query against disposable two-tenant inventory. **Source implementation prepared; CI, merge/deployment and live preview acceptance pending.** Do not label this as public-pilot completion.
+
+Next: accept CI, deploy the bounded private preview, run the existing temporary controls against the then-current serving build, read back the exact public ID/projection/eligibility, finish storage/site readiness, shut controls down and present the exact public pilot for its separate owner activation decision. Keep the prepared copy private until that review is concrete.
+
 ### One-property pilot continuation — authenticated app check, 2026-10-27
 
 The owner selected the one-property public pilot as the next work package. Fresh authenticated KH Rentals UI inspection confirmed selected SOLACE RESIDENCE property `DAE78C13-B571-42CB-A8EC-9C2C656B5B0B`: country Sri Lanka (LK), Apartment, LKR 60,000/month, Active, one registered exterior image and no currently associated rentees. These are UI observations, **not a substitute for the authoritative public eligibility query**. No property, agreement, rent, country or photo was changed.

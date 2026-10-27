@@ -11,13 +11,18 @@ const PropertyPublicVisibility=({propertyId})=>{
   const {user,membership}=useAuth();
   const admin=isAdministrator({user,membership}) && String(membership?.status||'active')==='active';
   const [draft,setDraft]=useState(null);
+  const [pilot,setPilot]=useState(null);
+  const [previewError,setPreviewError]=useState('');
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   useEffect(()=>{
     let active=true;
     if(!admin||!propertyId){setLoading(false);return()=>{active=false;};}
-    setLoading(true);setDraft(null);setError('');
+    setLoading(true);setDraft(null);setError('');setPilot(null);setPreviewError('');
+    requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId)+'/pilot-preview')
+      .then(data=>{if(active)setPilot(data);})
+      .catch(()=>{if(active)setPreviewError('Listing eligibility preview is unavailable. Refresh before release.');});
     requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId))
       .then(data=>{if(active){setDraft({
         countryCode:data.countryCode||'',
@@ -33,13 +38,15 @@ const PropertyPublicVisibility=({propertyId})=>{
   const update=(field,value)=>setDraft(prev=>({...prev,[field]:value}));
   const save=async()=>{
     try{
-      setSaving(true);setError('');
+      setSaving(true);setError('');setPilot(null);setPreviewError('');
       const values={...(draft.countryCode ? {countryCode:draft.countryCode} : {}),optedOut:draft.optedOut,
         headline:draft.headline.trim()||null,locationLabel:draft.locationLabel.trim()||null};
       const data=await requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId),
         {method:'PATCH',body:values});
       setDraft({countryCode:data.countryCode||'',optedOut:Boolean(data.optedOut),
         headline:data.headline||'',locationLabel:data.locationLabel||''});
+      try{setPilot(await requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId)+'/pilot-preview'));}
+      catch{setPreviewError('Listing eligibility preview is unavailable. Refresh before release.');}
     }catch(err){setError(err.message||'Unable to save public listing preferences.');}
     finally{setSaving(false);}
   };
@@ -49,6 +56,22 @@ const PropertyPublicVisibility=({propertyId})=>{
       Available rentals in supported markets appear publicly by default when their country is set. Rented or reserved properties are hidden automatically.
       You can opt out at any time. Private contact details, invoices, agreements and original attachments are never public.
     </p>
+    <div className="border rounded p-3 mb-4" aria-label="Private listing release preview">
+      <h3 className="font-semibold">Private listing release preview</h3>
+      <p className="text-sm">This check does not publish the property. Availability is checked again on every public read; photo approval and release settings are separate.</p>
+      {pilot&&<>
+        <p className="text-sm">Public listing reference: <code>{pilot.publicId}</code></p>
+        <p className="text-sm">{pilot.eligible?'Eligible at last server check.':'Not currently eligible for public listing.'}</p>
+        {pilot.publicPreview&&<dl className="text-sm">
+          <dt>Public title</dt><dd>{pilot.publicPreview.title}</dd>
+          <dt>Public location</dt><dd>{pilot.publicPreview.location}</dd>
+          <dt>Country</dt><dd>{pilot.publicPreview.country}</dd>
+          <dt>Category</dt><dd>{pilot.publicPreview.category}</dd>
+          <dt>Monthly rent</dt><dd>{pilot.publicPreview.monthlyRent===null?'Rent on request':pilot.publicPreview.currency+' '+pilot.publicPreview.monthlyRent}</dd>
+        </dl>}
+      </>}
+      {previewError&&<p role="alert" className="text-red-700">{previewError}</p>}
+    </div>
     <label className="block text-sm font-medium mb-2" htmlFor="public-country">Property country</label>
     <select id="public-country" value={draft.countryCode} onChange={e=>update('countryCode',e.target.value)}
       className="w-full border rounded p-2 mb-4" disabled={saving}>

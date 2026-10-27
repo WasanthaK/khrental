@@ -162,3 +162,12 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
     return result[0];
   }catch(error){await tx.rollback().catch(()=>{});throw error;}
 };
+
+// Private administrator preflight: reuse the public eligibility predicate, bound
+// to the authenticated tenant and exact source property. Never scan public inventory.
+export const PRIVATE_LISTING_PREVIEW_SQL=`
+ SELECT TOP(1) ${PUBLIC_LISTING_SELECT_SQL}
+ ${PUBLIC_LISTING_ELIGIBILITY_SQL}
+   AND pref.tenant_id=@tenantId AND p.id=@propertyId`;
+export const findEligibleForProperty=(tenantId,propertyId)=>runSingleQuery(
+  PRIVATE_LISTING_PREVIEW_SQL,{tenantId,propertyId});
