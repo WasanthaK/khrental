@@ -6,17 +6,21 @@ the website feed, modify a property, or close public lifecycle acceptance.
 The selected property/content/photo were reviewed privately. Keep identifying
 values and the private expected projection out of repository text and inputs.
 
+## Current pilot checkpoint — 2026-10-27
+
+Owner-approved pilot is live. Activation #40545952854, website deployment #40546437978 and one-replica/exact-build audit #40546580955 passed. Actual quixo.homes Sri Lanka residential search showed the one reviewed card/photo; commercial filtering and Brunei exclusion passed. [Current status](ONE-PROPERTY-PILOT-STATUS.md) records the controlling evidence, remaining public withdrawal/cache acceptance and emergency stop. The protected expected-content fixture is configured. This release does not close billing or regional launch.
+
 ## Release prerequisites
 
 | Gate | Status / required evidence |
 | --- | --- |
-| Application release | Accepted serving build `f631e7902a4fdae736a47ed6207271c503d81db9`; recheck exact serving SHA at execution |
+| Application release | Accepted serving build `d80e8c49b60fdff415f2869a93542934c9560d0d`; recheck exact serving SHA at execution |
 | Selected property | Private production eligibility, permitted fields and newly approved derivative accepted; do not reuse the earlier withdrawn test copy |
 | Storage direct exposure | Audit #40494891305 attempt 3 PASS; no repeat absent a relevant settings change |
 | Human operations | OPEN: production account match, owner/linked identity, recovery custody; assess any Workers/proxy route and cache behavior separately |
-| Private release fixture | NOT CONFIGURED by this change: Production secret `R4_PILOT_EXPECTED_PUBLIC_JSON`, containing the exact privately reviewed public DTO and one approved derivative URL/alt |
-| Public activation | NOT APPROVED: owner must approve exact property, fields, one photo and API/website audience separately |
-| Website feed | LK and BN search flags remain false; existing illustrative design remains accepted |
+| Private release fixture | CONFIGURED and used by the successful activation: Production secret `R4_PILOT_EXPECTED_PUBLIC_JSON`, containing the exact privately reviewed public DTO and one approved derivative URL/alt |
+| Public activation | OWNER APPROVED 2026-10-27 for the reviewed one property, fields and photo; broader release remains separate |
+| Website feed | LK search true after #439; BN and homepage feeds remain false; other illustrative examples are labelled |
 
 The expected JSON has exactly `id`, `country`, `category`, `title`, `location`,
 `monthlyRent`, `currency`, `images`. Country is LK, currency LKR, and `images`
