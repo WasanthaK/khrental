@@ -1,5 +1,28 @@
 # KH Rentals Execution Plan
 
+## Controlling R4 checkpoint — private rollout accepted, public release pending (2026-10-27)
+
+This checkpoint supersedes the older R4 draft/unmerged/source-only status below **only for the owner-approved private rollout**. Evidence is recorded in [PR #430](https://github.com/WasanthaK/khrental/pull/430), including its final private acceptance checkpoint, and corrective [PR #432](https://github.com/WasanthaK/khrental/pull/432). Historical evidence remains intact; no public activation is authorized.
+
+| Gate | Current evidence / decision |
+| --- | --- |
+| Canonical scope | R1 closed by owner; R2 deferred; R3 conditionally accepted for one ACA replica. Continue R4 real-property/photo acceptance. Website copy expansion and unrelated features remain parked. |
+| App-only country/photo rollout | #431 deployed; the prior authenticated demo test saved LK and verified the original photo at 1920×1440. Legacy unknown countries remain unassigned until explicitly verified. |
+| Private R4 deployment | #430 merged at `9025ee25e29bc428d4513f277669e7b93cbccdfd`. App deployment [#40362312999](https://github.com/WasanthaK/khrental/actions/runs/40362312999) and illustrative static site deployment [#40362313091](https://github.com/WasanthaK/khrental/actions/runs/40362313091) passed. |
+| Production migration | Governed apply [#40363193676](https://github.com/WasanthaK/khrental/actions/runs/40363193676) and separate strict read-only [#40363846709](https://github.com/WasanthaK/khrental/actions/runs/40363846709) passed; 13/13 ledger/schema entries recorded. Do not repeat this completed apply for another checklist tick. |
+| Source-path correction | #432 preserves exact registered R2 source-key casing after ownership validation. Deployment [#40365625032](https://github.com/WasanthaK/khrental/actions/runs/40365625032) passed at serving build `f585c7c3036212dfb1ca0a0c1e8e40a31be9c43a`. No source-image move, URL rewrite or further migration required. |
+| Actual private pilot | Preparation and 1600×1200 private preview passed. The copy stayed withheld. Withdrawal removed its row/preview without a reported cleanup error; the original 1920×1440 photo still loaded. This is private workflow acceptance, not independent anonymous object ACL/deletion proof. |
+| Approval transition | **Still untested live.** The pilot photo contains people; no rights/privacy confirmation or ready approval was fabricated. Automated approval tests are not live approval evidence. |
+| Temporary controls | Shutdown [#40430963466](https://github.com/WasanthaK/khrental/actions/runs/40430963466) passed: management/preparation/review OFF; anonymous listing/shared-limiter-ready/media/processor-ready OFF. Recorded no-credential checks: inventory 404; original photo 401. These are recorded prior results, not newly rerun checks. |
+| Public site | Illustrative static site remains live. Real-property listings/photos, public signup and payment activation remain OFF/unapproved. |
+
+**Next bounded work:** inspect registered demo images in the authenticated app, select a rights/privacy-cleared image, then exercise the missing administrator approval and withdrawal transition under the existing private-pilot scope. Confirm rights from the owner; a visually empty image alone does not prove a publication licence. Do not change tenancy/availability to force listing eligibility or infer a legacy country from address/currency.
+
+**Remaining before public launch:** explicit country classification for selected inventory; authoritative availability/active-agreement acceptance; actual derivative-storage anonymous ACL and withdrawal/cache/takedown acceptance; end-to-end country-scoped public API/site checks under a separately approved public pilot; explicit owner activation decision. Enabling the anonymous listing/media or static live-inventory switches is not part of the private pilot.
+
+**Read-only continuation, 2026-10-27:** authenticated app dashboard and property pages are accessible. WATER FALL VILLA and Malabe “Nescius” display registered original images and show “Country required”; no country assignment, property availability, tenancy, photo approval or public switch was changed during this inspection. Malabe's image includes people and is not cleared for the approval test. Private controls are absent from the inspected property UI, consistent with the recorded shutdown, without independently asserting current Azure flag values.
+
+
 
 ## CONTROLLING MASTER CANONICAL CHECKPOINT — 2026-10-24
 
