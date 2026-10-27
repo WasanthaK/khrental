@@ -222,7 +222,7 @@ test('single-listing pilot filters a mixed collection before enriching photos',a
 test('pilot rejects other direct listing and media links before SQL or object reads',async()=>{
   let finds=0,mediaFinds=0,reads=0;
   const router=createPublicListingsRouter({
-    env:pilotEnv,rateLimit:async()=>true,
+    env:pilotEnv,rateLimit:async()=>true,listMedia:async()=>[],
     find:async()=>{finds++;return row;},
     findMedia:async()=>{mediaFinds++;return {};},
     readDerivative:async()=>{reads++;return {body:Buffer.from('{}')};}
@@ -283,4 +283,12 @@ test('pilot does not replace the existing default-OFF publication gates',async()
     rateLimit:async()=>{throw Error('must not query');}
   });
   assert.equal((await makeCall(router,'GET','/?country=LK')).status,404);
+});
+
+test('pilot detail rejects a mismatched projection even if the lookup regresses',async()=>{
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,listMedia:async()=>[],
+    find:async()=>({...row,public_id:excludedId})
+  });
+  assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
 });
