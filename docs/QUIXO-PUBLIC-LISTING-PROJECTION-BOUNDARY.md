@@ -28,7 +28,26 @@ Photos should originate from the images attached to properties in the KH Rentals
 
 All public reads use the same SQL store of authoritative app inventory and status, with a shared cross-replica admission limit, strict country filtering, privacy-safe field projection, and no cookies required. No public create/update, viewing enquiries, signup, registration or payment actions accompany this listing stage. Authenticated opt-out/country editing requires an active tenant administrator and an independent authorization check; keep a change/audit trail.
 
-## Implementation/release boundaries
+## Current implementation and acceptance — 2026-10-27
+
+The [master dashboard and priority queue](EXECUTION-PLAN.md#current-canonical-dashboard-and-work-priority--2026-10-27) controls current work. The source-only/unapplied descriptions later in this document are historical checkpoints, superseded as follows:
+
+- **Deployed and schema accepted:** #430 private rollout, #431 country/original-photo support and #432 source-key casing correction; governed publication apply and independent verification recorded 13/13 managed schema entries. Do not repeat the apply.
+- **Private photo lifecycle accepted:** owner-confirmed SOLACE RESIDENCE third-floor apartment, LK, LKR 60,000/month; registered exterior photo prepared, privately loaded at 733×1200, rights/privacy attested, approved, withdrawn, and original 768×1258 retained. Temporary private controls shut down successfully in [#40487576537](https://github.com/WasanthaK/khrental/actions/runs/40487576537). The acceptance derivative is withdrawn.
+- **Single-property pilot scope deployed:** [#434](https://github.com/WasanthaK/khrental/pull/434), optional server-only `PUBLIC_LISTING_PILOT_PUBLIC_ID`, consistently limits collection/detail/media. Explicit invalid configuration denies reads. [Deployment #40489759980](https://github.com/WasanthaK/khrental/actions/runs/40489759980) succeeded at build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`; recorded anonymous LK/BN inventory returned 404. Scope safeguard does not activate publication or replace country/availability/opt-out checks.
+- **Private bucket direct-public-domain settings accepted:** [audit #40494891305 attempt 3](https://github.com/WasanthaK/khrental/actions/runs/40494891305/attempts/3) PASS, managed public access false, zero custom domains. [Infrastructure handover](INFRASTRUCTURE-HANDOVER.md) retains the evidence and remaining human ownership/recovery, account-match and Workers/proxy/cache/takedown limitations.
+- **Still OFF / not accepted:** anonymous real-property/photo publication and static live-inventory activation. Signup, enquiries, payment activation and expanded website content are outside this bounded pilot package.
+
+### Next bounded acceptance, in order
+
+1. Under authenticated administrator context, resolve the selected property's **opaque public listing ID**, exact public projection and authoritative eligibility. The similarly named active agreement belongs to a different property; display-name matching is insufficient. Do not change occupancy or agreements to force eligibility.
+2. Complete access, country, derivative withdrawal/cache/takedown and static live-feed readiness checks. Prepare the exact public fields and a newly prepared rights/privacy-approved derivative for owner review; the withdrawn acceptance copy is not a live asset.
+3. Present the exact one-property pilot scope, acceptance and rollback procedure for separate owner go-live approval. Only within that approval enable and verify the public site/API journey and withdrawal behavior.
+4. Record actual results in the master plan first and update this supporting record. Do not treat completed private approval or bucket settings audit as anonymous public-lifecycle acceptance.
+
+The owner's default-public-when-available policy remains unchanged for the eventual approved rollout. The one-property pilot boundary is temporary release scoping, not a new per-property Publish requirement.
+
+## Historical implementation/release boundaries — 2026-10-26
 
 The R4 foundation is staged in GitHub branch `r4/public-property-projection-foundation-20261026`. It covers automatic eligibility semantics, SQL preference/opt-out schema, strictly projected read-only API and tests. The schema migration is **not applied**, the public site is **not yet connected to real app properties**, and `PUBLIC_LISTING_READ_ENABLED`, `PUBLIC_LISTING_SHARED_RATE_LIMIT_READY`, `PUBLIC_LISTING_MANAGEMENT_ENABLED` remain disabled by default. The owner approved the linking direction and default-public policy, but live data exposure must wait for security testing, market metadata readiness, private-image isolation and review of the first real records. No external user records were exposed by documenting this decision.
 
