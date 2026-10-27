@@ -6,6 +6,8 @@ secret values, session cookies or recovery codes in this repository or workflow 
 
 ## Current disposition
 
+Planning reconciliation 2026-10-27: [master dashboard and execution queue](EXECUTION-PLAN.md#current-canonical-dashboard-and-work-priority--2026-10-27) is authoritative. The active business package is preparation for the bounded one-property public pilot. Direct-public-domain privacy audit is accepted; keep the remaining account/recovery and Workers/proxy/cache/takedown evidence separate. Deferred Invoice Designer milestone R2 is not reopened by R2 storage work.
+
 The application and object-storage integrations are working. Cloudflare account
 ownership/recovery and the exact production account-ID match remain **UNVERIFIED**.
 Owner-supplied dashboard screenshots on 2026-10-27 show the located `khrental`
@@ -204,7 +206,7 @@ and account-email details are intentionally omitted from this source record.
 - [x] Manual dashboard evidence retained in the project conversation: Public Development URL disabled and no custom domains (2026-10-27).
 - [x] Live direct-public-access audit PASS retained: #40494891305 attempt 3, 2026-10-27; Production-configured account/bucket, both direct-public-access mechanisms disabled.
 - [ ] Separate Workers/proxy/cache/takedown concerns assessed for the public pilot.
-- [ ] Canonical plan records this operational acceptance without reopening completed private tests.
+- [x] Canonical plan records this operational acceptance and current work priorities on 2026-10-27 without reopening completed private tests.
 
 ## Official references
 
