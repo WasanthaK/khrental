@@ -292,3 +292,48 @@ test('pilot detail rejects a mismatched projection even if the lookup regresses'
   });
   assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
 });
+
+
+test('private pilot preview is default-off and requires current tenant administrator',async()=>{
+  let reads=0;
+  const make=env=>createPublicListingPreferencesRouter({env,context:(req,res,next)=>next(),
+    get:async()=>{reads++;return {public_id:publicId,country_code:'LK'};},preview:async()=>row});
+  assert.equal((await makeCall(make({}),'GET','/'+property+'/pilot-preview',undefined,actor)).status,404);
+  const on=make({PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'});
+  for(const identity of [undefined,{...actor,membership:{...actor.membership,status:'inactive'}},
+    {...actor,user:{id:user,role:'staff'},membership:{...actor.membership,role:'staff'}},
+    {...actor,membership:{...actor.membership,tenant_id:publicId}}]){
+    assert.equal((await makeCall(on,'GET','/'+property+'/pilot-preview',undefined,identity)).status,403);
+  }
+  assert.equal(reads,0);
+});
+
+test('private pilot preview binds exact tenant/property and only projects eligible public fields',async()=>{
+  let eligible=row;
+  const router=createPublicListingPreferencesRouter({env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'},
+    context:(req,res,next)=>next(),get:async(t,p)=>{
+      assert.equal(t,tenant);assert.equal(p,property);return {public_id:publicId,country_code:'LK'};
+    },preview:async(t,p)=>{assert.equal(t,tenant);assert.equal(p,property);return eligible;}});
+  const path='/'+property+'/pilot-preview';
+  const ok=await makeCall(router,'GET',path,undefined,actor);
+  assert.equal(ok.status,200);assert.equal(ok.body.data.publicId,publicId);
+  assert.equal(ok.body.data.eligible,true);
+  assert.deepEqual(Object.keys(ok.body.data.publicPreview),['id','country','category','title','location','monthlyRent','currency','images']);
+  assert.ok(!JSON.stringify(ok.body).includes('redacted_by_contract'));
+  assert.ok(!JSON.stringify(ok.body).includes('private_source_id'));
+  eligible=null;
+  const hidden=await makeCall(router,'GET',path,undefined,actor);
+  assert.equal(hidden.body.data.eligible,false);assert.equal(hidden.body.data.publicPreview,null);
+  eligible={...row,public_id:property};
+  assert.equal((await makeCall(router,'GET',path,undefined,actor)).status,409);
+  eligible={...row,country_code:'BN'};
+  assert.equal((await makeCall(router,'GET',path,undefined,actor)).status,409);
+});
+
+test('private pilot preview rejects absent tenant property before eligibility lookup',async()=>{
+  let reads=0;
+  const router=createPublicListingPreferencesRouter({env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'},
+    context:(req,res,next)=>next(),get:async()=>null,preview:async()=>{reads++;return row;}});
+  assert.equal((await makeCall(router,'GET','/'+property+'/pilot-preview',undefined,actor)).status,404);
+  assert.equal(reads,0);
+});
