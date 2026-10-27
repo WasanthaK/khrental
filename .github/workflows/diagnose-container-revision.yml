@@ -65,13 +65,14 @@ jobs:
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --type system \
             --tail 100 \
-            --format text || true
+            --format json
 
           echo "Replica inventory for $latest_revision:"
           az containerapp replica list \
             --name "$AZURE_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --revision "$latest_revision" \
+            --query "[].{name:name,createdTime:properties.createdTime,runningState:properties.runningState,containers:properties.containers[].{name:name,ready:ready,restartCount:restartCount,runningState:runningState,runningStateDetails:runningStateDetails,started:started}}" \
             -o jsonc || true
 
           if [ "$RESTART_LATEST" = "true" ]; then
