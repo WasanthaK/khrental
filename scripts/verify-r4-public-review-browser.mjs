@@ -1,4 +1,4 @@
-// Review-only site smoke test. Serves marketing/ on localhost; never visits production.
+// Static-site and guarded live-client smoke test. Localhost with synthetic API interception only.
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -16,6 +16,10 @@ const app=http.createServer((req,res)=>{
     const content=fs.readFileSync(file);res.writeHead(200,{'Content-Type':types[path.extname(file)]});res.end(content);
   }catch{res.writeHead(404);res.end();}
 });
+const lkLive=fs.readFileSync(path.join(base,'lk/search/index.html'),'utf8').includes('data-public-listing-enabled="true"');
+const fixtureId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const fixtureImage='/api/public-listings/'+fixtureId+'/media/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?country=LK';
+const apiOrigin='https://app.quixo.homes';
 let browser,passes=0;
 try{
   await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
@@ -36,7 +40,22 @@ try{
   assert.deepEqual(imageProbes.filter(x=>!x.ok).map(x=>x.name),[],'All owner-approved sample photos must decode');
   for(const p of sitePaths)for(const width of [320,390,768,1280]){
     const page=await browser.newPage(),remote=[],failedResources=[];
-    page.on('request',r=>{if(!r.url().startsWith(origin+'/'))remote.push(r.url())});
+    let catalogRequests=0;
+    await page.setRequestInterception(true);
+    page.on('request',r=>{
+      if(r.url().startsWith(origin+'/'))return void r.continue();
+      if(lkLive&&p==='/lk/search/'&&r.url()===apiOrigin+'/api/public-listings?country=LK'){
+        catalogRequests++;
+        return void r.respond({status:200,contentType:'application/json',
+          headers:{'Access-Control-Allow-Origin':origin,'Cache-Control':'no-store','Vary':'Origin'},
+          body:JSON.stringify({country:'LK',data:[{id:fixtureId,country:'LK',category:'residential',
+            title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',
+            images:[{url:fixtureImage,alt:'Synthetic exterior'}]}]})});
+      }
+      if(lkLive&&p==='/lk/search/'&&r.url()===apiOrigin+fixtureImage)
+        return void r.respond({status:200,contentType:'image/webp',body:fs.readFileSync(path.join(base,'assets/hero-house.webp'))});
+      remote.push(r.url());return void r.abort();
+    });
     page.on('response',r=>{if(r.url().startsWith(origin+'/')&&r.status()>=400)failedResources.push(r.url()+' '+r.status())});
     page.on('requestfailed',r=>failedResources.push(r.url()+' '+r.failure()?.errorText));
     await page.setViewport({width,height:900,deviceScaleFactor:1});
@@ -55,8 +74,10 @@ try{
       forms:document.querySelectorAll('form').length,
       scripts:[...document.querySelectorAll('script')].map(x=>x.getAttribute('src')), 
       livePanel:document.querySelector('[data-public-listing-market]')?.dataset.publicListingEnabled,
+      liveTitles:[...document.querySelectorAll('[data-public-listing-cards] h3')].map(n=>n.textContent),
+      examplesHidden:!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden,
       enabledButtons:document.querySelectorAll('button:not([disabled])').length,
-      liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW'),
+      liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW')||document.body.textContent.includes('LIMITED PUBLIC PILOT'),
       photos:[...document.querySelectorAll('img.preview-photo,img.approved-wordmark,img[src$=".webp"]')].map(i=>({src:i.getAttribute('src'),width:i.naturalWidth,loaded:i.complete})),
       photoStyles:[...document.querySelectorAll('.hero,.home-hero,.review-market-card,.category-grid a,.owner-hero')].map(n=>getComputedStyle(n).backgroundImage).filter(s=>s.includes('.webp'))
     }));
@@ -68,7 +89,12 @@ try{
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
     assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
-    if(expectedListingPanel)assert.equal(data.livePanel,'false',p+' live property visibility must remain disabled');
+    if(expectedListingPanel)assert.equal(data.livePanel,lkLive&&p==='/lk/search/'?'true':'false',p+' single-market release scope');
+    if(lkLive&&p==='/lk/search/'){
+      assert.equal(catalogRequests,1,'Exactly one anonymous catalog request');
+      assert.deepEqual(data.liveTitles,['Synthetic pilot rental'],'Render only the synthetic approved API fixture');
+      assert.equal(data.examplesHidden,true,'Illustrations are hidden from live search results');
+    }else assert.equal(catalogRequests,0,'Dormant pages do not query inventory');
     if(p.endsWith('/search/')){
       const actual=await page.$eval('[data-country-filter]',n=>({
         selected:n.dataset.countryFilter,
@@ -106,6 +132,9 @@ try{
   // Country changes retain the selected rental category, without carrying arbitrary query data.
   for(const [from,to] of [['lk','bn'],['bn','lk']]){
     const tab=await browser.newPage();
+    await tab.setRequestInterception(true);
+    tab.on('request',r=>r.url().startsWith(origin+'/')?void r.continue():void r.respond({
+      status:503,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:'{}'}));
     await tab.goto(origin+'/'+from+'/search/?type=commercial&privateKey=never',{waitUntil:'networkidle0'});
     const targets=await tab.evaluate(()=>({
       explicit:document.querySelector('[data-country-switch="'+document.body.dataset.country+'"]')?.getAttribute('aria-current'),
@@ -116,8 +145,26 @@ try{
     assert.equal(targets.other,'/'+to+'/search/?type=commercial',from+' category-preserving switch');
     assert.ok(targets.header?.includes('?type=commercial'),from+' header switch category');
     assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
+    if(lkLive&&from==='lk'){
+      assert.equal(await tab.evaluate(()=>!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden),true,'API failure must not show example cards as real inventory');
+      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('temporarily unavailable')),'Show a clear unavailable state');
+    }
     await tab.goto(origin+targets.other,{waitUntil:'domcontentloaded'});
     assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
+    await tab.close();
+  }
+  if(lkLive)for(const kind of ['residential','commercial']){
+    const tab=await browser.newPage();
+    await tab.setRequestInterception(true);
+    tab.on('request',r=>{
+      if(r.url().startsWith(origin+'/'))return void r.continue();
+      if(r.url()===apiOrigin+'/api/public-listings?country=LK')
+        return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},
+          body:JSON.stringify({country:'LK',data:[{id:fixtureId,country:'LK',category:'residential',title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',images:[]}]})});
+      return void r.abort();
+    });
+    await tab.goto(origin+'/lk/search/?type='+kind,{waitUntil:'networkidle0'});
+    assert.equal(await tab.$$eval('[data-public-listing-cards] h3',n=>n.length),kind==='residential'?1:0,kind+' category filtering');
     await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
@@ -125,6 +172,6 @@ try{
   for(const file of ['hero-house.webp','hero-commercial.webp','residential-interior.webp','residential-villa.webp','commercial-office.webp','commercial-retail.webp']){const bytes=fs.readFileSync(path.join(base,'assets',file));assert.equal(bytes.subarray(0,4).toString('ascii'),'RIFF',file+' header');assert.equal(bytes.subarray(8,12).toString('ascii'),'WEBP',file+' container');assert.equal(bytes.readUInt32LE(4)+8,bytes.length,file+' size');}
   const robots=fs.readFileSync(path.join(base,'robots.txt'),'utf8');
   assert.ok(robots.includes('Disallow: /'));
-  console.log('QUIXO_R4_PUBLIC_REVIEW_BROWSER=PASS checked='+passes+' pages='+sitePaths.length+' viewports=4 liveActions=0');
+  console.log('QUIXO_R4_PUBLIC_REVIEW_BROWSER=PASS checked='+passes+' pages='+sitePaths.length+' viewports=4 liveActions=0 syntheticFeed='+lkLive);
 }catch(e){console.error('QUIXO_R4_PUBLIC_REVIEW_BROWSER=FAIL '+e.stack);process.exitCode=1;
 }finally{if(browser)await browser.close();if(app.listening)await new Promise(r=>app.close(r))}
