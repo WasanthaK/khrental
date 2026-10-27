@@ -192,3 +192,103 @@ test('tenant admin may prepare withheld photos, but cannot mass-assign readiness
   });
   assert.equal(args[0][1].env.PUBLIC_LISTING_IMAGE_PREPARE_ENABLED,'true');
 });
+
+const pilotEnv={
+  PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true',
+  PUBLIC_LISTING_MEDIA_ENABLED:'true',PUBLIC_LISTING_IMAGE_PROCESSOR_READY:'true',
+  PUBLIC_LISTING_PILOT_PUBLIC_ID:publicId.toUpperCase()
+};
+const excludedId='66666666-6666-4666-8666-666666666666';
+const pilotMediaId='77777777-7777-4777-8777-777777777777';
+
+test('single-listing pilot filters a mixed collection before enriching photos',async()=>{
+  let mediaIds;
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,
+    list:async()=>[row,{...row,public_id:excludedId}],
+    listMedia:async ids=>{mediaIds=ids;return [
+      {listingPublicId:publicId,mediaId:pilotMediaId,alt:'Reviewed exterior'},
+      {listingPublicId:excludedId,mediaId:pilotMediaId,alt:'Excluded'}
+    ];}
+  });
+  const result=await makeCall(router,'GET','/?country=LK');
+  assert.equal(result.status,200);
+  assert.deepEqual(result.body.data.map(x=>x.id),[publicId]);
+  assert.deepEqual(mediaIds,[publicId]);
+  assert.equal(result.body.data[0].images.length,1);
+  assert.ok(!JSON.stringify(result.body).includes(excludedId));
+});
+
+test('pilot rejects other direct listing and media links before SQL or object reads',async()=>{
+  let finds=0,mediaFinds=0,reads=0;
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,listMedia:async()=>[],
+    find:async()=>{finds++;return row;},
+    findMedia:async()=>{mediaFinds++;return {};},
+    readDerivative:async()=>{reads++;return {body:Buffer.from('{}')};}
+  });
+  assert.equal((await makeCall(router,'GET','/'+excludedId+'?country=LK')).status,404);
+  assert.equal((await makeCall(router,'GET','/'+excludedId+'/media/'+pilotMediaId+'?country=LK')).status,404);
+  assert.deepEqual([finds,mediaFinds,reads],[0,0,0]);
+  const ok=await makeCall(router,'GET','/'+publicId+'?country=LK');
+  assert.equal(ok.status,200);
+  assert.equal(ok.body.data.id,publicId);
+  assert.equal((await makeCall(router,'GET','/'+publicId+'?country=BN')).status,404);
+});
+
+test('pilot allows its selected photo and retains post-read eligibility recheck',async()=>{
+  let lookups=0,reads=0;
+  const meta={derivativeSha256:'abc'};
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,
+    findMedia:async args=>{
+      assert.equal(args.listingId,publicId);assert.equal(args.mediaId,pilotMediaId);
+      lookups++;return lookups<=2?meta:null;
+    },
+    readDerivative:async()=>{reads++;return {body:Buffer.from('{}')};}
+  });
+  assert.equal((await makeCall(router,'GET','/'+publicId+'/media/'+pilotMediaId+'?country=LK')).status,200);
+  assert.equal(lookups,2);assert.equal(reads,1);
+  assert.equal((await makeCall(router,'GET','/'+publicId+'/media/'+pilotMediaId+'?country=LK')).status,404);
+  assert.equal(reads,1,'withdrawn photo is not read again');
+});
+
+test('invalid explicitly configured pilot IDs fail closed before queries',async()=>{
+  for(const id of ['', ' ', 'not-an-id', publicId+','+excludedId]){
+    let invoked=0;
+    const router=createPublicListingsRouter({
+      env:{...pilotEnv,PUBLIC_LISTING_PILOT_PUBLIC_ID:id},
+      rateLimit:async()=>{invoked++;return true;},
+      list:async()=>{invoked++;return [row];}
+    });
+    assert.equal((await makeCall(router,'GET','/?country=LK')).status,404);
+    assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
+    assert.equal((await makeCall(router,'GET','/'+publicId+'/media/'+pilotMediaId+'?country=LK')).status,404);
+    assert.equal(invoked,0);
+  }
+});
+
+test('request query parameters cannot replace the server-selected pilot listing',async()=>{
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,
+    list:async()=>[row,{...row,public_id:excludedId}],listMedia:async()=>[]
+  });
+  const result=await makeCall(router,'GET','/?country=LK&publicId='+excludedId+'&pilotPublicId='+excludedId);
+  assert.deepEqual(result.body.data.map(x=>x.id),[publicId]);
+});
+
+test('pilot does not replace the existing default-OFF publication gates',async()=>{
+  const router=createPublicListingsRouter({
+    env:{PUBLIC_LISTING_PILOT_PUBLIC_ID:publicId},
+    rateLimit:async()=>{throw Error('must not query');}
+  });
+  assert.equal((await makeCall(router,'GET','/?country=LK')).status,404);
+});
+
+test('pilot detail rejects a mismatched projection even if the lookup regresses',async()=>{
+  const router=createPublicListingsRouter({
+    env:pilotEnv,rateLimit:async()=>true,listMedia:async()=>[],
+    find:async()=>({...row,public_id:excludedId})
+  });
+  assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
+});

@@ -20,8 +20,15 @@ export const createPublicListingsRouter=({
   readDerivative=media.readPublicDerivative
 }={})=>{
   const router=express.Router();
+  // Optional, server-configured rollout boundary. Never accepted from a request.
+  // An explicitly configured but invalid ID fails closed; absence preserves the
+  // owner's eventual default-public inventory policy behind the existing gates.
+  const pilotConfigured=Object.hasOwn(env,'PUBLIC_LISTING_PILOT_PUBLIC_ID');
+  const pilotId=String(env.PUBLIC_LISTING_PILOT_PUBLIC_ID??'').trim().toLowerCase();
+  const allowedInPilot=id=>!pilotConfigured||String(id||'').toLowerCase()===pilotId;
   router.use((req,res,next)=>{
-    if(!['GET','HEAD'].includes(req.method)||!PUBLIC_LISTING_ENABLED(env))return hidden(res);
+    if(!['GET','HEAD'].includes(req.method)||!PUBLIC_LISTING_ENABLED(env)||
+      (pilotConfigured&&!isId(pilotId)))return hidden(res);
     const origin=req.get('origin');
     if(origin&&publicOrigins.has(origin)){
       res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');
@@ -52,7 +59,7 @@ export const createPublicListingsRouter=({
     if(!await rateLimit(country))return res.status(429).json({code:'PUBLIC_RATE_LIMIT',error:'Please try again later.'});
     const rows=await list(country);
     // Defense in depth: a storage/query regression must never mix markets.
-    const data=rows.map(toPublicDTO).filter(item=>item&&item.country===country);
+    const data=rows.map(toPublicDTO).filter(item=>item&&item.country===country&&allowedInPilot(item.id));
     return res.json({country,data:await attachPublicImages(data)});
   }));
   router.get('/:publicId/media/:mediaId',asyncRoute(async(req,res)=>{
@@ -62,7 +69,7 @@ export const createPublicListingsRouter=({
     const country=parseCountry(req.query?.country);
     if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED'});
     const {publicId,mediaId}=req.params;
-    if(!isId(publicId)||!isId(mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(!isId(publicId)||!isId(mediaId)||!allowedInPilot(publicId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
     if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
     const meta=await findMedia({listingId:publicId,mediaId,country});
     if(!meta)return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
@@ -86,11 +93,11 @@ export const createPublicListingsRouter=({
   router.get('/:publicId',asyncRoute(async(req,res)=>{
     const country=parseCountry(req.query?.country);
     if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});
-    if(!isId(req.params.publicId))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    if(!isId(req.params.publicId)||!allowedInPilot(req.params.publicId))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
     if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
     const item=toPublicDTO(await find(req.params.publicId));
     // A direct link cannot bypass the selected country even if an ID is known.
-    if(!item||item.country!==country)return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    if(!item||item.country!==country||!allowedInPilot(item.id))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
     const [enriched]=await attachPublicImages([item]);
     res.json({data:enriched});
   }));
