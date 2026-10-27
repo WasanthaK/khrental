@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Private pilot preparation — status reconciliation, 2026-10-27
+
+Authenticated administrator release-preview acceptance is complete for the selected pilot property: the scoped production eligibility check passed, the public-field allowlist was reviewed, and the prepared derivative loaded and was approved under the previously confirmed rights/privacy scope. Private property details, preview identifiers, field values and image references are intentionally omitted from this update.
+
+The existing temporary-controls enable and disable workflows both succeeded. Final state: temporary administrator preparation/review OFF, anonymous publication OFF. No rent, occupancy, agreement or original-image edit was made. The approved copy remains gated; the earlier withdrawn acceptance copy remains withdrawn.
+
+Next: finish the bounded public-pilot release preparation, operational storage/account readiness, website feed configuration and rollback procedure, then obtain the separate exact-pilot activation decision. Anonymous country isolation, delivery and withdrawal/cache acceptance remain open. This completion does not authorize public exposure or close regional launch. Existing R1, conditional R3 and deferred invoice R2 decisions remain unchanged.
+
 ## Deployment recovery accepted — 2026-10-27
 
 **Current controlling result:** the #436 private listing-preview release is now serving and deployment recovery is accepted. [Read-only release verification #40523009356](https://github.com/WasanthaK/khrental/actions/runs/40523009356), job `122254901785`, passed with retained marker `RELEASE_ACCEPTANCE=PASS expected_build=f631e7902a4fdae736a47ed6207271c503d81db9 ready_revision=khrental-app--0000390`. Both application and MSSQL health returned `ok=true`, database connection ready. [Corrected diagnostics #40522371215](https://github.com/WasanthaK/khrental/actions/runs/40522371215) recorded revision Healthy, 100% traffic, one replica, zero restarts. Independent app.quixo.homes build and SQL health checks agree; LK public inventory still responds PUBLIC_LISTINGS_DISABLED.
