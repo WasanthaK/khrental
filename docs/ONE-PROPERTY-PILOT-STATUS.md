@@ -1,66 +1,54 @@
-# One-property pilot — current release preparation status
+# One-property public pilot — current canonical status
 
-Updated 2026-10-27. The existing [master plan](EXECUTION-PLAN.md) retains program authority. This redacted companion records current evidence and the owner's latest priority/cost decision without reproducing private property data.
+Updated 2026-10-27 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
-## Exact pilot release configuration ready — 2026-10-27
+## Current result: approved pilot LIVE
 
-[Private export #438](https://github.com/WasanthaK/khrental/pull/438) merged and [application deployment #40537493730](https://github.com/WasanthaK/khrental/actions/runs/40537493730) PASS at serving build `d80e8c49b60fdff415f2869a93542934c9560d0d`. The authenticated read-only field combines only the eligible saved public projection and exactly one approved derivative, excluding private/source data. Twelve boundary tests, existing browser photo lifecycle, native image, SQL isolation and application checks passed.
+The owner explicitly approved public visibility of the reviewed single property, permitted fields and one approved exterior derivative. [Open the live Sri Lanka pilot](https://quixo.homes/lk/search/?type=residential).
 
-[Private access #40540078231](https://github.com/WasanthaK/khrental/actions/runs/40540078231) PASS. The exact reviewed manifest was read from that field and saved as `R4_PILOT_EXPECTED_PUBLIC_JSON` in the repository's GitHub Production environment; UI metadata confirmed the new protected setting exists. No value, private identifier, rent or image reference is copied here. [Final shutdown #40541016227](https://github.com/WasanthaK/khrental/actions/runs/40541016227) PASS. Independent anonymous listing and selected-photo endpoint checks both returned PUBLIC_LISTINGS_DISABLED afterward. No property, photo approval, original, occupancy or agreement edit was made.
+[Activation #40545952854](https://github.com/WasanthaK/khrental/actions/runs/40545952854) PASS. Exact configured scope was installed and verified in a ready revision before anonymous listing/media gates opened. The verifier accepted exactly one reviewed listing/photo, exact saved public projection, empty BN inventory, country/unrelated-ID denial, anonymous/CORS/no-store boundaries and safe WebP delivery. Temporary management/preparation/review remained OFF.
 
-[Draft website release #439](https://github.com/WasanthaK/khrental/pull/439) is prepared, unmerged, all current checks green at head `0cdeb7c409505f4a2a12ed8a7894fd58d103e890`. Sri Lanka search uses the existing guarded feed, category choice and accurate limited-pilot labels; it removes sample results from real search and shows unavailable state on feed failure. Brunei and other feed flags stay off. Browser verification uses localhost synthetic responses only, blocks actual remote requests and covers responsive layouts, exact rendering, category choice, country navigation and failure handling.
+[Website #439](https://github.com/WasanthaK/khrental/pull/439) merged at `6ca8166b8d573e55b49e270048d33f4478ea142f`; [marketing deployment #40546437978](https://github.com/WasanthaK/khrental/actions/runs/40546437978) PASS. Actual quixo.homes browser acceptance showed one real residential card, the approved photo loaded, the saved rent rendered and no sample-results links on Sri Lanka search. Commercial selection showed no residential card. Switching to Brunei retained the category and showed its illustrative page with the live-feed flag false and no real pilot card. Returning to residential restored the one live listing.
 
-Owner reports both public addresses reach the same site; actual browser interaction additionally confirmed `https://quixo.homes/lk/search/` resolves to the public search page. Domain visibility is accepted. The completed Cloudflare direct-bucket privacy audit remains accepted and must not be repeated. The separate human ownership/recovery handover remains an explicitly unverified operational follow-up, not a newly diagnosed storage fault.
+The site's existing hostname and custom domain are visible. Homepage notices identify the limited Sri Lanka pilot and keep other illustrative examples explicit. Signup, viewing enquiries, payments and additional search filters remain unavailable. LK search is enabled; BN and homepage feed flags remain disabled.
 
-**Immediate next decision:** explicit approval to expose exactly the privately reviewed property, permitted fields and one exterior derivative publicly, then activate the single-listing API/media scope, pass anonymous acceptance and merge/deploy #439. Until then anonymous access and temporary controls remain OFF. The protected fixture is configured; do not repeat private photo acceptance or catalog setup. Scaling remains deferred; no extra test replica was created.
+## Deployment and cost boundary
 
-Historical execution notes: private setup #40536577750 encountered Azure Too Many Requests; intermediate shutdown #40537376249 was cancelled as the app deployment acquired production concurrency. Later successful private access and final shutdown above establish the final state; those earlier runs are not rewritten as successful. Initial website checks correctly rejected the dormant-only expectation, and a later added category-count assertion had a test-selector error; corrected current checks are green. No public pilot acceptance is claimed from those source tests.
+[Read-only production audit #40546580955](https://github.com/WasanthaK/khrental/actions/runs/40546580955) PASS:
+- Serving app build `d80e8c49b60fdff415f2869a93542934c9560d0d`, latest/ready revision `khrental-app--0000399`.
+- Revision mode Single, minReplicas=1, maxReplicas=1.
+- One active revision, one running replica, 100% traffic; app and MSSQL health passed.
+- Restart false. No scale change or extra test replica; none required shutdown.
 
-## Owner decision: defer scaling, continue the remaining canonical work
+Scaling and distinct-replica acceptance remain owner-deferred and do not block this single-replica pilot. Any future authorized temporary test capacity must be removed afterward and actual inventory/limits verified. Existing production costs remain; zero total hosting/SQL/storage/GitHub cost is not claimed.
 
-Scaling and distinct-replica acceptance are deferred. The existing single-replica technical acceptance is sufficient to continue the current bounded pilot preparation; the multi-replica gate stays open for a future scaling decision. No new replica or scale-up is required now. General signup remains OFF.
+## Preparation and retained evidence
 
-If a future separately authorized test temporarily adds replicas, remove the extra test capacity afterward and verify the actual active revision/replica inventory and limits. Do not leave test replicas running. This avoids ongoing additional replica costs; it does not establish zero total Azure/GitHub/SQL/storage costs or authorize shutting down the existing production app.
+- Private export [#438](https://github.com/WasanthaK/khrental/pull/438) deployed successfully in [#40537493730](https://github.com/WasanthaK/khrental/actions/runs/40537493730). It exports only the authorized eligible public projection and exactly one approved photo, omitting source/private fields.
+- Protected GitHub Production setting `R4_PILOT_EXPECTED_PUBLIC_JSON` was saved and its metadata verified. Actual property values, identifiers and image references are omitted here.
+- Private access #40540078231 and final private shutdown #40541016227 passed before activation. Original photo, property, occupancy, rent and agreements were unchanged.
+- Direct Cloudflare bucket privacy audit #40494891305 attempt 3 remains PASS; do not repeat it absent a relevant configuration change. Human ownership/recovery custody remains an unverified operational handover follow-up, not an unresolved bucket privacy fault.
+- Current website head `0cdeb7c409505f4a2a12ed8a7894fd58d103e890` passed application, R4/privacy/SQL/native-photo and isolated browser acceptance before merge. Browser fixtures were synthetic and external production requests blocked.
 
-## Current verified deployment and cost boundary
+Initial activation #40545316163 stopped on an HTTP 503 before cloud mutation. SQL readiness subsequently returned ready. Workflow-only commit `10c28151b9862775a83a4e817678af1b3f9be12f` adds bounded HTTP-unavailability retries before mutation and a fresh-revision SQL health check before catalog acceptance, preserving exact build/scope/field/privacy assertions. The underlying cause of the transient 503 is not established; the failed run remains historical evidence.
 
-[Read-only audit #40533092490](https://github.com/WasanthaK/khrental/actions/runs/40533092490) PASS: revision mode Single, minReplicas=1, maxReplicas=1, one active revision, one running replica and 100% traffic. No extra replica required shutdown. Restart remained false; no scaling, traffic override or app deployment occurred. Serving build `f631e7902a4fdae736a47ed6207271c503d81db9`, latest/ready revision 0000392; app and MSSQL health passed.
+Earlier private setup #40536577750 encountered Azure throttling; intermediate shutdown #40537376249 was cancelled as the private-export app deployment acquired concurrency. Later successful access/shutdown and the live activation/audit above establish current state. Earlier draft-only website assertions and one category-test selector error were corrected before green merge; no production exposure was inferred from failed tests.
 
-[PR #437](https://github.com/WasanthaK/khrental/pull/437) merged at `d4aa82081e0239578e3b0bf2b79da9383bc7ef9e`. Manual release controls, anonymous verifier and emergency rollback are now on main; [release/withdrawal runbook](ONE-PROPERTY-PUBLIC-PILOT.md). It did not activate publication or redeploy the application.
+## Remaining canonical work
 
-[Disabled-state verification #40533333116](https://github.com/WasanthaK/khrental/actions/runs/40533333116) PASS: exact serving build, app/SQL health and LK/BN anonymous inventory denied. Earlier #40532918290 stopped on an HTTP 503 before cloud login/mutation and remains failed evidence. A direct subsequent MSSQL check and independent release audit returned ready. The underlying reason for that transient response is not established.
-
-## Controlling billing test-account decision — 2026-10-27
-
-The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
-
-**Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
-
-Use the existing approved sandbox catalog and portal; do not recreate duplicates. The latest [read-only readiness checkpoint](BILLING-READINESS-20261027.md) records active sandbox Tax settings, no tax registrations and no registered webhook endpoint. Sandbox selection does not establish live merchant readiness, tax/Merchant-of-Record acceptance or paid-lifecycle acceptance. No Stripe object, credential, business profile, tax registration, subscription, charge, application configuration or replica was changed by recording this decision. Live billing and public signup remain gated.
-
-## Independent billing readiness — 2026-10-27
-
-[Fresh read-only billing checkpoint](BILLING-READINESS-20261027.md): connected supplemental sandbox Price still matches the approved USD 5/month licensed dwelling contract. Tax settings now report active, superseding the older pending observation for that sandbox, but tax registrations and webhook endpoints are both empty. Existing portal quantity edits remain disabled. No Stripe mutation or live-mode access occurred.
-
-Canonical sandbox selection is now CLOSED by the owner: use the currently connected Quixo Homes sandbox for B05 tests, superseding the earlier account choice. B02 merchant/tax/MoR acceptance and B04-owner/B05 implementation remain OPEN. Cloudflare plugin discovery returned no matching integration; prior browser sign-in limitation remains, so human ownership/recovery is still open. Scaling remains deferred.
-
-## Execution queue
-
-| Priority | Work | Status |
+| Priority | Work | Disposition |
 | --- | --- | --- |
-| Completed | Private selected-property reference, eligibility, permitted content and newly approved derivative | Accepted privately; do not repeat |
-| Completed | Release/rollback controls and disabled-state verification | #437 merged; fresh verification passed |
-| Follow-up | Production account/linked identity and recovery custody handover | OPEN operational record; completed bucket privacy audit remains accepted |
-| Completed | Configure exact privately approved projection in the Production release fixture | Saved in protected GitHub Production setting; private readback and shutdown passed |
-| 1 | Obtain separate exact one-property activation decision | READY FOR OWNER DECISION; public access remains OFF |
-| 2 | Controlled API/site country, photo delivery and public withdrawal/cache acceptance | NOT performed; follows approval; website #439 prepared |
-| Next independent program work | Paying-organization/billing readiness, then regional launch acceptance | OPEN; advance preparation if a pilot dependency is blocked |
-| Parked | Scaling/distinct-replica proof, invoice archive R2, expanded copy and general signup activation | Preserve existing evidence; resume under their respective decisions |
+| Completed | Exact private listing/photo review, protected manifest, single-property activation and real-site browsing | LIVE / accepted for this bounded pilot |
+| 1 | Public per-photo withdrawal/cache/takedown lifecycle and controlled rollback acceptance after actual public delivery | OPEN; prior private withdrawal evidence is retained; no public photo withdrawal/deletion was performed in this publication |
+| Follow-up | Human ownership/recovery custody and any external proxy/cache operational handover | OPEN; keep separate from the completed direct-bucket privacy audit |
+| Next independent package | Verified billing-pending owner organization, Checkout, signed/idempotent webhooks and server-owned quantity/entitlement lifecycle | OPEN; canonical billing sandbox selection is owner-confirmed, existing sandbox catalog retained |
+| Following | Marketplace/enquiry journey and staged Sri Lanka/Brunei regional paid-launch acceptance | OPEN |
+| Parked | Scaling/distinct-replica proof, invoice archive R2, expanded copy and general signup activation | Preserve existing decisions and evidence |
 
-Validation: pilot verifier CI #40531810965 passed all 15 Node cases. Application verification #40531810644 passed authorization tests and build. Local YAML/embedded Bash syntax and isolated mocked activation ordering, failed-acceptance shutdown and standalone rollback passed. The replica audit enhancement is read-only.
+R1 remains owner-closed. R3 remains conditionally accepted for one replica with general signup OFF. Invoice archive R2 remains owner-deferred. Public pilot visibility does not close paid billing or regional launch.
 
-Anonymous listing/media, LK/BN website live feeds and temporary administrator controls remain OFF. No secret configuration, property edit or public activation was performed. API PASS alone does not accept website, withdrawal or proxy/cache behavior.
+## Emergency stop
 
-R1 remains closed; R3 remains conditionally accepted for one replica; invoice archive R2 remains owner-deferred. The current business package remains the bounded one-property pilot. The latest owner decision defers scaling; it does not waive the other public-release gates.
+Use [One-property public pilot controls](../.github/workflows/one-property-public-pilot.yml), branch main, mode rollback, confirmation ROLLBACK. It disables anonymous and temporary administrator gates without depending on app build health or the private fixture, then verifies denial. Preserve exact scope until public gates are safely off. Revert the #439 marketing package if the public site must also return to the prior design-only state. Record actual outcome; interrupted or unverified rollback requires immediate operator action.
 
-The earlier attempted master/supporting full-file replacements were blocked by automatic approval review because those existing files contain private identifiers and financial/photo details. Those files were preserved. This companion adds no private property identifiers, field values or image references.
+Private historical property details in the master/supporting files were preserved after earlier automatic privacy-review blocks; they were not recopied by this reconciliation.
