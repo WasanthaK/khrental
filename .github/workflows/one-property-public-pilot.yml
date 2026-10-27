@@ -1,0 +1,179 @@
+name: One-property public pilot controls
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/one-property-public-pilot.yml'
+      - 'scripts/verify-one-property-pilot.mjs'
+      - 'tests/one-property-pilot-verifier.test.mjs'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check disabled state, explicitly activate, or emergency rollback
+        type: choice
+        options: [verify-disabled, activate, rollback]
+        default: verify-disabled
+        required: true
+      expected_build:
+        description: Exact serving application SHA (not required for rollback)
+        type: string
+      confirmation:
+        description: Activation requires APPROVE-ONE-PROPERTY-PUBLIC-PILOT; rollback requires ROLLBACK
+        type: string
+      operations_evidence:
+        description: Activation only - retained account/recovery and proxy readiness evidence reference (no private details)
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pilot-pr-{0}', github.event.pull_request.number) || 'khrental-production' }}
+  cancel-in-progress: false
+
+jobs:
+  verifier-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/one-property-pilot-verifier.test.mjs
+
+  configure:
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (needs.verifier-tests.result == 'success' || inputs.mode == 'rollback')
+    needs: verifier-tests
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+      PILOT_MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      OPERATIONS_EVIDENCE: ${{ inputs.operations_evidence }}
+      R4_PILOT_EXPECTED_PUBLIC_JSON: ${{ secrets.R4_PILOT_EXPECTED_PUBLIC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate request before any cloud mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$PILOT_MODE" in
+            verify-disabled) ;;
+            activate)
+              test "$CONFIRMATION" = APPROVE-ONE-PROPERTY-PUBLIC-PILOT
+              test -n "$OPERATIONS_EVIDENCE"
+              node --input-type=module <<'NODE'
+          import {validateExpected} from './scripts/verify-one-property-pilot.mjs';
+          try{validateExpected(JSON.parse(process.env.R4_PILOT_EXPECTED_PUBLIC_JSON||'null'));}
+          catch{console.error('Approved private projection missing or invalid');process.exit(1);}
+          NODE
+              ;;
+            rollback) test "$CONFIRMATION" = ROLLBACK ;;
+            *) exit 1 ;;
+          esac
+          # Emergency shutdown must work even when the app/build endpoint is unhealthy.
+          if [ "$PILOT_MODE" != rollback ]; then
+            [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
+            build=$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json)
+            test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+            for endpoint in health mssql/health; do
+              health=$(curl --fail --silent --show-error --max-time 20 "https://app.quixo.homes/api/$endpoint")
+              test "$(jq -r .ok <<<"$health")" = true
+            done
+            node scripts/verify-one-property-pilot.mjs disabled
+          fi
+
+      - uses: azure/login@v2
+        if: inputs.mode != 'verify-disabled'
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply bounded pilot or fail-closed rollback
+        if: inputs.mode != 'verify-disabled'
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          wait_ready() {
+            local latest ready deadline
+            latest=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestRevisionName -o tsv)
+            deadline=$((SECONDS+900))
+            while (( SECONDS < deadline )); do
+              ready=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestReadyRevisionName -o tsv)
+              if [ -n "$latest" ] && [ "$ready" = "$latest" ]; then return 0; fi
+              sleep 6
+            done
+            return 1
+          }
+          verify_flags() {
+            local settings name
+            settings=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+              --query "properties.template.containers[0].env[?starts_with(name, 'PUBLIC_LISTING_')].{name:name,value:value}" -o json)
+            for name in PUBLIC_LISTING_READ_ENABLED PUBLIC_LISTING_SHARED_RATE_LIMIT_READY PUBLIC_LISTING_MEDIA_ENABLED PUBLIC_LISTING_IMAGE_PROCESSOR_READY; do
+              test "$(jq -r --arg n "$name" '.[] | select(.name==$n) | .value' <<<"$settings")" = "$1" || return 1
+            done
+            for name in PUBLIC_LISTING_MANAGEMENT_ENABLED PUBLIC_LISTING_IMAGE_PREPARE_ENABLED PUBLIC_LISTING_MEDIA_REVIEW_ENABLED; do
+              test "$(jq -r --arg n "$name" '.[] | select(.name==$n) | .value' <<<"$settings")" = false || return 1
+            done
+          }
+          disable_public() {
+            az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+              --set-env-vars PUBLIC_LISTING_READ_ENABLED=false PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=false \
+                PUBLIC_LISTING_MEDIA_ENABLED=false PUBLIC_LISTING_IMAGE_PROCESSOR_READY=false \
+                PUBLIC_LISTING_MANAGEMENT_ENABLED=false PUBLIC_LISTING_IMAGE_PREPARE_ENABLED=false \
+                PUBLIC_LISTING_MEDIA_REVIEW_ENABLED=false --output none || return 1
+            wait_ready || return 1
+            verify_flags false || return 1
+            node scripts/verify-one-property-pilot.mjs disabled || return 1
+            echo 'ANONYMOUS_PUBLICATION=OFF; ROLLBACK=PASS' >> "$GITHUB_STEP_SUMMARY"
+          }
+          if [ "$PILOT_MODE" = rollback ]; then disable_public; exit $?; fi
+          recover() {
+            local result=$?
+            trap - EXIT
+            if [ "$result" -ne 0 ]; then
+              echo 'Pilot failed; attempting public-gate shutdown.' >&2
+              if ! disable_public; then
+                echo 'ROLLBACK=UNVERIFIED; immediate operator action required' >&2
+                echo 'ROLLBACK=UNVERIFIED; immediate operator action required' >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+            exit "$result"
+          }
+          trap recover EXIT
+          pilot_id=$(node --input-type=module -e 'console.log(JSON.parse(process.env.R4_PILOT_EXPECTED_PUBLIC_JSON).id)')
+          echo "::add-mask::$pilot_id"
+          # Scope is installed in a separate ready revision BEFORE any public gate.
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --set-env-vars "PUBLIC_LISTING_PILOT_PUBLIC_ID=$pilot_id" \
+              PUBLIC_LISTING_READ_ENABLED=false PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=false \
+              PUBLIC_LISTING_MEDIA_ENABLED=false PUBLIC_LISTING_IMAGE_PROCESSOR_READY=false \
+              PUBLIC_LISTING_MANAGEMENT_ENABLED=false PUBLIC_LISTING_IMAGE_PREPARE_ENABLED=false \
+              PUBLIC_LISTING_MEDIA_REVIEW_ENABLED=false --output none
+          wait_ready
+          actual_scope=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --query "properties.template.containers[0].env[?name=='PUBLIC_LISTING_PILOT_PUBLIC_ID'].value | [0]" -o tsv)
+          test "$actual_scope" = "$pilot_id"
+          verify_flags false
+          node scripts/verify-one-property-pilot.mjs disabled
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --set-env-vars PUBLIC_LISTING_READ_ENABLED=true PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=true \
+              PUBLIC_LISTING_MEDIA_ENABLED=true PUBLIC_LISTING_IMAGE_PROCESSOR_READY=true --output none
+          wait_ready
+          build=$(curl --fail --silent --show-error --max-time 20 https://app.quixo.homes/build-info.json)
+          test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+          verify_flags true
+          node scripts/verify-one-property-pilot.mjs active
+          echo 'ONE_PROPERTY_API_PILOT=PASS; static live feed remains independently gated' >> "$GITHUB_STEP_SUMMARY"
