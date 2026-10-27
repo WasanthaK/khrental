@@ -24,6 +24,16 @@ This checkpoint supersedes the older R4 draft/unmerged/source-only status below 
 
 
 
+### Owner-confirmed next private photo test — 2026-10-27
+
+The owner explicitly confirmed publication rights, privacy clearance and Sri Lanka (`LK`) for **SOLACE RESIDENCE**, the third-floor apartment with monthly rent LKR 60,000 (property `DAE78C13-B571-42CB-A8EC-9C2C656B5B0B`). Its registered exterior image was visually inspected with no people apparent. This confirmation allows recording the existing rights/privacy attestations during the private approval test; it is **not anonymous publication authorization**.
+
+**Execution status: blocked before mutation.** The app session is authenticated, but temporary private management/preparation/review controls are not visible. The GitHub connector has no workflow-dispatch operation. GitHub browser sign-in returned “Your browser did something unexpected”; no pilot workflow was dispatched and no flags, country, photo approvals or availability were changed in this continuation.
+
+**Avoid collateral property edits:** the standard edit form displays the existing Apartment as “Apartment Complex.” The edit was cancelled without saving. This is an observed form/detail discrepancy, not a verified source/root-cause finding and not a new implementation workstream. Use the existing country-specific management control once the private pilot workflow is available; do not save the unrelated whole form just to assign country.
+
+**Resume:** existing [administrator-only pilot workflow](https://github.com/WasanthaK/khrental/actions/workflows/r4-private-photo-pilot.yml), branch main, mode enable, expected build `f585c7c3036212dfb1ca0a0c1e8e40a31be9c43a`, confirmation `PRIVATE-PHOTO-PILOT`. Its own live-build guard must pass; do not substitute a guessed SHA. It forces anonymous publication flags OFF. Assign confirmed LK through the country-specific control; prepare, load private preview, record the owner-confirmed attestations, verify approval, withdraw and verify original-photo retention. Finish with the same workflow in disable mode and retained ready/build/OFF evidence. Do not reapply schema, enable anonymous inventory/media, or change occupancy to force eligibility.
+
 ## CONTROLLING MASTER CANONICAL CHECKPOINT — 2026-10-24
 
 **Authority and supersession.** This checkpoint is the controlling work priority and current evidence ledger, not a claim that the project has launched. Older dated status sections below remain historical. The master plan is **KH Rentals business release + Quixo.Homes regional SaaS expansion**, not only B04 database registration. One active fix at a time; execute the next independent item if access blocks an item. For any fix: reproduce/read-only evidence -> focused change -> exact-head CI -> main deployment/ready SHA/MSSQL -> real acceptance -> record decision. Do not repeat successful live invoicing, signing, emails, database apply or schema checks only to gather another tick.
