@@ -265,6 +265,7 @@ jobs:
               --args "scripts/start-container.sh"
 
       - name: Verify latest revision readiness and public browser build
+        timeout-minutes: 20
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -311,7 +312,12 @@ jobs:
             echo "Latest Azure revision: $latest_revision"
 
             ready_revision=""
-            for attempt in $(seq 1 30); do
+            # A cold GHCR image pull can outlast the old 3-minute sleep budget.
+            # Bound the wait by elapsed time; keep readiness and exact-build gates.
+            readiness_deadline=$((SECONDS + 900))
+            attempt=0
+            while [ "$SECONDS" -lt "$readiness_deadline" ]; do
+              attempt=$((attempt + 1))
               ready_revision=$(az containerapp show \
                 --name "$AZURE_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -322,7 +328,7 @@ jobs:
                 break
               fi
 
-              echo "Waiting for $latest_revision to become ready (latest ready: ${ready_revision:-none}, attempt $attempt/30)..."
+              echo "Waiting for $latest_revision to become ready (latest ready: ${ready_revision:-none}, attempt $attempt; 15-minute readiness budget)..."
               sleep 6
             done
 
@@ -345,10 +351,9 @@ jobs:
               az containerapp logs show \
                 --name "$AZURE_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
                 --type system \
                 --tail 100 \
-                --format text || true
+                --format json || true
 
               echo "Latest revision console logs:" >&2
               az containerapp logs show \
