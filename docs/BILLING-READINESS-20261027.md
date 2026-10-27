@@ -2,9 +2,17 @@
 
 Read-only canonical follow-on while the one-property pilot's human account/recovery and private release configuration dependencies remain open. R1 stays closed; invoice archive R2 and scaling remain deferred. No paid signup, live charging or replica change is authorized by this checkpoint.
 
+## Controlling billing test-account decision — 2026-10-27
+
+The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
+
+**Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
+
+Use the existing approved sandbox catalog and portal; do not recreate duplicates. The latest [read-only readiness checkpoint](BILLING-READINESS-20261027.md) records active sandbox Tax settings, no tax registrations and no registered webhook endpoint. Sandbox selection does not establish live merchant readiness, tax/Merchant-of-Record acceptance or paid-lifecycle acceptance. No Stripe object, credential, business profile, tax registration, subscription, charge, application configuration or replica was changed by recording this decision. Live billing and public signup remain gated.
+
 ## Fresh connector evidence
 
-Only the previously authorized supplemental **Quixo Homes sandbox** is exposed by the Stripe connection, with livemode=false. It remains different from the earlier owner-designated sandbox recorded in issue #375. Their relationship and canonical selection are unconfirmed. No mode or account switch was performed.
+The connected **Quixo Homes sandbox** is now owner-selected as canonical, with livemode=false. It differs from the earlier designated sandbox; that former selection is superseded. No Stripe mode or account switch was performed.
 
 | Check | Fresh result | What it does not establish |
 | --- | --- | --- |
@@ -24,7 +32,7 @@ Repository issue #375 contains earlier immediate-settlement proposals; its later
 
 ## Next actions
 
-1. Owner confirms whether the currently connected supplemental Quixo Homes sandbox becomes the canonical B05 integration test account, or connects the previously designated account. Do not silently resolve the mismatch or recreate duplicate catalog objects.
+1. **DONE — owner selected the connected Quixo Homes sandbox as canonical.** Reuse its existing verified catalog; no duplicate setup or connection to the former account is required.
 2. In the selected isolated sandbox, prepare organization billing-pending setup and server-owned inventory/Stripe reference mapping; paid entitlement remains false until verified initial payment. Zero-dwelling, cessation/reactivation and cancellation details remain explicit decisions.
 3. Build the real signed/idempotent webhook endpoint before registering it; do not invent a destination URL. Test duplicate/out-of-order events and independent organization isolation.
 4. Add hosted Checkout and quantity reconciliation under the approved next-invoice proration policy, then exercise sandbox lifecycle acceptance.
