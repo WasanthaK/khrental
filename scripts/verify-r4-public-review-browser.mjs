@@ -75,9 +75,9 @@ try{
       scripts:[...document.querySelectorAll('script')].map(x=>x.getAttribute('src')), 
       livePanel:document.querySelector('[data-public-listing-market]')?.dataset.publicListingEnabled,
       liveTitles:[...document.querySelectorAll('[data-public-listing-cards] h3')].map(n=>n.textContent),
-      examplesHidden:document.querySelector('.results .cards')?.hidden,
+      examplesHidden:!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden,
       enabledButtons:document.querySelectorAll('button:not([disabled])').length,
-      liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW'),
+      liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW')||document.body.textContent.includes('LIMITED PUBLIC PILOT'),
       photos:[...document.querySelectorAll('img.preview-photo,img.approved-wordmark,img[src$=".webp"]')].map(i=>({src:i.getAttribute('src'),width:i.naturalWidth,loaded:i.complete})),
       photoStyles:[...document.querySelectorAll('.hero,.home-hero,.review-market-card,.category-grid a,.owner-hero')].map(n=>getComputedStyle(n).backgroundImage).filter(s=>s.includes('.webp'))
     }));
@@ -146,11 +146,25 @@ try{
     assert.ok(targets.header?.includes('?type=commercial'),from+' header switch category');
     assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
     if(lkLive&&from==='lk'){
-      assert.equal(await tab.$eval('.results .cards',n=>n.hidden),true,'API failure must not show example cards as real inventory');
+      assert.equal(await tab.evaluate(()=>!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden),true,'API failure must not show example cards as real inventory');
       assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('temporarily unavailable')),'Show a clear unavailable state');
     }
     await tab.goto(origin+targets.other,{waitUntil:'domcontentloaded'});
     assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
+    await tab.close();
+  }
+  if(lkLive)for(const kind of ['residential','commercial']){
+    const tab=await browser.newPage();
+    await tab.setRequestInterception(true);
+    tab.on('request',r=>{
+      if(r.url().startsWith(origin+'/'))return void r.continue();
+      if(r.url()===apiOrigin+'/api/public-listings?country=LK')
+        return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},
+          body:JSON.stringify({country:'LK',data:[{id:fixtureId,country:'LK',category:'residential',title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',images:[]}]})});
+      return void r.abort();
+    });
+    await tab.goto(origin+'/lk/search/?type='+kind,{waitUntil:'networkidle0'});
+    assert.equal(await tab.$eval('[data-public-listing-cards] h3',n=>n.length),kind==='residential'?1:0,kind+' category filtering');
     await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
