@@ -40,7 +40,7 @@ Never record GitHub passwords, tokens, recovery codes or session cookies here.
 | Resource | Established reference | Provisioning/configuration authority | Evidence and limitation |
 | --- | --- | --- | --- |
 | Azure subscription | `3d42a180-fda5-4013-afcc-fdba10266f9b` | Existing Azure account/Entra administration | Referenced by current production workflows; not a new role-assignment audit |
-| Azure app | `khrental-prod-rg / khrental-app`, southeastasia | `scripts/bootstrap-azure.sh`; deployment workflow | Runtime deployment #40489759980 passed, build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`, Ready revision 0000386 |
+| Azure app | `khrental-prod-rg / khrental-app`, southeastasia | `scripts/bootstrap-azure.sh`; deployment workflow | Release recovery verification #40523009356 passed; serving build `f631e7902a4fdae736a47ed6207271c503d81db9`, healthy Ready revision 0000390, one replica |
 | GitHub deployment identity | Bootstrap names `khrental-github-deploy`; Production OIDC trust | Azure workload federation with repository Production environment | Workflow uses AZURE_CLIENT_ID/AZURE_TENANT_ID; do not infer Cloudflare authority from Azure OIDC |
 | Azure SQL | `khrentals.database.windows.net / khrentalsdb` | Existing governed migration runner and isolated `khrental-db-migrator` job | Runtime MSSQL health passed; migration authority remains governed separately |
 | R2 account/bucket | Existing `Production` R2_ACCOUNT_ID and R2_BUCKET secret/variable references; app environment uses these same identifiers | Actual Cloudflare account owner **UNCONFIRMED** | Exact identifiers must be resolved by an authorized operator from the existing configuration, not invented or copied from fixtures |
@@ -184,6 +184,7 @@ and account-email details are intentionally omitted from this source record.
 
 ## Retained verification and open acceptance
 
+- Current deployment recovery: [#40523009356](https://github.com/WasanthaK/khrental/actions/runs/40523009356) PASS, exact build `f631e7902a4fdae736a47ed6207271c503d81db9`, latest/ready revision 0000390, application and MSSQL health ready. Initial deployment #40515503895 timed out while pulling the image; retained failure is historical. Readiness wait is now bounded to 15 minutes and system-log diagnostics use supported JSON. No restart, scaling or public activation was performed.
 - Deployment #40489759980: standard images/documents/invoices write/read
   byte/content-type validation and probe cleanup passed. This test does not
   inspect managed/custom-domain configuration.
