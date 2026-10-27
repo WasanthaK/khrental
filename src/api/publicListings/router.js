@@ -97,7 +97,7 @@ export const createPublicListingsRouter=({
     if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
     const item=toPublicDTO(await find(req.params.publicId));
     // A direct link cannot bypass the selected country even if an ID is known.
-    if(!item||item.country!==country)return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    if(!item||item.country!==country||!allowedInPilot(item.id))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
     const [enriched]=await attachPublicImages([item]);
     res.json({data:enriched});
   }));
