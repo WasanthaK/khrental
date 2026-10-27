@@ -15,6 +15,20 @@ must retain that gap explicitly until resolved.
 Business sponsor: Wasantha Weerakoone. This is not proof that a particular
 Cloudflare login, mailbox or Cloudflare account is owned by that identity.
 
+## Cloudflare sign-in method — owner report, 2026-10-27
+
+Wasantha Weerakoone confirmed: “Cloudflare is using my GitHub account.”
+Use **Continue with GitHub** on the Cloudflare login page with the owner's
+linked GitHub identity. A separate Cloudflare password is not the documented
+sign-in route. The exact linked GitHub identity has not yet been independently
+verified; do not infer it solely from the repository owner name.
+
+This records the owner's reported sign-in method, not a completed login or
+verified match to the production R2 account/bucket. Recovery custody, MFA,
+backup access and the account/bucket match remain to be verified. GitHub login
+also does not supply the separate CLOUDFLARE_R2_AUDIT_TOKEN needed by the audit.
+Never record GitHub passwords, tokens, recovery codes or session cookies here.
+
 ## Resource and authority register
 
 | Resource | Established reference | Provisioning/configuration authority | Evidence and limitation |
@@ -37,7 +51,7 @@ Cloudflare login, mailbox or Cloudflare account is owned by that identity.
 | R2_ACCESS_KEY_ID | Production secret or variable; Azure `r2-access-key-id` secret | S3-compatible object access credential |
 | R2_SECRET_ACCESS_KEY | Production secret only; Azure `r2-secret-access-key` secret | S3-compatible request signing; never print/recover into chat |
 | CLOUDFLARE_R2_AUDIT_TOKEN | New dedicated Production secret, **not yet verified configured** | Read-only Cloudflare management API audit; no application/browser use |
-| Cloudflare login/recovery | Approved password-manager/identity-provider entry: **NOT YET IDENTIFIED** | Human account recovery; do not store a password here |
+| Cloudflare login/recovery | **GitHub sign-in**, reported by owner 2026-10-27; exact linked identity and restricted recovery-custody reference unverified | Human sign-in via Continue with GitHub; do not store credentials here |
 
 GitHub workflows can consume stored secrets without returning their values to an
 agent. Do not add a workflow to dump secrets, enumerate secret values, or turn
@@ -63,19 +77,21 @@ provide plaintext secret reads or manual workflow dispatch.
 - `prepare-quixo-marketing-dns.yml` obtains Azure domain-verification information;
   it is not a Cloudflare DNS/bucket management integration.
 
-The original bucket-creation action, creator, account-owner mailbox and sign-in
-method are **not established by these records**. Do not retrospectively label
-a manual or unknown action as infrastructure-as-code.
+The original bucket-creation action, creator and account-owner mailbox are
+**not established by these records**. The owner subsequently reported GitHub
+sign-in on 2026-10-27, as recorded above; the provisioning records do not verify
+that identity. Do not retrospectively label a manual or unknown action as
+infrastructure-as-code.
 
 ## Access-recovery sequence
 
 1. Preserve the working app and R2 configuration. Do not delete/recreate the
    bucket, rotate working credentials, weaken authentication, or enable public
    bucket access to solve a login problem.
-2. The business owner identifies the approved account/password-manager or
-   identity-provider record. Cloudflare visibly offers Google, GitHub, Apple,
-   SSO and email/password sign-in; the actual originally linked method is
-   unknown. Do not guess an account or switch an existing credential.
+2. Use **Continue with GitHub**, the sign-in method reported by the owner on
+   2026-10-27. The owner selects their originally linked GitHub identity and
+   completes any secure sign-in/MFA steps. Confirm the exact linked identity;
+   do not assume the repository owner name proves the Cloudflare login.
 3. If no record exists, the owner uses Cloudflare's normal account recovery
    or support process. The owner completes any password changes, recovery
    codes, MFA and identity checks. No password or code is sent through chat.
@@ -136,7 +152,9 @@ public listing derivatives are served through the guarded application endpoint.
   was released by that test.
 - Single-listing safeguard #434 deployed; independent LK and BN anonymous
   inventory requests returned 404. Real-property activation remains OFF.
-- Open: Cloudflare owner/login/recovery custodians; exact original bucket
+- Owner-reported sign-in method: GitHub, confirmed in conversation 2026-10-27;
+  successful login and production account/bucket match remain unverified.
+- Open: verified Cloudflare owner/linked GitHub identity/recovery custodians; exact original bucket
   provisioning provenance; successful live public-domain audit; public pilot
   storage/takedown/cache acceptance and separate owner go-live decision.
 
