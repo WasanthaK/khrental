@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Deployment recovery accepted — 2026-10-27
+
+**Current controlling result:** the #436 private listing-preview release is now serving and deployment recovery is accepted. [Read-only release verification #40523009356](https://github.com/WasanthaK/khrental/actions/runs/40523009356), job `122254901785`, passed with retained marker `RELEASE_ACCEPTANCE=PASS expected_build=f631e7902a4fdae736a47ed6207271c503d81db9 ready_revision=khrental-app--0000390`. Both application and MSSQL health returned `ok=true`, database connection ready. [Corrected diagnostics #40522371215](https://github.com/WasanthaK/khrental/actions/runs/40522371215) recorded revision Healthy, 100% traffic, one replica, zero restarts. Independent app.quixo.homes build and SQL health checks agree; LK public inventory still responds PUBLIC_LISTINGS_DISABLED.
+
+**Cause established for the failed readiness gate:** original [#40515503895](https://github.com/WasanthaK/khrental/actions/runs/40515503895) exhausted 30 six-second polls while the new container was still Waiting/PullingImage and not started. Its replica was created at 13:56:07 UTC and subsequently started at 14:05:00 UTC, approximately nine minutes later, with zero restarts. This establishes delayed image availability/start relative to the old readiness budget; the underlying provider/network reason for that pull duration is not independently established. The original workflow remains historically FAILED; later recovery proof does not rewrite it green.
+
+**Repair completed:** `6bf55cf` gives the deployment verifier a bounded 15-minute elapsed-time readiness window and a 20-minute step timeout, preserving exact-build, SQL, startup and revision checks. System logs use supported JSON without invalid revision scope. `cc1ed04` repairs the read-only diagnostic system-log format and limits replica output to operational fields. `f460632` adds optional expected-build acceptance to that diagnostic without deployment/restart. Both YAML files and all 12 embedded shell blocks passed syntax validation; isolated mocked immediate-ready, delayed-ready and timeout cases passed. Workflow-only changes did not redeploy the app; no cloud restart, traffic override, scaling, SQL apply or public release was performed.
+
+This supersedes older “deployment unaccepted / previous build serving / diagnostics queued” statements below. **Next canonical action:** resume the private administrator preview on the now-accepted serving build to obtain Solace's exact opaque listing ID, authoritative eligibility and permitted public fields. Public activation still requires the separately reviewed one-property decision. The fresh prepared derivative remains withheld; prior private acceptance need not be repeated.
+
 ## Current canonical dashboard and work priority — 2026-10-27
 
 **Controlling reconciliation:** Requested by the owner after reviewing the program status. This dashboard supersedes older current/next/source-only statements below wherever they conflict. Historical evidence and narrowly accepted waivers remain intact. The master authority is this document; supporting documents explain individual gates.
