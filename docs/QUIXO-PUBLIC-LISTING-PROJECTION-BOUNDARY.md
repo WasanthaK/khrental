@@ -28,7 +28,11 @@ Photos should originate from the images attached to properties in the KH Rentals
 
 All public reads use the same SQL store of authoritative app inventory and status, with a shared cross-replica admission limit, strict country filtering, privacy-safe field projection, and no cookies required. No public create/update, viewing enquiries, signup, registration or payment actions accompany this listing stage. Authenticated opt-out/country editing requires an active tenant administrator and an independent authorization check; keep a change/audit trail.
 
-## Private release-preview deployment checkpoint — 2026-10-27
+## Deployment recovery accepted — 2026-10-27
+
+Private-preview source #436 is now deployed at serving build `f631e7902a4fdae736a47ed6207271c503d81db9`, healthy revision 0000390. [Read-only release acceptance #40523009356](https://github.com/WasanthaK/khrental/actions/runs/40523009356) passed exact build, latest-ready equality and application/MSSQL health. The earlier rollout failure was its readiness deadline expiring during a delayed image pull; it remains historical failed evidence. Deployment readiness now waits up to 15 minutes, with corrected JSON system diagnostics. No restart, scaling or anonymous publication was required. This supersedes the unaccepted-rollout checkpoint below; actual authenticated property-specific preview and public-pilot acceptance remain next.
+
+## Historical private release-preview deployment checkpoint — 2026-10-27
 
 Owner-authorized #436 merged at `f631e7902a4fdae736a47ed6207271c503d81db9` after green PR checks. It adds a management-gated, administrator-only public-reference/eligibility preview bound to exact authenticated tenant/property and the existing public eligibility predicate. Main verification passed, but deployment #40515503895 failed its final revision-readiness gate: new revision 0000390 Activating with zero traffic; prior ready 0000389 retained. Public build-info still showed `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`. **Merged source is not live-preview acceptance.** Read-only diagnosis #40517299900 was queued with restart disabled; root cause remains unestablished. See the master plan's latest checkpoint before resuming controls or publication. No public-pilot activation occurred.
 
