@@ -8,6 +8,10 @@ on:
         required: true
         type: boolean
         default: false
+      expected_build:
+        description: Optional exact serving build to verify without deployment
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -36,6 +40,7 @@ jobs:
         shell: bash
         env:
           RESTART_LATEST: ${{ inputs.restart_latest }}
+          EXPECTED_BUILD: ${{ inputs.expected_build }}
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
@@ -131,3 +136,16 @@ jobs:
             --query properties.healthState -o tsv)
 
           echo "Final state: revision=$latest_revision running=$final_state health=$final_health"
+
+          # Optional acceptance of the existing rollout, without rebuilding or mutating it.
+          if [ -n "${EXPECTED_BUILD:-}" ]; then
+            [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
+            ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+            test "$latest_revision" = "$ready_revision"
+            fqdn=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+            build=$(curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/build-info.json")
+            test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
+            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/mssql/health"
+            echo "RELEASE_ACCEPTANCE=PASS expected_build=$EXPECTED_BUILD ready_revision=$ready_revision"
+          fi
