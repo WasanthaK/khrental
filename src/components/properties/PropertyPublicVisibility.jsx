@@ -105,7 +105,7 @@ const PropertyPublicVisibility=({propertyId})=>{
       className="px-4 py-2 bg-blue-800 text-white rounded disabled:opacity-50">
       {saving?'Saving…':'Save public listing preferences'}
     </button>
-    <PropertyPhotoReview key={String(user?.id)+':'+String(membership?.tenant_id)+':'+propertyId} propertyId={propertyId}/>
+    <PropertyPhotoReview key={String(user?.id)+':'+String(membership?.tenant_id)+':'+propertyId} propertyId={propertyId} publicPreview={pilot?.eligible?pilot.publicPreview:null}/>
   </section>;
 };
 export default PropertyPublicVisibility;
