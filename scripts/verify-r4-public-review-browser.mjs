@@ -164,7 +164,7 @@ try{
       return void r.abort();
     });
     await tab.goto(origin+'/lk/search/?type='+kind,{waitUntil:'networkidle0'});
-    assert.equal(await tab.$eval('[data-public-listing-cards] h3',n=>n.length),kind==='residential'?1:0,kind+' category filtering');
+    assert.equal(await tab.$$eval('[data-public-listing-cards] h3',n=>n.length),kind==='residential'?1:0,kind+' category filtering');
     await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
