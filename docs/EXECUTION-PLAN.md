@@ -1,5 +1,45 @@
 # KH Rentals Execution Plan
 
+## Current canonical dashboard and work priority — 2026-10-27
+
+**Controlling reconciliation:** Requested by the owner after reviewing the program status. This dashboard supersedes older current/next/source-only statements below wherever they conflict. Historical evidence and narrowly accepted waivers remain intact. The master authority is this document; supporting documents explain individual gates.
+
+**Business outcome now:** prepare one real Sri Lankan property for the separately approved Quixo.Homes public pilot, then complete paying-organization and regional-launch acceptance. One active work package at a time. If a step is access-blocked, record the dependency and advance independent preparation within this scope. Do not restart completed invoice, signing, private-photo or migration acceptance merely for another checklist tick.
+
+**Milestone naming:** The original locked sequence uses R4 for paying organizations and R5 for marketplace/regional expansion. Later owner-approved website/property packages use the R4 prefix. Preserve those PR/workflow names, but identify work by its business deliverable in this dashboard. Completed website/private-photo work does not close paying-organization billing or the regional marketplace launch.
+
+| Workstream | Current disposition | Remaining exit |
+| --- | --- | --- |
+| R1 — original KH Rentals release | **CLOSED — owner approved 2026-10-24.** Core release accepted; historic Evia local-audit recovery and invoice provider-correlation limitations retain their explicit owner waivers. | Preserve evidence; reopen only under the recorded owner/production-critical exception. |
+| R2 — Invoice Designer immutable archive | **OWNER-DEFERRED; incomplete.** Schema/default-OFF foundations and controlled PDF/date acceptance retained. | Resume only when rescheduled: bounded real R2/SQL archive, byte readback, authorized retrieval and delivery acceptance. Outside current critical path. |
+| R3 — seeker registration | **CONDITIONALLY ACCEPTED for the existing single ACA replica.** Controlled identity/session/tenant-boundary, SQL concurrency and challenge-ledger evidence retained. | General signup remains OFF; distinct-replica enforcement proof mandatory before scaling. Documented verification-UX/live-negative limits remain. |
+| Quixo.Homes website look-and-feel | **OWNER APPROVED; illustrative website published.** | Additional copy/sections parked for later owner discussion. Real inventory activation is separate. |
+| Real-property/photo integration (existing R4 packages) | **PRIVATE ACCEPTANCE COMPLETE; public pilot preparation ACTIVE.** #430/#432 deployed, governed 13/13 schema verified, Solace photo prepared/previewed/approved/withdrawn, original retained, private controls shut down. #434 single-listing safeguard deployed. | Authoritative selected-property eligibility and opaque listing ID, exact projected content, derivative takedown/cache/access checks, site/API country acceptance and exact public pilot go-live approval. |
+| R2 infrastructure privacy and operations | **Direct-public-access audit PASS**, 2026-10-27; working object operations retained. | Human account/linked identity, production account match and recovery custody remain unverified. Workers/proxy/cache/takedown checks remain part of public-pilot readiness. This storage track is distinct from deferred invoice milestone R2. |
+| Paying organizations — B01/B02/B03/B04-owner/B05 | **OPEN.** Commercial policy approved; sandbox setup is partial progress. | Verified account/tax/MoR readiness, isolated billing-pending owner setup, Checkout, signed/idempotent webhooks, server-counted quantity/proration, paid entitlements and lifecycle acceptance. |
+| Marketplace/regional expansion — B06/B07/P3–P7 | **OPEN.** Sri Lanka then Brunei; shared architecture and country-first browsing approved. | Controlled listings/search/enquiry journey, regional legal/privacy readiness and staged launch decisions. No broad regional launch accepted. |
+
+### Execution queue and decision points
+
+| Priority | Concrete work | Completion evidence / dependency |
+| --- | --- | --- |
+| **1 — NOW** | Finish the bounded one-property public-pilot preparation for SOLACE RESIDENCE, third-floor apartment. Resolve its opaque listing ID and authoritative availability without changing occupancy/agreements; read back the exact allowlisted public fields and chosen derivative. | Authenticated projection/eligibility evidence; no source property ID substituted for the public ID. Retain private original and source rights/privacy confirmation. |
+| **2 — SAME PILOT** | Complete storage access and withdrawal/cache checks, country-scoped collection/detail/media denial and site live-feed configuration review. Reconcile owner/account/recovery custody in the infrastructure handover. | Evidence tied to the selected listing, serving build and approved topology. The successful direct-public-domain audit is already closed; no repeat required absent a relevant change. Do not invent cache/Workers proof from it. |
+| **3 — PILOT RELEASE DECISION** | Present the exact property, fields, photo, exposure scope, acceptance and rollback procedure to the owner. After explicit activation approval, run the bounded public API/site pilot and retain withdrawal/rollback results. | Separate owner go-live decision; documentation approval alone does not enable public inventory/media. Prepare the reviewable package before requesting approval. |
+| **4 — NEXT PROGRAM PACKAGE** | Complete organization/billing readiness and paid onboarding under B02/B04-owner/B05, beginning with unresolved Stripe account and regional tax/MoR eligibility, then owner setup through verified paid management. | USD 5 per independently rentable dwelling/month, monthly/no trial; midcycle addition proration collected next regular invoice; 7-day renewal grace. Sandbox lifecycle acceptance precedes approved live charging. |
+| **5 — FOLLOWING** | Complete country marketplace/search/enquiry and regional pilot acceptance, Sri Lanka then Brunei, using the shared application and public projection boundary. | Regional legal/privacy readiness and explicit staged launch decision. Existing illustrative site approval is not regional service-launch proof. |
+| **PARKED** | Invoice Designer archive R2; expanded website copy; general signup activation and extra replicas. | R2/content need owner rescheduling; signup needs separate rollout decision; scaling needs distinct-replica acceptance and any required infrastructure/cost approval. |
+
+### Latest retained evidence
+
+- [#434](https://github.com/WasanthaK/khrental/pull/434) merged; [deployment #40489759980](https://github.com/WasanthaK/khrental/actions/runs/40489759980) succeeded at serving build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`, Ready revision 0000386, MSSQL ready, R2 object write/read/cleanup passed. Recorded anonymous LK/BN inventory returned 404; public activation remains OFF.
+- [Private controls shutdown #40487576537](https://github.com/WasanthaK/khrental/actions/runs/40487576537) succeeded after the Solace approval/withdrawal test. The acceptance derivative is withdrawn and original retained. No repeat private test is required.
+- [R2 direct-public-access audit #40494891305, attempt 3](https://github.com/WasanthaK/khrental/actions/runs/40494891305/attempts/3) succeeded on 2026-10-27 at 17:43:06 Asia/Colombo: `DIRECT_PUBLIC_BUCKET_ACCESS_DISABLED`, `managedPublicAccess=false`, zero configured/enabled custom domains, against Production-configured storage. This closes that specific settings gate, not human ownership or Workers/proxy/cache/takedown acceptance.
+- Governed publication apply and [independent strict verification #40363846709](https://github.com/WasanthaK/khrental/actions/runs/40363846709) already recorded 13/13; do not reapply completed production schema.
+- Supporting gate records: [infrastructure handover](INFRASTRUCTURE-HANDOVER.md) and [public listing projection boundary](QUIXO-PUBLIC-LISTING-PROJECTION-BOUNDARY.md).
+
+**Authorization for this reconciliation:** update planning/supporting documentation and priorities. No new public exposure, signup, property change, invoice/email/signature, SQL apply, payment or infrastructure scaling is authorized by this update.
+
 ## Infrastructure access recovery correction — 2026-10-27
 
 Owner identified an incomplete operational handover: existing R2 credentials work,
@@ -15,8 +55,7 @@ management token; existing S3 object credentials are never exposed or substitute
 PASS requires both direct access mechanisms disabled; missing/denied/incomplete
 evidence is BLOCKED. It does not certify Workers/proxy/cache behavior.
 
-Source/local tests are prepared; CI/live audit and account recovery are not yet
-accepted. No provider account, role, token, bucket, public setting or production
+The live direct-public-access audit is now accepted: [#40494891305 attempt 3](https://github.com/WasanthaK/khrental/actions/runs/40494891305/attempts/3) succeeded on 2026-10-27 with managed public access disabled and zero custom domains. Account ownership/recovery acceptance remains open; see the controlling dashboard above. No provider account, role, token, bucket, public setting or production
 resource is changed by this source package. Existing private-photo acceptance and
 shutdown remain closed. R2 invoice archive deferral is unchanged. Real-listing
 activation remains OFF pending this operational acceptance and separate public
@@ -33,11 +72,11 @@ pilot approval.
 
 **Read-only availability preflight:** the agreements screen listed three agreements. The active SOLACE RESIDENCE agreement `7A002E5A-617F-4609-BFBA-A57152E1F5F1` resolves to the *other* property `DF5D68DD-98D8-4E16-9916-D283BC39B1C3` and unit KH211, not the selected third-floor apartment. No agreement was edited. This supports the selected property's candidacy, but the authoritative SQL eligibility query must still accept it at activation; do not replace that check with a matching display name or stale Active label.
 
-**Release-scope correction, source only:** existing anonymous flags enable all eligible country-classified inventory across tenants. They cannot alone make a promise of one-property exposure. Add optional server-only `PUBLIC_LISTING_PILOT_PUBLIC_ID` using the opaque listing ID, consistently applied to collection, detail and media routes. Invalid/empty explicitly configured values deny reads; query parameters cannot change scope. Absence preserves the eventual default-public business policy behind existing default-OFF flags. This is a temporary rollout boundary, not a per-property Publish button, opt-out rewrite or SQL migration. New actual HTTP tests cover mixed inventory, unrelated direct/photo links, mismatched projections, invalid config, country checks and withdrawal recheck. Source checks pass; CI pending. Do not merge/deploy or activate under this checkpoint alone.
+**Release-scope correction, source only:** existing anonymous flags enable all eligible country-classified inventory across tenants. They cannot alone make a promise of one-property exposure. Add optional server-only `PUBLIC_LISTING_PILOT_PUBLIC_ID` using the opaque listing ID, consistently applied to collection, detail and media routes. Invalid/empty explicitly configured values deny reads; query parameters cannot change scope. Absence preserves the eventual default-public business policy behind existing default-OFF flags. This is a temporary rollout boundary, not a per-property Publish button, opt-out rewrite or SQL migration. New actual HTTP tests cover mixed inventory, unrelated direct/photo links, mismatched projections, invalid config, country checks and withdrawal recheck. **Update 2026-10-27:** #434 merged and deployment #40489759980 succeeded at serving build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`, Ready revision 0000386. Recorded anonymous LK and BN inventory returned 404. Safeguard deployment is complete; public activation remains pending separate approval.
 
 **Proposed public content, pending live projection/readback and owner go-live:** existing allowlisted defaults would show “Home for rent”, “Sri Lanka”, residential category and LKR 60,000/month. Public description/precise street address, bank details, tenant/contact data, agreements and original image URLs are excluded. The photo would be a newly prepared/approved metadata-stripped derivative after release preparation, not the withdrawn acceptance copy. Opaque listing ID must be resolved under the authenticated administrator context; never substitute the source property ID in pilot configuration.
 
-**Outstanding acceptance before public go-live:** verify actual R2 bucket/custom-domain anonymous access configuration (source and prior private workflow cannot prove it), derivative takedown/cache behavior, authoritative projected inventory and selected opaque ID, country-scoped anonymous CORS/cache/rate-limit behavior and static-site live-feed switch. Separate explicit owner approval of the exact public pilot and activation is still required. No live flag, storage ACL, property or website mutation occurs in this source step.
+**Outstanding acceptance before public go-live:** direct-public-domain configuration is now verified by successful audit #40494891305 attempt 3; do not repeat it merely for a checklist tick. Still required: derivative takedown/cache behavior, human ownership/recovery and production-account match, authoritative projected inventory and selected opaque ID, country-scoped anonymous CORS/cache/rate-limit behavior and static-site live-feed switch. Separate explicit owner approval of the exact public pilot and activation is still required. No live flag, storage ACL, property or website mutation occurs in this source step.
 
 
 ## Controlling R4 checkpoint — private rollout accepted, public release pending (2026-10-27)
@@ -153,7 +192,9 @@ The owner approved using the supplied Quixo.Homes mockup photographs on the publ
 
 **Country draft generator parity and initial pricing research (2026-10-25):** Re-ran `marketing/country-pages.mjs` generator from the exact GitHub branch source and compared each `/lk/index.html` and `/bn/index.html` byte-for-byte: **BOTH PASS**, with canonical URLs, noindex draft SEO, shared CSS, existing-customer sign-in and no active paid signup/checkout CTA. This is source/template validation **not a live mobile/browser test or deployment**. Additional [LK/BN market-pricing research](https://github.com/WasanthaK/khrental/blob/r4/lk-bn-marketing-drafts-20261025/docs/QUIXO-LK-BN-MARKET-PRICING-RESEARCH.md) on the same isolated preview branch records current advertised Sri Lankan comparable offers (Neski Mini LKR 999 for up to 10, RentGuard Standard LKR 1,700 for up to 10, Highriser promotional per-active-contract LKR 765), weaker direct Brunei SaaS pricing evidence, and open Stripe, privacy and market-affordability work. **No LK/BN price selected.** Preserve the owner-approved US$5 unit baseline, monthly-only/no-trial and Stripe Product/Price authority. Need real responsive/accessibility preview, local content/language review and explicit marketing publication authorization before merging `marketing/**`, because that main-path change triggers production Azure Static Web App deployment. Country website build approval does not imply paid regional launch.
 
-### Master progress and exit criteria
+### Master progress and exit criteria — historical 2026-10-24 baseline
+
+The controlling 2026-10-27 dashboard above supplies the latest status and queue, including completed private approval, deployed single-listing safeguard and accepted direct-public-access audit. Retain the detailed baseline below as historical evidence; its former next-work statements are superseded.
 
 | Canonical track | Latest independently grounded status | Release exit / next detailed fix |
 | --- | --- | --- |
@@ -231,7 +272,9 @@ On **2026-10-24**, the administrator directed closure of the repeated C03 audit-
 
 **Operating priority:** deliver program outcomes. Only a demonstrated outage, authorization exposure, data loss/corruption, or a blocked core business journey can interrupt the milestone sequence. No standalone diagnostic, hardening, cosmetic, re-architecture, migration-repeat, or B04 infrastructure workstream may displace it.
 
-### Program delivery milestones — locked order
+### Program delivery milestones — original sequence and identifiers
+
+The current 2026-10-27 dashboard and queue at the top incorporate later owner-approved website/property work and R3 conditional acceptance. Preserve the original identifiers below; historical R3-active statements do not restart completed acceptance, and later R4 website/property packages do not certify paid organizations.
 
 1. **R1 — KH Rentals original business release (CLOSED / OWNER APPROVED 2026-10-24).** C01/C04 already closed; C03 and C02 narrowly owner-waived; C05 final release decision explicitly **APPROVE**. Historical unverifiable items remain documented, without being relabeled as technical PASS. This decision accepts the R1 release milestone; no production switch, new customer communication or downstream feature flag is activated by recording it.
 2. **R3 — Quixo.Homes safe registration (B04; NEXT ACTIVE MILESTONE).** Starting from the completed 11/11 database foundation, mount and accept the existing public seeker flow with trusted ingress, verified sender, distributed rate limiting, safe one-use verification, browser/session/cross-tenant controls and bounded canary. No automatic KH Rentals membership. Public signup remains OFF until established release criteria are met.
