@@ -1,5 +1,13 @@
 # Quixo.Homes Stripe B02/B03 — merchant readiness and dwelling policy
 
+## Controlling billing test-account decision — 2026-10-27
+
+The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
+
+**Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
+
+Use the existing approved sandbox catalog and portal; do not recreate duplicates. The latest [read-only readiness checkpoint](BILLING-READINESS-20261027.md) records active sandbox Tax settings, no tax registrations and no registered webhook endpoint. Sandbox selection does not establish live merchant readiness, tax/Merchant-of-Record acceptance or paid-lifecycle acceptance. No Stripe object, credential, business profile, tax registration, subscription, charge, application configuration or replica was changed by recording this decision. Live billing and public signup remain gated.
+
 **Evidence review:** 2026-10-23  
 **Document status:** B02 platform feasibility assessed, **account acceptance OPEN**; B03 counting/quantity rules **PROPOSED, OWNER DECISION OPEN**.  
 **This document is read-only research and planning.** No Stripe products, prices, subscriptions, tax registrations, customer records, or transactions were created or edited. No application code, SQL or production features changed.
