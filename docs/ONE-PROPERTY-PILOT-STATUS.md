@@ -2,6 +2,20 @@
 
 Updated 2026-10-27. The existing [master plan](EXECUTION-PLAN.md) retains program authority. This redacted companion records current evidence and the owner's latest priority/cost decision without reproducing private property data.
 
+## Exact pilot release configuration ready — 2026-10-27
+
+[Private export #438](https://github.com/WasanthaK/khrental/pull/438) merged and [application deployment #40537493730](https://github.com/WasanthaK/khrental/actions/runs/40537493730) PASS at serving build `d80e8c49b60fdff415f2869a93542934c9560d0d`. The authenticated read-only field combines only the eligible saved public projection and exactly one approved derivative, excluding private/source data. Twelve boundary tests, existing browser photo lifecycle, native image, SQL isolation and application checks passed.
+
+[Private access #40540078231](https://github.com/WasanthaK/khrental/actions/runs/40540078231) PASS. The exact reviewed manifest was read from that field and saved as `R4_PILOT_EXPECTED_PUBLIC_JSON` in the repository's GitHub Production environment; UI metadata confirmed the new protected setting exists. No value, private identifier, rent or image reference is copied here. [Final shutdown #40541016227](https://github.com/WasanthaK/khrental/actions/runs/40541016227) PASS. Independent anonymous listing and selected-photo endpoint checks both returned PUBLIC_LISTINGS_DISABLED afterward. No property, photo approval, original, occupancy or agreement edit was made.
+
+[Draft website release #439](https://github.com/WasanthaK/khrental/pull/439) is prepared, unmerged, all current checks green at head `0cdeb7c409505f4a2a12ed8a7894fd58d103e890`. Sri Lanka search uses the existing guarded feed, category choice and accurate limited-pilot labels; it removes sample results from real search and shows unavailable state on feed failure. Brunei and other feed flags stay off. Browser verification uses localhost synthetic responses only, blocks actual remote requests and covers responsive layouts, exact rendering, category choice, country navigation and failure handling.
+
+Owner reports both public addresses reach the same site; actual browser interaction additionally confirmed `https://quixo.homes/lk/search/` resolves to the public search page. Domain visibility is accepted. The completed Cloudflare direct-bucket privacy audit remains accepted and must not be repeated. The separate human ownership/recovery handover remains an explicitly unverified operational follow-up, not a newly diagnosed storage fault.
+
+**Immediate next decision:** explicit approval to expose exactly the privately reviewed property, permitted fields and one exterior derivative publicly, then activate the single-listing API/media scope, pass anonymous acceptance and merge/deploy #439. Until then anonymous access and temporary controls remain OFF. The protected fixture is configured; do not repeat private photo acceptance or catalog setup. Scaling remains deferred; no extra test replica was created.
+
+Historical execution notes: private setup #40536577750 encountered Azure Too Many Requests; intermediate shutdown #40537376249 was cancelled as the app deployment acquired production concurrency. Later successful private access and final shutdown above establish the final state; those earlier runs are not rewritten as successful. Initial website checks correctly rejected the dormant-only expectation, and a later added category-count assertion had a test-selector error; corrected current checks are green. No public pilot acceptance is claimed from those source tests.
+
 ## Owner decision: defer scaling, continue the remaining canonical work
 
 Scaling and distinct-replica acceptance are deferred. The existing single-replica technical acceptance is sufficient to continue the current bounded pilot preparation; the multi-replica gate stays open for a future scaling decision. No new replica or scale-up is required now. General signup remains OFF.
@@ -36,10 +50,10 @@ Canonical sandbox selection is now CLOSED by the owner: use the currently connec
 | --- | --- | --- |
 | Completed | Private selected-property reference, eligibility, permitted content and newly approved derivative | Accepted privately; do not repeat |
 | Completed | Release/rollback controls and disabled-state verification | #437 merged; fresh verification passed |
-| 1 | Production account/linked identity, recovery custody and proxy readiness | OPEN; direct-public-domain audit already passed |
-| 2 | Configure exact privately approved projection in the Production release fixture | NOT configured by this package |
-| 3 | Obtain separate exact one-property activation decision | NOT approved |
-| 4 | Controlled API/site country, photo delivery and public withdrawal/cache acceptance | NOT performed; follows approval |
+| Follow-up | Production account/linked identity and recovery custody handover | OPEN operational record; completed bucket privacy audit remains accepted |
+| Completed | Configure exact privately approved projection in the Production release fixture | Saved in protected GitHub Production setting; private readback and shutdown passed |
+| 1 | Obtain separate exact one-property activation decision | READY FOR OWNER DECISION; public access remains OFF |
+| 2 | Controlled API/site country, photo delivery and public withdrawal/cache acceptance | NOT performed; follows approval; website #439 prepared |
 | Next independent program work | Paying-organization/billing readiness, then regional launch acceptance | OPEN; advance preparation if a pilot dependency is blocked |
 | Parked | Scaling/distinct-replica proof, invoice archive R2, expanded copy and general signup activation | Preserve existing evidence; resume under their respective decisions |
 
