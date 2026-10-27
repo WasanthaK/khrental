@@ -40,6 +40,14 @@
 
 **Authorization for this reconciliation:** update planning/supporting documentation and priorities. No new public exposure, signup, property change, invoice/email/signature, SQL apply, payment or infrastructure scaling is authorized by this update.
 
+### One-property pilot continuation — authenticated app check, 2026-10-27
+
+The owner selected the one-property public pilot as the next work package. Fresh authenticated KH Rentals UI inspection confirmed selected SOLACE RESIDENCE property `DAE78C13-B571-42CB-A8EC-9C2C656B5B0B`: country Sri Lanka (LK), Apartment, LKR 60,000/month, Active, one registered exterior image and no currently associated rentees. These are UI observations, **not a substitute for the authoritative public eligibility query**. No property, agreement, rent, country or photo was changed.
+
+Private listing/photo controls are absent, consistent with the accepted shutdown. The public listing ID and live allowlisted projection remain unresolved. Source inspection confirms the existing management GET returns the opaque public ID only while the management gate is enabled; the existing private-pilot workflow enables administrator preparation/review while forcing anonymous listing/media gates OFF.
+
+**Current execution dependency:** the application browser is authenticated; GitHub browser is not. The connector cannot dispatch workflows. GitHub sign-in reached two-factor authentication, then visibly returned “Two-factor authentication failed” and the login form. No workflow was dispatched and no runtime flag or public site was changed. Continue through owner-completed GitHub authentication, then run the existing private preparation workflow with the actual serving-build guard, resolve listing ID/projection/eligibility and prepare the exact pilot review package. Do not create replacement automation or extract credentials to evade this dependency. Public activation still requires the separately scoped owner decision after the package is concrete.
+
 ## Infrastructure access recovery correction — 2026-10-27
 
 Owner identified an incomplete operational handover: existing R2 credentials work,
