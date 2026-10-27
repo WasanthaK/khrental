@@ -29,6 +29,9 @@ const safePublicMediaURL=(entry,listingId,market)=>{
 if(previewArea?.dataset.publicListingEnabled==='true'){
   const market=previewArea.dataset.publicListingMarket;
   if(market==='LK'||market==='BN'){
+    // Once live browsing is selected, examples cannot substitute for real stock.
+    const examples=document.querySelector('.results .cards');
+    if(examples)examples.hidden=true;
     const endpoint=new URL('/api/public-listings',apiOrigin);
     endpoint.searchParams.set('country',market);
     const render=items=>{
@@ -91,7 +94,15 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
       if(!data||data.country!==market||!Array.isArray(data.data))throw new Error('Unexpected listing feed');
       render(data.data);
     }).catch(()=>{
-      // Fail-closed: never fall back to app-private storage or fabricated inventory.
+      // Fail closed; never substitute illustrative cards or private storage.
+      const list=previewArea.querySelector('[data-public-listing-cards]');
+      if(list){
+        list.replaceChildren();
+        const msg=document.createElement('p');
+        msg.textContent='Rental listings are temporarily unavailable. Please try again.';
+        list.append(msg);
+      }
+      previewArea.hidden=false;
     });
   }
 }
