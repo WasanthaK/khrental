@@ -9,7 +9,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
-import {PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
+import {PRIVATE_LISTING_PREVIEW_SQL,PUBLIC_LISTING_SELECT_SQL,PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL,PUBLIC_MEDIA_DETAIL_SQL} from '../src/api/publicListings/media.js';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
@@ -157,6 +157,14 @@ try{
     {u1:unitId(1),u2:unitId(2),tenant:A,property:id(7)});
   const publicIds=Object.fromEntries((await query('SELECT CONVERT(VARCHAR(36),property_id) AS pid,CONVERT(VARCHAR(36),public_id) AS publicid FROM dbo.public_listing_preferences')).recordset.map(x=>[x.pid.toLowerCase(),x.publicid.toLowerCase()]));
   const publicOf=n=>publicIds[id(n)];
+  // Execute the exact private preview SQL against real two-tenant inventory.
+  const preview=async(tenantId,n)=>(await query(PRIVATE_LISTING_PREVIEW_SQL,{tenantId,propertyId:id(n)})).recordset;
+  assert.equal((await preview(A,1))[0].public_id.toLowerCase(),publicOf(1));
+  assert.equal((await preview(B,1)).length,0,'foreign tenant cannot preview source property');
+  assert.equal((await preview(A,8)).length,0,'publicly eligible foreign property stays private to its owner preview');
+  for(const n of [3,4,5,6,9,99])assert.equal((await preview(A,n)).length,0,'ineligible/missing property '+n);
+  assert.equal((await preview(A,7)).length,1,'partially available building retains existing unit policy');
+
   // Public derivative manifest starts empty even though properties and source images exist.
   const initial=(await query('SELECT COUNT(*) AS count FROM dbo.public_listing_media')).recordset[0].count;
   assert.equal(initial,0,'migration never copies a private property image into public storage');
