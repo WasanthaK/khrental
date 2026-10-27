@@ -30,7 +30,7 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
   const market=previewArea.dataset.publicListingMarket;
   if(market==='LK'||market==='BN'){
     // Once live browsing is selected, examples cannot substitute for real stock.
-    const examples=document.querySelector('.results .cards');
+    const examples=document.querySelector('.results .cards:not([data-public-listing-cards])');
     if(examples)examples.hidden=true;
     const endpoint=new URL('/api/public-listings',apiOrigin);
     endpoint.searchParams.set('country',market);
@@ -40,14 +40,15 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
       list.replaceChildren();
       const heading=previewArea.querySelector('[data-public-listing-heading]');
       if(heading)heading.textContent='Available registered rentals';
-      if(!Array.isArray(items)||!items.length){
+      const visible=Array.isArray(items)?items.filter(item=>item?.country===market&&(!['residential','commercial'].includes(selectedKind)||item.category===selectedKind)):[];
+      if(!visible.length){
         const msg=document.createElement('p');
         msg.textContent='No available registered rental properties are currently listed.';
         list.append(msg);
         previewArea.hidden=false;
         return;
       }
-      for(const item of items.slice(0,50)){
+      for(const item of visible.slice(0,50)){
         if(item.country!==market||typeof item.title!=='string'||typeof item.id!=='string')continue;
         const article=document.createElement('article');
         article.className='listing';
@@ -82,7 +83,7 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
         list.append(article);
       }
       previewArea.hidden=false;
-      const examples=document.querySelector('.results .cards');
+      const examples=document.querySelector('.results .cards:not([data-public-listing-cards])');
       if(examples)examples.hidden=true;
     };
     fetch(endpoint.toString(),{
