@@ -7,7 +7,10 @@ secret values, session cookies or recovery codes in this repository or workflow 
 ## Current disposition
 
 The application and object-storage integrations are working. Cloudflare account
-ownership/recovery and current direct-public-access settings are **UNVERIFIED**.
+ownership/recovery and the exact production account-ID match remain **UNVERIFIED**.
+Owner-supplied dashboard screenshots on 2026-10-27 show the located `khrental`
+bucket has no custom domains and its Public Development URL is disabled.
+This is manual dashboard evidence; the automated management-API audit remains BLOCKED.
 A source runbook, a green object-operation test or a missing password does not
 prove ownership or prove that public access is disabled. Public-listing activation
 must retain that gap explicitly until resolved.
@@ -142,6 +145,33 @@ verify object deletion/readback, or test country/tenant/listing authorization.
 Those require their own existing release evidence. Keep the bucket private:
 public listing derivatives are served through the guarded application endpoint.
 
+## Manual dashboard evidence — 2026-10-27
+
+The owner located a Cloudflare account showing a bucket named `khrental`
+(69 objects, 5.83 MB in the supplied overview screenshot). An earlier sign-in
+showed R2 subscription setup instead; do not assume that earlier login identifies
+the account containing this bucket. The exact sign-in method for the located
+account and its match to Production R2_ACCOUNT_ID still need verification.
+
+The owner reported enabling the Public Development URL during troubleshooting.
+The supplied settings screenshot then showed a **Disable** control and no custom
+domains. After being asked to restore private access, the owner disabled it.
+The final screenshot explicitly states: **“The public development URL is disabled
+for this bucket.”** Thus the final manual evidence is:
+
+- Public Development URL: **disabled**, verified from the final screenshot.
+- Custom domains: **none assigned**, verified from the preceding settings screenshot.
+- Exposure duration and whether any objects were accessed during the temporary
+  enablement: unknown; these screenshots do not establish access history.
+- Automated audit run #40494891305: **BLOCKED**,
+  `MISSING_CLOUDFLARE_R2_AUDIT_TOKEN`; no Cloudflare request was made.
+- No app deployment or public-listing activation is implied by this evidence.
+  Workers/proxies, cache/takedown acceptance and production account-ID matching
+  remain separate checks.
+
+Screenshots were supplied in the project conversation on 2026-10-27. Credentials
+and account-email details are intentionally omitted from this source record.
+
 ## Retained verification and open acceptance
 
 - Deployment #40489759980: standard images/documents/invoices write/read
@@ -163,6 +193,7 @@ public listing derivatives are served through the guarded application endpoint.
 - [ ] Owner and actual Cloudflare account/bucket match verified.
 - [ ] Login/recovery and restricted credential-custody references recorded.
 - [ ] Backup recovery route verified by owner; no secrets in source/logs.
+- [x] Manual dashboard evidence retained in the project conversation: Public Development URL disabled and no custom domains (2026-10-27).
 - [ ] Live direct-public-access audit PASS retained with run/date.
 - [ ] Separate Workers/proxy/cache/takedown concerns assessed for the public pilot.
 - [ ] Canonical plan records this operational acceptance without reopening completed private tests.
