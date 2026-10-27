@@ -1,10 +1,11 @@
 import {useEffect,useRef,useState} from 'react';
 import {requestMssqlApi} from '../../services/mssqlApiClient';
+import {buildPilotConfiguration} from '../../utils/publicListingPilotConfiguration.js';
 
 // Mounted only inside the active administrator's property settings. The parent
 // keys this component by tenant/property so previews and attestations never carry
 // over when context changes. Nothing is prepared or approved on mount.
-export default function PropertyPhotoReview({propertyId,request=requestMssqlApi}){
+export default function PropertyPhotoReview({propertyId,publicPreview=null,request=requestMssqlApi}){
   const base='/api/public-listing-preferences/'+encodeURIComponent(propertyId)+'/media';
   const [model,setModel]=useState(null);
   const [selection,setSelection]=useState('');
@@ -65,6 +66,7 @@ export default function PropertyPhotoReview({propertyId,request=requestMssqlApi}
       'Photo withdrawn. Stored copy cleanup needs administrator attention.':
       'Photo withdrawn and no longer eligible for public delivery.');
   });
+  const pilotConfiguration=busy?null:buildPilotConfiguration(publicPreview,model?.prepared);
   if(!model)return error?<p role="alert" className="text-red-700 mt-4">{error}</p>:null;
   return <div className="border-t mt-6 pt-4" aria-labelledby="photo-review-title">
     <h3 id="photo-review-title" className="font-semibold">Public property photographs</h3>
@@ -91,6 +93,12 @@ export default function PropertyPhotoReview({propertyId,request=requestMssqlApi}
         </div>}
       </li>)}
     </ul>
+    {pilotConfiguration&&<div className="my-4">
+      <label className="block font-medium" htmlFor="pilot-release-configuration">Pilot release configuration (private)</label>
+      <p className="text-sm text-gray-600">Saved public fields and exactly one approved photo. Transfer only to the protected release setting; this does not publish the property.</p>
+      <textarea id="pilot-release-configuration" readOnly rows={12}
+        value={JSON.stringify(pilotConfiguration,null,2)} className="border rounded p-2 w-full font-mono text-xs"/>
+    </div>}
     {!model.canReview&&<p className="text-sm my-3">Photo review is currently unavailable; prepared copies remain private.</p>}
     {review&&preview&&<div className="border rounded p-4 my-3" aria-label="Private photo review">
       <img src={preview} alt={review.altText} onLoad={()=>setPreviewLoaded(true)}
