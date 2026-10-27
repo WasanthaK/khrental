@@ -28,6 +28,10 @@ Photos should originate from the images attached to properties in the KH Rentals
 
 All public reads use the same SQL store of authoritative app inventory and status, with a shared cross-replica admission limit, strict country filtering, privacy-safe field projection, and no cookies required. No public create/update, viewing enquiries, signup, registration or payment actions accompany this listing stage. Authenticated opt-out/country editing requires an active tenant administrator and an independent authorization check; keep a change/audit trail.
 
+## Private release-preview deployment checkpoint — 2026-10-27
+
+Owner-authorized #436 merged at `f631e7902a4fdae736a47ed6207271c503d81db9` after green PR checks. It adds a management-gated, administrator-only public-reference/eligibility preview bound to exact authenticated tenant/property and the existing public eligibility predicate. Main verification passed, but deployment #40515503895 failed its final revision-readiness gate: new revision 0000390 Activating with zero traffic; prior ready 0000389 retained. Public build-info still showed `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`. **Merged source is not live-preview acceptance.** Read-only diagnosis #40517299900 was queued with restart disabled; root cause remains unestablished. See the master plan's latest checkpoint before resuming controls or publication. No public-pilot activation occurred.
+
 ## Current implementation and acceptance — 2026-10-27
 
 The [master dashboard and priority queue](EXECUTION-PLAN.md#current-canonical-dashboard-and-work-priority--2026-10-27) controls current work. The source-only/unapplied descriptions later in this document are historical checkpoints, superseded as follows:
