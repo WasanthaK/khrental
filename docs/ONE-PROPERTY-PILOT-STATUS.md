@@ -2,6 +2,12 @@
 
 Updated 2026-10-27 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Owner acceptance and next package — 2026-10-27
+
+The owner confirmed the property is visible and instructed moving on. The bounded public browsing pilot is **OWNER-ACCEPTED / LIVE**. Do not repeat its private review, publication, country/media or browsing checks solely for another checklist tick. Public withdrawal/cache and operational handover remain honest follow-ups; they are parked from the immediate critical path under this move-on instruction, not falsely marked passed.
+
+**NOW: paying-organization setup (B04-owner/B05)** — verified owner identity, isolated billing-pending organization, server-owned dwelling quantity and Stripe linkage, then sandbox Checkout, signed/idempotent webhooks and paid entitlements. Reuse the owner-confirmed canonical billing sandbox and existing catalog; no duplicate setup. Keep public signup/live billing and scaling under their existing gates.
+
 ## Current result: approved pilot LIVE
 
 The owner explicitly approved public visibility of the reviewed single property, permitted fields and one approved exterior derivative. [Open the live Sri Lanka pilot](https://quixo.homes/lk/search/?type=residential).
@@ -39,9 +45,9 @@ Earlier private setup #40536577750 encountered Azure throttling; intermediate sh
 | Priority | Work | Disposition |
 | --- | --- | --- |
 | Completed | Exact private listing/photo review, protected manifest, single-property activation and real-site browsing | LIVE / accepted for this bounded pilot |
-| 1 | Public per-photo withdrawal/cache/takedown lifecycle and controlled rollback acceptance after actual public delivery | OPEN; prior private withdrawal evidence is retained; no public photo withdrawal/deletion was performed in this publication |
+| Parked follow-up | Public per-photo withdrawal/cache/takedown lifecycle and controlled rollback acceptance after actual public delivery | OPEN; prior private withdrawal evidence is retained; no public photo withdrawal/deletion was performed in this publication |
 | Follow-up | Human ownership/recovery custody and any external proxy/cache operational handover | OPEN; keep separate from the completed direct-bucket privacy audit |
-| Next independent package | Verified billing-pending owner organization, Checkout, signed/idempotent webhooks and server-owned quantity/entitlement lifecycle | OPEN; canonical billing sandbox selection is owner-confirmed, existing sandbox catalog retained |
+| 1 — NOW | Verified billing-pending owner organization, Checkout, signed/idempotent webhooks and server-owned quantity/entitlement lifecycle | ACTIVE; canonical billing sandbox selection is owner-confirmed, existing sandbox catalog retained |
 | Following | Marketplace/enquiry journey and staged Sri Lanka/Brunei regional paid-launch acceptance | OPEN |
 | Parked | Scaling/distinct-replica proof, invoice archive R2, expanded copy and general signup activation | Preserve existing decisions and evidence |
 
