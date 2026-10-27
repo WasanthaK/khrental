@@ -10,7 +10,8 @@ The application and object-storage integrations are working. Cloudflare account
 ownership/recovery and the exact production account-ID match remain **UNVERIFIED**.
 Owner-supplied dashboard screenshots on 2026-10-27 show the located `khrental`
 bucket has no custom domains and its Public Development URL is disabled.
-This is manual dashboard evidence; the automated management-API audit remains BLOCKED.
+The automated management-API audit subsequently passed on 2026-10-27 against
+the Production-configured account/bucket; see retained evidence below.
 A source runbook, a green object-operation test or a missing password does not
 prove ownership or prove that public access is disabled. Public-listing activation
 must retain that gap explicitly until resolved.
@@ -43,7 +44,7 @@ Never record GitHub passwords, tokens, recovery codes or session cookies here.
 | R2 account/bucket | Existing `Production` R2_ACCOUNT_ID and R2_BUCKET secret/variable references; app environment uses these same identifiers | Actual Cloudflare account owner **UNCONFIRMED** | Exact identifiers must be resolved by an authorized operator from the existing configuration, not invented or copied from fixtures |
 | R2 object access | GitHub Production credentials; Azure secret references below | Existing bucket-scoped storage credential | Deployment and private-photo tests passed; object access is not bucket-management or login access |
 | Marketing site | `quixo-homes-marketing`, `mango-grass-0314c0100.3.azurestaticapps.net` | Existing Azure Static Web Apps deployment | Static illustrative website is separate from real-property activation |
-| R2 public-domain audit | Manual `Audit R2 direct public access (read only)` workflow | Separate CLOUDFLARE_R2_AUDIT_TOKEN, if configured and authorized | No live audit acceptance yet; missing/denied access must report BLOCKED |
+| R2 public-domain audit | Manual `Audit R2 direct public access (read only)` workflow | Separate CLOUDFLARE_R2_AUDIT_TOKEN, if configured and authorized | Run #40494891305 attempt 3 PASS on 2026-10-27; managed access false, zero custom domains |
 
 ## Credential custody and purpose
 
@@ -53,7 +54,7 @@ Never record GitHub passwords, tokens, recovery codes or session cookies here.
 | R2_ACCOUNT_ID, R2_BUCKET | Production secret or variable, matching deployment workflow | Existing physical storage identity; not a Cloudflare dashboard login |
 | R2_ACCESS_KEY_ID | Production secret or variable; Azure `r2-access-key-id` secret | S3-compatible object access credential |
 | R2_SECRET_ACCESS_KEY | Production secret only; Azure `r2-secret-access-key` secret | S3-compatible request signing; never print/recover into chat |
-| CLOUDFLARE_R2_AUDIT_TOKEN | New dedicated Production secret, **not yet verified configured** | Read-only Cloudflare management API audit; no application/browser use |
+| CLOUDFLARE_R2_AUDIT_TOKEN | Dedicated Production secret; verified usable by audit run #40494891305 attempt 3 | Read-only Cloudflare management API audit; no application/browser use |
 | Cloudflare login/recovery | **GitHub sign-in**, reported by owner 2026-10-27; exact linked identity and restricted recovery-custody reference unverified | Human sign-in via Continue with GitHub; do not store credentials here |
 
 GitHub workflows can consume stored secrets without returning their values to an
@@ -163,8 +164,15 @@ for this bucket.”** Thus the final manual evidence is:
 - Custom domains: **none assigned**, verified from the preceding settings screenshot.
 - Exposure duration and whether any objects were accessed during the temporary
   enablement: unknown; these screenshots do not establish access history.
-- Automated audit run #40494891305: **BLOCKED**,
-  `MISSING_CLOUDFLARE_R2_AUDIT_TOKEN`; no Cloudflare request was made.
+- Automated audit run #40494891305: attempts 1 and 2 were **BLOCKED**,
+  `MISSING_CLOUDFLARE_R2_AUDIT_TOKEN`; no Cloudflare request was made in those
+  attempts. After the owner saved the token, **attempt 3 PASS**, audit job
+  `122181761703`, 2026-10-27 12:13:06 UTC (17:43:06 Asia/Colombo):
+  `DIRECT_PUBLIC_BUCKET_ACCESS_DISABLED`, `managedPublicAccess=false`,
+  `enabledCustomDomains=0`, `configuredCustomDomains=0`. The verify job also
+  passed. The token successfully read settings for the Production-configured
+  account/bucket; this does not independently identify the human account owner.
+  [Retained run](https://github.com/WasanthaK/khrental/actions/runs/40494891305/attempts/3).
 - No app deployment or public-listing activation is implied by this evidence.
   Workers/proxies, cache/takedown acceptance and production account-ID matching
   remain separate checks.
@@ -185,7 +193,7 @@ and account-email details are intentionally omitted from this source record.
 - Owner-reported sign-in method: GitHub, confirmed in conversation 2026-10-27;
   successful login and production account/bucket match remain unverified.
 - Open: verified Cloudflare owner/linked GitHub identity/recovery custodians; exact original bucket
-  provisioning provenance; successful live public-domain audit; public pilot
+  provisioning provenance; public pilot
   storage/takedown/cache acceptance and separate owner go-live decision.
 
 ## Closure checklist
@@ -194,7 +202,7 @@ and account-email details are intentionally omitted from this source record.
 - [ ] Login/recovery and restricted credential-custody references recorded.
 - [ ] Backup recovery route verified by owner; no secrets in source/logs.
 - [x] Manual dashboard evidence retained in the project conversation: Public Development URL disabled and no custom domains (2026-10-27).
-- [ ] Live direct-public-access audit PASS retained with run/date.
+- [x] Live direct-public-access audit PASS retained: #40494891305 attempt 3, 2026-10-27; Production-configured account/bucket, both direct-public-access mechanisms disabled.
 - [ ] Separate Workers/proxy/cache/takedown concerns assessed for the public pilot.
 - [ ] Canonical plan records this operational acceptance without reopening completed private tests.
 
