@@ -27,8 +27,9 @@ const PropertyOffer=({enquiry,owner=false,call})=>{
       if(pending.current?.key!==key){pending.current={key,id:crypto.randomUUID()};}
       const value=await call({path,method:'POST',body:{...body,requestId:pending.current.id}});
       if(!alive.current){return;}pending.current=null;receive(value);setConsent(false);
-      setNotice(action==='accept'?'Offer accepted and dwelling reserved until the stated deadline. No payment or signature has been recorded.':
-        action==='agreement'?'Agreement prepared for the existing account. Use agreement signing and move-in controls below.':'Rental offer updated.');
+      // Exact retries return current state, which may have changed since the
+      // original request. The receipt below, not the attempted action, is truth.
+      setNotice('Your request was recorded. Check the current offer and agreement status below.');
     }catch(err){if(alive.current){setError(err.message||'Unable to update rental offer. Refresh or retry.');}}
     finally{if(alive.current){setBusy(false);}}
   };
