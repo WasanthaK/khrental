@@ -6,6 +6,12 @@ the website feed, modify a property, or close public lifecycle acceptance.
 The selected property/content/photo were reviewed privately. Keep identifying
 values and the private expected projection out of repository text and inputs.
 
+## Broader physical-test release — 2026-10-28
+
+The owner approved all eligible inventory and authenticated listing/photo controls. Release #40613719898 PASS; [current canonical status](ONE-PROPERTY-PILOT-STATUS.md) records two LK listings, zero BN listings, real-site acceptance, administrator control location, unchanged one-replica limits and remaining follow-ups. The single-property environment scope is removed. Availability, country, opt-out and independent photo approval still apply. No source photos or property records were bulk-published or changed.
+
+Use `public-listing-testing-release.yml` for this broader release. Do not run the single-property activation sequence below against the broader live release. The existing rollback mode still disables all seven release gates without needing the private fixture. The single-property prerequisites and exact-one assertions below are retained as historical bounded-pilot instructions, not the current scope.
+
 ## Current pilot checkpoint — 2026-10-27
 
 Owner-approved pilot is live. Activation #40545952854, website deployment #40546437978 and one-replica/exact-build audit #40546580955 passed. Actual quixo.homes Sri Lanka residential search showed the one reviewed card/photo; commercial filtering and Brunei exclusion passed. [Current status](ONE-PROPERTY-PILOT-STATUS.md) records the controlling evidence, remaining public withdrawal/cache acceptance and emergency stop. The protected expected-content fixture is configured. This release does not close billing or regional launch.
