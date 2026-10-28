@@ -1,3 +1,4 @@
+import {loadRentalReservationReadiness} from '../src/api/platform/tenancyActivation.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -23,6 +24,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await q("ALTER TABLE dbo.property_rental_offers WITH CHECK CHECK CONSTRAINT CK_property_rental_offers_money");
  const store=createOfferStore({poolProvider:async()=>pool}),enquiries=createEnquiryStore({poolProvider:async()=>pool});
  const applications=createApplicationStore({poolProvider:async()=>pool});
+ const reservation=(id,status='signed')=>loadRentalReservationReadiness({query:async(statement,args)=>(await q(statement,args))[0],tenantId:owner.tenantId,agreement:{id,status},enabled:true});
  const uuid=()=>crypto.randomUUID();
  const request=(action,version,own=false,extra={})=>parseOfferAction({action,version,requestId:uuid(),...extra},own);
  const deadlines=()=>({offerUntil:new Date(Date.now()+86400000).toISOString(),holdUntil:new Date(Date.now()+2*86400000).toISOString()});
@@ -69,6 +71,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  const prepare=request('agreement',2,true,{templateId});
  const prepared=await store.change(owner,c.id,prepare,true),agreementId=prepared.offer.agreementId;
  assert.equal(prepared.offer.status,'agreement');assert.ok(agreementId);
+ assert.deepEqual(await reservation(agreementId),{valid:true});
  assert.equal((await store.change(owner,c.id,prepare,true)).offer.agreementId,agreementId);
  assert.equal((await q('SELECT COUNT(*) AS n FROM app_users'))[0].n,beforeUsers);
  assert.equal((await q('SELECT COUNT(*) AS n FROM auth_users'))[0].n,beforeAuth);
@@ -133,12 +136,15 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await store.change(repeat.actor,repeat.id,request('accept',1,false,{consent:true}));
  const firstAgreement=await store.change(owner,repeat.id,request('agreement',2,true,{templateId}),true);
  await q('UPDATE property_rental_offers SET offer_until=DATEADD(day,-3,SYSUTCDATETIME()),hold_until=DATEADD(day,-2,SYSUTCDATETIME()) WHERE enquiry_id=@id',{id:repeat.id});
+ assert.deepEqual(await reservation(firstAgreement.offer.agreementId),{valid:false});
  assert.equal((await store.get(repeat.actor,repeat.id)).offer.status,'expired');
  await store.change(owner,repeat.id,request('issue',4,true,{...terms(),rent:'110.00'}),true);
  assert.equal((await enquiries.list(repeat.actor,false,0,true)).items[0].id,repeat.id);
  await store.change(repeat.actor,repeat.id,request('accept',5,false,{consent:true}));
  const secondAgreement=await store.change(owner,repeat.id,request('agreement',6,true,{templateId}),true);
  assert.notEqual(firstAgreement.offer.agreementId,secondAgreement.offer.agreementId);
+ assert.deepEqual(await reservation(firstAgreement.offer.agreementId),{valid:false});
+ assert.deepEqual(await reservation(secondAgreement.offer.agreementId),{valid:true});
  assert.equal((await q('SELECT COUNT(*) AS n FROM rental_offer_agreement_links WHERE enquiry_id=@id',{id:repeat.id}))[0].n,2);
  assert.equal((await q('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:repeat.actor.actorId}))[0].n,1);
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>[51101,51103].includes(e.number));

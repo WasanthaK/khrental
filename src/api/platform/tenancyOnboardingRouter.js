@@ -5,6 +5,7 @@ import { authorizePermission } from './authorization.js';
 import { PERMISSIONS, isAdminRole, isTenantRole } from './permissionEngine.js';
 import {
   evaluateTenancyActivationReadiness,
+  loadRentalReservationReadiness,
   getActivationBlockingReasons,
   isAgreementSignatureComplete
 } from './tenancyActivation.js';
@@ -224,12 +225,14 @@ const buildOnboardingProjection = async (tenantId, agreement) => {
   const membership = agreement.rentee_membership_status
     ? { status: agreement.rentee_membership_status, role: agreement.rentee_membership_role }
     : null;
+  const rentalReservation=await loadRentalReservationReadiness({query:runSingleQuery,tenantId,agreement,enabled:process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true'});
   const readiness = evaluateTenancyActivationReadiness({
     agreement,
     rentee,
     membership,
     checklist,
-    securityDepositReceived: deposit.securityDeposit
+    securityDepositReceived: deposit.securityDeposit,
+    rentalReservation
   });
 
   return {
@@ -766,8 +769,12 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const activatedAgreement = await loadAgreementContext(req.tenantId, agreement.id);
       res.json({ data: await buildOnboardingProjection(req.tenantId, activatedAgreement), error: null });
     } catch (error) {
-      if (error?.number === 2601 || error?.number === 2627) {
+      if (error?.number === 2601 || error?.number === 2627 || error?.number === 51101) {
         next(createRequestError(409, 'The selected property or unit already has an active tenancy.', 'OCCUPANCY_CONFLICT'));
+        return;
+      }
+      if (error?.number === 51103 || error?.number === 51104) {
+        next(createRequestError(409, 'The reservation or activation requirements changed. Refresh and review the current offer and move-in checks.', 'TENANCY_NOT_READY'));
         return;
       }
       next(error);

@@ -185,3 +185,12 @@ test('normal agreement status updates still pass through generic CRUD', () => {
   );
   assert.equal(nextCalled, true);
 });
+
+
+test('an expired or replaced rental reservation blocks an otherwise ready activation',()=>{
+  const expired=evaluateTenancyActivationReadiness({...readyInput(),rentalReservation:{valid:false}});
+  assert.equal(expired.canActivate,false);assert.equal(expired.checks.rentalReservationValid,false);
+  assert.ok(getActivationBlockingReasons(expired).some(reason=>reason.includes('reservation')));
+  assert.equal(evaluateTenancyActivationReadiness({...readyInput(),rentalReservation:{valid:true}}).canActivate,true);
+  assert.equal(evaluateTenancyActivationReadiness({...readyInput(),agreement:{...readyInput().agreement,status:'active'},rentalReservation:{valid:false}}).canActivate,true,'An already active tenancy does not revert when its former hold deadline passes');
+});

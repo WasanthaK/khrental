@@ -174,8 +174,8 @@ const TenancyOnboarding = () => {
           <section className="bg-white rounded-lg shadow p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold">1. Tenant invitation</h2>
-                <p className="text-sm text-gray-500">Secure invitation acceptance establishes the tenant account and membership.</p>
+                <h2 className="text-lg font-semibold">1. Tenant account access</h2>
+                <p className="text-sm text-gray-500">Access can come from a secure invitation or an accepted rental offer linked to an existing verified account.</p>
               </div>
               <span className={`text-xs font-medium px-2 py-1 rounded-full ${rentee?.auth_id ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                 {rentee?.auth_id ? 'Accepted' : invitation?.state || 'Not accepted'}
@@ -292,7 +292,8 @@ const TenancyOnboarding = () => {
             <p className="text-sm text-gray-500 mb-4">Activation is a server-controlled transition.</p>
             <div>
               <CheckRow label="Tenant assigned" complete={readiness.checks.tenantAssigned} />
-              <CheckRow label="Invitation accepted" complete={readiness.checks.accountAccepted} />
+              <CheckRow label="Account access confirmed" complete={readiness.checks.accountAccepted} />
+              {readiness.checks.rentalReservationValid !== undefined && <CheckRow label="Accepted reservation is current" complete={readiness.checks.rentalReservationValid} />}
               <CheckRow label="Tenant membership active" complete={readiness.checks.membershipActive} />
               <CheckRow label="Property assigned" complete={readiness.checks.propertyAssigned} />
               <CheckRow label="Agreement signed" complete={readiness.checks.agreementSigned} />
