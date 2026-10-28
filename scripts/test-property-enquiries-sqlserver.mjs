@@ -194,6 +194,10 @@ try {
   await assert.rejects(applications.change(actor,saved.id,{...originalApplication,payloadHash:'changed'}),{code:'APPLICATION_REQUEST_CONFLICT'});
   await applications.change(owner,saved.id,apply('needs_information',1,true,{note:'Clarify your preferred term.'}),true);
   await assert.rejects(applications.change(owner,saved.id,apply('accept',1,true,{note:'Stale'}),true),{code:'APPLICATION_CHANGED'});
+  await query('UPDATE public_listing_preferences SET opted_out=1 WHERE public_id=@id',{id:first.listingId});
+  assert.equal((await applications.get(actor,saved.id)).canSubmit,false);
+  await assert.rejects(applications.change(actor,saved.id,apply('submit',2,false,details)),{code:'LISTING_UNAVAILABLE'});
+  await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
   await applications.change(actor,saved.id,apply('submit',2,false,{...details,termMonths:24}));
   await query('UPDATE public_listing_preferences SET opted_out=1 WHERE public_id=@id',{id:first.listingId});
   const acceptance=apply('accept',3,true,{note:'Reviewed for offer preparation.'});

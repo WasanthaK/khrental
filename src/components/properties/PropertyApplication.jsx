@@ -60,10 +60,10 @@ const PropertyApplication=({enquiry,owner=false,call})=>{
       {application.status==='accepted'&&<p>Accepted for offer preparation. No property reservation or tenancy has been created.</p>}
     </div>:<p>No application submitted.</p>)}
     {snapshot.loaded&&!owner&&(!snapshot.canSubmit||!open)&&(!application||application.status==='needs_information')&&
-      <p>Complete a viewing and keep this enquiry open before submitting. Refresh after the owner records the viewing outcome.</p>}
+      <p>Submission requires a completed viewing, an open enquiry and a currently available public listing. Refresh after the owner records the viewing outcome.</p>}
     {snapshot.loaded&&!owner&&snapshot.canSubmit&&open&&<form onSubmit={e=>{e.preventDefault();run('submit');}} className="space-y-3">
       <p>Share only the rental details requested here. Do not include identity documents, financial account details or sensitive personal information. Document uploads are not available in this step.</p>
-      <label className="block" htmlFor={field+'-date'}>Proposed move-in date</label>
+      <label className="block" htmlFor={field+'-date'}>Proposed move-in date (property local date)</label>
       <input id={field+'-date'} type="date" required value={draft.moveInDate} disabled={busy}
         onChange={e=>change('moveInDate',e.target.value)} className="border rounded p-2" />
       <label className="block" htmlFor={field+'-occupants'}>Number of occupants</label>

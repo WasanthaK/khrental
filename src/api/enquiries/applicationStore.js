@@ -6,11 +6,15 @@ import {toPublicDTO} from '../publicListings/contract.js';
 export const createApplicationStore=({poolProvider}={})=>{
   const enquiries=createEnquiryStore(poolProvider?{poolProvider}:{});
   const current=(query,id)=>query('SELECT * FROM dbo.property_applications WITH(UPDLOCK,HOLDLOCK) WHERE enquiry_id=@id',{id});
+  const available=async(query,enquiry)=>toPublicDTO((await query(`SELECT TOP(1) ${PUBLIC_LISTING_SELECT_SQL}
+    ${PUBLIC_LISTING_ELIGIBILITY_SQL} AND pref.public_id=@listingId AND pref.country_code=@country
+    AND p.id=@propertyId AND p.tenant_id=@tenantId`,{listingId:enquiry.listing_public_id,
+    country:enquiry.country_code,propertyId:enquiry.property_id,tenantId:enquiry.tenant_id}))[0]);
   const completed=async(query,id)=>Boolean((await query("SELECT enquiry_id FROM dbo.property_viewings WHERE enquiry_id=@id AND status='completed'",{id}))[0]);
   const receipt=async(query,id,enquiry)=>{
     const application=applicationReceipt((await current(query,id))[0]);
     const canSubmit=(!application||application.status==='needs_information')&&
-      ['pending','responded'].includes(enquiry.status)&&await completed(query,id);
+      ['pending','responded'].includes(enquiry.status)&&await completed(query,id)&&Boolean(await available(query,enquiry));
     return {application,canSubmit};
   };
   return {
@@ -29,11 +33,7 @@ export const createApplicationStore=({poolProvider}={})=>{
       const now=(await query('SELECT SYSUTCDATETIME() AS now'))[0].now;
       const next=nextApplication(old,input,owner,enquiry,await completed(query,id),now);
       if(['submit','accept'].includes(input.action)){
-        const available=(await query(`SELECT TOP(1) ${PUBLIC_LISTING_SELECT_SQL}
-          ${PUBLIC_LISTING_ELIGIBILITY_SQL} AND pref.public_id=@listingId AND pref.country_code=@country
-          AND p.id=@propertyId AND p.tenant_id=@tenantId`,{listingId:enquiry.listing_public_id,
-          country:enquiry.country_code,propertyId:enquiry.property_id,tenantId:enquiry.tenant_id}))[0];
-        if(!toPublicDTO(available)){throw enquiryError(409,'LISTING_UNAVAILABLE','This property is no longer available for submission or acceptance.');}
+        if(!await available(query,enquiry)){throw enquiryError(409,'LISTING_UNAVAILABLE','This property is no longer available for submission or acceptance.');}
       }
       const count=(await query(`SELECT COUNT(*) AS hits FROM dbo.property_application_events
         WHERE actor_id=@actorId AND created_at>DATEADD(hour,-24,SYSUTCDATETIME())`,args))[0];
