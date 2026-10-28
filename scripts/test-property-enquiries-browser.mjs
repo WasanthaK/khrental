@@ -211,7 +211,8 @@ try {
 
   assert.equal(viewing.instructions,null);
   viewingsOpen=false;
-  await page.reload({waitUntil:'networkidle0'});
+  await page.click('::-p-text(Refresh viewing)');
+  await page.waitForFunction(()=>!document.body.innerText.includes('Viewing appointment'));
   assert.equal(await page.$('input[type="datetime-local"]'),null);
   assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Viewing appointment'));
   console.log('PROPERTY_VIEWINGS_BROWSER_CLOSURE=PASS cancel_closed_enquiry delayed_refresh_privacy independent_default_off');
