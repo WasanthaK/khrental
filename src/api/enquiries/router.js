@@ -74,7 +74,8 @@ export const createEnquiriesRouter=({
     }
     res.json({data:await store.change(req.enquiryActor,req.params.id,input,owner)});
   }));
-  router.use((error,req,res,_next)=>{
+  router.use((error,req,res,next)=>{
+    if (res.headersSent) {return next(error);}
     if (error.status && error.code) {return res.status(error.status).json({code:error.code,error:error.message});}
     // Never send SQL errors, query text or contact values to a browser/log.
     res.status(503).json({code:'ENQUIRY_STORAGE_UNAVAILABLE',error:'Enquiries are temporarily unavailable. Retry with the same request reference.'});
