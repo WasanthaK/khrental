@@ -30,7 +30,7 @@ export const offerReceipt=row=>row?{
   status:row.status,version:row.version,applicationVersion:row.application_version,
   unitLabel:row.unit_label||null,currency:row.currency,rent:Number(row.rent).toFixed(2),deposit:Number(row.deposit).toFixed(2),fees:Number(row.fees).toFixed(2),
   startDate:new Date(row.start_date).toISOString().slice(0,10),endDate:new Date(row.end_date).toISOString().slice(0,10),terms:row.terms,
-  offerUntil:row.offer_until,holdUntil:row.hold_until,acceptedAt:row.accepted_at||null,
+  offerUntil:row.offer_until,holdUntil:row.hold_until,acceptedAt:row.accepted_at||null,consentVersion:row.consent_version||null,
   agreementId:row.agreement_id||null,updatedAt:row.updated_at
 }:null;
 export const assertOfferVersion=(row,input)=>{

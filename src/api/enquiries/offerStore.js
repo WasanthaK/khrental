@@ -95,7 +95,7 @@ export const createOfferStore=({poolProvider}={})=>{
           offerUntil:new Date(input.offerUntil),holdUntil:new Date(input.holdUntil),version:(old?.version??0)+1};
         await q(old?`UPDATE dbo.property_rental_offers SET unit_id=@unitId,unit_label=@unitLabel,application_version=@applicationVersion,
           status='offered',version=@version,currency=@currency,rent=@rent,deposit=@deposit,fees=@fees,start_date=@startDate,end_date=@endDate,
-          terms=@terms,offer_until=@offerUntil,hold_until=@holdUntil,accepted_at=NULL,agreement_id=NULL,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id`:
+          terms=@terms,offer_until=@offerUntil,hold_until=@holdUntil,accepted_at=NULL,consent_version=NULL,agreement_id=NULL,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id`:
           `INSERT INTO dbo.property_rental_offers(enquiry_id,tenant_id,property_id,unit_id,unit_label,application_version,status,version,currency,rent,deposit,fees,start_date,end_date,terms,offer_until,hold_until)
           VALUES(@id,@tenantId,@propertyId,@unitId,@unitLabel,@applicationVersion,'offered',@version,@currency,@rent,@deposit,@fees,@startDate,@endDate,@terms,@offerUntil,@holdUntil)`,args);
       }else if(!owner&&input.action==='accept'){
@@ -104,7 +104,7 @@ export const createOfferStore=({poolProvider}={})=>{
           throw conflict('RENTAL_OFFER_UNAVAILABLE','This offer or application is no longer available for acceptance.');
         }
         await checkDwelling(q,e,old.unit_id);
-        await q("UPDATE dbo.property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id});
+        await q("UPDATE dbo.property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),consent_version='rental-offer-v1',version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id});
       }else if(input.action==='agreement'&&owner){
         if(old?.status!=='accepted'||old.hold_until<=now||ap?.status!=='accepted'||ap.version!==old.application_version||!['pending','responded'].includes(e.status)){
           throw conflict('RENTAL_HOLD_EXPIRED','A current accepted offer and reservation are required.');
@@ -127,14 +127,14 @@ export const createOfferStore=({poolProvider}={})=>{
           WHERE au.id=@seekerId AND (au.status IS NULL OR au.status='active') AND au.user_type='seeker'
           AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')='true'`,{seekerId:e.seeker_id}))[0];
         if(!user){throw conflict('RENTAL_IDENTITY_UNAVAILABLE','The accepted applicant must have a verified usable account.');}
-        const template=(await q('SELECT id,content FROM dbo.agreement_templates WITH(UPDLOCK,HOLDLOCK) WHERE id=@id AND tenant_id=@tenantId',{id:input.templateId,tenantId:e.tenant_id}))[0];
+        const template=(await q('SELECT id,content,version FROM dbo.agreement_templates WITH(UPDLOCK,HOLDLOCK) WHERE id=@id AND tenant_id=@tenantId',{id:input.templateId,tenantId:e.tenant_id}))[0];
         if(!template?.content){throw conflict('RENTAL_TEMPLATE_REQUIRED','Select a populated agreement template in this workspace.');}
         const membership=(await q('SELECT id,role,status FROM dbo.tenant_memberships WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND app_user_id=@seekerId',{tenantId:e.tenant_id,seekerId:e.seeker_id}))[0];
         if(membership&&(membership.status!=='active'||!['rentee','tenant'].includes(membership.role))){throw conflict('RENTAL_MEMBERSHIP_CONFLICT','Existing account access requires an authorised review.');}
         const agreementId=randomUUID();
         const terms=JSON.stringify({monthlyRent:Number(old.rent),depositAmount:Number(old.deposit),feesAmount:Number(old.fees),
           startDate:new Date(old.start_date).toISOString().slice(0,10),endDate:new Date(old.end_date).toISOString().slice(0,10),
-          additionalTerms:old.terms,currency:old.currency,offerUntil:new Date(old.offer_until).toISOString(),holdUntil:new Date(old.hold_until).toISOString(),rentalOfferEnquiry:id,rentalOfferVersion:old.version});
+          additionalTerms:old.terms,currency:old.currency,offerUntil:new Date(old.offer_until).toISOString(),holdUntil:new Date(old.hold_until).toISOString(),rentalOfferEnquiry:id,rentalOfferVersion:old.version,agreementTemplateVersion:template.version});
         await q(`INSERT INTO dbo.agreements(id,tenant_id,templateid,renteeid,propertyid,unitid,status,startdate,enddate,rentamount,depositamount,title,content,terms,needs_document_generation)
           VALUES(@agreementId,@tenantId,@templateId,@seekerId,@propertyId,@unitId,'draft',@startDate,@endDate,@rent,@deposit,@title,@content,@terms,1)`,
         {agreementId,tenantId:e.tenant_id,templateId:template.id,seekerId:e.seeker_id,propertyId:e.property_id,unitId:old.unit_id||null,

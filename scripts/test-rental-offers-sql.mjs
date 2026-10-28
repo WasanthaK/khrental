@@ -46,7 +46,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
    VALUES(@id,'accepted',@date,1,12,'Synthetic accepted proposal','rental-application-v1',SYSUTCDATETIME(),1)`,{id,date:new Date(terms().startDate)});
   return {actor,id};
  };
- const available=async p=>Boolean((await q(`SELECT p.id ${PUBLIC_LISTING_ELIGIBILITY_SQL} AND pref.public_id=@listingId`,p))[0]);
+ const available=async p=>Boolean((await q(`SELECT p.id ${PUBLIC_LISTING_ELIGIBILITY_SQL} AND pref.public_id=@listingId`,{listingId:p.listingId}))[0]);
  const p=await property(),c=await candidate(p);
  const issue=request('issue',0,true,terms());
  const issued=await store.change(owner,c.id,issue,true);assert.equal(issued.offer.status,'offered');
@@ -60,8 +60,8 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal((await store.change(c.actor,c.id,acceptance)).offer.version,2);
  assert.equal(await available(p),false,'Accepted whole-property hold hides the catalog/detail/enquiry source');
  await q('CREATE TABLE dbo.public_listing_media(listing_public_id UNIQUEIDENTIFIER)');
- await q('INSERT dbo.public_listing_media VALUES(@listingId)',p);
- assert.equal((await q(`SELECT m.listing_public_id ${PUBLIC_MEDIA_ELIGIBILITY_SQL} AND pref.public_id=@listingId`,p)).length,0,'Copied photo URLs use the same hold predicate');
+ await q('INSERT dbo.public_listing_media VALUES(@listingId)',{listingId:p.listingId});
+ assert.equal((await q(`SELECT m.listing_public_id ${PUBLIC_MEDIA_ELIGIBILITY_SQL} AND pref.public_id=@listingId`,{listingId:p.listingId})).length,0,'Copied photo URLs use the same hold predicate');
  await assert.rejects(store.change(c.actor,c.id,request('accept',1,false,{consent:true})),{code:'OFFER_CHANGED'});
  const templateId=uuid();await q("INSERT agreement_templates(id,tenant_id,name,version,content) VALUES(@id,@tenantId,'Synthetic template',1,'<p>Agreed rental: {{monthlyRent}}</p>')",{id:templateId,tenantId:owner.tenantId});
  const beforeUsers=(await q('SELECT COUNT(*) AS n FROM app_users'))[0].n;

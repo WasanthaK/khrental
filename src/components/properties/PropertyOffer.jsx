@@ -47,7 +47,7 @@ const PropertyOffer=({enquiry,owner=false,call})=>{
       <p>Offer version {offer.version} · <strong>{offer.status}</strong> · {offer.unitLabel||'Whole property'}</p>
       <p>Monthly rent: {offer.currency} {offer.rent} · Security deposit: {offer.currency} {offer.deposit} · Other fees: {offer.currency} {offer.fees}</p>
       <p>Rental dates: {offer.startDate} to {offer.endDate} (property local dates)</p>
-      <p className="whitespace-pre-wrap">{offer.terms}</p>
+      <p className="whitespace-pre-wrap break-words">{offer.terms}</p>
       <p>Accept before {label(offer.offerUntil)}. If accepted, reservation ends {label(offer.holdUntil)}.</p>
       <p>Expiry or withdrawal releases the reservation. No automatic extension. Signature, deposit evidence, move-in checks and explicit activation are separate.</p>
       {data.agreement&&<p>Agreement: {data.agreement.status} · Signature: {data.agreement.signatureStatus||'not recorded'}</p>}

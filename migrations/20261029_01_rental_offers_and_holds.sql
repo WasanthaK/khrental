@@ -10,7 +10,7 @@ BEGIN
   application_version INT NOT NULL, status VARCHAR(20) NOT NULL, version INT NOT NULL,
   currency CHAR(3) NOT NULL, rent DECIMAL(18,2) NOT NULL,deposit DECIMAL(18,2) NOT NULL,fees DECIMAL(18,2) NOT NULL,
   start_date DATE NOT NULL,end_date DATE NOT NULL,terms NVARCHAR(MAX) NOT NULL,
-  offer_until DATETIME2 NOT NULL,hold_until DATETIME2 NOT NULL,accepted_at DATETIME2 NULL,
+  offer_until DATETIME2 NOT NULL,hold_until DATETIME2 NOT NULL,accepted_at DATETIME2 NULL,consent_version VARCHAR(30) NULL,
   agreement_id UNIQUEIDENTIFIER NULL,
   updated_at DATETIME2 NOT NULL CONSTRAINT DF_property_rental_offers_updated DEFAULT SYSUTCDATETIME(),
   CONSTRAINT FK_property_rental_offers_enquiry FOREIGN KEY(enquiry_id) REFERENCES dbo.property_enquiries(id),
@@ -24,7 +24,7 @@ BEGIN
   CONSTRAINT CK_property_rental_offers_dates CHECK(end_date>start_date AND hold_until>offer_until),
   CONSTRAINT CK_property_rental_offers_currency CHECK(currency IN('LKR','BND')),
   CONSTRAINT CK_property_rental_offers_terms CHECK(LEN(LTRIM(RTRIM(terms)))>0 AND LEN(terms)<=8000),
-  CONSTRAINT CK_property_rental_offers_acceptance CHECK(status IN('offered','declined','withdrawn','expired','invalidated') OR accepted_at IS NOT NULL),
+  CONSTRAINT CK_property_rental_offers_acceptance CHECK(status IN('offered','declined','withdrawn','expired','invalidated') OR (accepted_at IS NOT NULL AND consent_version='rental-offer-v1')),
   CONSTRAINT CK_property_rental_offers_agreement CHECK(status<>'agreement' OR agreement_id IS NOT NULL)
  );
  CREATE INDEX IX_property_rental_offers_property ON dbo.property_rental_offers(tenant_id,property_id,status,hold_until);
@@ -93,7 +93,7 @@ BEGIN
    OR ap.status<>''accepted'' OR ap.version<>o.application_version OR e.status NOT IN(''pending'',''responded'')
    OR NOT EXISTS(SELECT 1 FROM dbo.public_listing_preferences pref JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
       WHERE pref.public_id=e.listing_public_id AND pref.property_id=o.property_id AND pref.tenant_id=o.tenant_id
-      AND pref.opted_out=0 AND p.country_code=e.country_code AND pref.country_code=e.country_code AND p.status IN(''active'',''available'',''rented''))))
+      AND pref.opted_out=0 AND p.country_code COLLATE DATABASE_DEFAULT=e.country_code AND pref.country_code=e.country_code AND p.status IN(''active'',''available'',''rented''))))
   THROW 51103,''RENTAL_ACCEPTANCE_NO_LONGER_VALID'',1;
 
  IF EXISTS(SELECT 1 FROM inserted i JOIN dbo.rental_offer_agreement_links l ON l.agreement_id=i.id JOIN dbo.property_rental_offers o ON o.enquiry_id=l.enquiry_id
