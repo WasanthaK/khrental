@@ -47,7 +47,7 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
 }};
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
-let viewing=null,viewingsOpen=true;
+let viewing=null,viewingsOpen=true,holdViewingRead=false,releaseViewingRead=null,notifyViewingRead=null;
 const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
@@ -67,7 +67,11 @@ try {
   });
   app.get(['/api/property-enquiries/:id/viewing','/api/owner-enquiries/:id/viewing'],(req,res)=>{
     if(!viewingsOpen){return res.status(404).json({code:'VIEWINGS_UNAVAILABLE',error:'Viewing appointments are not open yet.'});}
-    res.json({data:viewingReceipt(viewing)});
+    const data=viewingReceipt(viewing);
+    if(holdViewingRead){
+      holdViewingRead=false;releaseViewingRead=()=>res.json({data});notifyViewingRead?.();return;
+    }
+    res.json({data});
   });
   app.post(['/api/property-enquiries/:id/viewing','/api/owner-enquiries/:id/viewing'],(req,res)=>{
     const owner=req.path.startsWith('/api/owner-');
@@ -196,14 +200,21 @@ try {
   await page.click('::-p-text(Withdraw enquiry)');
   await page.waitForFunction(()=>document.body.innerText.includes('Enquiry withdrawn.'));
   assert.equal(row.status,'withdrawn');
+  const readHeld=new Promise(resolve=>{notifyViewingRead=resolve;});
+  holdViewingRead=true;
+  await page.click('::-p-text(Refresh viewing)');await readHeld;
   await page.click('::-p-text(Cancel viewing)');
   await page.waitForFunction(()=>document.body.innerText.includes('Viewing status: cancelled'));
+  releaseViewingRead();await page.waitForNetworkIdle({idleTime:300,timeout:10000});
+  assert.ok((await page.$eval('body',e=>e.innerText)).includes('Viewing status: cancelled'));
+  assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Revised private meeting point'));
+
   assert.equal(viewing.instructions,null);
   viewingsOpen=false;
   await page.reload({waitUntil:'networkidle0'});
   assert.equal(await page.$('input[type="datetime-local"]'),null);
   assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Viewing appointment'));
-  console.log('PROPERTY_VIEWINGS_BROWSER_CLOSURE=PASS cancel_closed_enquiry independent_default_off');
+  console.log('PROPERTY_VIEWINGS_BROWSER_CLOSURE=PASS cancel_closed_enquiry delayed_refresh_privacy independent_default_off');
 
   // A new prospect crosses an email/browser boundary. Only the validated
   // public listing pointer survives; the verification token is scrubbed.

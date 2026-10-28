@@ -12,7 +12,8 @@ const PropertyViewing=({enquiry,owner=false,call})=>{
   const refresh=async()=>{
     try {
       const viewing=await call({path});
-      if(alive.current){setSnapshot({loaded:true,unavailable:false,viewing});}
+      if(alive.current){setSnapshot(previous=>(previous.viewing?.version??0)>(viewing?.version??0)
+        ?previous:{loaded:true,unavailable:false,viewing});}
     } catch(err) {
       if(alive.current){
         if(err.code==='VIEWINGS_UNAVAILABLE'){setSnapshot({loaded:true,unavailable:true,viewing:null});}

@@ -156,6 +156,8 @@ try {
   await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
   assert.equal((await viewings.change(actor,saved.id,action('accept',3))).status,'confirmed');
   assert.equal((await viewings.change(actor,saved.id,action('cancel',4))).status,'cancelled');
+  const acceptedReplay=await viewings.change(owner,saved.id,confirm,true);
+  assert.equal(acceptedReplay.status,'cancelled');assert.equal(acceptedReplay.instructions,null);
   // Rebook and establish a past completed appointment without a clock mock:
   // only the synthetic database fixture moves the saved appointment to the past.
   await viewings.change(actor,saved.id,action('request',5,false,{startsAt:start,endsAt:end}));
