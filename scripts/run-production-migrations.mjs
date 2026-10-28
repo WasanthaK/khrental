@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import sql from 'mssql';
+import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 
 const inspectBillingAdjustments = async (pool) => {
@@ -469,6 +470,12 @@ const MIGRATIONS = [
     file: 'migrations/20261028_01_property_enquiries.sql',
     inspect: inspectPropertyEnquiries,
     verify: async pool => assertSatisfied(inspectPropertyEnquiries(pool), 'Property enquiry schema verification failed.')
+  },
+  {
+    id: '20261028_02_property_viewings',
+    file: 'migrations/20261028_02_property_viewings.sql',
+    inspect: inspectPropertyViewings,
+    verify: async pool => assertSatisfied(inspectPropertyViewings(pool), 'Property viewing schema verification failed.')
   }
 ];
 

@@ -39,6 +39,7 @@ on:
           - 20261026_02_property_iso_country
           - 20261026_01_public_listing_preferences
           - 20261028_01_property_enquiries
+          - 20261028_02_property_viewings
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false

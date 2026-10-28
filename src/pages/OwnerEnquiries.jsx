@@ -1,8 +1,14 @@
+import PropertyViewing from '../components/properties/PropertyViewing';
 import {useEffect,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
+const viewingCall=async({path,method='GET',body})=>{
+  const result=await requestMssqlApi('/api/owner-enquiries'+path,{method,body});
+  // The shared transport preserves an envelope when its data is null.
+  return result?.data===null?null:result;
+};
 const OwnerEnquiries=()=>{
   const {activeTenantId}=useAuth();
   const [snapshot,setSnapshot]=useState(null),[error,setError]=useState('');
@@ -51,6 +57,7 @@ const OwnerEnquiries=()=>{
         <div className="flex gap-4"><button disabled={busy||!(drafts[item.id]??item.response??'').trim()} onClick={()=>save(item,'responded')} className="bg-blue-900 text-white rounded px-4 py-2 disabled:opacity-50">Save response</button>
           <button disabled={busy} onClick={()=>save(item,'closed')} className="border rounded px-4 py-2">Close enquiry</button></div>
       </>:item.response&&<p className="whitespace-pre-wrap">{item.response}</p>}
+      <PropertyViewing key={activeTenantId+':'+item.id} enquiry={item} owner call={viewingCall} />
     </article>)}
     <div className="flex gap-4"><button disabled={offset===0||busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
       <button disabled={!current?.hasMore||busy} onClick={()=>setOffset(n=>n+50)}>Next</button></div>

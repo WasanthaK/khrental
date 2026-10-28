@@ -10,11 +10,11 @@ const id=n=>'11111111-1111-4111-8111-'+String(n).padStart(12,'0');
 const input={listingId:id(1),country:'LK',requestId:id(2),message:'May I arrange a viewing?',consent:true};
 const env={PROPERTY_ENQUIRIES_ENABLED:'true',PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'};
 const actor={record:{appUserId:id(3),authId:id(4)},sessionId:id(5)};
-const launch=async(t,{owner=false,environment=env,session=actor,proof={verified:true,eligible:true},admin=true}={})=>{
+const launch=async(t,{owner=false,environment=env,session=actor,proof={verified:true,eligible:true},admin=true,viewings}={})=>{
   const calls=[];
   const app=express();app.use(express.json());
   app.use((req,res,next)=>{req.authSession=session;next();});
-  app.use(createEnquiriesRouter({owner,env:environment,
+  app.use(createEnquiriesRouter({owner,env:environment,...(viewings?{viewings}:{}),
     context:(req,res,next)=>{
       req.user={id:id(3),status:'active'};req.tenantContext={};
       if(owner){req.tenantId=id(7);req.membership={tenant_id:id(7),status:'active',role:admin?'admin':'staff'};}
@@ -97,4 +97,21 @@ test('owner inbox requires active admin and server tenant; seeker cannot update 
   const seeker=await launch(t);assert.equal((await seeker.request('/'+id(8),'PATCH',{status:'closed',version:1})).status,400);
   assert.equal((await seeker.request('/'+id(8),'PATCH',{status:'withdrawn',version:1})).status,200);
   assert.equal((await seeker.request('?offset=-1')).status,400);
+});
+
+test('viewing subroutes require their independent gate, live session, strict actor action and origin',async t=>{
+  const calls=[];
+  const viewings={get:async(...args)=>{calls.push(args);return null;},change:async(...args)=>{calls.push(args);return {status:'requested'};}};
+  const closed=await launch(t,{viewings});
+  assert.equal((await closed.request('/'+id(8)+'/viewing')).status,404);
+  assert.equal(calls.length,0);
+  const open=await launch(t,{viewings,environment:{...env,PROPERTY_VIEWINGS_ENABLED:'true'}});
+  assert.equal((await open.request('/'+id(8)+'/viewing')).status,200);
+  assert.equal(calls[0][0].actorId,actor.record.appUserId);
+  assert.equal((await open.request('/'+id(8)+'/viewing','POST',{action:'confirm',version:1,requestId:id(9)})).status,400);
+  assert.equal((await open.request('/'+id(8)+'/viewing','POST',{action:'cancel',version:1,requestId:id(9)},'https://evil.test')).status,403);
+  assert.equal(calls.length,1);
+  assert.equal((await open.request('/'+id(8)+'/viewing','POST',{action:'cancel',version:1,requestId:id(9)})).status,200);
+  const anonymous=await launch(t,{viewings,session:null,environment:{...env,PROPERTY_VIEWINGS_ENABLED:'true'}});
+  assert.equal((await anonymous.request('/'+id(8)+'/viewing')).status,401);
 });
