@@ -24,6 +24,10 @@ const PropertyEnquiry=()=>{
   const [hasMore,setHasMore]=useState(false);
   const requestId=useRef(crypto.randomUUID());
   const identity=String(user?.id||'');
+  const currentIdentity=useRef(identity);
+  currentIdentity.current=identity;
+  const [loadedFor,setLoadedFor]=useState(null);
+  const personalReady=state.ready && isAuthenticated && loadedFor===identity;
   const enabled=isPropertyEnquiriesEnabled();
   useEffect(()=>{
     setMessage('');setConsent(false);requestId.current=crypto.randomUUID();
@@ -41,22 +45,25 @@ const PropertyEnquiry=()=>{
   },[route,listingId,country,enabled]);
   useEffect(()=>{
     let active=true;
-    setItems([]);setHasMore(false);setState({ready:false,busy:false,error:'',notice:''});
+    setItems([]);setHasMore(false);setLoadedFor(null);setState({ready:false,busy:false,error:'',notice:''});
     setMessage('');setConsent(false);requestId.current=crypto.randomUUID();
     if (!enabled || loading || !isAuthenticated) {return ()=>{active=false;};}
     call({path:'?offset='+offset}).then(data=>{
-      if(active){setItems(data.items);setHasMore(data.hasMore);setState(s=>({...s,ready:true}));}
+      if(active){setItems(data.items);setHasMore(data.hasMore);setLoadedFor(identity);setState(s=>({...s,ready:true}));}
     }).catch(err=>{if(active){setState(s=>({...s,error:err.message}));}});
     return ()=>{active=false;};
   },[identity,isAuthenticated,loading,offset,enabled]);
   const refresh=async()=>{
+    const actorAtStart=identity;
     const data=await call({path:'?offset='+offset});
+    if(currentIdentity.current!==actorAtStart){return;}
     setItems(data.items);setHasMore(data.hasMore);
   };
   const submit=async e=>{
     e.preventDefault();setState(s=>({...s,busy:true,error:'',notice:''}));
     try {
       await call({method:'POST',body:{listingId,country,message,consent,requestId:requestId.current}});
+      if(currentIdentity.current!==identity){return;}
       setMessage('');setConsent(false);requestId.current=crypto.randomUUID();
       setState(s=>({...s,notice:'Your enquiry was saved in the owner’s inbox. It does not reserve the property or confirm a viewing.'}));
       await refresh();
@@ -67,6 +74,7 @@ const PropertyEnquiry=()=>{
     setState(s=>({...s,busy:true,error:'',notice:''}));
     try {
       await call({path:'/'+item.id,method:'PATCH',body:{status:'withdrawn',version:item.version}});
+      if(currentIdentity.current!==identity){return;}
       setState(s=>({...s,notice:'Enquiry withdrawn.'}));await refresh();
     } catch(err) {setState(s=>({...s,error:err.message}));}
     finally {setState(s=>({...s,busy:false}));}
@@ -87,7 +95,7 @@ const PropertyEnquiry=()=>{
         <p><Link className="underline text-blue-800" to={'/login'+enquiryLoginSearch(location.search)}>Sign in to enquire about this property</Link>. A verified personal seeker account is required.</p> : null}
       {state.error && <p role="alert" className="text-red-700">{state.error}</p>}
       {state.notice && <p role="status" className="rounded-xl bg-emerald-50 p-4 text-emerald-900">{state.notice}</p>}
-      {state.ready && listing && <form onSubmit={submit} className="rounded-xl bg-white border p-6 space-y-4">
+      {personalReady && listing && <form onSubmit={submit} className="rounded-xl bg-white border p-6 space-y-4">
         <label className="block">Message
           <textarea required maxLength={2000} value={message} disabled={state.busy}
             onChange={e=>{setMessage(e.target.value);requestId.current=crypto.randomUUID();}}
@@ -100,7 +108,7 @@ const PropertyEnquiry=()=>{
         <button disabled={state.busy||!message.trim()||!consent} className="bg-blue-900 text-white rounded px-4 py-3 disabled:opacity-50">
           {state.busy?'Saving…':'Send enquiry'}</button>
       </form>}
-      {state.ready && <section aria-labelledby="my-enquiries" className="space-y-4">
+      {personalReady && <section aria-labelledby="my-enquiries" className="space-y-4">
         <h2 id="my-enquiries" className="text-xl font-semibold">My enquiries</h2>
         {!items.length && <p>No enquiries on this page.</p>}
         {items.map(item=><article key={item.id} className="rounded-xl border bg-white p-5 space-y-2">

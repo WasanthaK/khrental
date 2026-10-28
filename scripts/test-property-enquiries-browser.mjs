@@ -112,6 +112,7 @@ try {
   await ownerPage.waitForFunction(()=>document.body.innerText.includes('Enquiry updated'));
   console.log('BROWSER_STAGE=owner_replied');
   assert.equal(ownerWrites,1);assert.equal(row.status,'responded');
+  await page.bringToFront();
   await page.click('::-p-text(Refresh responses)');
   await page.waitForFunction(()=>document.body.innerText.includes('Please suggest a convenient time.'));
   console.log('BROWSER_STAGE=seeker_reads_reply');
@@ -119,7 +120,9 @@ try {
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile layout must fit viewport');
   const output=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
   await fs.mkdir(output,{recursive:true});await page.screenshot({path:path.join(output,'seeker-enquiry.png'),fullPage:true});
+  await ownerPage.bringToFront();
   await ownerPage.screenshot({path:path.join(output,'owner-inbox.png'),fullPage:true});
+  await page.bringToFront();
   await page.click('::-p-text(Withdraw enquiry)');
   await page.waitForFunction(()=>document.body.innerText.includes('Enquiry withdrawn.'));
   assert.equal(row.status,'withdrawn');
