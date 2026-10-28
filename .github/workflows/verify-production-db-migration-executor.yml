@@ -1,6 +1,15 @@
 name: Verify production database migration executor
 
 on:
+  workflow_call:
+    inputs:
+      mode:
+        required: false
+        type: string
+        default: strict
+      confirmation:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       mode:
@@ -94,6 +103,16 @@ jobs:
           memory=$(jq -r '.resources.memory // empty' <<<"$container_json")
           server=$(jq -r '.env[]? | select(.name == "MSSQL_SERVER") | .value // empty' <<<"$container_json")
           database=$(jq -r '.env[]? | select(.name == "MSSQL_DATABASE") | .value // empty' <<<"$container_json")
+
+          # Schema acceptance must target the same database as the serving app.
+          # Compare internally; do not publish connection values.
+          app_env=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query 'properties.template.containers[0].env' -o json)
+          app_server=$(jq -r '.[] | select(.name=="MSSQL_SERVER") | .value // empty' <<<"$app_env")
+          app_database=$(jq -r '.[] | select(.name=="MSSQL_DATABASE") | .value // empty' <<<"$app_env")
+          if [ -z "$app_server" ] || [ -z "$app_database" ] || [ "${server,,}" != "${app_server,,}" ] || [ "$database" != "$app_database" ]; then
+            echo 'Executor and serving application database target could not be matched.' >&2
+            exit 1
+          fi
 
           for value in ready_revision image container_name cpu memory server database; do
             if [ -z "${!value:-}" ] || [ "${!value}" = "None" ]; then
@@ -205,7 +224,7 @@ jobs:
               fi
             } >> "$GITHUB_STEP_SUMMARY"
 
-            echo "Retained eleven redacted $VERIFICATION_MODE results for execution $execution_name."
+            echo "Retained fourteen redacted $VERIFICATION_MODE results for execution $execution_name."
             rm -f "$log_file"
           }
 
@@ -223,7 +242,7 @@ jobs:
               case "$status" in
                 Succeeded)
                   capture_verification_evidence
-                  echo "Read-only executor $VERIFICATION_MODE verification passed with eleven retained migration results."
+                  echo "Read-only executor $VERIFICATION_MODE verification passed with fourteen retained migration results."
                   exit 0
                   ;;
                 Failed|Stopped)

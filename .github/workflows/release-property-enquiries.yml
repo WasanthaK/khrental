@@ -23,17 +23,13 @@ concurrency:
   group: khrental-production
   cancel-in-progress: false
 jobs:
-  release:
+  validate:
     if: github.ref == 'refs/heads/main'
-    environment: Production
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     env:
       MODE: ${{ inputs.mode }}
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       CONFIRMATION: ${{ inputs.confirmation }}
-      AZURE_RESOURCE_GROUP: khrental-prod-rg
-      AZURE_CONTAINER_APP_NAME: khrental-app
     steps:
       - name: Validate explicit release request
         shell: bash
@@ -44,6 +40,27 @@ jobs:
             *) echo 'Exact release confirmation is required.' >&2; exit 1 ;;
           esac
           if [ "$MODE" != rollback ]; then [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]; fi
+  schema:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && inputs.mode != 'rollback'
+    uses: ./.github/workflows/verify-production-db-migration-executor.yml
+    with:
+      mode: strict
+      confirmation: VERIFY-MIGRATION-EXECUTOR
+    secrets: inherit
+  release:
+    needs: [validate, schema]
+    if: always() && github.ref == 'refs/heads/main' && needs.validate.result == 'success' && (inputs.mode == 'rollback' || needs.schema.result == 'success')
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+    steps:
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -52,7 +69,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify exact build, one-replica boundary and governed schema without writes
+      - name: Verify exact build, one-replica boundary and application access without writes
         if: inputs.mode != 'rollback'
         shell: bash
         run: |
@@ -74,7 +91,7 @@ jobs:
           ready=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
           image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$ready" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
-          # Existing application identity, read-only schema/ledger/config checks.
+          # Existing application identity, zero-row access and configuration checks.
           echo ENQUIRY_PREFLIGHT_STAGE=container_readiness
           set +e
           script -q -e -c "az containerapp exec -g \"$AZURE_RESOURCE_GROUP\" -n \"$AZURE_CONTAINER_APP_NAME\" --revision \"$ready\" --command 'node /app/scripts/check-enquiry-release-readiness.mjs'" /dev/null > "$folder/preflight" 2>&1
@@ -84,7 +101,7 @@ jobs:
           echo "ENQUIRY_PREFLIGHT_EXEC_STATUS=$exec_status"
           test "$exec_status" = 0
           grep -Fq 'ENQUIRY_RELEASE_READINESS=PASS' "$folder/preflight"
-          echo 'ENQUIRY_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 schema_ledger'
+          echo 'ENQUIRY_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 application_access signup_config'
       - name: Apply approved signup and enquiry scope
         id: enable
         if: inputs.mode != 'preflight'
