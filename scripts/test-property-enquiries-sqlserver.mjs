@@ -8,6 +8,7 @@ import sql from 'mssql';
 import {createEnquiryStore} from '../src/api/enquiries/store.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
+import {inspectEnquiryApplicationAccess} from '../src/api/enquiries/readiness.js';
 
 const container='quixo-enquiry-proof-'+process.pid+'-'+crypto.randomBytes(3).toString('hex');
 const password='Proof!'+crypto.randomBytes(18).toString('base64url')+'Aa9';
@@ -59,6 +60,25 @@ try {
   const migration=fs.readFileSync('migrations/20261028_01_property_enquiries.sql','utf8');
   await pool.request().batch(migration);await pool.request().batch(migration);
   assert.equal((await inspectPropertyEnquiries(pool)).satisfied,true);
+  // Match the restricted web identity: DML is allowed but definitions are not.
+  // A fresh strict executor check remains required separately in the workflow.
+  await query(`CREATE USER enquiry_readiness_probe WITHOUT LOGIN;
+    GRANT SELECT,INSERT,UPDATE ON dbo.property_enquiries TO enquiry_readiness_probe;
+    GRANT SELECT,INSERT ON dbo.property_enquiry_events TO enquiry_readiness_probe;
+    DENY VIEW DEFINITION TO enquiry_readiness_probe;`);
+  const restricted={request:()=>({query:statement=>pool.request().query(`
+    EXECUTE AS USER='enquiry_readiness_probe'; BEGIN TRY
+    ${statement}
+    REVERT; END TRY BEGIN CATCH REVERT; THROW; END CATCH;
+  `)})};
+  assert.equal((await inspectPropertyEnquiries(restricted)).satisfied,false,'Restricted metadata cannot establish strict schema acceptance');
+  assert.equal((await inspectEnquiryApplicationAccess(restricted)).satisfied,true,'Required runtime access works without definition rights');
+  await query('REVOKE INSERT ON dbo.property_enquiry_events FROM enquiry_readiness_probe');
+  assert.equal((await inspectEnquiryApplicationAccess(restricted)).satisfied,false,'Missing audit-write permission fails readiness without writing a row');
+  assert.equal((await query('SELECT COUNT(*) AS n FROM property_enquiries'))[0].n,0);
+  assert.equal((await query('SELECT COUNT(*) AS n FROM property_enquiry_events'))[0].n,0);
+  await query('DROP USER enquiry_readiness_probe');
+  console.log('ENQUIRY_APPLICATION_ACCESS_SQL=PASS restricted_definition_visibility required_dml denied_audit_write no_customer_writes');
   await query('ALTER TABLE property_enquiries NOCHECK CONSTRAINT FK_property_enquiries_seeker');
   assert.equal((await inspectPropertyEnquiries(pool)).satisfied,false,'Untrusted/disabled foreign keys must fail readiness');
   await query('ALTER TABLE property_enquiries WITH CHECK CHECK CONSTRAINT FK_property_enquiries_seeker');
