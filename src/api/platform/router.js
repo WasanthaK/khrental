@@ -1,3 +1,4 @@
+import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
 import express from 'express';
@@ -723,7 +724,10 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
   const inserted = [];
 
   for (const row of rows) {
-    if (safeTable === 'properties') {row.country_code = normalizePropertyCountry(row.country_code);}
+    if (safeTable === 'properties') {
+      row.country_code = normalizePropertyCountry(row.country_code);
+      row.rentalvalues = normalizePropertyRentalValues(row.rentalvalues,{requireCategory:true});
+    }
     const entries = Object.entries(row || {}).filter(([key, value]) => IDENTIFIER_REGEX.test(key) && value !== undefined);
     if (entries.length === 0) {continue;}
 
@@ -757,6 +761,9 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
   if (safeTable === 'properties' && Object.hasOwn(scopedPayload || {}, 'country_code')) {
     scopedPayload.country_code = normalizePropertyCountry(scopedPayload.country_code);
   }
+  if (safeTable === 'properties' && Object.hasOwn(scopedPayload || {}, 'rentalvalues')) {
+    scopedPayload.rentalvalues = normalizePropertyRentalValues(scopedPayload.rentalvalues);
+  }
   const entries = Object.entries(scopedPayload || {}).filter(([key, value]) => IDENTIFIER_REGEX.test(key) && value !== undefined);
   if (entries.length === 0) {
     return executeSelect({ table, filters, tenantId });
@@ -770,6 +777,10 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
   const assignments = entries.map(([key, value], index) => {
     const paramKey = `value${index}`;
     params[paramKey] = normalizeValue(value);
+    if (safeTable === 'properties' && key === 'rentalvalues' && !Object.hasOwn(value,'listingCategory')) {
+      // A rent-only legacy update must not erase a category already selected by its owner.
+      return `rentalvalues = CASE WHEN ISJSON(rentalvalues)=1 AND JSON_VALUE(rentalvalues,'$.listingCategory') IS NOT NULL THEN JSON_MODIFY(@${paramKey},'$.listingCategory',JSON_VALUE(rentalvalues,'$.listingCategory')) ELSE @${paramKey} END`;
+    }
     return `${key} = @${paramKey}`;
   });
 
