@@ -17,6 +17,7 @@ const app=http.createServer((req,res)=>{
   }catch{res.writeHead(404);res.end();}
 });
 const lkLive=fs.readFileSync(path.join(base,'lk/search/index.html'),'utf8').includes('data-public-listing-enabled="true"');
+const bnLive=fs.readFileSync(path.join(base,'bn/search/index.html'),'utf8').includes('data-public-listing-enabled="true"');
 const fixtureId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const fixtureImage='/api/public-listings/'+fixtureId+'/media/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?country=LK';
 const apiOrigin='https://app.quixo.homes';
@@ -41,18 +42,19 @@ try{
   for(const p of sitePaths)for(const width of [320,390,768,1280]){
     const page=await browser.newPage(),remote=[],failedResources=[];
     let catalogRequests=0;
+    const liveMarket=p==='/lk/search/'&&lkLive?'LK':p==='/bn/search/'&&bnLive?'BN':null;
     await page.setRequestInterception(true);
     page.on('request',r=>{
       if(r.url().startsWith(origin+'/'))return void r.continue();
-      if(lkLive&&p==='/lk/search/'&&r.url()===apiOrigin+'/api/public-listings?country=LK'){
+      if(liveMarket&&r.url()===apiOrigin+'/api/public-listings?country='+liveMarket){
         catalogRequests++;
         return void r.respond({status:200,contentType:'application/json',
           headers:{'Access-Control-Allow-Origin':origin,'Cache-Control':'no-store','Vary':'Origin'},
-          body:JSON.stringify({country:'LK',data:[{id:fixtureId,country:'LK',category:'residential',
+          body:JSON.stringify({country:liveMarket,data:[{id:fixtureId,country:liveMarket,category:'residential',
             title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',
-            images:[{url:fixtureImage,alt:'Synthetic exterior'}]}]})});
+            images:[{url:fixtureImage.replace('country=LK','country='+liveMarket),alt:'Synthetic exterior'}]}]})});
       }
-      if(lkLive&&p==='/lk/search/'&&r.url()===apiOrigin+fixtureImage)
+      if(liveMarket&&r.url()===apiOrigin+fixtureImage.replace('country=LK','country='+liveMarket))
         return void r.respond({status:200,contentType:'image/webp',body:fs.readFileSync(path.join(base,'assets/hero-house.webp'))});
       remote.push(r.url());return void r.abort();
     });
@@ -89,8 +91,8 @@ try{
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
     assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
-    if(expectedListingPanel)assert.equal(data.livePanel,lkLive&&p==='/lk/search/'?'true':'false',p+' single-market release scope');
-    if(lkLive&&p==='/lk/search/'){
+    if(expectedListingPanel)assert.equal(data.livePanel,liveMarket?'true':'false',p+' single-market release scope');
+    if(liveMarket){
       assert.equal(catalogRequests,1,'Exactly one anonymous catalog request');
       assert.deepEqual(data.liveTitles,['Synthetic pilot rental'],'Render only the synthetic approved API fixture');
       assert.equal(data.examplesHidden,true,'Illustrations are hidden from live search results');
@@ -145,7 +147,7 @@ try{
     assert.equal(targets.other,'/'+to+'/search/?type=commercial',from+' category-preserving switch');
     assert.ok(targets.header?.includes('?type=commercial'),from+' header switch category');
     assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
-    if(lkLive&&from==='lk'){
+    if((lkLive&&from==='lk')||(bnLive&&from==='bn')){
       assert.equal(await tab.evaluate(()=>!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden),true,'API failure must not show example cards as real inventory');
       assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('temporarily unavailable')),'Show a clear unavailable state');
     }
