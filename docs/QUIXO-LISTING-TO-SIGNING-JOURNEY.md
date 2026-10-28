@@ -54,7 +54,7 @@ Before implementing curated placement, decide who may approve it, slot limits, d
 3. **Then:** versioned offer and reservation with concurrency/idempotency proof; connect existing agreement signing and tenancy activation. Public owner signup remains dependent on the paying-organisation B04-owner/B05 package; reuse the canonical billing sandbox and catalogue.
 4. **Later:** curated featuring after the policy choices above; additional search filters and pagination; regional legal/operational acceptance. Scaling remains owner-deferred, and no extra running test replica is part of this work.
 
-Browsing and the explicitly activated personal registration/property-enquiry stage are live. Viewing coordination, applications, offers/reservations and the public signing entry remain unavailable until each corresponding implementation is accepted. Keep disabled states truthful rather than displaying a working-looking form that loses a request.
+Browsing, personal registration/property enquiries, viewing coordination and private applications are LIVE after their approved releases. Versioned offers/reservations and the public signing entry remain unavailable until their corresponding implementation and release are accepted. Keep disabled states truthful rather than displaying a working-looking form that loses a request.
 
 ## Physical acceptance
 
