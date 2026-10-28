@@ -1,4 +1,5 @@
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
+import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -45,7 +46,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   SIGNUP_CHALLENGE_MIGRATION_ID,
   SIGNUP_LIMIT_MIGRATION_ID,
   '20261026_02_property_iso_country',
-  '20261026_01_public_listing_preferences'
+  '20261026_01_public_listing_preferences',
+  '20261028_01_property_enquiries'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1018,6 +1020,14 @@ const main = async () => {
     assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media')).recordset[0].n,0);
     assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.public_listing_media_reviews')).recordset[0].n,0);
     console.log('PASS: governed public projection migration after deployed country schema; double apply; saved country preserved; zero public photos or approvals');
+    const enquirySql=fs.readFileSync(path.resolve('migrations/20261028_01_property_enquiries.sql'),'utf8');
+    await testPool.request().batch(enquirySql);
+    await testPool.request().batch(enquirySql);
+    const enquirySchema=await inspectPropertyEnquiries(testPool);
+    assert.equal(enquirySchema.satisfied,true,enquirySchema.detail);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.property_enquiries')).recordset[0].n,0);
+    assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.property_enquiry_events')).recordset[0].n,0);
+    console.log('PASS: governed enquiry migration double apply, strict metadata inspection, zero enquiry/contact/audit fixture writes');
 
 
   } finally {

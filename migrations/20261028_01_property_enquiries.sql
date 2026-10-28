@@ -1,4 +1,5 @@
--- Prepared enquiry schema. No production DDL or public activation at startup.
+-- Governed enquiry schema. Apply only through the protected migration runner.
+-- Additive metadata/audit storage; no public activation or request/startup DDL.
 SET XACT_ABORT ON;
 BEGIN TRY
  BEGIN TRANSACTION;

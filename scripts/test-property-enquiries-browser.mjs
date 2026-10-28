@@ -7,6 +7,7 @@ import express from 'express';
 import {createServer as createViteServer,transformWithEsbuild} from 'vite';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
+import {createPublicSignupVerificationLink} from '../src/api/auth/publicSignupVerificationEmail.js';
 
 const listingId='11111111-1111-4111-8111-111111111111';
 const enquiryId='22222222-2222-4222-8222-222222222222';
@@ -22,9 +23,12 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
   import PropertyEnquiry from '/src/pages/PropertyEnquiry.jsx';
   import OwnerEnquiries from '/src/pages/OwnerEnquiries.jsx';
   import Login from '/src/pages/Login.jsx';
+  import SeekerSignUp from '/src/pages/SeekerSignUp.jsx';
+  import VerifySeekerEmail from '/src/pages/VerifySeekerEmail.jsx';
   import '/src/index.css';
   createRoot(document.getElementById('root')).render(<BrowserRouter><Routes>
     <Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
+    <Route path="/seeker-sign-up" element={<SeekerSignUp/>}/><Route path="/verify-email" element={<VerifySeekerEmail/>}/>
     <Route path="/dashboard/enquiries" element={<OwnerEnquiries/>}/></Routes></BrowserRouter>);`;
 const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,importer){
   if(source.startsWith('\0enquiry-')){return source;}
@@ -38,15 +42,27 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-proof.jsx'){return transformWithEsbuild(entry,'enquiry-proof.jsx',{loader:'jsx',jsx:'automatic'});}
   if(id==='\0enquiry-auth'){return fixtureAuth;}
   if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
-  if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>false;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
+  if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw new Error(p.error);return p.data;};`;}
 }};
-let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false;
+let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
+const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
   app.get('/api/public-listings/:id',(req,res)=>res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location'}}));
   app.get('/api/platform/auth/seeker-context',(req,res)=>res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}}));
+  app.post('/api/public-signup/challenge',(req,res)=>{
+    assert.deepEqual(req.body.enquiry,{listingId,country:'LK'});
+    assert.equal(req.get('authorization'),undefined);assert.equal(req.get('x-tenant-id'),undefined);
+    verificationLink=createPublicSignupVerificationLink({token:verificationToken,baseUrl:'http://'+req.get('host'),enquiry:req.body.enquiry});
+    res.json({data:{accepted:true}});
+  });
+  app.post('/api/public-signup/redeem',(req,res)=>{
+    assert.equal(req.body.token,verificationToken);assert.equal(req.get('authorization'),undefined);
+    assert.equal(req.get('x-tenant-id'),undefined);
+    res.status(201).json({data:{user:{role:'authenticated',user_type:'seeker'},session:{access_token:'synthetic-registration-only'}}});
+  });
   app.get('/api/property-enquiries',(req,res)=>res.json({data:{items:row?[row]:[],hasMore:false}}));
   app.post('/api/property-enquiries',(req,res)=>{
     submissions++;
@@ -135,11 +151,43 @@ try {
   await page.click('::-p-text(Withdraw enquiry)');
   await page.waitForFunction(()=>document.body.innerText.includes('Enquiry withdrawn.'));
   assert.equal(row.status,'withdrawn');
+  // A new prospect crosses an email/browser boundary. Only the validated
+  // public listing pointer survives; the verification token is scrubbed.
+  await page.click('::-p-text(Sign out)');await page.waitForSelector('a[href^="/login?listingId="]');
+  await page.click('a[href^="/login?listingId="]');
+  await page.waitForSelector('a[href^="/seeker-sign-up?listingId="]');
+  await page.click('a[href^="/seeker-sign-up?listingId="]');
+  await page.waitForSelector('#seeker-name');await page.type('#seeker-name','Synthetic new seeker');
+  await page.type('#seeker-email','new-seeker@example.test');await page.click('form button');
+  await page.waitForFunction(()=>document.body.innerText.includes('verification email will be sent'));
+  assert.ok(verificationLink);
+  const verifyPage=await browser.newPage();activePage=verifyPage;
+  verifyPage.setDefaultTimeout(10000);verifyPage.setDefaultNavigationTimeout(15000);
+  verifyPage.on('pageerror',e=>errors.push(e.message));
+  await verifyPage.setRequestInterception(true);
+  verifyPage.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+  await verifyPage.goto(verificationLink,{waitUntil:'networkidle0'});
+  assert.equal(verifyPage.url(),origin+'/verify-email');
+  await verifyPage.waitForSelector('#seeker-password');
+  await verifyPage.type('#seeker-password','SyntheticFixtureOnly!');await verifyPage.type('#seeker-password-confirm','SyntheticFixtureOnly!');
+  await verifyPage.click('form button');await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your email has been verified'));
+  const returnHref=await verifyPage.$eval('a[href^="/login?listingId="]',e=>e.getAttribute('href'));
+  assert.ok(returnHref.includes(listingId));assert.ok(!returnHref.includes(verificationToken));
+  await verifyPage.click('a[href^="/login?listingId="]');await verifyPage.waitForSelector('#email-address');
+  await verifyPage.type('#email-address','new-seeker@example.test');await verifyPage.type('#password','SyntheticFixtureOnly!');
+  await verifyPage.click('button[type="submit"]');await verifyPage.waitForSelector('textarea');
+  assert.equal(new URL(verifyPage.url()).searchParams.get('listingId'),listingId);
+  await verifyPage.type('textarea','I verified my email and returned to this rental.');
+  await verifyPage.click('input[type="checkbox"]');await verifyPage.click('form button');
+  await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your enquiry was saved'));
+  assert.equal(submissions,3);assert.equal(row.status,'pending');
+  console.log('BROWSER_STAGE=registration_email_new_browser_login_enquiry');
+  await page.bringToFront();activePage=page;
   await page.goto(origin+'/enquire?off=1',{waitUntil:'networkidle0'});
   assert.match(await page.$eval('body',e=>e.innerText),/not open yet/);
   assert.equal(await page.$('textarea'),null);
   assert.deepEqual(errors,[]);
-  console.log('PROPERTY_ENQUIRIES_BROWSER=PASS listing_login_return consent retry inbox_reply mobile logout_privacy withdrawal default_off');
+  console.log('PROPERTY_ENQUIRIES_BROWSER=PASS listing_login_return consent retry inbox_reply mobile logout_privacy withdrawal signup_email_return default_off');
   }
 } catch(error) {
   if(activePage){

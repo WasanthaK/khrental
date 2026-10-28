@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
 import {createEnquiryStore} from '../src/api/enquiries/store.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
+import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 
 const container='quixo-enquiry-proof-'+process.pid+'-'+crypto.randomBytes(3).toString('hex');
 const password='Proof!'+crypto.randomBytes(18).toString('base64url')+'Aa9';
@@ -55,8 +56,16 @@ try {
     CREATE TABLE public_listing_preferences(public_id UNIQUEIDENTIFIER PRIMARY KEY,property_id UNIQUEIDENTIFIER,
       tenant_id UNIQUEIDENTIFIER,country_code CHAR(2),opted_out BIT,public_headline NVARCHAR(150),location_label NVARCHAR(120));
   `);
-  const migration=fs.readFileSync('migrations/drafts/20261028_01_property_enquiries.sql','utf8');
+  const migration=fs.readFileSync('migrations/20261028_01_property_enquiries.sql','utf8');
   await pool.request().batch(migration);await pool.request().batch(migration);
+  assert.equal((await inspectPropertyEnquiries(pool)).satisfied,true);
+  await query('ALTER TABLE property_enquiries NOCHECK CONSTRAINT FK_property_enquiries_seeker');
+  assert.equal((await inspectPropertyEnquiries(pool)).satisfied,false,'Untrusted/disabled foreign keys must fail readiness');
+  await query('ALTER TABLE property_enquiries WITH CHECK CHECK CONSTRAINT FK_property_enquiries_seeker');
+  await query('DROP INDEX UX_property_enquiries_open ON property_enquiries');
+  assert.equal((await inspectPropertyEnquiries(pool)).satisfied,false,'Missing duplicate-open protection must fail readiness');
+  await query("CREATE UNIQUE INDEX UX_property_enquiries_open ON property_enquiries(seeker_id,listing_public_id) WHERE status IN('pending','responded')");
+  assert.equal((await inspectPropertyEnquiries(pool)).satisfied,true);
   await query(`INSERT tenants VALUES(@tenant,N'active'),(@otherTenant,N'active')`,{tenant,otherTenant});
   for(const [a,role,userType,tenantId] of [[actor,'authenticated','seeker',null],[owner,'admin','staff',tenant],[foreignOwner,'admin','staff',otherTenant]]){
     const authUserId=crypto.randomUUID();

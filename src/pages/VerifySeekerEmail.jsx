@@ -2,13 +2,13 @@
 // S3a migration, shared durable limiter and S3b2 API release gates are green.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { consumeSeekerVerificationFragment } from '../utils/seekerVerificationFragment';
+import { consumeSeekerVerificationContext } from '../utils/seekerVerificationFragment';
 import { isPublicSignupUiEnabled } from '../utils/env';
 
 const permitted = isPublicSignupUiEnabled();
 
 const VerifySeekerEmail = () => {
-  const [token] = useState(() => consumeSeekerVerificationFragment({
+  const [{token,enquirySearch}] = useState(() => consumeSeekerVerificationContext({
     location: typeof window === 'undefined' ? null : window.location,
     history: typeof window === 'undefined' ? null : window.history
   }));
@@ -19,7 +19,7 @@ const VerifySeekerEmail = () => {
 
   const redeem = async event => {
     event.preventDefault();
-    if (!permitted || !token || status === 'sending') return;
+    if (!permitted || !token || status === 'sending') {return;}
 
     if (password.length < 12 || password.length > 256) {
       setMessage('Choose a password between 12 and 256 characters.');
@@ -44,7 +44,7 @@ const VerifySeekerEmail = () => {
         referrerPolicy: 'no-referrer',
         redirect: 'error'
       });
-      if (!response.ok) throw new Error('Registration could not be completed.');
+      if (!response.ok) {throw new Error('Registration could not be completed.');}
       const body = await response.json();
       if (body?.data?.user?.role !== 'authenticated' ||
           body?.data?.user?.user_type !== 'seeker' ||
@@ -76,7 +76,7 @@ const VerifySeekerEmail = () => {
             Registration is not available yet
           </h1>
           <p className="mt-4 text-slate-600">Online email verification has not been enabled.</p>
-          <Link to="/login" className="mt-6 inline-block text-blue-700 underline">Back to sign in</Link>
+          <Link to={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">Back to sign in</Link>
         </section>
       </main>
     );
@@ -121,9 +121,11 @@ const VerifySeekerEmail = () => {
             </button>
           </form>
         )}
-        <Link to="/login" className="mt-6 inline-block text-blue-700 underline">
+        {status==='complete'&&<p className="mt-4 text-sm text-slate-600">If another account is signed in, sign out of it or use a private window to continue with your new account.</p>}
+        <Link to={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">
           {status === 'complete' ? 'Continue to sign in' : 'Back to sign in'}
         </Link>
+        {status!=='complete'&&<Link to={'/seeker-sign-up'+enquirySearch} className="mt-4 block text-blue-700 underline">Request a new verification link</Link>}
       </section>
     </main>
   );

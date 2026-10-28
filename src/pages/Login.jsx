@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
 import { getPostLoginPath } from '../utils/authRedirect.js';
-import { enquiryReturnPath } from '../utils/enquiryReturnPath.js';
+import { enquiryReturnPath, enquiryLoginSearch } from '../utils/enquiryReturnPath.js';
 import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
 import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
 import { getPlatformClient } from '../services/platformClient';
@@ -178,11 +178,11 @@ const Login = () => {
 
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+              {!enquiryReturnPath(location.search)&&<Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
                 Create account
-              </Link>
+              </Link>}
               {isPublicSignupUiEnabled() && (
-                <Link to="/seeker-sign-up" className="ml-3 font-medium text-blue-600 hover:text-blue-500">
+                <Link to={'/seeker-sign-up'+enquiryLoginSearch(location.search)} className="ml-3 font-medium text-blue-600 hover:text-blue-500">
                   Create seeker account
                 </Link>
               )}

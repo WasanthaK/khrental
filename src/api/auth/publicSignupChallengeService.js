@@ -4,6 +4,7 @@
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { ensureAuthSchema } from './index.js';
 import { createPublicSignupChallengeToken } from './publicSignupChallenge.js';
+import {parseEnquiryIntent} from '../../utils/enquiryReturnPath.js';
 
 const fail = (code) => Object.assign(new Error('Signup verification is not available.'), {
   code, status: 503
@@ -15,7 +16,7 @@ const bind = (tx, values) => {
   return q;
 };
 
-export const normalizePublicSignupDetails = ({ email, name } = {}) => {
+export const normalizePublicSignupDetails = ({ email, name, enquiry } = {}) => {
   if (typeof email !== 'string' || typeof name !== 'string') return null;
   const normalized = email.trim().toLowerCase();
   const displayName = name.trim();
@@ -23,7 +24,9 @@ export const normalizePublicSignupDetails = ({ email, name } = {}) => {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ||
       displayName.length < 1 || displayName.length > 255 ||
       /[\x00-\x1f\x7f]/.test(displayName)) return null;
-  return { email: normalized, name: displayName };
+  const intent=enquiry===undefined?null:parseEnquiryIntent(enquiry);
+  if(enquiry!==undefined&&!intent){return null;}
+  return { email: normalized, name: displayName,...(intent?{enquiry:intent}:{}) };
 };
 
 // Caller must return a uniform public response regardless of whether this

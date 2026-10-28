@@ -1,9 +1,13 @@
 // Separate seeker identity registration. Never use the legacy renter signup.
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { isPublicSignupUiEnabled } from '../utils/env';
+import {enquiryIntentFromSearch,enquiryLoginSearch} from '../utils/enquiryReturnPath.js';
 
 export default function SeekerSignUp() {
+  const location=useLocation();
+  const enquiry=enquiryIntentFromSearch(location.search);
+  const returnSearch=enquiryLoginSearch(location.search);
   const enabled = isPublicSignupUiEnabled();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -12,19 +16,19 @@ export default function SeekerSignUp() {
 
   const submit = async event => {
     event.preventDefault();
-    if (!enabled || busy) return;
+    if (!enabled || busy) {return;}
     setBusy(true);
     try {
       const response = await fetch('/api/public-signup/challenge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(),...(enquiry?{enquiry}:{}) }),
         credentials: 'omit',
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
         redirect: 'error'
       });
-      if (!response.ok) throw Error('Unavailable');
+      if (!response.ok) {throw Error('Unavailable');}
       setMessage('If registration is available for this email address, a verification email will be sent.');
       setEmail('');
       setName('');
@@ -52,7 +56,7 @@ export default function SeekerSignUp() {
               type="submit">{busy ? 'Requesting…' : 'Send verification link'}</button>
           </form>}
         {message && <p role="status" className="mt-4 text-sm text-slate-700">{message}</p>}
-        <Link to="/login" className="mt-6 inline-block text-blue-700 underline">Back to sign in</Link>
+        <Link to={'/login'+returnSearch} className="mt-6 inline-block text-blue-700 underline">Back to sign in</Link>
       </section>
     </main>
   );

@@ -75,7 +75,8 @@ test('read-only executor preflight checks grants and all manifest states without
   assert.match(workflow, /verification_script="scripts\/run-production-migration-preflight\.sh"/);
   assert.match(workflow, /PREFLIGHT\[\[:space:\]\]/);
   assert.match(workflow, /Preflight allows PENDING and SATISFIED_UNTRACKED/);
-  assert.match(workflow, /Strict read-only migration verification passed for 13 managed migrations/);
+  const manifestCount=[...runner.matchAll(/^\s+id:\s*'(\d{8}_\d{2}_[^']+)'/gm)].length;
+  assert.ok(workflow.includes(`Strict read-only migration verification passed for ${manifestCount} managed migrations`));
   assert.doesNotMatch(workflow, /az containerapp job update/);
   assert.doesNotMatch(workflow, /--mode=apply/);
 });

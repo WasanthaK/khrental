@@ -142,7 +142,7 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
   assert.match(login, /isPublicSeekerLandingEnabled\(\) && result\?\.data\?\.user\?\.id/);
   assert.match(login, /expectedAuthId: result\.data\.user\.id/);
   assert.match(login, /isPublicSignupUiEnabled\(\) &&/);
-  assert.match(login, /to="\/seeker-sign-up"/);
+  assert.match(login, /to=\{'\/seeker-sign-up'\+enquiryLoginSearch\(location.search\)\}/);
   const config = readFileSync(new URL('../scripts/generate-env-config.js', import.meta.url), 'utf8');
   assert.match(config, /'VITE_PUBLIC_SIGNUP_UI_ENABLED'/);
   assert.match(config, /'VITE_PUBLIC_SEEKER_LANDING_ENABLED'/);
