@@ -7,6 +7,7 @@ import express from 'express';
 import {createServer as createViteServer,transformWithEsbuild} from 'vite';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
+import {parseViewingAction,nextViewing,viewingReceipt} from '../src/api/enquiries/viewingContract.js';
 import {createPublicSignupVerificationLink} from '../src/api/auth/publicSignupVerificationEmail.js';
 
 const listingId='11111111-1111-4111-8111-111111111111';
@@ -43,9 +44,10 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-auth'){return fixtureAuth;}
   if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
-  if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw new Error(p.error);return p.data;};`;}
+  if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data;};`;}
 }};
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
+let viewing=null,viewingsOpen=true;
 const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
@@ -62,6 +64,21 @@ try {
     assert.equal(req.body.token,verificationToken);assert.equal(req.get('authorization'),undefined);
     assert.equal(req.get('x-tenant-id'),undefined);
     res.status(201).json({data:{user:{role:'authenticated',user_type:'seeker'},session:{access_token:'synthetic-registration-only'}}});
+  });
+  app.get(['/api/property-enquiries/:id/viewing','/api/owner-enquiries/:id/viewing'],(req,res)=>{
+    if(!viewingsOpen){return res.status(404).json({code:'VIEWINGS_UNAVAILABLE',error:'Viewing appointments are not open yet.'});}
+    res.json({data:viewingReceipt(viewing)});
+  });
+  app.post(['/api/property-enquiries/:id/viewing','/api/owner-enquiries/:id/viewing'],(req,res)=>{
+    const owner=req.path.startsWith('/api/owner-');
+    if(!owner){assert.equal(req.get('authorization'),'Bearer synthetic-proof-token');assert.equal(req.get('x-tenant-id'),undefined);}
+    try {
+      const input=parseViewingAction(req.body,owner);
+      const next=nextViewing(viewing,input,owner,{country_code:'LK',status:row.status},new Date());
+      viewing={status:next.status,starts_at:next.startsAt,ends_at:next.endsAt,timezone:next.timeZone,
+        instructions:next.instructions,version:(viewing?.version??0)+1,updated_at:new Date().toISOString()};
+      res.json({data:viewingReceipt(viewing)});
+    } catch(err){res.status(err.status||500).json({code:err.code,error:err.message});}
   });
   app.get('/api/property-enquiries',(req,res)=>res.json({data:{items:row?[row]:[],hasMore:false}}));
   app.post('/api/property-enquiries',(req,res)=>{
@@ -133,6 +150,34 @@ try {
   await page.click('::-p-text(Refresh responses)');
   await page.waitForFunction(()=>document.body.innerText.includes('Please suggest a convenient time.'));
   console.log('BROWSER_STAGE=seeker_reads_reply');
+  const localDate=new Date(Date.now()+86400000).toISOString().slice(0,16);
+  const chooseTime=async p=>p.$eval('input[type="datetime-local"]',(input,value)=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  },localDate);
+  await chooseTime(page);
+  await page.click('::-p-text(Request viewing time)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Viewing status: requested'));
+  assert.equal(viewing.status,'requested');
+  assert.ok((await page.$eval('body',e=>e.innerText)).includes('Asia/Colombo'));
+  await ownerPage.bringToFront();await ownerPage.click('::-p-text(Refresh viewing)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Confirm requested time'));
+  await ownerPage.type('textarea[id$="-instructions"]','Synthetic private meeting point');
+  await ownerPage.click('::-p-text(Confirm requested time)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Viewing status: confirmed'));
+  await page.bringToFront();await page.click('::-p-text(Refresh viewing)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Synthetic private meeting point'));
+  await ownerPage.bringToFront();await chooseTime(ownerPage);
+  await ownerPage.type('textarea[id$="-instructions"]','Revised private meeting point');
+  await ownerPage.click('::-p-text(Propose viewing time)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Viewing status: proposed'));
+  await page.bringToFront();await page.click('::-p-text(Refresh viewing)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Accept proposed time'));
+  assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Revised private meeting point'));
+  await page.click('::-p-text(Accept proposed time)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Revised private meeting point'));
+  console.log('PROPERTY_VIEWINGS_BROWSER=PASS requested owner_confirmation reschedule seeker_accept private_instructions explicit_timezone');
+
   await page.setViewport({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile layout must fit viewport');
   const output=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
@@ -151,6 +196,15 @@ try {
   await page.click('::-p-text(Withdraw enquiry)');
   await page.waitForFunction(()=>document.body.innerText.includes('Enquiry withdrawn.'));
   assert.equal(row.status,'withdrawn');
+  await page.click('::-p-text(Cancel viewing)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Viewing status: cancelled'));
+  assert.equal(viewing.instructions,null);
+  viewingsOpen=false;
+  await page.reload({waitUntil:'networkidle0'});
+  assert.equal(await page.$('input[type="datetime-local"]'),null);
+  assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Viewing appointment'));
+  console.log('PROPERTY_VIEWINGS_BROWSER_CLOSURE=PASS cancel_closed_enquiry independent_default_off');
+
   // A new prospect crosses an email/browser boundary. Only the validated
   // public listing pointer survives; the verification token is scrubbed.
   await page.click('::-p-text(Sign out)');await page.waitForSelector('a[href^="/login?listingId="]');

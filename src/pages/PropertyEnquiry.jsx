@@ -1,3 +1,4 @@
+import PropertyViewing from '../components/properties/PropertyViewing';
 import {useEffect,useRef,useState} from 'react';
 import {Link,useLocation} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
@@ -119,6 +120,7 @@ const PropertyEnquiry=()=>{
           {item.response && <div className="bg-slate-50 p-3"><h4 className="font-semibold">Owner response</h4><p className="whitespace-pre-wrap">{item.response}</p></div>}
           <p className="text-sm text-slate-600">Submitted {new Date(item.createdAt).toLocaleString()}</p>
           {['pending','responded'].includes(item.status) && <button disabled={state.busy} className="underline text-red-800" onClick={()=>withdraw(item)}>Withdraw enquiry</button>}
+          <PropertyViewing key={identity+':'+item.id} enquiry={item} call={call} />
         </article>)}
         <div className="flex gap-4"><button disabled={offset===0||state.busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
           <button disabled={!hasMore||state.busy} onClick={()=>setOffset(n=>n+50)}>Next</button>

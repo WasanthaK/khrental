@@ -49,6 +49,14 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
     (enquiry_id,actor_user_id,from_status,to_status,version,response) VALUES(@id,@actorId,@from,@to,@version,@response)`,
   {id:row.id,actorId,from,to:row.status,version:row.version,response:row.owner_response||null});
   return {
+    withEnquiry:(actor,id,owner,work) => transaction(async query => {
+      await requireActor(query,actor,owner);
+      const enquiry=(await query(`SELECT * FROM dbo.property_enquiries WITH(UPDLOCK,HOLDLOCK)
+        WHERE id=@id AND ${owner?'tenant_id=@scope':'seeker_id=@scope'}`,
+      {id,scope:owner?actor.tenantId:actor.actorId}))[0];
+      if (!enquiry) {throw enquiryError(404,'ENQUIRY_NOT_FOUND','Enquiry not found.');}
+      return work(query,enquiry);
+    }),
     submit:(actor,input) => transaction(async query => {
       const user = await requireActor(query,actor);
       const args={...input,seekerId:actor.actorId};

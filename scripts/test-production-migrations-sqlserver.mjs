@@ -1,4 +1,5 @@
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
+import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -47,7 +48,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   SIGNUP_LIMIT_MIGRATION_ID,
   '20261026_02_property_iso_country',
   '20261026_01_public_listing_preferences',
-  '20261028_01_property_enquiries'
+  '20261028_01_property_enquiries',
+  '20261028_02_property_viewings'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1028,6 +1030,12 @@ const main = async () => {
     assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.property_enquiries')).recordset[0].n,0);
     assert.equal((await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.property_enquiry_events')).recordset[0].n,0);
     console.log('PASS: governed enquiry migration double apply, strict metadata inspection, zero enquiry/contact/audit fixture writes');
+    const viewingSql=fs.readFileSync(path.resolve('migrations/20261028_02_property_viewings.sql'),'utf8');
+    await testPool.request().batch(viewingSql);
+    await testPool.request().batch(viewingSql);
+    const viewingSchema=await inspectPropertyViewings(testPool);
+    assert.equal(viewingSchema.satisfied,true,viewingSchema.detail);
+    console.log('PASS: governed viewing migration double apply, strict metadata inspection, zero viewing fixture writes');
 
 
   } finally {

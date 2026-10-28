@@ -5,7 +5,7 @@
 // Personal enquiry calls deliberately omit tenant/dev headers and cookies.
 // The API independently verifies the live bearer session and global identity.
 export const requestSeekerEnquiries = async ({getSession,path='',method='GET',body}={}) => {
-  if (!/^\/(?:[0-9a-f-]{36})$/i.test(path) && path!=='' && !/^\?offset=\d{1,6}$/.test(path)) {
+  if (!/^\/(?:[0-9a-f-]{36})(?:\/viewing)?$/i.test(path) && path!=='' && !/^\?offset=\d{1,6}$/.test(path)) {
     throw new Error('Invalid enquiry request.');
   }
   const {data,error}=await getSession();

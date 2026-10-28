@@ -7,6 +7,9 @@ import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
 import {createEnquiryStore} from '../src/api/enquiries/store.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
+import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
+import {createViewingStore} from '../src/api/enquiries/viewingStore.js';
+import {parseViewingAction} from '../src/api/enquiries/viewingContract.js';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 import {inspectEnquiryApplicationAccess} from '../src/api/enquiries/readiness.js';
 
@@ -60,6 +63,14 @@ try {
   const migration=fs.readFileSync('migrations/20261028_01_property_enquiries.sql','utf8');
   await pool.request().batch(migration);await pool.request().batch(migration);
   assert.equal((await inspectPropertyEnquiries(pool)).satisfied,true);
+  const viewingMigration=fs.readFileSync('migrations/20261028_02_property_viewings.sql','utf8');
+  await pool.request().batch(viewingMigration);await pool.request().batch(viewingMigration);
+  const viewingSchema=await inspectPropertyViewings(pool);
+  assert.equal(viewingSchema.satisfied,true,viewingSchema.detail);
+  await query('ALTER TABLE property_viewings NOCHECK CONSTRAINT CK_property_viewings_time');
+  assert.equal((await inspectPropertyViewings(pool)).satisfied,false,'Disabled viewing checks fail strict acceptance');
+  await query('ALTER TABLE property_viewings WITH CHECK CHECK CONSTRAINT CK_property_viewings_time');
+
   // Match the restricted web identity: DML is allowed but definitions are not.
   // A fresh strict executor check remains required separately in the workflow.
   await query(`CREATE USER enquiry_readiness_probe WITHOUT LOGIN;
@@ -120,6 +131,40 @@ try {
   const mine=(await store.list(actor)).items[0];
   assert.equal(mine.response,'Please suggest a convenient time.');
   assert.ok(!Object.hasOwn(mine,'seekerEmail'));assert.ok(!Object.hasOwn(mine,'propertyId'));
+  const viewings=createViewingStore({poolProvider:async()=>pool});
+  const start=new Date(Date.now()+86400000).toISOString();
+  const end=new Date(Date.parse(start)+3600000).toISOString();
+  const action=(name,version,own=false,extra={})=>parseViewingAction({action:name,version,requestId:crypto.randomUUID(),...extra},own);
+  const request=action('request',0,false,{startsAt:start,endsAt:end});
+  const viewingConcurrent=await Promise.allSettled([viewings.change(actor,saved.id,request),viewings.change(actor,saved.id,request)]);
+  for(const result of viewingConcurrent){if(result.status==='rejected'){assert.equal(result.reason.code,'ENQUIRY_RETRY');}}
+  assert.ok(viewingConcurrent.some(result=>result.status==='fulfilled'));
+  assert.equal((await viewings.change(actor,saved.id,request)).version,1,'Exact replay survives retry');
+  assert.equal((await query('SELECT COUNT(*) AS n FROM property_viewing_events WHERE enquiry_id=@id',{id:saved.id}))[0].n,1);
+  await assert.rejects(viewings.get(foreignOwner,saved.id,true),{code:'ENQUIRY_NOT_FOUND'});
+  await assert.rejects(viewings.change(actor,saved.id,{...request,payloadHash:'changed'}),{code:'VIEWING_REQUEST_CONFLICT'});
+  const confirm=action('confirm',1,true,{instructions:'Synthetic private meeting point'});
+  assert.equal((await viewings.change(owner,saved.id,confirm,true)).status,'confirmed');
+  assert.equal((await viewings.get(actor,saved.id)).instructions,'Synthetic private meeting point');
+  await assert.rejects(viewings.change(actor,saved.id,action('cancel',1)),{code:'VIEWING_CHANGED'});
+  await assert.rejects(viewings.change(owner,saved.id,action('complete',2,true),true),{code:'VIEWING_CHANGED'});
+  const proposed=await viewings.change(owner,saved.id,action('propose',2,true,{startsAt:start,endsAt:end,instructions:'Revised meeting point'}),true);
+  assert.equal(proposed.status,'proposed');assert.equal(proposed.instructions,null);
+  assert.equal((await viewings.get(actor,saved.id)).instructions,null);
+  await query('UPDATE public_listing_preferences SET opted_out=1 WHERE public_id=@id',{id:first.listingId});
+  await assert.rejects(viewings.change(actor,saved.id,action('accept',3)),{code:'LISTING_UNAVAILABLE'});
+  await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
+  assert.equal((await viewings.change(actor,saved.id,action('accept',3))).status,'confirmed');
+  assert.equal((await viewings.change(actor,saved.id,action('cancel',4))).status,'cancelled');
+  // Rebook and establish a past completed appointment without a clock mock:
+  // only the synthetic database fixture moves the saved appointment to the past.
+  await viewings.change(actor,saved.id,action('request',5,false,{startsAt:start,endsAt:end}));
+  await viewings.change(owner,saved.id,action('confirm',6,true),true);
+  await query('UPDATE property_viewings SET starts_at=DATEADD(hour,-2,SYSUTCDATETIME()),ends_at=DATEADD(hour,-1,SYSUTCDATETIME()) WHERE enquiry_id=@id',{id:saved.id});
+  assert.equal((await viewings.change(owner,saved.id,action('complete',7,true),true)).status,'completed');
+  assert.deepEqual((await query('SELECT status FROM property_viewing_events WHERE enquiry_id=@id ORDER BY version',{id:saved.id})).map(x=>x.status),
+    ['requested','confirmed','proposed','confirmed','cancelled','requested','confirmed','completed']);
+  console.log('PROPERTY_VIEWINGS_SQL=PASS migration_rerun strict_drift scope concurrent_replay stale_version confirmation proposal privacy availability completion audit');
   assert.equal((await store.change(actor,saved.id,{version:2})).status,'withdrawn');
   await assert.rejects(store.change(owner,saved.id,{status:'responded',response:'Late reply',version:3},true),{code:'ENQUIRY_CHANGED'});
   const events=await query('SELECT version,from_status,to_status,response FROM property_enquiry_events WHERE enquiry_id=@id ORDER BY version',{id:saved.id});
@@ -137,6 +182,7 @@ try {
   await assert.rejects(sameAfterRestart.submit(actor,input(10)),{code:'ENQUIRY_LIMIT'});
   await query('UPDATE auth_sessions SET revoked_at=SYSUTCDATETIME() WHERE id=@id',{id:actor.sessionId});
   await assert.rejects(store.list(actor),{code:'ENQUIRY_ACTOR_REQUIRED'});
+  await assert.rejects(viewings.get(actor,saved.id),{code:'ENQUIRY_ACTOR_REQUIRED'});
   await query("UPDATE tenant_memberships SET status='revoked' WHERE app_user_id=@id",{id:owner.actorId});
   await assert.rejects(store.list(owner,true),{code:'ENQUIRY_ACTOR_REQUIRED'});
   assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:actor.actorId}))[0].n,0);

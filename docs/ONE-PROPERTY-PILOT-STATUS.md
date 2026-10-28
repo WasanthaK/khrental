@@ -13,6 +13,10 @@ Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) 
 | After the website | Owner SaaS subscriptions | Canonical billing sandbox/design retained; no live subscription charging activated. |
 | Deferred | Scaling | Single revision, min=max=1; no extra running web test replica. |
 
+## Viewing coordination — implementation and acceptance in progress
+
+The owner confirmed the remaining three website packages: viewing coordination; private applications/versioned offers/reservations; signing and explicit move-in activation. The first is now implemented for review in the existing seeker enquiry and administrator inbox. [Viewing controls and release boundary](QUIXO-PROPERTY-VIEWINGS.md) record reciprocal confirmation, property timezones, cancellation, private instructions, durable retries/versioned audit and the additive governed migration. Source defaults OFF. Production apply, strict 15/15 acceptance and explicit release are not claimed yet. Current public registration/enquiries remain LIVE, and all later stages remain incomplete. No extra running web replica is introduced.
+
 ## Public registration and enquiries — LIVE 2026-10-28
 
 The owner gave the required action-time approval to open public personal-seeker registration and email-verified property enquiries. [Public release #40682556348](https://github.com/WasanthaK/khrental/actions/runs/40682556348) PASS against accepted serving build `def79ca8fb12110cb59285f370c6a7890b576f5c`: request validation, fresh strict **14/14** executor schema/ledger/checksum acceptance, matched database target, restricted application DML access, signup origin/limiter/mail configuration and exact-build verification all passed before activation.

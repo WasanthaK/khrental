@@ -5,11 +5,13 @@ import {resolveVerifiedSeekerContext} from '../auth/seekerContext.js';
 import {hasActiveTenantMembership,isAdminRole} from '../platform/permissionEngine.js';
 import {PUBLIC_LISTING_ENABLED} from '../publicListings/eligibility.js';
 import {createEnquiryStore} from './store.js';
+import {createViewingStore} from './viewingStore.js';
+import {parseViewingAction} from './viewingContract.js';
 import {isUuid,parseEnquiry,parseOwnerAction,enquiryError} from './contract.js';
 
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 export const createEnquiriesRouter=({
-  owner=false,env=process.env,store=createEnquiryStore(),
+  owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),
   context=createTenantContextMiddleware({requireUser:true,requireTenant:owner}),
   verifySeeker=resolveVerifiedSeekerContext,allowedOrigin='https://app.quixo.homes'
 }={})=>{
@@ -45,6 +47,17 @@ export const createEnquiriesRouter=({
       ...(owner?{tenantId:req.tenantId}:{})};
     next();
   }).catch(next));
+  router.use('/:id/viewing',(req,res,next)=>{
+    if (env.PROPERTY_VIEWINGS_ENABLED!=='true') {return res.status(404).json({code:'VIEWINGS_UNAVAILABLE',error:'Viewing appointments are not open yet.'});}
+    if (!isUuid(req.params.id)) {return res.status(404).json({code:'ENQUIRY_NOT_FOUND',error:'Enquiry not found.'});}
+    next();
+  });
+  router.get('/:id/viewing',asyncRoute(async(req,res)=>{
+    res.json({data:await viewings.get(req.enquiryActor,req.params.id,owner)});
+  }));
+  router.post('/:id/viewing',asyncRoute(async(req,res)=>{
+    res.json({data:await viewings.change(req.enquiryActor,req.params.id,parseViewingAction(req.body,owner),owner)});
+  }));
   router.get('/',asyncRoute(async(req,res)=>{
     const offset=Number(req.query.offset||0);
     if (!Number.isInteger(offset) || offset<0 || offset>100000) {throw enquiryError(400,'INVALID_PAGE','Choose a valid page.');}
