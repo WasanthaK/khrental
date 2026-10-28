@@ -73,13 +73,13 @@ jobs:
         env:
           ENQUIRY_PROOF_DIR: enquiry-browser-proof
         run: node scripts/test-property-enquiries-browser.mjs
+      - name: Rental offers and agreement continuation browser proof
+        run: node scripts/test-rental-offers-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: enquiry-browser-proof
           path: enquiry-browser-proof/
           if-no-files-found: ignore
-      - name: Rental offers and agreement continuation browser proof
-        run: node scripts/test-rental-offers-browser.mjs
       - name: No production effects
         run: echo 'No production schema, release flags, public signup or extra cloud replicas changed.'

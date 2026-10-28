@@ -141,6 +141,8 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.notEqual(firstAgreement.offer.agreementId,secondAgreement.offer.agreementId);
  assert.equal((await q('SELECT COUNT(*) AS n FROM rental_offer_agreement_links WHERE enquiry_id=@id',{id:repeat.id}))[0].n,2);
  assert.equal((await q('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:repeat.actor.actorId}))[0].n,1);
+ await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>[51101,51103].includes(e.number));
+ await store.change(repeat.actor,repeat.id,request('withdraw',7));
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>e.number===51103);
  console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race active_occupancy_race catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
 };

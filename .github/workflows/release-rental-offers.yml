@@ -149,7 +149,7 @@ jobs:
           done
           if [ "$MODE" != rollback ]; then curl -fsS --max-time 20 'https://app.quixo.homes/api/public-listings?country=LK' > /dev/null; fi
           echo 'RENTAL_OFFER_RELEASE_ACCEPTANCE=PASS anonymous_denial no_customer_writes min_max_1'
-      - name: Close rental offers and holds if release verification fails
+      - name: Close new rental offers if release verification fails
         if: failure() && steps.enable.outputs.mutated == 'true'
         shell: bash
         run: |
