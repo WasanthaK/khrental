@@ -111,26 +111,36 @@ jobs:
           const origin='https://app.quixo.homes',site='https://quixo.homes';
           const id=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
           const fields=['id','country','category','title','location','monthlyRent','currency','images'].sort();
+          let checkpoint='start';
           async function request(path,status=200,requestOrigin=site){
+            const operation=path.includes('/media/')?'media':path.includes('/api/public-listings/')?'detail':'collection';
+            checkpoint=operation+':HTTP_'+status;
             const r=await fetch(origin+path,{redirect:'error',credentials:'omit',cache:'no-store',headers:{Origin:requestOrigin},signal:AbortSignal.timeout(20000)});
-            assert.equal(r.status,status);assert.match(r.headers.get('cache-control')||'',/no-store/);
+            if(r.status!==status)console.error('HTTP_STATUS actual='+r.status+' expected='+status);
+            assert.equal(r.status,status);checkpoint=operation+':cache';assert.match(r.headers.get('cache-control')||'',/no-store/);
+            checkpoint=operation+':anonymous_headers';
             assert.ok(!r.headers.get('set-cookie'));assert.ok(!r.headers.get('access-control-allow-credentials'));
+            checkpoint=operation+':cors';
             assert.equal(r.headers.get('access-control-allow-origin'),requestOrigin===site?site:null);
             return r;
           }
           try{
             for(const country of ['LK','BN']){
               const body=await (await request('/api/public-listings?country='+country)).json();
+              checkpoint=country+':collection_shape';
               assert.deepEqual(Object.keys(body).sort(),['country','data']);assert.equal(body.country,country);assert.ok(Array.isArray(body.data));
               const ids=new Set();
               for(const row of body.data){
+                checkpoint=country+':listing_shape';
                 assert.deepEqual(Object.keys(row).sort(),fields);assert.match(row.id,id);assert.ok(!ids.has(row.id));ids.add(row.id);
+                checkpoint=country+':market_and_values';
                 assert.equal(row.country,country);assert.equal(row.currency,country==='LK'?'LKR':'BND');
                 assert.ok(['residential','commercial','other'].includes(row.category));
                 for(const key of ['title','location'])assert.equal(typeof row[key],'string');
                 assert.ok(row.monthlyRent===null||(Number.isFinite(row.monthlyRent)&&row.monthlyRent>0));
                 assert.ok(Array.isArray(row.images)&&row.images.length<=6);
                 for(const photo of row.images){
+                  checkpoint=country+':photo_shape';
                   assert.deepEqual(Object.keys(photo).sort(),['alt','url']);assert.equal(typeof photo.alt,'string');
                   const prefix='/api/public-listings/'+row.id+'/media/';assert.ok(photo.url.startsWith(prefix));
                   assert.match(photo.url.slice(prefix.length).split('?')[0],id);
@@ -139,7 +149,8 @@ jobs:
               }
               const sample=body.data[0];
               if(sample){
-                assert.deepEqual(await (await request('/api/public-listings/'+sample.id+'?country='+country)).json(),{data:sample});
+                const detail=await (await request('/api/public-listings/'+sample.id+'?country='+country)).json();
+                checkpoint=country+':detail_projection';assert.deepEqual(detail,{data:sample});
                 await request('/api/public-listings/'+sample.id+'?country='+(country==='LK'?'BN':'LK'),404);
               }
               console.log(country+'_CATALOG_SHAPE_AND_ISOLATION=PASS; count='+body.data.length);
@@ -147,9 +158,10 @@ jobs:
             await request('/api/public-listings?country=XX',400);
             await request('/api/public-listings?country=LK',200,'https://untrusted.invalid');
             // Private controls must remain inaccessible without authentication.
+            checkpoint='private_controls:authentication';
             const r=await fetch(origin+'/api/public-listing-preferences/market-readiness',{redirect:'error',signal:AbortSignal.timeout(20000)});
             assert.ok([401,403].includes(r.status));
-          }catch{console.error('PUBLIC_RELEASE=FAIL; no listing data logged');process.exit(1);}
+          }catch{console.error('PUBLIC_RELEASE=FAIL checkpoint='+checkpoint+'; no listing data logged');process.exit(1);}
           NODE
           test "$(inspect --query properties.template.scale.maxReplicas -o tsv)" = 1
           echo 'ELIGIBLE_LISTINGS=LIVE; AUTHENTICATED_CONTROLS=ON; SINGLE_REPLICA_LIMIT=UNCHANGED' >> "$GITHUB_STEP_SUMMARY"
