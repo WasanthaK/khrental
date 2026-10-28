@@ -9,6 +9,7 @@ import * as media from './media.js';
 import {preparePropertyPhoto,imagePreparationEnabled} from './processor.js';
 import {photoReviewEnabled,reviewPreparedPhoto,withdrawPreparedPhoto} from './review.js';
 import {listAdminPhotos,previewAdminPhoto} from './adminPhotos.js';
+import {resolvePublicSignupRelease} from '../auth/publicSignupRuntime.js';
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const hidden=res=>res.status(404).json({code:'PUBLIC_LISTINGS_DISABLED',error:'Public listings are not enabled.'});
 const publicOrigins=new Set(['https://mango-grass-0314c0100.3.azurestaticapps.net','https://quixo.homes','https://www.quixo.homes']);
@@ -89,6 +90,20 @@ export const createPublicListingsRouter=({
     res.set('Content-Disposition','inline; filename="listing-photo.webp"');
     res.type('image/webp');
     return res.send(bytes.body);
+  }));
+  router.get('/:publicId/enquiry-status',asyncRoute(async(req,res)=>{
+    const country=parseCountry(req.query?.country);
+    if(!country){return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED'});}
+    if(!isId(req.params.publicId)||!allowedInPilot(req.params.publicId)){
+      return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    }
+    if(!await rateLimit('DETAIL')){return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});}
+    const item=toPublicDTO(await find(req.params.publicId));
+    if(!item||item.country!==country){return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});}
+    const signup=resolvePublicSignupRelease(env);
+    const flags=['PROPERTY_ENQUIRIES_ENABLED','PUBLIC_SEEKER_CONTEXT_ENABLED',
+      'VITE_PROPERTY_ENQUIRIES_UI_ENABLED','VITE_PUBLIC_SIGNUP_UI_ENABLED','VITE_PUBLIC_SEEKER_LANDING_ENABLED'];
+    res.json({data:{enquiriesOpen:signup.enabled&&signup.mode==='public'&&flags.every(key=>env[key]==='true')}});
   }));
   router.get('/:publicId',asyncRoute(async(req,res)=>{
     const country=parseCountry(req.query?.country);

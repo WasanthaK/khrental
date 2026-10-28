@@ -23,47 +23,7 @@ const fixtureImage='/api/public-listings/'+fixtureId+'/media/bbbbbbbb-bbbb-4bbb-
 const apiOrigin='https://app.quixo.homes';
 let browser,passes=0;
 try{
-  await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
-  const origin='http://127.0.0.1:'+app.address().port;
-  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-networking']});
-  const imageNames=['hero-house','hero-commercial','residential-interior','residential-villa','commercial-office','commercial-retail'];
-  const assetPage=await browser.newPage();
-  const imageProbes=await assetPage.evaluate(async(baseUrl,names)=>{
-    return await Promise.all(names.map(async name=>{
-      const image=new Image();
-      image.src=baseUrl+'/assets/'+name+'.webp';
-      try{await image.decode();return {name,ok:image.naturalWidth>0,width:image.naturalWidth};}
-      catch(e){return {name,ok:false,error:String(e)};}
-    }));
-  },origin,imageNames);
-  await assetPage.close();
-  console.log('QUIXO_R4_IMAGE_DECODING='+JSON.stringify(imageProbes));
-  assert.deepEqual(imageProbes.filter(x=>!x.ok).map(x=>x.name),[],'All owner-approved sample photos must decode');
-  for(const p of sitePaths)for(const width of [320,390,768,1280]){
-    const page=await browser.newPage(),remote=[],failedResources=[];
-    let catalogRequests=0;
-    const liveMarket=['/lk/','/lk/search/'].includes(p)&&lkLive?'LK':['/bn/','/bn/search/'].includes(p)&&bnLive?'BN':null;
-    await page.setRequestInterception(true);
-    page.on('request',r=>{
-      if(r.url().startsWith(origin+'/'))return void r.continue();
-      if(liveMarket&&r.url()===apiOrigin+'/api/public-listings?country='+liveMarket){
-        catalogRequests++;
-        return void r.respond({status:200,contentType:'application/json',
-          headers:{'Access-Control-Allow-Origin':origin,'Cache-Control':'no-store','Vary':'Origin'},
-          body:JSON.stringify({country:liveMarket,data:[{id:fixtureId,country:liveMarket,category:'residential',
-            title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',
-            images:[{url:fixtureImage.replace('country=LK','country='+liveMarket),alt:'Synthetic exterior'}]}]})});
-      }
-      if(liveMarket&&r.url()===apiOrigin+fixtureImage.replace('country=LK','country='+liveMarket))
-        return void r.respond({status:200,contentType:'image/webp',body:fs.readFileSync(path.join(base,'assets/hero-house.webp'))});
-      remote.push(r.url());return void r.abort();
-    });
-    page.on('response',r=>{if(r.url().startsWith(origin+'/')&&r.status()>=400)failedResources.push(r.url()+' '+r.status())});
-    page.on('requestfailed',r=>failedResources.push(r.url()+' '+r.failure()?.errorText));
-    await page.setViewport({width,height:900,deviceScaleFactor:1});
-    const response=await page.goto(origin+p,{waitUntil:'networkidle0',timeout:15000});
-    assert.equal(response.status(),200,p+' '+width+' HTTP');
-    // Force below-fold lazy imagery to load before asserting its decoded dimensions.
+  await…729 tokens truncated….
     await page.evaluate(async()=>{await Promise.all([...document.images].map(async img=>{img.loading='eager';await img.decode();}));});
     const data=await page.evaluate(()=>({
       site:document.body.dataset.site,
@@ -165,7 +125,8 @@ try{
     tab.on('request',r=>{
       if(r.url().startsWith(origin+'/'))return void r.continue();
       const response=r.url()===apiOrigin+'/api/public-listings?country=LK'?{country:'LK',data:rows}:
-        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:null;
+        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:
+        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'/enquiry-status?country=LK'?{data:{enquiriesOpen:kind==='residential'}}:null;
       if(response)return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:JSON.stringify(response)});
       return void r.abort();
     });
@@ -179,7 +140,9 @@ try{
       await Promise.all([tab.waitForNavigation({waitUntil:'networkidle0'}),tab.click('[data-public-listing-cards] a')]);
       assert.equal(new URL(tab.url()).searchParams.get('id'),fixtureId);
       assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',n=>n.map(e=>e.textContent)),['Synthetic residential'],'Real property detail route');
-      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('not open yet')),'Unavailable next stages are honest');
+      await tab.waitForSelector('a[href*="/enquire?listingId="]');
+      assert.equal(await tab.$eval('a[href*="/enquire?listingId="]',n=>n.href),apiOrigin+'/enquire?listingId='+fixtureId+'&country=LK','Public release capability opens the selected property enquiry');
+      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('does not reserve')),'Enquiry is not represented as a reservation');
     }
     await tab.close();
   }

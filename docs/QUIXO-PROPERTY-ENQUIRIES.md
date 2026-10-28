@@ -1,6 +1,6 @@
 # Property enquiries and owner inbox
 
-This is the next website package under the owner-directed listing-to-signing objective. SaaS subscription management remains afterward. Implementation is in PR #442; public enquiries are not activated by the source change.
+This is the next website package under the owner-directed listing-to-signing objective. SaaS subscription management remains afterward. The enquiry foundation is in PR #442 and governed schema/registration continuation in PR #443. Public enquiries are not activated by a source deployment.
 
 ## Behaviour
 
@@ -20,18 +20,21 @@ Replies are stored in the application. **No email notification or confirmed view
 
 ## Release boundary
 
-All new gates default OFF. No production schema, signup, cloud flags or replica change is part of this preparation.
+All new gates default OFF. Source changes alone do not activate signup or enquiries. Schema installation uses the protected migration executor.
 
 | Control | Effect |
 | --- | --- |
 | `PROPERTY_ENQUIRIES_ENABLED=true` | Enables both authenticated enquiry APIs only while the existing public-read/shared-rate readiness gates also allow browsing. Existing single-listing scope, when configured, is enforced for submission. |
 | `VITE_PROPERTY_ENQUIRIES_UI_ENABLED=true` | Exposes the application enquiry form and administrator navigation. It grants no API authority. |
-| `data-property-enquiries-enabled="true"` on the selected marketing detail area | Adds its specific enquiry link; omit until the API, schema and account journey are accepted. Hero/category stock imagery is unchanged. |
+| Public capability | The selected eligible listing’s `/api/public-listings/:id/enquiry-status?country=LK|BN` returns only an `enquiriesOpen` boolean. The marketing detail adds its enquiry link only when the explicit public registration mode and all enquiry/seeker UI and API gates are enabled. Hero/category stock imagery is unchanged. |
+| Registration scope | The existing normalized-mailbox pilot remains the default. General registration additionally requires `PUBLIC_SIGNUP_RELEASE_MODE=public` and `PUBLIC_SIGNUP_PUBLIC_APPROVED=true`; all existing origin, ingress, verified sender and durable quota controls remain required. |
 | Schema | Governed migration `20261028_01_property_enquiries`, exact file `migrations/20261028_01_property_enquiries.sql`. The runner strictly inspects columns, defaults, primary/unique/scoped indexes, filters, trusted non-cascading foreign keys and checks. Installation alone creates no enquiry or public signup access. No request/startup DDL is performed. |
 
 Before activation: apply/verify the governed migration through the protected production workflow using the exact enquiry target, deploy the accepted build, complete controlled authenticated browser acceptance with designated test identities and verify disabled/rollback behaviour. The existing single-mailbox signup pilot and general-signup release remain separate from navigation continuation; no broad registration gate is opened as a side effect. Recheck the actual property and workspace on submission. Do not fabricate live enquiries, create production test users or send mail merely to obtain evidence.
 
-Rollback disables the enquiry server/UI/marketing switches. Retain records and audit history; do not drop enquiry tables or mutate occupancy. Existing public browsing and photo gates can remain as independently approved. No extra cloud replica is needed for this package.
+The manual **Property enquiries release controls** workflow defaults to read-only `preflight` and requires the exact accepted serving SHA plus `CHECK-ENQUIRY-READINESS`. It checks strict schema, governed checksum, configured mail/origin/limiter and Single revision with min=max=1, without sending mail or creating customer records. `pilot` retains the existing operator-selected mailbox and requires `ENABLE-ENQUIRY-PILOT`. `public` requires `ENABLE-PUBLIC-ENQUIRIES` and a separately approved general-registration release. No email address is supplied through workflow inputs or printed.
+
+Activation checks anonymous API denial, cross-origin signup denial and marketing capability without creating customer data. Failed acceptance closes all new gates and verifies closure. Manual `rollback` requires `CLOSE-PUBLIC-ENQUIRIES`, needs no accepted-build input, and disables the signup, seeker and enquiry gates together. Retain records and audit history; do not drop enquiry tables or mutate occupancy. Existing public browsing and photo gates can remain as independently approved. No extra cloud replica is needed for this package.
 
 ## Verification
 
@@ -39,6 +42,6 @@ Rollback disables the enquiry server/UI/marketing switches. Retain records and a
 
 `scripts/test-property-enquiries-sqlserver.mjs` executes the exact migration twice, tests strict inspection against missing indexes/untrusted foreign keys, and runs the actual production store on disposable SQL Server: concurrent same-reference submissions, restart replay, conflicting content, duplicate open enquiries, foreign workspace denial, response/version conflicts, durable audit history, withdrawal, opt-out/country/reservation denial, durable quota and session/membership revocation. The general governed-migration proof independently executes the new migration twice and verifies its exact metadata and empty initial tables. Disposable containers are removed on completion and never use production configuration.
 
-`scripts/test-property-enquiries-browser.mjs` exercises the real enquiry, login and owner-inbox components against isolated synthetic API fixtures: selected listing through login, required consent, failure/retry, saved enquiry, owner reply, seeker refresh, mobile width, withdrawal and disabled UI. External requests are blocked. This fixture proof is distinct from controlled production acceptance; it does not prove real email delivery or new-user registration.
+`scripts/test-property-enquiries-browser.mjs` exercises the real enquiry, login and owner-inbox components against isolated synthetic API fixtures: selected listing through login, required consent, failure/retry, saved enquiry, owner reply, seeker refresh, mobile width, withdrawal and disabled UI. External requests are blocked. It also covers registration, verification in another browser and normal sign-in back to the selected listing using synthetic transport. This fixture proof is distinct from production acceptance and does not prove real email delivery. `tests/public-signup-release-policy.test.js` checks pilot/public approval and anonymous listing capability boundaries; the marketing browser proof follows the actual capability link without contacting production.
 
 The existing authentication/authorization regressions and production build also run. The local runtime prevents Chrome's socket creation; actual browser/SQL acceptance runs in GitHub's disposable jobs. Record successful run/head references in current canonical status before marking acceptance complete. Historical failed fixtures remain failures; later corrected proof supersedes their readiness implication.

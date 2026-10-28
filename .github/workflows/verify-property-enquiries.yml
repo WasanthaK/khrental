@@ -18,6 +18,10 @@ on:
       - 'src/services/requestContext.js'
       - 'migrations/20261028_01_property_enquiries.sql'
       - 'scripts/inspect-property-enquiries-schema.mjs'
+      - 'src/api/publicListings/router.js'
+      - 'tests/public-signup-release-policy.test.js'
+      - 'scripts/check-enquiry-release-readiness.mjs'
+      - '.github/workflows/release-property-enquiries.yml'
       - 'tests/property-enquiries.test.js'
       - 'tests/enquiry-registration-continuation.test.js'
       - 'scripts/test-property-enquiries-*.mjs'
@@ -39,7 +43,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
+      - run: node --test tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server
         run: node scripts/test-property-enquiries-sqlserver.mjs
