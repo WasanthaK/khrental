@@ -21,6 +21,13 @@ on:
       - 'scripts/inspect-property-viewings-schema.mjs'
       - 'src/components/properties/PropertyViewing.jsx'
       - 'src/components/properties/PropertyApplication.jsx'
+      - 'src/components/properties/PropertyOffer.jsx'
+      - 'src/pages/RentalJourney.jsx'
+      - 'migrations/20261029_01_rental_offers_and_holds.sql'
+      - 'scripts/*rental-offer*'
+      - 'tests/rental-offers.test.js'
+      - '.github/workflows/release-rental-offers.yml'
+      - 'src/api/platform/tenancyOnboardingRouter.js'
       - 'tests/property-applications.test.js'
       - 'migrations/20261028_03_property_applications.sql'
       - 'scripts/inspect-property-applications-schema.mjs'
@@ -56,9 +63,11 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/property-applications.test.js tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
+      - run: node --test tests/rental-offers.test.js tests/property-applications.test.js tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server
+        env:
+          PROPERTY_RENTAL_OFFERS_SCHEMA_READY: 'true'
         run: node scripts/test-property-enquiries-sqlserver.mjs
       - name: Isolated real-component browser acceptance
         env:
@@ -70,5 +79,7 @@ jobs:
           name: enquiry-browser-proof
           path: enquiry-browser-proof/
           if-no-files-found: ignore
+      - name: Rental offers and agreement continuation browser proof
+        run: node scripts/test-rental-offers-browser.mjs
       - name: No production effects
         run: echo 'No production schema, release flags, public signup or extra cloud replicas changed.'

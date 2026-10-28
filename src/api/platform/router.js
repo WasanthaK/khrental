@@ -742,10 +742,10 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
     });
 
     const result = await runQuery(
-      safeTable === 'properties'
+      ['properties','agreements'].includes(safeTable)
         ? `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
-           INSERT INTO properties (${columns.join(', ')}) OUTPUT INSERTED.id INTO @changed VALUES (${values.join(', ')});
-           SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`
+           INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.id INTO @changed VALUES (${values.join(', ')});
+           SELECT p.* FROM ${safeTable} p JOIN @changed c ON c.id=p.id;`
         : `INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.* VALUES (${values.join(', ')})`,
       params
     );
@@ -788,10 +788,10 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
 
   try {
     rows = await runQuery(
-      safeTable === 'properties'
+      ['properties','agreements'].includes(safeTable)
         ? `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
-           UPDATE properties SET ${assignments.join(', ')} OUTPUT INSERTED.id INTO @changed ${whereClause};
-           SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`
+           UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.id INTO @changed ${whereClause};
+           SELECT p.* FROM ${safeTable} p JOIN @changed c ON c.id=p.id;`
         : `UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.* ${whereClause}`,
       params
     );
@@ -896,7 +896,9 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
       const status = args.new_status || args.status;
       if (!agreementId || !status) {throw new Error('agreement_id and status are required');}
       const rows = await runQuery(
-        `UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.* WHERE id = @agreementId AND tenant_id = @tenantId`,
+        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.id INTO @rental_changed WHERE id = @agreementId AND tenant_id = @tenantId;
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }
       );
       return { data: rows.map(mapRow)[0] || null, error: null };

@@ -1,3 +1,4 @@
+import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
@@ -51,7 +52,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261026_01_public_listing_preferences',
   '20261028_01_property_enquiries',
   '20261028_02_property_viewings',
-  '20261028_03_property_applications'
+  '20261028_03_property_applications',
+  '20261029_01_rental_offers_and_holds'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1043,6 +1045,13 @@ const main = async () => {
     const applicationSchema=await inspectPropertyApplications(testPool);
     assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
     console.log('PASS: governed private application migration double apply, strict metadata inspection');
+    const rentalSql=fs.readFileSync(path.resolve('migrations/20261029_01_rental_offers_and_holds.sql'),'utf8');
+    await testPool.request().batch(rentalSql);await testPool.request().batch(rentalSql);
+    const rentalSchema=await inspectRentalOffers(testPool);assert.equal(rentalSchema.satisfied,true,rentalSchema.detail);
+    await testPool.request().query('DISABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
+    assert.equal((await inspectRentalOffers(testPool)).satisfied,false);
+    await testPool.request().query('ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
+    console.log('PASS: governed offer/hold migration double apply, exact enabled trigger proof and drift denial');
 
 
   } finally {

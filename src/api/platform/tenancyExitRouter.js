@@ -243,16 +243,18 @@ export const createTenancyExitRouter = () => {
       const endDate = req.body?.endDate || req.body?.enddate;
       if (!startDate || !endDate) throw createRequestError(400, 'startDate and endDate are required.', 'RENEWAL_DATES_REQUIRED');
       const created = await runSingleQuery(
-        `INSERT INTO agreements (
+        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+INSERT INTO agreements (
            tenant_id, templateid, renteeid, propertyid, unitid, status,
            startdate, enddate, rentamount, depositamount, title, content, processedcontent, terms, notes,
            needs_document_generation, renewed_from_agreement_id
-         ) OUTPUT INSERTED.*
+         ) OUTPUT INSERTED.id INTO @rental_changed
          VALUES (
            @tenantId, @templateId, @renteeId, @propertyId, @unitId, 'draft',
            @startDate, @endDate, @rentAmount, @depositAmount, @title, @content, @processedContent, @terms, @notes,
            1, @renewedFrom
-         )`,
+         );
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         {
           tenantId: req.tenantId,
           templateId: agreement.templateid,
@@ -596,11 +598,13 @@ export const createTenancyExitRouter = () => {
       try {
         const closed = await singleTransaction(
           transaction,
-          `UPDATE agreements
+          `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+UPDATE agreements
            SET status = 'closed', enddate = @endDate, closed_at = SYSUTCDATETIME(), closed_by = @closedBy,
                closure_reason = @reason, updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE tenant_id = @tenantId AND id = @agreementId AND status = 'active'`,
+           OUTPUT INSERTED.id INTO @rental_changed
+           WHERE tenant_id = @tenantId AND id = @agreementId AND status = 'active';
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
           { tenantId: req.tenantId, agreementId: agreement.id, endDate: effectiveEndDate, closedBy: req.user.id, reason: req.body?.reason || 'tenancy_closed' }
         );
         if (!closed) throw createRequestError(409, 'Tenancy status changed before closure.', 'TENANCY_STATE_CONFLICT');

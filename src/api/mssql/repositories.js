@@ -677,7 +677,7 @@ const ensureTenantScopedEntity = async ({ table, id, tenantId, label = table }) 
     `SELECT TOP 1 id
      FROM ${table}
      WHERE id = @id
-       AND tenant_id = @tenantId`,
+       AND (tenant_id = @tenantId ${table==='app_users'?`OR (tenant_id IS NULL AND EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WHERE tm.app_user_id=app_users.id AND tm.tenant_id=@tenantId AND tm.status='active' AND tm.role IN('rentee','tenant')))`:''})`,
     { id, tenantId: assertTenantId(tenantId) }
   );
 
@@ -1134,7 +1134,9 @@ export const getAppUserById = async (id, tenantId) => {
     ? `SELECT TOP 1 *
        FROM app_users
        WHERE id = @id
-         AND tenant_id = @tenantId`
+         AND (tenant_id = @tenantId OR (tenant_id IS NULL AND EXISTS(
+           SELECT 1 FROM dbo.tenant_memberships tm WHERE tm.app_user_id=app_users.id
+           AND tm.tenant_id=@tenantId AND tm.status='active' AND tm.role IN('rentee','tenant'))))`
     : `SELECT TOP 1 *
        FROM app_users
        WHERE id = @id`;
@@ -1885,7 +1887,8 @@ export const createAgreement = async (payload, tenantId) => {
   } = scopedPayload;
 
   const insertedRows = await runQuery(
-    `INSERT INTO agreements (
+    `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+INSERT INTO agreements (
       tenant_id,
       templateid,
       renteeid,
@@ -1919,7 +1922,7 @@ export const createAgreement = async (payload, tenantId) => {
       createdat,
       updatedat
     )
-    OUTPUT INSERTED.*
+    OUTPUT INSERTED.id INTO @rental_changed
     VALUES (
       @tenant_id,
       @templateid,
@@ -1953,7 +1956,8 @@ export const createAgreement = async (payload, tenantId) => {
       @cancellation_reason,
       @createdat,
       @updatedat
-    )`,
+    );
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     {
       tenant_id,
       templateid,
@@ -2014,13 +2018,15 @@ export const updateAgreement = async (id, payload, tenantId) => {
   assignments.push('updatedat = @updatedat');
 
   const rows = await runQuery(
-    `UPDATE agreements
+    `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+UPDATE agreements
      SET ${assignments.join(', ')}
-     OUTPUT INSERTED.*
+     OUTPUT INSERTED.id INTO @rental_changed
      WHERE id = @id
        AND tenant_id = @tenantId
        AND LOWER(LTRIM(RTRIM(COALESCE(status, '')))) NOT IN ('signed', 'completed', 'active')
-       AND LOWER(LTRIM(RTRIM(COALESCE(signature_status, '')))) NOT IN ('signed', 'completed', 'signing_complete')`,
+       AND LOWER(LTRIM(RTRIM(COALESCE(signature_status, '')))) NOT IN ('signed', 'completed', 'signing_complete');
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     params
   );
 
@@ -2095,23 +2101,27 @@ export const markAgreementSigned = async (id, tenantId) => {
     agreementRequest.input('signeddate', new Date().toISOString());
     agreementRequest.input('updatedat', new Date().toISOString());
 
-    const agreementResult = await agreementRequest.query(`
+    const agreementResult = await agreementRequest.query(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+
       UPDATE agreements
       SET status = 'signed',
           signeddate = @signeddate,
           updatedat = @updatedat
-      OUTPUT INSERTED.*
+      OUTPUT INSERTED.id INTO @rental_changed
       WHERE id = @id
         AND tenant_id = @tenantId
         AND LOWER(LTRIM(RTRIM(status))) IN ('pending', 'pending_signature')
-    `);
+    ;
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`);
 
     const updatedAgreement = agreementResult.recordset[0];
     if (!updatedAgreement) {
       throw createRepositoryError(409, 'Agreement signing state changed.', 'MANUAL_SIGN_STATE_INVALID');
     }
 
-    if (updatedAgreement.propertyid) {
+    const linkedRental=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true'&&Boolean((await new sql.Request(transaction)
+      .input('agreementId',id).query('SELECT enquiry_id FROM dbo.property_rental_offers WHERE agreement_id=@agreementId')).recordset[0]);
+    if (!linkedRental&&updatedAgreement.propertyid) {
       const propertyRequest = new sql.Request(transaction);
       propertyRequest.input('propertyId', updatedAgreement.propertyid);
       propertyRequest.input('tenantId', scopedTenantId);
@@ -2125,7 +2135,7 @@ export const markAgreementSigned = async (id, tenantId) => {
       `);
     }
 
-    if (updatedAgreement.unitid) {
+    if (!linkedRental&&updatedAgreement.unitid) {
       const unitRequest = new sql.Request(transaction);
       unitRequest.input('unitId', updatedAgreement.unitid);
       unitRequest.input('tenantId', scopedTenantId);
@@ -2139,7 +2149,7 @@ export const markAgreementSigned = async (id, tenantId) => {
       `);
     }
 
-    if (updatedAgreement.renteeid && updatedAgreement.propertyid) {
+    if (!linkedRental&&updatedAgreement.renteeid && updatedAgreement.propertyid) {
       const userRequest = new sql.Request(transaction);
       userRequest.input('renteeId', updatedAgreement.renteeid);
       userRequest.input('tenantId', scopedTenantId);

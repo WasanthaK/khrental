@@ -1,3 +1,4 @@
+import RentalJourney from './pages/RentalJourney';
 import { createBrowserRouter, Navigate, useLocation, useNavigate, useParams, RouterProvider } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from './hooks/useAuth';
@@ -244,6 +245,7 @@ const routes = [
       // the boundary still requires a fresh server-authenticated SQL proof.
       { path: 'seeker', element: <VerifiedSeekerBoundary /> },
       { path: 'enquire', element: <PropertyEnquiry /> },
+      { path: 'rental-journey', element: <RentalJourney /> },
       { path: 'auth-debug', element: adminRoute(<AuthDebug />) },
       { path: 'digital-signature-test', element: adminRoute(<DigitalSignatureForm />) },
       {

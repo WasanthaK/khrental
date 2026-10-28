@@ -1,6 +1,14 @@
+import process from 'node:process';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {runQuery,runSingleQuery} from '../mssql/query.js';
 
+// Schema readiness remains enabled after rollback: accepted holds must continue
+// suppressing stock even when new offers are closed. No table is queried before apply.
+const holdsReady=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true';
+const wholeHold=holdsReady?`AND NOT EXISTS(SELECT 1 FROM dbo.property_rental_offers h WHERE h.property_id=p.id
+  AND h.tenant_id=p.tenant_id AND h.unit_id IS NULL AND h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME())`:'';
+const unitHold=holdsReady?`AND NOT EXISTS(SELECT 1 FROM dbo.property_rental_offers h WHERE h.property_id=p.id
+  AND h.tenant_id=p.tenant_id AND h.unit_id=u.id AND h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME())`:'';
 // Authenticated SQL is the truth for current vacancy; no cached "published" bit can
 // outlive a reservation, active tenancy or opt-out. Every query rechecks status.
 export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
@@ -8,6 +16,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
   JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
   JOIN dbo.tenants t ON t.id=p.tenant_id
   WHERE pref.opted_out=0
+    ${wholeHold}
     AND p.country_code COLLATE DATABASE_DEFAULT=pref.country_code
     AND (t.status IS NULL OR t.status=N'active')
     AND LOWER(COALESCE(p.status,N'')) IN (N'active',N'available',N'rented')
@@ -23,6 +32,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
          SELECT 1 FROM dbo.property_units u
          WHERE u.propertyid=p.id AND u.tenant_id=p.tenant_id
            AND LOWER(COALESCE(u.status,N''))=N'available'
+           ${unitHold}
            AND NOT EXISTS(
              SELECT 1 FROM dbo.agreements a WHERE a.tenant_id=u.tenant_id
                AND a.propertyid=p.id AND a.unitid=u.id AND a.status=N'active'
@@ -32,6 +42,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
       OR (
        NOT EXISTS(SELECT 1 FROM dbo.property_units u WHERE u.propertyid=p.id AND u.tenant_id=p.tenant_id)
        AND LOWER(COALESCE(p.status,N'')) IN(N'active',N'available')
+       ${holdsReady?`AND NOT EXISTS(SELECT 1 FROM dbo.property_rental_offers h WHERE h.property_id=p.id AND h.tenant_id=p.tenant_id AND h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME())`:''}
        AND NOT EXISTS(SELECT 1 FROM dbo.agreements a WHERE a.tenant_id=p.tenant_id
                       AND a.propertyid=p.id AND a.status=N'active')
       )

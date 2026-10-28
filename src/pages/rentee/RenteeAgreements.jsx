@@ -1,3 +1,4 @@
+import {Link} from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -231,7 +232,8 @@ const RenteeAgreements = () => {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">My Agreements</h1>
+      <Link to="/rental-journey" className="block underline mb-4">My rental offers and enquiry history</Link>
+          <h1 className="text-2xl font-bold mb-4">My Agreements</h1>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {agreements.map((agreement) => {
           const notices = exitData[agreement.id]?.notices || [];
