@@ -52,6 +52,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  const p=await property(),c=await candidate(p);
  const issue=request('issue',0,true,terms());
  const issued=await store.change(owner,c.id,issue,true);assert.equal(issued.offer.status,'offered');
+ await assert.rejects(q("UPDATE property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),consent_version=NULL WHERE enquiry_id=@id",{id:c.id}),e=>e.number===547,'Acceptance cannot omit retained consent evidence, even outside the HTTP contract');
  assert.equal((await store.change(owner,c.id,issue,true)).offer.version,1);
  await assert.rejects(store.get(foreignOwner,c.id,true),{code:'ENQUIRY_NOT_FOUND'});
  await assert.rejects(store.change(owner,c.id,{...issue,payloadHash:'changed'},true),{code:'OFFER_REQUEST_CONFLICT'});
