@@ -15,7 +15,8 @@ const fixtureAuth=`import {useEffect,useState} from 'react';
   export const getSession=async()=>({data:{session:signedIn?{access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}:null}});
   export const useAuth=()=>{const [,render]=useState(0);useEffect(()=>{const f=()=>render(x=>x+1);listeners.add(f);return()=>listeners.delete(f);},[]);
     return {user:signedIn?{id:'synthetic-auth'}:null,isAuthenticated:signedIn,loading:false,activeTenantId:'synthetic-workspace',
-      login:async()=>{signedIn=true;listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},setDevBypass:()=>{}};};`;
+      login:async()=>{signedIn=true;listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
+      logout:async()=>{signedIn=false;listeners.forEach(f=>f());},setDevBypass:()=>{}};};`;
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
   import {BrowserRouter,Routes,Route} from 'react-router-dom';
   import PropertyEnquiry from '/src/pages/PropertyEnquiry.jsx';
@@ -123,6 +124,14 @@ try {
   await ownerPage.bringToFront();
   await ownerPage.screenshot({path:path.join(output,'owner-inbox.png'),fullPage:true});
   await page.bringToFront();
+  await page.click('::-p-text(Sign out)');
+  await page.waitForSelector('a[href^="/login?listingId="]');
+  assert.ok(!(await page.$eval('body',e=>e.innerText)).includes('Please suggest a convenient time.'));
+  assert.equal(await page.$('textarea'),null);
+  await page.click('a[href^="/login?listingId="]');await page.waitForSelector('#email-address');
+  await page.type('#email-address','seeker@example.test');await page.type('#password','SyntheticFixtureOnly!');
+  await page.click('button[type="submit"]');
+  await page.waitForFunction(()=>document.body.innerText.includes('Please suggest a convenient time.'));
   await page.click('::-p-text(Withdraw enquiry)');
   await page.waitForFunction(()=>document.body.innerText.includes('Enquiry withdrawn.'));
   assert.equal(row.status,'withdrawn');
@@ -130,7 +139,7 @@ try {
   assert.match(await page.$eval('body',e=>e.innerText),/not open yet/);
   assert.equal(await page.$('textarea'),null);
   assert.deepEqual(errors,[]);
-  console.log('PROPERTY_ENQUIRIES_BROWSER=PASS listing_login_return consent retry inbox_reply mobile withdrawal default_off');
+  console.log('PROPERTY_ENQUIRIES_BROWSER=PASS listing_login_return consent retry inbox_reply mobile logout_privacy withdrawal default_off');
   }
 } catch(error) {
   if(activePage){

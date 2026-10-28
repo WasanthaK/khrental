@@ -11,7 +11,7 @@ const call = options => requestSeekerEnquiries({
 });
 const PropertyEnquiry=()=>{
   const location=useLocation();
-  const {user,isAuthenticated,loading}=useAuth();
+  const {user,isAuthenticated,loading,logout}=useAuth();
   const route=enquiryReturnPath(location.search);
   const params=new URLSearchParams(route?.split('?')[1]);
   const listingId=params.get('listingId'),country=params.get('country');
@@ -67,8 +67,8 @@ const PropertyEnquiry=()=>{
       setMessage('');setConsent(false);requestId.current=crypto.randomUUID();
       setState(s=>({...s,notice:'Your enquiry was saved in the owner’s inbox. It does not reserve the property or confirm a viewing.'}));
       await refresh();
-    } catch(err) {setState(s=>({...s,error:err.message}));}
-    finally {setState(s=>({...s,busy:false}));}
+    } catch(err) {if(currentIdentity.current===identity){setState(s=>({...s,error:err.message}));}}
+    finally {if(currentIdentity.current===identity){setState(s=>({...s,busy:false}));}}
   };
   const withdraw=async item=>{
     setState(s=>({...s,busy:true,error:'',notice:''}));
@@ -76,14 +76,16 @@ const PropertyEnquiry=()=>{
       await call({path:'/'+item.id,method:'PATCH',body:{status:'withdrawn',version:item.version}});
       if(currentIdentity.current!==identity){return;}
       setState(s=>({...s,notice:'Enquiry withdrawn.'}));await refresh();
-    } catch(err) {setState(s=>({...s,error:err.message}));}
-    finally {setState(s=>({...s,busy:false}));}
+    } catch(err) {if(currentIdentity.current===identity){setState(s=>({...s,error:err.message}));}}
+    finally {if(currentIdentity.current===identity){setState(s=>({...s,busy:false}));}}
   };
   if (!enabled) {return <main className="p-8"><h1>Property enquiries</h1><p>Property enquiries are not open yet.</p></main>;}
   return <main className="min-h-screen bg-slate-50 px-4 py-10">
     <div className="mx-auto max-w-2xl space-y-6">
       <p className="font-semibold text-emerald-700">Quixo.Homes</p>
       <h1 className="text-3xl font-semibold text-slate-900">{route?'Property enquiry':'My property enquiries'}</h1>
+      {isAuthenticated && <button type="button" disabled={state.busy} className="underline text-blue-800"
+        onClick={async()=>{try{await logout();}catch{setState(s=>({...s,error:'Unable to sign out. Try again.'}));}}}>Sign out</button>}
       {!route && <p>Choose a property from the rental website to start a new enquiry. Your existing enquiries and owner replies appear below after sign-in.</p>}
       {route && <a className="underline text-blue-800" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>Back to property</a>}
       {listing && <section className="rounded-xl bg-white border p-6">

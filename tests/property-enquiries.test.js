@@ -4,6 +4,7 @@ import express from 'express';
 import {createEnquiriesRouter} from '../src/api/enquiries/router.js';
 import {parseEnquiry,parseOwnerAction,seekerReceipt} from '../src/api/enquiries/contract.js';
 import {enquiryReturnPath} from '../src/utils/enquiryReturnPath.js';
+import {requestSeekerEnquiries} from '../src/services/seekerContextClient.js';
 
 const id=n=>'11111111-1111-4111-8111-'+String(n).padStart(12,'0');
 const input={listingId:id(1),country:'LK',requestId:id(2),message:'May I arrange a viewing?',consent:true};
@@ -49,6 +50,24 @@ test('seeker receipt omits tenant, source property, email, actor and payload has
   assert.ok(!JSON.stringify(receipt).includes('private'));assert.ok(!Object.hasOwn(receipt,'propertyId'));
   assert.throws(()=>parseOwnerAction({status:'responded',version:1,response:''}));
   assert.throws(()=>parseOwnerAction({status:'pending',version:1,response:'Hi'}));
+});
+test('personal API omits tenant/cookie context and invalidates a mid-request account change',async()=>{
+  const originalFetch=globalThis.fetch;
+  const captured=[];
+  globalThis.fetch=async(url,options)=>{
+    captured.push({url,options});return {ok:true,json:async()=>({data:{items:[]}})};
+  };
+  try{
+    const session={access_token:'synthetic-only',user:{id:'synthetic-seeker'}};
+    let reads=0;
+    await assert.rejects(requestSeekerEnquiries({getSession:async()=>({data:{session:++reads===1?session:null}})}),/session changed/);
+    assert.equal(captured[0].url,'/api/property-enquiries');
+    assert.deepEqual(captured[0].options.headers,{Authorization:'Bearer synthetic-only'});
+    assert.equal(captured[0].options.credentials,'omit');
+    assert.equal(captured[0].options.redirect,'error');
+    await assert.rejects(requestSeekerEnquiries({getSession:async()=>({data:{session:null}})}),{status:401});
+    assert.equal(captured.length,1);
+  } finally {globalThis.fetch=originalFetch;}
 });
 test('default off, public shutdown and anonymous sessions perform no store operations',async t=>{
   for(const opts of [{environment:{}},{environment:{...env,PUBLIC_LISTING_READ_ENABLED:'false'}},{session:null}]){
