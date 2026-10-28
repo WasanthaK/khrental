@@ -2,6 +2,23 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Eligible-inventory physical testing release — LIVE, 2026-10-28
+
+The owner approved activation of all eligible listings and administrator controls. [Release #40613719898](https://github.com/WasanthaK/khrental/actions/runs/40613719898) **PASS** on workflow commit `c62d529e46ca28e469e3de9dde475533d510ae27`, preserving serving application build `d80e8c49b60fdff415f2869a93542934c9560d0d`. This checkpoint supersedes the single-property scope and prepared/pending activation statements below.
+
+- Server-only `PUBLIC_LISTING_PILOT_PUBLIC_ID` removed entirely. Public read/media and authenticated management/preparation/review gates verified ON in the ready revision. No property data, countries, occupancy, opt-outs or photo approvals were bulk-changed.
+- Strict public projection, market/currency isolation, matching detail projection, wrong-country denial, invalid-country rejection, CORS/no-store and anonymous denial of private administrator controls PASS. LK catalog count **2**, BN count **0**.
+- Actual [Sri Lanka all-category search](https://quixo.homes/lk/search/) rendered two real cards: one land and one residential. The approved residential derivative loaded. The land card has no automatically approved original photo. Residential-filtered navigation intentionally excludes land; use the all-category URL to see both.
+- Minimum and maximum replica settings verified as 1 before mutation, maximum rechecked as 1 afterward; Single revision mode required. No scale change or extra test replica was created.
+- Controls are enabled at **Properties → open property → Quixo.Homes public listing** for an active tenant administrator. Country and opt-out/public-copy settings can be saved; photo preparation, rights/privacy review and withdrawal are available separately. This browser currently requires app sign-in, so authenticated UI acceptance after activation is left for the owner's hands-on session; enabled flags and anonymous authentication denial were verified.
+- Signup, viewing enquiries, payments and additional search filters remain unavailable. The existing maximum of 50 results per market remains. Other properties appear only when existing country, tenant, vacancy and opt-out checks pass.
+
+Initial releases #40612889108 and #40613328721 failed verification and completed shutdown before retry. The second pinpointed market/category/value validation. The verifier had omitted the application's existing `land` category; the corrected verifier accepts canonical residential/commercial/land/other while rejecting private fields, unknown category and wrong currency in synthetic tests. Privacy, occupancy and authorization rules were not weakened. Retain both failed runs as historical evidence.
+
+Physical-test follow-up observed: the API's generic fallback headline currently calls land “Home for rent”; an administrator can set an accurate public headline now, and a category-aware default is a product-copy follow-up. The earlier intermittent SQL timeout root cause remains open, with recovered runtime health recorded below. Public withdrawal/cache and operational handover follow-ups remain open rather than passed.
+
+**Next:** owner hands-on browsing and property-control testing; triage actual findings, then resume B04-owner/B05. Scaling remains owner-deferred.
+
 ## Physical testing release preparation — 2026-10-28
 
 The owner requested fixing listing controls and releasing the website for hands-on testing. This is now the immediate priority ahead of B04-owner/B05. The existing one-property pilot remains the last verified production state until the broader release run succeeds.
