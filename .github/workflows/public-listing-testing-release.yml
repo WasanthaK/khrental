@@ -135,7 +135,7 @@ jobs:
                 assert.deepEqual(Object.keys(row).sort(),fields);assert.match(row.id,id);assert.ok(!ids.has(row.id));ids.add(row.id);
                 checkpoint=country+':market_and_values';
                 assert.equal(row.country,country);assert.equal(row.currency,country==='LK'?'LKR':'BND');
-                assert.ok(['residential','commercial','other'].includes(row.category));
+                assert.ok(['residential','commercial','land','other'].includes(row.category));
                 for(const key of ['title','location'])assert.equal(typeof row[key],'string');
                 assert.ok(row.monthlyRent===null||(Number.isFinite(row.monthlyRent)&&row.monthlyRent>0));
                 assert.ok(Array.isArray(row.images)&&row.images.length<=6);
