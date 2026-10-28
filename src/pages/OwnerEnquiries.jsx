@@ -1,3 +1,4 @@
+import PropertyApplication from '../components/properties/PropertyApplication';
 import PropertyViewing from '../components/properties/PropertyViewing';
 import {useEffect,useState} from 'react';
 import {Link} from 'react-router-dom';
@@ -58,6 +59,7 @@ const OwnerEnquiries=()=>{
           <button disabled={busy} onClick={()=>save(item,'closed')} className="border rounded px-4 py-2">Close enquiry</button></div>
       </>:item.response&&<p className="whitespace-pre-wrap">{item.response}</p>}
       <PropertyViewing key={activeTenantId+':'+item.id} enquiry={item} owner call={viewingCall} />
+      <PropertyApplication key={'application:'+activeTenantId+':'+item.id} enquiry={item} owner call={viewingCall} />
     </article>)}
     <div className="flex gap-4"><button disabled={offset===0||busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
       <button disabled={!current?.hasMore||busy} onClick={()=>setOffset(n=>n+50)}>Next</button></div>

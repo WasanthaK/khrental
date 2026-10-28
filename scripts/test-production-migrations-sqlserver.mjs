@@ -1,4 +1,5 @@
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
+import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 import assert from 'node:assert/strict';
@@ -49,7 +50,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261026_02_property_iso_country',
   '20261026_01_public_listing_preferences',
   '20261028_01_property_enquiries',
-  '20261028_02_property_viewings'
+  '20261028_02_property_viewings',
+  '20261028_03_property_applications'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1036,6 +1038,11 @@ const main = async () => {
     const viewingSchema=await inspectPropertyViewings(testPool);
     assert.equal(viewingSchema.satisfied,true,viewingSchema.detail);
     console.log('PASS: governed viewing migration double apply, strict metadata inspection, zero viewing fixture writes');
+    const applicationSql=fs.readFileSync(path.resolve('migrations/20261028_03_property_applications.sql'),'utf8');
+    await testPool.request().batch(applicationSql);await testPool.request().batch(applicationSql);
+    const applicationSchema=await inspectPropertyApplications(testPool);
+    assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
+    console.log('PASS: governed private application migration double apply, strict metadata inspection');
 
 
   } finally {

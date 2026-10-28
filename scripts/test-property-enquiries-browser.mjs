@@ -7,6 +7,7 @@ import express from 'express';
 import {createServer as createViteServer,transformWithEsbuild} from 'vite';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
+import {parseApplicationAction,nextApplication,applicationReceipt} from '../src/api/enquiries/applicationContract.js';
 import {parseViewingAction,nextViewing,viewingReceipt} from '../src/api/enquiries/viewingContract.js';
 import {createPublicSignupVerificationLink} from '../src/api/auth/publicSignupVerificationEmail.js';
 
@@ -47,6 +48,7 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
 }};
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
+let application=null,applicationsOpen=true;
 let viewing=null,viewingsOpen=true,holdViewingRead=false,releaseViewingRead=null,notifyViewingRead=null;
 const verificationToken='b'.repeat(43);
 try {
@@ -83,6 +85,21 @@ try {
         instructions:next.instructions,version:(viewing?.version??0)+1,updated_at:new Date().toISOString()};
       res.json({data:viewingReceipt(viewing)});
     } catch(err){res.status(err.status||500).json({code:err.code,error:err.message});}
+  });
+  const applicationState=()=>({application:applicationReceipt(application),canSubmit:(!application||application.status==='needs_information')&&viewing?.status==='completed'&&['pending','responded'].includes(row?.status)});
+  app.get(['/api/property-enquiries/:id/application','/api/owner-enquiries/:id/application'],(req,res)=>{
+    if(!applicationsOpen){return res.status(404).json({code:'APPLICATIONS_UNAVAILABLE',error:'Rental applications are not open yet.'});}
+    res.json({data:applicationState()});
+  });
+  app.post(['/api/property-enquiries/:id/application','/api/owner-enquiries/:id/application'],(req,res)=>{
+    const owner=req.path.startsWith('/api/owner-');
+    if(!owner){assert.equal(req.get('authorization'),'Bearer synthetic-proof-token');assert.equal(req.get('x-tenant-id'),undefined);}
+    try{
+      const input=parseApplicationAction(req.body,owner);
+      application={...nextApplication(application,input,owner,{country_code:'LK',status:row.status},viewing?.status==='completed',new Date()),
+        version:(application?.version??0)+1,updated_at:new Date().toISOString()};
+      res.json({data:applicationState()});
+    }catch(err){res.status(err.status||500).json({code:err.code,error:err.message});}
   });
   app.get('/api/property-enquiries',(req,res)=>res.json({data:{items:row?[row]:[],hasMore:false}}));
   app.post('/api/property-enquiries',(req,res)=>{
@@ -181,6 +198,50 @@ try {
   await page.click('::-p-text(Accept proposed time)');
   await page.waitForFunction(()=>document.body.innerText.includes('Revised private meeting point'));
   console.log('PROPERTY_VIEWINGS_BROWSER=PASS requested owner_confirmation reschedule seeker_accept private_instructions explicit_timezone');
+  await ownerPage.bringToFront();
+  viewing.starts_at=new Date(Date.now()-7200000).toISOString();viewing.ends_at=new Date(Date.now()-3600000).toISOString();
+  await ownerPage.click('::-p-text(Refresh viewing)');
+  await ownerPage.waitForSelector('::-p-text(Mark viewing completed)');
+  await ownerPage.click('::-p-text(Mark viewing completed)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Viewing status: completed'));
+  await page.bringToFront();await page.click('::-p-text(Refresh application)');
+  await page.waitForSelector('input[type="date"]');
+  const appDate=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+  await page.$eval('input[type="date"]',(input,value)=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  },appDate);
+  await page.type('textarea[id$="-statement"]','Synthetic rental application plans.');
+  assert.equal(await page.$eval('section[aria-label^="Application for"] button[type="submit"]',e=>e.disabled),true);
+  await page.click('section[aria-label^="Application for"] input[type="checkbox"]');
+  await page.click('::-p-text(Submit application)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Application status: submitted'));
+  await ownerPage.bringToFront();await ownerPage.click('::-p-text(Refresh application)');
+  await ownerPage.waitForSelector('textarea[id$="-note"]');
+  await ownerPage.type('textarea[id$="-note"]','Please clarify the proposed term.');
+  await ownerPage.click('::-p-text(Request application information)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Application status: needs information'));
+  await page.bringToFront();await page.click('::-p-text(Refresh application)');
+  await page.waitForSelector('::-p-text(Resubmit application)');
+  assert.equal(await page.$eval('section[aria-label^="Application for"] input[type="checkbox"]',e=>e.checked),false);
+  await page.click('section[aria-label^="Application for"] input[type="checkbox"]');
+  await page.click('::-p-text(Resubmit application)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Application status: submitted'));
+  await ownerPage.bringToFront();await ownerPage.click('::-p-text(Refresh application)');
+  await ownerPage.waitForSelector('::-p-text(Accept for offer preparation)');
+  await ownerPage.type('textarea[id$="-note"]','Reviewed for offer preparation.');
+  await ownerPage.click('::-p-text(Accept for offer preparation)');
+  await ownerPage.waitForFunction(()=>document.body.innerText.includes('Application status: accepted'));
+  await page.bringToFront();await page.click('::-p-text(Refresh application)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Accepted for offer preparation.'));
+  await page.click('::-p-text(Withdraw application)');
+  await page.waitForFunction(()=>document.body.innerText.includes('Application status: withdrawn'));
+  applicationsOpen=false;await page.click('::-p-text(Refresh application)');
+  await page.waitForFunction(()=>!document.body.innerText.includes('Rental application'));
+  // Restore a synthetic future confirmed appointment for the existing cancel-after-close proof.
+  viewing={...viewing,status:'confirmed',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString()};
+  console.log('PROPERTY_APPLICATIONS_BROWSER=PASS completed_viewing consent review information_resubmit renewed_consent acceptance_no_reservation withdrawal default_off');
+
 
   await page.setViewport({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile layout must fit viewport');

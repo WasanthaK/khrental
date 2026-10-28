@@ -123,10 +123,10 @@ jobs:
 
           # Both entrypoints are read-only and require the isolated identity.
           verification_script="scripts/run-production-migration-verify.sh"
-          verification_marker="Strict read-only migration verification passed for 15 managed migrations;"
+          verification_marker="Strict read-only migration verification passed for 16 managed migrations;"
           if [ "$VERIFICATION_MODE" = "preflight" ]; then
             verification_script="scripts/run-production-migration-preflight.sh"
-            verification_marker="Read-only executor preflight passed for 15 managed migrations;"
+            verification_marker="Read-only executor preflight passed for 16 managed migrations;"
           fi
 
           # Per-execution overrides do not change the resting job definition.
@@ -185,7 +185,8 @@ jobs:
             20261026_02_property_iso_country
             20261026_01_public_listing_preferences
             20261028_01_property_enquiries
-            20261028_02_property_viewings"
+            20261028_02_property_viewings
+            20261028_03_property_applications"
 
             for migration_id in $migration_ids; do
               if [ "$VERIFICATION_MODE" = "strict" ]; then
@@ -216,16 +217,16 @@ jobs:
                   echo "| $migration_id | LEDGERED | SCHEMA_OK |"
                 done
                 echo
-                echo "**15/15 ledger/schema checks passed.** Raw Azure logs are not published."
+                echo "**16/16 ledger/schema checks passed.** Raw Azure logs are not published."
               else
-                echo "Pre-apply preflight inspected all fifteen migrations with no database writes."
+                echo "Pre-apply preflight inspected all sixteen migrations with no database writes."
                 echo "Preflight allows PENDING and SATISFIED_UNTRACKED. It does not certify an applied schema."
                 echo "Production apply still requires separate authorization; strict acceptance must follow apply."
                 echo "Raw Azure logs are not published."
               fi
             } >> "$GITHUB_STEP_SUMMARY"
 
-            echo "Retained fifteen redacted $VERIFICATION_MODE results for execution $execution_name."
+            echo "Retained sixteen redacted $VERIFICATION_MODE results for execution $execution_name."
             rm -f "$log_file"
           }
 
@@ -243,7 +244,7 @@ jobs:
               case "$status" in
                 Succeeded)
                   capture_verification_evidence
-                  echo "Read-only executor $VERIFICATION_MODE verification passed with fifteen retained migration results."
+                  echo "Read-only executor $VERIFICATION_MODE verification passed with sixteen retained migration results."
                   exit 0
                   ;;
                 Failed|Stopped)

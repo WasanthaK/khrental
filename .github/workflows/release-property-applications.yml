@@ -1,0 +1,159 @@
+name: Property application release controls
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check, enable or close rental applications only
+        required: true
+        type: choice
+        options: [preflight, public, rollback]
+        default: preflight
+      expected_build:
+        description: Exact accepted serving application SHA (not needed for rollback)
+        required: false
+        type: string
+      confirmation:
+        description: CHECK-APPLICATION-READINESS, ENABLE-PUBLIC-APPLICATIONS or CLOSE-PUBLIC-APPLICATIONS
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Validate explicit release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$MODE:$CONFIRMATION" in
+            preflight:CHECK-APPLICATION-READINESS|public:ENABLE-PUBLIC-APPLICATIONS|rollback:CLOSE-PUBLIC-APPLICATIONS) ;;
+            *) echo 'Exact release confirmation is required.' >&2; exit 1 ;;
+          esac
+          if [ "$MODE" != rollback ]; then [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]; fi
+  schema:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && inputs.mode != 'rollback'
+    uses: ./.github/workflows/verify-production-db-migration-executor.yml
+    with:
+      mode: strict
+      confirmation: VERIFY-MIGRATION-EXECUTOR
+    secrets: inherit
+  release:
+    needs: [validate, schema]
+    if: always() && github.ref == 'refs/heads/main' && needs.validate.result == 'success' && (inputs.mode == 'rollback' || needs.schema.result == 'success')
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact build, one-replica boundary and application access without writes
+        if: inputs.mode != 'rollback'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          echo APPLICATION_PREFLIGHT_STAGE=app_configuration
+          az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$folder/app"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1 and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName' "$folder/app" >/dev/null
+          jq -e '(.properties.template.containers[0].env//[]) as $v |
+            def val($n): [$v[]|select(.name==$n)|.value]|first;
+            val("PUBLIC_LISTING_READ_ENABLED")=="true" and val("PUBLIC_LISTING_SHARED_RATE_LIMIT_READY")=="true"' "$folder/app" >/dev/null
+          echo APPLICATION_PREFLIGHT_STAGE=public_build
+          curl -fsS --retry 4 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json > "$folder/build"
+          jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' "$folder/build" >/dev/null
+          echo APPLICATION_PREFLIGHT_STAGE=ready_image
+          ready=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
+          image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$ready" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          # Existing application identity, zero-row access and configuration checks.
+          echo APPLICATION_PREFLIGHT_STAGE=container_readiness
+          set +e
+          script -q -e -c "az containerapp exec -g \"$AZURE_RESOURCE_GROUP\" -n \"$AZURE_CONTAINER_APP_NAME\" --revision \"$ready\" --command 'node /app/scripts/check-application-release-readiness.mjs'" /dev/null > "$folder/preflight" 2>&1
+          exec_status=$?
+          set -e
+          grep -Eo 'APPLICATION_RELEASE_READINESS=(PASS|FAIL)' "$folder/preflight" || true
+          echo "APPLICATION_PREFLIGHT_EXEC_STATUS=$exec_status"
+          test "$exec_status" = 0
+          grep -Fq 'APPLICATION_RELEASE_READINESS=PASS' "$folder/preflight"
+          echo 'APPLICATION_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 application_access enquiry_prerequisites'
+      - name: Apply rental application switch only
+        id: enable
+        if: inputs.mode != 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          value=false
+          if [ "$MODE" = public ]; then value=true; fi
+          echo 'mutated=true' >> "$GITHUB_OUTPUT"
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --set-env-vars PROPERTY_APPLICATIONS_ENABLED="$value" -o none
+      - name: Wait for the ready revision and verify anonymous boundaries without customer writes
+        if: inputs.mode != 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          for attempt in $(seq 1 90); do
+            az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$folder/app"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$folder/app" >/dev/null; then break; fi
+            sleep 10
+          done
+          jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.configuration.activeRevisionsMode=="Single" and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$folder/app" >/dev/null
+          if [ "$MODE" != rollback ]; then
+            curl -fsS --retry 4 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json > "$folder/build"
+            jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' "$folder/build" >/dev/null
+          fi
+          expected=false; if [ "$MODE" = public ]; then expected=true; fi
+          jq -e --arg value "$expected" 'any(.properties.template.containers[0].env[]; .name=="PROPERTY_APPLICATIONS_ENABLED" and .value==$value)' "$folder/app" >/dev/null
+          # No guessed authenticated record is read or written. The parent
+          # session boundary must reject even forged workspace headers.
+          for route in property-enquiries owner-enquiries; do
+            http=$(curl -sS --max-time 20 -H 'X-Tenant-Id: forged' -o "$folder/reply" -w '%{http_code}' "https://app.quixo.homes/api/$route/11111111-1111-4111-8111-111111111111/application")
+            if [ "$MODE" = rollback ]; then [[ "$http" = 401 || "$http" = 404 ]]; else test "$http" = 401; fi
+          done
+          if [ "$MODE" != rollback ]; then curl -fsS --max-time 20 'https://app.quixo.homes/api/public-listings?country=LK' > /dev/null; fi
+          echo 'APPLICATION_RELEASE_ACCEPTANCE=PASS anonymous_denial no_customer_writes min_max_1'
+      - name: Close rental applications if release verification fails
+        if: failure() && steps.enable.outputs.mutated == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --set-env-vars PROPERTY_APPLICATIONS_ENABLED=false -o none
+          for attempt in $(seq 1 90); do
+            latest=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestReadyRevisionName -o tsv)
+            if [ -n "$latest" ] && [ "$latest" = "$ready" ]; then break; fi
+            sleep 10
+          done
+          test "$latest" = "$ready"
+          closed=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query "properties.template.containers[0].env[?name=='PROPERTY_APPLICATIONS_ENABLED'].value | [0]" -o tsv)
+          test "$closed" = false
+          echo 'APPLICATION_RELEASE_GATES=VERIFIED_CLOSED_AFTER_FAILED_ACCEPTANCE'

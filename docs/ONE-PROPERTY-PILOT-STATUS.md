@@ -14,6 +14,10 @@ Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) 
 | After the website | Owner SaaS subscriptions | Canonical billing sandbox/design retained; no live subscription charging activated. |
 | Deferred | Scaling | Single revision, min=max=1; no extra running web test replica. |
 
+## Private rental applications — implementation and acceptance in progress
+
+The next website slice is implemented for review in the existing property enquiry: completed-viewing prerequisite, explicit sharing consent, proposed move-in/occupants/term/statement, owner information requests, renewed-consent resubmission, explicit acceptance for offer preparation, decline and withdrawal. [Application controls and release boundary](QUIXO-PRIVATE-APPLICATIONS.md) distinguish this from reservations, legal agreement/signature, membership and payment. No document uploads or automatic applicant scoring are introduced. Source defaults OFF; production migration/apply, strict 16/16 verification, activation and real participant acceptance are not claimed yet. Live browsing, registration, enquiries and viewing appointments remain unchanged. Offers/holds and the existing signing/onboarding bridge follow; subscriptions remain afterward and scaling is deferred.
+
 ## Viewing appointments — LIVE after approval, 2026-10-28
 
 The owner explicitly approved applying `20261028_02_property_viewings` and opening appointments after verification. [Production apply #40730045855](https://github.com/WasanthaK/khrental/actions/runs/40730045855) PASS through the exact target using the dedicated executor; the additive viewing/audit tables were applied and verified. The earlier approval-review rejection below is historical and has been resolved by this explicit approval.

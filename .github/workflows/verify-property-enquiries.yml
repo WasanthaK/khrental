@@ -20,6 +20,12 @@ on:
       - 'migrations/20261028_02_property_viewings.sql'
       - 'scripts/inspect-property-viewings-schema.mjs'
       - 'src/components/properties/PropertyViewing.jsx'
+      - 'src/components/properties/PropertyApplication.jsx'
+      - 'tests/property-applications.test.js'
+      - 'migrations/20261028_03_property_applications.sql'
+      - 'scripts/inspect-property-applications-schema.mjs'
+      - 'scripts/check-application-release-readiness.mjs'
+      - '.github/workflows/release-property-applications.yml'
       - 'src/utils/viewingTime.js'
       - 'tests/property-viewings.test.js'
       - 'scripts/inspect-property-enquiries-schema.mjs'
@@ -50,7 +56,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
+      - run: node --test tests/property-applications.test.js tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server
         run: node scripts/test-property-enquiries-sqlserver.mjs

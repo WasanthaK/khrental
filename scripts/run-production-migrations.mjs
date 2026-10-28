@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import sql from 'mssql';
+import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 
@@ -476,6 +477,12 @@ const MIGRATIONS = [
     file: 'migrations/20261028_02_property_viewings.sql',
     inspect: inspectPropertyViewings,
     verify: async pool => assertSatisfied(inspectPropertyViewings(pool), 'Property viewing schema verification failed.')
+  },
+  {
+    id: '20261028_03_property_applications',
+    file: 'migrations/20261028_03_property_applications.sql',
+    inspect: inspectPropertyApplications,
+    verify: async pool => assertSatisfied(inspectPropertyApplications(pool), 'Property application schema verification failed.')
   }
 ];
 
