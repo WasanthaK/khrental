@@ -5,6 +5,8 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../hooks/useAuth';
 import usePlatformAdminStatus from '../../hooks/usePlatformAdminStatus';
 import { getPortalLabel } from '../../utils/accessPolicy.js';
+import { isAdministrator } from '../../utils/accessModel.js';
+import { isPropertyEnquiriesEnabled } from '../../utils/env.js';
 import {
   WORKSPACE_SECTIONS,
   canAccessWorkspaceSection,
@@ -166,6 +168,12 @@ const DashboardLayout = () => {
           {showRentees && (
             <NavLink to="/dashboard/rentees" className={getNavLinkClass}>
               Tenants
+            </NavLink>
+          )}
+
+          {showTenantWorkspace && isPropertyEnquiriesEnabled() && isAdministrator(subject) && (
+            <NavLink to="/dashboard/enquiries" className={getNavLinkClass}>
+              Property enquiries
             </NavLink>
           )}
 
