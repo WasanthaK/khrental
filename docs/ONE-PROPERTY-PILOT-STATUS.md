@@ -2,6 +2,29 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Current website priorities
+
+| Priority | Capability | Current boundary |
+| --- | --- | --- |
+| Now | Country/category browsing, actual detail pages and villa photo | Live; preserve the hero and three stock category images. |
+| Now | Registration, verification, property enquiry and owner replies | Implemented/deployed with additive schema accepted. Combined production readiness PASS; public signup/enquiries remain OFF pending the required public-opening confirmation and subsequent real-account acceptance. |
+| Next website work | Viewing coordination; private applications; versioned offers and dwelling holds | New public journey stages remain to be implemented and accepted. |
+| Website completion | Connect accepted terms to existing signing, deposit/checklist evidence and explicit tenancy activation | Existing administrative controls are integration points; the public identity/authority bridge is still required. |
+| After the website | Owner SaaS subscriptions | Canonical billing sandbox/design retained; no live subscription charging activated. |
+| Deferred | Scaling | Single revision, min=max=1; no extra running web test replica. |
+
+## Readiness identity repair — deployed and accepted 2026-10-28
+
+[PR #445](https://github.com/WasanthaK/khrental/pull/445) supplied safe diagnostics and deployed at `921f57070bbc7c8464b19737a9af15fad6ddfc3b` to ready revision 0000409 in [#40678429133](https://github.com/WasanthaK/khrental/actions/runs/40678429133). [Read-only preflight #40678695027](https://github.com/WasanthaK/khrental/actions/runs/40678695027) established the failure: the restricted web identity could see columns, keys and relationships but could not inspect the index-filter/check/default definitions needed by strict schema acceptance. It failed at `phase=schema`; no gate changed. This supersedes earlier uncertainty about the failure's cause.
+
+[PR #446](https://github.com/WasanthaK/khrental/pull/446) merged at `def79ca8fb12110cb59285f370c6a7890b576f5c`. Its application/authorization and enquiry checks PASS at `5fa17a05b8c7ec850b73d8ec3cff2b455e87a026`. [Disposable SQL and browser acceptance #40680201087](https://github.com/WasanthaK/khrental/actions/runs/40680201087) additionally proved that a restricted user denied VIEW DEFINITION can pass the required application access checks, while revoking audit INSERT fails readiness without creating a record. Existing strict drift, concurrency, quota, identity-revocation and registration/enquiry browser proofs also PASS.
+
+The release workflow now validates the request, automatically requires the existing dedicated executor's strict schema/ledger/checksum proof against the same database as the serving application, and then uses zero-row queries to prove the web identity's required columns and DML permissions. It retains the existing web privileges. Rollback bypasses schema/provider readiness so closure is available independently. No production schema or grants changed in this repair.
+
+[Application deployment #40680458189](https://github.com/WasanthaK/khrental/actions/runs/40680458189) PASS: ready revision 0000410 serves the exact `def79ca8fb12110cb59285f370c6a7890b576f5c` build with healthy MSSQL and expected browser configuration. [Combined read-only readiness #40680583378](https://github.com/WasanthaK/khrental/actions/runs/40680583378) PASS: request validation, fresh **14/14** strict executor ledger/schema/checksum evidence against the matched database, exact serving build, Single revision/min=max=1, required application access and signup origin/limiter/mail configuration. The runtime probe reports `ENQUIRY_RELEASE_READINESS=PASS`; no customer record or email was created. Activation and rollback steps were skipped in this read-only mode. Public signup/enquiries remain OFF, and fresh deployed enquiry-page inspection states they are not open yet. No extra web test replica or production customer record was created.
+
+**Current next action:** obtain the required action-time confirmation and run the explicit public registration/enquiry release against accepted build `def79ca8fb12110cb59285f370c6a7890b576f5c`. This opens personal seeker registration and property enquiries to verified visitors; it does not create owner/admin memberships, reserve property, confirm viewings or complete later journey stages. After opening, real people complete registration/credential entry and controlled physical acceptance; do not fabricate production users/messages or claim real email delivery from fixture/preflight evidence. Continue the remaining website stages before SaaS subscriptions.
+
 ## Public enquiry release package — deployed, readiness remains closed
 
 [PR #444](https://github.com/WasanthaK/khrental/pull/444) merged at `de58d3b1f564077c23291f4295a5bfb25f588ad9`. [Application deployment #40675325909](https://github.com/WasanthaK/khrental/actions/runs/40675325909), attempt 2, PASS: ready revision 0000408 serves the exact build with healthy MSSQL and expected browser configuration. Attempt 1 reached the ready revision but failed when Azure Resource Manager returned a 503 during final verification; it remains a failed attempt, superseded by the successful retry. [Marketing deployment #40675325842](https://github.com/WasanthaK/khrental/actions/runs/40675325842) PASS.
