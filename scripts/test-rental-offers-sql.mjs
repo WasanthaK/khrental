@@ -126,5 +126,21 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal((await store.get(withdrawn.actor,withdrawn.id)).offer.status,'invalidated');
  assert.equal(await available(invalid),true);
  assert.equal((await q("SELECT COUNT(*) AS n FROM property_rental_offer_events WHERE enquiry_id=@id AND event_type='invalidated'",{id:withdrawn.id}))[0].n,1);
+ // Expiry after agreement preparation supports a fresh accepted version without
+ // reviving the old agreement or dropping the converted account's history.
+ const repeatProperty=await property(),repeat=await candidate(repeatProperty);
+ await store.change(owner,repeat.id,request('issue',0,true,terms()),true);
+ await store.change(repeat.actor,repeat.id,request('accept',1,false,{consent:true}));
+ const firstAgreement=await store.change(owner,repeat.id,request('agreement',2,true,{templateId}),true);
+ await q('UPDATE property_rental_offers SET offer_until=DATEADD(day,-3,SYSUTCDATETIME()),hold_until=DATEADD(day,-2,SYSUTCDATETIME()) WHERE enquiry_id=@id',{id:repeat.id});
+ assert.equal((await store.get(repeat.actor,repeat.id)).offer.status,'expired');
+ await store.change(owner,repeat.id,request('issue',4,true,{...terms(),rent:'110.00'}),true);
+ assert.equal((await enquiries.list(repeat.actor,false,0,true)).items[0].id,repeat.id);
+ await store.change(repeat.actor,repeat.id,request('accept',5,false,{consent:true}));
+ const secondAgreement=await store.change(owner,repeat.id,request('agreement',6,true,{templateId}),true);
+ assert.notEqual(firstAgreement.offer.agreementId,secondAgreement.offer.agreementId);
+ assert.equal((await q('SELECT COUNT(*) AS n FROM rental_offer_agreement_links WHERE enquiry_id=@id',{id:repeat.id}))[0].n,2);
+ assert.equal((await q('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:repeat.actor.actorId}))[0].n,1);
+ await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>e.number===51103);
  console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race active_occupancy_race catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
 };

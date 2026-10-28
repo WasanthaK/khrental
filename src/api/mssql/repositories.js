@@ -2120,7 +2120,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`);
     }
 
     const linkedRental=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true'&&Boolean((await new sql.Request(transaction)
-      .input('agreementId',id).query('SELECT enquiry_id FROM dbo.property_rental_offers WHERE agreement_id=@agreementId')).recordset[0]);
+      .input('agreementId',id).query('SELECT enquiry_id FROM dbo.rental_offer_agreement_links WHERE agreement_id=@agreementId')).recordset[0]);
     if (!linkedRental&&updatedAgreement.propertyid) {
       const propertyRequest = new sql.Request(transaction);
       propertyRequest.input('propertyId', updatedAgreement.propertyid);
