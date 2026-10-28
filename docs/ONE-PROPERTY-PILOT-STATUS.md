@@ -2,6 +2,14 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## First owner physical-test finding — 2026-10-28
+
+An owner-enabled additional residential property was present in the public catalog but difficult to identify because its optional public headline was blank, producing the generic “Home for rent” title, and it had no reviewed public photograph. Authenticated inspection confirmed saved LK country, opt-out false and eligible preview; matching the opaque public reference confirmed it was already in the catalog. This was a presentation/recognition problem, not another publication gate or failed save.
+
+The intended non-sensitive public headline was saved through the existing administrator control. A fresh real-site residential search then rendered the identifiable card with its existing rent. Source address, private financial fields, original photographs, occupancy and rollout flags were unchanged. The photo remains unpublished pending its own review. Current observed LK catalog has **3 listings: 2 residential and 1 land**, superseding the release-time LK count below.
+
+Priority UX follow-up: replace ambiguous pilot/eligibility wording with an actual website visibility result, an actionable hidden reason when relevant, and a direct way to view the matching public card. Explain the generic headline and missing approved-photo states clearly; do not infer that an optional blank headline means the property failed publication.
+
 ## Eligible-inventory physical testing release — LIVE, 2026-10-28
 
 The owner approved activation of all eligible listings and administrator controls. [Release #40613719898](https://github.com/WasanthaK/khrental/actions/runs/40613719898) **PASS** on workflow commit `c62d529e46ca28e469e3de9dde475533d510ae27`, preserving serving application build `d80e8c49b60fdff415f2869a93542934c9560d0d`. This checkpoint supersedes the single-property scope and prepared/pending activation statements below.
