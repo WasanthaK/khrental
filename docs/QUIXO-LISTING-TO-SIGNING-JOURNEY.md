@@ -2,6 +2,14 @@
 
 Owner direction, 28 October 2026 (Asia/Colombo). This is the product journey and delivery sequence for the public website, connected to the existing rental administration application. It supplements the program master plan and current pilot status; it does not reopen owner-deferred scaling or invoice-archive work.
 
+## Owner priority — website first, subscriptions afterward
+
+On 28 October 2026 the owner explicitly directed work toward a **fully operational rental website first**, with SaaS subscription management afterward. This supersedes earlier checkpoints that placed B04-owner/B05 ahead of the public renter journey. Preserve the existing canonical billing sandbox, price/quantity decisions and owner-billing design, but queue their implementation/activation until the website journey is accepted. Tenant rent/deposit evidence and tenancy activation remain part of the rental journey; they are distinct from owner SaaS subscriptions.
+
+The release objective is a functioning listing-to-signing journey, not just a deployed homepage. Next acceptance sequence: reliable sign-in and visibility controls; approved photos and accurate category/detail browsing; property-scoped enquiry and owner inbox; viewing coordination; private application and versioned offer; concurrency-safe reservation; verified agreement signing; explicit deposit/checklist and tenancy activation. Include withdrawal, cancellation, expiry, retry and failure feedback throughout. Existing owner/tenant permissions and public-signup gates still apply until their corresponding journeys are implemented and reviewed; this priority change does not invent free organisation entitlements or activate unfinished public registration.
+
+Work each remaining website package to a reviewable, tested result and keep the actual live/planned boundary in current status. Do not repeatedly re-open completed hero/stock-image, direct-bucket privacy or accepted browsing checks. Scaling remains owner-deferred, and temporary extra test replicas are not part of the plan.
+
 ## Browse and classify
 
 The three public categories are **houses & apartments**, **shops & retail**, and **offices & workspaces**. A new property registration must select exactly one. Physical property type remains separate because apartment units, houses and land have existing operational meanings. Residential browsing selects the first category; commercial browsing combines the latter two. Existing houses/apartments/condominiums retain residential classification. Existing broad commercial or land records are not guessed into retail or office: the owner must classify them when appropriate. Previously published legacy inventory remains available in the all-properties view until explicitly changed.
