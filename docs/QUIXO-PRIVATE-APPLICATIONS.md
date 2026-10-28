@@ -2,6 +2,10 @@
 
 Website-first package, 28 October 2026. This follows the live enquiry and viewing journey. Source defaults OFF until the additive migration and explicit release are accepted. Applications are private to the same verified seeker and active owner-workspace administrator; browsing, enquiry and viewing permissions do not create a tenancy membership.
 
+## Current acceptance
+
+PR #450 merged at `c36ff6231966c669c6518c4283757cdd3a8f156e` after all required checks passed at `506ff38c037b1ece939b34f31073b472f33a4a15`. Disposable SQL and real React browser proof #40734091225 PASS; governed migration proof #40734091360, application/authorization, default-public privacy, two-tenant SQL and marketing layout checks PASS. Local build and 52 focused tests PASS. The owner explicitly approved the migration and activation. Dedicated-executor production apply #40738580244 PASS through `20261028_03_property_applications`; the application switch remains OFF because browser transport failed before the release workflow could be dispatched. Strict 16/16 release acceptance, runtime access checks and activation are still pending. Approval is retained; resume the existing release workflow without repeating apply or asking for approval again. No production fixture, application, review decision or email was created. [Canonical status](ONE-PROPERTY-PILOT-STATUS.md) retains deployment and release evidence separately from isolated acceptance.
+
 ## Renter and owner controls
 
 Both participants use the **Rental application** section of the existing property enquiry. The owner opens **Dashboard → Property enquiries**; the seeker opens **My enquiries**. The selected property, market and verified enquiry identity stay attached on the server.
