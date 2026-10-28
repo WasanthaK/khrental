@@ -1,7 +1,8 @@
 // B04 S3c2c: route-level read-only seeker proof. Disabled by default.
 // Tenant and billing APIs remain protected by their existing server guards.
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
+import { enquiryReturnPath } from '../../utils/enquiryReturnPath.js';
 import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
@@ -12,6 +13,7 @@ import SeekerHome from '../../pages/SeekerHome';
 const enabled = isPublicSeekerLandingEnabled();
 
 export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
+  const location=useLocation();
   const { user, membership, memberships, loading, isAuthenticated } = useAuth();
   const [status, setStatus] = useState({ key: null, eligible: false });
   const key = String(user?.id || '') + ':' + String(user?.profileId || '');
@@ -57,6 +59,6 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   // Never reuse an earlier user's certification or an in-flight response.
   if (status.key !== key) return <div role="status">Verifying your account…</div>;
   if (!status.eligible) return <Navigate to="/unauthorized" replace />;
-  if (redirectOnly) return <Navigate to="/seeker" replace />;
+  if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || '/seeker'} replace />;
   return <SeekerHome {...profile} />;
 };
