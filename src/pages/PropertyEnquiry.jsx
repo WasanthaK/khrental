@@ -26,6 +26,10 @@ const PropertyEnquiry=()=>{
   const identity=String(user?.id||'');
   const enabled=isPropertyEnquiriesEnabled();
   useEffect(()=>{
+    setMessage('');setConsent(false);requestId.current=crypto.randomUUID();
+    setState(s=>({...s,error:'',notice:''}));
+  },[route]);
+  useEffect(()=>{
     let active=true;
     setListing(null);
     if (!enabled || !route) {return ()=>{active=false;};}
@@ -71,8 +75,8 @@ const PropertyEnquiry=()=>{
   return <main className="min-h-screen bg-slate-50 px-4 py-10">
     <div className="mx-auto max-w-2xl space-y-6">
       <p className="font-semibold text-emerald-700">Quixo.Homes</p>
-      <h1 className="text-3xl font-semibold text-slate-900">Property enquiry</h1>
-      {!route && <p role="alert">Choose a property from the rental website to start an enquiry.</p>}
+      <h1 className="text-3xl font-semibold text-slate-900">{route?'Property enquiry':'My property enquiries'}</h1>
+      {!route && <p>Choose a property from the rental website to start a new enquiry. Your existing enquiries and owner replies appear below after sign-in.</p>}
       {route && <a className="underline text-blue-800" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>Back to property</a>}
       {listing && <section className="rounded-xl bg-white border p-6">
         <h2 className="text-xl font-semibold">{listing.title}</h2>
