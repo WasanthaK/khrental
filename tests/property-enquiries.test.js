@@ -10,11 +10,11 @@ const id=n=>'11111111-1111-4111-8111-'+String(n).padStart(12,'0');
 const input={listingId:id(1),country:'LK',requestId:id(2),message:'May I arrange a viewing?',consent:true};
 const env={PROPERTY_ENQUIRIES_ENABLED:'true',PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'};
 const actor={record:{appUserId:id(3),authId:id(4)},sessionId:id(5)};
-const launch=async(t,{owner=false,environment=env,session=actor,proof={verified:true,eligible:true},admin=true,viewings}={})=>{
+const launch=async(t,{owner=false,environment=env,session=actor,proof={verified:true,eligible:true},admin=true,viewings,applications}={})=>{
   const calls=[];
   const app=express();app.use(express.json());
   app.use((req,res,next)=>{req.authSession=session;next();});
-  app.use(createEnquiriesRouter({owner,env:environment,...(viewings?{viewings}:{}),
+  app.use(createEnquiriesRouter({owner,env:environment,...(viewings?{viewings}:{}),...(applications?{applications}:{}),
     context:(req,res,next)=>{
       req.user={id:id(3),status:'active'};req.tenantContext={};
       if(owner){req.tenantId=id(7);req.membership={tenant_id:id(7),status:'active',role:admin?'admin':'staff'};}
@@ -114,4 +114,18 @@ test('viewing subroutes require their independent gate, live session, strict act
   assert.equal((await open.request('/'+id(8)+'/viewing','POST',{action:'cancel',version:1,requestId:id(9)})).status,200);
   const anonymous=await launch(t,{viewings,session:null,environment:{...env,PROPERTY_VIEWINGS_ENABLED:'true'}});
   assert.equal((await anonymous.request('/'+id(8)+'/viewing')).status,401);
+});
+
+test('private application routes require independent gate, verified actor, strict role contract and origin',async t=>{
+  const calls=[];
+  const applications={get:async(...args)=>{calls.push(args);return {application:null,canSubmit:false};},change:async(...args)=>{calls.push(args);return {application:{status:'withdrawn'}};}};
+  const closed=await launch(t,{applications});assert.equal((await closed.request('/'+id(8)+'/application')).status,404);assert.equal(calls.length,0);
+  const open=await launch(t,{applications,environment:{...env,PROPERTY_APPLICATIONS_ENABLED:'true'}});
+  assert.equal((await open.request('/'+id(8)+'/application')).status,200);
+  assert.equal((await open.request('/'+id(8)+'/application','POST',{action:'accept',version:1,requestId:id(9),note:'Owner only'})).status,400);
+  assert.equal((await open.request('/'+id(8)+'/application','POST',{action:'withdraw',version:1,requestId:id(9)},'https://evil.test')).status,403);
+  assert.equal(calls.length,1);
+  assert.equal((await open.request('/'+id(8)+'/application','POST',{action:'withdraw',version:1,requestId:id(9)})).status,200);
+  const anonymous=await launch(t,{applications,session:null,environment:{...env,PROPERTY_APPLICATIONS_ENABLED:'true'}});
+  assert.equal((await anonymous.request('/'+id(8)+'/application')).status,401);
 });

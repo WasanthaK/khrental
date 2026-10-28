@@ -5,13 +5,15 @@ import {resolveVerifiedSeekerContext} from '../auth/seekerContext.js';
 import {hasActiveTenantMembership,isAdminRole} from '../platform/permissionEngine.js';
 import {PUBLIC_LISTING_ENABLED} from '../publicListings/eligibility.js';
 import {createEnquiryStore} from './store.js';
+import {createApplicationStore} from './applicationStore.js';
+import {parseApplicationAction} from './applicationContract.js';
 import {createViewingStore} from './viewingStore.js';
 import {parseViewingAction} from './viewingContract.js';
 import {isUuid,parseEnquiry,parseOwnerAction,enquiryError} from './contract.js';
 
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 export const createEnquiriesRouter=({
-  owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),
+  owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),applications=createApplicationStore(),
   context=createTenantContextMiddleware({requireUser:true,requireTenant:owner}),
   verifySeeker=resolveVerifiedSeekerContext,allowedOrigin='https://app.quixo.homes'
 }={})=>{
@@ -57,6 +59,17 @@ export const createEnquiriesRouter=({
   }));
   router.post('/:id/viewing',asyncRoute(async(req,res)=>{
     res.json({data:await viewings.change(req.enquiryActor,req.params.id,parseViewingAction(req.body,owner),owner)});
+  }));
+  router.use('/:id/application',(req,res,next)=>{
+    if(env.PROPERTY_APPLICATIONS_ENABLED!=='true'){return res.status(404).json({code:'APPLICATIONS_UNAVAILABLE',error:'Rental applications are not open yet.'});}
+    if(!isUuid(req.params.id)){return res.status(404).json({code:'ENQUIRY_NOT_FOUND',error:'Enquiry not found.'});}
+    next();
+  });
+  router.get('/:id/application',asyncRoute(async(req,res)=>{
+    res.json({data:await applications.get(req.enquiryActor,req.params.id,owner)});
+  }));
+  router.post('/:id/application',asyncRoute(async(req,res)=>{
+    res.json({data:await applications.change(req.enquiryActor,req.params.id,parseApplicationAction(req.body,owner),owner)});
   }));
   router.get('/',asyncRoute(async(req,res)=>{
     const offset=Number(req.query.offset||0);

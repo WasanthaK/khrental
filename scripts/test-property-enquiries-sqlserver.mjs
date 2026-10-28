@@ -7,6 +7,9 @@ import {execFileSync} from 'node:child_process';
 import sql from 'mssql';
 import {createEnquiryStore} from '../src/api/enquiries/store.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
+import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
+import {createApplicationStore} from '../src/api/enquiries/applicationStore.js';
+import {parseApplicationAction} from '../src/api/enquiries/applicationContract.js';
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {createViewingStore} from '../src/api/enquiries/viewingStore.js';
 import {parseViewingAction} from '../src/api/enquiries/viewingContract.js';
@@ -65,6 +68,13 @@ try {
   assert.equal((await inspectPropertyEnquiries(pool)).satisfied,true);
   const viewingMigration=fs.readFileSync('migrations/20261028_02_property_viewings.sql','utf8');
   await pool.request().batch(viewingMigration);await pool.request().batch(viewingMigration);
+  const applicationMigration=fs.readFileSync('migrations/20261028_03_property_applications.sql','utf8');
+  await pool.request().batch(applicationMigration);await pool.request().batch(applicationMigration);
+  const applicationSchema=await inspectPropertyApplications(pool);
+  assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
+  await query('ALTER TABLE property_applications NOCHECK CONSTRAINT CK_property_applications_consent');
+  assert.equal((await inspectPropertyApplications(pool)).satisfied,false);
+  await query('ALTER TABLE property_applications WITH CHECK CHECK CONSTRAINT CK_property_applications_consent');
   const viewingSchema=await inspectPropertyViewings(pool);
   assert.equal(viewingSchema.satisfied,true,viewingSchema.detail);
   await query('ALTER TABLE property_viewings NOCHECK CONSTRAINT CK_property_viewings_time');
@@ -118,6 +128,13 @@ try {
   assert.equal(concurrent.filter(x=>x.created).length,1);
   assert.equal(concurrent[0].receipt.id,concurrent[1].receipt.id);
   const saved=concurrent[0].receipt;
+  const applications=createApplicationStore({poolProvider:async()=>pool});
+  const apply=(action,version,owner=false,extra={})=>parseApplicationAction({action,version,requestId:crypto.randomUUID(),...extra},owner);
+  const details={moveInDate:new Date(Date.now()+7*86400000).toISOString().slice(0,10),occupants:2,termMonths:12,statement:'Synthetic rental plans',consent:true};
+  const originalApplication=apply('submit',0,false,details);
+  await assert.rejects(applications.change(actor,saved.id,originalApplication),{code:'APPLICATION_VIEWING_REQUIRED'});
+  assert.equal((await applications.get(actor,saved.id)).canSubmit,false);
+
   const sameAfterRestart=createEnquiryStore({poolProvider:async()=>pool});
   assert.equal((await sameAfterRestart.submit(actor,first)).created,false);
   await assert.rejects(store.submit(actor,parseEnquiry({listingId:first.listingId,country:first.country,
@@ -167,6 +184,33 @@ try {
   assert.deepEqual((await query('SELECT status FROM property_viewing_events WHERE enquiry_id=@id ORDER BY version',{id:saved.id})).map(x=>x.status),
     ['requested','confirmed','proposed','confirmed','cancelled','requested','confirmed','completed']);
   console.log('PROPERTY_VIEWINGS_SQL=PASS migration_rerun strict_drift scope concurrent_replay stale_version confirmation proposal privacy availability completion audit');
+  assert.equal((await applications.get(actor,saved.id)).canSubmit,true);
+  const concurrentApplications=await Promise.allSettled([applications.change(actor,saved.id,originalApplication),applications.change(actor,saved.id,originalApplication)]);
+  assert.ok(concurrentApplications.some(x=>x.status==='fulfilled'));
+  for(const result of concurrentApplications){if(result.status==='rejected'){assert.equal(result.reason.code,'ENQUIRY_RETRY');}}
+  assert.equal((await applications.change(actor,saved.id,originalApplication)).application.version,1);
+  assert.equal((await query('SELECT COUNT(*) AS n FROM property_application_events'))[0].n,1);
+  await assert.rejects(applications.get(foreignOwner,saved.id,true),{code:'ENQUIRY_NOT_FOUND'});
+  await assert.rejects(applications.change(actor,saved.id,{...originalApplication,payloadHash:'changed'}),{code:'APPLICATION_REQUEST_CONFLICT'});
+  await applications.change(owner,saved.id,apply('needs_information',1,true,{note:'Clarify your preferred term.'}),true);
+  await assert.rejects(applications.change(owner,saved.id,apply('accept',1,true,{note:'Stale'}),true),{code:'APPLICATION_CHANGED'});
+  await query('UPDATE public_listing_preferences SET opted_out=1 WHERE public_id=@id',{id:first.listingId});
+  assert.equal((await applications.get(actor,saved.id)).canSubmit,false);
+  await assert.rejects(applications.change(actor,saved.id,apply('submit',2,false,details)),{code:'LISTING_UNAVAILABLE'});
+  await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
+  await applications.change(actor,saved.id,apply('submit',2,false,{...details,termMonths:24}));
+  await query('UPDATE public_listing_preferences SET opted_out=1 WHERE public_id=@id',{id:first.listingId});
+  const acceptance=apply('accept',3,true,{note:'Reviewed for offer preparation.'});
+  await assert.rejects(applications.change(owner,saved.id,acceptance,true),{code:'LISTING_UNAVAILABLE'});
+  await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
+  assert.equal((await applications.change(owner,saved.id,acceptance,true)).application.status,'accepted');
+  assert.equal((await query('SELECT COUNT(*) AS n FROM agreements'))[0].n,0,'Review does not create a tenancy');
+  assert.equal((await applications.change(actor,saved.id,apply('withdraw',4))).application.status,'withdrawn');
+  assert.equal((await applications.change(actor,saved.id,originalApplication)).application.status,'withdrawn','Old replay returns current decision');
+  assert.deepEqual((await query('SELECT status FROM property_application_events ORDER BY version')).map(x=>x.status),['submitted','needs_information','submitted','accepted','withdrawn']);
+  assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:actor.actorId}))[0].n,0);
+  console.log('PROPERTY_APPLICATIONS_SQL=PASS migration_rerun strict_consent_drift completed_viewing scope concurrent_replay consent renewed_submission version availability review withdrawal audit no_membership_no_tenancy');
+
   assert.equal((await store.change(actor,saved.id,{version:2})).status,'withdrawn');
   await assert.rejects(store.change(owner,saved.id,{status:'responded',response:'Late reply',version:3},true),{code:'ENQUIRY_CHANGED'});
   const events=await query('SELECT version,from_status,to_status,response FROM property_enquiry_events WHERE enquiry_id=@id ORDER BY version',{id:saved.id});
@@ -185,6 +229,7 @@ try {
   await query('UPDATE auth_sessions SET revoked_at=SYSUTCDATETIME() WHERE id=@id',{id:actor.sessionId});
   await assert.rejects(store.list(actor),{code:'ENQUIRY_ACTOR_REQUIRED'});
   await assert.rejects(viewings.get(actor,saved.id),{code:'ENQUIRY_ACTOR_REQUIRED'});
+  await assert.rejects(applications.get(actor,saved.id),{code:'ENQUIRY_ACTOR_REQUIRED'});
   await query("UPDATE tenant_memberships SET status='revoked' WHERE app_user_id=@id",{id:owner.actorId});
   await assert.rejects(store.list(owner,true),{code:'ENQUIRY_ACTOR_REQUIRED'});
   assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:actor.actorId}))[0].n,0);

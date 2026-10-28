@@ -100,7 +100,7 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
           link.textContent='View property →';panel.append(link);
         }else{
           const note=document.createElement('p');
-          note.textContent='Viewing requests and applications are not open yet. You can browse this property without creating an account.';
+          note.textContent='You can browse without an account. Check enquiry availability for further steps.';
           panel.append(note);
           const controller=new AbortController();
           const timeout=setTimeout(()=>controller.abort(),10000);
@@ -113,7 +113,7 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
               const enquire=document.createElement('a');
               enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
               enquire.textContent='Enquire about this property';panel.insertBefore(enquire,note);
-              note.textContent='An enquiry does not reserve this property or confirm a viewing. Applications are not open yet.';
+              note.textContent='An enquiry does not reserve this property or confirm a viewing. Check your enquiry for application controls when available.';
             }).catch(()=>{}).finally(()=>clearTimeout(timeout));
         }
         article.append(panel);
