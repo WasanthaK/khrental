@@ -96,7 +96,6 @@ const loadAgreementContext = async (tenantId, agreementId) => {
      FROM agreements a
      LEFT JOIN app_users au
        ON au.id = a.renteeid
-      AND au.tenant_id = a.tenant_id
      LEFT JOIN properties p
        ON p.id = a.propertyid
       AND p.tenant_id = a.tenant_id
@@ -376,18 +375,20 @@ export const createTenancyOnboardingRouter = () => {
       const billingDay = normalizeTenancyBillingDay(requestedBillingDay);
 
       const updated = await runSingleQuery(
-        `UPDATE agreements
+        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+UPDATE agreements
          SET terms = JSON_MODIFY(
                CASE WHEN ISJSON(terms) = 1 THEN terms ELSE N'{}' END,
                '$.billingDay',
                @billingDay
              ),
              updatedat = SYSUTCDATETIME()
-         OUTPUT INSERTED.*
+         OUTPUT INSERTED.id INTO @rental_changed
          WHERE tenant_id = @tenantId
            AND id = @agreementId
            AND renteeid = @renteeId
-           AND status = 'active'`,
+           AND status = 'active';
+SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         {
           tenantId: req.tenantId,
           agreementId: agreement.id,

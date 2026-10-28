@@ -1,3 +1,4 @@
+import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
@@ -51,7 +52,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261026_01_public_listing_preferences',
   '20261028_01_property_enquiries',
   '20261028_02_property_viewings',
-  '20261028_03_property_applications'
+  '20261028_03_property_applications',
+  '20261029_01_rental_offers_and_holds'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1043,6 +1045,26 @@ const main = async () => {
     const applicationSchema=await inspectPropertyApplications(testPool);
     assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
     console.log('PASS: governed private application migration double apply, strict metadata inspection');
+    // Complete the production-typed empty prerequisites for the new guards.
+    // Earlier migration fixtures intentionally exercised only smaller schemas.
+    await testPool.request().batch(`
+      ALTER TABLE dbo.properties ADD status NVARCHAR(50) NULL;
+      ALTER TABLE dbo.app_users ADD auth_id UNIQUEIDENTIFIER NULL,email NVARCHAR(320) NULL,status NVARCHAR(50) NULL;
+      CREATE TABLE dbo.agreements(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,unitid UNIQUEIDENTIFIER,renteeid UNIQUEIDENTIFIER,
+        templateid UNIQUEIDENTIFIER,status NVARCHAR(50),rentamount DECIMAL(18,2),depositamount DECIMAL(18,2),startdate DATETIMEOFFSET,enddate DATETIMEOFFSET,
+        terms NVARCHAR(MAX),content NVARCHAR(MAX),signeddate DATETIMEOFFSET,signature_status NVARCHAR(100),signature_completed_at DATETIMEOFFSET);
+      CREATE TABLE dbo.tenant_memberships(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,app_user_id UNIQUEIDENTIFIER,status NVARCHAR(50),role NVARCHAR(100));
+      CREATE TABLE dbo.tenancy_deposit_transactions(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,transaction_type NVARCHAR(50),status NVARCHAR(50),amount DECIMAL(18,2));
+      CREATE TABLE dbo.tenancy_move_in_checklists(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,status NVARCHAR(50));
+      CREATE TABLE dbo.tenancy_move_in_checklist_items(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,checklist_id UNIQUEIDENTIFIER,is_required BIT,status NVARCHAR(50));
+    `);
+    const rentalSql=fs.readFileSync(path.resolve('migrations/20261029_01_rental_offers_and_holds.sql'),'utf8');
+    await testPool.request().batch(rentalSql);await testPool.request().batch(rentalSql);
+    const rentalSchema=await inspectRentalOffers(testPool);assert.equal(rentalSchema.satisfied,true,rentalSchema.detail);
+    await testPool.request().query('DISABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
+    assert.equal((await inspectRentalOffers(testPool)).satisfied,false);
+    await testPool.request().query('ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
+    console.log('PASS: governed offer/hold migration double apply, exact enabled trigger proof and drift denial');
 
 
   } finally {

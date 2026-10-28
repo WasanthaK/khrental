@@ -143,6 +143,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                   required
                 >
                   <option value="">Select Rentee</option>
+                  {readOnly&&initialData?.renteeid&&!rentees?.some(r=>String(r.id).toLowerCase()===String(initialData.renteeid).toLowerCase())&&<option value={initialData.renteeid}>{initialData.rentee?.name||'Accepted applicant'}</option>}
                   {rentees?.map(rentee => (
                     <option key={rentee.id} value={rentee.id}>
                       {rentee.name}

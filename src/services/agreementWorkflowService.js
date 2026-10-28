@@ -1,3 +1,4 @@
+import {rentalOfferSchedule} from '../utils/rentalOfferSchedule.js';
 import { AGREEMENT_STATUS } from '../constants/agreementStatus';
 import { populateMergeFields } from '../utils/documentUtils';
 import { saveMergedDocument } from './DocumentService';
@@ -235,7 +236,11 @@ export const persistAgreementForm = async ({
   existingId = null
 }) => {
   const resolvedExistingId = formData?.id || existingId || null;
-  const payload = buildAgreementPersistencePayload({
+  const current=resolvedExistingId?await fetchAgreement(resolvedExistingId):null;
+  const bound=Boolean(parseObject(current?.terms).rentalOfferEnquiry);
+  // A bound agreement keeps the accepted canonical terms; editable legacy
+  // defaults must not rewrite fees, deadlines or the accepted-offer provenance.
+  const payload = bound?{status}:buildAgreementPersistencePayload({
     formData,
     status,
     existingId: resolvedExistingId
@@ -270,12 +275,13 @@ export const generateAndAttachAgreementDocument = async ({
     throw new Error('Agreement template content could not be loaded.');
   }
 
-  const mergedContent = await renderAgreementContent({
-    templateContent: template.content,
+  const renderedContent = await renderAgreementContent({
+    templateContent: parseObject(agreement.terms).rentalOfferEnquiry ? agreement.content : template.content,
     agreement,
     related
   });
 
+  const mergedContent=renderedContent+rentalOfferSchedule(agreement);
   const documentUrl = await saveMergedDocument(mergedContent, agreement.id);
   if (!documentUrl) {
     throw new Error('Agreement document could not be saved to storage.');

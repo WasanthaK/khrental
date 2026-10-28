@@ -5,6 +5,8 @@ import {resolveVerifiedSeekerContext} from '../auth/seekerContext.js';
 import {hasActiveTenantMembership,isAdminRole} from '../platform/permissionEngine.js';
 import {PUBLIC_LISTING_ENABLED} from '../publicListings/eligibility.js';
 import {createEnquiryStore} from './store.js';
+import {createOfferStore} from './offerStore.js';
+import {parseOfferAction} from './offerContract.js';
 import {createApplicationStore} from './applicationStore.js';
 import {parseApplicationAction} from './applicationContract.js';
 import {createViewingStore} from './viewingStore.js';
@@ -13,7 +15,7 @@ import {isUuid,parseEnquiry,parseOwnerAction,enquiryError} from './contract.js';
 
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 export const createEnquiriesRouter=({
-  owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),applications=createApplicationStore(),
+  owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),applications=createApplicationStore(),offers=createOfferStore(),
   context=createTenantContextMiddleware({requireUser:true,requireTenant:owner}),
   verifySeeker=resolveVerifiedSeekerContext,allowedOrigin='https://app.quixo.homes'
 }={})=>{
@@ -32,6 +34,36 @@ export const createEnquiriesRouter=({
     next();
   });
   router.use(context);
+  const rentalActor=req=>({actorId:req.authSession.record.appUserId,authId:req.authSession.record.authId,
+    sessionId:req.authSession.sessionId,...(owner?{tenantId:req.tenantId}:{})});
+  // A converted seeker retains access to their own rental history. The SQL
+  // authority admits only verified global identities and offer-derived renter
+  // memberships; the ordinary signup/enquiry eligibility gate remains unchanged.
+  const rentalGate=(req,res,next)=>{
+    if(owner&&(!isAdminRole({user:req.user,membership:req.membership})||!hasActiveTenantMembership({membership:req.membership,tenantId:req.tenantId}))){
+      return res.status(403).json({code:'ENQUIRY_ADMIN_REQUIRED',error:'Active tenant administrator required.'});
+    }
+    if(env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY!=='true'){
+      return res.status(404).json({code:'RENTAL_OFFERS_UNAVAILABLE',error:'Rental offers are not open yet.'});
+    }
+    if(req.method==='POST'&&env.PROPERTY_RENTAL_OFFERS_ENABLED!=='true'&&req.body?.action!=='withdraw'){
+      return res.status(409).json({code:'RENTAL_OFFERS_CLOSED',error:'New offers are temporarily closed. Existing reservations can still be withdrawn.'});
+    }
+    next();
+  };
+  if(!owner){router.get('/journey',rentalGate,asyncRoute(async(req,res)=>{
+    const offset=Number(req.query.offset||0);
+    if(!Number.isInteger(offset)||offset<0||offset>100000){throw enquiryError(400,'INVALID_PAGE','Choose a valid page.');}
+    res.json({data:await store.list(rentalActor(req),false,offset,true)});
+  }));}
+  router.get('/:id/offer',rentalGate,asyncRoute(async(req,res)=>{
+    if(!isUuid(req.params.id)){throw enquiryError(404,'ENQUIRY_NOT_FOUND','Enquiry not found.');}
+    res.json({data:{...await offers.get(rentalActor(req),req.params.id,owner),actionsEnabled:env.PROPERTY_RENTAL_OFFERS_ENABLED==='true'}});
+  }));
+  router.post('/:id/offer',rentalGate,asyncRoute(async(req,res)=>{
+    if(!isUuid(req.params.id)){throw enquiryError(404,'ENQUIRY_NOT_FOUND','Enquiry not found.');}
+    res.json({data:{...await offers.change(rentalActor(req),req.params.id,parseOfferAction(req.body,owner),owner),actionsEnabled:env.PROPERTY_RENTAL_OFFERS_ENABLED==='true'}});
+  }));
   router.use((req,res,next)=>Promise.resolve().then(async()=>{
     if (owner) {
       if (!req.tenantId || !isAdminRole({user:req.user,membership:req.membership}) ||

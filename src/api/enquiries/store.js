@@ -23,7 +23,7 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
       throw err;
     }
   };
-  const requireActor = async (query,actor,owner=false) => {
+  const requireActor = async (query,actor,owner=false,journey=false) => {
     // Recheck live session, reciprocal global identity and authority inside the
     // serialized write/read. Headers, browser roles and middleware snapshots cannot grant access.
     const rows = await query(`SELECT TOP(1) au.id,au.name,au.email
@@ -40,7 +40,7 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
           AND (t.status IS NULL OR t.status=N'active'))` : `au.tenant_id IS NULL
         AND au.role=N'authenticated' AND au.user_type=N'seeker' AND auth.role=N'authenticated'
         AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')=N'true'
-        AND NOT EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK) WHERE tm.app_user_id=au.id)`}`,
+        AND ${journey?`NOT EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK) WHERE tm.app_user_id=au.id AND (tm.status<>N'active' OR tm.role NOT IN(N'rentee',N'tenant') OR NOT EXISTS(SELECT 1 FROM dbo.rental_offer_agreement_links rl JOIN dbo.property_enquiries re ON re.id=rl.enquiry_id WHERE re.seeker_id=au.id AND re.tenant_id=tm.tenant_id)))`:`NOT EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK) WHERE tm.app_user_id=au.id)`}`}`,
     {actorId:actor.actorId,authId:actor.authId,sessionId:actor.sessionId,...(owner?{tenantId:actor.tenantId}:{})});
     if (!rows[0]) {throw enquiryError(403,'ENQUIRY_ACTOR_REQUIRED','Your account permissions could not be confirmed. Sign in again.');}
     return rows[0];
@@ -49,8 +49,8 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
     (enquiry_id,actor_user_id,from_status,to_status,version,response) VALUES(@id,@actorId,@from,@to,@version,@response)`,
   {id:row.id,actorId,from,to:row.status,version:row.version,response:row.owner_response||null});
   return {
-    withEnquiry:(actor,id,owner,work) => transaction(async query => {
-      await requireActor(query,actor,owner);
+    withEnquiry:(actor,id,owner,work,journey=false) => transaction(async query => {
+      await requireActor(query,actor,owner,journey);
       const enquiry=(await query(`SELECT * FROM dbo.property_enquiries WITH(UPDLOCK,HOLDLOCK)
         WHERE id=@id AND ${owner?'tenant_id=@scope':'seeker_id=@scope'}`,
       {id,scope:owner?actor.tenantId:actor.actorId}))[0];
@@ -78,18 +78,20 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
       const count=(await query(`SELECT COUNT(*) AS hits FROM dbo.property_enquiries
         WHERE seeker_id=@seekerId AND created_at>DATEADD(hour,-24,SYSUTCDATETIME())`,args))[0];
       if (Number(count.hits)>=10) {throw enquiryError(429,'ENQUIRY_LIMIT','You have reached the daily enquiry limit. Try again tomorrow.');}
-      const row=(await query(`INSERT INTO dbo.property_enquiries
+      const row=(await query(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+INSERT INTO dbo.property_enquiries
         (listing_public_id,tenant_id,property_id,seeker_id,seeker_name,seeker_email,country_code,
          listing_title,message,consent_version,request_id,payload_hash)
-        OUTPUT INSERTED.* VALUES(@listingId,@tenantId,@propertyId,@seekerId,@name,@email,@country,
-          @title,@message,'owner-contact-v1',@requestId,@payloadHash)`,
+        OUTPUT INSERTED.id INTO @rental_changed VALUES(@listingId,@tenantId,@propertyId,@seekerId,@name,@email,@country,
+          @title,@message,'owner-contact-v1',@requestId,@payloadHash);
+SELECT a.* FROM dbo.property_enquiries a JOIN @rental_changed c ON c.id=a.id;`,
       {...args,tenantId:available.tenant_id,propertyId:available.property_id,
         name:String(user.name||'Seeker').slice(0,200),email:user.email,title:publicListing.title}))[0];
       await audit(query,row,actor.actorId);
       return {receipt:seekerReceipt(row),created:true};
     }),
-    list:(actor,owner=false,offset=0) => transaction(async query => {
-      await requireActor(query,actor,owner);
+    list:(actor,owner=false,offset=0,journey=false) => transaction(async query => {
+      await requireActor(query,actor,owner,journey);
       const rows=await query(`SELECT * FROM dbo.property_enquiries
         WHERE ${owner?'tenant_id=@scope':'seeker_id=@scope'}
         ORDER BY created_at DESC,id OFFSET @offset ROWS FETCH NEXT 51 ROWS ONLY`,
@@ -105,10 +107,12 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
       if (old.version!==input.version || !['pending','responded'].includes(old.status)) {
         throw enquiryError(409,'ENQUIRY_CHANGED','This enquiry changed. Refresh before trying again.');
       }
-      const row=(await query(`UPDATE dbo.property_enquiries
+      const row=(await query(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+UPDATE dbo.property_enquiries
         SET status=@status,owner_response=${owner?'@response':'owner_response'},updated_by=@actorId,
           updated_at=SYSUTCDATETIME(),version=version+1
-        OUTPUT INSERTED.* WHERE id=@id AND ${owner?'tenant_id=@scope':'seeker_id=@scope'} AND version=@version`,
+        OUTPUT INSERTED.id INTO @rental_changed WHERE id=@id AND ${owner?'tenant_id=@scope':'seeker_id=@scope'} AND version=@version;
+SELECT a.* FROM dbo.property_enquiries a JOIN @rental_changed c ON c.id=a.id;`,
       {...args,actorId:actor.actorId,version:input.version,status:owner?input.status:'withdrawn',response:input.response||null}))[0];
       await audit(query,row,actor.actorId,old.status);
       return (owner?ownerReceipt:seekerReceipt)(row);

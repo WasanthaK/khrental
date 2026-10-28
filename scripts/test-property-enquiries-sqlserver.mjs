@@ -1,3 +1,4 @@
+import {verifyRentalOffers} from './test-rental-offers-sql.mjs';
 // Actual production store + exact draft migration on disposable SQL Server only.
 // Never reads production settings or creates cloud test capacity.
 import assert from 'node:assert/strict';
@@ -55,11 +56,19 @@ try {
     CREATE TABLE auth_sessions(id UNIQUEIDENTIFIER PRIMARY KEY,auth_user_id UNIQUEIDENTIFIER,
       revoked_at DATETIME2 NULL,expires_at DATETIME2);
     CREATE TABLE tenant_memberships(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,
-      app_user_id UNIQUEIDENTIFIER,role NVARCHAR(50),status NVARCHAR(50));
+      app_user_id UNIQUEIDENTIFIER,role NVARCHAR(50),status NVARCHAR(50),is_default BIT NOT NULL DEFAULT 0);
     CREATE TABLE properties(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,status NVARCHAR(50),
       country_code CHAR(2),propertytype NVARCHAR(100),rentalvalues NVARCHAR(MAX));
-    CREATE TABLE property_units(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,status NVARCHAR(50));
-    CREATE TABLE agreements(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,unitid UNIQUEIDENTIFIER NULL,status NVARCHAR(50));
+    CREATE TABLE property_units(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,status NVARCHAR(50),unitnumber NVARCHAR(100));
+    CREATE TABLE agreements(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,unitid UNIQUEIDENTIFIER NULL,status NVARCHAR(50),templateid UNIQUEIDENTIFIER NULL,renteeid UNIQUEIDENTIFIER NULL,
+      rentamount DECIMAL(18,2),depositamount DECIMAL(18,2),startdate DATETIMEOFFSET,enddate DATETIMEOFFSET,title NVARCHAR(255),content NVARCHAR(MAX),terms NVARCHAR(MAX),
+      needs_document_generation BIT,signature_status NVARCHAR(100),signature_completed_at DATETIMEOFFSET,signeddate DATETIMEOFFSET,
+      createdat DATETIMEOFFSET DEFAULT SYSUTCDATETIME(),updatedat DATETIMEOFFSET DEFAULT SYSUTCDATETIME());
+    CREATE TABLE agreement_templates(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,name NVARCHAR(255),version INT,content NVARCHAR(MAX));
+    CREATE TABLE tenancy_lifecycle_events(id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,event_type NVARCHAR(100),actor_user_id UNIQUEIDENTIFIER,metadata NVARCHAR(MAX));
+    CREATE TABLE tenancy_deposit_transactions(id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,transaction_type NVARCHAR(50),status NVARCHAR(50),amount DECIMAL(18,2));
+    CREATE TABLE tenancy_move_in_checklists(id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,status NVARCHAR(50));
+    CREATE TABLE tenancy_move_in_checklist_items(id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),tenant_id UNIQUEIDENTIFIER,checklist_id UNIQUEIDENTIFIER,is_required BIT,status NVARCHAR(50));
     CREATE TABLE public_listing_preferences(public_id UNIQUEIDENTIFIER PRIMARY KEY,property_id UNIQUEIDENTIFIER,
       tenant_id UNIQUEIDENTIFIER,country_code CHAR(2),opted_out BIT,public_headline NVARCHAR(150),location_label NVARCHAR(120));
   `);
@@ -70,6 +79,7 @@ try {
   await pool.request().batch(viewingMigration);await pool.request().batch(viewingMigration);
   const applicationMigration=fs.readFileSync('migrations/20261028_03_property_applications.sql','utf8');
   await pool.request().batch(applicationMigration);await pool.request().batch(applicationMigration);
+  await pool.request().batch(fs.readFileSync('migrations/20261029_01_rental_offers_and_holds.sql','utf8'));
   const applicationSchema=await inspectPropertyApplications(pool);
   assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
   await query('ALTER TABLE property_applications NOCHECK CONSTRAINT CK_property_applications_consent');
@@ -114,7 +124,7 @@ try {
       INSERT auth_users VALUES(@authUserId,@authId,@actorId,@email,@role,N'{"global_email_verified":true}');
       INSERT auth_sessions VALUES(@sessionId,@authUserId,NULL,DATEADD(day,1,SYSUTCDATETIME()));`,
     {...a,tenantId,authUserId,email:a.actorId+'@example.test',role,userType});
-    if(tenantId){await query(`INSERT tenant_memberships VALUES(NEWID(),@tenantId,@actorId,N'admin',N'active')`,{tenantId,actorId:a.actorId});}
+    if(tenantId){await query(`INSERT tenant_memberships(id,tenant_id,app_user_id,role,status) VALUES(NEWID(),@tenantId,@actorId,N'admin',N'active')`,{tenantId,actorId:a.actorId});}
   }
   for(let i=0;i<12;i++){
     await query(`INSERT properties VALUES(@propertyId,@tenant,N'available','LK',N'house',N'{"rent":1000,"listingCategory":"residential"}');
@@ -234,6 +244,8 @@ try {
   await assert.rejects(store.list(owner,true),{code:'ENQUIRY_ACTOR_REQUIRED'});
   assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:actor.actorId}))[0].n,0);
   console.log('PROPERTY_ENQUIRIES_SQL=PASS migration_rerun concurrent_idempotency scope consent_audit durable_quota revocation withdrawal');
+  await query("UPDATE tenant_memberships SET status='active' WHERE app_user_id=@id",{id:owner.actorId});
+  await verifyRentalOffers({pool,query,owner,foreignOwner});
 } finally {
   await pool?.close().catch(()=>{});await master?.close().catch(()=>{});
   if(created){docker(['rm','-f',container]);}

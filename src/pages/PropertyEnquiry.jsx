@@ -1,3 +1,4 @@
+import PropertyOffer from '../components/properties/PropertyOffer';
 import PropertyApplication from '../components/properties/PropertyApplication';
 import PropertyViewing from '../components/properties/PropertyViewing';
 import {useEffect,useRef,useState} from 'react';
@@ -85,6 +86,7 @@ const PropertyEnquiry=()=>{
   return <main className="min-h-screen bg-slate-50 px-4 py-10">
     <div className="mx-auto max-w-2xl space-y-6">
       <p className="font-semibold text-emerald-700">Quixo.Homes</p>
+      <Link to="/rental-journey" className="underline">My rental offers and agreement continuation</Link>
       <h1 className="text-3xl font-semibold text-slate-900">{route?'Property enquiry':'My property enquiries'}</h1>
       {isAuthenticated && <button type="button" disabled={state.busy} className="underline text-blue-800"
         onClick={async()=>{try{await logout();}catch{setState(s=>({...s,error:'Unable to sign out. Try again.'}));}}}>Sign out</button>}
@@ -123,6 +125,7 @@ const PropertyEnquiry=()=>{
           {['pending','responded'].includes(item.status) && <button disabled={state.busy} className="underline text-red-800" onClick={()=>withdraw(item)}>Withdraw enquiry</button>}
           <PropertyViewing key={identity+':'+item.id} enquiry={item} call={call} />
           <PropertyApplication key={'application:'+identity+':'+item.id} enquiry={item} call={call} />
+          <PropertyOffer key={'offer:'+identity+':'+item.id} enquiry={item} call={call} />
         </article>)}
         <div className="flex gap-4"><button disabled={offset===0||state.busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
           <button disabled={!hasMore||state.busy} onClick={()=>setOffset(n=>n+50)}>Next</button>

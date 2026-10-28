@@ -1,3 +1,4 @@
+import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -483,6 +484,12 @@ const MIGRATIONS = [
     file: 'migrations/20261028_03_property_applications.sql',
     inspect: inspectPropertyApplications,
     verify: async pool => assertSatisfied(inspectPropertyApplications(pool), 'Property application schema verification failed.')
+  },
+  {
+    id: '20261029_01_rental_offers_and_holds',
+    file: 'migrations/20261029_01_rental_offers_and_holds.sql',
+    inspect: inspectRentalOffers,
+    verify: async pool => assertSatisfied(inspectRentalOffers(pool), 'Rental offer and occupancy schema verification failed.')
   }
 ];
 

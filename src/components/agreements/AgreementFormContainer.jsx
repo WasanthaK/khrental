@@ -14,6 +14,10 @@ import {
 import { findAppUserByAuthId } from '../../services/appUserService';
 import { prepareRentalAgreementSignatories, matchesPendingRentalRoster } from '../../utils/rentalAgreementSignatories';
 
+const offerBound=record=>{
+  try{return Boolean((typeof record?.terms==='string'?JSON.parse(record.terms):record?.terms)?.rentalOfferEnquiry);}
+  catch{return false;}
+};
 const normalizeAgreementRecord = (record) => {
   if (!record) {
     return record;
@@ -285,8 +289,10 @@ const AgreementFormContainer = () => {
         </p>
       </div>
 
+      {offerBound(initialData)&&<p className="mb-4 rounded bg-blue-50 p-3">These rental terms and template are bound to the accepted offer. Use this page to review, generate and arrange signing. Deposit evidence, move-in checks and explicit activation remain in tenancy onboarding.</p>}
       <AgreementFormUI
         initialData={initialData}
+        readOnly={Boolean(offerBound(initialData))}
         onSubmit={handleSubmit}
         onCancel={() => navigate('/dashboard/agreements')}
       />

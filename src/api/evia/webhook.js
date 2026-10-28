@@ -876,16 +876,18 @@ export const processEviaWebhook = async (payload = {}, {
   });
 
   if (emailStatuses) {
-    const savedEmailStatus = await runQuery(`
+    const savedEmailStatus = await runQuery(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+
       UPDATE dbo.agreements
       SET signatories_status = @signatoriesStatus,
           updatedat = SYSUTCDATETIME()
-      OUTPUT INSERTED.id
+      OUTPUT INSERTED.id INTO @rental_changed
       WHERE id = @agreementId
         AND eviasignreference = @requestId
         AND LOWER(COALESCE(status, '')) NOT IN ('signed', 'cancelled', 'rejected', 'completed', 'terminated', 'expired')
         AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
-    `, {
+    ;
+SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
       agreementId: agreement.id,
       requestId: normalized.requestId,
       signatoriesStatus: JSON.stringify(emailStatuses)
@@ -901,18 +903,20 @@ export const processEviaWebhook = async (payload = {}, {
     });
 
     if (completedSignatories) {
-      const savedSignatory = await runQuery(`
+      const savedSignatory = await runQuery(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+
         UPDATE dbo.agreements
         SET
           signature_status = @signatureStatus,
           signatories_status = @signatoriesStatus,
           updatedat = SYSUTCDATETIME()
-        OUTPUT INSERTED.id
+        OUTPUT INSERTED.id INTO @rental_changed
         WHERE id = @agreementId
           AND eviasignreference = @requestId
           AND LOWER(COALESCE(status, '')) NOT IN ('signed', 'cancelled', 'rejected', 'completed', 'terminated', 'expired')
           AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
-      `, {
+      ;
+SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
         agreementId: agreement.id,
         requestId: normalized.requestId,
         signatureStatus: 'in_progress',
@@ -1073,7 +1077,8 @@ export const processEviaWebhook = async (payload = {}, {
     ? markAllSignatoriesCompleted(agreement.signatories_status, safeCompletedAt.toISOString())
     : null;
 
-  const terminalUpdated = await runQuery(`
+  const terminalUpdated = await runQuery(`DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+
     UPDATE dbo.agreements
     SET
       status = @agreementStatus,
@@ -1103,7 +1108,7 @@ export const processEviaWebhook = async (payload = {}, {
         ELSE signature_pdf_url
       END,
       updatedat = SYSUTCDATETIME()
-    OUTPUT INSERTED.id
+    OUTPUT INSERTED.id INTO @rental_changed
     WHERE id = @agreementId
       AND eviasignreference = @requestId
       AND (
@@ -1119,7 +1124,8 @@ export const processEviaWebhook = async (payload = {}, {
           AND LOWER(COALESCE(signature_status, '')) NOT IN ('completed', 'failed')
         )
       )
-  `, {
+  ;
+SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
     agreementId: agreement.id,
     requestId: normalized.requestId,
     agreementStatus: finalState.agreementStatus,
