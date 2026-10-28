@@ -1,0 +1,155 @@
+name: Public listing physical testing release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact serving application SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type RELEASE-ELIGIBLE-LISTINGS
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+    steps:
+      - name: Check approved request and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = RELEASE-ELIGIBLE-LISTINGS
+          [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
+          build=$(curl -fsS --retry 5 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json)
+          test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+          health=$(curl -fsS --retry 5 --retry-delay 3 --max-time 20 https://app.quixo.homes/api/mssql/health)
+          test "$(jq -r .ok <<<"$health")" = true
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable eligible inventory and authenticated property controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          inspect() { az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" "$@"; }
+          wait_ready() {
+            local latest ready deadline
+            latest=$(inspect --query properties.latestRevisionName -o tsv)
+            deadline=$((SECONDS+900))
+            while (( SECONDS < deadline )); do
+              ready=$(inspect --query properties.latestReadyRevisionName -o tsv)
+              if [ -n "$latest" ] && [ "$latest" = "$ready" ]; then return 0; fi
+              sleep 6
+            done
+            return 1
+          }
+          # Preserve the existing one-replica cost boundary. No scale mutation.
+          test "$(inspect --query properties.configuration.activeRevisionsMode -o tsv)" = Single
+          test "$(inspect --query properties.template.scale.minReplicas -o tsv)" = 1
+          test "$(inspect --query properties.template.scale.maxReplicas -o tsv)" = 1
+          recover() {
+            local result=$?
+            trap - EXIT
+            if [ "$result" -ne 0 ]; then
+              echo 'Release failed; disabling publication and administrator release gates.' >&2
+              if az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --set-env-vars \
+                PUBLIC_LISTING_READ_ENABLED=false PUBLIC_LISTING_MEDIA_ENABLED=false \
+                PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=false PUBLIC_LISTING_IMAGE_PROCESSOR_READY=false \
+                PUBLIC_LISTING_MANAGEMENT_ENABLED=false PUBLIC_LISTING_IMAGE_PREPARE_ENABLED=false \
+                PUBLIC_LISTING_MEDIA_REVIEW_ENABLED=false --output none && wait_ready; then
+                echo 'ROLLBACK_FLAGS_OFF=PASS; verify anonymous denial before retry' >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo 'ROLLBACK=UNVERIFIED; immediate operator action required' >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+            exit "$result"
+          }
+          trap recover EXIT
+          # Remove rather than blank: a configured empty pilot ID deliberately fails closed.
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --remove-env-vars PUBLIC_LISTING_PILOT_PUBLIC_ID \
+            --set-env-vars PUBLIC_LISTING_READ_ENABLED=true PUBLIC_LISTING_SHARED_RATE_LIMIT_READY=true \
+              PUBLIC_LISTING_MEDIA_ENABLED=true PUBLIC_LISTING_IMAGE_PROCESSOR_READY=true \
+              PUBLIC_LISTING_MANAGEMENT_ENABLED=true PUBLIC_LISTING_IMAGE_PREPARE_ENABLED=true \
+              PUBLIC_LISTING_MEDIA_REVIEW_ENABLED=true \
+              PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS=https://app.quixo.homes,https://khrental-app.proudpebble-f58b5187.southeastasia.azurecontainerapps.io \
+            --output none
+          wait_ready
+          settings=$(inspect --query "properties.template.containers[0].env[?starts_with(name, 'PUBLIC_LISTING_')].{name:name,value:value}" -o json)
+          test "$(jq '[.[] | select(.name=="PUBLIC_LISTING_PILOT_PUBLIC_ID")] | length' <<<"$settings")" = 0
+          for name in PUBLIC_LISTING_READ_ENABLED PUBLIC_LISTING_SHARED_RATE_LIMIT_READY PUBLIC_LISTING_MEDIA_ENABLED PUBLIC_LISTING_IMAGE_PROCESSOR_READY PUBLIC_LISTING_MANAGEMENT_ENABLED PUBLIC_LISTING_IMAGE_PREPARE_ENABLED PUBLIC_LISTING_MEDIA_REVIEW_ENABLED; do
+            test "$(jq -r --arg n "$name" '.[] | select(.name==$n) | .value' <<<"$settings")" = true
+          done
+          build=$(curl -fsS --retry 5 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json)
+          test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
+          health=$(curl -fsS --retry 5 --retry-delay 3 --max-time 20 https://app.quixo.homes/api/mssql/health)
+          test "$(jq -r .ok <<<"$health")" = true
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const origin='https://app.quixo.homes',site='https://quixo.homes';
+          const id=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          const fields=['id','country','category','title','location','monthlyRent','currency','images'].sort();
+          async function request(path,status=200,requestOrigin=site){
+            const r=await fetch(origin+path,{redirect:'error',credentials:'omit',cache:'no-store',headers:{Origin:requestOrigin},signal:AbortSignal.timeout(20000)});
+            assert.equal(r.status,status);assert.match(r.headers.get('cache-control')||'',/no-store/);
+            assert.ok(!r.headers.get('set-cookie'));assert.ok(!r.headers.get('access-control-allow-credentials'));
+            assert.equal(r.headers.get('access-control-allow-origin'),requestOrigin===site?site:null);
+            return r;
+          }
+          try{
+            for(const country of ['LK','BN']){
+              const body=await (await request('/api/public-listings?country='+country)).json();
+              assert.deepEqual(Object.keys(body).sort(),['country','data']);assert.equal(body.country,country);assert.ok(Array.isArray(body.data));
+              const ids=new Set();
+              for(const row of body.data){
+                assert.deepEqual(Object.keys(row).sort(),fields);assert.match(row.id,id);assert.ok(!ids.has(row.id));ids.add(row.id);
+                assert.equal(row.country,country);assert.equal(row.currency,country==='LK'?'LKR':'BND');
+                assert.ok(['residential','commercial','other'].includes(row.category));
+                for(const key of ['title','location'])assert.equal(typeof row[key],'string');
+                assert.ok(row.monthlyRent===null||(Number.isFinite(row.monthlyRent)&&row.monthlyRent>0));
+                assert.ok(Array.isArray(row.images)&&row.images.length<=6);
+                for(const photo of row.images){
+                  assert.deepEqual(Object.keys(photo).sort(),['alt','url']);assert.equal(typeof photo.alt,'string');
+                  const prefix='/api/public-listings/'+row.id+'/media/';assert.ok(photo.url.startsWith(prefix));
+                  assert.match(photo.url.slice(prefix.length).split('?')[0],id);
+                  assert.equal(photo.url.split('?')[1],'country='+country);
+                }
+              }
+              const sample=body.data[0];
+              if(sample){
+                assert.deepEqual(await (await request('/api/public-listings/'+sample.id+'?country='+country)).json(),{data:sample});
+                await request('/api/public-listings/'+sample.id+'?country='+(country==='LK'?'BN':'LK'),404);
+              }
+              console.log(country+'_CATALOG_SHAPE_AND_ISOLATION=PASS; count='+body.data.length);
+            }
+            await request('/api/public-listings?country=XX',400);
+            await request('/api/public-listings?country=LK',200,'https://untrusted.invalid');
+            // Private controls must remain inaccessible without authentication.
+            const r=await fetch(origin+'/api/public-listing-preferences/market-readiness',{redirect:'error',signal:AbortSignal.timeout(20000)});
+            assert.ok([401,403].includes(r.status));
+          }catch{console.error('PUBLIC_RELEASE=FAIL; no listing data logged');process.exit(1);}
+          NODE
+          test "$(inspect --query properties.template.scale.maxReplicas -o tsv)" = 1
+          echo 'ELIGIBLE_LISTINGS=LIVE; AUTHENTICATED_CONTROLS=ON; SINGLE_REPLICA_LIMIT=UNCHANGED' >> "$GITHUB_STEP_SUMMARY"

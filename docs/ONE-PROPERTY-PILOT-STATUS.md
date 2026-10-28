@@ -2,6 +2,18 @@
 
 Updated 2026-10-27 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Physical testing release preparation — 2026-10-28
+
+The owner requested fixing listing controls and releasing the website for hands-on testing. This is now the immediate priority ahead of B04-owner/B05. The existing one-property pilot remains the last verified production state until the broader release run succeeds.
+
+The prepared release removes the server-only single-property scope and enables authenticated administrator listing preferences, photo preparation, review and withdrawal. It preserves country, current availability, opt-out, derivative privacy and independent photo approval. Both country search pages are prepared to render real eligible inventory with empty/unavailable states; no illustrative search cards substitute for stock. Signup, enquiries and payments remain unavailable. No country values, opt-outs, occupancy or photo approvals are bulk-changed. Existing catalog queries return at most 50 properties per market; pagination beyond that is a follow-up, not a claim that unlimited inventory is supported.
+
+Controls: sign in to app.quixo.homes as an active tenant administrator, open Properties, then a property, and use **Quixo.Homes public listing**. Save the country/public text and **Do not advertise this property on Quixo.Homes** opt-out. Prepare/review photos separately; existing original attachments never become public automatically. Unassigned or unsupported countries require administrator correction before eligibility.
+
+Production activation uses `.github/workflows/public-listing-testing-release.yml`, exact serving build and `RELEASE-ELIGIBLE-LISTINGS`. It checks one-replica limits, readiness, build, strict public field shape, country isolation, CORS/no-store and anonymous denial of private controls. It disables release gates if post-mutation checks fail. The previous one-property workflow remains an emergency shutdown path; its activation mode must not be used over an already-live broader release.
+
+Status: PREPARED, not yet activated. Scaling remains deferred; no additional test replica is authorized or created.
+
 ## Owner acceptance and next package — 2026-10-27
 
 The owner confirmed the property is visible and instructed moving on. The bounded public browsing pilot is **OWNER-ACCEPTED / LIVE**. Do not repeat its private review, publication, country/media or browsing checks solely for another checklist tick. Public withdrawal/cache and operational handover remain honest follow-ups; they are parked from the immediate critical path under this move-on instruction, not falsely marked passed.
