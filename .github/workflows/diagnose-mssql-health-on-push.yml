@@ -1,6 +1,7 @@
 name: Diagnose production MSSQL health
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -26,6 +27,14 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Inspect SQL resource availability without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          az sql server show -g "$AZURE_RESOURCE_GROUP" -n khrentals --query '{state:state,publicNetworkAccess:publicNetworkAccess,minimalTlsVersion:minimalTlsVersion}' -o json
+          az sql db list -g "$AZURE_RESOURCE_GROUP" -s khrentals --query '[].{name:name,status:status,sku:sku.name,tier:sku.tier,capacity:sku.capacity,autoPauseDelay:autoPauseDelay,minCapacity:minCapacity,pausedDate:pausedDate,resumedDate:resumedDate,currentServiceObjectiveName:currentServiceObjectiveName}' -o json
+          az sql server firewall-rule list -g "$AZURE_RESOURCE_GROUP" -s khrentals --query '{ruleCount:length(@),azureServicesRuleCount:length([?startIpAddress==\u00270.0.0.0\u0027 && endIpAddress==\u00270.0.0.0\u0027])}' -o json
 
       - name: Capture MSSQL health and revision logs
         uses: azure/cli@v2
