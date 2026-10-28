@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import sql from 'mssql';
+import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 
 const inspectBillingAdjustments = async (pool) => {
   const result = await pool.request().query(`
@@ -462,6 +463,12 @@ const MIGRATIONS = [
     file: 'migrations/20261026_01_public_listing_preferences.sql',
     inspect: inspectPublicListingProjection,
     verify: async pool => assertSatisfied(inspectPublicListingProjection(pool), 'Public listing projection schema verification failed.')
+  },
+  {
+    id: '20261028_01_property_enquiries',
+    file: 'migrations/20261028_01_property_enquiries.sql',
+    inspect: inspectPropertyEnquiries,
+    verify: async pool => assertSatisfied(inspectPropertyEnquiries(pool), 'Property enquiry schema verification failed.')
   }
 ];
 
