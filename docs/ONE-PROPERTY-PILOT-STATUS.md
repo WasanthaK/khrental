@@ -2,6 +2,26 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Three-category browsing and journey repair — deployed 2026-10-28
+
+Owner direction preserves the main hero and all three stock category images. [#441](https://github.com/WasanthaK/khrental/pull/441) merged at `72963f41e9d8292c94cff5766e53fd39493135fd`. [Website deployment #40631464457](https://github.com/WasanthaK/khrental/actions/runs/40631464457) and [application deployment #40631464823](https://github.com/WasanthaK/khrental/actions/runs/40631464823) **PASS**, including ready revision, exact serving build and runtime/SQL health.
+
+- New property registration requires **houses & apartments**, **shops & retail**, or **offices & workspaces** on both client and server. The saved category is preserved by rent-only legacy updates. Physical property type remains independent. Existing residential types retain their known grouping; existing broad commercial/land records are not guessed into retail/office.
+- The three unchanged stock tiles now open distinct category searches. Commercial browsing combines shops/retail and offices/workspaces. Residential/commercial homepage navigation was exercised in the actual live site: two residential results rendered, while commercial, retail and office returned explicit empty messages for current inventory. Synthetic browser acceptance also verifies positive retail/office results and actual homepage clicks for all four views.
+- Country homepages render current available public properties instead of sample featured layouts. Loading, empty, missing-photo and error states are explicit. Hero and stock image assets are unchanged. Each live card opens its actual opaque-reference public detail page. Actual villa card-to-detail acceptance passed; unavailable enquiry/application actions are stated plainly.
+- Application/build, public listing/privacy/SQL/native-image and isolated desktop/mobile browser checks passed at the PR head. Focused local category/country/projection/eligibility tests: 17 PASS. No production property was fabricated for testing. A fresh admin registration UI session required sign-in after rollout, so post-deployment signed-in form acceptance remains unverified; deployed form/server validation and CI passed.
+- No scaling, database DDL/backfill, opt-out override, payment activation or public signup activation. Existing public inventory and administrator gates remain as already owner-approved; no new release-control workflow was run.
+
+### Photo and operator actions still pending
+
+The villa's registered photograph was prepared privately with metadata stripping and its derivative visually inspected. It remains **withheld / not public**, pending the owner's confirmation of the exact prepared photo before public release. No rights checkbox was asserted or review approval submitted by the agent. The signed-in session expired during deployment; completing the photo action also requires secure app sign-in.
+
+Automatic approval review rejected the optional enum-only edit to `.github/workflows/public-listing-testing-release.yml` because that existing workflow contains broader production publication controls and the review did not recognise broader-release authorisation. The retry first checked the recorded owner approval, successful existing broad release #40613719898, and exact one-assertion diff; it was rejected again. The file remains **unchanged**; no alternative route or indirect execution was used. Do not rerun that broad release workflow against new retail/office inventory until its category verifier correction is explicitly approved: its old enum would reject valid new categories and invoke shutdown. Current browsing and registration do not require rerunning it. Emergency shutdown remains available separately.
+
+### Listing to signing plan
+
+[Listing-to-signing journey](QUIXO-LISTING-TO-SIGNING-JOURNEY.md) is the controlling product story for country/category discovery → public detail → verified enquiry/owner inbox → viewing → private application → versioned offer/reservation → agreement signing → deposit/checklist and explicit tenancy activation. It includes cancellation/retry paths, identity/workspace isolation, concurrency/idempotency acceptance, featured-placement decisions and delivery order. Only browsing/details are live; later public journey stages remain planned/unavailable. Curated featuring is proposed separately from the current available-property cards, and no paid promotion policy is assumed. Owner SaaS billing remains separate from tenant rent/deposits and existing B04-owner/B05 scope is retained.
+
 ## First owner physical-test finding — 2026-10-28
 
 An owner-enabled additional residential property was present in the public catalog but difficult to identify because its optional public headline was blank, producing the generic “Home for rent” title, and it had no reviewed public photograph. Authenticated inspection confirmed saved LK country, opt-out false and eligible preview; matching the opaque public reference confirmed it was already in the catalog. This was a presentation/recognition problem, not another publication gate or failed save.
