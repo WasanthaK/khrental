@@ -80,7 +80,8 @@ try {
   const saved=concurrent[0].receipt;
   const sameAfterRestart=createEnquiryStore({poolProvider:async()=>pool});
   assert.equal((await sameAfterRestart.submit(actor,first)).created,false);
-  await assert.rejects(store.submit(actor,{...parseEnquiry({...first,message:'Changed content'}),requestId:first.requestId}),{code:'ENQUIRY_REQUEST_CONFLICT'});
+  await assert.rejects(store.submit(actor,parseEnquiry({listingId:first.listingId,country:first.country,
+    consent:true,requestId:first.requestId,message:'Changed content'})),{code:'ENQUIRY_REQUEST_CONFLICT'});
   await assert.rejects(store.submit(actor,input()),{code:'ENQUIRY_ALREADY_OPEN'});
   assert.equal((await store.list(foreignOwner,true)).items.length,0);
   await assert.rejects(store.change(foreignOwner,saved.id,{status:'closed',response:'',version:1},true),{code:'ENQUIRY_NOT_FOUND'});
