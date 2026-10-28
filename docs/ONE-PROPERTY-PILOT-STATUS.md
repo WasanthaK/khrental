@@ -2,6 +2,16 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Property enquiries and owner inbox — implementation active, 2026-10-28
+
+[PR #442](https://github.com/WasanthaK/khrental/pull/442) implements property-scoped enquiries, selected-listing return through normal sign-in, a private administrator inbox, saved responses, seeker withdrawal, optimistic versions and an audited durable lifecycle. It reuses the existing verified tenantless seeker identity; no membership is granted. Contact sharing requires explicit sender consent and the owner workspace is derived from the eligible listing on the server.
+
+The source remains default OFF. The exact enquiry schema is a draft outside the production migration runner; no production DDL, enquiry, email, public signup activation, release flag or additional cloud replica has been created. The website-first priority is unchanged. This is implementation progress, not an operational public enquiry release.
+
+Actual disposable SQL Server execution has passed the exact migration rerun and production-store concurrency/idempotency, workspace isolation, reply/version/audit history, withdrawal, current vacancy/country/opt-out, durable quota and session/membership revocation checks. Initial fixture defects were corrected; failed/cancelled run histories remain retained. Local targeted authority/routing/input tests and the production build pass. The local full suite has one Chrome-launch failure due to runtime socket restrictions; the existing application/privacy/SQL/website checks pass in GitHub. The isolated new browser acceptance remains under investigation and must pass before this package is accepted.
+
+Next: finish the real-component browser proof, then promote/register and strictly verify the proven schema through the governed migration process, deploy the accepted gated build, and perform controlled authenticated acceptance. Existing general-signup rollout and selected-listing continuation for new registration remain separate unfinished release work. Do not imply that enquiries, confirmed viewings or applications are live. [Package behaviour and controls](QUIXO-PROPERTY-ENQUIRIES.md) are prepared in the PR.
+
 ## Villa photo and registration acceptance — completed 2026-10-28
 
 Manual sign-in established the intended administrator session. Under the owner's existing publication instruction, the already prepared exterior derivative was reopened and visually verified, its rights/privacy review recorded through the authenticated photo controls, and approval completed. No re-preparation, original-photo publication, property data change or release-workflow execution was used.
