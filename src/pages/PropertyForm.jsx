@@ -1,3 +1,4 @@
+import { LISTING_CATEGORIES, normalizeListingCategory } from '../utils/listingCategories.js';
 import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
@@ -52,6 +53,7 @@ const PropertyForm = () => {
     rentalvalues: {
       rent: '',
       deposit: '',
+      listingCategory: '',
     },
     checklistitems: [],
     terms: {},
@@ -126,7 +128,7 @@ const PropertyForm = () => {
               bank_branch: property.bank_branch || '',
               bank_account_number: property.bank_account_number || '',
               unitconfiguration: property.unitconfiguration || '',
-              rentalvalues,
+              rentalvalues: {...rentalvalues,listingCategory:rentalvalues.listingCategory||(['house','apartment','condo'].includes(property.propertytype)?'residential':'')},
               checklistitems,
               terms: property.terms || {},
               images,
@@ -725,6 +727,8 @@ const PropertyForm = () => {
         propertytype: formData.propertytype,
         status: formData.status,
         rentalvalues: {
+          ...formData.rentalvalues,
+          listingCategory: normalizeListingCategory(formData.rentalvalues.listingCategory),
           rent: parseFloat(formData.rentalvalues.rent) || 0,
           deposit: parseFloat(formData.rentalvalues.deposit) || 0,
         },
@@ -892,6 +896,16 @@ const PropertyForm = () => {
               />
             </div>
             
+            <div className="mb-4">
+              <label htmlFor="listingCategory" className="block text-sm font-medium text-gray-700 mb-1">Website category *</label>
+              <select id="listingCategory" name="listingCategory" value={formData.rentalvalues.listingCategory||''}
+                onChange={handleRentalValueChange} required
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                <option value="">Choose a website category</option>
+                {LISTING_CATEGORIES.map(category=><option key={category.code} value={category.code}>{category.label}</option>)}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">This determines where available, publicly listed properties appear. Commercial browsing includes shops, retail, offices and workspaces.</p>
+            </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Property Type
