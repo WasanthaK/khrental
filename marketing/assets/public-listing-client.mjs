@@ -99,6 +99,11 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
           const link=document.createElement('a');link.href='/'+market.toLowerCase()+'/property/?id='+encodeURIComponent(item.id);
           link.textContent='View property →';panel.append(link);
         }else{
+          if(previewArea.dataset.propertyEnquiriesEnabled==='true'){
+            const enquire=document.createElement('a');
+            enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
+            enquire.textContent='Enquire about this property';panel.append(enquire);
+          }
           const note=document.createElement('p');note.textContent='Viewing requests and applications are not open yet. You can browse this property without creating an account.';panel.append(note);
         }
         article.append(panel);
