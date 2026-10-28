@@ -104,7 +104,11 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
             enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
             enquire.textContent='Enquire about this property';panel.append(enquire);
           }
-          const note=document.createElement('p');note.textContent='Viewing requests and applications are not open yet. You can browse this property without creating an account.';panel.append(note);
+          const note=document.createElement('p');
+          note.textContent=previewArea.dataset.propertyEnquiriesEnabled==='true'
+            ?'An enquiry does not reserve this property or confirm a viewing. Applications are not open yet.'
+            :'Viewing requests and applications are not open yet. You can browse this property without creating an account.';
+          panel.append(note);
         }
         article.append(panel);
         list.append(article);
