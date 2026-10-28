@@ -80,33 +80,10 @@ jobs:
           script -q -e -c "az containerapp exec -g \"$AZURE_RESOURCE_GROUP\" -n \"$AZURE_CONTAINER_APP_NAME\" --revision \"$ready\" --command 'node /app/scripts/check-enquiry-release-readiness.mjs'" /dev/null > "$folder/preflight" 2>&1
           exec_status=$?
           set -e
-          grep -Eo 'ENQUIRY_RELEASE_READINESS=(PASS|FAIL)( phase=[a-z_]+)?' "$folder/preflight" || true
+          grep -Eo 'ENQUIRY_RELEASE_(READINESS=(PASS|FAIL)( phase=[a-z_]+ sqlNumber=[0-9]+)?|SCHEMA=Missing or drifted enquiry schema: [a-zA-Z0-9_., ]+)' "$folder/preflight" || true
           echo "ENQUIRY_PREFLIGHT_EXEC_STATUS=$exec_status"
           test "$exec_status" = 0
-          if ! grep -Fq 'ENQUIRY_RELEASE_READINESS=PASS' "$folder/preflight"; then
-            # Read-only diagnostics: no row values, secrets or raw SQL errors.
-            probe=$(cat <<'NODE'
-          let phase="connection",pool;
-          try{
-            const db=await import("/app/src/api/mssql/pool.js");pool=await db.getMssqlPool();
-            phase="schema";const mod=await import("/app/scripts/inspect-property-enquiries-schema.mjs");
-            const schema=await mod.inspectPropertyEnquiries(pool);
-            console.log("ENQUIRY_DIAGNOSTIC_SCHEMA="+(schema.satisfied?"PASS":"FAIL"));
-            phase="ledger";await pool.request().query("SELECT TOP(0) migration_id,checksum FROM dbo.schema_migrations");
-            console.log("ENQUIRY_DIAGNOSTIC_LEDGER=PASS");
-            console.log("ENQUIRY_DIAGNOSTIC_CONFIG="+JSON.stringify({ingress:process.env.PUBLIC_SIGNUP_INGRESS_MODE==="azure-container-apps-http",origin:process.env.PUBLIC_SIGNUP_VERIFICATION_ORIGIN==="https://app.quixo.homes",throttle:String(process.env.PUBLIC_SIGNUP_THROTTLE_SECRET||"").length>=32,mailKey:!!process.env.PUBLIC_SIGNUP_SENDGRID_API_KEY,sender:!!process.env.PUBLIC_SIGNUP_SENDER_EMAIL}));
-          }catch(error){console.log("ENQUIRY_DIAGNOSTIC_FAIL phase="+phase+" sqlNumber="+(Number.isInteger(error.number)?error.number:0));}
-          finally{if(pool)await pool.close();}
-          NODE
-            )
-            # Host shell quoting and the exec API's argument parser are distinct.
-            # The JS has no apostrophes. Quote its complete Node command for sh.
-            node_command="node --input-type=module -e '$probe'"
-            NODE_COMMAND="$node_command" node -e 'const fs=require("node:fs");const q=s=>"\x27"+s.replaceAll("\x27","\x27\\\x27\x27")+"\x27";fs.writeFileSync(process.argv[1],"az containerapp exec -g "+q(process.env.AZURE_RESOURCE_GROUP)+" -n "+q(process.env.AZURE_CONTAINER_APP_NAME)+" --revision "+q(process.argv[2])+" --command "+q(process.env.NODE_COMMAND)+"\n");' "$folder/diagnostic" "$ready"
-            script -q -e -c "sh '$folder/diagnostic'" /dev/null > "$folder/diagnostic-output" 2>&1 || true
-            grep -Eo 'ENQUIRY_DIAGNOSTIC_(SCHEMA|LEDGER)=(PASS|FAIL)|ENQUIRY_DIAGNOSTIC_FAIL phase=[a-z_]+ sqlNumber=[0-9]+|ENQUIRY_DIAGNOSTIC_CONFIG=\{[^}]*\}' "$folder/diagnostic-output" || true
-            exit 1
-          fi
+          grep -Fq 'ENQUIRY_RELEASE_READINESS=PASS' "$folder/preflight"
           echo 'ENQUIRY_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 schema_ledger'
       - name: Apply approved signup and enquiry scope
         id: enable
