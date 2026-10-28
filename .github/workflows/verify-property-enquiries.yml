@@ -34,5 +34,15 @@ jobs:
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server
         run: node scripts/test-property-enquiries-sqlserver.mjs
+      - name: Isolated real-component browser acceptance
+        env:
+          ENQUIRY_PROOF_DIR: enquiry-browser-proof
+        run: node scripts/test-property-enquiries-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enquiry-browser-proof
+          path: enquiry-browser-proof/
+          if-no-files-found: ignore
       - name: No production effects
         run: echo 'No production schema, release flags, public signup or extra cloud replicas changed.'
