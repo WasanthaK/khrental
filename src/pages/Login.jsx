@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
 import { getPostLoginPath } from '../utils/authRedirect.js';
+import { enquiryReturnPath } from '../utils/enquiryReturnPath.js';
 import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
 import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
 import { getPlatformClient } from '../services/platformClient';
@@ -66,12 +67,12 @@ const Login = () => {
           getSession: () => getPlatformClient().auth.getSession()
         });
         if (proof.verified && proof.eligible) {
-          navigate('/seeker', { replace: true });
+          navigate(enquiryReturnPath(location.search) || '/seeker', { replace: true });
           return;
         }
       }
 
-      const returnPath = getPostLoginPath(location.state, null);
+      const returnPath = enquiryReturnPath(location.search) || getPostLoginPath(location.state, null);
       if (returnPath) {
         console.log('Login successful, returning to requested route:', returnPath);
         navigate(returnPath, { replace: true });
