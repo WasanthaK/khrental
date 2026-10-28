@@ -2,6 +2,8 @@
 // Deliberately not mounted. Only a future server-verified auth-context
 // adapter may supply props after controlled registration acceptance.
 import { isVerifiedTenantlessSeeker } from '../utils/seekerLandingPolicy';
+import { Link } from 'react-router-dom';
+import { isPropertyEnquiriesEnabled } from '../utils/env';
 
 const SeekerHome = ({
   user = null,
@@ -41,6 +43,9 @@ const SeekerHome = ({
         <p className="mt-4 text-slate-700">
           Your personal account is ready. You are not currently linked to any rental organization.
         </p>
+        {isPropertyEnquiriesEnabled() && <Link to="/enquire" className="inline-block mt-6 text-blue-800 underline">
+          My property enquiries and owner replies
+        </Link>}
         <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
           <h2 className="font-semibold text-slate-900">What happens next?</h2>
           <p className="mt-2 text-sm text-slate-600">

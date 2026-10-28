@@ -22,7 +22,8 @@ const envVars = [
   // Browser availability follows the separately approved server pilot.
   // The application generates these at startup; absent values stay OFF.
   'VITE_PUBLIC_SIGNUP_UI_ENABLED',
-  'VITE_PUBLIC_SEEKER_LANDING_ENABLED'
+  'VITE_PUBLIC_SEEKER_LANDING_ENABLED',
+  'VITE_PROPERTY_ENQUIRIES_UI_ENABLED'
 ];
 
 // Create the window._env_ object content
@@ -61,4 +62,4 @@ envConfigContent += `
 const outputPath = path.resolve(__dirname, '../public/env-config.js');
 fs.writeFileSync(outputPath, envConfigContent);
 
-console.log(`Generated ${outputPath} with environment variables from .env`); 
+console.log(`Generated ${outputPath} with environment variables from .env`);

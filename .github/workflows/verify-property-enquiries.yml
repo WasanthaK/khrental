@@ -1,0 +1,51 @@
+name: Verify property enquiries
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/enquiries/**'
+      - 'src/pages/PropertyEnquiry.jsx'
+      - 'src/pages/OwnerEnquiries.jsx'
+      - 'src/utils/enquiryReturnPath.js'
+      - 'src/services/seekerContextClient.js'
+      - 'src/routes.jsx'
+      - 'src/pages/Login.jsx'
+      - 'src/components/auth/VerifiedSeekerBoundary.jsx'
+      - 'src/services/requestContext.js'
+      - 'migrations/drafts/20261028_01_property_enquiries.sql'
+      - 'tests/property-enquiries.test.js'
+      - 'scripts/test-property-enquiries-*.mjs'
+      - '.github/workflows/verify-property-enquiries.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: enquiry-proof-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  enquiry-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/property-enquiries.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js
+      - run: npm run build
+      - name: Exact migration and concurrent store on disposable SQL Server
+        run: node scripts/test-property-enquiries-sqlserver.mjs
+      - name: Isolated real-component browser acceptance
+        env:
+          ENQUIRY_PROOF_DIR: enquiry-browser-proof
+        run: node scripts/test-property-enquiries-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enquiry-browser-proof
+          path: enquiry-browser-proof/
+          if-no-files-found: ignore
+      - name: No production effects
+        run: echo 'No production schema, release flags, public signup or extra cloud replicas changed.'

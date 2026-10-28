@@ -2,6 +2,31 @@
 // Do not inherit x-tenant-id, dev-bypass headers or cookies. This endpoint
 // alone cannot grant a membership or enable public registration.
 
+// Personal enquiry calls deliberately omit tenant/dev headers and cookies.
+// The API independently verifies the live bearer session and global identity.
+export const requestSeekerEnquiries = async ({getSession,path='',method='GET',body}={}) => {
+  if (!/^\/(?:[0-9a-f-]{36})$/i.test(path) && path!=='' && !/^\?offset=\d{1,6}$/.test(path)) {
+    throw new Error('Invalid enquiry request.');
+  }
+  const {data,error}=await getSession();
+  if (error || !data?.session?.access_token) {
+    throw Object.assign(new Error('Sign in to continue.'),{status:401});
+  }
+  const response=await fetch('/api/property-enquiries'+path,{
+    method,headers:{Authorization:'Bearer '+data.session.access_token,
+      ...(body?{'Content-Type':'application/json'}:{})},
+    credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error',
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+  const payload=await response.json();
+  const current=await getSession();
+  if (current?.data?.session?.access_token!==data.session.access_token) {
+    throw new Error('Your session changed. Reload before continuing.');
+  }
+  if (!response.ok) {throw Object.assign(new Error(payload.error||'Unable to save your enquiry.'),{status:response.status,code:payload.code});}
+  return payload.data;
+};
+
 export const fetchVerifiedSeekerBrowserContext = async ({
   expectedAuthId,
   fetchImpl = globalThis.fetch,

@@ -42,6 +42,7 @@ export const isPublicSignupUiEnabled = () => getEnvVar('VITE_PUBLIC_SIGNUP_UI_EN
 
 // Separate, default-OFF seeker landing pilot; never grants API permissions.
 export const isPublicSeekerLandingEnabled = () => getEnvVar('VITE_PUBLIC_SEEKER_LANDING_ENABLED') === 'true';
+export const isPropertyEnquiriesEnabled = () => getEnvVar('VITE_PROPERTY_ENQUIRIES_UI_ENABLED') === 'true';
 
 export const isDevBypassEnabled = () => {
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
@@ -87,4 +88,4 @@ export const ENV = {
   APP_BASE_URL: getEnvVar('VITE_APP_BASE_URL'),
   USE_MSSQL_API: getEnvVar('VITE_USE_MSSQL_API'),
   ENABLE_DEV_BYPASS: getEnvVar('VITE_ENABLE_DEV_BYPASS'),
-}; 
+};

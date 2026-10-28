@@ -5,6 +5,9 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
 import { getPostLoginPath } from './utils/authRedirect.js';
+import { enquiryReturnPath } from './utils/enquiryReturnPath.js';
+import PropertyEnquiry from './pages/PropertyEnquiry';
+import OwnerEnquiries from './pages/OwnerEnquiries';
 import { isPublicSeekerLandingEnabled } from './utils/env.js';
 import { VerifiedSeekerBoundary } from './components/auth/VerifiedSeekerBoundary';
 import {
@@ -111,7 +114,7 @@ const PublicRoute = ({ children }) => {
         String(user.userType || user.profileType || '').toLowerCase() === 'seeker') {
       return <VerifiedSeekerBoundary redirectOnly />;
     }
-    const targetPath = getPostLoginPath(location.state, defaultPath);
+    const targetPath = enquiryReturnPath(location.search) || getPostLoginPath(location.state, defaultPath);
 
     return <Navigate to={targetPath} replace />;
   }
@@ -240,6 +243,7 @@ const routes = [
       // With the flag OFF this resolves to /unauthorized. With the flag ON,
       // the boundary still requires a fresh server-authenticated SQL proof.
       { path: 'seeker', element: <VerifiedSeekerBoundary /> },
+      { path: 'enquire', element: <PropertyEnquiry /> },
       { path: 'auth-debug', element: adminRoute(<AuthDebug />) },
       { path: 'digital-signature-test', element: adminRoute(<DigitalSignatureForm />) },
       {
@@ -251,6 +255,7 @@ const routes = [
         ),
         children: [
           { index: true, element: <Dashboard /> },
+          { path: 'enquiries', element: adminRoute(<OwnerEnquiries />) },
           { path: 'notifications', element: <Notifications portal="dashboard" /> },
           {
             path: 'properties',

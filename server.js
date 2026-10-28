@@ -28,6 +28,7 @@ import { createTenantContextMiddleware } from './src/api/tenant/context.js';
 import { createSessionAuthMiddleware } from './src/api/auth/index.js';
 import { createPublicSignupRuntime } from './src/api/auth/publicSignupRuntime.js';
 import { createPublicListingsRouter, createPublicListingPreferencesRouter } from './src/api/publicListings/router.js';
+import { createEnquiriesRouter } from './src/api/enquiries/router.js';
 import { observeR3IngressPeer } from './src/api/auth/r3IngressPeerProbe.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
@@ -93,6 +94,7 @@ async function createServer() {
   // Credential-gated, temporarily enabled read-only R3 ingress peer attestation.
   // Absent its one-time environment secret this route always responds 404.
   app.post('/api/internal/r3-ingress-peer', (req, res) => observeR3IngressPeer(req, res));
+  app.use(['/api/property-enquiries','/api/owner-enquiries'], express.json({limit:'8kb'}));
   app.use(express.json({
     limit: '10mb',
     verify: (req, _res, buffer) => {
@@ -104,6 +106,8 @@ async function createServer() {
 
   app.use('/api/evia', createEviaWebhookRouter());
   app.use('/api', createSessionAuthMiddleware());
+  app.use('/api/property-enquiries', createEnquiriesRouter());
+  app.use('/api/owner-enquiries', createEnquiriesRouter({owner:true}));
 
   const requireApiSession = (req, res, next) => {
     if (!req.authSession) {
