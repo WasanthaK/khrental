@@ -41,6 +41,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
 // Numeric rent from existing app properties.rentalvalues.rent is optional.
 export const PUBLIC_LISTING_SELECT_SQL=`
   pref.public_id,p.country_code,pref.opted_out,pref.public_headline,pref.location_label,p.propertytype,
+  CASE WHEN ISJSON(p.rentalvalues)=1 THEN JSON_VALUE(p.rentalvalues,'$.listingCategory') ELSE NULL END AS listing_category,
   TRY_CONVERT(DECIMAL(18,2),CASE WHEN ISJSON(p.rentalvalues)=1
     THEN COALESCE(JSON_VALUE(p.rentalvalues,'$.rent'),JSON_VALUE(p.rentalvalues,'$.monthlyRent'))
     ELSE NULL END) AS monthly_rent`;

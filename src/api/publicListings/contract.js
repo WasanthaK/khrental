@@ -1,5 +1,6 @@
+import {publicListingCategory} from '../../utils/listingCategories.js';
 import {normalizePropertyCountry} from '../../utils/constants.js';
-import {PUBLIC_MARKETS,PUBLIC_TYPES,parseCountry} from './eligibility.js';
+import {PUBLIC_MARKETS,parseCountry} from './eligibility.js';
 
 export const ID_REGEX=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const isId=id=>ID_REGEX.test(String(id||'').trim());
@@ -37,12 +38,12 @@ export const PUBLIC_FIELDS=Object.freeze(['id','country','category','title','loc
 export const toPublicDTO=row=>{
   if(!row)return null;
   const country=parseCountry(row.country_code);
-  const category=PUBLIC_TYPES[String(row.propertytype||'').toLowerCase()]||'other';
+  const category=publicListingCategory(row.listing_category,row.propertytype);
   if(!country||row.opted_out===true||row.opted_out===1)return null;
   const rent=Number(row.monthly_rent);
   const obj={
     id:String(row.public_id),country,category,
-    title:String(row.public_headline|| (category==='commercial'?'Commercial space for rent':'Home for rent')),
+    title:String(row.public_headline|| ({commercial:'Commercial space for rent',retail:'Shop or retail space for rent',office:'Office or workspace for rent',land:'Land for rent'}[category]||'Home for rent')),
     location:String(row.location_label|| (country==='LK'?'Sri Lanka':'Brunei Darussalam')),
     monthlyRent:Number.isFinite(rent)&&rent>0?rent:null,
     currency:PUBLIC_MARKETS[country],

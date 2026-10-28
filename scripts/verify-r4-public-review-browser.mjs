@@ -42,7 +42,7 @@ try{
   for(const p of sitePaths)for(const width of [320,390,768,1280]){
     const page=await browser.newPage(),remote=[],failedResources=[];
     let catalogRequests=0;
-    const liveMarket=p==='/lk/search/'&&lkLive?'LK':p==='/bn/search/'&&bnLive?'BN':null;
+    const liveMarket=['/lk/','/lk/search/'].includes(p)&&lkLive?'LK':['/bn/','/bn/search/'].includes(p)&&bnLive?'BN':null;
     await page.setRequestInterception(true);
     page.on('request',r=>{
       if(r.url().startsWith(origin+'/'))return void r.continue();
@@ -89,9 +89,9 @@ try{
     assert.ok(data.main&&data.logo&&data.liveWarnings,p+' structure/logo/disclaimer');
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
-    const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/'].includes(p);
+    const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/','/lk/property/','/bn/property/'].includes(p);
     assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
-    if(expectedListingPanel)assert.equal(data.livePanel,liveMarket?'true':'false',p+' single-market release scope');
+    if(expectedListingPanel)assert.equal(data.livePanel,(p.startsWith('/lk/')?lkLive:bnLive)?'true':'false',p+' live country pages');
     if(liveMarket){
       assert.equal(catalogRequests,1,'Exactly one anonymous catalog request');
       assert.deepEqual(data.liveTitles,['Synthetic pilot rental'],'Render only the synthetic approved API fixture');
@@ -155,18 +155,32 @@ try{
     assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
     await tab.close();
   }
-  if(lkLive)for(const kind of ['residential','commercial']){
+  // Exercise actual homepage links, three categories, broad commercial and detail.
+  if(lkLive)for(const kind of ['residential','retail','office','commercial']){
     const tab=await browser.newPage();
+    const rows=['residential','retail','office'].map((category,index)=>({
+      id:index===0?fixtureId:index===1?'cccccccc-cccc-4ccc-8ccc-cccccccccccc':'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      country:'LK',category,title:'Synthetic '+category,location:'Sri Lanka',monthlyRent:1,currency:'LKR',images:[]}));
     await tab.setRequestInterception(true);
     tab.on('request',r=>{
       if(r.url().startsWith(origin+'/'))return void r.continue();
-      if(r.url()===apiOrigin+'/api/public-listings?country=LK')
-        return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},
-          body:JSON.stringify({country:'LK',data:[{id:fixtureId,country:'LK',category:'residential',title:'Synthetic pilot rental',location:'Sri Lanka',monthlyRent:1,currency:'LKR',images:[]}]})});
+      const response=r.url()===apiOrigin+'/api/public-listings?country=LK'?{country:'LK',data:rows}:
+        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:null;
+      if(response)return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:JSON.stringify(response)});
       return void r.abort();
     });
-    await tab.goto(origin+'/lk/search/?type='+kind,{waitUntil:'networkidle0'});
-    assert.equal(await tab.$$eval('[data-public-listing-cards] h3',n=>n.length),kind==='residential'?1:0,kind+' category filtering');
+    await tab.goto(origin+'/lk/',{waitUntil:'networkidle0'});
+    const selector=kind==='residential'?'.category-grid a[href$="type=residential"]':kind==='commercial'?'.hero-search a[href$="type=commercial"]':'.category-grid a[href$="type='+kind+'"]';
+    await Promise.all([tab.waitForNavigation({waitUntil:'networkidle0'}),tab.click(selector)]);
+    assert.equal(new URL(tab.url()).searchParams.get('type'),kind,'Homepage category link target');
+    assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',n=>n.map(e=>e.textContent)),
+      kind==='commercial'?['Synthetic retail','Synthetic office']:['Synthetic '+kind],kind+' category results');
+    if(kind==='residential'){
+      await Promise.all([tab.waitForNavigation({waitUntil:'networkidle0'}),tab.click('[data-public-listing-cards] a')]);
+      assert.equal(new URL(tab.url()).searchParams.get('id'),fixtureId);
+      assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',n=>n.map(e=>e.textContent)),['Synthetic residential'],'Real property detail route');
+      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('not open yet')),'Unavailable next stages are honest');
+    }
     await tab.close();
   }
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
