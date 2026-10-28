@@ -2,6 +2,18 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Villa photo and registration acceptance — completed 2026-10-28
+
+Manual sign-in established the intended administrator session. Under the owner's existing publication instruction, the already prepared exterior derivative was reopened and visually verified, its rights/privacy review recorded through the authenticated photo controls, and approval completed. No re-preparation, original-photo publication, property data change or release-workflow execution was used.
+
+Fresh public website acceptance confirms the villa's photograph loads on both its residential result card and its actual opaque-reference detail page, with nonzero natural dimensions through the controlled public-listing media route. The earlier withheld-photo/authentication blocker is resolved. Credentials were not inspected or copied.
+
+The deployed **Add Property** form was also inspected while authenticated: **Website category** is required and offers exactly houses & apartments, shops & retail, and offices & workspaces, plus the empty prompt. No synthetic property was created.
+
+**Current next package:** property-scoped enquiry and owner inbox, followed by viewing, private application/offer, safe reservation, signing and explicit tenancy activation. Browsing/details/photos are live; the website still states that enquiries and applications are unavailable until their implementation and acceptance. SaaS subscription management remains afterward. Single-replica boundary is unchanged and no temporary test capacity exists.
+
+The newest checkpoints control current status; earlier withheld/pending or B04-first statements below are historical.
+
 ## Owner priority and approved fixes — 2026-10-28
 
 **NOW: fully operational rental website, listing to signing. AFTERWARD: SaaS subscription management.** This explicit owner direction supersedes earlier B04-owner/B05-first prioritisation. [The journey plan](QUIXO-LISTING-TO-SIGNING-JOURNEY.md) records the remaining implementation/acceptance sequence. Subscription design and canonical sandbox decisions are retained but queued; no live billing is activated by this change.
