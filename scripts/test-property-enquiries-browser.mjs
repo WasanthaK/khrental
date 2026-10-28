@@ -44,7 +44,7 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-auth'){return fixtureAuth;}
   if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
-  if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data;};`;}
+  if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
 }};
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
 let viewing=null,viewingsOpen=true;

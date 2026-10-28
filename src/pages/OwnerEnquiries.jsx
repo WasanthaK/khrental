@@ -4,7 +4,11 @@ import {Link} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
-const viewingCall=({path,method='GET',body})=>requestMssqlApi('/api/owner-enquiries'+path,{method,body});
+const viewingCall=async({path,method='GET',body})=>{
+  const result=await requestMssqlApi('/api/owner-enquiries'+path,{method,body});
+  // The shared transport preserves an envelope when its data is null.
+  return result?.data===null?null:result;
+};
 const OwnerEnquiries=()=>{
   const {activeTenantId}=useAuth();
   const [snapshot,setSnapshot]=useState(null),[error,setError]=useState('');
