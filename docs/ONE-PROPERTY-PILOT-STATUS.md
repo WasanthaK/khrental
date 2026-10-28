@@ -1,6 +1,6 @@
 # One-property public pilot — current canonical status
 
-Updated 2026-10-27 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
+Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
 ## Physical testing release preparation — 2026-10-28
 
@@ -12,7 +12,9 @@ Controls: sign in to app.quixo.homes as an active tenant administrator, open Pro
 
 Production activation uses `.github/workflows/public-listing-testing-release.yml`, exact serving build and `RELEASE-ELIGIBLE-LISTINGS`. It checks one-replica limits, readiness, build, strict public field shape, country isolation, CORS/no-store and anonymous denial of private controls. It disables release gates if post-mutation checks fail. The previous one-property workflow remains an emergency shutdown path; its activation mode must not be used over an already-live broader release.
 
-Status: PREPARED, not yet activated. Scaling remains deferred; no additional test replica is authorized or created.
+Status: [#440](https://github.com/WasanthaK/khrental/pull/440) merged; application checks and isolated browser acceptance PASS. [Website deployment #40607690862](https://github.com/WasanthaK/khrental/actions/runs/40607690862) PASS. Broader inventory and authenticated controls are prepared, **not yet activated**; final public-exposure confirmation remains pending.
+
+Fresh browser checking initially received a SQL connection timeout and the website correctly displayed an unavailable message. [Read-only audit #40608009755](https://github.com/WasanthaK/khrental/actions/runs/40608009755) then passed exact existing build, ready revision, application and SQL health with min=max=1; the BN catalog subsequently returned its expected empty response under the existing single-property scope. No restart or scale change was used. Timeout root cause is **not established**. SQL management-plane inspection #40608127147 could not read server settings because the deployment identity lacks Microsoft.Sql/servers/read; no broader permissions were granted. Do not characterize this as a permanent timeout fix. Scaling remains deferred; no additional test replica is authorized or created.
 
 ## Owner acceptance and next package — 2026-10-27
 
