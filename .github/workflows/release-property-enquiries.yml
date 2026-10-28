@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           az extension add --name containerapp --upgrade --only-show-errors >/dev/null
           folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          echo ENQUIRY_PREFLIGHT_STAGE=app_configuration
           az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$folder/app"
           jq -e '.properties.configuration.activeRevisionsMode=="Single" and
             .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1 and
@@ -66,13 +67,22 @@ jobs:
           jq -e '(.properties.template.containers[0].env//[]) as $v |
             def val($n): [$v[]|select(.name==$n)|.value]|first;
             val("PUBLIC_LISTING_READ_ENABLED")=="true" and val("PUBLIC_LISTING_SHARED_RATE_LIMIT_READY")=="true"' "$folder/app" >/dev/null
+          echo ENQUIRY_PREFLIGHT_STAGE=public_build
           curl -fsS --retry 4 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json > "$folder/build"
           jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' "$folder/build" >/dev/null
+          echo ENQUIRY_PREFLIGHT_STAGE=ready_image
           ready=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
           image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$ready" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
           # Existing application identity, read-only schema/ledger/config checks.
+          echo ENQUIRY_PREFLIGHT_STAGE=container_readiness
+          set +e
           script -q -e -c "az containerapp exec -g \"$AZURE_RESOURCE_GROUP\" -n \"$AZURE_CONTAINER_APP_NAME\" --revision \"$ready\" --command 'node /app/scripts/check-enquiry-release-readiness.mjs'" /dev/null > "$folder/preflight" 2>&1
+          exec_status=$?
+          set -e
+          grep -Eo 'ENQUIRY_RELEASE_READINESS=(PASS|FAIL)( phase=[a-z_]+)?' "$folder/preflight" || true
+          echo "ENQUIRY_PREFLIGHT_EXEC_STATUS=$exec_status"
+          test "$exec_status" = 0
           grep -Fq 'ENQUIRY_RELEASE_READINESS=PASS' "$folder/preflight"
           echo 'ENQUIRY_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 schema_ledger'
       - name: Apply approved signup and enquiry scope
