@@ -2,6 +2,14 @@
 
 Updated 2026-10-28 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
+## Owner priority and approved fixes — 2026-10-28
+
+**NOW: fully operational rental website, listing to signing. AFTERWARD: SaaS subscription management.** This explicit owner direction supersedes earlier B04-owner/B05-first prioritisation. [The journey plan](QUIXO-LISTING-TO-SIGNING-JOURNEY.md) records the remaining implementation/acceptance sequence. Subscription design and canonical sandbox decisions are retained but queued; no live billing is activated by this change.
+
+The owner instructed completing the previously reviewed villa photo and verifier fixes. The category-only release-verifier correction is now saved at `cae784ea9e42c9b05baf2fa00d15905099538865`; exact readback confirms only retail/office acceptance changed. Local execution of the saved verifier with synthetic responses accepted six supported current/legacy categories and rejected unknown category/private-field cases. No release workflow was executed, no Azure flags or scope changed, and no test capacity was created. This supersedes the earlier blocked/pending verifier status.
+
+The prepared villa derivative remains withheld pending completion of administrator sign-in, not another publication-permission question. The secure sign-in request returned submitted but both the target tab and a fresh dashboard verification remained at login with no visible error. Authentication outcome is not established; no claim of incorrect credentials, successful login or a proven application defect is made. Credentials were not inspected, copied or read from storage. Manual sign-in in the task's existing browser is the next concrete unblocker; do not work around authentication or claim the photo public before anonymous delivery is verified.
+
 ## Three-category browsing and journey repair — deployed 2026-10-28
 
 Owner direction preserves the main hero and all three stock category images. [#441](https://github.com/WasanthaK/khrental/pull/441) merged at `72963f41e9d8292c94cff5766e53fd39493135fd`. [Website deployment #40631464457](https://github.com/WasanthaK/khrental/actions/runs/40631464457) and [application deployment #40631464823](https://github.com/WasanthaK/khrental/actions/runs/40631464823) **PASS**, including ready revision, exact serving build and runtime/SQL health.
