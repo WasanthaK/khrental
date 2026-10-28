@@ -99,16 +99,22 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
           const link=document.createElement('a');link.href='/'+market.toLowerCase()+'/property/?id='+encodeURIComponent(item.id);
           link.textContent='View property →';panel.append(link);
         }else{
-          if(previewArea.dataset.propertyEnquiriesEnabled==='true'){
-            const enquire=document.createElement('a');
-            enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
-            enquire.textContent='Enquire about this property';panel.append(enquire);
-          }
           const note=document.createElement('p');
-          note.textContent=previewArea.dataset.propertyEnquiriesEnabled==='true'
-            ?'An enquiry does not reserve this property or confirm a viewing. Applications are not open yet.'
-            :'Viewing requests and applications are not open yet. You can browse this property without creating an account.';
+          note.textContent='Viewing requests and applications are not open yet. You can browse this property without creating an account.';
           panel.append(note);
+          const controller=new AbortController();
+          const timeout=setTimeout(()=>controller.abort(),10000);
+          const status=new URL('/api/public-listings/'+encodeURIComponent(item.id)+'/enquiry-status',apiOrigin);
+          status.searchParams.set('country',market);
+          fetch(status,{credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error',signal:controller.signal})
+            .then(async response=>response.ok?response.json():null)
+            .then(result=>{
+              if(result?.data?.enquiriesOpen!==true||!panel.isConnected){return;}
+              const enquire=document.createElement('a');
+              enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
+              enquire.textContent='Enquire about this property';panel.insertBefore(enquire,note);
+              note.textContent='An enquiry does not reserve this property or confirm a viewing. Applications are not open yet.';
+            }).catch(()=>{}).finally(()=>clearTimeout(timeout));
         }
         article.append(panel);
         list.append(article);

@@ -165,7 +165,8 @@ try{
     tab.on('request',r=>{
       if(r.url().startsWith(origin+'/'))return void r.continue();
       const response=r.url()===apiOrigin+'/api/public-listings?country=LK'?{country:'LK',data:rows}:
-        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:null;
+        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:
+        r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'/enquiry-status?country=LK'?{data:{enquiriesOpen:kind==='residential'}}:null;
       if(response)return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:JSON.stringify(response)});
       return void r.abort();
     });
@@ -179,7 +180,9 @@ try{
       await Promise.all([tab.waitForNavigation({waitUntil:'networkidle0'}),tab.click('[data-public-listing-cards] a')]);
       assert.equal(new URL(tab.url()).searchParams.get('id'),fixtureId);
       assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',n=>n.map(e=>e.textContent)),['Synthetic residential'],'Real property detail route');
-      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('not open yet')),'Unavailable next stages are honest');
+      await tab.waitForSelector('a[href*="/enquire?listingId="]');
+      assert.equal(await tab.$eval('a[href*="/enquire?listingId="]',n=>n.href),apiOrigin+'/enquire?listingId='+fixtureId+'&country=LK','Public release capability opens the selected property enquiry');
+      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('does not reserve')),'Enquiry is not represented as a reservation');
     }
     await tab.close();
   }

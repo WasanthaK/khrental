@@ -26,17 +26,25 @@ export const createApprovedSignupPeerPredicate = (source) => {
   return peer => allow.has(normalizePublicSignupIp(peer));
 };
 
-export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
-  // R3 canary is *always* single-recipient in production. Neither rollout
-  // flag can open the public endpoint without a normalized mailbox fence.
+export const resolvePublicSignupRelease = (config={}) => {
+  // The accepted R3 canary remains the default. A general release requires
+  // BOTH an explicit public mode and its separate owner-approval marker,
+  // in addition to the existing runtime/approval/provider/ingress guards.
   const candidate = config.PUBLIC_SIGNUP_PILOT_EMAIL;
   const pilotEmail = typeof candidate === 'string' &&
     candidate === candidate.trim().toLowerCase() &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) &&
     candidate.length <= 320 ? candidate : null;
-  const enabled = config.PUBLIC_SIGNUP_ENABLED === 'true' &&
+  const mode=config.PUBLIC_SIGNUP_RELEASE_MODE||'pilot';
+  const publicApproved=mode==='public'&&config.PUBLIC_SIGNUP_PUBLIC_APPROVED==='true';
+  const enabled = ['pilot','public'].includes(mode)&&config.PUBLIC_SIGNUP_ENABLED === 'true' &&
     config.PUBLIC_SIGNUP_PILOT_APPROVED === 'true' &&
-    (config.NODE_ENV !== 'production' || pilotEmail !== null);
+    (mode==='public'?publicApproved:(config.NODE_ENV !== 'production' || pilotEmail !== null));
+  return {enabled,pilotEmail:config.NODE_ENV==='production'&&mode==='pilot'?pilotEmail:null,mode};
+};
+
+export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
+  const {enabled,pilotEmail}=resolvePublicSignupRelease(config);
   // This deployment-mode assertion must be set via the separately verified
   // ACA HTTP ingress OIDC gate. Never infer proxy trust from request headers.
   // In other environments keep the existing exact-socket predicate.

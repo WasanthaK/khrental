@@ -1,0 +1,164 @@
+name: Property enquiries release controls
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Approved release scope, or close signup and enquiries
+        required: true
+        type: choice
+        options: [preflight, pilot, public, rollback]
+        default: preflight
+      expected_build:
+        description: Exact accepted serving application SHA (not needed for rollback)
+        required: false
+        type: string
+      confirmation:
+        description: CHECK-ENQUIRY-READINESS, ENABLE-ENQUIRY-PILOT, ENABLE-PUBLIC-ENQUIRIES or CLOSE-PUBLIC-ENQUIRIES
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+    steps:
+      - name: Validate explicit release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$MODE:$CONFIRMATION" in
+            preflight:CHECK-ENQUIRY-READINESS|pilot:ENABLE-ENQUIRY-PILOT|public:ENABLE-PUBLIC-ENQUIRIES|rollback:CLOSE-PUBLIC-ENQUIRIES) ;;
+            *) echo 'Exact release confirmation is required.' >&2; exit 1 ;;
+          esac
+          if [ "$MODE" != rollback ]; then [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]; fi
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact build, one-replica boundary and governed schema without writes
+        if: inputs.mode != 'rollback'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$folder/app"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1 and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName' "$folder/app" >/dev/null
+          jq -e '(.properties.template.containers[0].env//[]) as $v |
+            def val($n): [$v[]|select(.name==$n)|.value]|first;
+            val("PUBLIC_LISTING_READ_ENABLED")=="true" and val("PUBLIC_LISTING_SHARED_RATE_LIMIT_READY")=="true"' "$folder/app" >/dev/null
+          curl -fsS --retry 4 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json > "$folder/build"
+          jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' "$folder/build" >/dev/null
+          ready=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
+          image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$ready" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          # Existing application identity, read-only schema/ledger/config checks.
+          script -q -e -c "az containerapp exec -g \"$AZURE_RESOURCE_GROUP\" -n \"$AZURE_CONTAINER_APP_NAME\" --revision \"$ready\" --command 'node /app/scripts/check-enquiry-release-readiness.mjs'" /dev/null > "$folder/preflight" 2>&1
+          grep -Fq 'ENQUIRY_RELEASE_READINESS=PASS' "$folder/preflight"
+          echo 'ENQUIRY_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 schema_ledger'
+      - name: Apply approved signup and enquiry scope
+        id: enable
+        if: inputs.mode != 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          value=false; public=false; release_mode=pilot
+          if [ "$MODE" != rollback ]; then value=true; fi
+          if [ "$MODE" = public ]; then public=true; release_mode=public; fi
+          if [ "$MODE" = pilot ]; then
+            # Retain the existing operator-designated R3 mailbox. Never print it.
+            pilot=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query "properties.template.containers[0].env[?name=='PUBLIC_SIGNUP_PILOT_EMAIL'].value | [0]" -o tsv)
+            PILOT_VALUE="$pilot" node -e 'const s=process.env.PILOT_VALUE||"";if(s!==s.trim().toLowerCase()||!/^\S+@\S+\.\S+$/.test(s)||s.length>320)process.exit(1)'
+            unset pilot
+          fi
+          echo 'mutated=true' >> "$GITHUB_OUTPUT"
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --set-env-vars \
+            PUBLIC_SIGNUP_ENABLED="$value" PUBLIC_SIGNUP_PILOT_APPROVED="$value" \
+            PUBLIC_SIGNUP_PUBLIC_APPROVED="$public" PUBLIC_SIGNUP_RELEASE_MODE="$release_mode" \
+            PUBLIC_SEEKER_CONTEXT_ENABLED="$value" VITE_PUBLIC_SIGNUP_UI_ENABLED="$value" \
+            VITE_PUBLIC_SEEKER_LANDING_ENABLED="$value" PROPERTY_ENQUIRIES_ENABLED="$value" \
+            VITE_PROPERTY_ENQUIRIES_UI_ENABLED="$value" -o none
+      - name: Wait for the ready revision and verify anonymous boundaries without customer writes
+        if: inputs.mode != 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          for attempt in $(seq 1 90); do
+            az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$folder/app"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$folder/app" >/dev/null; then break; fi
+            sleep 10
+          done
+          jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.configuration.activeRevisionsMode=="Single" and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$folder/app" >/dev/null
+          if [ "$MODE" != rollback ]; then
+            curl -fsS --retry 4 --retry-delay 3 --max-time 20 https://app.quixo.homes/build-info.json > "$folder/build"
+            jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' "$folder/build" >/dev/null
+          fi
+          for route in property-enquiries owner-enquiries; do
+            http=$(curl -sS --max-time 20 -H 'X-Tenant-Id: forged' -o "$folder/reply" -w '%{http_code}' "https://app.quixo.homes/api/$route")
+            if [ "$MODE" = rollback ]; then test "$http" = 404; else test "$http" = 401; fi
+          done
+          for route in challenge redeem; do
+            # Deliberately absent Origin: rejected before parser/quota/mail.
+            http=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' -o "$folder/reply" -w '%{http_code}' "https://app.quixo.homes/api/public-signup/$route")
+            if [ "$MODE" = rollback ]; then test "$http" = 404; else test "$http" = 403; fi
+          done
+          MODE="$MODE" node --input-type=module <<'NODE'
+          if(process.env.MODE!=='rollback')for(const country of ['LK','BN']){
+            const r=await fetch('https://app.quixo.homes/api/public-listings?country='+country);
+            if(!r.ok)throw Error('Public browsing changed unexpectedly');
+            const data=await r.json();
+            if(data.data.length){
+              const status=await fetch('https://app.quixo.homes/api/public-listings/'+data.data[0].id+'/enquiry-status?country='+country);
+              if(!status.ok||(await status.json()).data.enquiriesOpen!==(process.env.MODE==='public'))throw Error('Enquiry entry visibility mismatch');
+            }
+          }
+          NODE
+          echo 'ENQUIRY_RELEASE_ACCEPTANCE=PASS anonymous_denial origin_guard public_entry no_customer_writes min_max_1'
+      - name: Close new gates if release verification fails
+        if: failure() && steps.enable.outputs.mutated == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --set-env-vars \
+            PUBLIC_SIGNUP_ENABLED=false PUBLIC_SIGNUP_PILOT_APPROVED=false PUBLIC_SIGNUP_PUBLIC_APPROVED=false \
+            PUBLIC_SIGNUP_RELEASE_MODE=pilot PUBLIC_SEEKER_CONTEXT_ENABLED=false VITE_PUBLIC_SIGNUP_UI_ENABLED=false \
+            VITE_PUBLIC_SEEKER_LANDING_ENABLED=false PROPERTY_ENQUIRIES_ENABLED=false VITE_PROPERTY_ENQUIRIES_UI_ENABLED=false -o none
+          for attempt in $(seq 1 90); do
+            latest=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --query properties.latestReadyRevisionName -o tsv)
+            if [ -n "$latest" ] && [ "$latest" = "$ready" ]; then break; fi
+            sleep 10
+          done
+          test "$latest" = "$ready"
+          for route in property-enquiries owner-enquiries; do
+            http=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://app.quixo.homes/api/$route")
+            test "$http" = 404
+          done
+          for route in challenge redeem; do
+            http=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' -o /dev/null -w '%{http_code}' "https://app.quixo.homes/api/public-signup/$route")
+            test "$http" = 404
+          done
+          echo 'ENQUIRY_RELEASE_GATES=VERIFIED_CLOSED_AFTER_FAILED_ACCEPTANCE'
