@@ -74,38 +74,47 @@ try {
       console.log('FIXTURE_COMPILE=PASS '+resource);
     }
   } else {
-  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  browser=await puppeteer.launch({headless:true,protocolTimeout:20000,args:['--no-sandbox','--disable-dev-shm-usage']});
   const page=await browser.newPage();activePage=page;const errors=[];
+  page.setDefaultTimeout(10000);page.setDefaultNavigationTimeout(15000);
   page.on('pageerror',e=>{errors.push(e.message);console.error('FIXTURE_PAGE_ERROR='+e.message);});
   page.on('response',r=>{if(r.status()>=400){console.error('FIXTURE_HTTP_ERROR='+r.status()+' '+r.url());}});
   await page.setRequestInterception(true);
   page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
   await page.setViewport({width:1280,height:900});
   await page.goto(origin+'/enquire?listingId='+listingId+'&country=LK',{waitUntil:'networkidle0'});
+  console.log('BROWSER_STAGE=anonymous_listing');
   await page.waitForSelector('a[href^="/login?listingId="]');
   await page.click('a[href^="/login?listingId="]');
   await page.waitForSelector('#email-address');
   await page.type('#email-address','seeker@example.test');await page.type('#password','SyntheticFixtureOnly!');
   await page.click('button[type="submit"]');
   await page.waitForSelector('textarea');
+  console.log('BROWSER_STAGE=login_return');
   assert.equal(new URL(page.url()).searchParams.get('listingId'),listingId);
   await page.type('textarea','May I arrange a viewing?');
   assert.equal(await page.$eval('form button',e=>e.disabled),true);
   await page.click('input[type="checkbox"]');failNext=true;
   await page.click('form button');await page.waitForSelector('[role="alert"]');
+  console.log('BROWSER_STAGE=retry_error_visible');
   assert.match(await page.$eval('[role="alert"]',e=>e.textContent),/Temporarily unavailable/);
   await page.click('form button');await page.waitForFunction(()=>document.body.innerText.includes('Your enquiry was saved'));
+  console.log('BROWSER_STAGE=enquiry_saved');
   assert.equal(submissions,2);assert.equal(row.status,'pending');
   const ownerPage=await browser.newPage();
+  ownerPage.setDefaultTimeout(10000);ownerPage.setDefaultNavigationTimeout(15000);
   await ownerPage.setRequestInterception(true);
   ownerPage.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
   await ownerPage.goto(origin+'/dashboard/enquiries',{waitUntil:'networkidle0'});
   await ownerPage.waitForSelector('textarea');await ownerPage.type('textarea','Please suggest a convenient time.');
+  console.log('BROWSER_STAGE=owner_inbox');
   await ownerPage.click('article button');
   await ownerPage.waitForFunction(()=>document.body.innerText.includes('Enquiry updated'));
+  console.log('BROWSER_STAGE=owner_replied');
   assert.equal(ownerWrites,1);assert.equal(row.status,'responded');
   await page.click('::-p-text(Refresh responses)');
   await page.waitForFunction(()=>document.body.innerText.includes('Please suggest a convenient time.'));
+  console.log('BROWSER_STAGE=seeker_reads_reply');
   await page.setViewport({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile layout must fit viewport');
   const output=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
@@ -130,5 +139,5 @@ try {
   throw error;
 } finally {
   await browser?.close();await vite?.close();
-  if(server){await new Promise(r=>server.close(r));}
+  if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
 }
