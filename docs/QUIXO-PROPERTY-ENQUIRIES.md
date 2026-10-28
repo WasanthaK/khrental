@@ -1,6 +1,6 @@
 # Property enquiries and owner inbox
 
-This is the next website package under the owner-directed listing-to-signing objective. SaaS subscription management remains afterward. The enquiry foundation is in PR #442, governed schema/registration continuation in PR #443, public release controls in PR #444 and identity-appropriate production readiness in PR #446. Public enquiries are not activated by a source deployment.
+This package implements the public enquiry stage under the owner-directed listing-to-signing objective. SaaS subscription management remains afterward. The enquiry foundation is in PR #442, governed schema/registration continuation in PR #443, public release controls in PR #444 and identity-appropriate production readiness in PR #446. Source deployment alone does not activate public enquiries. Explicitly approved public release #40682556348 activated personal seeker registration and verified-user enquiries on 2026-10-28; all release checks PASS. Actual mail delivery and real-user enquiry/reply acceptance remain physical tests.
 
 ## Behaviour
 
