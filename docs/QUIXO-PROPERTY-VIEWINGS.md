@@ -2,6 +2,10 @@
 
 Website-first package, 28 October 2026. This connects verified seekers and active workspace administrators through their existing property enquiry. It does not create memberships, reserve stock, send email or activate a tenancy.
 
+## Current acceptance
+
+PR #448 merged at `6d4982956b8c35ae949df062a8e1fabc2653b22c`; final required checks passed at `c70cfc75dd1a8f011d357ce4c7847b9c495eba28`. Disposable SQL and actual React browser proof #40727465285 PASS, including cancellation after enquiry closure, delayed refresh and replay privacy. Governed migration #40727465296, application/authorization, two-tenant SQL and marketing layout checks PASS. Local build and 47 focused tests PASS. Production activation is now LIVE after explicit owner approval: dedicated-executor apply #40730045855 PASS and viewing release #40730503382 PASS against the accepted build, with fresh strict 15/15 schema/ledger/checksum acceptance, restricted application access, exact build, ready revision and Single revision/min=max=1 checks. Only the viewing switch was enabled; anonymous denial and public browsing checks passed, and rollback was not needed. The previous approval-review rejection occurred before the owner supplied this approval and is historical. No production fixture or real viewing was created. Current deployment/evidence is retained in [canonical status](ONE-PROPERTY-PILOT-STATUS.md).
+
 ## Controls and states
 
 The seeker uses **My enquiries → Viewing appointment**. The owner uses **Dashboard → Property enquiries → Viewing appointment**. Each enquiry has one versioned appointment, retained across rescheduling and cancellation. The inbox is the current schedule view; a separate multi-property calendar is not implemented in this slice.
