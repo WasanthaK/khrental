@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
-import {createServer as createViteServer} from 'vite';
+import {createServer as createViteServer,transformWithEsbuild} from 'vite';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
 
@@ -33,14 +33,14 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(source.endsWith('/services/platformClient')){return '\0enquiry-platform';}
   if(source.endsWith('/services/mssqlApiClient')){return '\0enquiry-mssql';}
   if(source.endsWith('/utils/env')||source.endsWith('/utils/env.js')){return '\0enquiry-env';}
-},load(id){
-  if(id==='\0enquiry-proof.jsx'){return entry;}
+},async load(id){
+  if(id==='\0enquiry-proof.jsx'){return transformWithEsbuild(entry,'enquiry-proof.jsx',{loader:'jsx',jsx:'automatic'});}
   if(id==='\0enquiry-auth'){return fixtureAuth;}
   if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>false;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw new Error(p.error);return p.data;};`;}
 }};
-let vite,browser,server;let row=null,submissions=0,ownerWrites=0,failNext=false;
+let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false;
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
@@ -65,9 +65,19 @@ try {
     '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@id/__x00__enquiry-proof.jsx"></script></body></html>')));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin='http://127.0.0.1:'+server.address().port;
+  if(process.env.ENQUIRY_FIXTURE_ONLY==='true'){
+    for(const resource of ['/@id/__x00__enquiry-proof.jsx','/src/pages/PropertyEnquiry.jsx','/@id/__x00__enquiry-auth']){
+      const response=await fetch(origin+resource);
+      const compiled=await response.text();
+      assert.equal(response.status,200);
+      assert.ok(!compiled.includes('.render(<BrowserRouter>'),'Virtual fixture JSX must be compiled');
+      console.log('FIXTURE_COMPILE=PASS '+resource);
+    }
+  } else {
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
-  const page=await browser.newPage();const errors=[];
-  page.on('pageerror',e=>errors.push(e.message));
+  const page=await browser.newPage();activePage=page;const errors=[];
+  page.on('pageerror',e=>{errors.push(e.message);console.error('FIXTURE_PAGE_ERROR='+e.message);});
+  page.on('response',r=>{if(r.status()>=400){console.error('FIXTURE_HTTP_ERROR='+r.status()+' '+r.url());}});
   await page.setRequestInterception(true);
   page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
   await page.setViewport({width:1280,height:900});
@@ -109,6 +119,15 @@ try {
   assert.equal(await page.$('textarea'),null);
   assert.deepEqual(errors,[]);
   console.log('PROPERTY_ENQUIRIES_BROWSER=PASS listing_login_return consent retry inbox_reply mobile withdrawal default_off');
+  }
+} catch(error) {
+  if(activePage){
+    console.error('FIXTURE_VISIBLE_STATE='+await activePage.$eval('body',e=>e.innerText.slice(0,2000)).catch(()=>''));
+    const output=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
+    await fs.mkdir(output,{recursive:true});
+    await activePage.screenshot({path:path.join(output,'failure.png'),fullPage:true}).catch(()=>{});
+  }
+  throw error;
 } finally {
   await browser?.close();await vite?.close();
   if(server){await new Promise(r=>server.close(r));}
