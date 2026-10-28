@@ -24,7 +24,7 @@ BEGIN
   CONSTRAINT CK_property_rental_offers_dates CHECK(end_date>start_date AND hold_until>offer_until),
   CONSTRAINT CK_property_rental_offers_currency CHECK(currency IN('LKR','BND')),
   CONSTRAINT CK_property_rental_offers_terms CHECK(LEN(LTRIM(RTRIM(terms)))>0 AND LEN(terms)<=8000),
-  CONSTRAINT CK_property_rental_offers_acceptance CHECK(status IN('offered','declined','withdrawn','expired','invalidated') OR (accepted_at IS NOT NULL AND consent_version='rental-offer-v1')),
+  CONSTRAINT CK_property_rental_offers_acceptance CHECK(status IN('offered','declined','withdrawn','expired','invalidated') OR (accepted_at IS NOT NULL AND consent_version IS NOT NULL AND consent_version='rental-offer-v1')),
   CONSTRAINT CK_property_rental_offers_agreement CHECK(status<>'agreement' OR agreement_id IS NOT NULL)
  );
  CREATE INDEX IX_property_rental_offers_property ON dbo.property_rental_offers(tenant_id,property_id,status,hold_until);
