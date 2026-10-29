@@ -23,13 +23,15 @@ const fixtureAuth=`import {useEffect,useState} from 'react';
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
   import {BrowserRouter,Routes,Route} from 'react-router-dom';
   import PropertyEnquiry from '/src/pages/PropertyEnquiry.jsx';
+  import SeekerHome from '/src/pages/SeekerHome.jsx';
+  import RentalJourney from '/src/pages/RentalJourney.jsx';
   import OwnerEnquiries from '/src/pages/OwnerEnquiries.jsx';
   import Login from '/src/pages/Login.jsx';
   import SeekerSignUp from '/src/pages/SeekerSignUp.jsx';
   import VerifySeekerEmail from '/src/pages/VerifySeekerEmail.jsx';
   import '/src/index.css';
   createRoot(document.getElementById('root')).render(<BrowserRouter><Routes>
-    <Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
+    <Route path="/seeker" element={<SeekerHome user={{id:"synthetic-profile",role:"authenticated",user_type:"seeker",tenant_id:null}} membership={null} memberships={[]} tenantContextVerified={true}/>}/><Route path="/rental-journey" element={<RentalJourney/>}/><Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
     <Route path="/seeker-sign-up" element={<SeekerSignUp/>}/><Route path="/verify-email" element={<VerifySeekerEmail/>}/>
     <Route path="/dashboard/enquiries" element={<OwnerEnquiries/>}/></Routes></BrowserRouter>);`;
 const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,importer){
@@ -101,6 +103,7 @@ try {
       res.json({data:applicationState()});
     }catch(err){res.status(err.status||500).json({code:err.code,error:err.message});}
   });
+  app.get('/api/property-enquiries/journey',(req,res)=>res.json({data:{items:row?[row]:[],hasMore:false}}));
   app.get('/api/property-enquiries',(req,res)=>res.json({data:{items:row?[row]:[],hasMore:false}}));
   app.post('/api/property-enquiries',(req,res)=>{
     submissions++;
@@ -146,6 +149,34 @@ try {
   await page.click('button[type="submit"]');
   await page.waitForSelector('textarea');
   console.log('BROWSER_STAGE=login_return');
+  // Customer experience: a fresh account always has a useful next action.
+  const uxOutput=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
+  await fs.mkdir(uxOutput,{recursive:true});
+  await page.click('nav[aria-label="Your rental search"] a[href="/seeker"]');
+  await page.waitForSelector('#browse-rentals');
+  assert.equal(await page.$eval('a[href="https://quixo.homes/lk/search/"]',e=>e.textContent),'Browse Sri Lanka');
+  assert.equal(await page.$eval('a[href="https://quixo.homes/bn/search/"]',e=>e.textContent),'Browse Brunei');
+  assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/not currently linked|No properties, leases|subscription billing/);
+  await page.screenshot({path:path.join(uxOutput,'seeker-overview-desktop.png'),fullPage:true});
+  await page.setViewport({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Overview fits mobile');
+  await page.screenshot({path:path.join(uxOutput,'seeker-overview-mobile.png'),fullPage:true});
+  await page.click('nav[aria-label="Your rental search"] a[href="/enquire"]');
+  await page.waitForSelector('.seeker-empty');
+  assert.equal(await page.$eval('.seeker-empty a',e=>e.getAttribute('href')),'/seeker#browse-rentals');
+  assert.equal(await page.$('.seeker-pagination'),null,'An empty first page has no paging controls');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Empty inbox fits mobile');
+  await page.screenshot({path:path.join(uxOutput,'seeker-empty-enquiries-mobile.png'),fullPage:true});
+  await page.click('nav[aria-label="Your rental search"] a[href="/rental-journey"]');
+  await page.waitForSelector('.seeker-empty');
+  assert.equal(await page.$('.seeker-pagination'),null);
+  assert.ok(await page.$('.seeker-empty a[href="/seeker#browse-rentals"]'));
+  await page.setViewport({width:1280,height:900});
+  await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-desktop.png'),fullPage:true});
+  await page.goto(origin+'/enquire?listingId='+listingId+'&country=LK',{waitUntil:'networkidle0'});
+  await page.waitForSelector('textarea');
+  console.log('SEEKER_UX_BROWSER=PASS overview markets useful_empty_states consistent_navigation mobile no_empty_pagination');
+
   assert.equal(new URL(page.url()).searchParams.get('listingId'),listingId);
   await page.type('textarea','May I arrange a viewing?');
   assert.equal(await page.$eval('form button',e=>e.disabled),true);

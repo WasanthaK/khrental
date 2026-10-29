@@ -125,10 +125,10 @@ const Login = () => {
         <div>
           <p className="page-kicker text-center">Quixo.Homes</p>
           <h1 className="auth-title mt-3">
-            Sign in to your workspace
+            Welcome back
           </h1>
           <p className="auth-subtitle">
-            Use your account to access tenant-aware dashboards, billing, agreements, and administration tools.
+            Sign in to continue your rental search or manage your properties.
           </p>
           
           {devBypassActive && (
@@ -179,11 +179,11 @@ const Login = () => {
           <div className="flex items-center justify-between">
             <div className="text-sm">
               {!enquiryReturnPath(location.search)&&<Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                Create account
+                For property owners
               </Link>}
               {isPublicSignupUiEnabled() && (
                 <Link to={'/seeker-sign-up'+enquiryLoginSearch(location.search)} className="ml-3 font-medium text-blue-600 hover:text-blue-500">
-                  Create seeker account
+                  Find a rental · Create free account
                 </Link>
               )}
             </div>

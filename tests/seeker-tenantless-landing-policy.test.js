@@ -71,8 +71,9 @@ test('global user role, unlinked test renter and platform admin never become see
 test('seeker UI remains standalone with no tenant APIs, billing operations or links', async () => {
   assert.match(page, /isVerifiedTenantlessSeeker/);
   assert.match(page, /if \(!allowed\)/);
-  assert.match(page, /Your seeker account/);
-  assert.match(page, /not currently linked to any rental organization/);
+  assert.match(page, /Your next move starts here/);
+  assert.match(page, /Browse \{name\}/);
+  assert.doesNotMatch(page, /not currently linked|subscription billing|No properties, leases/);
   assert.doesNotMatch(page, /fetch\(|requestMssqlApi|platformClient|localStorage|sessionStorage/);
   assert.doesNotMatch(page, /href="\/dashboard|href="\/rentee|\/api\/platform\/query|stripe/i);
   assert.match(routes, /VerifiedSeekerBoundary/);

@@ -1,3 +1,4 @@
+import SeekerLayout from '../components/layouts/SeekerLayout';
 import {useEffect,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
@@ -18,21 +19,20 @@ const RentalJourney=()=>{
     return()=>{active=false;};
   },[identity,loading,isAuthenticated,offset]);
   const current=snapshot?.identity===identity&&isAuthenticated?snapshot:null;
-  return <main className="max-w-4xl mx-auto p-6 space-y-5">
-    <h1 className="text-3xl font-semibold">My rental journey</h1>
-    <p>Your property enquiries, versioned offers and agreement continuation remain attached to your existing account.</p>
+  return <SeekerLayout active="offers"><div className="space-y-5">
+    <div className="seeker-page-heading"><div><p className="seeker-kicker">Your next chapter</p><h1>Offers & agreements</h1>
+    <p className="seeker-intro">Review offers from property owners and follow your agreement’s next steps.</p></div><Link className="seeker-button seeker-button-secondary" to="/enquire">My enquiries</Link></div>
     {!loading&&!isAuthenticated&&<Link to="/login" className="underline">Sign in to continue</Link>}
     {error&&<p role="alert" className="text-red-700">{error}</p>}
     {isAuthenticated&&!current&&!error&&<p role="status">Loading rental journey…</p>}
-    {current?.items.length===0&&<p>No rental enquiries on this page.</p>}
-    {current?.items.map(item=><article key={identity+':'+item.id} className="border rounded-xl p-5 space-y-3">
+    {current?.items.length===0&&<div className="seeker-empty"><div className="seeker-empty-icon" aria-hidden="true">⌂</div><h2>{offset>0?'You’ve reached the end':'A place to plan your next move'}</h2><p>{offset>0?'Go back to see earlier enquiries and offers.':'When an owner makes you a rental offer, you can review its terms here. Start by finding a property and contacting its owner.'}</p><Link className="seeker-button" to="/seeker#browse-rentals">Find a rental</Link></div>}
+    {current?.items.map(item=><article key={identity+':'+item.id} className="seeker-card space-y-3">
       <h2 className="text-xl font-semibold">{item.title}</h2><p>Enquiry: {item.status}</p>
       <p className="whitespace-pre-wrap">{item.message}</p>{item.response&&<p className="whitespace-pre-wrap">Owner response: {item.response}</p>}
       <PropertyOffer enquiry={item} call={call} />
     </article>)}
-    {current&&<div className="flex gap-4"><button disabled={offset===0} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
+    {current&&(offset>0||current.hasMore)&&<div className="seeker-pagination"><button disabled={offset===0} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
       <button disabled={!current.hasMore} onClick={()=>setOffset(n=>n+50)}>Next</button></div>}
-    <Link to="/enquire" className="underline">Property enquiries and viewing appointments</Link>
-  </main>;
+    </div></SeekerLayout>;
 };
 export default RentalJourney;

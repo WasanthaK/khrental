@@ -97,7 +97,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
         ) : (
           <form onSubmit={redeem} className="mt-6 space-y-4">
             <p className="text-sm text-slate-600">
-              Set a password to complete your global seeker account. Joining a property-management organization is a separate step.
+              Choose a password for your free account. Then sign in to contact owners and follow your rental search.
             </p>
             <label htmlFor="seeker-password" className="block text-sm font-medium text-slate-700">
               Password
