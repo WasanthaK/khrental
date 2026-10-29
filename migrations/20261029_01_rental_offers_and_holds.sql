@@ -68,11 +68,15 @@ BEGIN
  WHERE EXISTS(SELECT 1 FROM inserted i WHERE i.propertyid=p.id AND i.tenant_id=p.tenant_id);
  IF EXISTS(SELECT 1 FROM inserted i JOIN dbo.agreements a WITH(UPDLOCK,HOLDLOCK)
   ON a.tenant_id=i.tenant_id AND a.propertyid=i.propertyid AND a.id<>i.id
-  WHERE i.status=''active'' AND a.status=''active'' AND (i.unitid IS NULL OR a.unitid IS NULL OR i.unitid=a.unitid))
+  WHERE i.status=''active'' AND NOT EXISTS(SELECT 1 FROM deleted d WHERE d.id=i.id AND d.status=''active''
+    AND d.tenant_id=i.tenant_id AND d.propertyid=i.propertyid
+    AND ISNULL(CONVERT(VARCHAR(36),d.unitid),'''')=ISNULL(CONVERT(VARCHAR(36),i.unitid),'''')) AND a.status=''active'' AND (i.unitid IS NULL OR a.unitid IS NULL OR i.unitid=a.unitid))
   THROW 51101,''RENTAL_OCCUPANCY_CONFLICT'',1;
  IF EXISTS(SELECT 1 FROM inserted i JOIN dbo.property_rental_offers o WITH(UPDLOCK,HOLDLOCK)
   ON o.tenant_id=i.tenant_id AND o.property_id=i.propertyid
-  WHERE i.status=''active'' AND o.status IN(''accepted'',''agreement'') AND o.hold_until>SYSUTCDATETIME()
+  WHERE i.status=''active'' AND NOT EXISTS(SELECT 1 FROM deleted d WHERE d.id=i.id AND d.status=''active''
+    AND d.tenant_id=i.tenant_id AND d.propertyid=i.propertyid
+    AND ISNULL(CONVERT(VARCHAR(36),d.unitid),'''')=ISNULL(CONVERT(VARCHAR(36),i.unitid),'''')) AND o.status IN(''accepted'',''agreement'') AND o.hold_until>SYSUTCDATETIME()
    AND (o.agreement_id IS NULL OR o.agreement_id<>i.id)
    AND (i.unitid IS NULL OR o.unit_id IS NULL OR i.unitid=o.unit_id))
   THROW 51101,''RENTAL_OCCUPANCY_CONFLICT'',1;
