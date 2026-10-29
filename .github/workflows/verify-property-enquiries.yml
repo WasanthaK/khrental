@@ -9,6 +9,8 @@ on:
       - 'src/utils/enquiryReturnPath.js'
       - 'src/services/seekerContextClient.js'
       - 'src/routes.jsx'
+      - 'src/main.jsx'
+      - 'src/App.jsx'
       - 'src/pages/Login.jsx'
       - 'src/pages/SeekerSignUp.jsx'
       - 'src/pages/VerifySeekerEmail.jsx'
@@ -45,6 +47,7 @@ on:
       - 'tests/property-enquiries.test.js'
       - 'tests/enquiry-registration-continuation.test.js'
       - 'scripts/test-property-enquiries-*.mjs'
+      - 'scripts/test-seeker-verification-browser.mjs'
       - '.github/workflows/verify-property-enquiries.yml'
   workflow_dispatch:
 permissions:
@@ -73,6 +76,8 @@ jobs:
         env:
           ENQUIRY_PROOF_DIR: enquiry-browser-proof
         run: node scripts/test-property-enquiries-browser.mjs
+      - name: Seeker verification through actual application entry
+        run: node scripts/test-seeker-verification-browser.mjs
       - name: Rental offers and agreement continuation browser proof
         run: node scripts/test-rental-offers-browser.mjs
       - uses: actions/upload-artifact@v4
