@@ -1,14 +1,13 @@
 // B04 S3c foundation. Not connected to src/routes.jsx until the governed
 // S3a migration, shared durable limiter and S3b2 API release gates are green.
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { consumeSeekerVerificationContext } from '../utils/seekerVerificationFragment';
 import { isPublicSignupUiEnabled } from '../utils/env';
 
 const permitted = isPublicSignupUiEnabled();
 
-const VerifySeekerEmail = () => {
-  const [{token,enquirySearch}] = useState(() => consumeSeekerVerificationContext({
+const VerifySeekerEmail = ({ initialContext } = {}) => {
+  const [{token,enquirySearch}] = useState(() => initialContext ?? consumeSeekerVerificationContext({
     location: typeof window === 'undefined' ? null : window.location,
     history: typeof window === 'undefined' ? null : window.history
   }));
@@ -76,7 +75,7 @@ const VerifySeekerEmail = () => {
             Registration is not available yet
           </h1>
           <p className="mt-4 text-slate-600">Online email verification has not been enabled.</p>
-          <Link to={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">Back to sign in</Link>
+          <a href={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">Back to sign in</a>
         </section>
       </main>
     );
@@ -122,10 +121,11 @@ const VerifySeekerEmail = () => {
           </form>
         )}
         {status==='complete'&&<p className="mt-4 text-sm text-slate-600">If another account is signed in, sign out of it or use a private window to continue with your new account.</p>}
-        <Link to={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">
+        {/* Full navigation leaves the isolated credential entry and boots the normal app. */}
+        <a href={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">
           {status === 'complete' ? 'Continue to sign in' : 'Back to sign in'}
-        </Link>
-        {status!=='complete'&&<Link to={'/seeker-sign-up'+enquirySearch} className="mt-4 block text-blue-700 underline">Request a new verification link</Link>}
+        </a>
+        {status!=='complete'&&<a href={'/seeker-sign-up'+enquirySearch} className="mt-4 block text-blue-700 underline">Request a new verification link</a>}
       </section>
     </main>
   );

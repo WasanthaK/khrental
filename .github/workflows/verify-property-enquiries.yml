@@ -9,6 +9,8 @@ on:
       - 'src/utils/enquiryReturnPath.js'
       - 'src/services/seekerContextClient.js'
       - 'src/routes.jsx'
+      - 'src/main.jsx'
+      - 'src/App.jsx'
       - 'src/pages/Login.jsx'
       - 'src/pages/SeekerSignUp.jsx'
       - 'src/pages/VerifySeekerEmail.jsx'
@@ -45,6 +47,7 @@ on:
       - 'tests/property-enquiries.test.js'
       - 'tests/enquiry-registration-continuation.test.js'
       - 'scripts/test-property-enquiries-*.mjs'
+      - 'scripts/test-seeker-verification-browser.mjs'
       - '.github/workflows/verify-property-enquiries.yml'
   workflow_dispatch:
 permissions:
@@ -63,6 +66,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Seeker verification through actual application entry
+        run: node scripts/test-seeker-verification-browser.mjs
       - run: node --test tests/rental-offers.test.js tests/property-applications.test.js tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server

@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Website acceptance correction — seeker verification, 2026-10-29
+
+The protected rental-offer release is LIVE: preflight #40884956520 and public activation #40885569427 passed on accepted build `39068ecef4ef0fff998423c3c2fceb6303b51c54`, including strict 17/17 schema and Single/min=max=1 checks. This technical release does not close real participant agreement-to-tenancy acceptance or a major canonical milestone; #459 remains open and subscriptions remain deferred.
+
+The owner-authorized seeker registration email reached the owner, but the verification screen reported “This link is missing or invalid” before password setup. Account creation, normal seeker login and the downstream enquiry/offer journey are not accepted. The page destructively scrubbed the fragment in a React initializer inside the tenant-keyed application shell. Existing-account hydration can replace that tree and discard the only in-memory token; issuing another link alone does not repair that lifecycle.
+
+The bounded correction captures and scrubs verification context once at the browser entry, renders verification outside owner auth/tenant initialization, and uses full navigation when leaving this isolated entry. Failed scrub and malformed tokens still deny setup; redemption remains explicit and anonymous, preserving any existing stored session. The actual-entry browser regression uses synthetic tokens/API only and covers owner hydration, StrictMode, no implicit redemption, token privacy, session preservation and return navigation. Live email/password acceptance remains required after deployment; never bypass verification or fabricate signatures, deposits or occupancy to close #459.
+
 ## Private pilot preparation — status reconciliation, 2026-10-27
 
 Authenticated administrator release-preview acceptance is complete for the selected pilot property: the scoped production eligibility check passed, the public-field allowlist was reviewed, and the prepared derivative loaded and was approved under the previously confirmed rights/privacy scope. Private property details, preview identifiers, field values and image references are intentionally omitted from this update.
