@@ -115,6 +115,20 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  const activationRace=await Promise.allSettled([insertActive(null),insertActive(occupancy.unitIds[0])]);
  assert.equal(activationRace.filter(x=>x.status==='fulfilled').length,1);
  assert.equal((await q("SELECT COUNT(*) AS n FROM agreements WHERE propertyid=@id AND status='active'",{id:occupancy.id}))[0].n,1);
+ // Historical overlaps are fixture-only setup. Existing non-occupancy
+ // edits must work; new insertions and dwelling changes must still fail.
+ const legacy=await property(1),legacyWhole=uuid(),legacyUnit=uuid();
+ await q('DISABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
+ try{
+  await q("INSERT agreements(id,tenant_id,propertyid,unitid,status) VALUES(@id,@tenantId,@propertyId,NULL,'active'),(@otherId,@tenantId,@propertyId,@unitId,'active')",
+   {id:legacyWhole,otherId:legacyUnit,tenantId:owner.tenantId,propertyId:legacy.id,unitId:legacy.unitIds[0]});
+ }finally{await q('ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');}
+ await q('UPDATE agreements SET terms=@terms WHERE id=@id',{id:legacyWhole,terms:JSON.stringify({billingDay:10})});
+ assert.equal(JSON.parse((await q('SELECT terms FROM agreements WHERE id=@id',{id:legacyWhole}))[0].terms).billingDay,10);
+ await assert.rejects(q("INSERT agreements(id,tenant_id,propertyid,status) VALUES(@id,@tenantId,@propertyId,'active')",{id:uuid(),tenantId:owner.tenantId,propertyId:legacy.id}),e=>e.number===51101);
+ const movable=uuid(),empty=await property();
+ await q("INSERT agreements(id,tenant_id,propertyid,status) VALUES(@id,@tenantId,@propertyId,'active')",{id:movable,tenantId:owner.tenantId,propertyId:empty.id});
+ await assert.rejects(q('UPDATE agreements SET propertyid=@propertyId WHERE id=@id',{id:movable,propertyId:legacy.id}),e=>e.number===51101);
  const expiry=await property(),exp=await candidate(expiry);
  const original= request('issue',0,true,terms());await store.change(owner,exp.id,original,true);
  await store.change(exp.actor,exp.id,request('accept',1,false,{consent:true}));
@@ -151,5 +165,5 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>[51101,51103].includes(e.number));
  await store.change(repeat.actor,repeat.id,request('withdraw',7));
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>e.number===51103);
- console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race active_occupancy_race catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
+ console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race active_occupancy_race legacy_nonoccupancy_edit catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
 };
