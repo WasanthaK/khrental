@@ -2,7 +2,7 @@
 // A release flag ALONE is never sufficient; trusted ingress and a separately
 // approved pilot, persistent SQL quota, pinned mail origin and sender are required.
 import express from 'express';
-import { createPublicSignupRouter } from './publicSignupRegistrationRouter.js';
+import { createPublicSignupRouter, reportPublicSignupUnavailable } from './publicSignupRegistrationRouter.js';
 import { beginPublicSignupChallenge, completePublicSignupChallengeDelivery } from './publicSignupChallengeService.js';
 import { redeemPublicSignupChallenge } from './publicSignupRedemption.js';
 import { createSqlPublicSignupLimiter } from './publicSignupSqlLimiter.js';
@@ -99,7 +99,10 @@ export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
     }
     // This also prevents reading request bodies when the Azure peer cannot
     // be independently matched against the explicitly approved peer list.
-    if (!address(req)) { res.status(503).json(unavailable); return; }
+    if (!address(req)) {
+      reportPublicSignupUnavailable('ingress_client_address');
+      res.status(503).json(unavailable); return;
+    }
     next();
   });
   // Mount before the app-wide 10 MB JSON parser: enforce a separate 8 KB

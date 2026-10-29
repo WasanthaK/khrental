@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import { request as httpRequest } from 'node:http';
 import { createApprovedSignupPeerPredicate, createPublicSignupRuntime } from '../src/api/auth/publicSignupRuntime.js';
 
 const serve = async (runtime, fn) => {
@@ -85,4 +86,34 @@ test('production signup pilot flags alone cannot open registration without one m
     assert.equal(r.status, 404);
     assert.equal((await r.json()).code, 'PUBLIC_SIGNUP_DISABLED');
   });
+});
+
+test('ingress 503 is diagnosed before parsing without logging client addresses or body', async t => {
+  const logged = [];
+  t.mock.method(console, 'error', (...parts) => logged.push(parts));
+  await serve(createPublicSignupRuntime({config:{
+    PUBLIC_SIGNUP_ENABLED:'true', PUBLIC_SIGNUP_PILOT_APPROVED:'true'
+  }}), async origin => {
+    const body = 'private-invalid-json-token-password';
+    const r = await new Promise((resolve, reject) => {
+      // Native fetch controls Host itself; use the HTTP fixture client to
+      // represent the actual pinned host/origin while retaining a local socket.
+      const req = httpRequest(origin+'/api/public-signup/redeem', {
+        method:'POST',headers:{'content-type':'application/json',host:'app.quixo.homes',
+          origin:'https://app.quixo.homes','x-forwarded-for':'203.0.113.99',
+          'content-length':Buffer.byteLength(body)}
+      }, response => {
+        let text = '';
+        response.on('data', chunk => {text += chunk;});
+        response.on('end', () => resolve({status:response.statusCode,body:JSON.parse(text)}));
+      });
+      req.on('error', reject);
+      req.end(body);
+    });
+    assert.equal(r.status,503);
+    assert.equal(r.body.code,'PUBLIC_SIGNUP_NOT_READY');
+  });
+  assert.deepEqual(logged,[['[PublicSignupUnavailable]',{
+    stage:'ingress_client_address',category:'UNCLASSIFIED'
+  }]]);
 });

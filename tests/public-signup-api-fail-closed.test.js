@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { readFileSync } from 'node:fs';
-import { createPublicSignupRouter } from '../src/api/auth/publicSignupRegistrationRouter.js';
+import { createPublicSignupRouter, reportPublicSignupUnavailable } from '../src/api/auth/publicSignupRegistrationRouter.js';
 
 const serverSource = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const authSource = readFileSync(new URL('../src/api/auth/index.js', import.meta.url), 'utf8');
@@ -183,4 +183,71 @@ test('single-mailbox canary refuses other addresses without email or account act
     assert.equal(redeemed.status, 201);
     assert.equal(harness.calls.find(c => c.kind === 'redeem').expectedEmail, pilotEmail);
   });
+});
+
+test('unexpected redemption failures report their stage without exposing request or driver data', async t => {
+  const logged = [];
+  t.mock.method(console, 'error', (...parts) => logged.push(parts));
+  const sensitive = 'opaque-token password salt email@example.invalid SELECT private_data';
+  const cases = [
+    ['redeem_client_address', 'UNCLASSIFIED', h => {h.clientAddress = () => null;}],
+    ['redeem_ip_quota', 'SQL_PERMISSION', h => {h.limiter.consume = async () => {throw Object.assign(new Error(sensitive), {number:229});};}],
+    ['redemption', 'SQL_WRITE_CONTRACT', h => {h.redeem = async () => {throw Object.assign(new Error(sensitive), {originalError:{info:{number:547,message:sensitive}}});};}],
+    ['redemption_result', 'UNCLASSIFIED', h => {h.redeem = async () => ({role:'admin', tenantId:'private-tenant'});}],
+    ['identity_readback', 'UNCLASSIFIED', h => {h.findAuth = async () => null;}],
+    ['identity_readback', 'TIMEOUT', h => {h.findAuth = async () => {throw Object.assign(new Error(sensitive), {code:'ETIMEOUT'});};}],
+    ['session_issue', 'CONNECTION', h => {h.createSession = async () => {throw Object.assign(new Error(sensitive), {code:'ECONNCLOSED'});};}]
+  ];
+  for (const [stage, category, alter] of cases) {
+    logged.length = 0;
+    const {adapters} = createHarness();
+    alter(adapters);
+    await withHttp(createPublicSignupRouter(adapters), async post => {
+      const response = await post('/redeem', {token:sensitive, password:sensitive});
+      assert.equal(response.status, 503);
+      assert.deepEqual(response.body, {error:'Public registration is temporarily unavailable.', code:'PUBLIC_SIGNUP_NOT_READY'});
+    });
+    assert.deepEqual(logged, [['[PublicSignupUnavailable]', {stage, category}]]);
+    assert.ok(!JSON.stringify(logged).includes(sensitive));
+  }
+});
+
+test('diagnostic categories are fixed even for hostile stage, code and limiter fields', t => {
+  const logged = [];
+  t.mock.method(console, 'error', (...parts) => logged.push(parts));
+  const secret = 'do-not-log-this-private-value';
+  reportPublicSignupUnavailable(secret, {code:secret,message:secret,number:secret,request:{password:secret}});
+  reportPublicSignupUnavailable('redeem_ip_quota', {code:'PUBLIC_SIGNUP_LIMITER_NOT_READY',diagnosticCategory:secret});
+  reportPublicSignupUnavailable('redeem_ip_quota', {code:'PUBLIC_SIGNUP_LIMITER_NOT_READY',diagnosticCategory:'SQL_THROTTLED'});
+  assert.deepEqual(logged.map(parts => parts[1]), [
+    {stage:'unknown',category:'UNCLASSIFIED'},
+    {stage:'redeem_ip_quota',category:'LIMITER_UNAVAILABLE'},
+    {stage:'redeem_ip_quota',category:'SQL_THROTTLED'}
+  ]);
+  assert.ok(!JSON.stringify(logged).includes(secret));
+});
+
+test('diagnostic sink failure cannot replace the existing 503 response', async t => {
+  t.mock.method(console, 'error', () => {throw new Error('Sink unavailable');});
+  const {adapters} = createHarness();
+  adapters.redeem = async () => {throw new Error('Private failure');};
+  await withHttp(createPublicSignupRouter(adapters), async post => {
+    assert.equal((await post('/redeem', {token:'synthetic',password:'synthetic'})).status, 503);
+  });
+});
+
+test('successful signup and expected invalid challenges do not emit unavailable diagnostics', async t => {
+  const logged = [];
+  t.mock.method(console, 'error', (...parts) => logged.push(parts));
+  const {adapters} = createHarness();
+  await withHttp(createPublicSignupRouter(adapters), async post => {
+    assert.equal((await post('/redeem', {token:'synthetic',password:'synthetic'})).status, 201);
+  });
+  for (const code of ['SIGNUP_VERIFICATION_UNAVAILABLE','SIGNUP_PASSWORD_INVALID','SIGNUP_IDENTITY_ALREADY_EXISTS']) {
+    adapters.redeem = async () => {throw Object.assign(new Error('Private expected failure'),{code});};
+    await withHttp(createPublicSignupRouter(adapters), async post => {
+      assert.equal((await post('/redeem', {token:'synthetic',password:'synthetic'})).status, 400);
+    });
+  }
+  assert.deepEqual(logged, []);
 });
