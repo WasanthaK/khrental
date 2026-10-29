@@ -173,7 +173,8 @@ try {
   assert.ok(await page.$('.seeker-empty a[href="/seeker#browse-rentals"]'));
   await page.setViewport({width:1280,height:900});
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-desktop.png'),fullPage:true});
-  await page.goto(origin+'/enquire?listingId='+listingId+'&country=LK',{waitUntil:'networkidle0'});
+  // Return through client history: the isolated fixture intentionally holds auth in memory.
+  await page.goBack();await page.goBack();await page.goBack();
   await page.waitForSelector('textarea');
   console.log('SEEKER_UX_BROWSER=PASS overview markets useful_empty_states consistent_navigation mobile no_empty_pagination');
 
