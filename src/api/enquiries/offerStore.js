@@ -45,8 +45,14 @@ export const createOfferStore=({poolProvider}={})=>{
   const eligible=async(q,e)=>Boolean((await q(`SELECT TOP(1) p.id ${PUBLIC_LISTING_ELIGIBILITY_SQL}
     AND p.id=@propertyId AND p.tenant_id=@tenantId AND pref.public_id=@listingId AND pref.country_code=@country`,
   {propertyId:e.property_id,tenantId:e.tenant_id,listingId:e.listing_public_id,country:e.country_code}))[0]);
-  const checkDwelling=async(q,e,unitId)=>{
+  const checkDwelling=async(q,e,unitId,parentStatus)=>{
     const args={propertyId:e.property_id,tenantId:e.tenant_id,unitId};
+    if(!unitId){
+      const unavailable=(await q("SELECT TOP(1) id FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK) WHERE propertyid=@propertyId AND tenant_id=@tenantId AND LOWER(COALESCE(status,''))<>'available'",args))[0];
+      if(!['active','available'].includes(String(parentStatus||'').toLowerCase())||unavailable){
+        throw conflict('RENTAL_DWELLING_UNAVAILABLE','The whole property is unavailable. Select an available unit or review the property and unit statuses.');
+      }
+    }
     if(unitId){
       const unit=(await q(`SELECT id,unitnumber FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK)
         WHERE id=@unitId AND propertyid=@propertyId AND tenant_id=@tenantId AND LOWER(status)='available'`,args))[0];
@@ -87,7 +93,7 @@ export const createOfferStore=({poolProvider}={})=>{
         if(!today||input.startDate<today||Date.parse(input.offerUntil)<=now.getTime()||Date.parse(input.holdUntil)>now.getTime()+90*86400000){
           throw conflict('RENTAL_DATES_UNAVAILABLE','Choose future deadlines within 90 days and a current or future rental start date.');
         }
-        await checkDwelling(q,e,input.unitId);
+        await checkDwelling(q,e,input.unitId,parent.status);
         const unit=input.unitId?(await q('SELECT unitnumber FROM dbo.property_units WHERE id=@id',{id:input.unitId}))[0]:null;
         const args={id,tenantId:e.tenant_id,propertyId:e.property_id,unitId:input.unitId,unitLabel:unit?.unitnumber||null,
           applicationVersion:ap.version,currency:{LK:'LKR',BN:'BND'}[e.country_code],rent:input.rent,deposit:input.deposit,fees:input.fees,
@@ -103,7 +109,7 @@ export const createOfferStore=({poolProvider}={})=>{
             !['pending','responded'].includes(e.status)||!await eligible(q,e)){
           throw conflict('RENTAL_OFFER_UNAVAILABLE','This offer or application is no longer available for acceptance.');
         }
-        await checkDwelling(q,e,old.unit_id);
+        await checkDwelling(q,e,old.unit_id,parent.status);
         await q("UPDATE dbo.property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),consent_version='rental-offer-v1',version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id});
       }else if(input.action==='agreement'&&owner){
         if(old?.status!=='accepted'||old.hold_until<=now||ap?.status!=='accepted'||ap.version!==old.application_version||!['pending','responded'].includes(e.status)){

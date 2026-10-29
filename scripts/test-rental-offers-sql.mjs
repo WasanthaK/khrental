@@ -109,6 +109,16 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal(await available(multi),Boolean(winning.unitLabel),'Other available units remain visible');
  await store.change(winner.actor,winner.id,request('withdraw',winning.version));
  assert.equal(await available(multi),true);
+ // Whole-property availability includes every unit's authoritative status,
+ // even where legacy occupancy has no active agreement record.
+ const partial=await property(2),partialCandidate=await candidate(partial);
+ await q("UPDATE property_units SET status='occupied' WHERE id=@id",{id:partial.unitIds[0]});
+ await assert.rejects(store.change(owner,partialCandidate.id,request('issue',0,true,terms()),true),{code:'RENTAL_DWELLING_UNAVAILABLE'});
+ await store.change(owner,partialCandidate.id,request('issue',0,true,{...terms(),unitId:partial.unitIds[1]}),true);
+ await store.change(partialCandidate.actor,partialCandidate.id,request('accept',1,false,{consent:true}));
+ assert.equal(await available(partial),false);
+ await store.change(partialCandidate.actor,partialCandidate.id,request('withdraw',2));
+ assert.equal(await available(partial),true);
  // Existing active agreement writers must serialize across whole/unit records too.
  const occupancy=await property(1);
  const insertActive=unitId=>q("INSERT agreements(id,tenant_id,propertyid,unitid,status) VALUES(@id,@tenantId,@propertyId,@unitId,'active')",{id:uuid(),tenantId:owner.tenantId,propertyId:occupancy.id,unitId});
@@ -165,5 +175,5 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>[51101,51103].includes(e.number));
  await store.change(repeat.actor,repeat.id,request('withdraw',7));
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>e.number===51103);
- console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race active_occupancy_race legacy_nonoccupancy_edit catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
+ console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race partial_unit_availability active_occupancy_race legacy_nonoccupancy_edit catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
 };
