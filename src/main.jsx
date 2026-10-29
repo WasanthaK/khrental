@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { BrowserRouter } from 'react-router-dom';
+import VerifySeekerEmail from './pages/VerifySeekerEmail';
+import { consumeSeekerVerificationContext } from './utils/seekerVerificationFragment';
 import './index.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
@@ -65,4 +68,22 @@ const AppWithErrorHandling = import.meta.env.DEV ?
   <ErrorBoundary><App /></ErrorBoundary> : 
   <React.StrictMode><ErrorBoundary><App /></ErrorBoundary></React.StrictMode>;
 
-ReactDOM.createRoot(document.getElementById('root')).render(AppWithErrorHandling);
+const root = ReactDOM.createRoot(document.getElementById('root'));
+if (window.location.pathname === '/verify-email') {
+  // Capture and scrub once, before React renders or owner auth hydration can
+  // replace the tenant-scoped tree. Keep credentials in this page's memory
+  // only; neither initialize nor replace an existing account's session.
+  const initialContext = consumeSeekerVerificationContext({
+    location: window.location,
+    history: window.history
+  });
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <BrowserRouter><VerifySeekerEmail initialContext={initialContext} /></BrowserRouter>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+} else {
+  root.render(AppWithErrorHandling);
+}
