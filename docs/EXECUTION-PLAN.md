@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## Seeker redemption 503 — read-only evidence and diagnostic preparation, 2026-10-30
+
+Real seeker completion remains blocked by HTTP 503 from `/api/public-signup/redeem`; #460's successful rendering correction is not signup/login acceptance. Approved read-only production run #40970286104 passed against serving build `b1656bc1c6f39045d25a00f13085f5dbbcb82f40`: schema, application identity DML permissions, required-column/default metadata and insert-trigger absence checked. Follow-up #40970990956 passed memory-only synthetic password derivation and foreign-key inspection; only the expected app-user-to-tenant foreign key was returned, and aggregate broken seeker app/auth linkage was zero. These observations do not establish the original request's failure stage or whether that particular account exists. No production customer write, token/password inspection, email resend, schema or permission change occurred.
+
+The existing endpoint intentionally collapses request-address, limiter, redemption, identity-readback and session failures into one public 503 and currently discards the private failure evidence. The bounded next diagnostic adds only allowlisted server-side stage/category labels, with no raw error, SQL, body, token, credential, contact, IP, tenant or provider output. Public responses, normal session authority and fail-closed guards remain unchanged. Tests cover each unexpected failure stage, hostile error values, diagnostic-sink failure, ingress rejection before parsing, successful signup and expected invalid/replayed challenge handling. This diagnostic is not a root-cause correction; deployment and a controlled real verification followed by normal login remain separate acceptance gates. Keep #459 open, subscription work deferred, and do not claim an operational website from these read-only results.
+
 ## Website acceptance correction — seeker verification, 2026-10-29
 
 The protected rental-offer release is LIVE: preflight #40884956520 and public activation #40885569427 passed on accepted build `39068ecef4ef0fff998423c3c2fceb6303b51c54`, including strict 17/17 schema and Single/min=max=1 checks. This technical release does not close real participant agreement-to-tenancy acceptance or a major canonical milestone; #459 remains open and subscriptions remain deferred.
