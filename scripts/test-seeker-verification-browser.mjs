@@ -30,7 +30,7 @@ const plugin={name:'verification-bootstrap-fixture',enforce:'pre',resolveId(sour
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
-  app.get('/fixture-auth',(req,res)=>{authRequests++;releaseAuth=()=>res.json({ok:true});});
+  app.get('/fixture-auth',(req,res)=>{authRequests++;releaseAuth=()=>{if(!res.writableEnded)res.json({ok:true});};});
   app.post('/api/public-signup/redeem',(req,res)=>{
     redemptions++;
     assert.equal(req.body.token,token);
@@ -46,6 +46,7 @@ try {
   const origin='http://127.0.0.1:'+server.address().port;
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
   const page=await browser.newPage();page.setDefaultTimeout(15000);
+  page.on('pageerror',error=>console.error('VERIFICATION_FIXTURE_PAGE_ERROR='+error.message));
   await page.setRequestInterception(true);
   page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
   await page.evaluateOnNewDocument(()=>localStorage.setItem('verification-owner-marker','unchanged'));
@@ -57,6 +58,7 @@ try {
   if(releaseAuth){
     releaseAuth();
     await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
+    console.log('VERIFICATION_AUTH_HYDRATION_REPRODUCED=token_lost_after_tenant_tree_remount');
   }
   assert.equal(await page.$('#seeker-password')!==null,true,'verification form must survive application initialization');
   assert.equal(authRequests,0,'verification must not start the owner auth/tenant shell');
