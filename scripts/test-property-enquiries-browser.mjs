@@ -14,12 +14,12 @@ import {createPublicSignupVerificationLink} from '../src/api/auth/publicSignupVe
 const listingId='11111111-1111-4111-8111-111111111111';
 const enquiryId='22222222-2222-4222-8222-222222222222';
 const fixtureAuth=`import {useEffect,useState} from 'react';
-  let signedIn=false;const listeners=new Set();
+  let signedIn=!!localStorage.getItem('khrental.local.session');const listeners=new Set();
   export const getSession=async()=>({data:{session:signedIn?{access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}:null}});
   export const useAuth=()=>{const [,render]=useState(0);useEffect(()=>{const f=()=>render(x=>x+1);listeners.add(f);return()=>listeners.delete(f);},[]);
     return {user:signedIn?{id:'synthetic-auth'}:null,isAuthenticated:signedIn,loading:false,activeTenantId:'synthetic-workspace',
-      login:async()=>{signedIn=true;listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
-      logout:async()=>{signedIn=false;listeners.forEach(f=>f());},setDevBypass:()=>{}};};`;
+      login:async()=>{await fetch('/fixture/login',{method:'POST'});signedIn=true;listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
+      logout:async()=>{localStorage.removeItem('khrental.local.session');signedIn=false;listeners.forEach(f=>f());},setDevBypass:()=>{}};};`;
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
   import {BrowserRouter,Routes,Route} from 'react-router-dom';
   import PropertyEnquiry from '/src/pages/PropertyEnquiry.jsx';
@@ -49,13 +49,14 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
 }};
-let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null;
+let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null,normalLogins=0;
 let application=null,applicationsOpen=true;
 let viewing=null,viewingsOpen=true,holdViewingRead=false,releaseViewingRead=null,notifyViewingRead=null;
 const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
+  app.post('/fixture/login',(req,res)=>{normalLogins++;res.json({ok:true});});
   app.get('/api/public-listings/:id',(req,res)=>res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location'}}));
   app.get('/api/platform/auth/seeker-context',(req,res)=>res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}}));
   app.post('/api/public-signup/challenge',(req,res)=>{
@@ -67,7 +68,7 @@ try {
   app.post('/api/public-signup/redeem',(req,res)=>{
     assert.equal(req.body.token,verificationToken);assert.equal(req.get('authorization'),undefined);
     assert.equal(req.get('x-tenant-id'),undefined);
-    res.status(201).json({data:{user:{role:'authenticated',user_type:'seeker'},session:{access_token:'synthetic-registration-only'}}});
+    res.status(201).json({data:{user:{id:'synthetic-auth',role:'authenticated',user_type:'seeker'},session:{access_token:'synthetic-registration-only',user:{id:'synthetic-auth'}}}});
   });
   app.get(['/api/property-enquiries/:id/viewing','/api/owner-enquiries/:id/viewing'],(req,res)=>{
     if(!viewingsOpen){return res.status(404).json({code:'VIEWINGS_UNAVAILABLE',error:'Viewing appointments are not open yet.'});}
@@ -329,18 +330,21 @@ try {
   assert.equal(verifyPage.url(),origin+'/verify-email');
   await verifyPage.waitForSelector('#seeker-password');
   await verifyPage.type('#seeker-password','SyntheticFixtureOnly!');await verifyPage.type('#seeker-password-confirm','SyntheticFixtureOnly!');
-  await verifyPage.click('form button');await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your email has been verified'));
-  const returnHref=await verifyPage.$eval('a[href^="/login?listingId="]',e=>e.getAttribute('href'));
-  assert.ok(returnHref.includes(listingId));assert.ok(!returnHref.includes(verificationToken));
-  await verifyPage.click('a[href^="/login?listingId="]');await verifyPage.waitForSelector('#email-address');
-  await verifyPage.type('#email-address','new-seeker@example.test');await verifyPage.type('#password','SyntheticFixtureOnly!');
-  await verifyPage.click('button[type="submit"]');await verifyPage.waitForSelector('textarea');
+  const loginsBeforeVerification=normalLogins;
+  await verifyPage.click('form button');await verifyPage.waitForSelector('textarea');
+  assert.equal(new URL(verifyPage.url()).pathname,'/enquire');
   assert.equal(new URL(verifyPage.url()).searchParams.get('listingId'),listingId);
+  assert.equal(normalLogins,loginsBeforeVerification,'Email verification must not demand a second password login');
+  const afterVerification=await verifyPage.evaluate(()=>({storage:{...localStorage},url:location.href}));
+  assert.ok(!JSON.stringify(afterVerification).includes(verificationToken),'Challenge token is never persisted');
+  assert.ok(afterVerification.storage['khrental.local.session'],'Server-issued session persists for reload');
+  await verifyPage.reload({waitUntil:'networkidle0'});await verifyPage.waitForSelector('textarea');
+  assert.equal(normalLogins,loginsBeforeVerification);
   await verifyPage.type('textarea','I verified my email and returned to this rental.');
   await verifyPage.click('input[type="checkbox"]');await verifyPage.click('form button');
   await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your enquiry was saved'));
   assert.equal(submissions,3);assert.equal(row.status,'pending');
-  console.log('BROWSER_STAGE=registration_email_new_browser_login_enquiry');
+  console.log('BROWSER_STAGE=registration_email_new_browser_automatic_session_reload_enquiry');
   await page.bringToFront();activePage=page;
   await page.goto(origin+'/enquire?off=1',{waitUntil:'networkidle0'});
   assert.match(await page.$eval('body',e=>e.innerText),/not open yet/);

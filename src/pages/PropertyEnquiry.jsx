@@ -88,7 +88,7 @@ const PropertyEnquiry=()=>{
     <div className="space-y-6">
       <div className="seeker-page-heading"><div>
         <p className="seeker-kicker">Conversations & viewings</p>
-        <h1>{route?'Enquire about this property':'My enquiries'}</h1>
+        <h1>{route?'Express your interest':'My enquiries'}</h1>
         <p className="seeker-intro">{route?'Ask a question or tell the owner you’d like to arrange a viewing.':'Your conversations, viewing appointments and applications, all in one place.'}</p>
       </div><Link to="/seeker#browse-rentals" className="seeker-button">Find a rental</Link></div>
       {route && <a className="underline text-blue-800" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>Back to property</a>}
@@ -119,7 +119,7 @@ const PropertyEnquiry=()=>{
         {!items.length && <div className="seeker-empty">
           <div className="seeker-empty-icon" aria-hidden="true">↗</div>
           <h3>{offset>0?'You’ve reached the end':'Your next place starts with a conversation'}</h3>
-          <p>{offset>0?'Go back to see your earlier enquiries.':route?'Send your message above. The owner’s reply and viewing details will appear here.':'Find a rental you like and choose “Enquire” on its listing. You can ask a question or arrange a viewing with the owner.'}</p>
+          <p>{offset>0?'Go back to see your earlier enquiries.':route?'Send your message above. The owner’s reply and viewing details will appear here.':'Find a rental you like and choose “Express your interest” on its listing. You can ask a question or arrange a viewing with the owner.'}</p>
           {!route && offset===0 && <Link className="seeker-button" to="/seeker#browse-rentals">Browse rentals</Link>}
         </div>}
         {items.map(item=><article key={item.id} className="rounded-xl border bg-white p-5 space-y-2">

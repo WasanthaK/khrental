@@ -1,3 +1,5 @@
+import {loadStoredSession,saveStoredSession,clearActiveTenantId} from './requestContext.js';
+
 // B04 S3c2c: same-origin bearer-bound read-only seeker certification.
 // Do not inherit x-tenant-id, dev-bypass headers or cookies. This endpoint
 // alone cannot grant a membership or enable public registration.
@@ -74,5 +76,42 @@ export const fetchVerifiedSeekerBrowserContext = async ({
   } catch {
     // This may be a 404 disabled API, 401, missing DB or a network error.
     return denied;
+  }
+};
+
+// Called only after explicit successful email redemption. Server certification
+// is required before adopting its session; an existing different account must
+// never be replaced, including when validation or storage is unavailable.
+export const continueVerifiedSeekerSession = async ({
+  session,expectedAuthId,fetchImpl=globalThis.fetch,
+  readSession=loadStoredSession,writeSession=saveStoredSession,
+  clearTenant=clearActiveTenantId
+}={}) => {
+  try {
+    const before=readSession();
+    const fingerprint=JSON.stringify(before);
+    const unchanged=()=>JSON.stringify(readSession())===fingerprint;
+    const proof=await fetchVerifiedSeekerBrowserContext({
+      expectedAuthId,fetchImpl,getSession:async()=>({data:{session}})
+    });
+    if(!proof.verified||!proof.eligible)return {adopted:false,reason:'verification_unavailable'};
+    if(!unchanged())return {adopted:false,reason:'session_changed'};
+    if(before?.access_token && String(before.user?.id||'').toLowerCase()!==String(session.user.id).toLowerCase()){
+      const response=await fetchImpl('/api/platform/auth/context',{
+        method:'GET',headers:{Authorization:'Bearer '+before.access_token},
+        credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error'
+      });
+      if(!unchanged())return {adopted:false,reason:'session_changed'};
+      if(response.ok)return {adopted:false,reason:'another_account'};
+      // Only a definite authentication rejection permits stale-session
+      // replacement. Outages, forbidden responses and unknowns preserve it.
+      if(response.status!==401)return {adopted:false,reason:'verification_unavailable'};
+    }
+    if(!unchanged())return {adopted:false,reason:'session_changed'};
+    clearTenant();
+    writeSession(session);
+    return {adopted:true};
+  } catch {
+    return {adopted:false,reason:'verification_unavailable'};
   }
 };

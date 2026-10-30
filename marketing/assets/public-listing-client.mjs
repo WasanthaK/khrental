@@ -112,8 +112,8 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
               if(result?.data?.enquiriesOpen!==true||!panel.isConnected){return;}
               const enquire=document.createElement('a');
               enquire.href=apiOrigin+'/enquire?listingId='+encodeURIComponent(item.id)+'&country='+market;
-              enquire.textContent='Enquire about this property';panel.insertBefore(enquire,note);
-              note.textContent='An enquiry does not reserve this property or confirm a viewing. Check your enquiry for application controls when available.';
+              enquire.textContent='Express your interest';panel.insertBefore(enquire,note);
+              note.textContent='Sign in or create a free account to contact the owner. We’ll bring you back to this property.';
             }).catch(()=>{}).finally(()=>clearTimeout(timeout));
         }
         article.append(panel);

@@ -29,7 +29,7 @@ const entry=`import React,{useState} from 'react';import {createRoot} from 'reac
     <button onClick={()=>auth.logout()}>Sign out</button>
   </section>;}
   function Harness(){const [key,setKey]=useState(0);return <><button id="remount" onClick={()=>setKey(n=>n+1)}>Remount app</button><AuthProvider key={key}><Status/></AuthProvider></>;}
-  createRoot(document.getElementById('root')).render(<Harness/>);`;
+  createRoot(document.getElementById('root')).render(<React.StrictMode><Harness/></React.StrictMode>);`;
 const plugin={name:'renter-auth-fixture',enforce:'pre',resolveId(source,importer){
   if(source==='virtual:renter-auth')return '\0renter-auth-entry.jsx';
   if(!importer?.endsWith('/src/hooks/useAuth.jsx'))return;
@@ -43,7 +43,10 @@ const plugin={name:'renter-auth-fixture',enforce:'pre',resolveId(source,importer
   if(id==='\0renter-auth-mssql')return `export const isMssqlApiEnabled=()=>true;
     export const requestMssqlApi=async(_path,options)=>{
       const id=options.headers['x-auth-id'];
-      if(window.authFixture.holdProfile===id)await new Promise(resolve=>window.authFixture.releaseProfile=resolve);
+      if(window.authFixture.holdProfile===id)await new Promise(resolve=>{
+        const state=window.authFixture;state.releases??=[];state.releases.push(resolve);
+        state.releaseProfile=()=>state.releases.splice(0).forEach(release=>release());
+      });
       return {id:'profile-'+id,role:'authenticated',user_type:'seeker'};
     };`;
 }};
@@ -68,7 +71,25 @@ try {
   await page.waitForSelector('#auth-state[data-loading="false"]');
   assert.equal(await page.$eval('#auth-state',e=>e.dataset.id),'account-a',
     'A valid same-account session must hydrate after a provider remount instead of returning to sign-in');
-  console.log('RENTER_AUTH_BROWSER=PASS same_account_provider_remount');
+  // A delayed response for A must not replace the newer signed-in B.
+  await page.evaluate(()=>{window.authFixture.holdProfile='account-a';});
+  await page.click('#remount');
+  await page.waitForFunction(()=>typeof window.authFixture.releaseProfile==='function');
+  await page.click('::-p-text(Sign in B)');
+  await page.waitForSelector('#auth-state[data-id="account-b"][data-loading="false"]');
+  await page.evaluate(()=>{window.authFixture.releaseProfile();window.authFixture.holdProfile=null;});
+  await page.waitForNetworkIdle({idleTime:300});
+  assert.equal(await page.$eval('#auth-state',e=>e.dataset.id),'account-b');
+  // Also guard the explicit login path's outstanding profile request.
+  await page.evaluate(()=>{window.authFixture.holdProfile='account-a';window.authFixture.releaseProfile=null;});
+  await page.click('::-p-text(Sign in A)');
+  await page.waitForFunction(()=>typeof window.authFixture.releaseProfile==='function');
+  await page.click('::-p-text(Sign out)');
+  await page.waitForSelector('#auth-state[data-id=""][data-loading="false"]');
+  await page.evaluate(()=>{window.authFixture.releaseProfile();window.authFixture.holdProfile=null;});
+  await page.waitForNetworkIdle({idleTime:300});
+  assert.equal(await page.$eval('#auth-state',e=>e.dataset.id),'');
+  console.log('RENTER_AUTH_BROWSER=PASS same_account_provider_remount delayed_old_identity late_login_after_logout');
 } finally {
   await browser?.close();await vite?.close();
   if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}

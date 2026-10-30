@@ -19,58 +19,6 @@ const logDebug = (message, data) => {
 // Create the context (but don't export it directly)
 const AuthContext = createContext(null);
 
-// Add at the top of the file with other helpers
-const AUTH_THROTTLE_MS = 5000; // 5 seconds between auth state processing
-
-// Add a debounce/throttle mechanism for auth state changes
-const authStateRef = {
-  lastProcessedAt: 0,
-  lastUser: null,
-  pendingTimeout: null
-};
-
-// Throttled auth state processor
-const processAuthStateChange = (session, fetchUserProfile, setUserData, setLoading) => {
-  const now = Date.now();
-  
-  // Clear any pending timeouts
-  if (authStateRef.pendingTimeout) {
-    clearTimeout(authStateRef.pendingTimeout);
-    authStateRef.pendingTimeout = null;
-  }
-  
-  // If we processed auth state recently, schedule it for later
-  if (now - authStateRef.lastProcessedAt < AUTH_THROTTLE_MS) {
-    authStateRef.pendingTimeout = setTimeout(() => {
-      processAuthStateChange(session, fetchUserProfile, setUserData, setLoading);
-    }, AUTH_THROTTLE_MS - (now - authStateRef.lastProcessedAt));
-    return;
-  }
-  
-  // Update the last processed timestamp
-  authStateRef.lastProcessedAt = now;
-  
-  // Process the auth state
-  const handleAuth = async () => {
-    if (session?.user) {
-      // Only fetch profile if the user ID changed to prevent unnecessary processing
-      if (!authStateRef.lastUser || authStateRef.lastUser.id !== session.user.id) {
-        logDebug('Session user found, fetching profile');
-        const userWithProfile = await fetchUserProfile(session.user);
-        authStateRef.lastUser = session.user;
-        setUserData(userWithProfile);
-      }
-    } else {
-      logDebug('No session user, clearing user state');
-      authStateRef.lastUser = null;
-      setUserData(null);
-    }
-    setLoading(false);
-  };
-  
-  handleAuth();
-};
-
 // Create the provider component
 const AuthProvider = ({ children }) => {
   const [userData, setUserData] = useState(null);
@@ -335,53 +283,41 @@ const AuthProvider = ({ children }) => {
     logDebug('Initializing normal authentication');
     initialized.current = true;
     
-    let authSubscription = null;
-    
-    const initializeAuth = async () => {
+    let active=true;
+    let generation=0;
+    const applySession=async session=>{
+      const request=++generation;
+      setLoading(true);
       try {
-        // First check for existing session
-        const { data: { session }, error: sessionError } = await platformClient.auth.getSession();
-        
-        if (sessionError) {
-          console.error('[Auth DEBUG] Error getting session:', sessionError);
-          setError(sessionError.message);
-          setLoading(false);
-          return;
+        const profile=session?.user?await fetchUserProfile(session.user):null;
+        if(active&&request===generation){setUserData(profile);}
+      } catch {
+        if(active&&request===generation){
+          setUserData(null);setError('We couldn’t load your account. Please sign in again.');
         }
-        
-        // Use the throttled processor for consistency
-        processAuthStateChange(session, fetchUserProfile, setUserData, setLoading);
-        
-        // Set up auth state listener
-        logDebug('Setting up auth state listener');
-        const { data: { subscription } } = platformClient.auth.onAuthStateChange(
-          async (_event, session) => {
-            logDebug('Auth state changed', {
-              session: !!session,
-              user: !!session?.user
-            });
-            
-            processAuthStateChange(session, fetchUserProfile, setUserData, setLoading);
-          }
-        );
-        
-        authSubscription = subscription;
-      } catch (err) {
-        console.error('[Auth DEBUG] Error initializing auth:', err);
-        setError(err.message);
       } finally {
-        setLoading(false);
+        if(active&&request===generation){setLoading(false);}
       }
     };
-    
-    initializeAuth();
-    
-    // Clean up subscription
-    return () => {
-      if (authSubscription) {
-        logDebug('Cleaning up auth listener subscription');
-        authSubscription.unsubscribe();
+    // Subscribe before reading startup state. A later sign-in/out wins over
+    // any outstanding bootstrap read or profile response for an older session.
+    const {data:{subscription}}=platformClient.auth.onAuthStateChange(
+      (_event,session)=>{if(active){void applySession(session);}}
+    );
+    const startupGeneration=generation;
+    platformClient.auth.getSession().then(({data,error:sessionError})=>{
+      if(!active||generation!==startupGeneration){return;}
+      if(sessionError){setError(sessionError.message);setLoading(false);return;}
+      void applySession(data?.session||null);
+    }).catch(()=>{
+      if(active&&generation===startupGeneration){
+        setError('We couldn’t load your account. Please sign in again.');setLoading(false);
       }
+    });
+    return ()=>{
+      active=false;generation++;
+      subscription.unsubscribe();
+      initialized.current=false;
     };
   }, []); // Empty dependency array - run only once
 
@@ -453,8 +389,12 @@ const AuthProvider = ({ children }) => {
           role: userWithProfile?.role,
           id: userWithProfile?.id
         });
+        const current=await platformClient.auth.getSession();
+        if(current?.error||current?.data?.session?.access_token!==data.session?.access_token){
+          return {error:{message:'Your session changed. Please continue with the account currently signed in.'}};
+        }
         setUserData(userWithProfile);
-        
+
         // Check if user needs to change password
         if (data.user.user_metadata?.force_password_change) {
           console.log('[Auth] User needs to change password');

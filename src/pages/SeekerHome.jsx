@@ -40,7 +40,7 @@ const SeekerHome = ({
       </div>
       <div className="seeker-hero-note">
         <h2>Already found a place?</h2>
-        <p>Open the property listing and choose “Enquire” to contact its owner. Your replies and next steps will appear here.</p>
+        <p>Open the property listing and choose “Express your interest” to contact its owner. Your replies and next steps will appear here.</p>
         {isPropertyEnquiriesEnabled() && <Link className="seeker-button seeker-button-secondary" to="/enquire">View my enquiries</Link>}
       </div>
     </section>
