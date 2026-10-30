@@ -18,7 +18,7 @@ const fixtureAuth=`import {useEffect,useState} from 'react';
   export const getSession=async()=>({data:{session:signedIn?{access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}:null}});
   export const useAuth=()=>{const [,render]=useState(0);useEffect(()=>{const f=()=>render(x=>x+1);listeners.add(f);return()=>listeners.delete(f);},[]);
     return {user:signedIn?{id:'synthetic-auth'}:null,isAuthenticated:signedIn,loading:false,activeTenantId:'synthetic-workspace',
-      login:async()=>{await fetch('/fixture/login',{method:'POST'});signedIn=true;listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
+      login:async()=>{await fetch('/fixture/login',{method:'POST'});signedIn=true;localStorage.setItem('khrental.local.session',JSON.stringify({access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}));listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
       logout:async()=>{localStorage.removeItem('khrental.local.session');signedIn=false;listeners.forEach(f=>f());},setDevBypass:()=>{}};};`;
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
   import {BrowserRouter,Routes,Route} from 'react-router-dom';
@@ -166,11 +166,14 @@ try {
   const designOutput=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
   await fs.mkdir(designOutput,{recursive:true});
   await page.screenshot({path:path.join(designOutput,'property-enquiry-desktop.png'),fullPage:true});
+  await page.focus('#enquiry-message');await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(()=>document.activeElement.type),'checkbox','Keyboard moves from message to explicit consent');
   await page.setViewport({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Selected property form fits mobile');
   await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile.png'),fullPage:true});
   photoMode='missing';await page.reload({waitUntil:'networkidle0'});
   await page.waitForSelector('.enquiry-photo-empty');
+  await page.waitForSelector('#enquiry-message');
   assert.ok(await page.$('#enquiry-message'),'A failed public photo does not block contact');
   await page.screenshot({path:path.join(designOutput,'property-enquiry-photo-fallback.png'),fullPage:true});
   publicListingMode='missing';await page.reload({waitUntil:'networkidle0'});
@@ -204,7 +207,7 @@ try {
   assert.ok(await page.$('.seeker-empty a[href="/seeker#browse-rentals"]'));
   await page.setViewport({width:1280,height:900});
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-desktop.png'),fullPage:true});
-  // Return through client history: the isolated fixture intentionally holds auth in memory.
+  // Return through client history to the same selected-property enquiry.
   await page.goBack();await page.goBack();await page.goBack();
   await page.waitForSelector('textarea');
   console.log('SEEKER_UX_BROWSER=PASS overview markets useful_empty_states consistent_navigation mobile no_empty_pagination');

@@ -101,7 +101,7 @@ const PropertyEnquiry=()=>{
       {state.error && <p role="alert" className="seeker-alert">{state.error}</p>}
       {state.notice && <p role="status" className="enquiry-success">{state.notice}</p>}
       {route && <div className="enquiry-compose">
-        <section className="enquiry-property" aria-label="Selected property">
+        <section className={'enquiry-property'+(listing?' enquiry-property-ready':'')} aria-label="Selected property">
           {listing ? <>
             {photo&&!photoFailed ? <img className="enquiry-photo" src={photo.src} alt={photo.alt}
               width="720" height="480" referrerPolicy="no-referrer" onError={()=>setPhotoFailed(true)} />

@@ -20,5 +20,5 @@ export const publicListingRent=listing=>{
   const currency={LK:'LKR',BN:'BND'}[listing?.country];
   if(!currency||listing?.currency!==currency||typeof listing.monthlyRent!=='number'||
       !Number.isFinite(listing.monthlyRent)||listing.monthlyRent<=0)return null;
-  return new Intl.NumberFormat('en',{style:'currency',currency,currencyDisplay:'code',maximumFractionDigits:2}).format(listing.monthlyRent);
+  return new Intl.NumberFormat('en',{style:'currency',currency,currencyDisplay:'code',minimumFractionDigits:0,maximumFractionDigits:2}).format(listing.monthlyRent);
 };
