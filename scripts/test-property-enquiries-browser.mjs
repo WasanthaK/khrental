@@ -171,6 +171,10 @@ try {
   await page.setViewport({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Selected property form fits mobile');
   await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile.png'),fullPage:true});
+  await page.setViewport({width:320,height:740});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Selected property form fits a narrow phone');
+  await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile-small.png'),fullPage:true});
+  await page.setViewport({width:390,height:844});
   photoMode='missing';await page.reload({waitUntil:'networkidle0'});
   await page.waitForSelector('.enquiry-photo-empty');
   await page.waitForSelector('#enquiry-message');

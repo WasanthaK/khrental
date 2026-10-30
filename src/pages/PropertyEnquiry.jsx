@@ -111,7 +111,7 @@ const PropertyEnquiry=()=>{
               <h2>{listing.title}</h2>
               <p className="enquiry-location">{listing.location}</p>
               <p className="enquiry-rent">{rent ? <>{rent}<span> / month</span></>:'Ask the owner about rent'}</p>
-              <a className="seeker-text-link" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>View photos & property details →</a>
+              <a className="seeker-text-link" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>View property details</a>
             </div>
           </> : <div className="enquiry-property-copy">
             {listingError ? <><h2>Property unavailable</h2><p role="alert">{listingError}</p>
@@ -137,7 +137,7 @@ const PropertyEnquiry=()=>{
             <p id="enquiry-message-limit" className="enquiry-hint">{message.length.toLocaleString()} / 2,000 characters · Keep payment details and personal documents out of your message.</p>
             <label className="enquiry-consent"><input type="checkbox" required checked={consent} disabled={state.busy}
               onChange={e=>{setConsent(e.target.checked);requestId.current=crypto.randomUUID();}} />
-              <span>I agree to share my account name, verified email and this message with the property owner so they can reply.</span>
+              <span>I agree to share my name, verified email and this message with the property owner so they can reply.</span>
             </label>
             <button type="submit" disabled={state.busy||!message.trim()||!consent} className="seeker-button enquiry-send">
               {state.busy?'Sending…':'Send enquiry'}</button>
