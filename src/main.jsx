@@ -72,7 +72,8 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 if (window.location.pathname === '/verify-email') {
   // Capture and scrub once, before React renders or owner auth hydration can
   // replace the tenant-scoped tree. Keep credentials in this page's memory
-  // only; neither initialize nor replace an existing account's session.
+  // only. Explicit redemption decides safe session continuation; normal
+  // auth/tenant initialization must not run on this isolated entry.
   const initialContext = consumeSeekerVerificationContext({
     location: window.location,
     history: window.history

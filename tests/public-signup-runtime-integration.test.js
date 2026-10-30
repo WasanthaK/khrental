@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { request as httpRequest } from 'node:http';
-import { createApprovedSignupPeerPredicate, createPublicSignupRuntime } from '../src/api/auth/publicSignupRuntime.js';
+import { createApprovedSignupPeerPredicate, createPublicSignupRuntime, serializePublicSignupSession } from '../src/api/auth/publicSignupRuntime.js';
 
 const serve = async (runtime, fn) => {
   const app = express();
@@ -116,4 +116,15 @@ test('ingress 503 is diagnosed before parsing without logging client addresses o
   assert.deepEqual(logged,[['[PublicSignupUnavailable]',{
     stage:'ingress_client_address',category:'UNCLASSIFIED'
   }]]);
+});
+
+
+test('redeemed signup session can hydrate normal auth without credential or tenant leakage',()=>{
+  const actual=serializePublicSignupSession({authId:'fixture-auth',email:'seeker@example.test',role:'authenticated',
+    appUserId:'fixture-profile',tenantId:'must-not-leak',passwordHash:'must-not-leak',metadata:{global_email_verified:true,private_field:'must-not-leak'}},
+    {accessToken:'synthetic-issued-session',expiresAt:'2027-01-01T00:00:00Z'});
+  assert.equal(actual.user.id,'fixture-auth');assert.equal(actual.user.email,'seeker@example.test');
+  assert.equal(actual.user.role,'authenticated');assert.equal(actual.user.user_metadata.global_email_verified,true);
+  assert.equal(actual.expires_at,1798761600);
+  assert.doesNotMatch(JSON.stringify(actual),/must-not-leak|tenantId|passwordHash|appUserId|private_field/);
 });

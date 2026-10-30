@@ -1,3 +1,4 @@
+import SeekerLayout from '../components/layouts/SeekerLayout';
 import PropertyOffer from '../components/properties/PropertyOffer';
 import PropertyApplication from '../components/properties/PropertyApplication';
 import PropertyViewing from '../components/properties/PropertyViewing';
@@ -14,7 +15,7 @@ const call = options => requestSeekerEnquiries({
 });
 const PropertyEnquiry=()=>{
   const location=useLocation();
-  const {user,isAuthenticated,loading,logout}=useAuth();
+  const {user,isAuthenticated,loading}=useAuth();
   const route=enquiryReturnPath(location.search);
   const params=new URLSearchParams(route?.split('?')[1]);
   const listingId=params.get('listingId'),country=params.get('country');
@@ -83,14 +84,13 @@ const PropertyEnquiry=()=>{
     finally {if(currentIdentity.current===identity){setState(s=>({...s,busy:false}));}}
   };
   if (!enabled) {return <main className="p-8"><h1>Property enquiries</h1><p>Property enquiries are not open yet.</p></main>;}
-  return <main className="min-h-screen bg-slate-50 px-4 py-10">
-    <div className="mx-auto max-w-2xl space-y-6">
-      <p className="font-semibold text-emerald-700">Quixo.Homes</p>
-      <Link to="/rental-journey" className="underline">My rental offers and agreement continuation</Link>
-      <h1 className="text-3xl font-semibold text-slate-900">{route?'Property enquiry':'My property enquiries'}</h1>
-      {isAuthenticated && <button type="button" disabled={state.busy} className="underline text-blue-800"
-        onClick={async()=>{try{await logout();}catch{setState(s=>({...s,error:'Unable to sign out. Try again.'}));}}}>Sign out</button>}
-      {!route && <p>Choose a property from the rental website to start a new enquiry. Your existing enquiries and owner replies appear below after sign-in.</p>}
+  return <SeekerLayout active="enquiries">
+    <div className="space-y-6">
+      <div className="seeker-page-heading"><div>
+        <p className="seeker-kicker">Conversations & viewings</p>
+        <h1>{route?'Express your interest':'My enquiries'}</h1>
+        <p className="seeker-intro">{route?'Ask a question or tell the owner you’d like to arrange a viewing.':'Your conversations, viewing appointments and applications, all in one place.'}</p>
+      </div><Link to="/seeker#browse-rentals" className="seeker-button">Find a rental</Link></div>
       {route && <a className="underline text-blue-800" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>Back to property</a>}
       {listing && <section className="rounded-xl bg-white border p-6">
         <h2 className="text-xl font-semibold">{listing.title}</h2>
@@ -98,7 +98,7 @@ const PropertyEnquiry=()=>{
         <p className="mt-2 text-sm">Ask about availability or request a viewing. Do not include identification documents, payment details or sensitive personal information.</p>
       </section>}
       {loading ? <p role="status">Checking your account…</p> : !isAuthenticated ?
-        <p><Link className="underline text-blue-800" to={'/login'+enquiryLoginSearch(location.search)}>Sign in to enquire about this property</Link>. A verified personal seeker account is required.</p> : null}
+        <p><Link className="underline text-blue-800" to={'/login'+enquiryLoginSearch(location.search)}>Sign in to contact the owner</Link> or <Link className="seeker-text-link" to={'/seeker-sign-up'+enquiryLoginSearch(location.search)}>create your free account</Link>. We’ll bring you back to this property.</p> : null}
       {state.error && <p role="alert" className="text-red-700">{state.error}</p>}
       {state.notice && <p role="status" className="rounded-xl bg-emerald-50 p-4 text-emerald-900">{state.notice}</p>}
       {personalReady && listing && <form onSubmit={submit} className="rounded-xl bg-white border p-6 space-y-4">
@@ -109,14 +109,19 @@ const PropertyEnquiry=()=>{
         </label>
         <label className="flex gap-3 items-start"><input type="checkbox" required checked={consent} disabled={state.busy}
           onChange={e=>{setConsent(e.target.checked);requestId.current=crypto.randomUUID();}} />
-          <span>I agree to share my account name, verified email and this message with the property’s owner workspace so they can respond to this enquiry.</span>
+          <span>I agree to share my account name, verified email and this message with the property owner so they can reply.</span>
         </label>
         <button disabled={state.busy||!message.trim()||!consent} className="bg-blue-900 text-white rounded px-4 py-3 disabled:opacity-50">
           {state.busy?'Saving…':'Send enquiry'}</button>
       </form>}
       {personalReady && <section aria-labelledby="my-enquiries" className="space-y-4">
-        <h2 id="my-enquiries" className="text-xl font-semibold">My enquiries</h2>
-        {!items.length && <p>No enquiries on this page.</p>}
+        <h2 id="my-enquiries" className="text-xl font-semibold">{route?'Your enquiries':'Your conversations'}</h2>
+        {!items.length && <div className="seeker-empty">
+          <div className="seeker-empty-icon" aria-hidden="true">↗</div>
+          <h3>{offset>0?'You’ve reached the end':'Your next place starts with a conversation'}</h3>
+          <p>{offset>0?'Go back to see your earlier enquiries.':route?'Send your message above. The owner’s reply and viewing details will appear here.':'Find a rental you like and choose “Express your interest” on its listing. You can ask a question or arrange a viewing with the owner.'}</p>
+          {!route && offset===0 && <Link className="seeker-button" to="/seeker#browse-rentals">Browse rentals</Link>}
+        </div>}
         {items.map(item=><article key={item.id} className="rounded-xl border bg-white p-5 space-y-2">
           <h3 className="font-semibold">{item.title}</h3><p>Status: {item.status}</p>
           <p className="whitespace-pre-wrap">{item.message}</p>
@@ -127,11 +132,11 @@ const PropertyEnquiry=()=>{
           <PropertyApplication key={'application:'+identity+':'+item.id} enquiry={item} call={call} />
           <PropertyOffer key={'offer:'+identity+':'+item.id} enquiry={item} call={call} />
         </article>)}
-        <div className="flex gap-4"><button disabled={offset===0||state.busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
-          <button disabled={!hasMore||state.busy} onClick={()=>setOffset(n=>n+50)}>Next</button>
-          <button disabled={state.busy} onClick={()=>refresh().catch(err=>setState(s=>({...s,error:err.message})))}>Refresh responses</button></div>
+        {(offset>0||hasMore) && <div className="seeker-pagination"><button disabled={offset===0||state.busy} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button>
+          <button disabled={!hasMore||state.busy} onClick={()=>setOffset(n=>n+50)}>Next</button></div>}
+          {items.length>0 && <button className="seeker-text-link" disabled={state.busy} onClick={()=>refresh().catch(err=>setState(s=>({...s,error:err.message})))}>Refresh responses</button>}
       </section>}
     </div>
-  </main>;
+  </SeekerLayout>;
 };
 export default PropertyEnquiry;

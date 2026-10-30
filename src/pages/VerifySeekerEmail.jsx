@@ -1,8 +1,10 @@
-// B04 S3c foundation. Not connected to src/routes.jsx until the governed
-// S3a migration, shared durable limiter and S3b2 API release gates are green.
+// Isolated email verification; explicit redemption owns credential setup and
+// server-verified session continuation. Normal tenant initialization stays outside.
 import { useState } from 'react';
 import { consumeSeekerVerificationContext } from '../utils/seekerVerificationFragment';
 import { isPublicSignupUiEnabled } from '../utils/env';
+import {continueVerifiedSeekerSession} from '../services/seekerContextClient';
+import {enquiryReturnPath} from '../utils/enquiryReturnPath.js';
 
 const permitted = isPublicSignupUiEnabled();
 
@@ -15,6 +17,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
   const [confirm, setConfirm] = useState('');
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
+  const [continuation,setContinuation]=useState(null);
 
   const redeem = async event => {
     event.preventDefault();
@@ -47,16 +50,24 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
       const body = await response.json();
       if (body?.data?.user?.role !== 'authenticated' ||
           body?.data?.user?.user_type !== 'seeker' ||
-          !body?.data?.session?.access_token) {
+          !body?.data?.session?.access_token || !body?.data?.user?.id ||
+          body.data.session.user?.id!==body.data.user.id) {
         throw new Error('Registration could not be verified.');
       }
 
-      // Do not persist the new session or auto-switch the current browser
-      // identity until S3c session-preservation / tenantless UX is accepted.
       setStatus('complete');
       setPassword('');
       setConfirm('');
-      setMessage('Your email has been verified. Sign in with your new password.');
+      setMessage('Your email has been verified. Getting your account ready…');
+      const result=await continueVerifiedSeekerSession({
+        session:body.data.session,expectedAuthId:body.data.user.id
+      });
+      setContinuation(result);
+      if(result.adopted){
+        window.location.assign(enquiryReturnPath(enquirySearch)||'/seeker');
+      }else{
+        setMessage('Your email has been verified and your account is ready.');
+      }
     } catch {
       // Generic error: no token, account existence or provider status leak.
       setStatus('error');
@@ -97,7 +108,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
         ) : (
           <form onSubmit={redeem} className="mt-6 space-y-4">
             <p className="text-sm text-slate-600">
-              Set a password to complete your global seeker account. Joining a property-management organization is a separate step.
+              Choose a password for your free account. We’ll then take you back to continue your interest.
             </p>
             <label htmlFor="seeker-password" className="block text-sm font-medium text-slate-700">
               Password
@@ -120,7 +131,11 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
             </button>
           </form>
         )}
-        {status==='complete'&&<p className="mt-4 text-sm text-slate-600">If another account is signed in, sign out of it or use a private window to continue with your new account.</p>}
+        {status==='complete'&&continuation&&!continuation.adopted&&<p className="mt-4 text-sm text-slate-600">
+          {continuation.reason==='another_account'||continuation.reason==='session_changed'
+            ? 'Another account is open in this browser. It has been kept signed in. Open a private window to sign in to your new account, or sign out of the other account first.'
+            : 'We couldn’t safely sign you in automatically. Use your new password to sign in and continue.'}
+        </p>}
         {/* Full navigation leaves the isolated credential entry and boots the normal app. */}
         <a href={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">
           {status === 'complete' ? 'Continue to sign in' : 'Back to sign in'}

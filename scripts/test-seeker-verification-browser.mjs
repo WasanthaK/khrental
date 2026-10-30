@@ -36,7 +36,15 @@ try {
     assert.equal(req.body.token,token);
     assert.equal(req.get('authorization'),undefined);
     assert.equal(req.get('x-tenant-id'),undefined);
-    res.status(201).json({data:{user:{role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only'}}});
+    res.status(201).json({data:{user:{id:'fixture-new',role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'fixture-new'}}}});
+  });
+  app.get('/api/platform/auth/seeker-context',(req,res)=>{
+    assert.equal(req.get('authorization'),'Bearer fixture-only');assert.equal(req.get('x-tenant-id'),undefined);
+    res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}});
+  });
+  app.get('/api/platform/auth/context',(req,res)=>{
+    assert.equal(req.get('authorization'),'Bearer fixture-owner-token');assert.equal(req.get('x-tenant-id'),undefined);
+    res.json({data:{user:{id:'fixture-owner'}}});
   });
   app.use('/api',(req,res)=>res.status(404).json({error:'Fixture denies all other API work'}));
   app.use(vite.middlewares);
@@ -49,7 +57,11 @@ try {
   page.on('pageerror',error=>console.error('VERIFICATION_FIXTURE_PAGE_ERROR='+error.message));
   await page.setRequestInterception(true);
   page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
-  await page.evaluateOnNewDocument(()=>localStorage.setItem('verification-owner-marker','unchanged'));
+  await page.evaluateOnNewDocument(()=>{
+    localStorage.setItem('verification-owner-marker','unchanged');
+    localStorage.setItem('khrental.local.session',JSON.stringify({access_token:'fixture-owner-token',user:{id:'fixture-owner'}}));
+    localStorage.setItem('khrental.activeTenantId','fixture-owner-workspace');
+  });
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#seeker-password');
   assert.equal(new URL(page.url()).hash,'');
@@ -69,7 +81,7 @@ try {
   await page.type('#seeker-password','SyntheticFixtureOnly!');
   await page.type('#seeker-password-confirm','SyntheticFixtureOnly!');
   await page.click('button[type="submit"]');
-  await page.waitForFunction(()=>document.body.innerText.includes('Your email has been verified'));
+  await page.waitForFunction(()=>document.body.innerText.includes('Another account is open in this browser'));
   assert.equal(redemptions,1);
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored);
   // Leaving the isolated entry must boot the normal application, not keep

@@ -10,6 +10,18 @@ import { createPublicSignupSendGridAdapters } from './publicSignupSendGrid.js';
 import { createAzureSignupClientAddress, checkPublicSignupBrowserRequest, normalizePublicSignupIp } from './publicSignupIngressGuard.js';
 import { findAuthRecordByEmail, issueAuthSession } from './index.js';
 
+// Same browser session shape as normal sign-in; credentials and tenant access are excluded.
+export const serializePublicSignupSession=(record,issued)=>({
+  access_token:issued.accessToken,
+  token_type:'bearer',
+  expires_at:Math.floor(new Date(issued.expiresAt).getTime()/1000),
+  user:{
+    id:record.authId,email:record.email,role:'authenticated',aud:'authenticated',
+    app_metadata:{provider:'local-mssql',role:'authenticated'},
+    user_metadata:{global_email_verified:record.metadata?.global_email_verified===true}
+  }
+});
+
 const disabled = Object.freeze({ error: 'Public registration is not available.', code: 'PUBLIC_SIGNUP_DISABLED' });
 const unavailable = Object.freeze({ error: 'Public registration is temporarily unavailable.', code: 'PUBLIC_SIGNUP_NOT_READY' });
 
@@ -84,7 +96,7 @@ export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
       // The shared identity service issues the normal secure bearer token.
       // Neither tenant membership nor organization access is granted here.
       const session = await issueAuthSession(record);
-      return { access_token: session.accessToken, token_type: 'bearer', expires_at: session.expiresAt };
+      return serializePublicSignupSession(record,session);
     }
   });
   const router = express.Router();
