@@ -1,5 +1,41 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Controlling owner decision — configurable market pricing, 30 October 2026
+
+This section supersedes the earlier fixed-USD-5/no-app-side-pricing-edit restriction below. The owner requires **global-admin-controlled base fees and included rental-value thresholds**, informed by market research, without a code release for each price change. This is a commercial/configuration requirement for the subscription-management phase, not evidence of implemented controls or live billing activation.
+
+### Customer offer and journey
+
+- The base fee pays for property and rental-lifecycle management. Standard public listing is an included value-add, automatic for eligible available inventory unless the owner opts out; there is **no separate listing fee**.
+- Premium/paid-prominence listings are **out of initial scope**.
+- Rental seekers browse freely, choose **Express your interest**, then register/sign in and continue with that property. Do not require registration just to browse.
+- Owner signup leads to adding/managing property and the governed paid subscription flow, rather than a separate pay-to-list product.
+
+### Required Global Admin settings
+
+| Setting | Configuration authority and meaning |
+| --- | --- |
+| Market | Explicit supported country/market, initially LK and BN; no silent cross-market fallback |
+| Base management fee | Editable amount and billing currency, per independently rentable dwelling per month; USD 5 remains the starting baseline, not a hardcoded permanent price |
+| Included monthly-rent threshold | Editable amount in the market's rent currency (e.g. LKR for LK, BND for BN); independently set using market research |
+| Above-threshold adjustment | Configurable policy/rate once commercially approved; calculation basis and rounding must be explicit, with a preview |
+| Effective date and version | Schedule and identify each pricing rule; retain previous versions |
+| Research rationale | Record the source/date or decision note supporting the market threshold |
+
+The user specifically approved configurability of the **base fee and threshold**. The excess fee/rate, final threshold values, billing currency overrides, FX treatment and rounding are not yet commercially finalized. Rs 25,000, USD 100 and BND 1,200 are discussion examples, not production defaults or researched market findings. No example may activate an unapproved surcharge.
+
+Only a server-verified active **global/platform admin** may create/change these rules. Organization owners, staff, seekers and client-supplied roles/country values must not grant price-edit authority. Validate amounts/currencies, prevent stale concurrent overwrites, record actor/before/after/reason/effective time, and preview the customer price before activation. Unconfigured/incomplete market rules must not silently invent a fee or enable paid checkout.
+
+### Billing ownership and change application
+
+Global-admin settings govern the commercial market rules; Stripe continues to own actual payment collection, subscription/invoice state and Stripe Product/Price resources. Implement controlled, versioned synchronization/publication to Stripe as part of B05. Do not create a second application invoice/collection system or treat a saved draft admin setting as an active Stripe price.
+
+Changing a setting must not silently reprice existing subscriptions or rewrite historical invoices. New pricing needs an explicit effective date and defined application to new subscriptions; migration of existing customers requires a separately reviewed policy. Tax-inclusive/exclusive presentation and market tax readiness remain explicit launch requirements.
+
+**Status:** requirement recorded; admin controls, schema/API, Stripe synchronization and live pricing acceptance are not implemented by this document. Preserve the ordered website-first / subscription-management-next scope, existing merchant/tax gates, tenant isolation and no-trial decision. No Stripe object, customer charge, live account, permission, schema, feature flag or deployment is changed by this clarification.
+
+---
+
 ## Controlling billing test-account decision — 2026-10-27
 
 The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
