@@ -205,7 +205,8 @@ export const createPublicSignupRouter = ({
       stage = 'session_issue';
       const session = await createSession(record);
       res.status(201).json({ data: {
-        user: { id: result.authId, role: 'authenticated', user_type: 'seeker' },
+        // Use the read-back authority, exactly as the issued session does.
+        user: { id: record.authId, role: 'authenticated', user_type: 'seeker' },
         session
       } });
     } catch (error) {
