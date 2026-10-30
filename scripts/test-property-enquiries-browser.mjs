@@ -25,19 +25,25 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
   import PropertyEnquiry from '/src/pages/PropertyEnquiry.jsx';
   import SeekerHome from '/src/pages/SeekerHome.jsx';
   import RentalJourney from '/src/pages/RentalJourney.jsx';
+  import RootLayout from '/src/components/layouts/RootLayout.jsx';
   import OwnerEnquiries from '/src/pages/OwnerEnquiries.jsx';
   import Login from '/src/pages/Login.jsx';
   import SeekerSignUp from '/src/pages/SeekerSignUp.jsx';
   import VerifySeekerEmail from '/src/pages/VerifySeekerEmail.jsx';
   import '/src/index.css';
   createRoot(document.getElementById('root')).render(<BrowserRouter><Routes>
-    <Route path="/seeker" element={<SeekerHome user={{id:"synthetic-profile",role:"authenticated",user_type:"seeker",tenant_id:null}} membership={null} memberships={[]} tenantContextVerified={true}/>}/><Route path="/rental-journey" element={<RentalJourney/>}/><Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
+    <Route path="/seeker" element={<SeekerHome user={{id:"synthetic-profile",role:"authenticated",user_type:"seeker",tenant_id:null}} membership={null} memberships={[]} tenantContextVerified={true}/>}/><Route path="/rental-journey" element={<RootLayout/>}><Route index element={<RentalJourney/>}/></Route><Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
     <Route path="/seeker-sign-up" element={<SeekerSignUp/>}/><Route path="/verify-email" element={<VerifySeekerEmail/>}/>
     <Route path="/dashboard/enquiries" element={<OwnerEnquiries/>}/></Routes></BrowserRouter>);`;
 const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,importer){
   if(source.startsWith('\0enquiry-')){return source;}
   if(source==='virtual:enquiry-proof'){return '\0enquiry-proof.jsx';}
   if(!importer?.includes('/src/')){return;}
+  if(importer.endsWith('/layouts/RootLayout.jsx')){
+    if(source.endsWith('/services/appInitService')){return '\0enquiry-app-init';}
+    if(source.endsWith('/contexts/ConfirmContext')){return '\0enquiry-confirm';}
+    if(['/ScrollToTop','/RouteChangeHandler','/ForceRefresh','/NavigationRegistrar','/WelcomeGuide'].some(s=>source.endsWith(s))){return '\0enquiry-shell-child';}
+  }
   if(source.endsWith('/hooks/useAuth')){return '\0enquiry-auth';}
   if(source.endsWith('/services/platformClient')){return '\0enquiry-platform';}
   if(source.endsWith('/services/mssqlApiClient')){return '\0enquiry-mssql';}
@@ -45,6 +51,9 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
 },async load(id){
   if(id==='\0enquiry-proof.jsx'){return transformWithEsbuild(entry,'enquiry-proof.jsx',{loader:'jsx',jsx:'automatic'});}
   if(id==='\0enquiry-auth'){return fixtureAuth;}
+  if(id==='\0enquiry-app-init'){return `export const initializeApp=async()=>{await fetch('/fixture/management-init',{method:'POST'});return {error:'Synthetic management storage error',isStorageError:true};};`;}
+  if(id==='\0enquiry-confirm'){return `export const ConfirmContextProvider=({children})=>children;`;}
+  if(id==='\0enquiry-shell-child'){return `export default ()=>null;`;}
   if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
@@ -52,6 +61,7 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null,normalLogins=0;
 let application=null,applicationsOpen=true;
 let publicListingMode='ready',photoMode='ready';
+let managementInitializations=0;
 const photoId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
 const photoUrl='/api/public-listings/'+listingId+'/media/'+photoId+'?country=LK';
 // Existing stock asset is used only for the clearly synthetic property fixture.
@@ -61,6 +71,7 @@ const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
+  app.post('/fixture/management-init',(req,res)=>{managementInitializations++;res.json({ok:true});});
   app.post('/fixture/login',(req,res)=>{normalLogins++;res.json({ok:true});});
   app.get('/api/public-listings/:id/media/:mediaId',(req,res)=>photoMode==='missing'?res.sendStatus(404):res.type('image/webp').send(fixturePhoto));
   app.get('/api/public-listings/:id',(req,res)=>publicListingMode==='missing'?res.sendStatus(404):res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location',monthlyRent:100000,currency:'LKR',images:[{url:photoUrl,alt:'Synthetic approved property photo'}]}}));
@@ -208,10 +219,17 @@ try {
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-enquiries-mobile.png'),fullPage:true});
   await page.click('nav[aria-label="Your rental search"] a[href="/rental-journey"]');
   await page.waitForSelector('.seeker-empty');
+  assert.equal(managementInitializations,0,'Rental journey must not initialize organization storage');
+  assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/Storage Notice|storage buckets|Synthetic management storage error/);
   assert.equal(await page.$('.seeker-pagination'),null);
   assert.ok(await page.$('.seeker-empty a[href="/seeker#browse-rentals"]'));
   await page.setViewport({width:1280,height:900});
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-desktop.png'),fullPage:true});
+  await page.setViewport({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Offers fit mobile');
+  await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-mobile.png'),fullPage:true});
+  await page.setViewport({width:1280,height:900});
+  console.log('RENTAL_JOURNEY_SHELL=PASS actual_root_layout no_management_initialization no_storage_notice desktop mobile');
   // Return through client history to the same selected-property enquiry.
   await page.goBack();await page.goBack();await page.goBack();
   await page.waitForSelector('textarea');

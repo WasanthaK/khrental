@@ -1,7 +1,7 @@
 const SESSION_STORAGE_KEY = 'khrental.local.session';
 const ACTIVE_TENANT_STORAGE_KEY = 'khrental.activeTenantId';
 const DEV_BYPASS_ROLE_KEY = 'dev_bypass_role';
-const AUTH_FLOW_ISOLATED_PATHS = new Set(['/reset-password', '/accept-invite', '/seeker', '/seeker-sign-up', '/verify-email', '/enquire']);
+const AUTH_FLOW_ISOLATED_PATHS = new Set(['/reset-password', '/accept-invite', '/seeker', '/seeker-sign-up', '/verify-email', '/enquire', '/rental-journey']);
 const isBrowser = typeof window !== 'undefined';
 const fallbackStorage = new Map();
 
@@ -27,6 +27,8 @@ const normalizePathname = (pathname = '') => {
  * Route isolation does not imply identical session handling. Password recovery
  * is intentionally anonymous, while secure invitation redemption may inspect a
  * server-valid existing session solely to preserve a different signed-in user.
+ * Tenantless rental-search pages also own their authenticated API requests;
+ * they must not initialize organization storage or management onboarding.
  */
 export const isAuthFlowIsolatedPath = (pathname = '') => AUTH_FLOW_ISOLATED_PATHS.has(normalizePathname(pathname));
 
