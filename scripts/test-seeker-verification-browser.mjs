@@ -120,6 +120,8 @@ try {
   await page.waitForFunction(()=>document.body.innerText.includes('Try signing in with the password you just chose'));
   assert.equal(await page.$('#seeker-password'),null,'An accepted setup must not offer another credential redemption');
   assert.equal(redemptions,4);
+  assert.equal(await page.$('a[href^="/seeker-sign-up"]'),null,'Accepted setup does not suggest re-registering');
+  assert.ok(await page.$('a[href="/login"]'));
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored,'A mismatched identity never changes the existing session');
   await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
   if(releaseAuth)releaseAuth();

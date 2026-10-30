@@ -154,9 +154,9 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
         </p>}
         {/* Full navigation leaves the isolated credential entry and boots the normal app. */}
         <a href={'/login'+enquirySearch} className="mt-6 inline-block text-blue-700 underline">
-          {status === 'complete' ? 'Continue to sign in' : 'Back to sign in'}
+          {status === 'complete' || status === 'recovery' ? 'Continue to sign in' : 'Back to sign in'}
         </a>
-        {status!=='complete'&&<a href={'/seeker-sign-up'+enquirySearch} className="mt-4 block text-blue-700 underline">Request a new verification link</a>}
+        {status!=='complete'&&status!=='recovery'&&<a href={'/seeker-sign-up'+enquirySearch} className="mt-4 block text-blue-700 underline">Request a new verification link</a>}
       </section>
     </main>
   );
