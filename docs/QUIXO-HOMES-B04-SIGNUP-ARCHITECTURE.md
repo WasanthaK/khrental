@@ -4,6 +4,19 @@
 **Status:** ARCHITECTURE PROPOSAL / NOT IMPLEMENTED / NOT PRODUCTION-ACCEPTED  
 **Scope:** Allow global rental-seeker accounts, subscription-owning property-management organizations, and verified tenancy invitation accounts to coexist safely. This is a design handoff, not a code/deployment approval.
 
+## Controlling owner clarification — 30 October 2026
+
+The current implementation order and acceptance checklist are in [the execution plan](EXECUTION-PLAN.md#controlling-customer-journeys-commercial-decisions-and-implementation-order--30-october-2026). This clarification supersedes conflicting early proposal language below; historical source observations must not be treated as current implementation status.
+
+- **Find a property:** browse freely → choose a property → **Express your interest** → register/sign in → continue directly with the selected property. Do not put registration before browsing, discard the listing reference, or send the customer to a generic empty account screen.
+- **List my property:** verified account → verified owned organization → first-property setup → governed management subscription. Standard eligible/available public listing is included automatically unless opted out; there is no separate listing fee. Premium listings are out of initial scope.
+- USD 5 is the starting management base fee, with an included monthly-rent threshold determined by market research. **Global Admin only** controls the base fee/currency and threshold/local currency per market in platform-wide setup. Tenant/organization administrators and owners cannot edit these commercial market settings.
+- Pricing versions require preview, effective dates and audit, with no silent repricing of existing subscriptions. Excess policy/rate, final thresholds and FX/rounding remain undecided. The earlier fixed-price/no-app-side-edit restriction is superseded by the [controlling billing requirements](QUIXO-HOMES-STRIPE-SAAS-BILLING.md#controlling-owner-decision--configurable-market-pricing-30-october-2026); Stripe retains collection/subscription/invoice authority.
+- Safe session continuation must use established server authority and preserve a valid different browser identity explicitly. One identity per email, tenant isolation, separate invitation/tenancy authority, no trial and no unpaid entitlement remain governing constraints.
+- Sequence: renter journey/interest continuation first; owner registration/draft-property foundation; actual rental-lifecycle acceptance; then Global Admin pricing and subscription-management implementation; then full paid-owner launch acceptance. No planning entry is proof of completed signup, successful payment, automatic publication or an operational website.
+
+---
+
 ## Problem, grounded in current source
 
 The public Quixo.Homes website serves **people searching for rentals** as well as **owners/managers**. A rental seeker is not an existing renter of an organization. A prospective owner must not gain paid SaaS access before a paid Stripe subscription. A person may hold all three relationships under a single global identity.
