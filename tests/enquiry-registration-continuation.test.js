@@ -6,6 +6,7 @@ import {createPublicSignupVerificationLink,createPublicSignupVerificationEmail} 
 import {consumeSeekerVerificationContext} from '../src/utils/seekerVerificationFragment.js';
 import {enquiryReturnPath,parseEnquiryIntent,pendingVerificationBrowseUrl} from '../src/utils/enquiryReturnPath.js';
 import express from 'express';
+import {publicListingPhoto,publicListingRent} from '../src/utils/publicListingPresentation.js';
 import {createPublicSignupRouter} from '../src/api/auth/publicSignupRegistrationRouter.js';
 
 const enquiry={listingId:'11111111-1111-4111-8111-111111111111',country:'LK'};
@@ -77,4 +78,26 @@ test('signup acknowledgement returns to public browsing with no identity or cred
   for(const query of ['', '?returnUrl=https://evil.test', '?listingId=bad&country=LK','?listingId='+enquiry.listingId+'&country=US']){
     assert.equal(pendingVerificationBrowseUrl(query),'https://quixo.homes/?verification=pending');
   }
+});
+
+
+test('enquiry summary accepts only approved public media for the selected property and market',()=>{
+  const id=enquiry.listingId,media='abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  const url='/api/public-listings/'+id+'/media/'+media+'?country=LK';
+  const listing={id,country:'LK',title:'Public property',images:[{url,alt:'Approved photo'}]};
+  assert.deepEqual(publicListingPhoto(listing),{src:url,alt:'Approved photo'});
+  assert.deepEqual(publicListingPhoto({...listing,images:[{url:'https://app.quixo.homes'+url}]}),{src:url,alt:'Public property property photograph'});
+  for(const bad of ['https://private.example/photo.webp','https://evil.test'+url,'/api/storage/private.webp',
+    url.replace(id,media),url.replace('country=LK','country=BN'),url+'&token=private',url+'#private',
+    'https://user:password@app.quixo.homes'+url]){
+    assert.equal(publicListingPhoto({...listing,images:[{url:bad}]}),null,bad);
+  }
+  assert.equal(publicListingPhoto({...listing,images:[]}),null);
+});
+
+test('enquiry rent is formatted from the approved public market currency without inventing a price',()=>{
+  assert.match(publicListingRent({country:'LK',currency:'LKR',monthlyRent:100000}),/LKR.*100,000/);
+  assert.match(publicListingRent({country:'BN',currency:'BND',monthlyRent:1200}),/BND.*1,200/);
+  for(const monthlyRent of [null,0,-1,Infinity,NaN,'100000'])assert.equal(publicListingRent({country:'LK',currency:'LKR',monthlyRent}),null);
+  assert.equal(publicListingRent({country:'LK',currency:'USD',monthlyRent:100}),null);
 });
