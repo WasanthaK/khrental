@@ -1,5 +1,5 @@
-// B04 S3c foundation. Not connected to src/routes.jsx until the governed
-// S3a migration, shared durable limiter and S3b2 API release gates are green.
+// Isolated email verification; explicit redemption owns credential setup and
+// server-verified session continuation. Normal tenant initialization stays outside.
 import { useState } from 'react';
 import { consumeSeekerVerificationContext } from '../utils/seekerVerificationFragment';
 import { isPublicSignupUiEnabled } from '../utils/env';

@@ -178,9 +178,6 @@ const Login = () => {
 
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              {!enquiryReturnPath(location.search)&&<Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                For property owners
-              </Link>}
               {isPublicSignupUiEnabled() && (
                 <Link to={'/seeker-sign-up'+enquiryLoginSearch(location.search)} className="ml-3 font-medium text-blue-600 hover:text-blue-500">
                   Find a rental · Create free account
