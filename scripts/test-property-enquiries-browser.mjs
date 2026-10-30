@@ -51,13 +51,19 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
 }};
 let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,failNext=false,verificationLink=null,normalLogins=0;
 let application=null,applicationsOpen=true;
+let publicListingMode='ready',photoMode='ready';
+const photoId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
+const photoUrl='/api/public-listings/'+listingId+'/media/'+photoId+'?country=LK';
+// Existing stock asset is used only for the clearly synthetic property fixture.
+const fixturePhoto=await fs.readFile(new URL('../marketing/assets/residential-villa.webp',import.meta.url));
 let viewing=null,viewingsOpen=true,holdViewingRead=false,releaseViewingRead=null,notifyViewingRead=null;
 const verificationToken='b'.repeat(43);
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
   app.post('/fixture/login',(req,res)=>{normalLogins++;res.json({ok:true});});
-  app.get('/api/public-listings/:id',(req,res)=>res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location'}}));
+  app.get('/api/public-listings/:id/media/:mediaId',(req,res)=>photoMode==='missing'?res.sendStatus(404):res.type('image/webp').send(fixturePhoto));
+  app.get('/api/public-listings/:id',(req,res)=>publicListingMode==='missing'?res.sendStatus(404):res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location',monthlyRent:100000,currency:'LKR',images:[{url:photoUrl,alt:'Synthetic approved property photo'}]}}));
   app.get('/api/platform/auth/seeker-context',(req,res)=>res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}}));
   app.post('/api/public-signup/challenge',(req,res)=>{
     assert.deepEqual(req.body.enquiry,{listingId,country:'LK'});
@@ -150,6 +156,30 @@ try {
   await page.click('button[type="submit"]');
   await page.waitForSelector('textarea');
   console.log('BROWSER_STAGE=login_return');
+  await page.waitForFunction(()=>document.querySelector('.enquiry-photo')?.naturalWidth>0);
+  assert.match(await page.$eval('.enquiry-rent',e=>e.textContent),/LKR.*100,000.*month/);
+  assert.equal(await page.$('.enquiry-heading .seeker-button'),null,'Selected property has no competing browse CTA');
+  assert.equal(await page.$('.enquiry-compose .seeker-empty'),null);
+  assert.equal(await page.$eval('#enquiry-message',e=>e.value),'','Never invent a customer message');
+  assert.equal(await page.$eval('input[type="checkbox"]',e=>e.checked),false,'Consent stays explicit');
+  assert.ok(await page.$eval('#enquiry-message',e=>e.placeholder.includes('still available')));
+  const designOutput=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
+  await fs.mkdir(designOutput,{recursive:true});
+  await page.screenshot({path:path.join(designOutput,'property-enquiry-desktop.png'),fullPage:true});
+  await page.setViewport({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Selected property form fits mobile');
+  await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile.png'),fullPage:true});
+  photoMode='missing';await page.reload({waitUntil:'networkidle0'});
+  await page.waitForSelector('.enquiry-photo-empty');
+  assert.ok(await page.$('#enquiry-message'),'A failed public photo does not block contact');
+  await page.screenshot({path:path.join(designOutput,'property-enquiry-photo-fallback.png'),fullPage:true});
+  publicListingMode='missing';await page.reload({waitUntil:'networkidle0'});
+  await page.waitForFunction(()=>document.body.innerText.includes('This property is no longer publicly available'));
+  assert.equal(await page.$('#enquiry-message'),null,'Unavailable listing cannot be submitted');
+  publicListingMode='ready';photoMode='ready';
+  await page.click('::-p-text(Try loading again)');await page.waitForSelector('#enquiry-message');
+  await page.setViewport({width:1280,height:900});
+  console.log('PROPERTY_ENQUIRY_DESIGN=PASS public_photo rent property_context guidance explicit_consent mobile missing_photo unavailable_retry');
   // Customer experience: a fresh account always has a useful next action.
   const uxOutput=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
   await fs.mkdir(uxOutput,{recursive:true});
@@ -186,7 +216,7 @@ try {
   await page.click('form button');await page.waitForSelector('[role="alert"]');
   console.log('BROWSER_STAGE=retry_error_visible');
   assert.match(await page.$eval('[role="alert"]',e=>e.textContent),/Temporarily unavailable/);
-  await page.click('form button');await page.waitForFunction(()=>document.body.innerText.includes('Your enquiry was saved'));
+  await page.click('form button');await page.waitForFunction(()=>document.body.innerText.includes('Your enquiry was sent'));
   console.log('BROWSER_STAGE=enquiry_saved');
   assert.equal(submissions,2);assert.equal(row.status,'pending');
   const ownerPage=await browser.newPage();
@@ -344,7 +374,7 @@ try {
   assert.equal(normalLogins,loginsBeforeVerification);
   await verifyPage.type('textarea','I verified my email and returned to this rental.');
   await verifyPage.click('input[type="checkbox"]');await verifyPage.click('form button');
-  await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your enquiry was saved'));
+  await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your enquiry was sent'));
   assert.equal(submissions,3);assert.equal(row.status,'pending');
   console.log('BROWSER_STAGE=registration_email_new_browser_automatic_session_reload_enquiry');
   await page.bringToFront();activePage=page;
