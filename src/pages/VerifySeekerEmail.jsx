@@ -36,6 +36,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
 
     setStatus('sending');
     setMessage('');
+    let accepted=false;
     try {
       // Explicit same-origin fetch with no bearer, tenant header, credentials
       // or URL token. This page must never inherit the landlord workspace.
@@ -57,10 +58,12 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
           'This link may have expired or already been used. Sign in if you completed setup, or request a new link.');
         return;
       }
+      accepted=true;
       if (body?.data?.user?.role !== 'authenticated' ||
           body?.data?.user?.user_type !== 'seeker' ||
           !body?.data?.session?.access_token || !body?.data?.user?.id ||
-          body.data.session.user?.id!==body.data.user.id) {
+          typeof body.data.session.user?.id!=='string' ||
+          body.data.session.user.id.toLowerCase()!==String(body.data.user.id).toLowerCase()) {
         throw new Error('Registration could not be verified.');
       }
 
@@ -79,8 +82,11 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
       }
     } catch {
       // Generic error: no token, account existence or provider status leak.
-      setStatus('error');
-      setMessage('We couldn’t finish setup right now. Please try again on this page.');
+      if(accepted){setPassword('');setConfirm('');}
+      setStatus(accepted?'recovery':'error');
+      setMessage(accepted
+        ?'Your setup request was accepted, but we couldn’t confirm access. Try signing in with the password you just chose.'
+        :'We couldn’t finish setup right now. Please try again on this page.');
     }
   };
 
@@ -110,8 +116,8 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
           <p className="mt-4 text-slate-600" role="alert">
             This link is missing or invalid. Please request a fresh verification message.
           </p>
-        ) : status === 'complete' ? (
-          <p className="mt-4 text-green-800" role="status">{message}</p>
+        ) : status === 'complete' || status === 'recovery' ? (
+          <p className={status==='complete'?'mt-4 text-green-800':'mt-4 text-slate-700'} role="status">{message}</p>
         ) : (
           <form onSubmit={redeem} noValidate className="mt-6 space-y-4">
             <p className="text-sm text-slate-600">

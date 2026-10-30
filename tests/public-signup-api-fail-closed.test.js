@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import {serializePublicSignupSession} from '../src/api/auth/publicSignupRuntime.js';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const {guidToArray,bufferToUpperCaseGuid}=require('tedious/lib/guid-parser.js');
 import { readFileSync } from 'node:fs';
 import { createPublicSignupRouter, reportPublicSignupUnavailable } from '../src/api/auth/publicSignupRegistrationRouter.js';
 
@@ -261,5 +265,22 @@ test('password-policy rejection is actionable and reveals no private failure det
     assert.equal(response.status,400);const body=response.body;
     assert.equal(body.code,'SIGNUP_PASSWORD_INVALID');assert.match(body.error,/8 to 256/);
     assert.doesNotMatch(JSON.stringify(body),/private token|short/);
+  });
+});
+
+
+test('redemption response uses persisted SQL identity casing consistently with its issued session',async()=>{
+  const {adapters}=createHarness();
+  const generated='abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  const persisted=bufferToUpperCaseGuid(Buffer.from(guidToArray(generated)));
+  assert.notEqual(generated,persisted,'Reproduce the real driver UUID casing transition');
+  adapters.redeem=async()=>({authId:generated,appUserId:generated,email:'synthetic@example.invalid',role:'authenticated',userType:'seeker',tenantId:null});
+  adapters.findAuth=async()=>({authId:persisted,appUserId:persisted,email:'synthetic@example.invalid',role:'authenticated',metadata:{global_email_verified:true}});
+  adapters.createSession=async record=>serializePublicSignupSession(record,{accessToken:'synthetic-only',expiresAt:new Date(Date.now()+60000)});
+  await withHttp(createPublicSignupRouter(adapters),async post=>{
+    const {status,body}=await post('/redeem',{token:'synthetic',password:'SyntheticOnly8!'});
+    assert.equal(status,201);
+    assert.equal(body.data.user.id,body.data.session.user.id);
+    assert.equal(body.data.user.id,persisted);
   });
 });

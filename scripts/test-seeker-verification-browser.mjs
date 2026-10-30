@@ -19,6 +19,7 @@ const authFixture=`import React,{createContext,useContext,useEffect,useState} fr
   export const useAuth=()=>useContext(Context);`;
 let vite,server,browser,releaseAuth;
 let authRequests=0,redemptions=0,replyMode="password";
+const generatedId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
 const plugin={name:'verification-bootstrap-fixture',enforce:'pre',resolveId(source,importer){
   if(!importer?.includes('/src/'))return;
   if(/\/hooks\/useAuth(?:\.jsx)?$/.test(source))return '\0verification-auth';
@@ -38,7 +39,8 @@ try {
     assert.equal(req.get('x-tenant-id'),undefined);
     if(replyMode==='password')return res.status(400).json({code:'SIGNUP_PASSWORD_INVALID'});
     if(replyMode==='unavailable')return res.status(503).json({code:'PUBLIC_SIGNUP_NOT_READY'});
-    res.status(201).json({data:{user:{id:'fixture-new',role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'fixture-new'}}}});
+    if(replyMode==='malformed')return res.status(201).json({data:{user:{id:generatedId,role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'different-account'}}}});
+    res.status(201).json({data:{user:{id:generatedId,role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:generatedId.toUpperCase()}}}});
   });
   app.get('/api/platform/auth/seeker-context',(req,res)=>{
     assert.equal(req.get('authorization'),'Bearer fixture-only');assert.equal(req.get('x-tenant-id'),undefined);
@@ -107,12 +109,21 @@ try {
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(new URL(page.url()).hash,'');
   assert.equal(redemptions,3);
+  replyMode='malformed';
+  await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
+  await page.waitForSelector('#seeker-password');
+  await page.type('#seeker-password','Bird8!xx');await page.type('#seeker-password-confirm','Bird8!xx');
+  await page.click('button[type="submit"]');
+  await page.waitForFunction(()=>document.body.innerText.includes('Try signing in with the password you just chose'));
+  assert.equal(await page.$('#seeker-password'),null,'An accepted setup must not offer another credential redemption');
+  assert.equal(redemptions,4);
+  assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored,'A mismatched identity never changes the existing session');
   await page.evaluateOnNewDocument(()=>{history.replaceState=()=>{throw new Error('fixture scrub denied');};});
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(await page.$('#seeker-password'),null);
-  assert.equal(redemptions,3);
-  console.log('SEEKER_VERIFICATION_BROWSER=PASS entry_isolation auth_hydration fragment_scrub explicit_redemption eight_character_policy inline_validation retry_same_link session_preservation full_navigation invalid_fragment scrub_failure');
+  assert.equal(redemptions,4);
+  console.log('SEEKER_VERIFICATION_BROWSER=PASS entry_isolation auth_hydration fragment_scrub explicit_redemption eight_character_policy inline_validation retry_same_link sql_uuid_casing accepted_setup_no_replay session_preservation full_navigation invalid_fragment scrub_failure');
 } finally {
   if(releaseAuth)releaseAuth();
   if(browser)await browser.close();
