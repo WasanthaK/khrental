@@ -2,6 +2,7 @@
 // until a real cross-instance atomic limiter, trusted client IP source,
 // controlled delivery adapter, governed SQL apply and pilot acceptance exist.
 import express from 'express';
+import {PUBLIC_SIGNUP_PASSWORD_HINT} from '../../utils/publicSignupPasswordPolicy.js';
 import { normalizePublicSignupDetails } from './publicSignupChallengeService.js';
 import { hashPublicSignupThrottleKey } from './publicSignupThrottleKey.js';
 
@@ -208,7 +209,11 @@ export const createPublicSignupRouter = ({
         session
       } });
     } catch (error) {
-      if (['SIGNUP_VERIFICATION_UNAVAILABLE', 'SIGNUP_PASSWORD_INVALID',
+      if(error?.code==='SIGNUP_PASSWORD_INVALID'){
+        res.status(400).json({error:PUBLIC_SIGNUP_PASSWORD_HINT,code:'SIGNUP_PASSWORD_INVALID'});
+        return;
+      }
+      if (['SIGNUP_VERIFICATION_UNAVAILABLE',
         'SIGNUP_IDENTITY_ALREADY_EXISTS'].includes(error?.code)) {
         res.status(400).json({
           error: 'This verification cannot be completed. Sign in or request another link.',

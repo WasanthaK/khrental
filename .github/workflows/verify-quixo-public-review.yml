@@ -22,5 +22,11 @@ jobs:
       - run: npm ci
       - name: Verify release paths in a localhost Chromium browser
         run: node scripts/verify-r4-public-review-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-browse-proof
+          path: verification-browse-proof/
+          if-no-files-found: ignore
       - name: Report isolated preview boundary
         run: echo "R4 layout and any LK live-client path verified on localhost with synthetic fixtures only; no production requests, signup or enquiries"

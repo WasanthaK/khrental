@@ -7,6 +7,7 @@ on:
       - 'src/pages/PropertyEnquiry.jsx'
       - 'src/pages/OwnerEnquiries.jsx'
       - 'src/utils/enquiryReturnPath.js'
+      - 'src/utils/publicSignupPasswordPolicy.js'
       - 'src/services/seekerContextClient.js'
       - 'src/routes.jsx'
       - 'src/main.jsx'

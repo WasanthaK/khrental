@@ -90,7 +90,7 @@ try{
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/','/lk/property/','/bn/property/'].includes(p);
-    assert.deepEqual(data.scripts,expectedListingPanel?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
+    assert.deepEqual(data.scripts,(expectedListingPanel||p==='/')?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
     if(expectedListingPanel)assert.equal(data.livePanel,(p.startsWith('/lk/')?lkLive:bnLive)?'true':'false',p+' live country pages');
     if(liveMarket){
       assert.equal(catalogRequests,1,'Exactly one anonymous catalog request');
@@ -183,6 +183,34 @@ try{
       await tab.waitForSelector('a[href*="/enquire?listingId="]');
       assert.equal(await tab.$eval('a[href*="/enquire?listingId="]',n=>n.href),apiOrigin+'/enquire?listingId='+fixtureId+'&country=LK','Public release capability opens the selected property enquiry');
       assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('does not reserve')),'Enquiry is not represented as a reservation');
+      // Signup acknowledgement returns to useful public browsing. The marker
+      // is only a reminder; it sends no credentialed or account-mutating request.
+      await tab.goto(origin+'/lk/property/?id='+fixtureId+'&verification=pending',{waitUntil:'networkidle0'});
+      await tab.waitForSelector('.verification-reminder');
+      assert.equal(new URL(tab.url()).searchParams.has('verification'),false);
+      const continueUrl=apiOrigin+'/enquire?listingId='+fixtureId+'&country=LK';
+      assert.equal(await tab.$eval('.verification-reminder-continue',e=>e.href),continueUrl);
+      const pending=await tab.evaluate(()=>sessionStorage.getItem('quixo.signup.pending'));
+      assert.deepEqual(JSON.parse(pending),{intent:{listingId:fixtureId,country:'LK'}});
+      fs.mkdirSync('verification-browse-proof',{recursive:true});
+      await tab.setViewport({width:1280,height:900});
+      await tab.screenshot({path:'verification-browse-proof/pending-property-desktop.png',fullPage:false});
+      await tab.setViewport({width:390,height:844});
+      assert.ok(await tab.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Pending banner fits mobile');
+      await tab.screenshot({path:'verification-browse-proof/pending-property-mobile.png',fullPage:false});
+      await tab.goto(origin+'/',{waitUntil:'networkidle0'});
+      await tab.waitForSelector('.verification-reminder');
+      assert.equal(await tab.$eval('.verification-reminder-continue',e=>e.href),continueUrl,'Browsing retains the original property');
+      await tab.click('button[aria-label="Dismiss verification reminder"]');
+      assert.equal(await tab.$('.verification-reminder'),null);
+      assert.equal(await tab.evaluate(()=>sessionStorage.getItem('quixo.signup.pending')),null);
+      await tab.goto(origin+'/?verification=verified&role=admin',{waitUntil:'networkidle0'});
+      assert.equal(await tab.$('.verification-reminder'),null,'A query flag never establishes a verified account');
+      await tab.evaluate(()=>sessionStorage.setItem('quixo.signup.pending',JSON.stringify({intent:{listingId:'javascript:bad',country:'LK'}})));
+      await tab.reload({waitUntil:'networkidle0'});assert.equal(await tab.$('.verification-reminder'),null);
+      await tab.evaluate(()=>sessionStorage.removeItem('quixo.signup.pending'));
+      console.log('VERIFICATION_BROWSE_BANNER=PASS property_context continued_browsing mobile dismissal invalid_marker_no_auth');
+
     }
     await tab.close();
   }

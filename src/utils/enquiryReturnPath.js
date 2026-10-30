@@ -21,3 +21,14 @@ export const enquiryLoginSearch = search => {
   const path=enquiryReturnPath(search);
   return path?'?'+path.split('?')[1]:'';
 };
+
+// Return to public browsing after a generic signup acknowledgement. Never put
+// an email, password, token or arbitrary return URL on the public website.
+export const pendingVerificationBrowseUrl=search=>{
+  const intent=enquiryIntentFromSearch(search);
+  const url=new URL(intent
+    ?'https://quixo.homes/'+intent.country.toLowerCase()+'/property/?id='+intent.listingId
+    :'https://quixo.homes/');
+  url.searchParams.set('verification','pending');
+  return url.href;
+};

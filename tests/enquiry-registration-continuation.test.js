@@ -4,7 +4,7 @@ import {createPublicSignupChallengeToken} from '../src/api/auth/publicSignupChal
 import {normalizePublicSignupDetails} from '../src/api/auth/publicSignupChallengeService.js';
 import {createPublicSignupVerificationLink,createPublicSignupVerificationEmail} from '../src/api/auth/publicSignupVerificationEmail.js';
 import {consumeSeekerVerificationContext} from '../src/utils/seekerVerificationFragment.js';
-import {enquiryReturnPath,parseEnquiryIntent} from '../src/utils/enquiryReturnPath.js';
+import {enquiryReturnPath,parseEnquiryIntent,pendingVerificationBrowseUrl} from '../src/utils/enquiryReturnPath.js';
 import express from 'express';
 import {createPublicSignupRouter} from '../src/api/auth/publicSignupRegistrationRouter.js';
 
@@ -67,4 +67,14 @@ test('malformed continuation and failed scrubbing cannot produce a redemption co
     history:{replaceState(){throw Error('denied');}}}),{token:null,enquirySearch:''});
   assert.throws(()=>createPublicSignupVerificationLink({token,baseUrl:'https://app.quixo.homes',production:true,
     enquiry:{...enquiry,returnUrl:'https://evil.test'}}));
+});
+
+
+test('signup acknowledgement returns to public browsing with no identity or credential in the URL',()=>{
+  const result=new URL(pendingVerificationBrowseUrl('?listingId='+enquiry.listingId+'&country=LK&email=private@example.test&token=secret&returnUrl=https://evil.test'));
+  assert.equal(result.origin,'https://quixo.homes');assert.equal(result.pathname,'/lk/property/');
+  assert.deepEqual([...result.searchParams],[['id',enquiry.listingId],['verification','pending']]);
+  for(const query of ['', '?returnUrl=https://evil.test', '?listingId=bad&country=LK','?listingId='+enquiry.listingId+'&country=US']){
+    assert.equal(pendingVerificationBrowseUrl(query),'https://quixo.homes/?verification=pending');
+  }
 });

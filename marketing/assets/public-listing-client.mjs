@@ -7,6 +7,50 @@ const kinds=['residential','commercial','retail','office'];
 const selectedKind=new URLSearchParams(location.search).get('type');
 const kindLabels={residential:'houses & apartments',commercial:'commercial properties',retail:'shops & retail',office:'offices & workspaces'};
 const detailPage=previewArea?.hasAttribute('data-public-listing-detail');
+// This reminder is a browsing preference, never authentication or access proof.
+// It holds only a validated public property reference, never contact/credential data.
+{
+  const key='quixo.signup.pending';
+  const pointer=value=>value&&typeof value==='object'&&!Array.isArray(value)&&
+    Object.keys(value).length===2&&['LK','BN'].includes(value.country)&&
+    typeof value.listingId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.listingId)
+    ?{listingId:value.listingId.toLowerCase(),country:value.country}:null;
+  let pending=null;
+  try {
+    const value=JSON.parse(sessionStorage.getItem(key));
+    if(value&&Object.keys(value).length===1&&Object.hasOwn(value,'intent')&&
+      (value.intent===null||pointer(value.intent)))pending={intent:pointer(value.intent)};
+  }catch{/* Browsing must still work with storage disabled. */}
+  const url=new URL(location.href);
+  if(url.searchParams.get('verification')==='pending'){
+    pending={intent:detailPage?pointer({listingId:url.searchParams.get('id'),country:document.body.dataset.country}):null};
+    try{sessionStorage.setItem(key,JSON.stringify(pending));}catch{/* Current-page reminder still works. */}
+    url.searchParams.delete('verification');
+    try{history.replaceState(history.state,'',url.pathname+url.search+url.hash);}catch{/* No secret is present in this marker. */}
+  }
+  if(pending){
+    const banner=document.createElement('section');
+    banner.className='verification-reminder';banner.setAttribute('role','status');
+    banner.setAttribute('aria-label','Email verification reminder');
+    const copy=document.createElement('div');
+    const title=document.createElement('strong');title.textContent='Verify your email to unlock account features';
+    const text=document.createElement('p');text.textContent='Keep browsing while you wait. Check your inbox for a verification link.';
+    copy.append(title,text);
+    const actions=document.createElement('div');actions.className='verification-reminder-actions';
+    const search=pending.intent?'?listingId='+pending.intent.listingId+'&country='+pending.intent.country:'';
+    const clear=()=>{try{sessionStorage.removeItem(key);}catch{}banner.remove();};
+    const next=document.createElement('a');next.className='verification-reminder-continue';
+    next.href=apiOrigin+(pending.intent?'/enquire'+search:'/seeker');
+    next.textContent='Continue after verifying';next.addEventListener('click',clear);
+    const signin=document.createElement('a');signin.href=apiOrigin+'/login'+search;
+    signin.textContent='Already registered? Sign in';signin.addEventListener('click',clear);
+    const dismiss=document.createElement('button');dismiss.type='button';
+    dismiss.textContent='×';dismiss.setAttribute('aria-label','Dismiss verification reminder');
+    dismiss.addEventListener('click',clear);
+    actions.append(next,signin,dismiss);banner.append(copy,actions);
+    document.querySelector('main')?.before(banner);
+  }
+}
 if(location.pathname.endsWith('/search/')){
   for(const link of document.querySelectorAll('.search-tabs a')){
     const kind=new URL(link.href).searchParams.get('type');

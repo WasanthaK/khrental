@@ -280,3 +280,12 @@ Any future change touching authentication, invitations, user creation, membershi
 5. Add or update regression coverage before merge.
 6. Prove security, UX and durable persisted state independently.
 7. Avoid compatibility or cleanup work unless it is necessary to repair the verified flow.
+
+
+## Public registration browsing and password policy (2026-10-30)
+
+After the public registration endpoint acknowledges a request, return the visitor to public browsing. Preserve a validated selected-property reference when present and show a dismissible email-verification reminder. The reminder stores only that public reference in session storage; it never establishes an identity or authorizes account features. Acknowledgement does not prove email delivery or account creation. Verification remains necessary before authenticated actions.
+
+The owner-approved public signup password minimum is 8 characters, with a 256-character maximum. Use one shared policy for client validation and server redemption, permit spaces, and provide show/hide controls. Reject an invalid password before consuming a verification challenge. Password validation failures must identify the rule; temporary service failures must offer a retry on the current page without clearing the entered password or requiring another email. Never persist or log passwords or verification secrets.
+
+This source change does not establish that the reported production redemption failure is resolved. Live intended-account verification and the agreement-to-tenancy acceptance remain release acceptance requirements under #459.

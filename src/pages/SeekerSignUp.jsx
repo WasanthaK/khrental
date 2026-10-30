@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { isPublicSignupUiEnabled } from '../utils/env';
-import {enquiryIntentFromSearch,enquiryLoginSearch} from '../utils/enquiryReturnPath.js';
+import {enquiryIntentFromSearch,enquiryLoginSearch,pendingVerificationBrowseUrl} from '../utils/enquiryReturnPath.js';
 
 export default function SeekerSignUp() {
   const location=useLocation();
@@ -32,6 +32,7 @@ export default function SeekerSignUp() {
       setMessage('If registration is available for this email address, a verification email will be sent.');
       setEmail('');
       setName('');
+      window.location.assign(pendingVerificationBrowseUrl(location.search));
     } catch {
       setMessage('Registration is unavailable right now. Please try again later.');
     } finally { setBusy(false); }

@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { createPasswordCredential, ensureAuthSchema } from './index.js';
 import { hashPublicSignupChallengeToken } from './publicSignupChallenge.js';
+import {isValidPublicSignupPassword,PUBLIC_SIGNUP_PASSWORD_HINT} from '../../utils/publicSignupPasswordPolicy.js';
 
 const fail = (status, code, message) => {
   const error = new Error(message);
@@ -41,8 +42,8 @@ export const redeemPublicSignupChallenge = async ({ token, password, expectedEma
   } catch {
     throw unavailable();
   }
-  if (typeof password !== 'string' || password.length < 12 || password.length > 256) {
-    throw fail(400, 'SIGNUP_PASSWORD_INVALID', 'Password length must be 12 to 256 characters.');
+  if (!isValidPublicSignupPassword(password)) {
+    throw fail(400, 'SIGNUP_PASSWORD_INVALID', PUBLIC_SIGNUP_PASSWORD_HINT);
   }
 
   // Perform expensive scrypt BEFORE locking the challenge row.

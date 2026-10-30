@@ -251,3 +251,15 @@ test('successful signup and expected invalid challenges do not emit unavailable 
   }
   assert.deepEqual(logged, []);
 });
+
+
+test('password-policy rejection is actionable and reveals no private failure details',async t=>{
+  const {adapters}=createHarness();
+  adapters.redeem=async()=>{throw Object.assign(new Error('private token and password'),{code:'SIGNUP_PASSWORD_INVALID'});};
+  await withHttp(createPublicSignupRouter(adapters),async post=>{
+    const response=await post('/redeem',{token:'synthetic',password:'short'});
+    assert.equal(response.status,400);const body=response.body;
+    assert.equal(body.code,'SIGNUP_PASSWORD_INVALID');assert.match(body.error,/8 to 256/);
+    assert.doesNotMatch(JSON.stringify(body),/private token|short/);
+  });
+});

@@ -18,7 +18,7 @@ const authFixture=`import React,{createContext,useContext,useEffect,useState} fr
   }
   export const useAuth=()=>useContext(Context);`;
 let vite,server,browser,releaseAuth;
-let authRequests=0,redemptions=0;
+let authRequests=0,redemptions=0,replyMode="password";
 const plugin={name:'verification-bootstrap-fixture',enforce:'pre',resolveId(source,importer){
   if(!importer?.includes('/src/'))return;
   if(/\/hooks\/useAuth(?:\.jsx)?$/.test(source))return '\0verification-auth';
@@ -36,6 +36,8 @@ try {
     assert.equal(req.body.token,token);
     assert.equal(req.get('authorization'),undefined);
     assert.equal(req.get('x-tenant-id'),undefined);
+    if(replyMode==='password')return res.status(400).json({code:'SIGNUP_PASSWORD_INVALID'});
+    if(replyMode==='unavailable')return res.status(503).json({code:'PUBLIC_SIGNUP_NOT_READY'});
     res.status(201).json({data:{user:{id:'fixture-new',role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'fixture-new'}}}});
   });
   app.get('/api/platform/auth/seeker-context',(req,res)=>{
@@ -78,11 +80,22 @@ try {
   const stored=await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state}));
   assert.ok(!JSON.stringify(stored).includes(token));
   assert.equal(stored.local['verification-owner-marker'],'unchanged');
-  await page.type('#seeker-password','SyntheticFixtureOnly!');
-  await page.type('#seeker-password-confirm','SyntheticFixtureOnly!');
+  assert.ok((await page.$eval('#seeker-password-hint',e=>e.textContent)).includes('8 to 256'));
+  await page.type('#seeker-password','Bird8!x');await page.type('#seeker-password-confirm','Bird8!x');
   await page.click('button[type="submit"]');
+  await page.waitForSelector('[role="alert"]');assert.equal(redemptions,0,'Too-short input never consumes a request or challenge');
+  await page.type('#seeker-password','x');await page.type('#seeker-password-confirm','x');
+  await page.click('button[type="button"]');
+  assert.equal(await page.$eval('#seeker-password',e=>e.type),'text');
+  await page.click('button[type="button"]');
+  await page.click('button[type="submit"]');await page.waitForNetworkIdle({idleTime:200});
+  assert.equal(redemptions,1);assert.ok((await page.$eval('[role="alert"]',e=>e.textContent)).includes('8 to 256'));
+  replyMode='unavailable';await page.click('button[type="submit"]');
+  await page.waitForFunction(()=>document.body.innerText.includes('you don’t need to request another link yet'));
+  assert.equal(redemptions,2);
+  replyMode='ok';await page.click('button[type="submit"]');
   await page.waitForFunction(()=>document.body.innerText.includes('Another account is open in this browser'));
-  assert.equal(redemptions,1);
+  assert.equal(redemptions,3,'The same in-memory verification context survives policy/service retries');
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored);
   // Leaving the isolated entry must boot the normal application, not keep
   // the completed verification component alive under a changed URL.
@@ -93,13 +106,13 @@ try {
   await page.goto(origin+'/verify-email#token=short',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(new URL(page.url()).hash,'');
-  assert.equal(redemptions,1);
+  assert.equal(redemptions,3);
   await page.evaluateOnNewDocument(()=>{history.replaceState=()=>{throw new Error('fixture scrub denied');};});
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(await page.$('#seeker-password'),null);
-  assert.equal(redemptions,1);
-  console.log('SEEKER_VERIFICATION_BROWSER=PASS entry_isolation auth_hydration fragment_scrub explicit_redemption session_preservation full_navigation invalid_fragment scrub_failure');
+  assert.equal(redemptions,3);
+  console.log('SEEKER_VERIFICATION_BROWSER=PASS entry_isolation auth_hydration fragment_scrub explicit_redemption eight_character_policy inline_validation retry_same_link session_preservation full_navigation invalid_fragment scrub_failure');
 } finally {
   if(releaseAuth)releaseAuth();
   if(browser)await browser.close();
