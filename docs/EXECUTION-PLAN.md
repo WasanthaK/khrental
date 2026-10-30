@@ -1,5 +1,60 @@
 # KH Rentals Execution Plan
 
+## Controlling customer journeys, commercial decisions and implementation order — 30 October 2026
+
+**Authority:** owner's clarified decisions in the Quixo.Homes project conversation, confirmed with “yes update the canonical plan and then we can start”. This section controls over conflicting earlier checkpoints below, including register-before-browsing, a separate listing fee, permanently hardcoded USD 5 pricing or tenant-admin pricing controls. Earlier sections remain historical evidence, not current completion claims.
+
+### Product promise and entry journeys
+
+The public website must immediately serve two intentions: **Find a property** and **List my property**. Preserve the approved marketing hero and three category stock images; residential/commercial/category searches must open eligible available public inventory.
+
+| Customer | Required journey |
+| --- | --- |
+| Prospective renter | Browse/search freely → choose a property → **Express your interest** → register or sign in if needed → return directly to that property's enquiry → owner reply → viewing → application → offer/agreement → tenancy |
+| Owner/manager | Sign up and verify → establish their own organization through verified server authority → add the first property/dwelling → enter the governed management-subscription flow → manage the rental lifecycle; eligible available property is publicly listed automatically unless opted out |
+| Returning customer | Sign in → resume the selected property or actual next task; no generic dead-end account screen |
+
+Property details needed for discovery remain browsable. Registration is requested at **Express your interest**, not before search. Carry only the validated public listing reference/market across registration and verification; do not lose the customer’s chosen property. Complete setup with the server-issued session where safe, preserving a valid different signed-in identity explicitly; do not force redundant password entry or silently switch accounts. Server verification, one global identity per email, organization isolation, explicit enquiry-sharing consent and separate existing-renter tenancy authority remain mandatory.
+
+Customer screens must present useful next actions and ordinary language. Do not expose internal organization membership, tenant context, access-boundary or subscription architecture as the renter’s onboarding instructions. These are product usability requirements, not authorization bypasses.
+
+### Agreed commercial model and Global Admin authority
+
+- Management fee pays for **property and rental-lifecycle management**, not for placing a listing.
+- Standard public listing is an **included value-add**, automatic for eligible available inventory unless the owner opts out. No separate listing fee.
+- Premium/featured paid listing products are **out of initial scope**.
+- USD 5 per independently rentable dwelling/month is the **starting base-fee baseline**, not a permanent code constant.
+- The base fee includes management up to a **market-specific monthly-rent threshold**; market research informs that threshold.
+- **Global Admin only**, through platform-wide setup, can configure each market’s base fee/billing currency and included rent threshold/local currency. Tenant/organization admins, property owners, staff and renters cannot change market pricing; they may see the applicable customer price.
+- Include validated values, a price preview, effective date/version and an audit of actor/before/after/reason. Existing subscriptions and historical invoices must not silently change when an admin edits a rule.
+- Above-threshold pricing policy/rate, FX/rounding and final market thresholds remain **undecided**. Rs 25,000, USD 100 and BND 1,200 are discussion examples, not approved defaults or market-research findings. Do not invent or activate a surcharge.
+- Global Admin controls commercial pricing policy; Stripe remains the payment/subscription/invoice authority. Implementation must synchronize published pricing versions with Stripe rather than create a separate collection/invoice system. Merchant/tax readiness and the existing no-trial decision remain intact.
+- Detailed controlling billing requirements: [canonical SaaS billing contract](QUIXO-HOMES-STRIPE-SAAS-BILLING.md#controlling-owner-decision--configurable-market-pricing-30-october-2026).
+
+### Current evidence and limits
+
+| Item | Current accepted evidence / remaining work |
+| --- | --- |
+| Isolated verification entry | #460 merged/deployed; actual-entry/StrictMode fragment preservation correction proved. This is not proof of successful registration for the intended account. |
+| Signup diagnostics | #461 deployed at application build e36474a1515f010233af43e5528a3a894bc7ff08, Ready revision 0000424. Release #40972954960 and read-only #40974303591 passed exact-build/SQL health. Returned diagnostic log window had no signup-unavailable event; original redemption 503 cause remains unverified. |
+| Reported sign-in return | Owner reported a repeat sign-in screen after submitting credentials, then supplied seeker-area screenshots. Those show page access, not independent proof of the intended identity or resolution of the reported loop. Keep live acceptance open. |
+| Seeker-area UX | Draft #462, head f36edbcd5f55f1b322acecc04b868a0b031b6e98, has 780 tests/build plus isolated SQL/browser journeys PASS (#40976683716, #40976683711). It is UNMERGED/UNDEPLOYED and must be aligned with the clarified public-entry journey before release. Do not treat an improved dashboard as complete onboarding. |
+| Owner signup | Current generic /register is not verified owner/organization onboarding and returns to generic sign-in. Do not relabel the legacy renter-registration flow as owner signup. |
+| Global Admin pricing / subscriptions | Requirements recorded; editable market controls, approved excess pricing, safe Stripe synchronization and customer billing acceptance remain unimplemented/open. |
+| Overall operational website | #459 remains OPEN. Genuine participant agreement-to-tenancy and final customer acceptance have not passed; no subscription/planning decision closes them. |
+
+### Ordered implementation and acceptance
+
+1. **Renter entry and interest continuation — FIRST ACTIVE PACKAGE.** Align the public property action to Express your interest; preserve the selected property through signup/sign-in/verification; establish safe, explicit session continuation; reproduce/correct the reported login return using evidence. Integrate useful #462 customer navigation/empty states in this journey. Prove new and returning customers, reload/new-browser email opening, expired/replayed links, an already-signed-in different account, logout/re-login and mobile. No registration wall before browsing.
+2. **Owner onboarding foundation.** Replace legacy generic signup with verified global identity + separately owned organization; take the owner to first-property setup (country, one of the three categories, details/photos, availability and opt-out) and listing preview. Draft preparation must not grant unpaid management entitlement or imply paid launch. Preserve one global identity and server-resolved membership/role authority.
+3. **Existing rental lifecycle acceptance.** Complete actual enquiry → reply → viewing → application → offer → agreement/signature → deposit/checklist → explicit tenancy activation. Automated fixtures are regression evidence only; never fabricate participant consent, signatures, money or activation to close acceptance. Review the complete canonical status after this website/lifecycle package.
+4. **Subscription-management phase: Global Admin setup and paid owner activation.** Build platform-only market settings with deny tests for tenant admins/owners/seekers; settle/validate researched thresholds and above-threshold policy before activation; implement effective pricing versions, approved Stripe catalog mapping, Checkout, signed webhook handling, dwelling quantity, dunning/cancellation and subscription isolation. Preserve merchant/tax launch gates and historical customer access. No separate listing charge or premium-listing feature.
+5. **Complete owner launch and final acceptance.** Verify paid owner signup → first property → automatic eligible listing/opt-out → public renter discovery/interest through the same property, plus multi-organization and existing-account cases. Check desktop/mobile, payment failure and renewal/cancellation behavior. A paid-owner journey is not operational until subscription acceptance passes; preparing its screens in step 2 is not completion.
+
+**Release discipline:** prepare concrete tested changes for review; do not infer production deployment approval from this planning update. No runtime, schema, customer-account, payment or listing publication change is performed by updating this plan.
+
+---
+
 ## Seeker redemption 503 — read-only evidence and diagnostic preparation, 2026-10-30
 
 Real seeker completion remains blocked by HTTP 503 from `/api/public-signup/redeem`; #460's successful rendering correction is not signup/login acceptance. Approved read-only production run #40970286104 passed against serving build `b1656bc1c6f39045d25a00f13085f5dbbcb82f40`: schema, application identity DML permissions, required-column/default metadata and insert-trigger absence checked. Follow-up #40970990956 passed memory-only synthetic password derivation and foreign-key inspection; only the expected app-user-to-tenant foreign key was returned, and aggregate broken seeker app/auth linkage was zero. These observations do not establish the original request's failure stage or whether that particular account exists. No production customer write, token/password inspection, email resend, schema or permission change occurred.
@@ -2583,12 +2638,3 @@ Owner explicitly instructed “merge” after the concrete merge/deployment appr
 Independent public build-info read still returned prior build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`. Do not claim the new private preview is live or enable pilot controls with the new SHA until actual serving/readiness evidence passes. Existing public listing gates were not enabled by this merge.
 
 Existing [read-only revision diagnostic #40517299900](https://github.com/WasanthaK/khrental/actions/runs/40517299900), job `122234189706`, was dispatched with `restart_latest=false`; queued at the latest inspection. No restart, traffic shift, scaling, SQL migration or speculative source correction was performed. **Next dependency:** inspect this diagnostic, identify the startup/readiness cause, complete the authorized deployment and record matching build/SQL acceptance; then resume the private listing preview. Original R1 remains closed, R3 single-replica condition and deferred invoice R2 remain unchanged.
-
-
-## Seeker customer journey UX correction — 30 October 2026
-
-Owner rejected the live seeker landing and empty enquiry/offer screens as an unusable customer experience. A home seeker must be able to find a rental and contact its owner without being told to join an organization or interpret subscription/access implementation details. This is part of the operational website goal in #459; subscriptions remain deferred.
-
-Bounded presentation correction: consistent Overview / My enquiries / Offers & agreements navigation, Sri Lanka and Brunei browse actions, useful empty states with a next action, mobile layouts and no paging controls on an empty first page. Existing property-reference continuation through signup/verification/sign-in remains governed by the validated listing pointer. Login and signup copy describe customer goals. No account is automatically created or switched, and no listing, viewing, application, offer, signature or tenancy status is fabricated.
-
-This package does not change session establishment or claim the reported post-sign-in loop is fixed. Its live cause and successful login for the intended account remain acceptance items. The provided screenshots show access to seeker screens, not proof of which account was used. Signup safe diagnostics deployed in #461 at e36474a1515f010233af43e5528a3a894bc7ff08, revision 0000424; read-only #40974303591 confirms release/SQL health and returned no sanitized signup-failure event. Customer UX correction remains unmerged/undeployed until its checks and release decision. Physical customer journey and real agreement-to-tenancy acceptance remain OPEN.
