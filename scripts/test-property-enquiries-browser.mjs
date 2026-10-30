@@ -139,7 +139,7 @@ try {
   page.on('pageerror',e=>{errors.push(e.message);console.error('FIXTURE_PAGE_ERROR='+e.message);});
   page.on('response',r=>{if(r.status()>=400){console.error('FIXTURE_HTTP_ERROR='+r.status()+' '+r.url());}});
   await page.setRequestInterception(true);
-  page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+  page.on('request',r=>{if(r.url().startsWith('https://quixo.homes/'))return r.respond({status:200,contentType:'text/html',body:'<h1>Public browsing fixture</h1>'});return r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort();});
   await page.setViewport({width:1280,height:900});
   await page.goto(origin+'/enquire?listingId='+listingId+'&country=LK',{waitUntil:'networkidle0'});
   console.log('BROWSER_STAGE=anonymous_listing');
@@ -319,7 +319,9 @@ try {
   await page.click('a[href^="/seeker-sign-up?listingId="]');
   await page.waitForSelector('#seeker-name');await page.type('#seeker-name','Synthetic new seeker');
   await page.type('#seeker-email','new-seeker@example.test');await page.click('form button');
-  await page.waitForFunction(()=>document.body.innerText.includes('verification email will be sent'));
+  await page.waitForFunction(()=>document.body.innerText.includes('Public browsing fixture'));
+  const publicReturn=new URL(page.url());assert.equal(publicReturn.origin,'https://quixo.homes');
+  assert.equal(publicReturn.searchParams.get('id'),listingId);assert.equal(publicReturn.searchParams.get('verification'),'pending');
   assert.ok(verificationLink);
   const verifyPage=await browser.newPage();activePage=verifyPage;
   verifyPage.setDefaultTimeout(10000);verifyPage.setDefaultNavigationTimeout(15000);
@@ -331,7 +333,7 @@ try {
   await verifyPage.waitForSelector('#seeker-password');
   await verifyPage.type('#seeker-password','SyntheticFixtureOnly!');await verifyPage.type('#seeker-password-confirm','SyntheticFixtureOnly!');
   const loginsBeforeVerification=normalLogins;
-  await verifyPage.click('form button');await verifyPage.waitForSelector('textarea');
+  await verifyPage.click('button[type="submit"]');await verifyPage.waitForSelector('textarea');
   assert.equal(new URL(verifyPage.url()).pathname,'/enquire');
   assert.equal(new URL(verifyPage.url()).searchParams.get('listingId'),listingId);
   assert.equal(normalLogins,loginsBeforeVerification,'Email verification must not demand a second password login');
