@@ -8,6 +8,18 @@
 - SECURITY, USER EXPERIENCE, and DURABILITY are mandatory design constraints for authentication and account lifecycle work
 - READ `docs/AUTHENTICATION-LIFECYCLE.md` and `docs/EXECUTION-PLAN.md` before changing authentication, invitations, user creation, memberships, session handling, password flows, onboarding, or auth-related routing
 
+## Customer Design and Acceptance Principles
+
+Content, UX, UI and usability are mandatory design criteria for every customer-facing change, alongside security, correctness and durability.
+
+- **Content:** Read the actual headings, labels, instructions, consent, errors and empty states. Use clear customer language, truthful promises and helpful guidance. Explain the customer's task and next action without exposing internal architecture.
+- **UX:** Review the complete affected journey from the customer's intention to its outcome. Preserve the selected property and entered information across required steps; remove unnecessary repetition, dead ends and distracting navigation.
+- **UI:** Review visual hierarchy, spacing, typography, contrast and responsive layout. Keep useful property context visible, including approved public photos, rent and details where relevant and available. Give the main action suitable prominence.
+- **Usability:** Check that a customer can quickly understand the value, identify where they are and complete the next task. Review relevant loading, empty, validation, error, retry and success states, keyboard access and mobile use.
+- **Evidence:** Inspect the rendered page and its actual wording in desktop and mobile views for the affected journey. Review screenshots in context and perform representative interactions; do not accept a page from a successful API response or automated tests alone.
+- **Acceptance:** Record functional verification separately from content/design/usability acceptance. A working sign-in does not establish that the enquiry page or the full rental lifecycle is accepted. Keep observed design gaps open until reviewed and corrected.
+- Apply these criteria within the requested scope, preserving authentication, explicit consent, privacy and existing authorization boundaries. Never invent customer messages, consents, signatures or payments to complete an acceptance record.
+
 ## Authentication and Account Lifecycle
 - One global `app_users` identity per email is canonical; organization access belongs in `tenant_memberships`
 - Every credential lifecycle transition MUST have exactly one UI owner and one backend authority
