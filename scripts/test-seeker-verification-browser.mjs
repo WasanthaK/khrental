@@ -110,6 +110,9 @@ try {
   assert.equal(new URL(page.url()).hash,'');
   assert.equal(redemptions,3);
   replyMode='malformed';
+  // A hash-only goto does not start a new isolated verification bootstrap.
+  await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
+  if(releaseAuth)releaseAuth();
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#seeker-password');
   await page.type('#seeker-password','Bird8!xx');await page.type('#seeker-password-confirm','Bird8!xx');
@@ -118,6 +121,8 @@ try {
   assert.equal(await page.$('#seeker-password'),null,'An accepted setup must not offer another credential redemption');
   assert.equal(redemptions,4);
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored,'A mismatched identity never changes the existing session');
+  await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
+  if(releaseAuth)releaseAuth();
   await page.evaluateOnNewDocument(()=>{history.replaceState=()=>{throw new Error('fixture scrub denied');};});
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
