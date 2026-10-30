@@ -125,7 +125,14 @@ try {
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored,'A mismatched identity never changes the existing session');
   await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
   if(releaseAuth)releaseAuth();
-  await page.evaluateOnNewDocument(()=>{history.replaceState=()=>{throw new Error('fixture scrub denied');};});
+  await page.evaluateOnNewDocument(()=>{
+    const replace=history.replaceState.bind(history);
+    // Deny the credential scrub while allowing React Router bookkeeping.
+    history.replaceState=(state,title,url)=>{
+      if(url==='/verify-email')throw new Error('fixture scrub denied');
+      return replace(state,title,url);
+    };
+  });
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(await page.$('#seeker-password'),null);
