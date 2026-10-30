@@ -13,7 +13,7 @@ const detailPage=previewArea?.hasAttribute('data-public-listing-detail');
   const key='quixo.signup.pending';
   const pointer=value=>value&&typeof value==='object'&&!Array.isArray(value)&&
     Object.keys(value).length===2&&['LK','BN'].includes(value.country)&&
-    typeof value.listingId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value.listingId)
+    typeof value.listingId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.listingId)
     ?{listingId:value.listingId.toLowerCase(),country:value.country}:null;
   let pending=null;
   try {
