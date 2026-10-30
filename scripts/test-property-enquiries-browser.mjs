@@ -173,6 +173,7 @@ try {
   await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile.png'),fullPage:true});
   await page.setViewport({width:320,height:740});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Selected property form fits a narrow phone');
+  assert.ok(await page.$eval('.enquiry-rent',e=>e.scrollWidth<=e.clientWidth+1),'Rent and its monthly period remain fully visible inside the card');
   await page.screenshot({path:path.join(designOutput,'property-enquiry-mobile-small.png'),fullPage:true});
   await page.setViewport({width:390,height:844});
   photoMode='missing';await page.reload({waitUntil:'networkidle0'});
