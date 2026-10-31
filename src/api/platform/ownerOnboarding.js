@@ -26,11 +26,21 @@ export const createOwnerTestingWorkspace=async({actorId,authId,input,getPool=get
   let begun=false;
   try{
     await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);begun=true;
-    const identity=await query(`SELECT au.id FROM dbo.app_users au WITH(UPDLOCK,HOLDLOCK)
+    // Profile metadata is editable through legacy account APIs. A marker alone
+    // is never proof of email ownership; require the durable verification ledger
+    // for this credential's lifetime (or an accepted invitation for this user).
+    const identity=await query(`SELECT au.id,CASE WHEN
+      EXISTS(SELECT 1 FROM dbo.public_signup_challenges c WHERE c.email_normalized=LOWER(au.email)
+        AND c.sent_at IS NOT NULL AND c.revoked_at IS NULL
+        AND c.consumed_at>=CAST(auth.createdat AS DATETIME2(3)))
+      OR EXISTS(SELECT 1 FROM dbo.user_invitations i WHERE i.app_user_id=au.id AND LOWER(i.email)=LOWER(au.email)
+        AND i.revoked_at IS NULL AND CAST(i.accepted_at AS DATETIME2(3))>=CAST(auth.createdat AS DATETIME2(3)))
+      THEN 1 ELSE 0 END AS verified FROM dbo.app_users au WITH(UPDLOCK,HOLDLOCK)
       INNER JOIN dbo.auth_users auth ON auth.app_user_id=au.id AND auth.auth_id=au.auth_id
       AND LOWER(auth.email)=LOWER(au.email)
       WHERE au.id=@actorId AND au.auth_id=@authId AND au.status='active'`,{actorId,authId});
     if(identity.length!==1){throw failure(403,'OWNER_IDENTITY_REQUIRED','We couldn’t confirm your account. Please sign in again.');}
+    if(Number(identity[0].verified)!==1){throw failure(403,'OWNER_VERIFICATION_REQUIRED','Verify your email before setting up a property workspace.');}
     const slug='owner-'+details.requestId;
     const existing=await query(`SELECT t.id,t.name,settings.feature_flags_json FROM dbo.tenants t WITH(UPDLOCK,HOLDLOCK)
       INNER JOIN dbo.tenant_memberships m ON m.tenant_id=t.id AND m.app_user_id=@actorId AND m.role='admin' AND m.status='active'
