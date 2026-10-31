@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildReturnPath, getPostLoginPath } from '../src/utils/authRedirect.js';
+import { buildReturnPath, getPostLoginPath,getExistingPropertyWorkspacePath } from '../src/utils/authRedirect.js';
+
+test('existing property workspace navigation follows active membership, not email or a global role',()=>{
+  const membership={tenant_id:'current-business',role:'admin',status:'active'};
+  for(const email of ['owner-a@example.test','owner-b@example.test']){
+    assert.equal(getExistingPropertyWorkspacePath({user:{id:'account',role:'authenticated',email},membership}),'/dashboard/properties');
+  }
+  assert.equal(getExistingPropertyWorkspacePath({user:{role:'admin'},membership:null}),null);
+  assert.equal(getExistingPropertyWorkspacePath({user:{role:'admin'},membership:{...membership,status:'revoked'}}),null);
+  assert.equal(getExistingPropertyWorkspacePath({user:{role:'authenticated'},membership:{...membership,role:'rentee'}}),null);
+  assert.equal(getExistingPropertyWorkspacePath({user:{role:'staff'},membership:{...membership,role:'staff',permission_bundle:'read_only'}}),'/dashboard/properties');
+});
 
 test('protected tenant deep links survive the login round trip', () => {
   const state = {

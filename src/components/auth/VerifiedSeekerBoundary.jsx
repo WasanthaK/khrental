@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { enquiryReturnPath,ownerSetupPath } from '../../utils/enquiryReturnPath.js';
+import {getDefaultLandingPath} from '../../utils/accessPolicy.js';
 import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
@@ -54,7 +55,7 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
-  if (!candidate) return <Navigate to="/unauthorized" replace />;
+  if (!candidate) return <Navigate to={getDefaultLandingPath({user,membership})} replace />;
 
   // Never reuse an earlier user's certification or an in-flight response.
   if (status.key !== key) return <div role="status">Verifying your account…</div>;

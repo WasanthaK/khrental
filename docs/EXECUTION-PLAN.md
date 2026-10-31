@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Active correction: returning-owner entry and workspace meaning — 31 October 2026
+
+The owner clarifies that workspace is the SaaS tenant, and accepts that term if the UI explains it. A workspace groups properties, team access, agreements and invoices; one workspace can manage many properties. Do not equate it to a rentable office/property or require another workspace for a returning property manager.
+
+Live read-only review confirms the current Administrator session reaches the existing KH Rentals organization and its ten properties. This proves current authenticated management access, not a fresh password login. Owner entry nevertheless always displayed new-workspace setup, and its brand link navigated to the seeker-only route. These are reproduced entry/navigation errors. Source normal sign-in has no email allowlist; a current Gmail login/return complaint remains the case under investigation. Do not claim other accounts or fresh production credentials were tested.
+
+Prepared correction: explain workspace in new-owner setup; show returning managers their selected existing workspace and properties instead of another create form; route owner-context sign-in/registration back to existing property management; keep ordinary owner/staff/tenant sign-in independent of seeker-only certification, and send business accounts reaching the seeker landing to their normal portal. Membership, API and email-verification authority remain intact. Actual AuthProvider/Login/router browser regressions cover distinct synthetic email accounts and roles, existing context, new owner/seeker and desktop/mobile copy. Source/unit/build evidence is not deployment or live login acceptance; CI, review and release remain pending.
+
+---
+
 ## Existing-account owner verification deployed — 31 October 2026
 
 Live review reproduced a signed-in existing Administrator blocked by `OWNER_VERIFICATION_REQUIRED`. The workspace action sent no email and offered no send/resend continuation, while new-account signup intentionally skipped existing identities. The owner authorized the repair.

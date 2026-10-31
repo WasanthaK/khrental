@@ -380,6 +380,7 @@ const AuthProvider = ({ children }) => {
       }
       
       // Fetch user profile after successful login
+      let resolvedProfile=null;
       if (data?.user) {
         logDebug('Login successful, fetching user profile');
         console.log('[Auth] Login successful, fetching user profile for:', data.user.id);
@@ -394,6 +395,7 @@ const AuthProvider = ({ children }) => {
           return {error:{message:'Your session changed. Please continue with the account currently signed in.'}};
         }
         setUserData(userWithProfile);
+        resolvedProfile=userWithProfile;
 
         // Check if user needs to change password
         if (data.user.user_metadata?.force_password_change) {
@@ -409,7 +411,7 @@ const AuthProvider = ({ children }) => {
       }
       
       setLoading(false);
-      return { data };
+      return { data, profile:resolvedProfile };
     } catch (error) {
       console.error('[Auth] Error logging in:', error.message);
       
@@ -589,4 +591,4 @@ const useAuth = () => {
 };
 
 // Export only the hook and provider for better HMR compatibility
-export { AuthProvider, useAuth }; 
+export { AuthProvider, useAuth };

@@ -7,6 +7,8 @@ on:
       - 'src/api/platform/ownerOnboarding.js'
       - 'src/api/platform/router.js'
       - 'src/pages/OwnerSetup.jsx'
+      - 'src/utils/authRedirect.js'
+      - 'scripts/test-returning-owner-entry-browser.mjs'
       - 'src/pages/VerifyAccountEmail.jsx'
       - 'src/api/auth/accountEmailVerification.js'
       - 'tests/account-email-verification.test.js'
@@ -86,6 +88,8 @@ jobs:
         run: node scripts/test-seeker-verification-browser.mjs
       - name: Existing-account email verification through actual pages
         run: node scripts/test-account-email-verification-browser.mjs
+      - name: Returning owner and normal account entry through actual auth and routes
+        run: node scripts/test-returning-owner-entry-browser.mjs
       - run: node --test tests/owner-onboarding.test.js tests/seeker-session-continuation.test.js tests/rental-offers.test.js tests/property-applications.test.js tests/property-viewings.test.js tests/public-signup-release-policy.test.js tests/property-enquiries.test.js tests/enquiry-registration-continuation.test.js tests/verified-seeker-browser-routing.test.js tests/auth-flow-isolation.test.js tests/seeker-email-verification-ui-contract.test.js tests/public-signup-verification-presentation.test.js tests/public-signup-sendgrid-adapter.test.js
       - run: npm run build
       - name: Exact migration and concurrent store on disposable SQL Server
