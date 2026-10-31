@@ -23,10 +23,12 @@ export default function VerifyAccountEmail({initialContext}) {
     {!isPublicSignupUiEnabled()?<p>Account verification is unavailable.</p>:verified?<>
       <p>Your existing account’s email is verified. Return to your property setup tab and continue, or open setup here.</p>
       <a className="block rounded-lg bg-blue-700 p-3 text-center text-white" href={ownerSetupPath(initialContext.enquirySearch)||'/owner-start'}>Continue property setup</a>
+      <p className="text-sm">Using another browser? <a className="underline" href={'/login'+initialContext.enquirySearch}>Sign in to your existing account</a>.</p>
     </>:<form onSubmit={submit} className="space-y-5">
       <p>Confirm this email address for your existing account to continue property setup. Your password and signed-in account will stay the same.</p>
       {error&&<p role="alert" className="text-rose-700">{error}</p>}
       <button className="w-full rounded-lg bg-blue-700 p-3 text-white" disabled={busy} type="submit">{busy?'Verifying…':'Verify email'}</button>
+      <a className="block underline" href={ownerSetupPath(initialContext.enquirySearch)||'/owner-start'}>Return to property setup</a>
     </form>}
   </section></main>;
 }
