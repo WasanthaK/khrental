@@ -12,8 +12,40 @@ export default function OwnerSetup(){
   const [name,setName]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [needsVerification,setNeedsVerification]=useState(false);
+  const [verificationMessage,setVerificationMessage]=useState('');
+  const [draftIdentity,setDraftIdentity]=useState(null);
   const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
-  useEffect(()=>{setName('');setError('');setBusy(false);setRequestId(crypto.randomUUID());},[identity]);
+  const draftKey='quixo.owner-setup.draft.'+identity;
+  useEffect(()=>{
+    let draft=null;
+    try{draft=identity?JSON.parse(sessionStorage.getItem(draftKey)):null;}catch{/* Draft storage is optional. */}
+    const valid=draft&&typeof draft.name==='string'&&draft.name.length<=200&&['LK','BN'].includes(draft.country)&&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft.requestId||'');
+    setName(valid?draft.name:'');setCountry(valid?draft.country:(selected.get('country')==='BN'?'BN':'LK'));
+    setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');
+    setRequestId(valid?draft.requestId:crypto.randomUUID());setDraftIdentity(identity);
+  },[identity]);
+  useEffect(()=>{
+    if(!identity||draftIdentity!==identity){return;}
+    try{sessionStorage.setItem(draftKey,JSON.stringify({name,country,requestId}));}catch{/* Keep the current form usable without storage. */}
+  },[identity,draftIdentity,name,country,requestId]);
+  const requestVerification=async()=>{
+    if(busy){return;}const actorAtStart=identity;setBusy(true);setError('');setVerificationMessage('');
+    try{
+      const {data,error:sessionError}=await getPlatformClient().auth.getSession();
+      if(sessionError||!data?.session?.access_token){throw new Error('Please sign in to continue.');}
+      if(currentIdentity.current!==actorAtStart||String(data.session.user?.id)!==actorAtStart){return;}
+      const response=await fetch('/api/public-signup/account-challenge',{method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},
+        credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',body:JSON.stringify({country})});
+      const body=await response.json().catch(()=>null);
+      if(currentIdentity.current!==actorAtStart){return;}
+      if(!response.ok||body?.data?.accepted!==true){throw new Error(body?.error||'We couldn’t request your verification email. Please try again.');}
+      setVerificationMessage(body.data.message);
+    }catch(err){if(currentIdentity.current===actorAtStart){setError(err.message);}}
+    finally{if(currentIdentity.current===actorAtStart){setBusy(false);}}
+  };
   const submit=async event=>{
     event.preventDefault();if(busy){return;}setBusy(true);setError('');
     const actorAtStart=identity;
@@ -24,6 +56,8 @@ export default function OwnerSetup(){
       const response=await fetch('/api/platform/owner-setup',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},
         credentials:'omit',cache:'no-store',body:JSON.stringify({name:name.trim(),country,requestId})});
       const body=await response.json().catch(()=>null);
+      if(currentIdentity.current!==actorAtStart){return;}
+      if(body?.code==='OWNER_VERIFICATION_REQUIRED'){setNeedsVerification(true);}
       if(!response.ok){throw new Error(body?.error||'We couldn’t create your workspace. Please try again.');}
       if(typeof body?.data?.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.data.id)){throw new Error('We couldn’t confirm your workspace. Please try again.');}
       const current=await client.auth.getSession();
@@ -34,6 +68,7 @@ export default function OwnerSetup(){
       }
       const result=await client.auth.setActiveTenant(body.data.id);
       if(result.error){throw new Error('Your workspace is ready. Please sign in again to continue.');}
+      try{sessionStorage.removeItem(draftKey);}catch{/* No draft cleanup is needed when storage is unavailable. */}
       window.location.assign('/dashboard/properties/new?country='+country);
     }catch(err){if(currentIdentity.current===actorAtStart){setError(err.message);}}finally{if(currentIdentity.current===actorAtStart){setBusy(false);}}
   };
@@ -56,6 +91,13 @@ export default function OwnerSetup(){
       <label className="block" htmlFor="owner-country">Property country</label>
       <select id="owner-country" disabled={busy} className="w-full rounded-lg border p-3" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei Darussalam</option></select>
       {error&&<p role="alert" className="text-rose-700">{error}</p>}
+      {needsVerification&&<section aria-label="Verify your existing account" className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+        <p>Verify your existing account’s email address to continue. We’ll keep your workspace details here.</p>
+        <button type="button" disabled={busy} onClick={requestVerification} className="rounded-lg border border-blue-700 p-3 text-blue-800">
+          {busy?'Please wait…':verificationMessage?'Resend verification email':'Send verification email'}
+        </button>
+        {verificationMessage&&<p role="status">{verificationMessage} After verifying, select Continue to first property.</p>}
+      </section>}
       <button type="submit" disabled={busy} className="w-full rounded-lg bg-blue-700 p-3 text-white">{busy?'Setting up…':'Continue to first property'}</button>
     </form>}
     <a className="block underline" href="https://quixo.homes/">Browse rentals</a>

@@ -113,7 +113,7 @@ export const checkPublicSignupBrowserRequest = (req, {
         (headers['sec-fetch-site'] && headers['sec-fetch-site'] !== 'same-origin') ||
         (headers['sec-fetch-mode'] && headers['sec-fetch-mode'] !== 'cors') ||
         typeof req.originalUrl !== 'string' ||
-        !/^\/api\/public-signup\/(challenge|redeem)$/.test(req.originalUrl)) {
+        !/^\/api\/public-signup\/(challenge|redeem|account-challenge|account-redeem)$/.test(req.originalUrl)) {
       return reject;
     }
     const mediaType = String(headers['content-type'] || '').toLowerCase();

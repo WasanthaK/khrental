@@ -1,5 +1,17 @@
 # KH Rentals Authentication Lifecycle
 
+## Existing-account owner email verification — 31 October 2026
+
+An existing account must not be sent through new-account signup to verify its email. The signed-in owner setup page owns send/resend through `/api/public-signup/account-challenge`; the backend selects the recipient from a freshly authenticated, reciprocally linked active identity, never from a posted email. Reuse the existing SendGrid sender, verified origin, pre-parser same-origin/8 KB controls and shared SQL email/IP quotas. Preserve pilot-mailbox restrictions where configured. Report actual provider acceptance separately from mailbox delivery; failed/ambiguous submission revokes the pending proof and shows a retryable error.
+
+Reuse the existing hash-only `public_signup_challenges` ledger without a schema change. Existing-account proof uses a separate digest domain bound to the persisted auth row, app/auth IDs, normalized email and current password credential. A signup token cannot redeem as existing-account proof, or vice versa; identity, email or credential changes invalidate a pending link. Resend revokes previous pending proof and has a two-minute cooldown. Never store or log raw tokens or credential material.
+
+The email links to the isolated `/verify-email` entry with token/challenge reference in the fragment only. Capture/scrub once before React/auth initialization. Explicit confirmation through `/api/public-signup/account-redeem` consumes accepted, unexpired, unrevoked proof and sets the existing account's verification metadata atomically. The email link proves mailbox ownership; it does not issue a session, switch an existing browser account, reset a password, change a global role or add memberships. This permits confirmation in a separate email browser without signing it into the application. Owner setup still independently requires authenticated reciprocal identity plus durable consumed proof before workspace creation.
+
+Keep the owner draft (name/country/request ID only) in per-account tab storage, never verification tokens. Same-tab continuation/reload retains the draft; successful setup clears it. Different accounts do not inherit the draft or pending responses. Automated HTTP, actual SQL and rendered browser evidence is required; real mailbox receipt and actual property creation remain separate live acceptance.
+
+---
+
 **Status:** Canonical design for authentication, invitation, recovery and session ownership.  
 **Applies to:** tenant/rentee and staff/team account creation, invitation redemption, login, password reset, account recovery and authenticated onboarding.
 

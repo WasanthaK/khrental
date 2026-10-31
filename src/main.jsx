@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { BrowserRouter } from 'react-router-dom';
 import VerifySeekerEmail from './pages/VerifySeekerEmail';
+import VerifyAccountEmail from './pages/VerifyAccountEmail';
 import { consumeSeekerVerificationContext } from './utils/seekerVerificationFragment';
 import './index.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -81,7 +82,7 @@ if (window.location.pathname === '/verify-email') {
   root.render(
     <React.StrictMode>
       <ErrorBoundary>
-        <BrowserRouter><VerifySeekerEmail initialContext={initialContext} /></BrowserRouter>
+        <BrowserRouter>{initialContext.accountChallenge?<VerifyAccountEmail initialContext={initialContext} />:<VerifySeekerEmail initialContext={initialContext} />}</BrowserRouter>
       </ErrorBoundary>
     </React.StrictMode>
   );

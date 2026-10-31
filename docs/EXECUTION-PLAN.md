@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Active repair: existing-account owner verification — 31 October 2026
+
+Live read-only review reproduced a signed-in existing Administrator reaching owner setup and receiving `OWNER_VERIFICATION_REQUIRED`. That action sends no email; public signup deliberately does not issue challenges for existing identities. There was no send/resend continuation, so waiting or repeating signup could not resolve this state. This establishes the missing existing-account journey, not a historical SendGrid delivery result.
+
+The owner authorized the repair. Source now adds an authenticated send/resend action using the existing sender and SQL quotas, purpose-separated identity/credential-bound proof in the existing verification ledger, isolated explicit email confirmation without password/account/session/role changes, and per-account owner draft retention. No new library or production schema is required. HTTP/unit checks and local build pass. Full local authorization run passes all non-browser checks; this execution environment refuses Chrome's socket creation, so browser acceptance and disposable SQL are delegated to the existing CI workflow. CI/review/release and real mailbox receipt remain pending; do not claim the fix is deployed or close #459 from source evidence.
+
+---
+
 ## Owner-authorized product testing — 31 October 2026
 
 The owner confirms there are no public clients and explicitly directs: open the implemented product and test it; do not wait for completion of the entire product before enabling customer journeys. This supersedes earlier planning-only approval fences where they prevented internal development testing.
