@@ -330,6 +330,21 @@ export async function verifyPhase4StaffMaintenanceHttp({
     await managerPage.setViewport({ width: 390, height: 844 });
     assert.ok(await managerPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await managerPage.screenshot({ path: 'billing-sql-proof/manager-maintenance-create-mobile.png', fullPage: true });
+    // A transient failure must preserve the entered request and allow retry.
+    let rejectFirstCreate = true;
+    await managerPage.setRequestInterception(true);
+    managerPage.on('request', intercepted => {
+      if (rejectFirstCreate && intercepted.method() === 'POST' && intercepted.url().endsWith('/api/maintenance-lifecycle/requests')) {
+        rejectFirstCreate = false;
+        return intercepted.respond({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary maintenance save failure. Please try again.' }) });
+      }
+      return intercepted.continue();
+    });
+    await managerPage.click('button[type="submit"]');
+    await managerPage.waitForSelector('[role="alert"]');
+    await managerPage.waitForFunction(() => !document.querySelector('button[type="submit"]').disabled);
+    assert.equal(await managerPage.$eval('#title', field => field.value), 'Manager property maintenance browser proof');
+    assert.ok((await managerPage.$eval('[role="alert"]', node => node.innerText)).includes('Temporary maintenance save failure'));
     const createdResponse = managerPage.waitForResponse(response => response.url().endsWith('/api/maintenance-lifecycle/requests') && response.request().method() === 'POST');
     await managerPage.click('button[type="submit"]');
     const response = await createdResponse;
