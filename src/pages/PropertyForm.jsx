@@ -2,7 +2,7 @@ import { LISTING_CATEGORIES, normalizeListingCategory } from '../utils/listingCa
 import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
 import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import { generateTempId } from '../utils/helpers';
@@ -32,6 +32,7 @@ const PropertyForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const requestedCountry=new URLSearchParams(useLocation().search).get('country');
   const { user, membership } = useAuth();
   const canEditInvoiceMaster = isInvoiceMasterUiEnabled && hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
   
@@ -45,7 +46,7 @@ const PropertyForm = () => {
   const initialFormData = {
     name: '',
     address: '',
-    country_code: '',
+    country_code: !isEditMode&&['LK','BN'].includes(requestedCountry)?requestedCountry:'',
     bank_name: '',
     bank_branch: '',
     bank_account_number: '',

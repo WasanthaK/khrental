@@ -453,6 +453,7 @@ try {
   assert.equal(await ownerEmailPage.$eval('#owner-workspace',e=>e.value),'Synthetic owner workspace');
   await ownerEmailPage.click('button[type="submit"]');
   await ownerEmailPage.waitForFunction(()=>location.pathname==='/dashboard/properties/new');
+  assert.equal(new URL(ownerEmailPage.url()).searchParams.get('country'),'BN');
   assert.equal(await ownerEmailPage.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),ownerWorkspaceId);
   assert.equal(managementInitializations,0,'Owner entry never initializes unrelated organization storage');
   assert.equal(ownerSetupAttempts,2);

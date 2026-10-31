@@ -105,6 +105,10 @@ const PublicRoute = ({ children }) => {
   }
 
   if (isAuthenticated && user) {
+    if(location.pathname==='/owner-sign-up'){
+      const country=new URLSearchParams(location.search).get('country')==='BN'?'BN':'LK';
+      return <Navigate to={'/owner-start?country='+country} replace />;
+    }
     const defaultPath = getDefaultLandingPath({
       user,
       membership: membership || user.membership || null

@@ -21,10 +21,10 @@ export default function OwnerSetup(){
         credentials:'omit',cache:'no-store',body:JSON.stringify({name:name.trim(),country,requestId})});
       const body=await response.json().catch(()=>null);
       if(!response.ok){throw new Error(body?.error||'We couldn’t create your workspace. Please try again.');}
-      if(typeof body?.data?.id!=='string'||!/^[0-9a-f-]{36}$/i.test(body.data.id)){throw new Error('We couldn’t confirm your workspace. Please try again.');}
+      if(typeof body?.data?.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.data.id)){throw new Error('We couldn’t confirm your workspace. Please try again.');}
       const result=await client.auth.setActiveTenant(body.data.id);
       if(result.error){throw new Error('Your workspace is ready. Please sign in again to continue.');}
-      window.location.assign('/dashboard/properties/new');
+      window.location.assign('/dashboard/properties/new?country='+country);
     }catch(err){setError(err.message);}finally{setBusy(false);}
   };
   return <main className="auth-shell flex items-center justify-center"><section className="auth-card space-y-6">
