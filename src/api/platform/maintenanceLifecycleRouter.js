@@ -266,15 +266,15 @@ export const createMaintenanceLifecycleRouter = () => {
       let agreement = null;
       if (isRenter) {
         agreement = await runSingleQuery(
-        `SELECT TOP 1 id, propertyid, unitid
-         FROM agreements
-         WHERE tenant_id = @tenantId
-           AND renteeid = @renteeId
-           AND propertyid = @propertyId
-           AND status = 'active'
-         ORDER BY activated_at DESC, startdate DESC`,
-        { tenantId: req.tenantId, renteeId: req.user.id, propertyId }
-      );
+          `SELECT TOP 1 id, propertyid, unitid
+           FROM agreements
+           WHERE tenant_id = @tenantId
+             AND renteeid = @renteeId
+             AND propertyid = @propertyId
+             AND status = 'active'
+           ORDER BY activated_at DESC, startdate DESC`,
+          { tenantId: req.tenantId, renteeId: req.user.id, propertyId }
+        );
         if (!agreement) {
           throw createRequestError(409, 'An active tenancy for the selected property is required.', 'ACTIVE_TENANCY_REQUIRED');
         }

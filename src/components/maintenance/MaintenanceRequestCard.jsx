@@ -28,8 +28,6 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
     maintenance_request_images
   } = request;
 
-  console.log('MaintenanceRequestCard received request:', request);
-  console.log('Property data in card:', property);
 
   // Create a human-readable request ID
   const getHumanReadableId = () => {
@@ -166,8 +164,8 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
             <p className="font-medium">{getRequestTypeLabel(requesttype)}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-600">Reported by</p>
-            <p className="font-medium">{rentee?.name || 'Unknown rentee'}</p>
+            <p className="text-sm text-gray-600">{rentee ? 'Reported by' : 'Request source'}</p>
+            <p className="font-medium">{rentee?.name || (rentee ? 'Resident' : 'Property management')}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Assigned to</p>
