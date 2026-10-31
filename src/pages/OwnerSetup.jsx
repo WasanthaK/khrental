@@ -30,7 +30,7 @@ export default function OwnerSetup(){
     const valid=draft&&typeof draft.name==='string'&&draft.name.length<=200&&['LK','BN'].includes(draft.country)&&
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft.requestId||'');
     setName(valid?draft.name:'');setCountry(valid?draft.country:(selected.get('country')==='BN'?'BN':'LK'));
-    setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');
+    setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');setSaveMessage('');
     setRequestId(valid?draft.requestId:crypto.randomUUID());setDraftIdentity(identity);
   },[identity,createAnotherWorkspace]);
   useEffect(()=>{
@@ -39,6 +39,7 @@ export default function OwnerSetup(){
   },[identity,draftIdentity,name,country,requestId]);
   useEffect(()=>{
     if(!identity||draftIdentity!==identity||loading||busy||!isAuthenticated||(existingProperties&&!createAnotherWorkspace)){return;}
+    setSaveMessage('Saving setup…');
     let active=true;
     const timer=setTimeout(()=>{
       saveQueue.current=saveQueue.current.catch(()=>{}).then(async()=>{

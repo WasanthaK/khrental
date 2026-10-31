@@ -6,7 +6,8 @@ export const getOwnerContinuationPath = ({user,membership=user?.membership}={}) 
   if(!progress||!['LK','BN'].includes(progress.country)){return null;}
   const existing=getExistingPropertyWorkspacePath({user,membership});
   if(existing){
-    return progress.step==='property'&&String(progress.tenantId||'').toLowerCase()===String(membership.tenant_id).toLowerCase()
+    return progress.step==='property'&&hasPermission({user,membership},PERMISSIONS.PROPERTIES_MANAGE)
+      &&String(progress.tenantId||'').toLowerCase()===String(membership.tenant_id).toLowerCase()
       ?'/dashboard/properties/new?country='+progress.country:existing;
   }
   return progress.step==='workspace'&&!membership&&getDefaultLandingPath({user,membership})==='/unauthorized'
