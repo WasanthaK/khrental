@@ -1,5 +1,16 @@
 # KH Rentals Execution Plan
 
+## Customer-purpose corrections merged; live verification next — 31 October 2026
+
+PR #474 MERGED at `b814c0efc293c779fcc7d3d2251af0d0fdf73d04` from reviewed head `23bb81312b3f5e501dc6aca486eb2c1fdd242ce2`. Final-head checks all PASS: application #41219728220 (813 tests/build), two-tenant billing SQL #41219728231, public visibility/privacy SQL #41219728320, protected billing browser #41219728218 and owner/enquiry/rental-offer journey #41219728187. Artifact 13050035439 contains reviewed desktop/390px owner-context retry and same-owner personal-enquiry form screenshots. The four affected screenshots match the already-inspected pixels exactly.
+
+Delivered source: unavailable workspace context produces a retry state without new setup or draft writes; retry cannot overwrite a concurrently changed account. Existing-workspace navigation stays separate from new-workspace drafts. Explicit Find a place and List/manage my property preserve the selected management workspace. Personal enquiry/viewing/application/offer access uses the live, reciprocal verified global actor and actor-owned SQL scope; business inbox/actions retain target-workspace administrator membership. A consumed email-proof ledger is rechecked during certification and serialized SQL operations, so caller-editable verification metadata alone cannot authorize personal activity. Agreement preparation retains target-membership conflict protection. No new schema, dependencies, global role grants, billing configuration or subscription work.
+
+Deployment #41220067874 is running. Live repeated owner entry, personal selected-property form and management return remain OPEN until the serving build is verified. No real enquiry, consent, workspace or repair is created for live testing. Fresh password login and live unfinished-owner/new-browser recovery remain separate open acceptance. Keep #459 and the full operational website/rental lifecycle OPEN; continue the ordered entry/UI and filter work after this correction is accepted.
+
+---
+
+
 ## Active correction: one account across customer purposes — 31 October 2026
 
 Expected experience: returning owners open their existing properties; workspace lookup failures offer retry and preserve the account instead of starting another business. A verified owner chooses Find a place, browses and enquires personally, then uses List/manage my property to return to their selected management workspace. One account supports both tasks without role changes or duplicate registration.
