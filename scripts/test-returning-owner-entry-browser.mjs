@@ -131,6 +131,8 @@ try{
           await page.type(selector,value);
         }
         await page.select('#listingCategory',category);
+        await page.select('#propertytype','house');
+        assert.deepEqual(await page.$$eval(':invalid',nodes=>nodes.map(node=>node.id)),[], 'Fixture completes every required property field');
         await page.click('button[type="submit"]');
         await page.waitForFunction(()=>location.pathname==='/dashboard/properties');
         assert.equal(propertyWrites.at(-1).rentalvalues.listingCategory,category);
