@@ -223,7 +223,7 @@ try {
   // Customer experience: a fresh account always has a useful next action.
   const uxOutput=process.env.ENQUIRY_PROOF_DIR||'/tmp/quixo-enquiry-browser-proof';
   await fs.mkdir(uxOutput,{recursive:true});
-  await page.click('nav[aria-label="Your rental search"] a[href="/seeker"]');
+  await page.click('nav[aria-label="Your rental search"] a[href="/seeker?purpose=rental"]');
   await page.waitForSelector('#browse-rentals');
   assert.equal(await page.$eval('a[href="https://quixo.homes/lk/search/"]',e=>e.textContent),'Browse Sri Lanka');
   assert.equal(await page.$eval('a[href="https://quixo.homes/bn/search/"]',e=>e.textContent),'Browse Brunei');
@@ -243,7 +243,7 @@ try {
   assert.equal(managementInitializations,0,'Rental journey must not initialize organization storage');
   assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/Storage Notice|storage buckets|Synthetic management storage error/);
   assert.equal(await page.$('.seeker-pagination'),null);
-  assert.ok(await page.$('.seeker-empty a[href="/seeker#browse-rentals"]'));
+  assert.ok(await page.$('.seeker-empty a[href="/seeker?purpose=rental#browse-rentals"]'));
   await page.setViewport({width:1280,height:900});
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-offers-desktop.png'),fullPage:true});
   await page.setViewport({width:390,height:844});
