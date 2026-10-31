@@ -54,7 +54,8 @@ try {
       tenant_id UNIQUEIDENTIFIER NULL,name NVARCHAR(255),email NVARCHAR(320),role NVARCHAR(50),
       user_type NVARCHAR(50),status NVARCHAR(50));
     CREATE TABLE auth_users(id UNIQUEIDENTIFIER PRIMARY KEY,auth_id UNIQUEIDENTIFIER,
-      app_user_id UNIQUEIDENTIFIER,email NVARCHAR(320),role NVARCHAR(64),metadata NVARCHAR(MAX));
+      app_user_id UNIQUEIDENTIFIER,email NVARCHAR(320),role NVARCHAR(64),metadata NVARCHAR(MAX),createdat DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
+    CREATE TABLE public_signup_challenges(email_normalized NVARCHAR(320),sent_at DATETIME2(3),consumed_at DATETIME2(3),revoked_at DATETIME2(3));
     CREATE TABLE auth_sessions(id UNIQUEIDENTIFIER PRIMARY KEY,auth_user_id UNIQUEIDENTIFIER,
       revoked_at DATETIME2 NULL,expires_at DATETIME2);
     CREATE TABLE tenant_memberships(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,
@@ -123,9 +124,10 @@ try {
   for(const [a,role,userType,tenantId] of [[actor,'authenticated','seeker',null],[owner,'admin','staff',tenant],[foreignOwner,'admin','staff',otherTenant]]){
     const authUserId=crypto.randomUUID();
     await query(`INSERT app_users VALUES(@actorId,@authId,@tenantId,N'Synthetic Account',@email,@role,@userType,N'active');
-      INSERT auth_users VALUES(@authUserId,@authId,@actorId,@email,@role,N'{"global_email_verified":true}');
+      INSERT auth_users(id,auth_id,app_user_id,email,role,metadata) VALUES(@authUserId,@authId,@actorId,@email,@role,N'{"global_email_verified":true}');
       INSERT auth_sessions VALUES(@sessionId,@authUserId,NULL,DATEADD(day,1,SYSUTCDATETIME()));`,
     {...a,tenantId,authUserId,email:a.actorId+'@example.test',role,userType});
+    await query('INSERT public_signup_challenges(email_normalized,sent_at,consumed_at) VALUES(@email,SYSUTCDATETIME(),SYSUTCDATETIME())',{email:a.actorId+'@example.test'});
     if(tenantId){await query(`INSERT tenant_memberships(id,tenant_id,app_user_id,role,status) VALUES(NEWID(),@tenantId,@actorId,N'admin',N'active')`,{tenantId,actorId:a.actorId});}
   }
   for(let i=0;i<12;i++){
@@ -252,6 +254,9 @@ try {
   await query('UPDATE auth_users SET metadata=@metadata WHERE auth_id=@id',{id:foreignOwner.authId,metadata:JSON.stringify({global_email_verified:false})});
   await assert.rejects(store.list(foreignOwner),{code:'ENQUIRY_ACTOR_REQUIRED'});
   await query('UPDATE auth_users SET metadata=@metadata WHERE auth_id=@id',{id:foreignOwner.authId,metadata:JSON.stringify({global_email_verified:true})});
+  await query('UPDATE public_signup_challenges SET consumed_at=NULL WHERE email_normalized=@email',{email:foreignOwner.actorId+'@example.test'});
+  await assert.rejects(store.list(foreignOwner),{code:'ENQUIRY_ACTOR_REQUIRED'},'A forged metadata marker is insufficient without consumed proof');
+  await query('UPDATE public_signup_challenges SET consumed_at=SYSUTCDATETIME() WHERE email_normalized=@email',{email:foreignOwner.actorId+'@example.test'});
   console.log('PERSONAL_RENTAL_SQL=PASS verified_member actor_only cross_organization_inbox_denied forged_actor_denied verification_rechecked no_membership_mutation');
   await query('UPDATE auth_sessions SET revoked_at=SYSUTCDATETIME() WHERE id=@id',{id:actor.sessionId});
   await assert.rejects(store.list(actor),{code:'ENQUIRY_ACTOR_REQUIRED'});

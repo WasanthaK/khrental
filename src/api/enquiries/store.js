@@ -1,3 +1,4 @@
+import {PERSONAL_RENTAL_EMAIL_PROOF_SQL} from '../auth/seekerContext.js';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {PUBLIC_LISTING_ELIGIBILITY_SQL} from '../publicListings/store.js';
 import {toPublicDTO} from '../publicListings/contract.js';
@@ -38,7 +39,8 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
           JOIN dbo.tenants t ON t.id=tm.tenant_id WHERE tm.app_user_id=au.id
           AND tm.tenant_id=@tenantId AND tm.role=N'admin' AND tm.status=N'active'
           AND (t.status IS NULL OR t.status=N'active'))` : `LOWER(LTRIM(RTRIM(au.role)))=LOWER(LTRIM(RTRIM(auth.role)))
-        AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')=N'true'` }`,
+        AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')=N'true'
+        AND ${PERSONAL_RENTAL_EMAIL_PROOF_SQL}` }`,
     {actorId:actor.actorId,authId:actor.authId,sessionId:actor.sessionId,...(owner?{tenantId:actor.tenantId}:{})});
     if (!rows[0]) {throw enquiryError(403,'ENQUIRY_ACTOR_REQUIRED','Your account permissions could not be confirmed. Sign in again.');}
     return rows[0];

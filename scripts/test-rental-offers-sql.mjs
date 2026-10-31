@@ -41,6 +41,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
   const actor={actorId:uuid(),authId:uuid(),sessionId:uuid()},authUser=uuid(),email=uuid()+'@example.invalid';
   await q("INSERT app_users(id,auth_id,tenant_id,name,email,role,user_type,status) VALUES(@actorId,@authId,NULL,'Synthetic seeker',@email,'authenticated','seeker','active')",{...actor,email});
   await q(`INSERT auth_users(id,auth_id,app_user_id,email,role,metadata) VALUES(@authUser,@authId,@actorId,@email,'authenticated',N'{"global_email_verified":true}')`,{...actor,email,authUser});
+  await q('INSERT public_signup_challenges(email_normalized,sent_at,consumed_at) VALUES(@email,SYSUTCDATETIME(),SYSUTCDATETIME())',{email});
   await q('INSERT auth_sessions(id,auth_user_id,expires_at) VALUES(@sessionId,@authUser,DATEADD(day,1,SYSUTCDATETIME()))',{...actor,authUser});
   const saved=await enquiries.submit(actor,parseEnquiry({listingId:p.listingId,country:'LK',requestId:uuid(),message:'Synthetic rental enquiry',consent:true}));
   const id=saved.receipt.id;

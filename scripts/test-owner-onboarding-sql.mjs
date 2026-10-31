@@ -7,9 +7,9 @@ export const verifyOwnerOnboarding=async({pool,query})=>{
   await pool.request().batch(`ALTER TABLE tenants ADD name NVARCHAR(200),slug NVARCHAR(200),[plan] NVARCHAR(50),createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET;`);
   await pool.request().batch(`CREATE UNIQUE INDEX UX_owner_test_slug ON tenants(slug) WHERE slug IS NOT NULL;
     ALTER TABLE tenant_memberships ADD createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET;
-    ALTER TABLE auth_users ADD createdat DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+    IF COL_LENGTH('dbo.auth_users','createdat') IS NULL ALTER TABLE auth_users ADD createdat DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
     CREATE TABLE tenant_settings(tenant_id UNIQUEIDENTIFIER PRIMARY KEY,feature_flags_json NVARCHAR(MAX),createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET);
-    CREATE TABLE public_signup_challenges(email_normalized NVARCHAR(320),sent_at DATETIME2(3),consumed_at DATETIME2(3),revoked_at DATETIME2(3));
+    IF OBJECT_ID(N'dbo.public_signup_challenges',N'U') IS NULL CREATE TABLE public_signup_challenges(email_normalized NVARCHAR(320),sent_at DATETIME2(3),consumed_at DATETIME2(3),revoked_at DATETIME2(3));
     CREATE TABLE user_invitations(app_user_id UNIQUEIDENTIFIER,email NVARCHAR(320),accepted_at DATETIME2,revoked_at DATETIME2);`);
   const actorId=crypto.randomUUID(),authId=crypto.randomUUID(),otherActor=crypto.randomUUID(),otherAuth=crypto.randomUUID();
   for(const [id,auth]of [[actorId,authId],[otherActor,otherAuth]]){

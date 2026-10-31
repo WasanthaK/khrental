@@ -122,7 +122,7 @@ test('seeker context endpoint remains read-only, bearer-only, and disabled by de
 
 
 test('verified personal rental context admits an organization member without tenant authority', async()=>{
-  const current=fixture();current.authSession.sessionId='live-session';
+  const current=fixture();current.authSession.sessionId='live-session';current.query=async()=>[{id:userId}];
   for(const role of ['authenticated','admin','staff','rentee']){
     const input={...current,authSession:{...current.authSession,record:{...current.authSession.record,role}},
       user:{...current.user,role,user_type:'staff',tenant_id:'organization-a'},
@@ -132,7 +132,7 @@ test('verified personal rental context admits an organization member without ten
   }
 });
 test('personal rental proof rejects unverified, mismatched, inactive and delegated identities',async()=>{
-  const current=fixture();current.authSession.sessionId='live-session';
+  const current=fixture();current.authSession.sessionId='live-session';current.query=async()=>[{id:userId}];
   for(const patch of [
     {authSession:null}, {authSession:{...current.authSession,sessionId:null}},
     {authSession:{...current.authSession,record:{...current.authSession.record,metadata:{global_email_verified:false}}}},
@@ -143,4 +143,11 @@ test('personal rental proof rejects unverified, mismatched, inactive and delegat
     {tenantContext:{...current.tenantContext,requestedTenantId:'foreign'}},
     {tenantContext:{...current.tenantContext,identity:{devBypassRole:'admin'}}}
   ]){assert.deepEqual(await resolvePersonalRentalContext({...current,...patch}),{verified:false,eligible:false});}
+});
+
+
+test('editable verification metadata cannot replace a consumed email proof',async()=>{
+  const current=fixture();current.authSession.sessionId='live-session';
+  for(const rows of [[],null]){assert.deepEqual(await resolvePersonalRentalContext({...current,query:async()=>rows}),{verified:false,eligible:false});}
+  await assert.rejects(resolvePersonalRentalContext({...current,query:async()=>{throw new Error('Ledger unavailable');}}),/Ledger unavailable/);
 });
