@@ -118,7 +118,11 @@ try{
       assert.deepEqual(actual.current,[market],p+' only the chosen country is selected');
       assert.deepEqual(actual.markets,['LK','BN'],p+' both market choices available');
     }
-    assert.ok(data.links.includes('https://app.quixo.homes/login'),p+' existing sign-in');
+    const signInUrl=p.endsWith('/owners/')
+      ?'https://app.quixo.homes/login?ownerCountry='+(p.startsWith('/lk/')?'LK':'BN')
+      :'https://app.quixo.homes/login';
+    assert.ok(data.links.includes(signInUrl),p+' existing sign-in preserves page purpose');
+    if(p.endsWith('/owners/')){assert.ok(!data.links.includes('https://app.quixo.homes/login'),p+' owner links retain their purpose');}
     assert.equal(remote.length,0,p+' external network requests');
     assert.equal(failedResources.length,0,p+' failed assets: '+failedResources.join('; '));
     for(const photo of data.photos)assert.ok(photo.loaded&&photo.width>0,p+' non-decodable image '+photo.src);
