@@ -17,7 +17,7 @@ const authModule=`
   export const getPlatformClient=()=>({auth});
   export const signIn=async id=>{state.session=session(id);emit();return {data:{user:state.session.user,session:state.session}};};
   export const signOut=async()=>{state.session=null;emit();return {};};
-  export const getCurrentUser=async()=>null;
+  export const getCurrentUser=async()=>({data:{user:state.session?.user||null}});
   export const signUp=async()=>({});export const resetPassword=async()=>({});export const updatePassword=async()=>({});
 `;
 const entry=`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
@@ -27,6 +27,7 @@ const entry=`import React,{useState} from 'react';import {createRoot} from 'reac
     <button onClick={()=>auth.login('account-a','FixtureOnly!')}>Sign in A</button>
     <button onClick={()=>auth.login('account-b','FixtureOnly!')}>Sign in B</button>
     <button onClick={()=>auth.logout()}>Sign out</button>
+    <button id="retry-context" onClick={()=>auth.refreshTenantContext()}>Retry workspace lookup</button>
   </section>;}
   function Harness(){const [key,setKey]=useState(0);return <><button id="remount" onClick={()=>setKey(n=>n+1)}>Remount app</button><AuthProvider key={key}><Status/></AuthProvider></>;}
   createRoot(document.getElementById('root')).render(<React.StrictMode><Harness/></React.StrictMode>);`;
@@ -80,6 +81,15 @@ try {
   await page.evaluate(()=>{window.authFixture.releaseProfile();window.authFixture.holdProfile=null;});
   await page.waitForNetworkIdle({idleTime:300});
   assert.equal(await page.$eval('#auth-state',e=>e.dataset.id),'account-b');
+  // A retry started by B must not replace A after an account change.
+  await page.evaluate(()=>{window.authFixture.holdProfile='account-b';window.authFixture.releaseProfile=null;});
+  await page.click('#retry-context');
+  await page.waitForFunction(()=>typeof window.authFixture.releaseProfile==='function');
+  await page.click('::-p-text(Sign in A)');
+  await page.waitForSelector('#auth-state[data-id="account-a"][data-loading="false"]');
+  await page.evaluate(()=>{window.authFixture.releaseProfile();window.authFixture.holdProfile=null;});
+  await page.waitForNetworkIdle({idleTime:300});
+  assert.equal(await page.$eval('#auth-state',e=>e.dataset.id),'account-a','Old workspace retry cannot overwrite the newer account');
   // Also guard the explicit login path's outstanding profile request.
   await page.evaluate(()=>{window.authFixture.holdProfile='account-a';window.authFixture.releaseProfile=null;});
   await page.click('::-p-text(Sign in A)');

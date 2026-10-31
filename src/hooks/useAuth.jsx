@@ -234,7 +234,14 @@ const AuthProvider = ({ children }) => {
         return { data: null, error: null };
       }
 
+      const started = await platformClient.auth.getSession();
       const refreshedUser = await fetchUserProfile(activeAuthUser);
+      const current = await platformClient.auth.getSession();
+      if(started.error||current.error||!started.data?.session?.access_token||
+        started.data.session.access_token!==current.data?.session?.access_token||
+        String(activeAuthUser.id)!==String(current.data?.session?.user?.id)){
+        throw new Error('Your signed-in account changed. Try again with your current account.');
+      }
       setUserData(refreshedUser);
 
       return { data: refreshedUser, error: null };
