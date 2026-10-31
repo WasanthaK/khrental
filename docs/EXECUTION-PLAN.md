@@ -1,5 +1,19 @@
 # KH Rentals Execution Plan
 
+## Owner-authorized product testing — 31 October 2026
+
+The owner confirms there are no public clients and explicitly directs: open the implemented product and test it; do not wait for completion of the entire product before enabling customer journeys. This supersedes earlier planning-only approval fences where they prevented internal development testing.
+
+- Enable implemented listing, signup, enquiry, viewing, application and offer flows through existing release workflows. Preserve authentication, verified identity, organization isolation, public-field/privacy boundaries and rollback controls; these are correctness requirements, not reasons to postpone testing.
+- Implement and expose owner self-registration as a usable journey rather than a closed marketing message: verified global identity → the owner's separately owned workspace → first property. Reuse the canonical credential service and one identity per email. No client-supplied global role or access to another workspace.
+- During this pre-customer testing phase, a newly self-provisioned owner workspace may have an explicitly recorded development-testing plan and active owner membership so property and lifecycle screens can be exercised without waiting for Stripe implementation. This is not a paid subscription, a customer free trial, a billing acceptance claim or permission to collect money. Paid commercial launch retains the later Stripe/pricing acceptance requirements.
+- Replace obsolete LIMITED PUBLIC PILOT and closed-owner messaging only with functioning, tested entry points. Preserve approved hero and category images. Do not pretend unfinished functionality is enabled by changing copy alone.
+- Authorized work includes the needed source changes, CI, normal reviewed merge/deployment and existing feature release controls for these test flows; do not repeatedly seek the same test-opening approval. Report actual blockers and distinguish development regression evidence, live testing and completed real participant acceptance.
+- The reported sign-out/new-account login return remains a defect to reproduce and correct. Preserve the last signed-in account/tab; do not clear live browser storage or sign out to manufacture a test state. Use isolated synthetic tests for destructive/session-race scenarios. No fabricated signatures, deposits or payment evidence.
+
+---
+
+
 ## Controlling customer journeys, commercial decisions and implementation order — 30 October 2026
 
 **Authority:** owner's clarified decisions in the Quixo.Homes project conversation, confirmed with “yes update the canonical plan and then we can start”. This section controls over conflicting earlier checkpoints below, including register-before-browsing, a separate listing fee, permanently hardcoded USD 5 pricing or tenant-admin pricing controls. Earlier sections remain historical evidence, not current completion claims.
