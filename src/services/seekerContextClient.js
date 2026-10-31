@@ -31,6 +31,7 @@ export const requestSeekerEnquiries = async ({getSession,path='',method='GET',bo
 
 export const fetchVerifiedSeekerBrowserContext = async ({
   expectedAuthId,
+  purpose='entry',
   fetchImpl = globalThis.fetch,
   getSession = null
 } = {}) => {
@@ -48,7 +49,7 @@ export const fetchVerifiedSeekerBrowserContext = async ({
       return denied;
     }
 
-    const response = await fetchImpl('/api/platform/auth/seeker-context', {
+    const response = await fetchImpl('/api/platform/auth/seeker-context'+(purpose==='rental'?'?purpose=rental':''), {
       method: 'GET',
       headers: { Authorization: `Bearer ${session.access_token}` },
       credentials: 'omit',
@@ -61,7 +62,7 @@ export const fetchVerifiedSeekerBrowserContext = async ({
     // Fail closed: unknown, stale or malformed server projections cannot be
     // promoted into a client-visible seeker landing decision.
     if (context?.verified !== true || context?.eligible !== true ||
-        context?.userType !== 'seeker' || context?.tenantId !== null) {
+        context?.userType !== (purpose==='rental'?'rental':'seeker') || context?.tenantId !== null) {
       return denied;
     }
 
@@ -115,3 +116,5 @@ export const continueVerifiedSeekerSession = async ({
     return {adopted:false,reason:'verification_unavailable'};
   }
 };
+
+export const fetchPersonalRentalBrowserContext = options => fetchVerifiedSeekerBrowserContext({...options,purpose:'rental'});

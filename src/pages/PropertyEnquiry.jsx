@@ -97,7 +97,7 @@ const PropertyEnquiry=()=>{
         {route && <a className="seeker-text-link enquiry-back" href={'https://quixo.homes/'+country.toLowerCase()+'/property/?id='+listingId}>← Back to property details</a>}
         <h1>{route?'Express your interest':'My enquiries'}</h1>
         <p className="seeker-intro">{route?'Contact the owner about this rental.':'Your conversations, viewing appointments and applications, all in one place.'}</p>
-      </div>{!route && <Link to="/seeker#browse-rentals" className="seeker-button">Find a rental</Link>}</div>
+      </div>{!route && <Link to="/seeker?purpose=rental#browse-rentals" className="seeker-button">Find a rental</Link>}</div>
       {state.error && <p role="alert" className="seeker-alert">{state.error}</p>}
       {state.notice && <p role="status" className="enquiry-success">{state.notice}</p>}
       {route && <div className="enquiry-compose">
@@ -152,7 +152,7 @@ const PropertyEnquiry=()=>{
           <div className="seeker-empty-icon" aria-hidden="true">↗</div>
           <h3>{offset>0?'You’ve reached the end':'Your next place starts with a conversation'}</h3>
           <p>{offset>0?'Go back to see your earlier enquiries.':route?'Send your message above. The owner’s reply and viewing details will appear here.':'Find a rental you like and choose “Express your interest” on its listing. You can ask a question or arrange a viewing with the owner.'}</p>
-          {!route && offset===0 && <Link className="seeker-button" to="/seeker#browse-rentals">Browse rentals</Link>}
+          {!route && offset===0 && <Link className="seeker-button" to="/seeker?purpose=rental#browse-rentals">Browse rentals</Link>}
         </div>}
         {items.map(item=><article key={item.id} className="rounded-xl border bg-white p-5 space-y-2">
           <h3 className="font-semibold">{item.title}</h3><p>Status: {item.status}</p>

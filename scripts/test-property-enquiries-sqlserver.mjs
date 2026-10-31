@@ -238,6 +238,21 @@ try {
   // Quota survives new store instances and includes withdrawn requests.
   for(let n=1;n<10;n++){await store.submit(actor,input(n));}
   await assert.rejects(sameAfterRestart.submit(actor,input(10)),{code:'ENQUIRY_LIMIT'});
+  // A verified owner in organization B rents personally from organization A.
+  // Personal actor scope never grants that owner access to A's management inbox.
+  const beforeMemberships=(await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:foreignOwner.actorId}))[0].n;
+  const personal=await store.submit(foreignOwner,input(11));
+  assert.equal((await store.list(foreignOwner)).items[0].id,personal.receipt.id);
+  assert.equal((await store.list(foreignOwner,true)).items.length,0);
+  assert.ok((await store.list(owner,true)).items.some(row=>row.id===personal.receipt.id));
+  await assert.rejects(store.withEnquiry(owner,personal.receipt.id,false,async()=>null),{code:'ENQUIRY_NOT_FOUND'});
+  await assert.rejects(store.withEnquiry(foreignOwner,saved.id,false,async()=>null),{code:'ENQUIRY_NOT_FOUND'});
+  await assert.rejects(store.list({...foreignOwner,actorId:actor.actorId}),{code:'ENQUIRY_ACTOR_REQUIRED'});
+  assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:foreignOwner.actorId}))[0].n,beforeMemberships);
+  await query('UPDATE auth_users SET metadata=@metadata WHERE auth_id=@id',{id:foreignOwner.authId,metadata:JSON.stringify({global_email_verified:false})});
+  await assert.rejects(store.list(foreignOwner),{code:'ENQUIRY_ACTOR_REQUIRED'});
+  await query('UPDATE auth_users SET metadata=@metadata WHERE auth_id=@id',{id:foreignOwner.authId,metadata:JSON.stringify({global_email_verified:true})});
+  console.log('PERSONAL_RENTAL_SQL=PASS verified_member actor_only cross_organization_inbox_denied forged_actor_denied verification_rechecked no_membership_mutation');
   await query('UPDATE auth_sessions SET revoked_at=SYSUTCDATETIME() WHERE id=@id',{id:actor.sessionId});
   await assert.rejects(store.list(actor),{code:'ENQUIRY_ACTOR_REQUIRED'});
   await assert.rejects(viewings.get(actor,saved.id),{code:'ENQUIRY_ACTOR_REQUIRED'});

@@ -1,7 +1,7 @@
 import express from 'express';
 import process from 'node:process';
 import {createTenantContextMiddleware} from '../tenant/context.js';
-import {resolveVerifiedSeekerContext} from '../auth/seekerContext.js';
+import {resolvePersonalRentalContext} from '../auth/seekerContext.js';
 import {hasActiveTenantMembership,isAdminRole} from '../platform/permissionEngine.js';
 import {PUBLIC_LISTING_ENABLED} from '../publicListings/eligibility.js';
 import {createEnquiryStore} from './store.js';
@@ -17,7 +17,7 @@ const asyncRoute=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).cat
 export const createEnquiriesRouter=({
   owner=false,env=process.env,store=createEnquiryStore(),viewings=createViewingStore(),applications=createApplicationStore(),offers=createOfferStore(),
   context=createTenantContextMiddleware({requireUser:true,requireTenant:owner}),
-  verifySeeker=resolveVerifiedSeekerContext,allowedOrigin='https://app.quixo.homes'
+  verifySeeker=resolvePersonalRentalContext,allowedOrigin='https://app.quixo.homes'
 }={})=>{
   const router=express.Router();
   router.use((req,res,next)=>{
@@ -73,7 +73,7 @@ export const createEnquiriesRouter=({
     } else {
       const proof=await verifySeeker({authSession:req.authSession,user:req.user,tenantContext:req.tenantContext});
       if (!proof.verified || !proof.eligible || (req.user.status && req.user.status!=='active')) {
-        throw enquiryError(403,'VERIFIED_SEEKER_REQUIRED','A verified personal seeker account is required.');
+        throw enquiryError(403,'VERIFIED_SEEKER_REQUIRED','Verify your account’s email address to continue your rental search.');
       }
     }
     req.enquiryActor={actorId:req.authSession.record.appUserId,

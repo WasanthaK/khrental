@@ -52,3 +52,18 @@ export const resolveVerifiedSeekerContext = async ({
     ? { verified: true, eligible: true, userType: 'seeker', tenantId: null }
     : { verified: true, eligible: false };
 };
+
+// Personal rental activity belongs to the verified global actor. Memberships
+// grant business access separately and cannot broaden this actor-only context.
+export const resolvePersonalRentalContext = async ({authSession=null,user=null,tenantContext=null}={}) => {
+  const record=authSession?.record;
+  const denied={verified:false,eligible:false};
+  if(!authSession?.sessionId||!record?.authId||!record?.appUserId||
+    !sameId(record.appUserId,user?.id)||!sameId(record.authId,user?.auth_id)||
+    !normalize(record.email)||normalize(record.email)!==normalize(user?.email)||
+    !normalize(record.role)||normalize(record.role)!==normalize(user?.role)||
+    record.metadata?.global_email_verified!==true||
+    (user?.status&&normalize(user.status)!=='active')||user?.active===false||
+    user?.is_dev_bypass||tenantContext?.identity?.devBypassRole||tenantContext?.requestedTenantId){return denied;}
+  return {verified:true,eligible:true,userType:'rental',tenantId:null};
+};

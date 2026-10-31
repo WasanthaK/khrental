@@ -1,5 +1,16 @@
 # KH Rentals Execution Plan
 
+## Active correction: one account across customer purposes — 31 October 2026
+
+Expected experience: returning owners open their existing properties; workspace lookup failures offer retry and preserve the account instead of starting another business. A verified owner chooses Find a place, browses and enquires personally, then uses List/manage my property to return to their selected management workspace. One account supports both tasks without role changes or duplicate registration.
+
+Prepared correction: explicitly track workspace-context success in AuthProvider and block new-setup rendering/autosave while it is unavailable; recover with the existing refresh authority. Keep legacy tenantless signup/default-entry proof unchanged. Add explicit personal-rental proof for verified reciprocal active identities, and recheck it inside the existing serialized SQL enquiry authority. Scope personal reads/writes by the session actor, retaining business administrator membership checks and consent. Preserve the existing workspace selection throughout the purpose switch. Existing offer/agreement target-membership conflicts remain closed; unrelated role, subscription and schema changes are outside scope.
+
+Verification package: actual AuthProvider/routes render the failed-context retry, no extra setup/progress write, same-account personal overview/selected-property enquiry form and management return; real SQL covers an owner from another organization making an actor-owned enquiry without business inbox access, forged actor denial, verification removal, membership preservation and existing rental-offer transitions. Inspect desktop/mobile screenshots and repeat the observed live paths after rollout. Source preparation and focused tests are in progress; CI, release and live acceptance remain OPEN. Fresh password-login and live unfinished-owner/new-browser recovery remain separate open evidence. Continue the ordered website goal before subscriptions; #459 stays OPEN.
+
+---
+
+
 ## Live customer-purpose test: owner return and rental search — 31 October 2026
 
 **Owner-authorized live test, using the existing authenticated demo account. No password was re-entered, session cleared, account re-created, workspace submitted, consent checked or enquiry sent.** This proves the session-restoration/navigation cases below, not a fresh password-login handshake or an unfinished new-owner account.

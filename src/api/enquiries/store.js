@@ -37,10 +37,8 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
         AND ${owner ? `EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK)
           JOIN dbo.tenants t ON t.id=tm.tenant_id WHERE tm.app_user_id=au.id
           AND tm.tenant_id=@tenantId AND tm.role=N'admin' AND tm.status=N'active'
-          AND (t.status IS NULL OR t.status=N'active'))` : `au.tenant_id IS NULL
-        AND au.role=N'authenticated' AND au.user_type=N'seeker' AND auth.role=N'authenticated'
-        AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')=N'true'
-        AND ${journey?`NOT EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK) WHERE tm.app_user_id=au.id AND (tm.status<>N'active' OR tm.role NOT IN(N'rentee',N'tenant') OR NOT EXISTS(SELECT 1 FROM dbo.rental_offer_agreement_links rl JOIN dbo.property_enquiries re ON re.id=rl.enquiry_id WHERE re.seeker_id=au.id AND re.tenant_id=tm.tenant_id)))`:`NOT EXISTS(SELECT 1 FROM dbo.tenant_memberships tm WITH(UPDLOCK,HOLDLOCK) WHERE tm.app_user_id=au.id)`}`}`,
+          AND (t.status IS NULL OR t.status=N'active'))` : `LOWER(LTRIM(RTRIM(au.role)))=LOWER(LTRIM(RTRIM(auth.role)))
+        AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')=N'true'` }`,
     {actorId:actor.actorId,authId:actor.authId,sessionId:actor.sessionId,...(owner?{tenantId:actor.tenantId}:{})});
     if (!rows[0]) {throw enquiryError(403,'ENQUIRY_ACTOR_REQUIRED','Your account permissions could not be confirmed. Sign in again.');}
     return rows[0];

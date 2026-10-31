@@ -1,5 +1,16 @@
 # KH Rentals Authentication Lifecycle
 
+## Personal rental activity and workspace lookup — 31 October 2026
+
+One verified account may manage property and search for a rental. Explicit Find a place opens personal rental activity; List/manage my property returns to the selected authorized workspace or deliberate owner setup. Keep the workspace selection intact while personal API calls omit tenant/development headers and cookies. The legacy default tenantless signup/session-adoption certification remains strict and separate from explicit personal-rental certification.
+
+Personal rental authority comes from a live bearer session, reciprocal auth/application identity, matching normalized email and global role, active account and durable verified-email metadata. Recheck persisted session, verification and reciprocal identity inside the SQL transaction. Personal enquiry, viewing, application and offer history is scoped by the authenticated actor ID; organization membership grants no access to another person's activity. Business inbox/actions still require an active administrator membership in the target workspace. Revoking workspace membership does not erase independent personal rental access; disabling the global account, revoking its session or removing email proof denies it. Agreement conversion retains existing target-workspace membership conflict checks and never overwrites an administrator role.
+
+An unavailable or malformed workspace lookup is different from a verified zero-membership result. Show a retry state, preserve the account/draft, and do not display or autosave new-workspace setup while context is unavailable. Retry refreshes authoritative context before offering existing-workspace navigation or unfinished setup. URL purpose is navigation, never an access grant. This correction needs exact-head regression, rendered desktop/mobile review and live verification; fresh password login and live unfinished-owner recovery retain their separate acceptance status.
+
+---
+
+
 ## Durable owner continuation implementation — 31 October 2026
 
 Use the existing auth record's bounded owner_onboarding draft (name, LK/BN country, UUID request ID) as resumable business/form state. Store initial owner purpose only during successful new-account redemption; a signed-in owner may then save their own draft through the reciprocal server identity. Use an atomic JSON-field update so unrelated verification and credential metadata are preserved. Serialize browser draft saves and preserve different-account changes before any workspace command.

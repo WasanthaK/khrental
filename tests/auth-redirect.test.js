@@ -42,3 +42,8 @@ test('missing or unsafe return paths use the supplied fallback', () => {
   assert.equal(getPostLoginPath({ from: { pathname: 'https://example.com' } }, '/rentee'), '/rentee');
   assert.equal(getPostLoginPath({ from: { pathname: '//example.com/path' } }, '/rentee'), '/rentee');
 });
+
+
+test('failed workspace lookup cannot choose a cached owner workspace',()=>{
+  assert.equal(getExistingPropertyWorkspacePath({user:{id:'account',role:'admin',tenantContextVerified:false},membership:{tenant_id:'old',status:'active',role:'admin'}}),null);
+});

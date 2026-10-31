@@ -10,11 +10,12 @@ export default function SeekerLayout({active, children}) {
   return <div className="seeker-space">
     <a className="seeker-skip" href="#seeker-content">Skip to content</a>
     <header className="seeker-header">
-      <Link className="seeker-brand" to="/seeker" aria-label="Quixo.Homes home">quixo<span>.</span>homes</Link>
+      <Link className="seeker-brand" to="/seeker?purpose=rental" aria-label="Quixo.Homes home">quixo<span>.</span>homes</Link>
       <nav aria-label="Your rental search" className="seeker-nav">
-        {[['home','/seeker','Overview'],['enquiries','/enquire','My enquiries'],['offers','/rental-journey','Offers & agreements']].filter(([key])=>key==='home'||isPropertyEnquiriesEnabled()).map(([key,to,label])=>
+        {[['home','/seeker?purpose=rental','Overview'],['enquiries','/enquire','My enquiries'],['offers','/rental-journey','Offers & agreements']].filter(([key])=>key==='home'||isPropertyEnquiriesEnabled()).map(([key,to,label])=>
           <Link key={key} to={to} aria-current={active===key?'page':undefined}>{label}</Link>)}
       </nav>
+      {isAuthenticated && <Link className="seeker-text-link" to="/owner-start">List/manage my property</Link>}
       {isAuthenticated && <button type="button" className="seeker-signout" onClick={async()=>{
         try {await logout();} catch {setError('We couldn’t sign you out. Please try again.');}
       }}>Sign out</button>}

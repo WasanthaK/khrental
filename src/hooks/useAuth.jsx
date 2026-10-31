@@ -64,6 +64,7 @@ const AuthProvider = ({ children }) => {
 
     return {
       ...userRecord,
+      tenantContextVerified: Boolean(tenantContext && Array.isArray(tenantContext.memberships) && typeof tenantContext.resolution === 'string'),
       ownerOnboarding: tenantContext?.ownerOnboarding || null,
       tenantId: finalTenantId,
       tenant: resolvedTenant,

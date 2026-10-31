@@ -1,6 +1,6 @@
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
-import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
+import { resolveVerifiedSeekerContext, resolvePersonalRentalContext } from '../auth/seekerContext.js';
 import express from 'express';
 import {ownerSetupHandler,ownerProgressHandler,getOwnerOnboardingContext} from './ownerOnboarding.js';
 import crypto from 'node:crypto';
@@ -1014,7 +1014,7 @@ export const createPlatformRouter = () => {
       return;
     }
     try {
-      const verified = await resolveVerifiedSeekerContext({
+      const verified = await (req.query.purpose==='rental'?resolvePersonalRentalContext:resolveVerifiedSeekerContext)({
         authSession: req.authSession,
         user: req.user,
         tenantContext: req.tenantContext
