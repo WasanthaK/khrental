@@ -1,5 +1,18 @@
 # KH Rentals Execution Plan
 
+## Customer-purpose correction deployed and live-verified — 31 October 2026
+
+PR #474 deployment #41220067874 SUCCESS: 813/813 tests/build, Ready revision 0000437, exact serving SHA `b814c0efc293c779fcc7d3d2251af0d0fdf73d04`, deterministic startup, live MSSQL and expected runtime. Independent browser build-info matches. Final reviewed-head CI and desktop/390px evidence are recorded below.
+
+**Live bounded acceptance PASS:** the existing demo owner followed Properties → Find a place → personal rental overview → Browse Sri Lanka → selected public property → Express your interest. The actual message form now appears with the correct public photo/property/rent instead of the personal-seeker rejection. Message remained empty, consent unchecked and Send enquiry disabled. List/manage my property → existing-workspace panel → Open my properties restored the same workspace/property. Separately, public owner marketing → Sign in to the app returned directly to existing properties, without a new workspace form or manual reload. No live workspace, enquiry, consent, message, repair, credential, signature or payment was fabricated.
+
+Controlled browser tests separately prove failed-context retry without setup/progress writes and preservation of a newer account. Existing-owner handoff, owner personal overview/enquiry-form access, selected-property context and management return are accepted within this correction. Fresh password sign-in, live unfinished-owner/new-browser recovery, actual enquiry submission and the complete viewing/application/offer/agreement/tenancy lifecycle remain separate OPEN acceptance. UX-03's demonstrated owner-switching blocker is corrected; this does not close full lifecycle acceptance.
+
+**Next:** ordered UX-04/UX-05/UX-06 entry presentation (prominent Find a place and List/manage my property, remove repeated signup choices, consistent wording/progress), then UX-08 filter presentation and the remaining listing/rental lifecycle. Preserve approved imagery and existing security boundaries. #459 stays OPEN; subscriptions remain later. This status supersedes release-pending entries while retaining their history.
+
+---
+
+
 ## Customer-purpose corrections merged; live verification next — 31 October 2026
 
 PR #474 MERGED at `b814c0efc293c779fcc7d3d2251af0d0fdf73d04` from reviewed head `23bb81312b3f5e501dc6aca486eb2c1fdd242ce2`. Final-head checks all PASS: application #41219728220 (813 tests/build), two-tenant billing SQL #41219728231, public visibility/privacy SQL #41219728320, protected billing browser #41219728218 and owner/enquiry/rental-offer journey #41219728187. Artifact 13050035439 contains reviewed desktop/390px owner-context retry and same-owner personal-enquiry form screenshots. The four affected screenshots match the already-inspected pixels exactly.
