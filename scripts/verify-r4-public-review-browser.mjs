@@ -86,7 +86,17 @@ try{
     assert.equal(data.site,'quixo-homes-marketing',p);
     assert.equal(data.robots,'noindex,nofollow',p);
     assert.equal(data.h1,1,p+' needs exactly one h1');
-    assert.ok(data.main&&data.logo&&data.liveWarnings,p+' structure/logo/disclaimer');
+    assert.ok(data.main&&data.logo,p+' structure/logo');
+    assert.equal(data.liveWarnings,false,p+' no obsolete pilot restriction');
+    assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/Owner self-registration is not open|New customer onboarding is not yet open|New owner registration is not open/);
+    if(p.endsWith('/owners/')){
+      const country=p.startsWith('/bn/')?'BN':'LK';
+      assert.ok(data.links.includes('https://app.quixo.homes/owner-start?country='+country),p+' working owner entry');
+      if(width===390||width===1280){
+        fs.mkdirSync('verification-browse-proof',{recursive:true});
+        await page.screenshot({path:'verification-browse-proof/owner-marketing-'+country+'-'+width+'.png',fullPage:true});
+      }
+    }
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
     assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/','/lk/property/','/bn/property/'].includes(p);

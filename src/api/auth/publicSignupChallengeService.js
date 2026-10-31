@@ -16,7 +16,7 @@ const bind = (tx, values) => {
   return q;
 };
 
-export const normalizePublicSignupDetails = ({ email, name, enquiry } = {}) => {
+export const normalizePublicSignupDetails = ({ email, name, enquiry,ownerCountry } = {}) => {
   if (typeof email !== 'string' || typeof name !== 'string') return null;
   const normalized = email.trim().toLowerCase();
   const displayName = name.trim();
@@ -26,7 +26,8 @@ export const normalizePublicSignupDetails = ({ email, name, enquiry } = {}) => {
       /[\x00-\x1f\x7f]/.test(displayName)) return null;
   const intent=enquiry===undefined?null:parseEnquiryIntent(enquiry);
   if(enquiry!==undefined&&!intent){return null;}
-  return { email: normalized, name: displayName,...(intent?{enquiry:intent}:{}) };
+  if(ownerCountry!==undefined&&(!['LK','BN'].includes(ownerCountry)||enquiry!==undefined)){return null;}
+  return { email: normalized, name: displayName,...(intent?{enquiry:intent}:{}),...(ownerCountry?{ownerCountry}:{}) };
 };
 
 // Caller must return a uniform public response regardless of whether this

@@ -15,7 +15,7 @@ const configError = () => {
 // Raw verification tokens must never appear in the HTTP path or query.
 // A fragment is not transmitted in an HTTP request; the later S3c browser
 // page must read and clear it before posting the token in the request body.
-export const createPublicSignupVerificationLink = ({ token, baseUrl, production = false, enquiry }) => {
+export const createPublicSignupVerificationLink = ({ token, baseUrl, production = false, enquiry,ownerCountry }) => {
   hashPublicSignupChallengeToken(token); // strict 256-bit base64url shape
   let url;
   try {
@@ -43,6 +43,10 @@ export const createPublicSignupVerificationLink = ({ token, baseUrl, production 
   // Only a server-controlled origin; never accept client-provided return URLs.
   url.pathname = '/verify-email';
   url.hash = 'token=' + token;
+  if(ownerCountry!==undefined){
+    if(!['LK','BN'].includes(ownerCountry)||enquiry!==undefined){throw configError();}
+    url.hash+='&ownerCountry='+ownerCountry;
+  }
   if(enquiry!==undefined){
     const intent=parseEnquiryIntent(enquiry);
     if(!intent){throw configError();}
@@ -53,8 +57,8 @@ export const createPublicSignupVerificationLink = ({ token, baseUrl, production 
   return url.toString();
 };
 
-export const createPublicSignupVerificationEmail = ({ token, baseUrl, production = false, enquiry }) => {
-  const link = createPublicSignupVerificationLink({ token, baseUrl, production, enquiry });
+export const createPublicSignupVerificationEmail = ({ token, baseUrl, production = false, enquiry,ownerCountry }) => {
+  const link = createPublicSignupVerificationLink({ token, baseUrl, production, enquiry,ownerCountry });
   return {
     subject: 'Verify your Quixo.Homes email address',
     text: [

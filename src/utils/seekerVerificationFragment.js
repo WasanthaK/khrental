@@ -16,6 +16,8 @@ export const consumeSeekerVerificationContext = ({
   if (!isVerificationPath) {return empty;}
   let token = null;
   let enquirySearch='';
+  const ownerMatch=/^#token=([A-Za-z0-9_-]{43})&ownerCountry=(LK|BN)$/.exec(rawHash);
+  if(ownerMatch&&ownerMatch[0]===rawHash){token=ownerMatch[1];enquirySearch='?ownerCountry='+ownerMatch[2];}
   const match=/^#token=([A-Za-z0-9_-]{43})(?:&listingId=([^&]+)&country=(LK|BN))?$/.exec(rawHash);
   if(match&&match[0]===rawHash&&TOKEN.test(match[1])){
     const intent=match[2]?parseEnquiryIntent({listingId:match[2],country:match[3]}):null;
