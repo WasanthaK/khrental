@@ -101,7 +101,6 @@ const PropertyForm = () => {
           
           if (data && data.length > 0) {
             const property = fromDatabaseFormat(data[0]);
-            console.log('Fetched property data:', property);
             
             // Ensure rentalvalues is properly structured
             const rentalvalues = typeof property.rentalvalues === 'string' 
@@ -129,7 +128,7 @@ const PropertyForm = () => {
               bank_branch: property.bank_branch || '',
               bank_account_number: property.bank_account_number || '',
               unitconfiguration: property.unitconfiguration || '',
-              rentalvalues: {...rentalvalues,listingCategory:rentalvalues.listingCategory||(['house','apartment','condo'].includes(property.propertytype)?'residential':'')},
+              rentalvalues: {...rentalvalues,listingCategory:rentalvalues.listingCategory||rentalvalues.listingcategory||(['house','apartment','condo'].includes(property.propertytype)?'residential':'')},
               checklistitems,
               terms: property.terms || {},
               images,
@@ -715,6 +714,10 @@ const PropertyForm = () => {
       setSubmitting(true);
       setError(null);
 
+      const rentalValues={...formData.rentalvalues};
+      // The visible category control owns the selection when editing a legacy
+      // document; do not resend a hidden older spelling alongside that choice.
+      delete rentalValues.listingcategory;
       // Prepare the data for database
       const propertyData = {
         ...formData,
@@ -728,7 +731,7 @@ const PropertyForm = () => {
         propertytype: formData.propertytype,
         status: formData.status,
         rentalvalues: {
-          ...formData.rentalvalues,
+          ...rentalValues,
           listingCategory: normalizeListingCategory(formData.rentalvalues.listingCategory),
           rent: parseFloat(formData.rentalvalues.rent) || 0,
           deposit: parseFloat(formData.rentalvalues.deposit) || 0,
