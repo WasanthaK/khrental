@@ -27,6 +27,9 @@ export default function OwnerSetup(){
   const draftKey='quixo.owner-setup.draft.'+identity+(createAnotherWorkspace?'.additional':'');
   useEffect(()=>{
     if(contextUnavailable){return;}
+    if(existingProperties&&!createAnotherWorkspace){
+      setCountry(selected.get('country')==='BN'?'BN':'LK');setDraftIdentity(null);return;
+    }
     let draft=!createAnotherWorkspace?user?.ownerOnboarding:null;
     try{if(!draft){draft=identity?JSON.parse(sessionStorage.getItem(draftKey)):null;}}catch{/* Draft storage is optional. */}
     const valid=draft&&typeof draft.name==='string'&&draft.name.length<=200&&['LK','BN'].includes(draft.country)&&
@@ -34,7 +37,7 @@ export default function OwnerSetup(){
     setName(valid?draft.name:'');setCountry(valid?draft.country:(selected.get('country')==='BN'?'BN':'LK'));
     setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');setSaveMessage('');
     setRequestId(valid?draft.requestId:crypto.randomUUID());setDraftIdentity(identity);
-  },[identity,createAnotherWorkspace,contextUnavailable]);
+  },[identity,createAnotherWorkspace,contextUnavailable,existingProperties]);
   useEffect(()=>{
     if(!identity||draftIdentity!==identity){return;}
     try{sessionStorage.setItem(draftKey,JSON.stringify({name,country,requestId}));}catch{/* Keep the current form usable without storage. */}
