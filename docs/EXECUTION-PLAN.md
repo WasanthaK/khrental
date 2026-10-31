@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Active login-return investigation — 31 October 2026
+
+The owner reports a newly self-registered, email-verified account returning silently to `/login` after submitting credentials. Mailbox receipt is evidenced; successful credential redemption, normal login and session persistence for the intended account are not yet independently established. Do not recreate the account, reset credentials, resend an invitation or treat prior administrator-session acceptance as proof for this identity.
+
+Source establishes an error-presentation defect: `AuthProvider.login` sets global loading before sending credentials; `PublicRoute` replaces/unmounts `Login` while loading. On any rejected request, Login's local error is written to the discarded component and the replacement form appears blank. Keep pending credential submission in Login's existing local state; global auth loading remains owned by startup/session-event profile resolution. This preserves errors and retry without weakening credential verification, server certification, membership or tenant checks. It explains a silent failed request, not the specific account's underlying rejection.
+
+Strengthen the existing rendered regression to use the production auth client, session storage, listeners and MSSQL profile adapter instead of substituting auth/session behavior. Check delayed HTTP 401 and 503, visible errors, retained email, enabled retry, no failed-request session, successful retry, fresh-document session restoration, existing owner/staff/renter and new owner/seeker routing, plus desktop/mobile presentation. CI, release and actual intended-account login remain pending; overall #459 acceptance stays OPEN and subscriptions stay deferred.
+
+---
+
 ## Returning-owner entry and workspace explanation deployed — 31 October 2026
 
 The owner clarifies that workspace is the SaaS tenant and accepts that name when explained. A workspace groups properties, team access, agreements and invoices; one workspace manages many properties. Returning managers use their current workspace. Another workspace remains an explicit optional action for a separately managed business.

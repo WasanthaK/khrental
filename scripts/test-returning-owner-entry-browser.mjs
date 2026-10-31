@@ -16,33 +16,20 @@ const cases=[
   {email:'new-owner@example.test',role:'authenticated',member:null,path:'/owner-start?country=BN'},
   {email:'seeker@example.test',role:'authenticated',member:null,path:'/seeker'}
 ].map((x,i)=>({...x,id:`22222222-2222-4222-8222-${String(i+1).padStart(12,'0')}`,profileId:`33333333-3333-4333-8333-${String(i+1).padStart(12,'0')}`}));
-const authModule=`const listeners=new Set();
-  const stored=JSON.parse(localStorage.getItem('fixture-session')||'null');let session=stored;
-  const emit=()=>listeners.forEach(f=>f('FIXTURE',session));
-  const auth={getSession:async()=>({data:{session}}),
-    onAuthStateChange:callback=>{listeners.add(callback);return {data:{subscription:{unsubscribe:()=>listeners.delete(callback)}}};},
-    getTenantContext:async()=>({data:await fetch('/fixture/context',{headers:{Authorization:'Bearer '+session?.access_token}}).then(r=>r.json())})};
-  export const getPlatformClient=()=>({auth});
-  export const signIn=async(email,password)=>{const r=await fetch('/fixture/sign-in',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});const result=await r.json();session=result.data.session;localStorage.setItem('fixture-session',JSON.stringify(session));emit();return result;};
-  export const getCurrentUser=async()=>session?.user;export const signOut=async()=>({});
-  export const signUp=async()=>({});export const resetPassword=async()=>({});export const updatePassword=async()=>({});`;
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';
   import {AuthProvider} from '/src/hooks/useAuth.jsx';import AppRouter from '/src/routes.jsx';import '/src/index.css';
   createRoot(document.getElementById('root')).render(<React.StrictMode><AuthProvider><AppRouter/></AuthProvider></React.StrictMode>);`;
 const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,importer){
   if(source.startsWith('\0returning-')){return source;}
   if(!importer?.includes('/src/')){return;}
-  if(/\/(?:hooks\/useAuth\.jsx|pages\/Login\.jsx|pages\/OwnerSetup\.jsx|components\/auth\/VerifiedSeekerBoundary\.jsx)$/.test(importer)&&/\/services\/platformClient(?:\.js)?$/.test(source)){return '\0returning-platform';}
-  if(importer.endsWith('/hooks/useAuth.jsx')&&source.endsWith('/services/mssqlApiClient')){return '\0returning-mssql';}
+  if(/\/(?:hooks\/useAuth\.jsx|pages\/Login\.jsx|pages\/OwnerSetup\.jsx|components\/auth\/VerifiedSeekerBoundary\.jsx)$/.test(importer)&&/\/services\/platformClient(?:\.js)?$/.test(source)){return new URL('../src/services/platformClientCore.js',import.meta.url).pathname;}
   if(importer.endsWith('/routes.jsx')&&/\/components\/layouts\//.test(source)){return '\0returning-layout.jsx';}
   if(importer.endsWith('/routes.jsx')&&/\/pages\/(?:PropertyList|Dashboard|rentee\/RenteePortal)$/.test(source)){return '\0returning-destination.jsx';}
   if(importer.endsWith('/auth/VerifiedSeekerBoundary.jsx')&&source.endsWith('/pages/SeekerHome')){return '\0returning-destination.jsx';}
 },async load(id){
   if(id==='\0returning-entry.jsx'){return transformWithEsbuild(entry,'returning-entry.jsx',{loader:'jsx',jsx:'automatic'});}
-  if(id==='\0returning-platform'){return authModule;}
   if(id==='\0returning-layout.jsx'){return `import React from 'react';import {Outlet} from 'react-router-dom';export default ()=>React.createElement(Outlet);`;}
   if(id==='\0returning-destination.jsx'){return `import React from 'react';export default ()=>React.createElement('h1',null,'Synthetic destination '+location.pathname);`;}
-  if(id==='\0returning-mssql'){return `export const isMssqlApiEnabled=()=>true;export const requestMssqlApi=async(_p,options)=>fetch('/fixture/profile',{headers:{'x-auth-id':options.headers['x-auth-id']}}).then(r=>r.json());`;}
 }};
 let vite,server,browser,seekerChecks=0,ownerWrites=0;
 const byToken=req=>cases.find(x=>'fixture-'+x.id===String(req.get('authorization')||'').replace(/^Bearer /,''));
@@ -53,15 +40,19 @@ const context=x=>{
 try{
   vite=await createServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
-  app.post('/fixture/sign-in',(req,res)=>{
+  app.post('/api/platform/auth/sign-in',async(req,res)=>{
+    // Let React commit the pending state before returning an actual HTTP error.
+    await new Promise(resolve=>setTimeout(resolve,150));
+    if(req.body.password==='RejectedFixturePassword8!'){return res.status(401).json({error:'Invalid login credentials'});}
+    if(req.body.password==='UnavailableFixturePassword8!'){return res.status(503).json({error:'Sign-in is temporarily unavailable. Please try again.'});}
     const x=cases.find(x=>x.email===req.body.email);assert.ok(x);assert.equal(req.body.password,'SyntheticPassword8!');
     const user={id:x.id,email:x.email,role:x.role,user_metadata:{user_type:'seeker'}};
     res.json({data:{user,session:{access_token:'fixture-'+x.id,user}}});
   });
-  app.get('/fixture/context',(req,res)=>res.json(context(byToken(req))));
-  app.get('/fixture/profile',(req,res)=>{
+  app.get('/api/platform/auth/context',(req,res)=>res.json({data:context(byToken(req))}));
+  app.get('/api/mssql/me',(req,res)=>{
     const x=cases.find(x=>x.id===req.get('x-auth-id'));assert.ok(x);
-    res.json({id:x.profileId,role:x.role,user_type:'seeker',name:'Example customer'});
+    res.json({data:{id:x.profileId,role:x.role,user_type:'seeker',name:'Example customer'}});
   });
   app.get('/api/platform/auth/seeker-context',(req,res)=>{
     seekerChecks++;const x=byToken(req);
@@ -76,6 +67,33 @@ try{
   const origin='http://127.0.0.1:'+server.address().port;
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
   await fs.mkdir('enquiry-browser-proof',{recursive:true});
+  // Use the production auth client/storage/listeners, AuthProvider and Login.
+  // An unsuccessful request must leave its form mounted with a usable retry.
+  for(const failure of [
+    {password:'RejectedFixturePassword8!',message:'Invalid login credentials'},
+    {password:'UnavailableFixturePassword8!',message:'Sign-in is temporarily unavailable. Please try again.'}
+  ]){
+    const isolated=await browser.createBrowserContext();const page=await isolated.newPage();
+    await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+    await page.goto(origin+'/login?ownerCountry=BN',{waitUntil:'networkidle0'});
+    await page.waitForSelector('#email-address');
+    await page.type('#email-address','new-owner@example.test');await page.type('#password',failure.password);
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('[role="alert"]');
+    assert.equal(await page.$eval('[role="alert"]',e=>e.innerText),failure.message);
+    assert.equal(await page.$eval('#email-address',e=>e.value),'new-owner@example.test');
+    assert.equal(await page.$eval('button[type="submit"]',e=>e.disabled),false);
+    assert.equal(await page.evaluate(()=>localStorage.getItem('khrental.local.session')),null);
+    await page.setViewport({width:1365,height:900});await page.screenshot({path:'enquiry-browser-proof/login-failure-desktop.png',fullPage:true});
+    await page.setViewport({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:'enquiry-browser-proof/login-failure-mobile.png',fullPage:true});
+    await page.$eval('#password',e=>e.select());await page.type('#password','SyntheticPassword8!');
+    await page.click('button[type="submit"]');
+    await page.waitForFunction(()=>location.pathname==='/owner-start');
+    // A fresh document must restore the successful session through production storage.
+    await page.reload({waitUntil:'networkidle0'});await page.waitForSelector('#owner-workspace');
+    await isolated.close();
+  }
   for(const x of cases){
     const browserContext=await browser.createBrowserContext();const page=await browserContext.newPage();page.setDefaultTimeout(20000);
     await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
@@ -110,5 +128,5 @@ try{
     }
     await browserContext.close();
   }
-  console.log('RETURNING_OWNER_ENTRY_BROWSER=PASS actual_auth_provider actual_login actual_public_route multiple_emails membership_based_routing no_business_seeker_probe existing_workspace no_duplicate_creation seeker_to_owner_portal renter_portal new_owner_explanation desktop_mobile');
+  console.log('RETURNING_OWNER_ENTRY_BROWSER=PASS actual_auth_client actual_auth_storage actual_auth_provider actual_login failed_login_visible retry reload actual_public_route multiple_emails membership_based_routing no_business_seeker_probe existing_workspace no_duplicate_creation seeker_to_owner_portal renter_portal new_owner_explanation desktop_mobile');
 }finally{await browser?.close();await vite?.close();if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}}
