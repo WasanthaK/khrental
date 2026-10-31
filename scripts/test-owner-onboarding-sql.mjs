@@ -4,8 +4,8 @@ import {createOwnerTestingWorkspace} from '../src/api/platform/ownerOnboarding.j
 
 export const verifyOwnerOnboarding=async({pool,query})=>{
   // Match existing production foundation columns; no production schema mutation.
-  await pool.request().batch(`ALTER TABLE tenants ADD name NVARCHAR(200),slug NVARCHAR(200),[plan] NVARCHAR(50),createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET;
-    CREATE UNIQUE INDEX UX_owner_test_slug ON tenants(slug) WHERE slug IS NOT NULL;
+  await pool.request().batch(`ALTER TABLE tenants ADD name NVARCHAR(200),slug NVARCHAR(200),[plan] NVARCHAR(50),createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET;`);
+  await pool.request().batch(`CREATE UNIQUE INDEX UX_owner_test_slug ON tenants(slug) WHERE slug IS NOT NULL;
     ALTER TABLE tenant_memberships ADD createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET;
     CREATE TABLE tenant_settings(tenant_id UNIQUEIDENTIFIER PRIMARY KEY,feature_flags_json NVARCHAR(MAX),createdat DATETIMEOFFSET,updatedat DATETIMEOFFSET);`);
   const actorId=crypto.randomUUID(),authId=crypto.randomUUID(),otherActor=crypto.randomUUID(),otherAuth=crypto.randomUUID();
