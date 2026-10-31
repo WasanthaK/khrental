@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Login error preservation deployed — 31 October 2026
+
+PR #470 MERGED at `fd0947ba67104902e6deba31de20885b5b824eb5`, reviewed head `c82da114fce2bebc29557a216e76ba1f1a9bfd34`. Application release #41183287046 SUCCESS: 803/803 merged tests and build; Ready revision 0000433, deterministic startup, exact public build fingerprint, live MSSQL and expected browser runtime configuration. Independent cloud-browser build-info readback confirms the merge SHA.
+
+Credential submission now uses Login's local pending state, so a rejected request no longer unmounts the form and silently erases its error. Global loading remains with auth startup/session-event profile resolution. Production auth client/storage/listeners/MSSQL-adapter browser regression PASS: delayed 401 and 503 messages, retained email, enabled retry, no session on failure, successful retry and fresh-document session restoration, plus owner/staff/renter/new-owner/seeker routing. Application CI #41183006160 and complete journey CI #41183006149 PASS; desktop and 390px screenshots visually reviewed, artifact 13035752996. Local 19/19 focused and build PASS; full local suite's sole unavailable-Chrome failure passes in CI.
+
+This is a proven silent-error repair, not proof of the intended real account's underlying rejection or successful login. User supplied verification-email receipt and reports completed verification, but its real credential submission/session outcome remains unverified; previous secure sign-in timed out and available cloud logs did not capture the user's failure. No account/password/verification/membership changes, recreation or resend performed. Keep intended-account login and #459 acceptance OPEN; subscriptions deferred. Next is a refreshed real sign-in and its now-visible error/result. Do not assume the account needs to be recreated or its password reset.
+
+---
+
 ## Active login-return investigation — 31 October 2026
 
 The owner reports a newly self-registered, email-verified account returning silently to `/login` after submitting credentials. Mailbox receipt is evidenced; successful credential redemption, normal login and session persistence for the intended account are not yet independently established. Do not recreate the account, reset credentials, resend an invitation or treat prior administrator-session acceptance as proof for this identity.
