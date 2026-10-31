@@ -1,5 +1,23 @@
 # KH Rentals Authentication Lifecycle
 
+## Fundamental customer-purpose contract — 31 October 2026
+
+The owner establishes two primary Quixo.Homes entry intentions: **Find a place** and **List/manage my property**. People know their purpose when they choose one; authentication continues that chosen business journey. The controlling stories BJ-01–BJ-08, gap assessment and acceptance requirements are in [Fundamental business journey: preserve the customer's purpose](EXECUTION-PLAN.md#fundamental-business-journey-preserve-the-customers-purpose--31-october-2026).
+
+- First-time owner: select list/manage → register → verify email/establish credentials → set up their property workspace → add the first property → property management.
+- Returning unfinished owner: ordinary sign-in recovers the verified account's owner purpose and resumes the next incomplete step, including after logout/browser closure or verification in another browser.
+- Existing authorized property manager: list/manage → sign in → existing authorized workspace and properties; make a workspace choice explicit when ambiguous.
+- Prospective renter: browse freely → select property → Express your interest → register/sign in when needed → the same property's enquiry.
+- A person who both rents and manages property uses one global identity and deliberate purpose-switch actions; effective organization permissions remain membership-derived. Preserve invited-participant and platform-administrator destinations.
+
+Owner intent and resumable progress must be durable account-associated business state. URL context and optional sessionStorage drafts assist immediate continuation but cannot be the only source for ordinary-login recovery. Bind pending context only through verified account establishment; preserve an existing different account and keep its state separate. A selected purpose or editable preference never creates membership, grants a role, proves email verification or authorizes access to another organization. The initial internal seeker classification is not a completed owner experience or a permanent customer-purpose restriction.
+
+Honor a valid explicit task/purpose switch. With no new task, ordinary login resumes unfinished owner setup when applicable or the appropriate established destination. Explain workspace as the account grouping properties, team, agreements and invoices; one workspace supports many properties. Existing managers continue there, with another workspace created only through an explicit action.
+
+Acceptance requires the real owner signup → verification → first-property outcome, interrupted setup recovered via plain login, reload/new-browser persistence, safe different-account handling, existing manager and participant destinations, selected-property renter continuation and usable dual-purpose access. Authentication alone is not owner-onboarding acceptance. Current durable-resumption and dual-purpose gaps remain open; this documentation changes no authentication authority or runtime behavior.
+
+---
+
 ## Returning owner entry and workspace terminology — 31 October 2026
 
 Workspace is the customer-facing name for a SaaS tenant: the account grouping properties, team access, agreements and invoices. Explain this during initial setup; one workspace manages many properties. A returning property manager with an active, server-resolved business membership continues in the currently selected workspace and must not be forced into another workspace creation or new-owner verification flow merely to access existing properties. Never switch organizations implicitly.

@@ -1,5 +1,55 @@
 # KH Rentals Execution Plan
 
+## Fundamental business journey: preserve the customer's purpose — 31 October 2026
+
+**Controlling owner decision.** A visitor arrives at Quixo.Homes with a purpose: find a place to rent, or list/manage their property. The website presents those two clear entry choices and carries the selected purpose through registration, email verification, sign-in and subsequent visits. This is a fundamental business requirement, not an optional navigation improvement. It takes precedence over earlier defaults that treat every public account as a rental seeker. The original choice should remain meaningful after the first page.
+
+### Expected customer experience and user stories
+
+| Story | Customer intention | Required experience |
+| --- | --- | --- |
+| BJ-01 — Find a place | As a prospective renter, I want to explore places before committing to an account. | Find a place → browse/search freely → choose a property → Express your interest → register/sign in when needed → return to that property's enquiry with its country and listing context retained. Continue through replies, viewing, application, offer/agreement and tenancy. |
+| BJ-02 — First-time owner | As a first-time owner/manager, I want to register so I can add and manage my property. | List/manage my property → sign up → verify email and establish credentials → set up my property workspace → add my first property/dwelling, category, country, details and photos → enter property management and the applicable listing journey. The purpose remains owner onboarding throughout. |
+| BJ-03 — Returning owner with unfinished setup | As an owner who left before finishing, I want to continue from my next incomplete step. | Ordinary sign-in, including after logout, browser closure or opening the verification email in another browser → recover the verified account's owner onboarding progress → Continue setting up your property → next incomplete step. Completed verification/setup steps remain completed. |
+| BJ-04 — Existing property manager | As an owner or authorized manager with an existing workspace, I want to manage my properties immediately. | List/manage my property → sign in → existing authorized workspace/property management. Retain an authorized current selection; offer a clear workspace choice when the context is ambiguous. An additional workspace is an explicit separate-business action. |
+| BJ-05 — Returning rental seeker | As someone searching for a rental, I want to resume my selected property or ongoing conversation. | Find a place → sign in when needed → selected enquiry or rental-search activity. A selected property takes the customer back to that property's task. |
+| BJ-06 — One person, both purposes | As someone who both rents and owns/manages property, I want to use one account for both activities. | Clear actions to Find a place and List/manage my property allow deliberate switching. Existing conversations and management access stay with the same identity. Changing purpose changes the task presented; organization permissions remain derived from actual membership. |
+| BJ-07 — Invited participant | As invited staff or a resident, I want to reach the work or tenancy I was invited to access. | Invitation → establish/verify account access through the existing invitation authority → the authorized organization/tenancy and role-appropriate next task. An existing global account is reused safely. |
+| BJ-08 — Platform administrator | As a platform administrator, I want to reach platform administration and deliberately enter an organization when needed. | Ordinary administrative sign-in retains the authorized administrative destination. A separately selected public task has clear continuation without erasing platform or organization authority. |
+
+### Business rules
+
+1. **Purpose is selected at entry.** Use clear customer actions such as Find a place and List/manage my property. Continue the choice already made; a repeat purpose question is unnecessary when that choice is known.
+2. **Owner purpose and progress are durable.** Associate resumable onboarding with the verified global account so ordinary login and another browser can recover it. URL parameters and per-tab drafts may carry immediate context but are insufficient as the sole record. Pending anonymous context must be associated with an identity only through successful verified account establishment; one browser account must never inherit another's progress.
+3. **Explicit task and saved progress guide continuation.** Honor a valid selected property/task or deliberate purpose switch. For ordinary login without a new task, resume the account's unfinished owner setup when applicable, otherwise its appropriate established management, rental-search, tenancy or administrative destination. Resolve ambiguous workspace context explicitly.
+4. **One global account supports both purposes.** Purpose is not a permission grant or a permanent renter/owner restriction. Backend identity, verified-email and membership checks independently control access. The internal initial seeker classification must not determine an owner's customer-facing completion state.
+5. **Setup happens once for the intended workspace.** Explain: “A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.” An individual can use their own name; a company is not required merely to understand the form. Existing managers continue in an existing authorized workspace.
+6. **A person can understand their next action.** Owner entry, email confirmation and post-login screens consistently describe property setup/management. Rental-search screens expose a clear route to list/manage property. Verification acceptance, successful login and completion of owner onboarding are separate outcomes.
+7. **Current testing and commercial sequence remain intact.** Existing development-testing owner workspaces support the implemented property journey while subscription management is deferred under the earlier owner instruction. This decision changes neither approved pricing nor commercial activation requirements, collects no payment and does not imply paid-launch acceptance.
+
+### Current implementation gap and acceptance status
+
+Live browser observation now confirms an authenticated rental-search page and session restoration after reload, following the owner's sign-in. It does not establish completion of owner onboarding or independently recover the original signup selection. The owner's business concern is valid: reaching the seeker page alone is not completion of an owner journey.
+
+Source review finds that public signup creates an initial seeker identity, owner continuation is carried through the ownerCountry URL context, and the current owner form draft is per-account tab storage. Ordinary /login without that context cannot recover owner purpose from durable onboarding state. The seeker landing offers rental-search actions but no clear owner continuation. Existing membership-based manager routing and URL-based owner continuation are useful foundations; durable resumption and a usable dual-purpose journey remain gaps. The current tenantless-seeker API restrictions also require review before claiming that one person can complete both journeys; a navigation link alone does not establish that capability.
+
+**Next implementation package:** close BJ-02/BJ-03/BJ-04/BJ-06 together through a bounded gap review, durable owner continuation, clear purpose-switch entry and regression of existing membership-based destinations. Use the existing identity/onboarding authorities. Keep the original property, country and unfinished task intact. This documentation records the expected behavior; it does not claim the correction is implemented.
+
+### Required acceptance evidence
+
+- New owner follows List/manage my property through signup and email verification to workspace setup and actual first-property management.
+- Owner exits at each incomplete step, logs out/closes the browser, then uses ordinary login and resumes the correct next step without repeating completed setup.
+- Email verification opened in another browser preserves owner continuation; valid different signed-in accounts are preserved and receive clear guidance.
+- Existing authorized managers reach their properties; multiple-workspace selection, explicit additional-workspace setup, staff, resident and platform-administrator destinations remain correct.
+- Rental seekers browse anonymously, retain the selected property through authentication and resume their enquiry.
+- One account can deliberately move between rental search and authorized property management without losing either activity or creating a duplicate identity.
+- Retry/error, expired link, reload, mobile and desktop behavior remain usable; backend authorization and organization isolation hold independently of navigation.
+- Tests, rendered UI review and actual live customer-journey evidence are recorded separately. Authentication success or a mocked destination alone does not close owner or full rental-lifecycle acceptance.
+
+Canonical issue #459 remains OPEN. Full operational-website acceptance and the later subscription-management phase retain their existing order. This is a documentation-only business decision; no runtime, schema, account, workspace, membership or payment change is made here.
+
+---
+
 ## Login error preservation deployed — 31 October 2026
 
 PR #470 MERGED at `fd0947ba67104902e6deba31de20885b5b824eb5`, reviewed head `c82da114fce2bebc29557a216e76ba1f1a9bfd34`. Application release #41183287046 SUCCESS: 803/803 merged tests and build; Ready revision 0000433, deterministic startup, exact public build fingerprint, live MSSQL and expected browser runtime configuration. Independent cloud-browser build-info readback confirms the merge SHA.
