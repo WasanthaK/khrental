@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
-import { getPostLoginPath } from '../utils/authRedirect.js';
+import { getPostLoginPath,getExistingPropertyWorkspacePath } from '../utils/authRedirect.js';
+import {getDefaultLandingPath} from '../utils/accessPolicy.js';
 import { enquiryReturnPath, enquiryLoginSearch,ownerSetupPath } from '../utils/enquiryReturnPath.js';
 import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
 import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
@@ -61,7 +62,10 @@ const Login = () => {
       
       // This server proof alone can route a new, tenantless seeker.
       // Never honor a stale landlord/renter deep link for that identity.
-      if (isPublicSeekerLandingEnabled() && result?.data?.user?.id) {
+      const subject={user:result.profile||result?.data?.user,membership:result.profile?.membership};
+      const existingProperties=getExistingPropertyWorkspacePath(subject);
+      if(ownerSetupPath(location.search)&&existingProperties){navigate(existingProperties,{replace:true});return;}
+      if (isPublicSeekerLandingEnabled() && result?.data?.user?.id && getDefaultLandingPath(subject)==='/unauthorized') {
         const proof = await fetchVerifiedSeekerBrowserContext({
           expectedAuthId: result.data.user.id,
           getSession: () => getPlatformClient().auth.getSession()

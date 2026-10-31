@@ -1,5 +1,13 @@
 # KH Rentals Authentication Lifecycle
 
+## Returning owner entry and workspace terminology — 31 October 2026
+
+Workspace is the customer-facing name for a SaaS tenant: the account grouping properties, team access, agreements and invoices. Explain this during initial setup; one workspace manages many properties. A returning property manager with an active, server-resolved business membership continues in the currently selected workspace and must not be forced into another workspace creation or new-owner verification flow merely to access existing properties. Never switch organizations implicitly.
+
+Owner-intent sign-in/registration may return such a manager to existing properties. Normal owner/staff/tenant login must not depend on the tenantless-seeker certification endpoint; choose presentation from the freshly resolved profile and membership, retaining the backend's independent authorization. An existing business account reaching the seeker landing returns to its normal portal. These are navigation decisions, not proof of membership or permission grants. New global seekers and new owners without a workspace retain verified seeker/owner onboarding, and actual property APIs remain tenant-scoped.
+
+---
+
 ## Existing-account owner email verification — 31 October 2026
 
 An existing account must not be sent through new-account signup to verify its email. The signed-in owner setup page owns send/resend through `/api/public-signup/account-challenge`; the backend selects the recipient from a freshly authenticated, reciprocally linked active identity, never from a posted email. Reuse the existing SendGrid sender, verified origin, pre-parser same-origin/8 KB controls and shared SQL email/IP quotas. Preserve pilot-mailbox restrictions where configured. Report actual provider acceptance separately from mailbox delivery; failed/ambiguous submission revokes the pending proof and shows a retryable error.

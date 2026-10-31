@@ -6,7 +6,7 @@ import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
-import { getPostLoginPath } from './utils/authRedirect.js';
+import { getPostLoginPath,getExistingPropertyWorkspacePath } from './utils/authRedirect.js';
 import { enquiryReturnPath,ownerSetupPath } from './utils/enquiryReturnPath.js';
 import PropertyEnquiry from './pages/PropertyEnquiry';
 import OwnerEnquiries from './pages/OwnerEnquiries';
@@ -107,7 +107,7 @@ const PublicRoute = ({ children }) => {
   if (isAuthenticated && user) {
     if(location.pathname==='/owner-sign-up'){
       const country=new URLSearchParams(location.search).get('country')==='BN'?'BN':'LK';
-      return <Navigate to={'/owner-start?country='+country} replace />;
+      return <Navigate to={getExistingPropertyWorkspacePath({user,membership})||'/owner-start?country='+country} replace />;
     }
     const defaultPath = getDefaultLandingPath({
       user,
@@ -120,7 +120,8 @@ const PublicRoute = ({ children }) => {
         String(user.userType || user.profileType || '').toLowerCase() === 'seeker') {
       return <VerifiedSeekerBoundary redirectOnly />;
     }
-    const targetPath = ownerSetupPath(location.search) || enquiryReturnPath(location.search) || getPostLoginPath(location.state, defaultPath);
+    const ownerPath=ownerSetupPath(location.search);
+    const targetPath = (ownerPath&&getExistingPropertyWorkspacePath({user,membership})) || ownerPath || enquiryReturnPath(location.search) || getPostLoginPath(location.state, defaultPath);
 
     return <Navigate to={targetPath} replace />;
   }

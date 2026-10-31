@@ -2,9 +2,13 @@ import {useState,useRef,useEffect} from 'react';
 import {Link,useLocation} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
 import {getPlatformClient} from '../services/platformClient';
+import {getExistingPropertyWorkspacePath} from '../utils/authRedirect.js';
 
 export default function OwnerSetup(){
-  const {user,loading,isAuthenticated}=useAuth();
+  const {user,membership,loading,isAuthenticated}=useAuth();
+  const existingMembership=membership||user?.membership;
+  const existingProperties=getExistingPropertyWorkspacePath({user,membership:existingMembership});
+  const workspaceName=existingMembership?.tenant?.name||user?.tenant?.name||'Your workspace';
   const identity=String(user?.id||'');
   const currentIdentity=useRef(identity);currentIdentity.current=identity;
   const selected=new URLSearchParams(useLocation().search);
@@ -73,7 +77,7 @@ export default function OwnerSetup(){
     }catch(err){if(currentIdentity.current===actorAtStart){setError(err.message);}}finally{if(currentIdentity.current===actorAtStart){setBusy(false);}}
   };
   return <main className="auth-shell flex items-center justify-center"><section className="auth-card space-y-6">
-    <Link className="font-semibold text-blue-700" to="/seeker">Quixo.Homes</Link>
+    <a className="font-semibold text-blue-700" href="https://quixo.homes/">Quixo.Homes</a>
     <h1 className="auth-title">Have a property to rent?</h1>
     <p className="auth-subtitle">Add your property, reach renters and manage the rental from one place. Your standard listing is included unless you choose to keep it private.</p>
     <p className="text-sm text-slate-600">Product testing is open. No payment is collected during testing.</p>
@@ -83,9 +87,15 @@ export default function OwnerSetup(){
       <select id="owner-country" disabled={busy} className="w-full rounded-lg border p-3" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei Darussalam</option></select>
       <a className="block rounded-lg bg-blue-700 p-3 text-center text-white" href={'/owner-sign-up?country='+country}>Create owner account</a>
       <Link className="block underline" to={'/login?ownerCountry='+country}>Already have an account? Sign in</Link>
-    </div>:<form onSubmit={submit} className="space-y-4">
+    </div>:existingProperties?<section className="space-y-4" aria-label="Your existing workspace">
+      <h2 className="text-xl font-semibold">Continue in {workspaceName}</h2>
+      <p>A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.</p>
+      <Link className="block rounded-lg bg-blue-700 p-3 text-center text-white" to={existingProperties}>Open my properties</Link>
+      {String(existingMembership?.role).toLowerCase()==='admin'&&<Link className="block underline" to={'/dashboard/properties/new?country='+country}>Add a property</Link>}
+    </section>:<form onSubmit={submit} className="space-y-4">
       <h2 className="text-xl font-semibold">Set up your property workspace</h2>
-      <p className="text-sm text-slate-600">Give it a name you recognise. Next, add your first property and its photos.</p>
+      <p className="text-sm text-slate-600">A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.</p>
+      <p className="text-sm text-slate-600">Use your name or business name. Next, add your first property and its photos.</p>
       <label className="block" htmlFor="owner-workspace">Workspace name</label>
       <input id="owner-workspace" className="w-full rounded-lg border p-3" required disabled={busy} maxLength={200} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name or property business"/>
       <label className="block" htmlFor="owner-country">Property country</label>
