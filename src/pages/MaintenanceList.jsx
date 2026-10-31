@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { listAuthorizedMaintenanceRequests } from '../services/maintenanceListReadService';
+import { hasPermission, PERMISSIONS } from '../utils/accessPolicy';
 import { useAuth } from '../hooks/useAuth';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
 import { toast } from 'react-hot-toast';
 import MaintenanceRequestCard from '../components/maintenance/MaintenanceRequestCard';
 
 const MaintenanceList = () => {
-  const { userData, activeTenantId } = useAuth();
+  const { userData, activeTenantId, membership } = useAuth();
+  const canManage = hasPermission({ user: userData, membership }, PERMISSIONS.MAINTENANCE_MANAGE);
   
   // State management
   const [maintenanceRequests, setMaintenanceRequests] = useState([]);
@@ -29,7 +31,6 @@ const MaintenanceList = () => {
 
       const data = await listAuthorizedMaintenanceRequests();
 
-      console.log('Fetched maintenance requests:', data);
       setMaintenanceRequests(data || []);
     } catch (err) {
       setMaintenanceRequests([]);
@@ -82,12 +83,12 @@ const MaintenanceList = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Maintenance Requests</h1>
-        <Link
+        {canManage && <Link
           to="/dashboard/maintenance/new"
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           Create New Request
-        </Link>
+        </Link>}
       </div>
 
       {/* Error message */}

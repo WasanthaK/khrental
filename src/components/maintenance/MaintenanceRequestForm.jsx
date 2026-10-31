@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { listMaintenanceEligibleProperties } from '../../services/maintenanceLifecycleClient';
+import { hasPermission, PERMISSIONS } from '../../utils/accessPolicy';
 import { getMyTenancySummary } from '../../services/platformClient';
 import { maintenancePropertiesFromTenancies } from '../../services/maintenancePropertyEligibility';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../../utils/constants';
@@ -11,14 +13,9 @@ import { createMaintenanceRequest } from '../../services/maintenanceService';
 
 const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false, initialData = null }) => {
   const navigate = useNavigate();
-  const { user, userData, activeTenantId } = useAuth();
-  const appUserId = userData?.profileId || userData?.appUserId || null;
-  
-  // Add logging for userData
-  useEffect(() => {
-    console.log('MaintenanceRequestForm - userData:', userData);
-  }, [userData]);
-  
+  const { user, activeTenantId, membership } = useAuth();
+  const canManage = hasPermission({ user, membership }, PERMISSIONS.MAINTENANCE_MANAGE);
+
   // State
   const [formData, setFormData] = useState({
     propertyid: '',
@@ -49,8 +46,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
     }
   }, [isEditMode, initialData]);
   
-  // Only the server's authenticated active tenancy projection determines
-  // which properties can receive a new renter maintenance request.
+  // The server supplies management scope or the renter's active tenancies.
   useEffect(() => {
     let cancelled = false;
     setProperties([]);
@@ -59,16 +55,19 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
     setLoading(true);
     const load = async () => {
       try {
-        const { data, error: tenancyError } = await getMyTenancySummary();
+        const { data, error: tenancyError } = canManage
+          ? await listMaintenanceEligibleProperties()
+          : await getMyTenancySummary();
         if (tenancyError) throw tenancyError;
-        const eligible = maintenancePropertiesFromTenancies(data);
+        const eligible = canManage ? data : maintenancePropertiesFromTenancies(data);
+        if (!Array.isArray(eligible)) throw new Error('Invalid property response');
         if (cancelled) return;
         setProperties(eligible);
         setFormData(prev => ({ ...prev, propertyid: eligible.length === 1 ? eligible[0].id : '' }));
       } catch (error) {
         if (cancelled) return;
         setProperties([]);
-        setError('Unable to verify active tenancy properties. Please try again.');
+        setError(canManage ? 'Unable to load properties you can manage. Please try again.' : 'Unable to verify active tenancy properties. Please try again.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -76,7 +75,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
     if (user?.id && activeTenantId) load();
     else setLoading(false);
     return () => { cancelled = true; };
-  }, [user?.id, activeTenantId]);
+  }, [user?.id, activeTenantId, canManage]);
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -89,7 +88,6 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
   
   // Handle image changes
   const handleImagesChange = (imageUrls) => {
-    console.log('Images changed:', imageUrls);
     setSelectedImages(imageUrls);
     setFormData(prev => ({
       ...prev,
@@ -106,7 +104,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
     try {
       // Validate required fields
       if (!formData.propertyid || !properties.some(p => p.id === formData.propertyid)) {
-        throw new Error('Please select an eligible active tenancy property');
+        throw new Error(canManage ? 'Please select a property you can manage' : 'Please select an eligible active tenancy property');
       }
 
       if (!formData.title.trim()) {
@@ -121,9 +119,6 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         throw new Error('User information not available');
       }
 
-      console.log('Submitting form data:', formData);
-      console.log('Current auth user:', user);
-      console.log('Current user data:', userData);
 
       // Create maintenance request using auth_id
       const requestData = {
@@ -131,7 +126,6 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         images: selectedImages || [] // Ensure images is always an array
       };
       
-      console.log('Final request data being sent:', requestData);
       
       const result = await createMaintenanceRequest(requestData, user.id);
 
@@ -139,7 +133,6 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         throw new Error(result.error);
       }
 
-      console.log('Maintenance request created successfully:', result);
       toast.success('Maintenance request created successfully');
       onSubmitSuccess(result.data);
     } catch (error) {
@@ -188,7 +181,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
           Property <span className="text-red-500">*</span>
         </label>
         {properties.length === 0 ? (
-          <p className="text-sm text-gray-500">No properties available.</p>
+          <p className="text-sm text-gray-500">{canManage ? 'No properties available. Add a property or ask your administrator for property access.' : 'No active tenancy properties available. Contact your property manager.'}</p>
         ) : properties.length === 1 ? (
           <p className="text-sm font-medium">{properties[0].name}</p>
         ) : (

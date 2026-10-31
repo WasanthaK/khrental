@@ -33,6 +33,8 @@ const result = async (operation) => {
   }
 };
 
+export const listMaintenanceEligibleProperties = () => result(() => request('/eligible-properties'));
+
 export const createMaintenanceLifecycleRequest = (input = {}) => result(() => request('/requests', {
   method: 'POST',
   body: input

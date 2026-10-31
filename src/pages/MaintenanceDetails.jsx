@@ -602,7 +602,7 @@ const MaintenanceDetails = () => {
                 
                 <div>
                   <h3 className="text-md font-medium mb-2">Reported by</h3>
-                  <p className="text-gray-700">{rentee?.name || 'Unknown rentee'}</p>
+                  <p className="text-gray-700">{rentee?.name || (rentee ? 'Resident' : 'Property maintenance')}</p>
                   {rentee && rentee.contact_details && (
                     <p className="text-gray-600 text-sm">{rentee.contact_details.email || rentee.contact_details.phone}</p>
                   )}
