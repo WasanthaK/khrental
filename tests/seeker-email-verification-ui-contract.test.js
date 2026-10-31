@@ -74,7 +74,8 @@ test('S3c forms post only to same-origin API; no browser session or tenant claim
   assert.match(page, /cache: 'no-store'/);
   assert.match(page, /referrerPolicy: 'no-referrer'/);
   assert.match(page, /redirect: 'error'/);
-  assert.match(page, /body: JSON\.stringify\(\{ token, password \}\)/);
+  assert.match(page, /body: JSON\.stringify\(\{ token, password,/);
+  assert.match(page, /ownerSetupPath\(enquirySearch\)\?\{ownerCountry:/);
   assert.match(page, /role !== 'authenticated'/);
   assert.match(page, /user_type !== 'seeker'/);
   assert.doesNotMatch(page, /saveStoredSession|localStorage|sessionStorage|Authorization|x-tenant-id/);

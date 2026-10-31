@@ -1,5 +1,19 @@
 import {getDefaultLandingPath,hasPermission,PERMISSIONS} from './accessPolicy.js';
 
+// This server projection selects a task only; route/API guards retain authority.
+export const getOwnerContinuationPath = ({user,membership=user?.membership}={}) => {
+  const progress=user?.ownerOnboarding;
+  if(!progress||!['LK','BN'].includes(progress.country)){return null;}
+  const existing=getExistingPropertyWorkspacePath({user,membership});
+  if(existing){
+    return progress.step==='property'&&hasPermission({user,membership},PERMISSIONS.PROPERTIES_MANAGE)
+      &&String(progress.tenantId||'').toLowerCase()===String(membership.tenant_id).toLowerCase()
+      ?'/dashboard/properties/new?country='+progress.country:existing;
+  }
+  return progress.step==='workspace'&&!membership&&getDefaultLandingPath({user,membership})==='/unauthorized'
+    ?'/owner-start?country='+progress.country:null;
+};
+
 // Navigation only: keep a returning property manager in the currently resolved
 // organization. This never selects another tenant or grants API authority.
 export const getExistingPropertyWorkspacePath = ({user,membership=user?.membership}={}) => {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
-import { getPostLoginPath,getExistingPropertyWorkspacePath } from '../utils/authRedirect.js';
+import { getPostLoginPath,getExistingPropertyWorkspacePath,getOwnerContinuationPath } from '../utils/authRedirect.js';
 import {getDefaultLandingPath} from '../utils/accessPolicy.js';
 import { enquiryReturnPath, enquiryLoginSearch,ownerSetupPath } from '../utils/enquiryReturnPath.js';
 import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
@@ -64,6 +64,8 @@ const Login = () => {
       // Never honor a stale landlord/renter deep link for that identity.
       const subject={user:result.profile||result?.data?.user,membership:result.profile?.membership};
       const existingProperties=getExistingPropertyWorkspacePath(subject);
+      const continuation=getOwnerContinuationPath(subject);
+      if(!enquiryReturnPath(location.search)&&!ownerSetupPath(location.search)&&continuation){navigate(continuation,{replace:true});return;}
       if(ownerSetupPath(location.search)&&existingProperties){navigate(existingProperties,{replace:true});return;}
       if (isPublicSeekerLandingEnabled() && result?.data?.user?.id && getDefaultLandingPath(subject)==='/unauthorized') {
         const proof = await fetchVerifiedSeekerBrowserContext({
@@ -133,7 +135,7 @@ const Login = () => {
             Welcome back
           </h1>
           <p className="auth-subtitle">
-            Sign in to continue your rental search or manage your properties.
+            {ownerSetupPath(location.search)?'Sign in to manage your properties or continue setting up your first property.':'Sign in to continue your rental search or manage your properties.'}
           </p>
           
           {devBypassActive && (

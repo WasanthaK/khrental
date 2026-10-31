@@ -2,7 +2,7 @@ import { normalizePropertyRentalValues } from '../../utils/listingCategories.js'
 import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
 import express from 'express';
-import {ownerSetupHandler} from './ownerOnboarding.js';
+import {ownerSetupHandler,ownerProgressHandler,getOwnerOnboardingContext} from './ownerOnboarding.js';
 import crypto from 'node:crypto';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import {
@@ -988,11 +988,15 @@ export const createPlatformRouter = () => {
   router.use(createTenantContextMiddleware());
 
   router.post('/owner-setup',requireAuthenticated,ownerSetupHandler());
+  router.post('/owner-setup/progress',requireAuthenticated,ownerProgressHandler());
 
   router.get('/auth/context', createTenantContextMiddleware({ requireUser: true }), async (req, res) => {
+    const ownerOnboarding=await getOwnerOnboardingContext({record:req.authSession?.record,user:req.user,tenantContext:req.tenantContext});
+    res.set('Cache-Control','no-store, private');
     res.json({
       data: {
         user: req.user,
+        ownerOnboarding,
         ...serializeTenantContext(req.tenantContext)
       }
     });

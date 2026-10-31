@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { enquiryReturnPath,ownerSetupPath } from '../../utils/enquiryReturnPath.js';
 import {getDefaultLandingPath} from '../../utils/accessPolicy.js';
+import {getOwnerContinuationPath} from '../../utils/authRedirect.js';
 import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
@@ -61,6 +62,6 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   if (status.key !== key) return <div role="status">Verifying your account…</div>;
   if (!status.eligible) return <Navigate to="/unauthorized" replace />;
   if (redirectOnly&&ownerSetupPath(location.search)) return <Navigate to={ownerSetupPath(location.search)} replace />;
-  if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || '/seeker'} replace />;
+  if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || getOwnerContinuationPath({user,membership}) || '/seeker'} replace />;
   return <SeekerHome {...profile} />;
 };

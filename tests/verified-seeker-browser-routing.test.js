@@ -135,7 +135,7 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
   assert.match(boundary, /status\.key !== key/);
   assert.match(boundary, /if \(!status\.eligible\) return <Navigate to="\/unauthorized" replace \/>/);
   assert.match(boundary, /isVerifiedTenantlessSeeker\(profile\)/);
-  assert.match(boundary, /if \(redirectOnly\) return <Navigate to=\{enquiryReturnPath\(location.search\) \|\| '\/seeker'\} replace \/>/);
+  assert.match(boundary, /if \(redirectOnly\) return <Navigate to=\{enquiryReturnPath\(location.search\) \|\| getOwnerContinuationPath\(\{user,membership\}\) \|\| '\/seeker'\} replace \/>/);
   assert.match(login, /if \(proof\.verified && proof\.eligible\)/);
   assert.match(login, /navigate\(enquiryReturnPath\(location.search\) \|\| '\/seeker', \{ replace: true \}\)/);
   // The real hook returns { data }, not an in-scope data variable in Login.

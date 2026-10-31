@@ -185,6 +185,7 @@ export const createPublicSignupRouter = ({
       stage = 'redemption';
       const result = await redeem({
         token: req.body?.token, password: req.body?.password,
+        ...(req.body?.ownerCountry!==undefined?{ownerCountry:req.body.ownerCountry}:{}),
         ...(pilotEmail ? { expectedEmail: pilotEmail } : {})
       });
       stage = 'redemption_result';

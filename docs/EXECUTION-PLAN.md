@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Owner continuity implementation in review — 31 October 2026
+
+Active scope is UX-01/UX-02 and the owner-continuation foundation of UX-03, under the customer-journey package below and #459. The correction reuses existing auth metadata for a bounded country/name/request-ID draft; it is task/form state only. Signup redemption can persist the selected owner country with the verified new account, and the signed-in owner form serializes autosaves through an identity-bound endpoint. Workspace creation retains the same draft transactionally. No new schema, dependency or service authority is introduced.
+
+Fresh authenticated context returns validated owner progress. With no membership it resumes workspace setup; for the actually selected active owner/admin membership, server-owned workspace provenance and real property existence determine first-property or completed setup. Draft metadata cannot select a workspace, grant membership, change roles or replace verification. Ordinary login restores the unfinished owner task; explicit selected-property context and existing business/admin destinations retain precedence. Owner marketing login links preserve purpose/country. The seeker screen gains an owner-entry action, and setup/login copy makes the next task clearer.
+
+Prepared evidence includes focused parser/identity/continuation tests, disposable SQL persistence/provenance/property-existence and rollback tests, and actual-auth-client browser checks for plain-login resumption and a separate browser restoring the same draft. Source/build and CI evidence remain separate from actual production owner workspace/first-property creation. All UX items remain OPEN pending their required evidence. Full dual-purpose authenticated enquiry access, homepage hierarchy, entry simplification and inactive-filter presentation remain within their sequenced packages; a new link alone does not close them. No subscriptions, pricing or payments work is included.
+
+---
+
 ## Active website package: complete the chosen customer journey — 31 October 2026
 
 **Owner direction:** document the live UI/UX review, set a concrete goal and follow it under the repository rules and global canonical goals. This package implements the fundamental customer-purpose stories BJ-01–BJ-08 below. It is part of the existing operational-website objective tracked by #459, not a replacement milestone or a new product track.

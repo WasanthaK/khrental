@@ -45,6 +45,7 @@ const SeekerHome = ({
       </div>
     </section>
     <section id="browse-rentals" className="seeker-section" aria-labelledby="browse-heading">
+      <div className="seeker-card"><h2>Have a property to rent?</h2><p>Use your existing account to add and manage your property.</p><Link className="seeker-button" to="/owner-start">List/manage my property</Link></div>
       <div className="seeker-section-heading"><div><p className="seeker-kicker">Start exploring</p><h2 id="browse-heading">Where would you like to rent?</h2></div></div>
       <div className="seeker-grid">
         {[['Sri Lanka','LK','lk'],['Brunei','BN','bn']].map(([name,code,path])=><article key={code} className="seeker-card seeker-market">
