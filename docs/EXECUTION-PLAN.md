@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Active first-property save correction — 31 October 2026
+
+Live acceptance reached the authenticated new-property form. Saving failed with PROPERTY_LISTING_CATEGORY_REQUIRED despite a selected Houses & apartments category. Source traces the mismatch to the shared insert/update formatter recursively lowercasing JSON keys: listingCategory becomes listingcategory before the server validates rentalvalues. This is a reproduced save-path contract defect, not a missing customer category or an onboarding authentication failure.
+
+The bounded correction preserves the canonical rentalvalues document in property insert/update/upsert payloads without changing other tables' formatting. Server normalization accepts only the exact older lowercase key spelling, validates one of the same three approved category values, canonicalizes it and rejects conflicting dual keys. This supports retrying the already-open form without losing its entered details. Existing tenant/membership/property authorization, public-field allowlists and country rules remain authoritative. Remove submission-payload console logging so private property/banking fields are not logged by new clients.
+
+Validation includes category/alias/conflict tests and the actual PropertyForm using the production save client to create all three categories through the fixture API contract. Current live draft remains in the user's browser; do not refresh it or copy private/banking values into repository evidence. Source/CI/deployment and a real save/readback remain separate. Keep owner first-property and #459 acceptance OPEN until the persisted property outcome is observed. No schema, dependency, subscription, payment or unrelated UI work is included.
+
+---
+
 ## Owner continuity deployed; live first-property acceptance next — 31 October 2026
 
 PR #471 MERGED at `0cc6c7b46a98967496ed460e48c9ded88e0a103a` (reviewed head `1d9675229b819c314690be0939db89b717c6ef06`). Application release #41205201733 SUCCESS: 807/807 merged tests and build, Ready revision 0000434, exact public fingerprint, deterministic startup, live MSSQL and expected runtime. Independent browser build-info readback matches. Marketing #41205201697 SUCCESS on retry; its first attempt failed starting the downloaded Azure publisher with spawn ETXTBSY. No source/configuration workaround or unrelated deployment change was required.

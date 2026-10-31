@@ -753,8 +753,6 @@ const PropertyForm = () => {
         propertyData.createdat = new Date().toISOString();
       }
 
-      console.log('Submitting property data:', propertyData);
-
       let result;
       if (id) {
         // Update existing property
