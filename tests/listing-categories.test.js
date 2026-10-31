@@ -22,6 +22,16 @@ test('public projection exports category only, keeps markets/private fields sepa
   assert.equal(publicListingCategory(null,'commercial'),'commercial','no invented legacy retail/office assignment');
   assert.equal(publicListingCategory(null,'land'),'land','existing land is not silently reclassified');
 });
+test('older property-save JSON casing canonicalizes without weakening category validation',()=>{
+  for(const listingcategory of ['residential','retail','office']){
+    const input={rent:125000,deposit:125000,listingcategory};
+    assert.deepEqual(normalizePropertyRentalValues(input,{requireCategory:true}),{rent:125000,deposit:125000,listingCategory:listingcategory});
+    assert.equal(input.listingcategory,listingcategory,'Caller data is not mutated');
+  }
+  assert.throws(()=>normalizePropertyRentalValues({listingcategory:'commercial'},{requireCategory:true}),{code:'PROPERTY_LISTING_CATEGORY_REQUIRED'});
+  assert.throws(()=>normalizePropertyRentalValues({listingCategory:'office',listingcategory:'residential'}),{code:'PROPERTY_LISTING_CATEGORY_CONFLICT'});
+  assert.deepEqual(normalizePropertyRentalValues({listingCategory:'OFFICE',listingcategory:'office'}),{listingCategory:'office'});
+});
 test('both server property creation and registration form enforce the classification',()=>{
   const server=fs.readFileSync('src/api/platform/router.js','utf8');
   assert.ok(server.includes('normalizePropertyRentalValues(row.rentalvalues,{requireCategory:true})'));

@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '../utils/env';
+import {normalizePropertyRentalValues} from '../utils/listingCategories.js';
 import {
   buildRequestContextHeaders,
   clearActiveTenantId,
@@ -549,8 +550,18 @@ const cleanDataForDatabase = (data) => {
   return cleanedData;
 };
 
+const formatTableData=(table,data)=>{
+  const formatted=toDatabaseFormat(data);
+  // Column names follow database casing; rentalvalues is an opaque JSON
+  // document whose canonical keys must survive the shared save client.
+  if(String(table).toLowerCase()==='properties'&&Object.hasOwn(data||{},'rentalvalues')){
+    formatted.rentalvalues=normalizePropertyRentalValues(data.rentalvalues);
+  }
+  return cleanDataForDatabase(formatted);
+};
+
 export const insertData = async (table, data) => {
-  const dbData = cleanDataForDatabase(toDatabaseFormat(data));
+  const dbData = formatTableData(table,data);
   const now = new Date().toISOString();
   return platformClient.from(table).insert({ ...dbData, createdat: dbData.createdat || now, updatedat: dbData.updatedat || now }).select('*');
 };
@@ -561,7 +572,7 @@ export const updateData = async (table, id, data) => {
   }
 
   try {
-    const dbData = cleanDataForDatabase(toDatabaseFormat(data));
+    const dbData = formatTableData(table,data);
     const { data: result, error } = await platformClient
       .from(table)
       .update({ ...dbData, updatedat: new Date().toISOString() })
@@ -578,7 +589,7 @@ export const deleteData = async (table, id) => platformClient.from(table).delete
 export const auth = authClient;
 export { rpc };
 export const selectData = fetchData;
-export const upsertData = async (table, data) => platformClient.from(table).upsert(toDatabaseFormat(data)).select('*');
+export const upsertData = async (table, data) => platformClient.from(table).upsert(String(table).toLowerCase()==='properties'?formatTableData(table,data):toDatabaseFormat(data)).select('*');
 export const query = async (tableOrOptions, columns = null, filters = null) => fetchData(tableOrOptions, columns, filters);
 export const execute = rpc;
 

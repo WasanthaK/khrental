@@ -6,6 +6,7 @@ import express from 'express';
 import {createServer,transformWithEsbuild} from 'vite';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
+import {normalizePropertyRentalValues} from '../src/utils/listingCategories.js';
 
 const tenantId='11111111-1111-4111-8111-111111111111';
 const cases=[
@@ -32,6 +33,7 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
   if(id==='\0returning-destination.jsx'){return `import React from 'react';export default ()=>React.createElement('h1',null,'Synthetic destination '+location.pathname);`;}
 }};
 let vite,server,browser,seekerChecks=0,ownerWrites=0;
+const propertyWrites=[];
 const byToken=req=>cases.find(x=>'fixture-'+x.id===String(req.get('authorization')||'').replace(/^Bearer /,''));
 const progressById=new Map(cases.filter(x=>x.email==='new-owner@example.test').map(x=>[x.id,{name:'',country:'BN',requestId:'44444444-4444-4444-8444-444444444444'}]));
 const context=x=>{
@@ -60,6 +62,18 @@ try{
     if(x?.member){return res.status(403).json({error:'Fixture denies business accounts in seeker API'});}
     res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}});
   });
+  app.post('/api/platform/query',(req,res)=>{
+    if(req.body.action==='select'){return res.json({data:req.body.table==='properties'?[{...propertyWrites.at(-1),id:'55555555-5555-4555-8555-555555555555'}]:[]});}
+    if(req.body.table!=='properties'||!['insert','update'].includes(req.body.action)){return res.sendStatus(400);}
+    const payload=req.body.payload;
+    assert.ok(['residential','retail','office'].includes(payload.rentalvalues.listingCategory));
+    assert.equal(Object.hasOwn(payload.rentalvalues,'listingcategory'),false,'Shared client preserves JSON key case');
+    const rentalvalues=normalizePropertyRentalValues(payload.rentalvalues,{requireCategory:true});
+    propertyWrites.push({...payload,rentalvalues});
+    res.json({data:[{...payload,id:'55555555-5555-4555-8555-555555555555',rentalvalues}]});
+  });
+  app.get('/api/properties/:id/fixed-utilities',(_req,res)=>res.json({data:{configs:[]}}));
+  app.put('/api/properties/:id/fixed-utilities',(_req,res)=>res.json({data:{configs:[]}}));
   app.post('/api/platform/owner-setup/progress',(req,res)=>{const x=byToken(req);assert.ok(x);progressById.set(x.id,req.body);res.json({data:req.body});});
   app.post('/api/platform/owner-setup',(_req,res)=>{ownerWrites++;res.sendStatus(500);});
   app.use('/api',(_req,res)=>res.sendStatus(404));app.use(vite.middlewares);
@@ -108,6 +122,31 @@ try{
     await page.waitForFunction(path=>location.pathname+location.search===path,{},x.path);
     if(x.member){assert.equal(seekerChecks,before,'Business sign-in never depends on seeker certification');}
     assert.equal(ownerWrites,0,'Returning users never create a duplicate workspace');
+    if(x.email==='owner-b@example.test'){
+      // Render the actual PropertyForm and use the production save client.
+      for(const category of ['residential','retail','office']){
+        await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});
+        await page.waitForSelector('#name');
+        for(const [selector,value]of [['#name','Example first property'],['#address','Example address'],['#bank_name','Example bank'],['#bank_branch','Example branch'],['#bank_account_number','0000000000'],['#rent','125000'],['#deposit','125000']]){
+          await page.type(selector,value);
+        }
+        await page.select('#listingCategory',category);
+        await page.select('#propertytype','house');
+        assert.deepEqual(await page.$$eval(':invalid',nodes=>nodes.map(node=>node.id)),[], 'Fixture completes every required property field');
+        await page.click('button[type="submit"]');
+        await page.waitForFunction(()=>location.pathname==='/dashboard/properties');
+        assert.equal(propertyWrites.at(-1).rentalvalues.listingCategory,category);
+        assert.equal(propertyWrites.at(-1).rentalvalues.rent,125000);
+        // Existing records may contain the earlier lowercase spelling.
+        propertyWrites.at(-1).rentalvalues={rent:125000,deposit:125000,listingcategory:category};
+        await page.goto(origin+'/dashboard/properties/55555555-5555-4555-8555-555555555555/edit',{waitUntil:'networkidle0'});
+        await page.waitForFunction(code=>document.querySelector('#listingCategory')?.value===code,{},category);
+        await page.click('button[type="submit"]');
+        await page.waitForFunction(()=>location.pathname==='/dashboard/properties');
+        assert.equal(propertyWrites.at(-1).rentalvalues.listingCategory,category);
+
+      }
+    }
     if(x.member==='admin'){
       await page.goto(origin+'/owner-start?country=BN',{waitUntil:'networkidle0'});
       await page.waitForFunction(()=>document.body.innerText.includes('Continue in Example Rentals'));
@@ -144,5 +183,5 @@ try{
     }
     await browserContext.close();
   }
-  console.log('RETURNING_OWNER_ENTRY_BROWSER=PASS actual_auth_client actual_auth_storage actual_auth_provider actual_login failed_login_visible retry reload actual_public_route multiple_emails membership_based_routing no_business_seeker_probe existing_workspace no_duplicate_creation seeker_to_owner_portal renter_portal new_owner_explanation desktop_mobile');
+  console.log('RETURNING_OWNER_ENTRY_BROWSER=PASS actual_property_form three_category_save actual_auth_client actual_auth_storage actual_auth_provider actual_login failed_login_visible retry reload actual_public_route multiple_emails membership_based_routing no_business_seeker_probe existing_workspace no_duplicate_creation seeker_to_owner_portal renter_portal new_owner_explanation desktop_mobile');
 }finally{await browser?.close();await vite?.close();if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}}

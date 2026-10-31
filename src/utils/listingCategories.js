@@ -17,6 +17,17 @@ export const normalizePropertyRentalValues=(value,{requireCategory=false}={})=>{
   if(!data||typeof data!=='object'||Array.isArray(data))throw Object.assign(
     new Error('Property rental settings must be an object.'),{status:400,code:'INVALID_PROPERTY_RENTAL_VALUES'});
   const result={...data};
+  // Older shared clients lowercased keys inside JSON columns. Accept that
+  // exact wire spelling, then store only the canonical category key.
+  if(Object.hasOwn(result,'listingcategory')){
+    const category=normalizeListingCategory(result.listingcategory);
+    if(Object.hasOwn(result,'listingCategory')&&normalizeListingCategory(result.listingCategory)!==category){
+      throw Object.assign(new Error('Choose a single website category and try again.'),
+        {status:400,code:'PROPERTY_LISTING_CATEGORY_CONFLICT'});
+    }
+    result.listingCategory=category;
+    delete result.listingcategory;
+  }
   if(requireCategory||Object.hasOwn(result,'listingCategory'))result.listingCategory=normalizeListingCategory(result.listingCategory);
   return result;
 };
