@@ -12,6 +12,14 @@ const service = readFileSync(
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const identity = readFileSync(new URL('../src/api/auth/index.js', import.meta.url), 'utf8');
 
+test('owner country is a bounded onboarding preference, not a role or tenant claim',async()=>{
+  for(const ownerCountry of ['US','LK&role=admin',{},'//foreign.test']){
+    await assert.rejects(redeemPublicSignupChallenge({token:'x'.repeat(43),password:'FixturePassword8!',ownerCountry}),
+      {code:'SIGNUP_VERIFICATION_UNAVAILABLE'});
+  }
+  assert.match(service,/owner_onboarding:\{country:ownerCountry,name:'',requestId:crypto.randomUUID\(\)\}/);
+});
+
 test('global signup cannot redeem invalid tokens, including empty and malformed input', async () => {
   for (const token of [null, undefined, '', 'short', 'bad/+/token']) {
     await assert.rejects(

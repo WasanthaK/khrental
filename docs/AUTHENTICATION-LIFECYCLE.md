@@ -1,5 +1,15 @@
 # KH Rentals Authentication Lifecycle
 
+## Durable owner continuation implementation — 31 October 2026
+
+Use the existing auth record's bounded owner_onboarding draft (name, LK/BN country, UUID request ID) as resumable business/form state. Store initial owner purpose only during successful new-account redemption; a signed-in owner may then save their own draft through the reciprocal server identity. Use an atomic JSON-field update so unrelated verification and credential metadata are preserved. Serialize browser draft saves and preserve different-account changes before any workspace command.
+
+Fresh authenticated context validates this draft. It may suggest workspace setup for an account without memberships. First-property continuation additionally requires the actually selected active administrator membership, workspace provenance matching this authenticated actor/request and a real property-existence query. Existing properties complete that step. An unresolved/different workspace, revoked membership or malformed draft cannot select a tenant or manufacture access. Workspace creation retains the draft in the existing transaction; permission and durable email-proof checks remain authoritative.
+
+Ordinary sign-in resumes this server-projected next task, while explicit selected-property continuation and established administrative/membership destinations are retained. Per-tab storage is only a fallback, and the UI reports saved/unsaved draft state. Owner links retain purpose/country. This is the implementation contract for the current bounded correction; source preparation and automated fixtures do not close live owner/first-property acceptance or the broader dual-purpose journey.
+
+---
+
 ## Fundamental customer-purpose contract — 31 October 2026
 
 The owner establishes two primary Quixo.Homes entry intentions: **Find a place** and **List/manage my property**. People know their purpose when they choose one; authentication continues that chosen business journey. The controlling stories BJ-01–BJ-08, gap assessment and acceptance requirements are in [Fundamental business journey: preserve the customer's purpose](EXECUTION-PLAN.md#fundamental-business-journey-preserve-the-customers-purpose--31-october-2026).

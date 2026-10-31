@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {createOwnerTestingWorkspace} from '../src/api/platform/ownerOnboarding.js';
+import {createOwnerTestingWorkspace,saveOwnerProgress,getOwnerOnboardingContext} from '../src/api/platform/ownerOnboarding.js';
 
 export const verifyOwnerOnboarding=async({pool,query})=>{
   // Match existing production foundation columns; no production schema mutation.
@@ -19,10 +19,21 @@ export const verifyOwnerOnboarding=async({pool,query})=>{
       SELECT LOWER(email),SYSUTCDATETIME(),SYSUTCDATETIME() FROM app_users WHERE id=@id`,{id});
   }
   const input={name:'Synthetic owner workspace',country:'BN',requestId:crypto.randomUUID()};
+  const persisted=(await query('SELECT * FROM auth_users WHERE auth_id=@authId',{authId}))[0];
+  const record={id:persisted.id,authId,appUserId:actorId,email:persisted.email};
+  const user={id:actorId,auth_id:authId,email:persisted.email};
+  await saveOwnerProgress({record,input,query});
+  const readRecord=async()=>({...record,metadata:JSON.parse((await query('SELECT metadata FROM auth_users WHERE id=@id',{id:record.id}))[0].metadata)});
+  assert.equal((await getOwnerOnboardingContext({record:await readRecord(),user,tenantContext:{memberships:[]},query})).name,input.name,'A fresh server read restores the owner draft');
+  assert.equal((await readRecord()).metadata.global_email_verified,true,'Draft update preserves verification metadata');
   const create=(actor=actorId,auth=authId,command=input)=>createOwnerTestingWorkspace({actorId:actor,authId:auth,input:command,getPool:async()=>pool});
   const results=await Promise.all(Array.from({length:4},()=>create()));
   assert.equal(new Set(results.map(x=>x.id.toLowerCase())).size,1,'Concurrent retries create exactly one organization');
   const id=results[0].id;
+  const tenantContext={tenantId:id,membership:{tenant_id:id,role:'admin',status:'active'}};
+  assert.equal((await getOwnerOnboardingContext({record:await readRecord(),user,tenantContext,query})).step,'property');
+  await query('INSERT INTO properties(id,tenant_id)VALUES(NEWID(),@id)',{id});
+  assert.equal((await getOwnerOnboardingContext({record:await readRecord(),user,tenantContext,query})).step,'complete','Existing properties complete first-property continuation');
   const rows=await query(`SELECT t.status,t.[plan],m.app_user_id,m.role,m.is_default,s.feature_flags_json
     FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id JOIN tenant_settings s ON s.tenant_id=t.id WHERE t.id=@id`,{id});
   assert.equal(rows.length,1);assert.equal(rows[0].role,'admin');assert.equal(rows[0].plan,'development-testing');assert.equal(rows[0].is_default,false);

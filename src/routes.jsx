@@ -6,7 +6,7 @@ import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
-import { getPostLoginPath,getExistingPropertyWorkspacePath } from './utils/authRedirect.js';
+import { getPostLoginPath,getExistingPropertyWorkspacePath,getOwnerContinuationPath } from './utils/authRedirect.js';
 import { enquiryReturnPath,ownerSetupPath } from './utils/enquiryReturnPath.js';
 import PropertyEnquiry from './pages/PropertyEnquiry';
 import OwnerEnquiries from './pages/OwnerEnquiries';
@@ -113,6 +113,8 @@ const PublicRoute = ({ children }) => {
       user,
       membership: membership || user.membership || null
     });
+    const continuation=getOwnerContinuationPath({user,membership});
+    if(!enquiryReturnPath(location.search)&&!ownerSetupPath(location.search)&&continuation){return <Navigate to={continuation} replace />;}
     // Only a server-verified global seeker can reach the seeker landing.
     // Ignore tenant deep links rather than redirecting a seeker into business UI.
     if (isPublicSeekerLandingEnabled() && defaultPath === '/unauthorized' &&

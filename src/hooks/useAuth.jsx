@@ -64,6 +64,7 @@ const AuthProvider = ({ children }) => {
 
     return {
       ...userRecord,
+      ownerOnboarding: tenantContext?.ownerOnboarding || null,
       tenantId: finalTenantId,
       tenant: resolvedTenant,
       membership: resolvedMembership,

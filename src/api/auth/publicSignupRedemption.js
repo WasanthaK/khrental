@@ -29,7 +29,8 @@ const isUniqueConflict = error => [2601, 2627].includes(
 // Caller must establish the real user-facing verification flow and bounded
 // abuse controls separately. This service never accepts a tenant, role,
 // app-user ID, Stripe ID or organization ID from the browser.
-export const redeemPublicSignupChallenge = async ({ token, password, expectedEmail = null } = {}) => {
+export const redeemPublicSignupChallenge = async ({ token, password, expectedEmail = null, ownerCountry } = {}) => {
+  if(ownerCountry!==undefined&&!['LK','BN'].includes(ownerCountry)){throw unavailable();}
   if (expectedEmail !== null &&
       (typeof expectedEmail !== 'string' ||
        expectedEmail !== expectedEmail.trim().toLowerCase() ||
@@ -113,7 +114,8 @@ export const redeemPublicSignupChallenge = async ({ token, password, expectedEma
 
     const metadata = JSON.stringify({
       name, role: 'authenticated', user_type: 'seeker',
-      global_email_verified: true
+      global_email_verified: true,
+      ...(ownerCountry?{owner_onboarding:{country:ownerCountry,name:'',requestId:crypto.randomUUID()}}:{})
     });
     const authCreated = await request(transaction, {
       authId, appUserId, email, metadata, ...credential

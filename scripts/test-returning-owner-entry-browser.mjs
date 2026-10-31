@@ -33,9 +33,10 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
 }};
 let vite,server,browser,seekerChecks=0,ownerWrites=0;
 const byToken=req=>cases.find(x=>'fixture-'+x.id===String(req.get('authorization')||'').replace(/^Bearer /,''));
+const progressById=new Map(cases.filter(x=>x.email==='new-owner@example.test').map(x=>[x.id,{name:'',country:'BN',requestId:'44444444-4444-4444-8444-444444444444'}]));
 const context=x=>{
   const membership=x?.member?{tenant_id:tenantId,role:x.member,status:'active',permission_bundle:'read_only',tenant:{id:tenantId,name:'Example Rentals'}}:null;
-  return {tenantId:membership?tenantId:null,membership,memberships:membership?[membership]:[],tenant:membership?.tenant||null,resolution:membership?'single-membership':'none'};
+  return {ownerOnboarding:progressById.has(x?.id)?{...progressById.get(x.id),step:'workspace'}:null,tenantId:membership?tenantId:null,membership,memberships:membership?[membership]:[],tenant:membership?.tenant||null,resolution:membership?'single-membership':'none'};
 };
 try{
   vite=await createServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
@@ -59,6 +60,7 @@ try{
     if(x?.member){return res.status(403).json({error:'Fixture denies business accounts in seeker API'});}
     res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}});
   });
+  app.post('/api/platform/owner-setup/progress',(req,res)=>{const x=byToken(req);assert.ok(x);progressById.set(x.id,req.body);res.json({data:req.body});});
   app.post('/api/platform/owner-setup',(_req,res)=>{ownerWrites++;res.sendStatus(500);});
   app.use('/api',(_req,res)=>res.sendStatus(404));app.use(vite.middlewares);
   app.use(async(req,res)=>res.type('html').send(await vite.transformIndexHtml(req.originalUrl,
@@ -99,7 +101,7 @@ try{
     await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
     page.on('pageerror',e=>console.error('RETURNING_OWNER_FIXTURE_ERROR='+e.message));
     const before=seekerChecks;
-    const query=x.email==='tenant@example.test'||x.email==='seeker@example.test'?'':'?ownerCountry=BN';
+    const query=['tenant@example.test','seeker@example.test','new-owner@example.test'].includes(x.email)?'':'?ownerCountry=BN';
     await page.goto(origin+'/login'+query,{waitUntil:'networkidle0'});
     await page.type('#email-address',x.email);await page.type('#password','SyntheticPassword8!');
     await page.click('button[type="submit"]');
@@ -125,6 +127,20 @@ try{
       await page.waitForSelector('#owner-workspace');
       assert.ok((await page.$eval('body',e=>e.innerText)).includes('A workspace is your account for managing properties'));
       await page.setViewport({width:390,height:844});await page.screenshot({path:'enquiry-browser-proof/new-owner-workspace-explanation-mobile.png',fullPage:true});
+      const savedDraft=page.waitForResponse(r=>r.url().endsWith('/api/platform/owner-setup/progress')&&JSON.parse(r.request().postData()||'{}').name==='Durable example rentals');
+      await page.type('#owner-workspace','Durable example rentals');
+      await savedDraft;
+      await page.waitForFunction(()=>document.body.innerText.includes('Setup saved.'));
+      assert.equal(progressById.get(x.id).name,'Durable example rentals');
+      // A separate browser has none of the first tab's sessionStorage or session.
+      const nextContext=await browser.createBrowserContext();const next=await nextContext.newPage();
+      await next.setRequestInterception(true);next.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+      await next.goto(origin+'/login',{waitUntil:'networkidle0'});
+      await next.type('#email-address',x.email);await next.type('#password','SyntheticPassword8!');await next.click('button[type="submit"]');
+      await next.waitForSelector('#owner-workspace');
+      assert.equal(await next.$eval('#owner-workspace',e=>e.value),'Durable example rentals');
+      assert.equal(await next.$eval('#owner-country',e=>e.value),'BN');
+      await nextContext.close();
     }
     await browserContext.close();
   }

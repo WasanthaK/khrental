@@ -43,7 +43,8 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
       const response = await fetch('/api/public-signup/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password,
+          ...(ownerSetupPath(enquirySearch)?{ownerCountry:new URLSearchParams(enquirySearch).get('ownerCountry')}:{}) }),
         credentials: 'omit',
         cache: 'no-store',
         referrerPolicy: 'no-referrer',

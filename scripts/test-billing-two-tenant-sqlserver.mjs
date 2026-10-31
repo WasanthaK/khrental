@@ -1905,7 +1905,7 @@ async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
   const password = 'DisposableSecurePassword#2026';
   const baselineTenants = Number((await first(pool, 'SELECT COUNT_BIG(*) AS n FROM dbo.tenants')).n);
   const usable = await newFixture('s3b-valid');
-  const registered = await redeemPublicSignupChallenge({ token: usable.token, password });
+  const registered = await redeemPublicSignupChallenge({ token: usable.token, password, ownerCountry:'BN' });
   assert.equal(registered.email, usable.email);
   assert.equal(registered.tenantId, null);
   assert.equal(registered.role, 'authenticated');
@@ -1925,6 +1925,9 @@ async function verifyPublicSignupRedemptionAgainstDisposableSql(pool) {
   assert.equal(guid(auth.appUserId), guid(appUser.id));
   assert.equal(guid(auth.authId), guid(appUser.auth_id));
   assert.equal(await verifyPasswordCredential(auth, password), true);
+  assert.equal(auth.metadata.owner_onboarding.country,'BN');
+  assert.equal(auth.metadata.owner_onboarding.name,'');
+  assert.match(auth.metadata.owner_onboarding.requestId,/^[0-9a-f-]{36}$/i);
   const memberships = await query(pool,
     'SELECT id FROM dbo.tenant_memberships WHERE app_user_id = @appUserId',
     { appUserId: appUser.id });
