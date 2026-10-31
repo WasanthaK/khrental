@@ -2,7 +2,7 @@
 // Tenant and billing APIs remain protected by their existing server guards.
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { enquiryReturnPath } from '../../utils/enquiryReturnPath.js';
+import { enquiryReturnPath,ownerSetupPath } from '../../utils/enquiryReturnPath.js';
 import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
@@ -59,6 +59,7 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   // Never reuse an earlier user's certification or an in-flight response.
   if (status.key !== key) return <div role="status">Verifying your account…</div>;
   if (!status.eligible) return <Navigate to="/unauthorized" replace />;
+  if (redirectOnly&&ownerSetupPath(location.search)) return <Navigate to={ownerSetupPath(location.search)} replace />;
   if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || '/seeker'} replace />;
   return <SeekerHome {...profile} />;
 };

@@ -2,6 +2,7 @@ import { normalizePropertyRentalValues } from '../../utils/listingCategories.js'
 import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext } from '../auth/seekerContext.js';
 import express from 'express';
+import {ownerSetupHandler} from './ownerOnboarding.js';
 import crypto from 'node:crypto';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import {
@@ -985,6 +986,8 @@ export const createPlatformRouter = () => {
   };
 
   router.use(createTenantContextMiddleware());
+
+  router.post('/owner-setup',requireAuthenticated,ownerSetupHandler());
 
   router.get('/auth/context', createTenantContextMiddleware({ requireUser: true }), async (req, res) => {
     res.json({

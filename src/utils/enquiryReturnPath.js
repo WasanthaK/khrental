@@ -1,6 +1,10 @@
 // Only the listing reference and market can survive the sign-in round trip.
 // Never accept a URL, arbitrary path, private property id or tenant selection.
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const ownerSetupPath=search=>{
+  const p=new URLSearchParams(search);
+  return ['LK','BN'].includes(p.get('ownerCountry'))&&!p.has('listingId')?'/owner-start?country='+p.get('ownerCountry'):null;
+};
 export const parseEnquiryIntent = input => {
   if(!input||typeof input!=='object'||Array.isArray(input)||
       Object.keys(input).some(k=>!['listingId','country'].includes(k))||

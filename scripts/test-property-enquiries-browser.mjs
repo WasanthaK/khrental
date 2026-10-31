@@ -26,6 +26,7 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
   import SeekerHome from '/src/pages/SeekerHome.jsx';
   import RentalJourney from '/src/pages/RentalJourney.jsx';
   import RootLayout from '/src/components/layouts/RootLayout.jsx';
+  import OwnerSetup from '/src/pages/OwnerSetup.jsx';
   import OwnerEnquiries from '/src/pages/OwnerEnquiries.jsx';
   import Login from '/src/pages/Login.jsx';
   import SeekerSignUp from '/src/pages/SeekerSignUp.jsx';
@@ -34,6 +35,8 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
   createRoot(document.getElementById('root')).render(<BrowserRouter><Routes>
     <Route path="/seeker" element={<SeekerHome user={{id:"synthetic-profile",role:"authenticated",user_type:"seeker",tenant_id:null}} membership={null} memberships={[]} tenantContextVerified={true}/>}/><Route path="/rental-journey" element={<RootLayout/>}><Route index element={<RentalJourney/>}/></Route><Route path="/enquire" element={<PropertyEnquiry/>}/><Route path="/login" element={<Login/>}/>
     <Route path="/seeker-sign-up" element={<SeekerSignUp/>}/><Route path="/verify-email" element={<VerifySeekerEmail/>}/>
+    <Route path="/owner-sign-up" element={<SeekerSignUp/>}/><Route path="/owner-start" element={<RootLayout/>}><Route index element={<OwnerSetup/>}/></Route>
+    <Route path="/dashboard/properties/new" element={<h1>First property setup fixture</h1>}/>
     <Route path="/dashboard/enquiries" element={<OwnerEnquiries/>}/></Routes></BrowserRouter>);`;
 const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,importer){
   if(source.startsWith('\0enquiry-')){return source;}
@@ -54,7 +57,7 @@ const plugin={name:'isolated-enquiry-fixture',enforce:'pre',resolveId(source,imp
   if(id==='\0enquiry-app-init'){return `export const initializeApp=async()=>{await fetch('/fixture/management-init',{method:'POST'});return {error:'Synthetic management storage error',isStorageError:true};};`;}
   if(id==='\0enquiry-confirm'){return `export const ConfirmContextProvider=({children})=>children;`;}
   if(id==='\0enquiry-shell-child'){return `export default ()=>null;`;}
-  if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession}});`;}
+  if(id==='\0enquiry-platform'){return `import {getSession} from '\0enquiry-auth';export const getPlatformClient=()=>({auth:{getSession,setActiveTenant:async id=>{localStorage.setItem('khrental.activeTenantId',id);return {};}}});`;}
   if(id==='\0enquiry-env'){return `export const isDevBypassEnabled=()=>false;export const isPublicSeekerLandingEnabled=()=>true;export const isPublicSignupUiEnabled=()=>true;export const isPropertyEnquiriesEnabled=()=>!location.search.includes('off=1');`;}
   if(id==='\0enquiry-mssql'){return `export const requestMssqlApi=async(path,options={})=>{const r=await fetch(path,{method:options.method||'GET',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data??p;};`;}
 }};
@@ -62,6 +65,8 @@ let vite,browser,server,activePage;let row=null,submissions=0,ownerWrites=0,fail
 let application=null,applicationsOpen=true;
 let publicListingMode='ready',photoMode='ready';
 let managementInitializations=0;
+let ownerSetupAttempts=0,ownerSetupRequest=null,ownerVerificationLink=null;
+const ownerWorkspaceId='44444444-4444-4444-8444-444444444444';
 const photoId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
 const photoUrl='/api/public-listings/'+listingId+'/media/'+photoId+'?country=LK';
 // Existing stock asset is used only for the clearly synthetic property fixture.
@@ -72,14 +77,27 @@ try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
   app.post('/fixture/management-init',(req,res)=>{managementInitializations++;res.json({ok:true});});
+  app.post('/api/platform/owner-setup',(req,res)=>{
+    assert.equal(req.get('authorization'),'Bearer synthetic-proof-token');assert.equal(req.get('x-tenant-id'),undefined);
+    assert.equal(req.body.country,'BN');assert.equal(req.body.name,'Synthetic owner workspace');
+    if(ownerSetupRequest){assert.deepEqual(req.body,ownerSetupRequest);}else{ownerSetupRequest=req.body;}
+    ownerSetupAttempts++;
+    if(ownerSetupAttempts===1){return res.status(503).json({error:'Synthetic temporary failure. Please retry.'});}
+    res.status(201).json({data:{id:ownerWorkspaceId,name:req.body.name,testing:true}});
+  });
   app.post('/fixture/login',(req,res)=>{normalLogins++;res.json({ok:true});});
   app.get('/api/public-listings/:id/media/:mediaId',(req,res)=>photoMode==='missing'?res.sendStatus(404):res.type('image/webp').send(fixturePhoto));
   app.get('/api/public-listings/:id',(req,res)=>publicListingMode==='missing'?res.sendStatus(404):res.json({data:{id:listingId,country:'LK',title:'Synthetic rental',location:'General location',monthlyRent:100000,currency:'LKR',images:[{url:photoUrl,alt:'Synthetic approved property photo'}]}}));
   app.get('/api/platform/auth/seeker-context',(req,res)=>res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}}));
   app.post('/api/public-signup/challenge',(req,res)=>{
-    assert.deepEqual(req.body.enquiry,{listingId,country:'LK'});
+    if(req.body.ownerCountry){
+      assert.equal(req.body.ownerCountry,'BN');assert.equal(req.body.enquiry,undefined);
+      ownerVerificationLink=createPublicSignupVerificationLink({token:verificationToken,baseUrl:'http://'+req.get('host'),ownerCountry:req.body.ownerCountry});
+    }else{
+      assert.deepEqual(req.body.enquiry,{listingId,country:'LK'});
+      verificationLink=createPublicSignupVerificationLink({token:verificationToken,baseUrl:'http://'+req.get('host'),enquiry:req.body.enquiry});
+    }
     assert.equal(req.get('authorization'),undefined);assert.equal(req.get('x-tenant-id'),undefined);
-    verificationLink=createPublicSignupVerificationLink({token:verificationToken,baseUrl:'http://'+req.get('host'),enquiry:req.body.enquiry});
     res.json({data:{accepted:true}});
   });
   app.post('/api/public-signup/redeem',(req,res)=>{
@@ -403,6 +421,43 @@ try {
   await verifyPage.waitForFunction(()=>document.body.innerText.includes('Your enquiry was sent'));
   assert.equal(submissions,3);assert.equal(row.status,'pending');
   console.log('BROWSER_STAGE=registration_email_new_browser_automatic_session_reload_enquiry');
+  // Fresh owner account; email opens in a separately isolated browser context.
+  const ownerContext=await browser.createBrowserContext();
+  const ownerSignupPage=await ownerContext.newPage();activePage=ownerSignupPage;
+  await ownerSignupPage.setRequestInterception(true);
+  ownerSignupPage.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+  await ownerSignupPage.goto(origin+'/owner-sign-up?country=BN',{waitUntil:'networkidle0'});
+  await ownerSignupPage.type('#seeker-name','Synthetic owner');await ownerSignupPage.type('#seeker-email','owner@example.test');
+  await ownerSignupPage.click('button[type="submit"]');
+  await ownerSignupPage.waitForSelector('a[href="/owner-sign-up?country=BN"]');
+  assert.match(await ownerSignupPage.$eval('body',e=>e.innerText),/Check your email/);
+  assert.equal(ownerSetupAttempts,0,'Signup acknowledgement never creates a workspace');
+  const ownerEmailContext=await browser.createBrowserContext();
+  const ownerEmailPage=await ownerEmailContext.newPage();activePage=ownerEmailPage;
+  await ownerEmailPage.setRequestInterception(true);
+  ownerEmailPage.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
+  await ownerEmailPage.goto(ownerVerificationLink,{waitUntil:'networkidle0'});
+  assert.equal(ownerEmailPage.url(),origin+'/verify-email');
+  await ownerEmailPage.type('#seeker-password','SyntheticFixtureOnly!');await ownerEmailPage.type('#seeker-password-confirm','SyntheticFixtureOnly!');
+  const beforeOwnerLogin=normalLogins;
+  await ownerEmailPage.click('button[type="submit"]');await ownerEmailPage.waitForSelector('#owner-workspace');
+  assert.equal(new URL(ownerEmailPage.url()).searchParams.get('country'),'BN');
+  assert.equal(normalLogins,beforeOwnerLogin,'Owner verification uses issued session without a second login');
+  await ownerEmailPage.type('#owner-workspace','Synthetic owner workspace');
+  await ownerEmailPage.setViewport({width:1280,height:900});
+  await ownerEmailPage.screenshot({path:path.join(uxOutput,'owner-setup-desktop.png'),fullPage:true});
+  await ownerEmailPage.setViewport({width:390,height:844});
+  assert.ok(await ownerEmailPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Owner setup fits mobile');
+  await ownerEmailPage.screenshot({path:path.join(uxOutput,'owner-setup-mobile.png'),fullPage:true});
+  await ownerEmailPage.click('button[type="submit"]');await ownerEmailPage.waitForSelector('[role="alert"]');
+  assert.equal(await ownerEmailPage.$eval('#owner-workspace',e=>e.value),'Synthetic owner workspace');
+  await ownerEmailPage.click('button[type="submit"]');
+  await ownerEmailPage.waitForFunction(()=>location.pathname==='/dashboard/properties/new');
+  assert.equal(await ownerEmailPage.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),ownerWorkspaceId);
+  assert.equal(managementInitializations,0,'Owner entry never initializes unrelated organization storage');
+  assert.equal(ownerSetupAttempts,2);
+  await ownerEmailContext.close();await ownerContext.close();
+  console.log('OWNER_ONBOARDING_BROWSER=PASS email_new_context verified_session country_continuation explicit_workspace retry_preserves_input selected_created_membership first_property_route desktop mobile');
   await page.bringToFront();activePage=page;
   await page.goto(origin+'/enquire?off=1',{waitUntil:'networkidle0'});
   assert.match(await page.$eval('body',e=>e.innerText),/not open yet/);

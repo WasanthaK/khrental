@@ -1,4 +1,5 @@
 import RentalJourney from './pages/RentalJourney';
+import OwnerSetup from './pages/OwnerSetup';
 import { createBrowserRouter, Navigate, useLocation, useNavigate, useParams, RouterProvider } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from './hooks/useAuth';
@@ -6,7 +7,7 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import { PORTAL_TYPES } from './utils/accessModel.js';
 import { PERMISSIONS, getDefaultLandingPath } from './utils/accessPolicy.js';
 import { getPostLoginPath } from './utils/authRedirect.js';
-import { enquiryReturnPath } from './utils/enquiryReturnPath.js';
+import { enquiryReturnPath,ownerSetupPath } from './utils/enquiryReturnPath.js';
 import PropertyEnquiry from './pages/PropertyEnquiry';
 import OwnerEnquiries from './pages/OwnerEnquiries';
 import { isPublicSeekerLandingEnabled } from './utils/env.js';
@@ -115,7 +116,7 @@ const PublicRoute = ({ children }) => {
         String(user.userType || user.profileType || '').toLowerCase() === 'seeker') {
       return <VerifiedSeekerBoundary redirectOnly />;
     }
-    const targetPath = enquiryReturnPath(location.search) || getPostLoginPath(location.state, defaultPath);
+    const targetPath = ownerSetupPath(location.search) || enquiryReturnPath(location.search) || getPostLoginPath(location.state, defaultPath);
 
     return <Navigate to={targetPath} replace />;
   }
@@ -230,6 +231,8 @@ const routes = [
       // Dedicated global seeker flow. Both screens fail closed under the
       // VITE_PUBLIC_SIGNUP_UI_ENABLED default-OFF flag; legacy stays intact.
       { path: 'seeker-sign-up', element: <PublicRoute><SeekerSignUp /></PublicRoute> },
+      { path: 'owner-sign-up', element: <PublicRoute><SeekerSignUp /></PublicRoute> },
+      { path: 'owner-start', element: <OwnerSetup /> },
       // Verification must remain accessible without switching a different
       // already signed-in browser account. It never stores the new session.
       { path: 'verify-email', element: <VerifySeekerEmail /> },

@@ -149,7 +149,7 @@ export const createPublicSignupRouter = ({
         // token and destination. The caller must supply a validated origin.
         let accepted = false;
         try {
-          const mail = makeEmail({ token: issued.token,...(details.enquiry?{enquiry:details.enquiry}:{}) });
+          const mail = makeEmail({ token: issued.token,...(details.enquiry?{enquiry:details.enquiry}:{}),...(details.ownerCountry?{ownerCountry:details.ownerCountry}:{}) });
           const response = await sendEmail({ to: issued.email, ...mail });
           accepted = response?.success === true && response?.simulated !== true;
         } catch {

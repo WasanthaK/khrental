@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { isDevBypassEnabled } from '../utils/env';
 import { getPostLoginPath } from '../utils/authRedirect.js';
-import { enquiryReturnPath, enquiryLoginSearch } from '../utils/enquiryReturnPath.js';
+import { enquiryReturnPath, enquiryLoginSearch,ownerSetupPath } from '../utils/enquiryReturnPath.js';
 import { isPublicSeekerLandingEnabled, isPublicSignupUiEnabled } from '../utils/env';
 import { fetchVerifiedSeekerBrowserContext } from '../services/seekerContextClient';
 import { getPlatformClient } from '../services/platformClient';
@@ -67,12 +67,13 @@ const Login = () => {
           getSession: () => getPlatformClient().auth.getSession()
         });
         if (proof.verified && proof.eligible) {
+          if(ownerSetupPath(location.search)){navigate(ownerSetupPath(location.search),{replace:true});return;}
           navigate(enquiryReturnPath(location.search) || '/seeker', { replace: true });
           return;
         }
       }
 
-      const returnPath = enquiryReturnPath(location.search) || getPostLoginPath(location.state, null);
+      const returnPath = ownerSetupPath(location.search) || enquiryReturnPath(location.search) || getPostLoginPath(location.state, null);
       if (returnPath) {
         console.log('Login successful, returning to requested route:', returnPath);
         navigate(returnPath, { replace: true });
@@ -183,6 +184,7 @@ const Login = () => {
                   Find a rental · Create free account
                 </Link>
               )}
+              {isPublicSignupUiEnabled()&&<Link to="/owner-start" className="ml-3 block font-medium text-blue-600 hover:text-blue-500">List my property · Create owner account</Link>}
             </div>
             <div className="text-sm">
               <Link to="/reset-password" className="font-medium text-blue-600 hover:text-blue-500">

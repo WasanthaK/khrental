@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { consumeSeekerVerificationContext } from '../utils/seekerVerificationFragment';
 import { isPublicSignupUiEnabled } from '../utils/env';
 import {continueVerifiedSeekerSession} from '../services/seekerContextClient';
-import {enquiryReturnPath} from '../utils/enquiryReturnPath.js';
+import {enquiryReturnPath,ownerSetupPath} from '../utils/enquiryReturnPath.js';
 import {PUBLIC_SIGNUP_PASSWORD_MIN,PUBLIC_SIGNUP_PASSWORD_MAX,PUBLIC_SIGNUP_PASSWORD_HINT,isValidPublicSignupPassword} from '../utils/publicSignupPasswordPolicy.js';
 
 const permitted = isPublicSignupUiEnabled();
@@ -76,6 +76,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
       });
       setContinuation(result);
       if(result.adopted){
+        if(ownerSetupPath(enquirySearch)){window.location.assign(ownerSetupPath(enquirySearch));return;}
         window.location.assign(enquiryReturnPath(enquirySearch)||'/seeker');
       }else{
         setMessage('Your email has been verified and your account is ready.');
@@ -121,7 +122,7 @@ const VerifySeekerEmail = ({ initialContext } = {}) => {
         ) : (
           <form onSubmit={redeem} noValidate className="mt-6 space-y-4">
             <p className="text-sm text-slate-600">
-              Choose a password for your free account. We’ll then take you back to continue your interest.
+              {ownerSetupPath(enquirySearch)?'Choose a password. Next, set up your property workspace.':'Choose a password for your free account. We’ll then take you back to continue your interest.'}
             </p>
             <p id="seeker-password-hint" className="text-sm text-slate-600">{PUBLIC_SIGNUP_PASSWORD_HINT}</p>
             <label htmlFor="seeker-password" className="block text-sm font-medium text-slate-700">

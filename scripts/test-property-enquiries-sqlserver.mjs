@@ -1,4 +1,5 @@
 import {verifyRentalOffers} from './test-rental-offers-sql.mjs';
+import {verifyOwnerOnboarding} from './test-owner-onboarding-sql.mjs';
 // Actual production store + exact draft migration on disposable SQL Server only.
 // Never reads production settings or creates cloud test capacity.
 import assert from 'node:assert/strict';
@@ -246,6 +247,7 @@ try {
   console.log('PROPERTY_ENQUIRIES_SQL=PASS migration_rerun concurrent_idempotency scope consent_audit durable_quota revocation withdrawal');
   await query("UPDATE tenant_memberships SET status='active' WHERE app_user_id=@id",{id:owner.actorId});
   await verifyRentalOffers({pool,query,owner,foreignOwner});
+  await verifyOwnerOnboarding({pool,query});
 } finally {
   await pool?.close().catch(()=>{});await master?.close().catch(()=>{});
   if(created){docker(['rm','-f',container]);}
