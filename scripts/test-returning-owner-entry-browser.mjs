@@ -133,7 +133,7 @@ try{
     if(x.email==='owner-b@example.test'){
       // Failures in workspace context must not create or autosave new setup.
       contextUnavailable=true;const savesBefore=progressSaves;
-      await page.goto(origin+'/owner-start?country=LK',{waitUntil:'networkidle0'});
+      await page.goto(origin+'/login?ownerCountry=LK',{waitUntil:'networkidle0'});
       await page.waitForSelector('[aria-label="Workspace lookup unavailable"]');
       assert.equal(await page.$('#owner-workspace'),null);
       assert.equal(progressSaves,savesBefore);assert.equal(ownerWrites,0);

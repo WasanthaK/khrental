@@ -107,7 +107,7 @@ export default function OwnerSetup(){
   };
   return <main className="auth-shell flex items-center justify-center"><section className="auth-card space-y-6">
     <a className="font-semibold text-blue-700" href="https://quixo.homes/">Quixo.Homes</a>
-    <h1 className="auth-title">{isAuthenticated&&!existingProperties?'Continue setting up your property':'Have a property to rent?'}</h1>
+    <h1 className="auth-title">{contextUnavailable?'Your property account':isAuthenticated&&!existingProperties?'Continue setting up your property':'Have a property to rent?'}</h1>
     <p className="auth-subtitle">Add your property, reach renters and manage the rental from one place. Your standard listing is included unless you choose to keep it private.</p>
     <p className="text-sm text-slate-600">Product testing is open. No payment is collected during testing.</p>
     {loading?<p role="status">Checking your account…</p>:contextUnavailable?<section aria-label="Workspace lookup unavailable" className="space-y-4">

@@ -36,9 +36,9 @@ export const createEnquiriesRouter=({
   router.use(context);
   const rentalActor=req=>({actorId:req.authSession.record.appUserId,authId:req.authSession.record.authId,
     sessionId:req.authSession.sessionId,...(owner?{tenantId:req.tenantId}:{})});
-  // A converted seeker retains access to their own rental history. The SQL
-  // authority admits only verified global identities and offer-derived renter
-  // memberships; the ordinary signup/enquiry eligibility gate remains unchanged.
+  // Personal rental history remains bound to its verified global actor,
+  // independently of workspace membership. SQL rechecks that identity;
+  // business actions separately require the target workspace administrator.
   const rentalGate=(req,res,next)=>{
     if(owner&&(!isAdminRole({user:req.user,membership:req.membership})||!hasActiveTenantMembership({membership:req.membership,tenantId:req.tenantId}))){
       return res.status(403).json({code:'ENQUIRY_ADMIN_REQUIRED',error:'Active tenant administrator required.'});

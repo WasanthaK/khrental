@@ -33,7 +33,7 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
     },
     membership: membership ?? null,
     memberships: Array.isArray(memberships) ? memberships : null,
-    tenantContextVerified: true
+    tenantContextVerified: user?.tenantContextVerified!==false
   };
   const candidate = personal ? Boolean(isAuthenticated&&user?.id) : isVerifiedTenantlessSeeker(profile);
 
