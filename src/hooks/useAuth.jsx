@@ -325,13 +325,13 @@ const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       logDebug('Login attempt for email', email);
-      setLoading(true);
+      // Login owns its pending form state. Global loading would unmount the
+      // form in PublicRoute and erase an unsuccessful request's visible error.
       setError(null);
       
       // Validate inputs
       if (!email || !password) {
         setError('Email and password are required');
-        setLoading(false);
         return { error: { message: 'Email and password are required' } };
       }
       
@@ -375,7 +375,6 @@ const AuthProvider = ({ children }) => {
           setError(error.message || 'An error occurred during login');
         }
         
-        setLoading(false);
         return { error };
       }
       
@@ -410,7 +409,6 @@ const AuthProvider = ({ children }) => {
         console.warn('[Auth] Login successful but no user data returned');
       }
       
-      setLoading(false);
       return { data, profile:resolvedProfile };
     } catch (error) {
       console.error('[Auth] Error logging in:', error.message);
@@ -430,8 +428,6 @@ const AuthProvider = ({ children }) => {
       
       setError(userMessage);
       return { error: { message: userMessage } };
-    } finally {
-      setLoading(false);
     }
   };
 
