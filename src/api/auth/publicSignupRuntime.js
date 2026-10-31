@@ -8,7 +8,8 @@ import { redeemPublicSignupChallenge } from './publicSignupRedemption.js';
 import { createSqlPublicSignupLimiter } from './publicSignupSqlLimiter.js';
 import { createPublicSignupSendGridAdapters } from './publicSignupSendGrid.js';
 import { createAzureSignupClientAddress, checkPublicSignupBrowserRequest, normalizePublicSignupIp } from './publicSignupIngressGuard.js';
-import { findAuthRecordByEmail, issueAuthSession } from './index.js';
+import { findAuthRecordByEmail, issueAuthSession, createSessionAuthMiddleware } from './index.js';
+import {createAccountEmailVerificationRouter} from './accountEmailVerification.js';
 
 // Same browser session shape as normal sign-in; credentials and tenant access are excluded.
 export const serializePublicSignupSession=(record,issued)=>({
@@ -80,10 +81,11 @@ export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
       // Never fall back to the landlord sender or an unverified public origin.
     }
   }
+  const limiter = enabled ? createSqlPublicSignupLimiter() : null;
   const registration = createPublicSignupRouter({
     enabled,
     pilotEmail: config.NODE_ENV === 'production' ? pilotEmail : null,
-    limiter: enabled ? createSqlPublicSignupLimiter() : null,
+    limiter,
     clientAddress: address,
     throttleSecret: config.PUBLIC_SIGNUP_THROTTLE_SECRET || '',
     beginChallenge: beginPublicSignupChallenge,
@@ -127,6 +129,9 @@ export const createPublicSignupRuntime = ({ config = process.env } = {}) => {
     }
     next(error);
   });
+  router.use(createAccountEmailVerificationRouter({enabled, pilotEmail, limiter, clientAddress: address,
+    throttleSecret: config.PUBLIC_SIGNUP_THROTTLE_SECRET || '', mail,
+    authenticate: createSessionAuthMiddleware(), finishDelivery: completePublicSignupChallengeDelivery}));
   router.use(registration);
   return router;
 };

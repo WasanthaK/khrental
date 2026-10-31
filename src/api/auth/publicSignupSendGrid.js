@@ -40,7 +40,8 @@ export const createPublicSignupSendGridAdapters = ({
     token: 'a'.repeat(43), baseUrl, production
   });
 
-  const makeEmail = ({ token, enquiry,ownerCountry }) => createPublicSignupVerificationEmail({
+  const makeEmail = ({ token, enquiry,ownerCountry,accountChallenge }) => createPublicSignupVerificationEmail({
+    accountChallenge,
     ownerCountry,
     token, baseUrl, production, enquiry
   });
