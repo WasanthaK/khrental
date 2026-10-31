@@ -234,7 +234,7 @@ try {
   await page.screenshot({path:path.join(uxOutput,'seeker-overview-mobile.png'),fullPage:true});
   await page.click('nav[aria-label="Your rental search"] a[href="/enquire"]');
   await page.waitForSelector('.seeker-empty');
-  assert.equal(await page.$eval('.seeker-empty a',e=>e.getAttribute('href')),'/seeker#browse-rentals');
+  assert.equal(await page.$eval('.seeker-empty a',e=>e.getAttribute('href')),'/seeker?purpose=rental#browse-rentals');
   assert.equal(await page.$('.seeker-pagination'),null,'An empty first page has no paging controls');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Empty inbox fits mobile');
   await page.screenshot({path:path.join(uxOutput,'seeker-empty-enquiries-mobile.png'),fullPage:true});
