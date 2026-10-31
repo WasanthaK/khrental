@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Property save and maintenance correction released — 31 October 2026
+
+**Maintenance release and live form verification PASS.** Application #41212951883 SUCCESS with 808/808 tests and build, Ready revision 0000436, deterministic startup, live MSSQL, expected runtime and exact serving code SHA `437209ac6281c977035ded233537f68bb6f575cd`. Independent browser build-info matches. The existing demo workspace administrator's Maintenance tab loads normally; Create New Request now displays the newly saved workspace property, without the renter-tenancy verification error, and Submit is available. Cancel returns to the expected empty list; the normal Create New Request link returns to the working form. Desktop live form wording/layout reviewed; final-head desktop/390px screenshots and real SQL/browser save, controlled failure/retry, reload and isolation proof are recorded below. No real repair request or fabricated maintenance work was submitted to production. Actual customer repairs, image-upload bytes and full maintenance lifecycle acceptance remain distinct from this bounded correction.
+
+Delivered fixes: management property eligibility/create authority, tenant-local and assigned-property scope, renter active-tenancy restrictions, nullable resident/agreement for property-management reports, durable authenticated reporter event, permission-aligned route/button, truthful request-source wording, maintenance image label, and retry after a save error. PR #473 MERGED; its exact reviewed head and all final verification runs are recorded in the preceding release-progress section. The first-property save correction remains live-verified and persisted after reload. These two reported blockers are corrected; broader owner resumption, dual-purpose access, public listing and genuine rental-lifecycle goals remain OPEN under #459. Continue the documented website journey before subscription management. This status supersedes the older 'release underway' entries without deleting their evidence/history.
+
+---
+
+
 ## First property persisted; maintenance release underway — 31 October 2026
 
 **Live first-property save PASS.** PR #472 merged at `e998dfb194baaf390727ed0a82a5c5b5b7b7f4ac`; application #41212257629 SUCCESS, Ready revision 0000435, exact public build fingerprint, deterministic startup and live MSSQL verified. The signed-in demo workspace administrator's already-filled failed form was preserved throughout rollout and retried successfully, using the backend's compatibility normalization for the earlier client. The owner-supplied property appears in its authorized workspace with the entered rent and remains after full reload. No duplicate property or new account was created. This establishes the observed first-property save/readback; interrupted/new-browser owner continuation, full public listing and the complete rental lifecycle retain their separate open acceptance criteria.
