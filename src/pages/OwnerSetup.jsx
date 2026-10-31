@@ -12,6 +12,7 @@ export default function OwnerSetup(){
   const identity=String(user?.id||'');
   const currentIdentity=useRef(identity);currentIdentity.current=identity;
   const selected=new URLSearchParams(useLocation().search);
+  const createAnotherWorkspace=selected.get('newWorkspace')==='1';
   const [country,setCountry]=useState(selected.get('country')==='BN'?'BN':'LK');
   const [name,setName]=useState('');
   const [busy,setBusy]=useState(false);
@@ -87,15 +88,17 @@ export default function OwnerSetup(){
       <select id="owner-country" disabled={busy} className="w-full rounded-lg border p-3" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei Darussalam</option></select>
       <a className="block rounded-lg bg-blue-700 p-3 text-center text-white" href={'/owner-sign-up?country='+country}>Create owner account</a>
       <Link className="block underline" to={'/login?ownerCountry='+country}>Already have an account? Sign in</Link>
-    </div>:existingProperties?<section className="space-y-4" aria-label="Your existing workspace">
+    </div>:existingProperties&&!createAnotherWorkspace?<section className="space-y-4" aria-label="Your existing workspace">
       <h2 className="text-xl font-semibold">Continue in {workspaceName}</h2>
       <p>A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.</p>
       <Link className="block rounded-lg bg-blue-700 p-3 text-center text-white" to={existingProperties}>Open my properties</Link>
       {String(existingMembership?.role).toLowerCase()==='admin'&&<Link className="block underline" to={'/dashboard/properties/new?country='+country}>Add a property</Link>}
+      <p className="text-sm text-slate-600">For a separately managed business, <Link className="underline" to={'/owner-start?country='+country+'&newWorkspace=1'}>set up another workspace</Link>.</p>
     </section>:<form onSubmit={submit} className="space-y-4">
       <h2 className="text-xl font-semibold">Set up your property workspace</h2>
       <p className="text-sm text-slate-600">A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.</p>
       <p className="text-sm text-slate-600">Use your name or business name. Next, add your first property and its photos.</p>
+      {existingProperties&&<Link className="block underline" to={'/owner-start?country='+country}>Back to my current workspace</Link>}
       <label className="block" htmlFor="owner-workspace">Workspace name</label>
       <input id="owner-workspace" className="w-full rounded-lg border p-3" required disabled={busy} maxLength={200} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name or property business"/>
       <label className="block" htmlFor="owner-country">Property country</label>

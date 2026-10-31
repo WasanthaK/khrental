@@ -95,6 +95,9 @@ try{
       await page.setViewport({width:1365,height:900});await page.screenshot({path:'enquiry-browser-proof/returning-owner-desktop.png',fullPage:true});
       await page.setViewport({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:'enquiry-browser-proof/returning-owner-mobile.png',fullPage:true});
+      await page.click('a[href="/owner-start?country=BN&newWorkspace=1"]');await page.waitForSelector('#owner-workspace');
+      assert.equal(ownerWrites,0,'An additional workspace remains an explicit optional setup');
+      await page.click('a[href="/owner-start?country=BN"]');await page.waitForSelector('section[aria-label="Your existing workspace"]');
       await page.goto(origin+'/seeker',{waitUntil:'networkidle0'});
       await page.waitForFunction(()=>location.pathname==='/dashboard');
       await page.goto(origin+'/owner-sign-up?country=BN',{waitUntil:'networkidle0'});
