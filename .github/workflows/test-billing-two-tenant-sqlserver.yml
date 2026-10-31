@@ -86,3 +86,9 @@ jobs:
       - run: node --check scripts/test-billing-two-tenant-sqlserver.mjs
       - name: Execute disposable SQL Server billing acceptance
         run: npm run test:billing:sqlserver
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maintenance-manager-browser-proof
+          path: billing-sql-proof/
+          if-no-files-found: ignore

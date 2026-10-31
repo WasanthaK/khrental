@@ -400,7 +400,7 @@ const routes = [
                   <MaintenanceList />
                 )
               },
-              { path: 'new', element: adminRoute(<MaintenanceForm />) },
+              { path: 'new', element: permissionRoute([PERMISSIONS.MAINTENANCE_MANAGE], <MaintenanceForm />) },
               {
                 path: ':id',
                 element: permissionRoute(

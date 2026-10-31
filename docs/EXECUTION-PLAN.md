@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Active maintenance creation correction — 31 October 2026
+
+Live administrator acceptance reproduced an active-tenancy verification error on Create Maintenance Request. Both the shared form and governed create API were renter-only despite the management entry. Restore the existing maintenance.manage authority: administrators may report property maintenance in their selected organization, property managers only for assigned properties, while renters retain the active-tenancy requirement. An unoccupied property does not require an invented resident or agreement. Keep the reporter in the lifecycle event actor, with nullable resident/agreement fields for management reports; retain transactional notifications and tenant isolation. Use a dedicated scoped eligible-properties read and the existing create authority, never generic SQL writes or client-selected permissions. Hide creation from assigned-only workers and align the route with the same permission.
+
+Regression scope: real-session two-tenant SQL creation/denial/readback, vacant-property administrator report, resident impersonation rejection, actual manager form submission and reload, desktop/mobile visual review. Source and focused tests are prepared; exact-head CI, rollout and live browser acceptance remain OPEN. First-property correction remains the immediate release dependency. No subscriptions or external maintenance messages are introduced.
+
+---
+
+
 ## Active first-property save correction — 31 October 2026
 
 Live acceptance reached the authenticated new-property form. Saving failed with PROPERTY_LISTING_CATEGORY_REQUIRED despite a selected Houses & apartments category. Source traces the mismatch to the shared insert/update formatter recursively lowercasing JSON keys: listingCategory becomes listingcategory before the server validates rentalvalues. This is a reproduced save-path contract defect, not a missing customer category or an onboarding authentication failure.

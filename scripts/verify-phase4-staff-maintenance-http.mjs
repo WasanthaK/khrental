@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
 
 const guid = value => String(value || '').toLowerCase();
 
@@ -18,7 +19,7 @@ export async function verifyPhase4StaffMaintenanceHttp({
     if (code) assert.equal(response.payload?.code, code, JSON.stringify(response));
     return response.payload?.data;
   };
-  const actor = async (item, bundle, assignedPropertyId = null) => {
+  const actor = async (item, bundle, assignedPropertyId = null, membershipRole = 'staff') => {
     const email = 'maintenance-acceptance-' + crypto.randomUUID() + '@example.invalid';
     const row = await one(
       "INSERT INTO app_users (tenant_id, name, email, role, user_type) OUTPUT INSERTED.id VALUES (@tenantId, 'Fixture Staff', @email, 'staff', 'staff')",
@@ -26,8 +27,8 @@ export async function verifyPhase4StaffMaintenanceHttp({
     );
     const userId = guid(row.id);
     await sqlRows(
-      "INSERT INTO tenant_memberships (tenant_id, app_user_id, role, permission_bundle, status, is_default) VALUES (@tenantId, @userId, 'staff', @bundle, 'active', 1)",
-      { tenantId: item.tenantId, userId, bundle }
+      "INSERT INTO tenant_memberships (tenant_id, app_user_id, role, permission_bundle, status, is_default) VALUES (@tenantId, @userId, @membershipRole, @bundle, 'active', 1)",
+      { tenantId: item.tenantId, userId, bundle, membershipRole }
     );
     if (assignedPropertyId) {
       await sqlRows(
@@ -47,6 +48,7 @@ export async function verifyPhase4StaffMaintenanceHttp({
     return { userId, email, authId, token: (await issueAuthSession(record)).accessToken };
   };
 
+  const adminA = await actor(a, 'read_only', null, 'admin');
   const managerA = await actor(a, 'property_operations', a.propertyId);
   const managerNoScope = await actor(a, 'property_operations');
   const workerA = await actor(a, 'maintenance');
@@ -95,7 +97,35 @@ export async function verifyPhase4StaffMaintenanceHttp({
     description: 'Synthetic water leak for two-tenant acceptance'
   };
   check(await request(a, null, 'POST', null, '', requestBody), 401);
-  check(await request(a, managerA.token, 'POST', null, '', requestBody), 403, 'TENANT_PORTAL_REQUIRED');
+  const eligibleProperties = '/api/maintenance-lifecycle/eligible-properties';
+  check(await api(a, null, 'GET', eligibleProperties), 401);
+  check(await api(a, tokenA, 'GET', eligibleProperties), 403, 'MAINTENANCE_MANAGE_REQUIRED');
+  check(await api(a, workerA.token, 'GET', eligibleProperties), 403, 'MAINTENANCE_MANAGE_REQUIRED');
+  assert.deepEqual(check(await api(a, managerNoScope.token, 'GET', eligibleProperties), 200), []);
+  const vacantProperty = await one(
+    "INSERT INTO properties (tenant_id, name, address, status) OUTPUT INSERTED.id VALUES (@tenantId, 'Vacant maintenance fixture', 'Synthetic address', 'active')",
+    { tenantId: a.tenantId }
+  );
+  assert.ok(check(await api(a, adminA.token, 'GET', eligibleProperties), 200).some(row => guid(row.id) === guid(vacantProperty.id)));
+  const adminCreated = check(await request(a, adminA.token, 'POST', null, '', { ...requestBody, propertyId: vacantProperty.id }), 201);
+  assert.equal(adminCreated.renteeid, null);
+  assert.equal(adminCreated.agreementid, null);
+  assert.equal(guid((await snapshot(adminCreated.id)).events[0].actor_user_id), adminA.userId);
+  const propertyIds = check(await api(a, managerA.token, 'GET', eligibleProperties), 200).map(row => guid(row.id));
+  assert.deepEqual(propertyIds, [a.propertyId]);
+  for (const denied of [managerNoScope, workerA, financeA, readOnlyA]) {
+    check(await request(a, denied.token, 'POST', null, '', requestBody), 403);
+  }
+  check(await request(a, managerA.token, 'POST', null, '', { ...requestBody, propertyId: b.propertyId }), 403, 'RESOURCE_ACCESS_DENIED');
+  const managerCreated = check(await request(a, managerA.token, 'POST', null, '', {
+    ...requestBody, renteeid: a.renteeId, agreementid: crypto.randomUUID()
+  }), 201);
+  assert.equal(managerCreated.renteeid, null, 'Manager must not impersonate a resident');
+  assert.equal(managerCreated.agreementid, null);
+  const managerSaved = await snapshot(managerCreated.id);
+  assert.equal(guid(managerSaved.events[0].actor_user_id), managerA.userId);
+  check(await request(a, tokenA, 'GET', managerCreated.id), 403, 'RESOURCE_ACCESS_DENIED');
+  check(await request(b, managerB.token, 'GET', managerCreated.id), 404, 'MAINTENANCE_REQUEST_NOT_FOUND');
   check(await request(a, tokenA, 'POST', null, '', { ...requestBody, propertyId: b.propertyId }),
     409, 'ACTIVE_TENANCY_REQUIRED');
   const created = check(await request(a, tokenA, 'POST', null, '', requestBody), 201);
@@ -288,6 +318,46 @@ export async function verifyPhase4StaffMaintenanceHttp({
         access_token: token, user: { id: authId, email, role: 'staff' }
       }));
     }, managerA.token, a.tenantId, managerA.authId, managerA.email);
+    await fs.mkdir('billing-sql-proof', { recursive: true });
+    // Actual manager form: property eligibility, submit and durable readback.
+    await managerPage.goto(origin + '/dashboard/maintenance/new', { waitUntil: 'networkidle0', timeout: 45000 });
+    await managerPage.waitForSelector('#title');
+    assert.equal(await managerPage.$('[role="alert"]'), null);
+    await managerPage.type('#title', 'Manager property maintenance browser proof');
+    await managerPage.type('#description', 'Synthetic inspection request without resident impersonation');
+    await managerPage.setViewport({ width: 1365, height: 900 });
+    await managerPage.screenshot({ path: 'billing-sql-proof/manager-maintenance-create-desktop.png', fullPage: true });
+    await managerPage.setViewport({ width: 390, height: 844 });
+    assert.ok(await managerPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await managerPage.screenshot({ path: 'billing-sql-proof/manager-maintenance-create-mobile.png', fullPage: true });
+    // A transient failure must preserve the entered request and allow retry.
+    let rejectFirstCreate = true;
+    await managerPage.setRequestInterception(true);
+    managerPage.on('request', intercepted => {
+      if (rejectFirstCreate && intercepted.method() === 'POST' && intercepted.url().endsWith('/api/maintenance-lifecycle/requests')) {
+        rejectFirstCreate = false;
+        return intercepted.respond({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary maintenance save failure. Please try again.' }) });
+      }
+      return intercepted.continue();
+    });
+    await managerPage.click('button[type="submit"]');
+    await managerPage.waitForSelector('[role="alert"]');
+    await managerPage.waitForFunction(() => !document.querySelector('button[type="submit"]').disabled);
+    assert.equal(await managerPage.$eval('#title', field => field.value), 'Manager property maintenance browser proof');
+    assert.ok((await managerPage.$eval('[role="alert"]', node => node.innerText)).includes('Temporary maintenance save failure'));
+    const createdResponse = managerPage.waitForResponse(response => response.url().endsWith('/api/maintenance-lifecycle/requests') && response.request().method() === 'POST');
+    await managerPage.click('button[type="submit"]');
+    const response = await createdResponse;
+    assert.equal(response.status(), 201);
+    const browserCreated = (await response.json()).data;
+    await managerPage.waitForFunction(() => location.pathname === '/dashboard/maintenance');
+    const persisted = await snapshot(browserCreated.id);
+    assert.equal(persisted.request.renteeid, null);
+    assert.equal(guid(persisted.request.propertyid), a.propertyId);
+    assert.equal(guid(persisted.events[0].actor_user_id), managerA.userId);
+    await managerPage.reload({ waitUntil: 'networkidle0' });
+    await managerPage.waitForFunction(() => document.body.innerText.includes('Manager property maintenance browser proof'));
+
     await managerPage.goto(origin + '/dashboard/maintenance/' + managerFixtureId,
       { waitUntil: 'domcontentloaded', timeout: 45000 });
     try {

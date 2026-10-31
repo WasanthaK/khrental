@@ -185,6 +185,19 @@ export const createMaintenanceLifecycleRouter = () => {
     auditLabel: 'maintenance-lifecycle'
   }));
 
+  router.get('/eligible-properties', async (req, res, next) => {
+    try {
+      requireManager(req);
+      const rows = await runQuery(
+        `SELECT id, name, address FROM properties WHERE tenant_id = @tenantId ORDER BY name, id`,
+        { tenantId: req.tenantId }
+      );
+      res.json({ data: rows.filter(property => hasPropertyScope(req, property.id)), error: null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/requests', async (req, res, next) => {
     try {
       const page = parseMaintenanceListPage(req.query);
@@ -241,9 +254,8 @@ export const createMaintenanceLifecycleRouter = () => {
 
   router.post('/requests', async (req, res, next) => {
     try {
-      if (!isTenantRole({ user: req.user, membership: req.membership })) {
-        throw createRequestError(403, 'Tenant portal access is required to submit a maintenance request.', 'TENANT_PORTAL_REQUIRED');
-      }
+      const isRenter = isTenantRole({ user: req.user, membership: req.membership });
+      if (!isRenter) requireManager(req);
       const title = String(req.body?.title || '').trim();
       const description = String(req.body?.description || '').trim();
       const propertyId = req.body?.propertyid || req.body?.propertyId || null;
@@ -251,18 +263,29 @@ export const createMaintenanceLifecycleRouter = () => {
         throw createRequestError(400, 'title, description and propertyId are required.', 'INVALID_MAINTENANCE_REQUEST');
       }
 
-      const agreement = await runSingleQuery(
-        `SELECT TOP 1 id, propertyid, unitid
-         FROM agreements
-         WHERE tenant_id = @tenantId
-           AND renteeid = @renteeId
-           AND propertyid = @propertyId
-           AND status = 'active'
-         ORDER BY activated_at DESC, startdate DESC`,
-        { tenantId: req.tenantId, renteeId: req.user.id, propertyId }
-      );
-      if (!agreement) {
-        throw createRequestError(409, 'An active tenancy for the selected property is required.', 'ACTIVE_TENANCY_REQUIRED');
+      let agreement = null;
+      if (isRenter) {
+        agreement = await runSingleQuery(
+          `SELECT TOP 1 id, propertyid, unitid
+           FROM agreements
+           WHERE tenant_id = @tenantId
+             AND renteeid = @renteeId
+             AND propertyid = @propertyId
+             AND status = 'active'
+           ORDER BY activated_at DESC, startdate DESC`,
+          { tenantId: req.tenantId, renteeId: req.user.id, propertyId }
+        );
+        if (!agreement) {
+          throw createRequestError(409, 'An active tenancy for the selected property is required.', 'ACTIVE_TENANCY_REQUIRED');
+        }
+      } else {
+        const property = await runSingleQuery(
+          'SELECT id FROM properties WHERE tenant_id = @tenantId AND id = @propertyId',
+          { tenantId: req.tenantId, propertyId }
+        );
+        if (!property || !hasPropertyScope(req, property.id)) {
+          throw createRequestError(403, 'The selected property is outside your maintenance access.', 'RESOURCE_ACCESS_DENIED');
+        }
       }
 
       const pool = await getMssqlPool();
@@ -281,10 +304,10 @@ export const createMaintenanceLifecycleRouter = () => {
            )`,
           {
             tenantId: req.tenantId,
-            propertyId: agreement.propertyid,
-            renteeId: req.user.id,
-            agreementId: agreement.id,
-            unitId: agreement.unitid || null,
+            propertyId: agreement?.propertyid || propertyId,
+            renteeId: isRenter ? req.user.id : null,
+            agreementId: agreement?.id || null,
+            unitId: agreement?.unitid || null,
             title,
             description,
             priority: req.body?.priority || 'medium',
@@ -298,7 +321,7 @@ export const createMaintenanceLifecycleRouter = () => {
           eventType: 'request_created',
           toStatus: MAINTENANCE_STATUS.PENDING,
           actorUserId: req.user.id,
-          metadata: { agreementId: agreement.id, unitId: agreement.unitid || null }
+          metadata: { agreementId: agreement?.id || null, unitId: agreement?.unitid || null }
         });
         await writeMaintenanceNotifications({
           transaction, queryTransaction, tenantId: req.tenantId,
