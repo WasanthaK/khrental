@@ -15,7 +15,7 @@ const listingId='11111111-1111-4111-8111-111111111111';
 const enquiryId='22222222-2222-4222-8222-222222222222';
 const fixtureAuth=`import {useEffect,useState} from 'react';
   let signedIn=!!localStorage.getItem('khrental.local.session');const listeners=new Set();
-  export const getSession=async()=>({data:{session:signedIn?{access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}:null}});
+  export const getSession=async()=>({data:{session:window.ownerFixtureSession|| (signedIn?{access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}:null)}});
   export const useAuth=()=>{const [,render]=useState(0);useEffect(()=>{const f=()=>render(x=>x+1);listeners.add(f);return()=>listeners.delete(f);},[]);
     return {user:signedIn?{id:'synthetic-auth'}:null,isAuthenticated:signedIn,loading:false,activeTenantId:'synthetic-workspace',
       login:async()=>{await fetch('/fixture/login',{method:'POST'});signedIn=true;localStorage.setItem('khrental.local.session',JSON.stringify({access_token:'synthetic-proof-token',user:{id:'synthetic-auth'}}));listeners.forEach(f=>f());return {data:{user:{id:'synthetic-auth'}}};},
@@ -66,6 +66,8 @@ let application=null,applicationsOpen=true;
 let publicListingMode='ready',photoMode='ready';
 let managementInitializations=0;
 let ownerSetupAttempts=0,ownerSetupRequest=null,ownerVerificationLink=null;
+let releaseOwnerSetup,notifyOwnerSetup;
+const ownerSetupHeld=new Promise(resolve=>{notifyOwnerSetup=resolve;});
 const ownerWorkspaceId='44444444-4444-4444-8444-444444444444';
 const photoId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
 const photoUrl='/api/public-listings/'+listingId+'/media/'+photoId+'?country=LK';
@@ -83,6 +85,7 @@ try {
     if(ownerSetupRequest){assert.deepEqual(req.body,ownerSetupRequest);}else{ownerSetupRequest=req.body;}
     ownerSetupAttempts++;
     if(ownerSetupAttempts===1){return res.status(503).json({error:'Synthetic temporary failure. Please retry.'});}
+    if(ownerSetupAttempts===2){notifyOwnerSetup();releaseOwnerSetup=()=>res.status(201).json({data:{id:ownerWorkspaceId,name:req.body.name,testing:true}});return;}
     res.status(201).json({data:{id:ownerWorkspaceId,name:req.body.name,testing:true}});
   });
   app.post('/fixture/login',(req,res)=>{normalLogins++;res.json({ok:true});});
@@ -452,11 +455,18 @@ try {
   await ownerEmailPage.click('button[type="submit"]');await ownerEmailPage.waitForSelector('[role="alert"]');
   assert.equal(await ownerEmailPage.$eval('#owner-workspace',e=>e.value),'Synthetic owner workspace');
   await ownerEmailPage.click('button[type="submit"]');
+  await ownerSetupHeld;
+  await ownerEmailPage.evaluate(()=>{window.ownerFixtureSession={access_token:'synthetic-changed-account',user:{id:'synthetic-account-b'}};});
+  releaseOwnerSetup();
+  await ownerEmailPage.waitForFunction(()=>document.body.innerText.includes('Your signed-in account changed'));
+  assert.equal(await ownerEmailPage.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),null,'Late workspace response preserves the changed account context');
+  await ownerEmailPage.evaluate(()=>{delete window.ownerFixtureSession;});
+  await ownerEmailPage.click('button[type="submit"]');
   await ownerEmailPage.waitForFunction(()=>location.pathname==='/dashboard/properties/new');
   assert.equal(new URL(ownerEmailPage.url()).searchParams.get('country'),'BN');
   assert.equal(await ownerEmailPage.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),ownerWorkspaceId);
   assert.equal(managementInitializations,0,'Owner entry never initializes unrelated organization storage');
-  assert.equal(ownerSetupAttempts,2);
+  assert.equal(ownerSetupAttempts,3);
   await ownerEmailContext.close();await ownerContext.close();
   console.log('OWNER_ONBOARDING_BROWSER=PASS email_new_context verified_session country_continuation explicit_workspace retry_preserves_input selected_created_membership first_property_route desktop mobile');
   await page.bringToFront();activePage=page;

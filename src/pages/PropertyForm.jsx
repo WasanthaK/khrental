@@ -1246,4 +1246,4 @@ const PropertyForm = () => {
   );
 };
 
-export default PropertyForm; 
+export default PropertyForm;
