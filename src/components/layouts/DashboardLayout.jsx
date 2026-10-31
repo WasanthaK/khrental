@@ -153,6 +153,7 @@ const DashboardLayout = () => {
 
       <div className="flex-1 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
         <nav className="space-y-1">
+          {isPropertyEnquiriesEnabled() && <NavLink to="/seeker?purpose=rental" className={getNavLinkClass}>Find a place</NavLink>}
           {showTenantWorkspace && (
             <NavLink to="/dashboard" end className={getNavLinkClass}>
               Dashboard

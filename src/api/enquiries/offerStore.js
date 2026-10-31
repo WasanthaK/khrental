@@ -1,3 +1,4 @@
+import {PERSONAL_RENTAL_EMAIL_PROOF_SQL} from '../auth/seekerContext.js';
 import {randomUUID} from 'node:crypto';
 import {createEnquiryStore} from './store.js';
 import {enquiryError} from './contract.js';
@@ -130,8 +131,8 @@ export const createOfferStore=({poolProvider}={})=>{
         const user=(await q(`SELECT au.id FROM dbo.app_users au WITH(UPDLOCK,HOLDLOCK)
           JOIN dbo.auth_users auth ON auth.auth_id=au.auth_id AND auth.app_user_id=au.id
           AND LOWER(LTRIM(RTRIM(auth.email)))=LOWER(LTRIM(RTRIM(au.email)))
-          WHERE au.id=@seekerId AND (au.status IS NULL OR au.status='active') AND au.user_type='seeker'
-          AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')='true'`,{seekerId:e.seeker_id}))[0];
+          WHERE au.id=@seekerId AND (au.status IS NULL OR au.status='active')
+          AND JSON_VALUE(CASE WHEN ISJSON(auth.metadata)=1 THEN auth.metadata ELSE N'{}' END,'$.global_email_verified')='true' AND ${PERSONAL_RENTAL_EMAIL_PROOF_SQL}`,{seekerId:e.seeker_id}))[0];
         if(!user){throw conflict('RENTAL_IDENTITY_UNAVAILABLE','The accepted applicant must have a verified usable account.');}
         const template=(await q('SELECT id,content,version FROM dbo.agreement_templates WITH(UPDLOCK,HOLDLOCK) WHERE id=@id AND tenant_id=@tenantId',{id:input.templateId,tenantId:e.tenant_id}))[0];
         if(!template?.content){throw conflict('RENTAL_TEMPLATE_REQUIRED','Select a populated agreement template in this workspace.');}

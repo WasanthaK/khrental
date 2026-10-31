@@ -52,3 +52,29 @@ export const resolveVerifiedSeekerContext = async ({
     ? { verified: true, eligible: true, userType: 'seeker', tenantId: null }
     : { verified: true, eligible: false };
 };
+
+export const PERSONAL_RENTAL_EMAIL_PROOF_SQL = `EXISTS(
+  SELECT 1 FROM dbo.public_signup_challenges email_proof
+  WHERE email_proof.email_normalized=LOWER(LTRIM(RTRIM(au.email)))
+    AND email_proof.sent_at IS NOT NULL AND email_proof.revoked_at IS NULL
+    AND email_proof.consumed_at>=CAST(auth.createdat AS DATETIME2(3)))`;
+
+// Personal rental activity belongs to the verified global actor. Memberships
+// grant business access separately and cannot broaden this actor-only context.
+export const resolvePersonalRentalContext = async ({authSession=null,user=null,tenantContext=null,query=runQuery}={}) => {
+  const record=authSession?.record;
+  const denied={verified:false,eligible:false};
+  if(!authSession?.sessionId||!record?.authId||!record?.appUserId||
+    !sameId(record.appUserId,user?.id)||!sameId(record.authId,user?.auth_id)||
+    !normalize(record.email)||normalize(record.email)!==normalize(user?.email)||
+    !normalize(record.role)||normalize(record.role)!==normalize(user?.role)||
+    record.metadata?.global_email_verified!==true||
+    (user?.status&&normalize(user.status)!=='active')||user?.active===false||
+    user?.is_dev_bypass||tenantContext?.identity?.devBypassRole||tenantContext?.requestedTenantId){return denied;}
+  const proof=await query(`SELECT TOP(1) au.id FROM dbo.app_users au
+    JOIN dbo.auth_users auth ON auth.app_user_id=au.id AND auth.auth_id=au.auth_id
+    WHERE au.id=@actorId AND auth.auth_id=@authId AND ${PERSONAL_RENTAL_EMAIL_PROOF_SQL}`,
+    {actorId:record.appUserId,authId:record.authId});
+  return Array.isArray(proof)&&proof.length===1
+    ?{verified:true,eligible:true,userType:'rental',tenantId:null}:denied;
+};

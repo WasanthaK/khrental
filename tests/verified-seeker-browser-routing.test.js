@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fetchVerifiedSeekerBrowserContext } from '../src/services/seekerContextClient.js';
+import { fetchVerifiedSeekerBrowserContext, fetchPersonalRentalBrowserContext } from '../src/services/seekerContextClient.js';
 import { getDefaultLandingPath } from '../src/utils/accessPolicy.js';
 
 const routes = readFileSync(new URL('../src/routes.jsx', import.meta.url), 'utf8');
@@ -131,7 +131,7 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
   assert.match(routes, /getDefaultLandingPath\(/);
   assert.match(routes, /defaultPath === '\/unauthorized'/);
   assert.match(boundary, /if \(!enabled\) return <Navigate to="\/unauthorized" replace \/>/);
-  assert.match(boundary, /fetchVerifiedSeekerBrowserContext\(/);
+  assert.match(boundary, /personal\?fetchPersonalRentalBrowserContext:fetchVerifiedSeekerBrowserContext/);
   assert.match(boundary, /status\.key !== key/);
   assert.match(boundary, /if \(!status\.eligible\) return <Navigate to="\/unauthorized" replace \/>/);
   assert.match(boundary, /isVerifiedTenantlessSeeker\(profile\)/);
@@ -155,4 +155,17 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
     'src/components/auth/VerifiedSeekerBoundary.jsx',
     { loader: 'jsx', jsx: 'automatic' });
   assert.match(jsx.code, /VerifiedSeekerBoundary/);
+});
+
+
+test('explicit personal search requires distinct actor proof and never sends a tenant selection',async()=>{
+  const current=supply({payload:{data:{verified:true,eligible:true,userType:'rental',tenantId:null}}});
+  assert.deepEqual(await fetchPersonalRentalBrowserContext({expectedAuthId:SESSION.user.id,getSession:current.getSession,fetchImpl:current.fetchImpl}),{verified:true,eligible:true});
+  assert.equal(current.captures[0].url,'/api/platform/auth/seeker-context?purpose=rental');
+  assert.deepEqual(current.captures[0].options.headers,{Authorization:'Bearer synthetic-auth-token'});
+  assert.equal(current.captures[0].options.credentials,'omit');
+  for(const options of [{payload:CERTIFIED},{later:null},{payload:{data:{verified:true,eligible:true,userType:'rental',tenantId:'business'}}}]){
+    const bad=supply(options);
+    assert.deepEqual(await fetchPersonalRentalBrowserContext({expectedAuthId:SESSION.user.id,getSession:bad.getSession,fetchImpl:bad.fetchImpl}),{verified:false,eligible:false});
+  }
 });

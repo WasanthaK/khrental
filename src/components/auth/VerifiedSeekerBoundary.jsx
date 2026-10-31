@@ -8,7 +8,7 @@ import {getOwnerContinuationPath} from '../../utils/authRedirect.js';
 import { useAuth } from '../../hooks/useAuth';
 import { isPublicSeekerLandingEnabled } from '../../utils/env';
 import { isVerifiedTenantlessSeeker } from '../../utils/seekerLandingPolicy';
-import { fetchVerifiedSeekerBrowserContext } from '../../services/seekerContextClient';
+import { fetchVerifiedSeekerBrowserContext, fetchPersonalRentalBrowserContext } from '../../services/seekerContextClient';
 import { getPlatformClient } from '../../services/platformClient';
 import SeekerHome from '../../pages/SeekerHome';
 
@@ -18,7 +18,8 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   const location=useLocation();
   const { user, membership, memberships, loading, isAuthenticated } = useAuth();
   const [status, setStatus] = useState({ key: null, eligible: false });
-  const key = String(user?.id || '') + ':' + String(user?.profileId || '');
+  const personal=!redirectOnly&&new URLSearchParams(location.search).get('purpose')==='rental';
+  const key = String(user?.id || '') + ':' + String(user?.profileId || '')+':'+String(personal);
 
   const profile = {
     user: user && {
@@ -32,14 +33,14 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
     },
     membership: membership ?? null,
     memberships: Array.isArray(memberships) ? memberships : null,
-    tenantContextVerified: true
+    tenantContextVerified: user?.tenantContextVerified!==false
   };
-  const candidate = isVerifiedTenantlessSeeker(profile);
+  const candidate = personal ? Boolean(isAuthenticated&&user?.id) : isVerifiedTenantlessSeeker(profile);
 
   useEffect(() => {
     if (!enabled || loading || !isAuthenticated || !candidate) return;
     let active = true;
-    fetchVerifiedSeekerBrowserContext({
+    (personal?fetchPersonalRentalBrowserContext:fetchVerifiedSeekerBrowserContext)({
       expectedAuthId: user.id,
       getSession: () => getPlatformClient().auth.getSession()
     })
@@ -49,7 +50,7 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
         });
       });
     return () => { active = false; };
-  }, [key, user, loading, isAuthenticated, candidate]);
+  }, [key, user, loading, isAuthenticated, candidate, personal]);
 
   if (!enabled) return <Navigate to="/unauthorized" replace />;
   if (loading) return <div role="status">Checking your account…</div>;
@@ -63,5 +64,5 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   if (!status.eligible) return <Navigate to="/unauthorized" replace />;
   if (redirectOnly&&ownerSetupPath(location.search)) return <Navigate to={ownerSetupPath(location.search)} replace />;
   if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || getOwnerContinuationPath({user,membership}) || '/seeker'} replace />;
-  return <SeekerHome {...profile} />;
+  return <SeekerHome {...profile} personalRentalVerified={personal&&status.eligible} />;
 };

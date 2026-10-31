@@ -5,7 +5,8 @@ import {getPlatformClient} from '../services/platformClient';
 import {getExistingPropertyWorkspacePath,getOwnerContinuationPath} from '../utils/authRedirect.js';
 
 export default function OwnerSetup(){
-  const {user,membership,loading,isAuthenticated}=useAuth();
+  const {user,membership,loading,isAuthenticated,refreshTenantContext}=useAuth();
+  const contextUnavailable=isAuthenticated&&user?.tenantContextVerified===false;
   const existingMembership=membership||user?.membership;
   const existingProperties=getExistingPropertyWorkspacePath({user,membership:existingMembership});
   const workspaceName=existingMembership?.tenant?.name||user?.tenant?.name||'Your workspace';
@@ -25,6 +26,10 @@ export default function OwnerSetup(){
   const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
   const draftKey='quixo.owner-setup.draft.'+identity+(createAnotherWorkspace?'.additional':'');
   useEffect(()=>{
+    if(contextUnavailable){return;}
+    if(existingProperties&&!createAnotherWorkspace){
+      setCountry(selected.get('country')==='BN'?'BN':'LK');setDraftIdentity(null);return;
+    }
     let draft=!createAnotherWorkspace?user?.ownerOnboarding:null;
     try{if(!draft){draft=identity?JSON.parse(sessionStorage.getItem(draftKey)):null;}}catch{/* Draft storage is optional. */}
     const valid=draft&&typeof draft.name==='string'&&draft.name.length<=200&&['LK','BN'].includes(draft.country)&&
@@ -32,13 +37,13 @@ export default function OwnerSetup(){
     setName(valid?draft.name:'');setCountry(valid?draft.country:(selected.get('country')==='BN'?'BN':'LK'));
     setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');setSaveMessage('');
     setRequestId(valid?draft.requestId:crypto.randomUUID());setDraftIdentity(identity);
-  },[identity,createAnotherWorkspace]);
+  },[identity,createAnotherWorkspace,contextUnavailable,existingProperties]);
   useEffect(()=>{
     if(!identity||draftIdentity!==identity){return;}
     try{sessionStorage.setItem(draftKey,JSON.stringify({name,country,requestId}));}catch{/* Keep the current form usable without storage. */}
   },[identity,draftIdentity,name,country,requestId]);
   useEffect(()=>{
-    if(!identity||draftIdentity!==identity||loading||busy||!isAuthenticated||(existingProperties&&!createAnotherWorkspace)){return;}
+    if(contextUnavailable||!identity||draftIdentity!==identity||loading||busy||!isAuthenticated||(existingProperties&&!createAnotherWorkspace)){return;}
     setSaveMessage('Saving setup…');
     let active=true;
     const timer=setTimeout(()=>{
@@ -58,7 +63,7 @@ export default function OwnerSetup(){
       });
     },400);
     return()=>{active=false;clearTimeout(timer);};
-  },[identity,draftIdentity,name,country,requestId,loading,busy,isAuthenticated,existingProperties,createAnotherWorkspace]);
+  },[identity,draftIdentity,name,country,requestId,loading,busy,isAuthenticated,existingProperties,createAnotherWorkspace,contextUnavailable]);
   const requestVerification=async()=>{
     if(busy){return;}const actorAtStart=identity;setBusy(true);setError('');setVerificationMessage('');
     try{
@@ -76,7 +81,7 @@ export default function OwnerSetup(){
     finally{if(currentIdentity.current===actorAtStart){setBusy(false);}}
   };
   const submit=async event=>{
-    event.preventDefault();if(busy){return;}setBusy(true);setError('');
+    event.preventDefault();if(busy||contextUnavailable){return;}setBusy(true);setError('');
     const actorAtStart=identity;
     try{
       await saveQueue.current;
@@ -105,10 +110,15 @@ export default function OwnerSetup(){
   };
   return <main className="auth-shell flex items-center justify-center"><section className="auth-card space-y-6">
     <a className="font-semibold text-blue-700" href="https://quixo.homes/">Quixo.Homes</a>
-    <h1 className="auth-title">{isAuthenticated&&!existingProperties?'Continue setting up your property':'Have a property to rent?'}</h1>
+    <h1 className="auth-title">{contextUnavailable?'Your property account':isAuthenticated&&!existingProperties?'Continue setting up your property':'Have a property to rent?'}</h1>
     <p className="auth-subtitle">Add your property, reach renters and manage the rental from one place. Your standard listing is included unless you choose to keep it private.</p>
     <p className="text-sm text-slate-600">Product testing is open. No payment is collected during testing.</p>
-    {loading?<p role="status">Checking your account…</p>:!isAuthenticated?<div className="space-y-4">
+    {loading?<p role="status">Checking your account…</p>:contextUnavailable?<section aria-label="Workspace lookup unavailable" className="space-y-4">
+      <p role="alert">We couldn’t load your workspace. Try again to continue with your existing account.</p>
+      <button type="button" disabled={busy} className="rounded-lg bg-blue-700 p-3 text-white" onClick={async()=>{
+        setBusy(true);try{await refreshTenantContext();}finally{setBusy(false);}
+      }}>{busy?'Checking your account…':'Try again'}</button>
+    </section>:!isAuthenticated?<div className="space-y-4">
       {selected.get('verification')==='pending'&&<p role="status">Check your email to verify your account. Your next step is adding your first property.</p>}
       <label className="block" htmlFor="owner-country">Property country</label>
       <select id="owner-country" disabled={busy} className="w-full rounded-lg border p-3" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei Darussalam</option></select>

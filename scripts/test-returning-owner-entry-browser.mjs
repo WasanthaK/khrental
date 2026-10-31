@@ -26,7 +26,6 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
   if(/\/(?:hooks\/useAuth\.jsx|pages\/Login\.jsx|pages\/OwnerSetup\.jsx|components\/auth\/VerifiedSeekerBoundary\.jsx)$/.test(importer)&&/\/services\/platformClient(?:\.js)?$/.test(source)){return new URL('../src/services/platformClientCore.js',import.meta.url).pathname;}
   if(importer.endsWith('/routes.jsx')&&/\/components\/layouts\//.test(source)){return '\0returning-layout.jsx';}
   if(importer.endsWith('/routes.jsx')&&/\/pages\/(?:PropertyList|Dashboard|rentee\/RenteePortal)$/.test(source)){return '\0returning-destination.jsx';}
-  if(importer.endsWith('/auth/VerifiedSeekerBoundary.jsx')&&source.endsWith('/pages/SeekerHome')){return '\0returning-destination.jsx';}
 },async load(id){
   if(id==='\0returning-entry.jsx'){return transformWithEsbuild(entry,'returning-entry.jsx',{loader:'jsx',jsx:'automatic'});}
   if(id==='\0returning-layout.jsx'){return `import React from 'react';import {Outlet} from 'react-router-dom';export default ()=>React.createElement(Outlet);`;}
@@ -34,6 +33,7 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
 }};
 let vite,server,browser,seekerChecks=0,ownerWrites=0;
 const propertyWrites=[];
+let contextUnavailable=false,progressSaves=0;
 const byToken=req=>cases.find(x=>'fixture-'+x.id===String(req.get('authorization')||'').replace(/^Bearer /,''));
 const progressById=new Map(cases.filter(x=>x.email==='new-owner@example.test').map(x=>[x.id,{name:'',country:'BN',requestId:'44444444-4444-4444-8444-444444444444'}]));
 const context=x=>{
@@ -52,13 +52,15 @@ try{
     const user={id:x.id,email:x.email,role:x.role,user_metadata:{user_type:'seeker'}};
     res.json({data:{user,session:{access_token:'fixture-'+x.id,user}}});
   });
-  app.get('/api/platform/auth/context',(req,res)=>res.json({data:context(byToken(req))}));
+  app.get('/api/platform/auth/context',(req,res)=>contextUnavailable?res.status(503).json({error:'Controlled workspace lookup unavailable'}):res.json({data:context(byToken(req))}));
   app.get('/api/mssql/me',(req,res)=>{
     const x=cases.find(x=>x.id===req.get('x-auth-id'));assert.ok(x);
     res.json({data:{id:x.profileId,role:x.role,user_type:'seeker',name:'Example customer'}});
   });
   app.get('/api/platform/auth/seeker-context',(req,res)=>{
-    seekerChecks++;const x=byToken(req);
+    const x=byToken(req);
+    if(req.query.purpose==='rental'){return res.json({data:{verified:true,eligible:true,userType:'rental',tenantId:null}});}
+    seekerChecks++;
     if(x?.member){return res.status(403).json({error:'Fixture denies business accounts in seeker API'});}
     res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}});
   });
@@ -74,11 +76,17 @@ try{
   });
   app.get('/api/properties/:id/fixed-utilities',(_req,res)=>res.json({data:{configs:[]}}));
   app.put('/api/properties/:id/fixed-utilities',(_req,res)=>res.json({data:{configs:[]}}));
-  app.post('/api/platform/owner-setup/progress',(req,res)=>{const x=byToken(req);assert.ok(x);progressById.set(x.id,req.body);res.json({data:req.body});});
+  app.post('/api/platform/owner-setup/progress',(req,res)=>{progressSaves++;const x=byToken(req);assert.ok(x);progressById.set(x.id,req.body);res.json({data:req.body});});
   app.post('/api/platform/owner-setup',(_req,res)=>{ownerWrites++;res.sendStatus(500);});
+  app.get('/api/public-listings/:id',(req,res)=>res.json({data:{id:req.params.id,country:'LK',title:'Example public rental',currency:'LKR',monthlyRent:100000,images:[]}}));
+  app.get('/api/property-enquiries',(req,res)=>{
+    assert.ok(byToken(req));assert.equal(req.get('x-tenant-id'),undefined);
+    res.json({data:{items:[],hasMore:false}});
+  });
+
   app.use('/api',(_req,res)=>res.sendStatus(404));app.use(vite.middlewares);
   app.use(async(req,res)=>res.type('html').send(await vite.transformIndexHtml(req.originalUrl,
-    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script>window._env_={VITE_PUBLIC_SIGNUP_UI_ENABLED:"true",VITE_PUBLIC_SEEKER_LANDING_ENABLED:"true",VITE_USE_MSSQL_API:"true"};</script><script type="module" src="/@id/__x00__returning-entry.jsx"></script></body></html>')));
+    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script>window._env_={VITE_PUBLIC_SIGNUP_UI_ENABLED:"true",VITE_PROPERTY_ENQUIRIES_UI_ENABLED:"true",VITE_PUBLIC_SEEKER_LANDING_ENABLED:"true",VITE_USE_MSSQL_API:"true"};</script><script type="module" src="/@id/__x00__returning-entry.jsx"></script></body></html>')));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin='http://127.0.0.1:'+server.address().port;
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -123,6 +131,33 @@ try{
     if(x.member){assert.equal(seekerChecks,before,'Business sign-in never depends on seeker certification');}
     assert.equal(ownerWrites,0,'Returning users never create a duplicate workspace');
     if(x.email==='owner-b@example.test'){
+      // Failures in workspace context must not create or autosave new setup.
+      contextUnavailable=true;const savesBefore=progressSaves;
+      await page.goto(origin+'/login?ownerCountry=LK',{waitUntil:'networkidle0'});
+      await page.waitForSelector('[aria-label="Workspace lookup unavailable"]');
+      assert.equal(await page.$('#owner-workspace'),null);
+      assert.equal(progressSaves,savesBefore);assert.equal(ownerWrites,0);
+      await page.setViewport({width:1365,height:900});await page.screenshot({path:'enquiry-browser-proof/owner-context-retry-desktop.png',fullPage:true});
+      await page.setViewport({width:390,height:844});await page.screenshot({path:'enquiry-browser-proof/owner-context-retry-mobile.png',fullPage:true});
+      contextUnavailable=false;
+      await page.evaluate(()=>[...document.querySelectorAll('button')].find(button=>button.textContent==='Try again').click());
+      await page.waitForFunction(()=>document.body.innerText.includes('Continue in Example Rentals'));
+      assert.equal(await page.$('#owner-workspace'),null);assert.equal(progressSaves,savesBefore);
+      // Explicit personal search is distinct from the default management entry.
+      await page.goto(origin+'/seeker?purpose=rental',{waitUntil:'networkidle0'});
+      await page.waitForSelector('#seeker-home-heading');
+      assert.equal(await page.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),tenantId);
+      await page.goto(origin+'/enquire?listingId=66666666-6666-4666-8666-666666666666&country=LK',{waitUntil:'networkidle0'});
+      await page.waitForSelector('#enquiry-message');
+      assert.equal(await page.$eval('.enquiry-send',button=>button.disabled),true,'Explicit consent and a message remain required');
+      await page.setViewport({width:1365,height:900});await page.screenshot({path:'enquiry-browser-proof/owner-personal-enquiry-desktop.png',fullPage:true});
+      await page.setViewport({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await page.screenshot({path:'enquiry-browser-proof/owner-personal-enquiry-mobile.png',fullPage:true});
+      await page.click('a[href="/owner-start"]');
+      await page.waitForFunction(()=>document.body.innerText.includes('Continue in Example Rentals'));
+      await page.click('a[href="/dashboard/properties"]');
+      await page.waitForFunction(()=>location.pathname==='/dashboard/properties');
+      assert.equal(await page.evaluate(()=>localStorage.getItem('khrental.activeTenantId')),tenantId);
       // Render the actual PropertyForm and use the production save client.
       for(const category of ['residential','retail','office']){
         await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});

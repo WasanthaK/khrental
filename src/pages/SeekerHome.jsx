@@ -7,9 +7,10 @@ const SeekerHome = ({
   user = null,
   membership,
   memberships,
+  personalRentalVerified = false,
   tenantContextVerified = false
 }) => {
-  const allowed = isVerifiedTenantlessSeeker({
+  const allowed = personalRentalVerified || isVerifiedTenantlessSeeker({
     user, membership, memberships, tenantContextVerified
   });
 

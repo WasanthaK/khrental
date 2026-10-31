@@ -41,6 +41,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
   const actor={actorId:uuid(),authId:uuid(),sessionId:uuid()},authUser=uuid(),email=uuid()+'@example.invalid';
   await q("INSERT app_users(id,auth_id,tenant_id,name,email,role,user_type,status) VALUES(@actorId,@authId,NULL,'Synthetic seeker',@email,'authenticated','seeker','active')",{...actor,email});
   await q(`INSERT auth_users(id,auth_id,app_user_id,email,role,metadata) VALUES(@authUser,@authId,@actorId,@email,'authenticated',N'{"global_email_verified":true}')`,{...actor,email,authUser});
+  await q('INSERT public_signup_challenges(email_normalized,sent_at,consumed_at) VALUES(@email,SYSUTCDATETIME(),SYSUTCDATETIME())',{email});
   await q('INSERT auth_sessions(id,auth_user_id,expires_at) VALUES(@sessionId,@authUser,DATEADD(day,1,SYSUTCDATETIME()))',{...actor,authUser});
   const saved=await enquiries.submit(actor,parseEnquiry({listingId:p.listingId,country:'LK',requestId:uuid(),message:'Synthetic rental enquiry',consent:true}));
   const id=saved.receipt.id;
@@ -79,7 +80,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal((await q('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:c.actor.actorId}))[0].n,1);
  assert.equal((await q('SELECT role FROM tenant_memberships WHERE app_user_id=@id',{id:c.actor.actorId}))[0].role,'rentee');
  assert.equal((await enquiries.list(c.actor,false,0,true)).items[0].id,c.id,'Converted identity retains own enquiry history');
- await assert.rejects(enquiries.list(c.actor),{code:'ENQUIRY_ACTOR_REQUIRED'},'General seeker eligibility is not relaxed');
+ assert.equal((await enquiries.list(c.actor)).items[0].id,c.id,'Personal enquiry history remains actor-owned after joining a workspace');
  await assert.rejects(q('UPDATE agreements SET rentamount=101 WHERE id=@id',{id:agreementId}),e=>e.number===51102);
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:agreementId}),e=>e.number===51104);
  await q("UPDATE agreements SET signature_status='completed',signature_completed_at=SYSUTCDATETIME() WHERE id=@id",{id:agreementId});
@@ -96,7 +97,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await q("UPDATE agreements SET terms=JSON_MODIFY(terms,'$.billingDay',10) WHERE id=@id",{id:agreementId});
  await assert.rejects(store.change(c.actor,c.id,request('withdraw',3)),{code:'RENTAL_ALREADY_ACTIVE'});
  await q("UPDATE tenant_memberships SET status='revoked' WHERE app_user_id=@id",{id:c.actor.actorId});
- await assert.rejects(store.get(c.actor,c.id),{code:'ENQUIRY_ACTOR_REQUIRED'});
+ assert.equal((await store.get(c.actor,c.id)).agreement.id,agreementId,'Revoked workspace access does not erase verified personal rental history');
  // Different seekers race for overlapping whole-property/unit holds.
  const multi=await property(2),whole=await candidate(multi),unit=await candidate(multi);
  await store.change(owner,whole.id,request('issue',0,true,terms()),true);

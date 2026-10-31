@@ -105,6 +105,8 @@ const PublicRoute = ({ children }) => {
   }
 
   if (isAuthenticated && user) {
+    const explicitTask=ownerSetupPath(location.search)||enquiryReturnPath(location.search);
+    if(user.tenantContextVerified===false&&explicitTask){return <Navigate to={explicitTask} replace />;}
     if(location.pathname==='/owner-sign-up'){
       const country=new URLSearchParams(location.search).get('country')==='BN'?'BN':'LK';
       return <Navigate to={getOwnerContinuationPath({user,membership})||getExistingPropertyWorkspacePath({user,membership})||'/owner-start?country='+country} replace />;

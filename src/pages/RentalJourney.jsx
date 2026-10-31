@@ -25,7 +25,7 @@ const RentalJourney=()=>{
     {!loading&&!isAuthenticated&&<Link to="/login" className="underline">Sign in to continue</Link>}
     {error&&<p role="alert" className="text-red-700">{error}</p>}
     {isAuthenticated&&!current&&!error&&<p role="status">Loading rental journey…</p>}
-    {current?.items.length===0&&<div className="seeker-empty"><div className="seeker-empty-icon" aria-hidden="true">⌂</div><h2>{offset>0?'You’ve reached the end':'A place to plan your next move'}</h2><p>{offset>0?'Go back to see earlier enquiries and offers.':'When an owner makes you a rental offer, you can review its terms here. Start by finding a property and contacting its owner.'}</p><Link className="seeker-button" to="/seeker#browse-rentals">Find a rental</Link></div>}
+    {current?.items.length===0&&<div className="seeker-empty"><div className="seeker-empty-icon" aria-hidden="true">⌂</div><h2>{offset>0?'You’ve reached the end':'A place to plan your next move'}</h2><p>{offset>0?'Go back to see earlier enquiries and offers.':'When an owner makes you a rental offer, you can review its terms here. Start by finding a property and contacting its owner.'}</p><Link className="seeker-button" to="/seeker?purpose=rental#browse-rentals">Find a rental</Link></div>}
     {current?.items.map(item=><article key={identity+':'+item.id} className="seeker-card space-y-3">
       <h2 className="text-xl font-semibold">{item.title}</h2><p>Enquiry: {item.status}</p>
       <p className="whitespace-pre-wrap">{item.message}</p>{item.response&&<p className="whitespace-pre-wrap">Owner response: {item.response}</p>}

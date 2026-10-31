@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolveVerifiedSeekerContext } from '../src/api/auth/seekerContext.js';
+import { resolveVerifiedSeekerContext, resolvePersonalRentalContext } from '../src/api/auth/seekerContext.js';
 
 const routerSource = readFileSync(
   new URL('../src/api/platform/router.js', import.meta.url), 'utf8'
@@ -112,10 +112,42 @@ test('seeker context endpoint remains read-only, bearer-only, and disabled by de
   assert.match(endpoint, /createTenantContextMiddleware\(\{ requireUser: true \}\)/);
   assert.match(endpoint, /PUBLIC_SEEKER_CONTEXT_ENABLED !== 'true'/);
   assert.match(endpoint, /req\.authSession\?\.record\?\.appUserId/);
-  assert.match(endpoint, /resolveVerifiedSeekerContext\(/);
+  assert.match(endpoint, /req\.query\.purpose==='rental'\?resolvePersonalRentalContext:resolveVerifiedSeekerContext/);
   assert.match(endpoint, /res\.status\(401\)/);
   assert.match(endpoint, /res\.status\(503\)/);
   assert.match(endpoint, /Cache-Control', 'no-store, private'/);
   assert.doesNotMatch(endpoint, /\b(?:INSERT|UPDATE|DELETE)\b|\b(?:issueAuthSession|buildSession|createTenant)\s*\(/);
   assert.match(mainServerSource, /app\.use\('\/api', createSessionAuthMiddleware\(\)\)/);
+});
+
+
+test('verified personal rental context admits an organization member without tenant authority', async()=>{
+  const current=fixture();current.authSession.sessionId='live-session';current.query=async()=>[{id:userId}];
+  for(const role of ['authenticated','admin','staff','rentee']){
+    const input={...current,authSession:{...current.authSession,record:{...current.authSession.record,role}},
+      user:{...current.user,role,user_type:'staff',tenant_id:'organization-a'},
+      tenantContext:{...current.tenantContext,tenantId:'organization-a',membership:{role:'admin'},memberships:[{role:'admin'}],resolution:'single-membership'}};
+    assert.deepEqual(await resolvePersonalRentalContext(input),{verified:true,eligible:true,userType:'rental',tenantId:null});
+    assert.deepEqual(await resolveVerifiedSeekerContext(input),{verified:false,eligible:false},'Legacy tenantless signup proof remains strict');
+  }
+});
+test('personal rental proof rejects unverified, mismatched, inactive and delegated identities',async()=>{
+  const current=fixture();current.authSession.sessionId='live-session';current.query=async()=>[{id:userId}];
+  for(const patch of [
+    {authSession:null}, {authSession:{...current.authSession,sessionId:null}},
+    {authSession:{...current.authSession,record:{...current.authSession.record,metadata:{global_email_verified:false}}}},
+    {user:{...current.user,id:'foreign'}},{user:{...current.user,auth_id:'foreign'}},
+    {user:{...current.user,email:'foreign@example.invalid'}},{user:{...current.user,role:'admin'}},
+    {user:{...current.user,status:'inactive'}},{user:{...current.user,active:false}},
+    {user:{...current.user,is_dev_bypass:true}},
+    {tenantContext:{...current.tenantContext,requestedTenantId:'foreign'}},
+    {tenantContext:{...current.tenantContext,identity:{devBypassRole:'admin'}}}
+  ]){assert.deepEqual(await resolvePersonalRentalContext({...current,...patch}),{verified:false,eligible:false});}
+});
+
+
+test('editable verification metadata cannot replace a consumed email proof',async()=>{
+  const current=fixture();current.authSession.sessionId='live-session';
+  for(const rows of [[],null]){assert.deepEqual(await resolvePersonalRentalContext({...current,query:async()=>rows}),{verified:false,eligible:false});}
+  await assert.rejects(resolvePersonalRentalContext({...current,query:async()=>{throw new Error('Ledger unavailable');}}),/Ledger unavailable/);
 });
