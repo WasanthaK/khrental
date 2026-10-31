@@ -1,5 +1,27 @@
 # KH Rentals Execution Plan
 
+## Live customer-purpose test: owner return and rental search — 31 October 2026
+
+**Owner-authorized live test, using the existing authenticated demo account. No password was re-entered, session cleared, account re-created, workspace submitted, consent checked or enquiry sent.** This proves the session-restoration/navigation cases below, not a fresh password-login handshake or an unfinished new-owner account.
+
+| Case | Observed outcome | Acceptance |
+| --- | --- | --- |
+| Fresh application document at Properties | Restored the same administrator and existing workspace/property. | PASS — session restoration and property persistence |
+| Public owner page → Sign in to the app | Preserved ownerCountry=LK, but the first transition showed workspace creation despite an existing workspace/property. Reloading owner-start restored “Continue in [existing workspace]” and “Open my properties”; that action opened the existing property list. | FAIL / intermittent — existing-owner entry must not depend on reload; root cause not yet established |
+| Ordinary /login with the existing valid session | Restored the administrator dashboard with one property in the existing workspace. | PASS — authenticated entry; not a fresh credential test |
+| Same account → residential category → selected public property | Inventory, public photograph, rent and selected listing/country survived into Express your interest. | PASS — discovery and selected-property context |
+| Same owner account → selected-property enquiry | The app showed “A verified personal seeker account is required.” No message form was available. | FAIL — UX-03 / BJ-06 one-account purpose switching |
+| Rental-search Overview → management | Returned the same account to its existing dashboard. The navigation does not provide a complete deliberate personal-search/management switch. | Management preserved; UX-03 still OPEN |
+
+**Source-supported gap:** src/api/auth/seekerContext.js intentionally rejects any current or historical organization membership and tenant association; src/api/enquiries/router.js reuses that tenantless-only proof for personal enquiries. This explains the observed dual-purpose denial. Do not simply remove checks or reuse organization administration authority for personal rental actions. The next bounded correction must provide verified, actor-owned personal rental access for an account that also manages property, retain selected-property intent and the selected management workspace, and preserve consent, participant/owner boundaries and organization isolation.
+
+**Owner-entry investigation:** src/hooks/useAuth.jsx currently falls back to profile-only state when fresh tenant context fails; src/pages/OwnerSetup.jsx interprets absence of a resolved existing workspace as new setup and can autosave its displayed draft. This is an investigation lead, not a proven cause of the live intermittent transition. Test missing/failed/delayed context separately from a confirmed zero-membership result before correcting this entry. Do not create a second workspace to work around it.
+
+**Immediate next scope:** correct these two observed purpose-continuity defects, then retest the same account across both purposes and the existing-owner handoff. Live unfinished-owner ordinary-login/new-browser recovery remains OPEN because this demo account has already completed its workspace and first property; existing isolated browser/SQL coverage remains separate evidence. Continue the ordered UX-04/UX-05/UX-06 entry work, UX-08 filters and the genuine rental lifecycle afterward. Keep #459 OPEN; subscriptions remain later. This update records test evidence only; no serving source, permissions or runtime configuration changed.
+
+---
+
+
 ## Property save and maintenance correction released — 31 October 2026
 
 **Maintenance release and live form verification PASS.** Application #41212951883 SUCCESS with 808/808 tests and build, Ready revision 0000436, deterministic startup, live MSSQL, expected runtime and exact serving code SHA `437209ac6281c977035ded233537f68bb6f575cd`. Independent browser build-info matches. The existing demo workspace administrator's Maintenance tab loads normally; Create New Request now displays the newly saved workspace property, without the renter-tenancy verification error, and Submit is available. Cancel returns to the expected empty list; the normal Create New Request link returns to the working form. Desktop live form wording/layout reviewed; final-head desktop/390px screenshots and real SQL/browser save, controlled failure/retry, reload and isolation proof are recorded below. No real repair request or fabricated maintenance work was submitted to production. Actual customer repairs, image-upload bytes and full maintenance lifecycle acceptance remain distinct from this bounded correction.
