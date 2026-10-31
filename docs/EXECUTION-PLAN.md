@@ -14,6 +14,20 @@ The owner confirms there are no public clients and explicitly directs: open the 
 ---
 
 
+### Owner testing release evidence — 31 October 2026
+
+PR #467 is merged at `d51a69db934c1b22e864e0989f4b6096bf243b1a` (reviewed head `6cb1c9712fc19b1bb59c4eafe2a371cd6077d8a4`). Application release #41150326835 PASS: 795/795 merged tests + build; Ready revision 0000430, exact serving fingerprint, deterministic startup, live MSSQL and expected browser runtime. Marketing #41150326731 PASS. The owner path is exposed for development testing without waiting for Stripe/commercial launch.
+
+Implemented: verified global account → owner/country continuation across email and sign-in → own development-testing workspace/admin membership → first-property form with country preselected. No payment is collected. SQL creation is transactional/idempotent and requires reciprocal identity plus a completed verification/invitation record for this credential. Editable metadata alone cannot authorize it; global roles and existing default membership preferences are unchanged. Pending responses preserve a newly changed signed-in account.
+
+Reviewed-head CI PASS: application #41149932240 (795/795/build), journey #41149932229 (71 contracts, actual auth/verification, disposable SQL, owner and existing enquiry/offer browser journeys), billing SQL #41149932288, billing browser #41149932319, listing #41149932350, marketing #41149932220 (11 pages × 4 viewports), webhook #41149932308. Exact-head desktop/390px owner setup and marketing screenshots reviewed. The owner fixture uses a stand-in for the final first-property destination; it does not establish actual production property creation by a new owner.
+
+Live post-release read-only review: owner marketing no longer has the LIMITED PUBLIC PILOT banner or closed-registration message; Create owner account navigates to owner-start with LK retained, then to the enabled owner signup form. No account request was submitted. Public rental inventory initially showed temporary unavailability during rollout, then loaded after Ready/reload; WATER FALL VILLA photo/rent/detail and Express your interest observed. No cause beyond the timing is inferred. Browser pages left available; no live sign-out, browser-data clearing, customer account/workspace, enquiry, signature or payment write performed.
+
+Remaining acceptance: reproduce the reported real sign-in return and perform a real verified owner signup/workspace/first-property test plus genuine rental lifecycle acceptance. These remain tests to execute while the product is open, not reasons to close it until the full product is complete. Advanced search filters remain unimplemented placeholders (including residual helper copy referencing a pilot); do not represent those as a subscription/entitlement gate. No overall operational-website or paid-launch completion claim.
+
+---
+
 ## Controlling customer journeys, commercial decisions and implementation order — 30 October 2026
 
 **Authority:** owner's clarified decisions in the Quixo.Homes project conversation, confirmed with “yes update the canonical plan and then we can start”. This section controls over conflicting earlier checkpoints below, including register-before-browsing, a separate listing fee, permanently hardcoded USD 5 pricing or tenant-admin pricing controls. Earlier sections remain historical evidence, not current completion claims.
