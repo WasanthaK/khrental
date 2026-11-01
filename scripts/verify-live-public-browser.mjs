@@ -61,7 +61,8 @@ try{
     await page.waitForFunction(()=>!!document.querySelector('[data-public-listing-cards] .listing'),{timeout:22000});
     const title=await page.$eval('[data-public-listing-cards] h3',e=>e.textContent);
     assert.ok(title.trim().length>0,'Public property detail has name');
-    const enquiryHref=await page.$eval('a[href*="/enquire?listingId="]',a=>a.href).catch(()=>null);
+    await page.waitForSelector('a[href*="/enquire?listingId="]',{timeout:12000});
+    const enquiryHref=await page.$eval('a[href*="/enquire?listingId="]',a=>a.href);
     if(enquiryHref){
       const intent=new URL(enquiryHref);
       assert.equal(intent.origin,app,'Enquiry opens authenticated app');
