@@ -1,5 +1,17 @@
 # KH Rentals Execution Plan
 
+## Read-only production rental entry acceptance — 1 November 2026
+
+**Public entry/serving gate materially advanced; actual rental transaction still OPEN.** PR #477 merged at `43953e616465da5c409f448854379a8ee507683c` after exact-head read-only production probe #41300855915 PASS and application verification #41300855998 PASS (PR deployment skipped). The probe has no credentials or customer mutations, and emits only counts/HTTP/build identity. It runs GETs to real production domains rather than synthetic browsing fixtures.
+
+First runner probe #41300728030 reached the app but observed `/api/mssql/health` HTTP **503** and correctly failed. A repeat probe #41300794073 observed HTTP **200**, connection ready. The extended final-head run #41300855915 again observed HTTP **200**, connection ready. Treat the initial 503 as an observed intermittent health fault; its cause is not established. Monitor repeat health checks rather than concealing this result or claiming a permanent fix.
+
+Final-head live evidence: app serving build SHA `129ab69a3cbd0321cd5a93706cce18ac3a759661` (UX-04/05/06), 23 public GET checks PASS; root + LK/BN pages, each of residential/commercial/retail/office routes, rendered marketing HTML for UX-08 filter inputs and direct UX-05 owner-registration links. Public catalogue: LK **9** eligible listings, BN **0**; country isolation checked. Three selected LK public details matched their listings; all three returned enquiry-open status. No actual enquiry submitted; no customer consent, viewing, application, offer, agreement, signature, deposit or tenancy activation was fabricated. Marketing UX-08 controls are present in serving HTML, but real-browser filter interaction and mobile visual acceptance remain OPEN. The app serving SHA is **not** UX-08 merged commit; UX-08 changes were public-marketing-only, and this probe does not establish app rollout of the later source.
+
+**Next sequential gate:** browser-test actual marketing filter interactions and selected-property → authenticate → valid enquiry form using the real current session without sending unless explicitly approved; then conduct one owner/seeker authorized complete transaction with durable state readback at each stage. Review production 503 recurrence separately. Keep canonical #459 OPEN, subscriptions later.
+
+---
+
 ## Complete customer transaction audit and acceptance plan — 1 November 2026
 
 **Audit type: repository/canonical-source review, not a production browser acceptance.** Reviewed PROJECT_RULES.md, AUTHENTICATION-LIFECYCLE.md, QUIXO-LISTING-TO-SIGNING-JOURNEY.md, QUIXO-PROPERTY-ENQUIRIES.md, QUIXO-PROPERTY-VIEWINGS.md, QUIXO-OFFERS-TO-TENANCY.md, PropertyEnquiry.jsx, OwnerEnquiries.jsx, PropertyViewing.jsx, PropertyApplication.jsx, PropertyOffer.jsx, RentalJourney.jsx, TenancyOnboarding.jsx, tenancyActivationGuard.js and offerStore.js. Public production URLs/build-info were unreachable from the review environment; no authenticated production browser session or customer transaction was used. Source presence, fixture CI, protected release and true participant acceptance are distinct evidence levels.
