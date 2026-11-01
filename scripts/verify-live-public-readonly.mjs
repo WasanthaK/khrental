@@ -53,7 +53,18 @@ for(const [country,code] of [['lk','LK'],['bn','BN']]){
       assert.equal(Object.hasOwn(item,privateKey),false,'No private listing key');
     }
   }
-  console.log('PUBLIC_MARKET_READONLY=PASS country='+code+' inventoryCount='+catalog.data.length);
+  let detailsChecked=0,enquiryEligible=0;
+  for(const item of catalog.data.slice(0,3)){
+    const property=await get('/api/public-listings/'+encodeURIComponent(item.id)+'?country='+code,{json:true});
+    assert.equal(property.data?.id,item.id,'Public detail retains selected listing');
+    assert.equal(property.data?.country,code,'Property detail stays in selected market');
+    assert.equal(property.data?.title,item.title,'Listing title preserved on detail');
+    const enquiry=await get('/api/public-listings/'+encodeURIComponent(item.id)+'/enquiry-status?country='+code,{json:true});
+    assert.ok(typeof enquiry.data?.enquiriesOpen==='boolean','Enquiry availability is explicit');
+    if(enquiry.data.enquiriesOpen)enquiryEligible++;
+    detailsChecked++;
+  }
+  console.log('PUBLIC_MARKET_READONLY=PASS country='+code+' inventoryCount='+catalog.data.length+' detailsChecked='+detailsChecked+' enquiryOpenAmongChecked='+enquiryEligible);
 }
 console.log('PUBLIC_ROUTE_PROBES=PASS servingBuild='+build.buildSha+' checks='+requests.length);
 assert.ok(healthReady,'LIVE_PUBLIC_READONLY=BLOCKED: app database health is not ready');
