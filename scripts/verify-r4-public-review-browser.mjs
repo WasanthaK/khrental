@@ -91,7 +91,7 @@ try{
     assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/Owner self-registration is not open|New customer onboarding is not yet open|New owner registration is not open/);
     if(p.endsWith('/owners/')){
       const country=p.startsWith('/bn/')?'BN':'LK';
-      assert.ok(data.links.includes('https://app.quixo.homes/owner-start?country='+country),p+' working owner entry');
+      assert.ok(data.links.includes('https://app.quixo.homes/owner-sign-up?country='+country),p+' working owner registration entry');
       if(width===390||width===1280){
         fs.mkdirSync('verification-browse-proof',{recursive:true});
         await page.screenshot({path:'verification-browse-proof/owner-marketing-'+country+'-'+width+'.png',fullPage:true});
