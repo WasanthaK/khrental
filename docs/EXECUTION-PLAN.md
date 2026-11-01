@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## UX-04/UX-05/UX-06 entry changes merged — 1 November 2026
+
+PR #475 merged at `129ab69a3cbd0321cd5a93706cce18ac3a759661` from reviewed head `8ddd33cc11aa249ceea56d4b8286c54a48385a64`. Application verification #41268505308 PASS (deploy job skipped on PR), public website browser #41268505293 PASS, enquiry journey #41268505296 PASS. Public responsive artifact 13067888005 and enquiry-browser artifact 13068540920 were generated; manual visual inspection of artifact contents and live post-merge acceptance remain pending. The original stale owner-entry assertion was corrected in the same PR after initial failure.
+
+Delivered: both customer-purpose actions prominent on root/LK/BN entry; direct owner account creation from LK/BN owner marketing; owner-country switch and account/verification/workspace/property guidance; simplified context-specific sign-in and workspace wording. No existing approved imagery, public category routes, credentials, tenant authority, consent, schema, payments or subscriptions changed. **Do not claim production deployment or UX acceptance from the PR checks**. Verify main-push release and actual serving build, inspect desktop/390px screenshots and live task navigation before marking UX-04/05/06 accepted. Canonical #459 and genuine enquiry-to-tenancy acceptance remain open; UX-08 follows.
+
+---
+
 ## Customer-purpose correction deployed and live-verified — 31 October 2026
 
 PR #474 deployment #41220067874 SUCCESS: 813/813 tests/build, Ready revision 0000437, exact serving SHA `b814c0efc293c779fcc7d3d2251af0d0fdf73d04`, deterministic startup, live MSSQL and expected runtime. Independent browser build-info matches. Final reviewed-head CI and desktop/390px evidence are recorded below.
