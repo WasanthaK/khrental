@@ -195,7 +195,7 @@ try{
     const country=market.toLowerCase();
     const path='/'+country+'/search/';
     await tab.goto(origin+path+'?type=commercial&location=Kandy&maxRent=200000&privateToken=discard',{waitUntil:'networkidle0'});
-    assert.deepEqual(await tab.$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['River office'],'UX-08 combined commercial/location/rent filters');
+    assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['River office'],'UX-08 combined commercial/location/rent filters');
     assert.equal(await tab.$eval('[data-rental-filter-status]',e=>e.textContent),'1 property matching your filters.');
     assert.equal(await tab.$eval('[data-rental-filters] input[name=location]',e=>e.value),'Kandy');
     assert.equal(await tab.$eval('[data-rental-filters] input[name=maxRent]',e=>e.value),'200000');
@@ -213,7 +213,7 @@ try{
     assert.equal(new URL(tab.url()).searchParams.get('location'),'Kandy','filters submit location');
     assert.equal(new URL(tab.url()).searchParams.get('maxRent'),'100000','filters submit rent');
     assert.equal(new URL(tab.url()).searchParams.get('type'),'residential','filters submit keeps category');
-    assert.deepEqual(await tab.$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['Waterfall home']);
+    assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['Waterfall home']);
     assert.equal(requests,4,'only one anonymous catalog request per page load');
     fs.mkdirSync('verification-browse-proof',{recursive:true});
     await tab.setViewport({width:390,height:844});
