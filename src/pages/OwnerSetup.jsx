@@ -131,10 +131,10 @@ export default function OwnerSetup(){
       {String(existingMembership?.role).toLowerCase()==='admin'&&<Link className="block underline" to={'/dashboard/properties/new?country='+country}>Add a property</Link>}
       <p className="text-sm text-slate-600">For a separately managed business, <Link className="underline" to={'/owner-start?country='+country+'&newWorkspace=1'}>set up another workspace</Link>.</p>
     </section>:<form onSubmit={submit} className="space-y-4">
-      <p className="text-sm font-medium text-blue-700">Account → Email verification → Workspace → First property</p>
-      <h2 className="text-xl font-semibold">Set up your property workspace</h2>
+      <p className="text-sm font-medium text-blue-700">Account ✓ → Email verification → Workspace → First property</p>
+      <h2 className="text-xl font-semibold">Step 3 of 4 · Set up your workspace</h2>
       <p className="text-sm text-slate-600">A workspace is your account for managing properties. It keeps your properties, team, agreements and invoices together. One workspace can manage many properties.</p>
-      <p className="text-sm text-slate-600">Use your name or business name. Next, add your first property and its photos.</p>
+      <p className="text-sm text-slate-600">Use your name or business name. Next: add your first property and photos (step 4 of 4).</p>
       {existingProperties&&<Link className="block underline" to={'/owner-start?country='+country}>Back to my current workspace</Link>}
       <label className="block" htmlFor="owner-workspace">Workspace name</label>
       <input id="owner-workspace" className="w-full rounded-lg border p-3" required disabled={busy} maxLength={200} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name or property business"/>
