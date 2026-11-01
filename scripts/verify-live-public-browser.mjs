@@ -17,6 +17,20 @@ try{
     await page.setViewport({width,height:900,deviceScaleFactor:1});
     await page.setRequestInterception(true);
     const rejects=[];
+    const catalogObservations=[];
+    const catalogPath='/api/public-listings?country=LK';
+    page.on('response',response=>{
+      const url=new URL(response.url());
+      if(url.origin===app&&url.pathname==='/api/public-listings'){
+        catalogObservations.push({status:response.status(),path:url.pathname,market:url.searchParams.get('country')});
+      }
+    });
+    page.on('requestfailed',request=>{
+      if(request.url().startsWith(app+'/api/public-listings')){
+        catalogObservations.push({failure:request.failure()?.errorText||'unknown',path:'/api/public-listings'});
+      }
+    });
+    page.on('pageerror',error=>catalogObservations.push({scriptError:String(error.message||'script error').slice(0,120)}));
     page.on('request',r=>{
       // The only external destinations expected for anonymous catalog browsing.
       // GET-only guard prevents accidental customer action or credential replay.
@@ -40,7 +54,8 @@ try{
     if(!before){
       await page.screenshot({path:'live-public-browser-proof/lk-missing-inventory-'+width+'.png',fullPage:true});
       console.log('PUBLIC_BROWSER_LISTINGS_BLOCKED viewport='+width+
-        ' visibleState='+JSON.stringify((await page.$eval('[data-public-listing-cards]',n=>n.textContent)).slice(0,120)));
+        ' visibleState='+JSON.stringify((await page.$eval('[data-public-listing-cards]',n=>n.textContent)).slice(0,120))+
+        ' catalogNetwork='+JSON.stringify(catalogObservations));
     }
     assert.ok(before>0,'Expected at least one real residential listing in LK');
     assert.ok(await page.$('input[name=location]')&&await page.$('input[name=maxRent]'),'UX-08 inputs are live');
