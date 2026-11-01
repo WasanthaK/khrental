@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## UX-08 merged; serving release and live acceptance pending — 1 November 2026
+
+PR #476 MERGED at `0931ecf73b211e9c7687b38ee187e1abba592d11`, final reviewed head `17bfd20cfcdae101bc9bebf011dd4089339e17d3`. Exact-head application/build #41272161279 PASS, public-listing privacy/visibility #41272161240 PASS, and synthetic multi-viewport public website browser #41272161204 PASS with artifact 13069233244. The browser run exercised public location/maximum-monthly-rent combinations, filter form submission/clear, category and country carryover, no-match copy and responsive layout. The initial test-only error in evaluating a set of cards was corrected and the final run passed. No customer enquiries, consent, payments, auth states or tenancy records were written.
+
+This is **merged-source evidence, not confirmed live deployment**. Post-merge GitHub Actions release status, exact serving build SHA on app and marketing site, visual screenshot review and actual live filter interactions remain OPEN; do not mark full UX-08 or website accepted yet. UX-04/05/06 production serving acceptance remains separately open. Canonical #459 genuine enquiry-to-tenancy and subsequent subscription milestones remain open.
+
+---
+
 ## UX-08 — Public search filters in review — 1 November 2026
 
 Canonical #459 continues after UX-04/05/06. Draft PR #476 replaces disabled Sri Lanka/Brunei search widgets with functional public-data location/property-name and maximum monthly rent filters. Category and country selection continue using only allowlisted URL fields; listing/card photos and selected-property enquiry behavior remain unchanged. The country homepages now direct visitors to working search rather than depicting disabled controls. Unpublished bedrooms, bathrooms, furnishing, floor area and permitted use are not shown as available filters. This is anonymous read-only browsing, not a new backend authority, pricing/subscription feature or permission grant.
