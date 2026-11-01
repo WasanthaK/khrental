@@ -135,7 +135,7 @@ const Login = () => {
             Welcome back
           </h1>
           <p className="auth-subtitle">
-            {ownerSetupPath(location.search)?'Sign in to manage your properties or continue setting up your first property.':'Sign in to continue your rental search or manage your properties.'}
+            {ownerSetupPath(location.search)?'Sign in to continue managing your property. Your existing workspace and setup progress will be restored.':'Sign in to continue where you left off.'}
           </p>
           
           {devBypassActive && (
@@ -185,12 +185,10 @@ const Login = () => {
 
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              {isPublicSignupUiEnabled() && (
-                <Link to={'/seeker-sign-up'+enquiryLoginSearch(location.search)} className="ml-3 font-medium text-blue-600 hover:text-blue-500">
-                  Find a rental · Create free account
-                </Link>
+              {isPublicSignupUiEnabled() && (ownerSetupPath(location.search)
+                ? <Link to={'/owner-sign-up?country='+new URLSearchParams(location.search).get('ownerCountry')} className="font-medium text-blue-600 hover:text-blue-500">New owner? Create an account</Link>
+                : <Link to={'/seeker-sign-up'+enquiryLoginSearch(location.search)} className="font-medium text-blue-600 hover:text-blue-500">New here? Create an account to find a rental</Link>
               )}
-              {isPublicSignupUiEnabled()&&<Link to="/owner-start" className="ml-3 block font-medium text-blue-600 hover:text-blue-500">List my property · Create owner account</Link>}
             </div>
             <div className="text-sm">
               <Link to="/reset-password" className="font-medium text-blue-600 hover:text-blue-500">
