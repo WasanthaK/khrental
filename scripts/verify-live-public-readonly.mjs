@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 const app='https://app.quixo.homes';
 const site='https://quixo.homes';
 const requests=[];
-const get=async(path,{json=false}={})=>{
+const get=async(path,{json=false,allowError=false}={})=>{
   const url=new URL(path,path.startsWith('/api/')||path==='/build-info.json'?app:site);
   assert.ok([app,site].includes(url.origin),'Unexpected probe origin');
   const controller=new AbortController();
@@ -14,6 +14,7 @@ const get=async(path,{json=false}={})=>{
     const response=await fetch(url,{method:'GET',redirect:'error',signal:controller.signal,
       headers:{Accept:json?'application/json':'text/html'},cache:'no-store'});
     requests.push({path:url.pathname+(url.search?'?type=selected':''),http:response.status});
+    if(allowError&&response.status!==200)return {http:response.status};
     assert.equal(response.status,200,url.pathname+' HTTP');
     assert.ok((response.headers.get('content-type')||'').includes(json?'json':'html'),url.pathname+' content type');
     const text=await response.text();
@@ -26,8 +27,9 @@ assert.match(home,/href="lk\/"/,'Root has Sri Lanka entry');
 assert.match(home,/href="bn\/"/,'Root has Brunei entry');
 const build=await get('/build-info.json',{json:true});
 assert.match(build.buildSha,/^[a-f0-9]{40}$/,'Serving app build has commit identity');
-const health=await get('/api/mssql/health',{json:true});
-assert.equal(health.connection,'ready','Read-only MSSQL health');
+const health=await get('/api/mssql/health',{json:true,allowError:true});
+const healthReady=health.connection==='ready';
+console.log('APP_MSSQL_HEALTH='+ (healthReady?'PASS':'BLOCKED')+' http='+(health.http||200));
 for(const [country,code] of [['lk','LK'],['bn','BN']]){
   const market=await get('/'+country+'/');
   assert.ok(market.includes('href="./search/"'),'Country homepage has rental search');
@@ -53,4 +55,6 @@ for(const [country,code] of [['lk','LK'],['bn','BN']]){
   }
   console.log('PUBLIC_MARKET_READONLY=PASS country='+code+' inventoryCount='+catalog.data.length);
 }
-console.log('LIVE_PUBLIC_READONLY=PASS servingBuild='+build.buildSha+' checks='+requests.length);
+console.log('PUBLIC_ROUTE_PROBES=PASS servingBuild='+build.buildSha+' checks='+requests.length);
+assert.ok(healthReady,'LIVE_PUBLIC_READONLY=BLOCKED: app database health is not ready');
+console.log('LIVE_PUBLIC_READONLY=PASS');
