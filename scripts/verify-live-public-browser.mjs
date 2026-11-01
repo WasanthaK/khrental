@@ -70,8 +70,44 @@ try{
       assert.ok(/^[0-9a-f-]{36}$/i.test(intent.searchParams.get('listingId')),'Selected listing reference retained');
     }
     await page.screenshot({path:'live-public-browser-proof/lk-detail-'+width+'.png',fullPage:true});
+    // The actual public-to-app transition must retain this exact property
+    // even for an anonymous visitor. No message or account action is sent.
+    const intent=new URL(enquiryHref);
+    const selectedListing=intent.searchParams.get('listingId');
+    const handoff=await page.goto(enquiryHref,{waitUntil:'networkidle2',timeout:45000});
+    assert.equal(handoff.status(),200,'Enquiry app page responds');
+    await page.waitForFunction(()=>{
+      const body=document.body.innerText;
+      return body.includes('Sign in to contact the owner')||
+        body.includes('Your selected property')||
+        body.includes('Property unavailable')||
+        body.includes('Property enquiries are not open yet');
+    },{timeout:25000});
+    const handoffState=await page.evaluate(()=>({
+      href:location.href,
+      text:document.body.innerText.slice(0,2200),
+      selectedTitle:document.querySelector('.enquiry-property-copy h2')?.textContent||'',
+      login:document.querySelector('a[href^="/login?"]')?.getAttribute('href')||'',
+      signup:document.querySelector('a[href^="/seeker-sign-up?"]')?.getAttribute('href')||'',
+      image:!!document.querySelector('.enquiry-photo')
+    }));
+    await page.screenshot({path:'live-public-browser-proof/lk-enquiry-handoff-'+width+'.png',fullPage:true});
+    assert.ok(handoffState.text.includes('Your selected property'),'Selected property shown after public-to-app transition');
+    assert.equal(handoffState.selectedTitle,title,'Selected property title is unchanged');
+    assert.ok(handoffState.text.includes('Sign in to contact the owner'),'Anonymous enquiry prompts sign-in');
+    for(const link of [handoffState.login,handoffState.signup]){
+      const target=new URL(link,app);
+      assert.equal(target.searchParams.get('listingId'),selectedListing,'Auth link retains selected listing');
+      assert.equal(target.searchParams.get('country'),'LK','Auth link retains selected country');
+    }
+    assert.equal(await page.$('button.enquiry-send'),null,'Anonymous visitor cannot send an enquiry');
+    await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.click('a[href^="/login?"]')]);
+    assert.equal(new URL(page.url()).searchParams.get('listingId'),selectedListing,'Login route retains property');
+    assert.equal(new URL(page.url()).searchParams.get('country'),'LK','Login route retains country');
+    assert.ok(await page.$('#email-address'),'Login form is available');
+    await page.screenshot({path:'live-public-browser-proof/lk-selected-login-'+width+'.png',fullPage:true});
     assert.deepEqual(rejects,[],'No private/mutating requests');
-    console.log(label+'=PASS viewport='+width+' initialCards='+before+' filteredEmpty=true restored=true propertyDetail=true enquiryLink='+(enquiryHref?'available':'not-offered'));
+    console.log(label+'=PASS viewport='+width+' initialCards='+before+' filteredEmpty=true restored=true propertyDetail=true enquiryLink=available selectedLogin=PASS');
     await context.close();
   }
 }finally{await browser?.close();}
