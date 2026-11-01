@@ -111,7 +111,7 @@ const PropertyMarketReadiness=()=>{
         disabled={saving!==null||!snapshot?.records?.length||snapshot?.records?.length<PAGE_SIZE}
         className="border rounded px-3 py-1 disabled:opacity-40">Next</button>
     </nav>}
-    <p className="text-xs text-gray-500 mt-4">Country assignment is an administrative classification, not a manual publishing approval. Public inventory remains disabled until the separate rollout gate is accepted.</p>
+    <p className="text-xs text-gray-500 mt-4">Country assignment determines which country's website a property is eligible for. Open the property to review its public listing details or choose not to advertise it.</p>
   </section>;
 };
 export default PropertyMarketReadiness;
