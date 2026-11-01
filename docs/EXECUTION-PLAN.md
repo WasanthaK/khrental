@@ -1,5 +1,18 @@
 # KH Rentals Execution Plan
 
+## Item 1 property and maintenance persistence acceptance — 1 November 2026
+
+Live authorized demo maintenance create/readback/reload/cancel/reload PASS in the existing owner workspace. Request `190ACAC8-65E8-488C-8D7C-5458A72CC6CA` (`MR-202611-OTH-190A`) was explicitly labelled as a test, low priority, Other, for Bamba Living. It is retained in **cancelled** state; no real repair or work completion was claimed. Detail view preserved the property and management-origin context. No staff assignment, actual repair, signature, payment or rental enquiry was fabricated.
+
+Live existing-property update persistence PASS: a temporary, clearly labelled test description was saved on Bamba Living, survived full reload, then the original blank description was restored and verified after another reload. Existing property identity, rent, category, country and availability display were preserved; no duplicate property was created. This supplements the historical first-property creation acceptance without claiming a fresh signup test.
+
+The broken Bamba Living card image is a **shared placeholder defect**, not a lost uploaded photo: the record has no photos and DEFAULT_IMAGE decoded to an SVG with invalid namespace `http://www.org/2000/svg`. Correct the shared placeholder to `http://www.w3.org/2000/svg` using readable percent-encoded SVG. Existing real images and protected image-delivery rules are unchanged. Existing image-delivery tests and production build PASS locally; release and live image decoding acceptance remain to be recorded.
+
+PR #481 is MERGED/DEPLOYED at `7fc65c9424b50b559adb63f50de584b42810a6a7`; workflow #41316418622 passed with 813/813 tests and production readiness/build checks. Fresh browser reload confirmed the corrected owner listing guidance. Canonical #459 and Item 1 remain OPEN for remaining real participant enquiry-to-tenancy acceptance; Item 2/subscriptions remain deferred. Owner additionally authorized numeric email-alias demo staff for subsequent checks; staff creation/invitation acceptance is separate from this persistence evidence.
+
+---
+
+
 ## Owner listing guidance correction — 1 November 2026
 
 Fresh production browser acceptance found the owner Properties screen still stating that public inventory was disabled, while actual public LK listings were visible. Replace that hard-coded historical rollout notice with customer guidance: country assignment determines the eligible country website, and the property page provides listing details and the opt-out control. This is a copy-only correction; it does not assert live publication status or change release settings, availability, privacy or authorization.
