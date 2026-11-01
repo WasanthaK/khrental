@@ -1,4 +1,5 @@
 import { requestMssqlApi } from './mssqlApiClient';
+import { fetchData } from './platformClient';
 import { normalizePropertyChecklist, normalizePropertyCoordinates } from '../utils/propertyDetailFields.js';
 
 const parseJsonValue = (value, fallback) => {
@@ -39,7 +40,10 @@ const normalizeProperty = (property) => {
 };
 
 export const listTenantProperties = async () => {
-  const properties = await requestMssqlApi('/api/mssql/properties?pageSize=500');
+  const { data: properties, error } = await fetchData({ table: 'properties', limit: 500 });
+  if (error) {
+    throw error;
+  }
   return Array.isArray(properties) ? properties.map(normalizeProperty) : [];
 };
 
