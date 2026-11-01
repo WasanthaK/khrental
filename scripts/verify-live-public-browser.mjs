@@ -31,8 +31,17 @@ try{
     const url=market+'/lk/search/?type=residential';
     const response=await page.goto(url,{waitUntil:'networkidle2',timeout:45000});
     assert.equal(response.status(),200,'Live LK rental search');
-    await page.waitForFunction(()=>document.querySelector('[data-public-listing-cards]')?.textContent?.trim()?.length>0,{timeout:22000});
+    await page.waitForFunction(()=>{
+      const area=document.querySelector('[data-public-listing-cards]');
+      return !!area&&(!!area.querySelector('article.listing')||
+        (!area.textContent.includes('Loading available properties')&&area.textContent.trim().length>0));
+    },{timeout:22000});
     const before=await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length);
+    if(!before){
+      await page.screenshot({path:'live-public-browser-proof/lk-missing-inventory-'+width+'.png',fullPage:true});
+      console.log('PUBLIC_BROWSER_LISTINGS_BLOCKED viewport='+width+
+        ' visibleState='+JSON.stringify((await page.$eval('[data-public-listing-cards]',n=>n.textContent)).slice(0,120)));
+    }
     assert.ok(before>0,'Expected at least one real residential listing in LK');
     assert.ok(await page.$('input[name=location]')&&await page.$('input[name=maxRent]'),'UX-08 inputs are live');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'No horizontal overflow');
