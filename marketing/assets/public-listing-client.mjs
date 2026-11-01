@@ -7,6 +7,32 @@ const kinds=['residential','commercial','retail','office'];
 const selectedKind=new URLSearchParams(location.search).get('type');
 const kindLabels={residential:'houses & apartments',commercial:'commercial properties',retail:'shops & retail',office:'offices & workspaces'};
 const detailPage=previewArea?.hasAttribute('data-public-listing-detail');
+// Only public catalog fields can be searched. URL parameters are navigation,
+// not authentication or authority; unknown parameters are never propagated.
+const isSearchPage=location.pathname.endsWith('/search/');
+const searchParameters=new URLSearchParams(location.search);
+const requestedLocation=isSearchPage?(searchParameters.get('location')||'').trim().slice(0,100):'';
+const locationQuery=requestedLocation.toLocaleLowerCase();
+const requestedRent=isSearchPage?searchParameters.get('maxRent'):null;
+const maximumRent=requestedRent&&/^\d{1,12}$/.test(requestedRent)&&Number(requestedRent)>0?Number(requestedRent):null;
+const filterForm=isSearchPage?document.querySelector('[data-rental-filters]'):null;
+if(filterForm){
+  filterForm.elements.location.value=requestedLocation;
+  filterForm.elements.maxRent.value=maximumRent===null?'':String(maximumRent);
+  filterForm.addEventListener('submit',event=>{
+    event.preventDefault();
+    const next=new URLSearchParams();
+    if(kinds.includes(selectedKind))next.set('type',selectedKind);
+    const locationValue=String(filterForm.elements.location.value||'').trim().slice(0,100);
+    const rentValue=String(filterForm.elements.maxRent.value||'').trim();
+    if(locationValue)next.set('location',locationValue);
+    if(/^\d{1,12}$/.test(rentValue)&&Number(rentValue)>0)next.set('maxRent',String(Number(rentValue)));
+    location.assign(location.pathname+(next.size?'?'+next.toString():''));
+  });
+  const clear=filterForm.querySelector('[data-clear-rental-filters]');
+  if(clear)clear.href=location.pathname+(kinds.includes(selectedKind)?'?type='+encodeURIComponent(selectedKind):'');
+}
+
 // This reminder is a browsing preference, never authentication or access proof.
 // It holds only a validated public property reference, never contact/credential data.
 {
@@ -51,18 +77,24 @@ const detailPage=previewArea?.hasAttribute('data-public-listing-detail');
     document.querySelector('main')?.before(banner);
   }
 }
-if(location.pathname.endsWith('/search/')){
+if(isSearchPage){
   for(const link of document.querySelectorAll('.search-tabs a')){
     const kind=new URL(link.href).searchParams.get('type');
     if((!kinds.includes(selectedKind)&&!kind)||kind===selectedKind)link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
+    const destination=new URL(link.href);
+    if(requestedLocation)destination.searchParams.set('location',requestedLocation);
+    if(maximumRent!==null)destination.searchParams.set('maxRent',String(maximumRent));
+    link.href=destination.pathname+destination.search;
   }
 }
-if(location.pathname.endsWith('/search/')&&kinds.includes(selectedKind)){
+if(isSearchPage){
   for(const link of document.querySelectorAll('.country-menu a,[data-country-switch]')){
     const destination=new URL(link.getAttribute('href'),location.origin);
     if(/^\/(lk|bn)\/search\/$/.test(destination.pathname)){
-      destination.searchParams.set('type',selectedKind);
+      if(kinds.includes(selectedKind))destination.searchParams.set('type',selectedKind);
+      if(requestedLocation)destination.searchParams.set('location',requestedLocation);
+      if(maximumRent!==null)destination.searchParams.set('maxRent',String(maximumRent));
       link.setAttribute('href',destination.pathname+destination.search);
     }
   }
@@ -96,10 +128,17 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
       list.replaceChildren();
       const heading=previewArea.querySelector('[data-public-listing-heading]');
       if(heading)heading.textContent=detailPage?'Property details':selectedKind&&kindLabels[selectedKind]?'Available '+kindLabels[selectedKind]:'Available registered rentals';
-      const visible=Array.isArray(items)?items.filter(item=>item?.country===market&&(!kinds.includes(selectedKind)||(selectedKind==='commercial'?['commercial','retail','office'].includes(item.category):item.category===selectedKind))):[];
+      const categoryMatches=item=>!kinds.includes(selectedKind)||(selectedKind==='commercial'?['commercial','retail','office'].includes(item.category):item.category===selectedKind);
+      const inCategory=Array.isArray(items)?items.filter(item=>item?.country===market&&categoryMatches(item)):[];
+      const visible=inCategory.filter(item=>(!locationQuery||[item.title,item.location].some(value=>typeof value==='string'&&value.toLocaleLowerCase().includes(locationQuery)))&&
+        (maximumRent===null||(Number.isFinite(item.monthlyRent)&&item.monthlyRent>0&&item.monthlyRent<=maximumRent)));
+      const filterStatus=document.querySelector('[data-rental-filter-status]');
+      if(filterStatus)filterStatus.textContent=visible.length+' '+(visible.length===1?'property':'properties')+' matching your filters.';
       if(!visible.length){
         const msg=document.createElement('p');
-        msg.textContent='No available registered rental properties are currently listed.';
+        msg.textContent=isSearchPage&&(requestedLocation||maximumRent!==null)&&inCategory.length
+          ?'No properties match these filters. Adjust or clear them to see more rentals.'
+          :'No available registered rental properties are currently listed.';
         list.append(msg);
         previewArea.hidden=false;
         return;

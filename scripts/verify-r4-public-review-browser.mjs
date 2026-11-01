@@ -98,7 +98,10 @@ try{
       }
     }
     assert.ok(data.scrollWidth<=width+2,p+' width '+width+' overflow '+data.scrollWidth);
-    assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
+    if(p.endsWith('/search/')){
+      assert.equal(data.forms,1,p+' search filters are a read-only catalog form');
+      assert.equal(data.enabledButtons,1,p+' only apply-filters control is enabled');
+    }else assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/','/lk/property/','/bn/property/'].includes(p);
     assert.deepEqual(data.scripts,(expectedListingPanel||p==='/')?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
     if(expectedListingPanel)assert.equal(data.livePanel,(p.startsWith('/lk/')?lkLive:bnLive)?'true':'false',p+' live country pages');
@@ -169,6 +172,58 @@ try{
     assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
     await tab.close();
   }
+  // UX-08: exercise public-only filtering, empty states, category/country
+  // continuity, and rejection of unrecognized query keys using local fixtures.
+  for(const market of ['LK','BN']){
+    const tab=await browser.newPage();
+    const categoryRows=[
+      {id:fixtureId,country:market,category:'residential',title:'Waterfall home',location:'Kandy',monthlyRent:100000,images:[]},
+      {id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',country:market,category:'retail',title:'City shop',location:'Colombo',monthlyRent:250000,images:[]},
+      {id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',country:market,category:'office',title:'River office',location:'Kandy',monthlyRent:180000,images:[]}
+    ];
+    await tab.setRequestInterception(true);
+    let requests=0;
+    tab.on('request',request=>{
+      if(request.url().startsWith(origin+'/'))return void request.continue();
+      if(request.url()===apiOrigin+'/api/public-listings?country='+market){
+        requests++;
+        return void request.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},
+          body:JSON.stringify({country:market,data:categoryRows})});
+      }
+      return void request.abort();
+    });
+    const country=market.toLowerCase();
+    const path='/'+country+'/search/';
+    await tab.goto(origin+path+'?type=commercial&location=Kandy&maxRent=200000&privateToken=discard',{waitUntil:'networkidle0'});
+    assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['River office'],'UX-08 combined commercial/location/rent filters');
+    assert.equal(await tab.$eval('[data-rental-filter-status]',e=>e.textContent),'1 property matching your filters.');
+    assert.equal(await tab.$eval('[data-rental-filters] input[name=location]',e=>e.value),'Kandy');
+    assert.equal(await tab.$eval('[data-rental-filters] input[name=maxRent]',e=>e.value),'200000');
+    const otherMarket=market==='LK'?'BN':'LK';
+    const switchTarget=await tab.$eval('[data-country-switch="'+otherMarket+'"]',e=>e.getAttribute('href'));
+    assert.equal(switchTarget,'/'+otherMarket.toLowerCase()+'/search/?type=commercial&location=Kandy&maxRent=200000','country carries only allowed filters');
+    assert.ok(!switchTarget.includes('privateToken'),'unknown filter never reaches another market');
+    assert.equal(await tab.$eval('[data-clear-rental-filters]',e=>e.getAttribute('href')),path+'?type=commercial','clear retains category');
+    await tab.goto(origin+path+'?type=residential&location=Neverhere',{waitUntil:'networkidle0'});
+    assert.equal(await tab.$eval('[data-public-listing-cards]',e=>e.textContent.includes('No properties match these filters')),true,'filtered-empty state');
+    await tab.goto(origin+path+'?type=residential',{waitUntil:'networkidle0'});
+    await tab.$eval('[data-rental-filters] input[name=location]',e=>{e.value='Kandy'});
+    await tab.$eval('[data-rental-filters] input[name=maxRent]',e=>{e.value='100000'});
+    await Promise.all([tab.waitForNavigation({waitUntil:'networkidle0'}),tab.click('[data-rental-filters] button[type=submit]')]);
+    assert.equal(new URL(tab.url()).searchParams.get('location'),'Kandy','filters submit location');
+    assert.equal(new URL(tab.url()).searchParams.get('maxRent'),'100000','filters submit rent');
+    assert.equal(new URL(tab.url()).searchParams.get('type'),'residential','filters submit keeps category');
+    assert.deepEqual(await tab.$$eval('[data-public-listing-cards] h3',els=>els.map(e=>e.textContent)),['Waterfall home']);
+    assert.equal(requests,4,'only one anonymous catalog request per page load');
+    fs.mkdirSync('verification-browse-proof',{recursive:true});
+    await tab.setViewport({width:390,height:844});
+    assert.ok(await tab.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'UX-08 filters fit mobile');
+    await tab.screenshot({path:'verification-browse-proof/search-filters-'+country+'-390.png',fullPage:true});
+    await tab.setViewport({width:1280,height:900});
+    await tab.screenshot({path:'verification-browse-proof/search-filters-'+country+'-1280.png',fullPage:true});
+    await tab.close();
+  }
+  console.log('QUIXO_UX08_FILTERS=PASS countries=2 public_fields_only category_market_continuity empty_state mobile');
   // Exercise actual homepage links, three categories, broad commercial and detail.
   if(lkLive)for(const kind of ['residential','retail','office','commercial']){
     const tab=await browser.newPage();

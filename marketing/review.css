@@ -58,3 +58,12 @@
 .listing-country-options a:hover,.listing-country-options a:focus-visible{background:#e9f4fa}
 .listing-country-options a.selected{background:#0B2545;color:#fff;border-color:#0B2545}
 @media(max-width:420px){.listing-country-filter{align-items:stretch}.listing-country-options{width:100%}.listing-country-options a{flex:1;padding:9px}}
+
+/* UX-08: only filters supported by the public listing feed are interactive. */
+.filters [data-rental-filters]{display:grid;gap:10px;margin-top:14px}
+.filters [data-rental-filters] label{font-size:13px;font-weight:750;color:var(--navy)}
+.filters [data-rental-filters] input{width:100%;min-height:44px;max-width:100%;box-sizing:border-box;border:1px solid #a9c2d2;border-radius:9px;padding:10px 12px;background:white;color:#0B2545}
+.filters [data-rental-filters] button{min-height:44px;border:0;border-radius:9px;background:#0B2545;color:white;font-weight:750;cursor:pointer}
+.filters [data-rental-filters] button:focus-visible,.filters [data-rental-filters] input:focus-visible{outline:3px solid #3B8DCC;outline-offset:2px}
+.filters [data-clear-rental-filters]{font-size:13px;text-align:center;text-decoration:underline}
+.filters [data-rental-filter-status]{font-size:13px;margin-top:16px}
