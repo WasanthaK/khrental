@@ -46,6 +46,8 @@ export default function SeekerSignUp() {
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">{ownerCountry?'Start managing your property':'Find your next place'}</h1>
         {!enabled ? <p className="mt-4 text-slate-600">Public registration is not available yet.</p> :
           <form onSubmit={submit} className="mt-6 space-y-4">
+            {ownerCountry && <><p className="text-sm font-medium text-blue-700">Step 1 of 4 · Create account</p><p className="text-sm text-slate-600">Next: verify email → set up your workspace → add your first property.</p><p className="text-sm text-slate-700">Property country: <strong>{ownerCountry==='LK'?'Sri Lanka':'Brunei Darussalam'}</strong>. <Link className="text-blue-700 underline" to={'/owner-sign-up?country='+(ownerCountry==='LK'?'BN':'LK')}>Change country</Link></p></>}
+
             <p className="text-sm text-slate-600">{ownerCountry?'Create your account to add a property, reach renters and manage your rental. No payment is collected during product testing.':'Create your free account to contact owners, arrange viewings and keep track of your rental search.'} We’ll email you a link to verify your address and set a password.</p>
             <label className="block text-sm font-medium" htmlFor="seeker-name">Full name</label>
             <input className="w-full rounded-lg border p-3" id="seeker-name" autoComplete="name"
