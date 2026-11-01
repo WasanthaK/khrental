@@ -38,7 +38,7 @@ const Dashboard = () => {
         setLoading(true);
         
         // DEBUG: Check user counts by type directly
-        const usersByType = await fetchAppUsers();
+        const usersByType = canViewTeam ? await fetchAppUsers() : [];
         
         let directRenteeCount = 0;
         
