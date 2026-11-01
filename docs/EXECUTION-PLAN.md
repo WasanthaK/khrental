@@ -1,5 +1,16 @@
 # KH Rentals Execution Plan
 
+## Owner listing guidance correction — 1 November 2026
+
+Fresh production browser acceptance found the owner Properties screen still stating that public inventory was disabled, while actual public LK listings were visible. Replace that hard-coded historical rollout notice with customer guidance: country assignment determines the eligible country website, and the property page provides listing details and the opt-out control. This is a copy-only correction; it does not assert live publication status or change release settings, availability, privacy or authorization.
+
+Observed live in this session: residential search returned eight listings; commercial/retail/office displayed category-specific empty states; WATER FALL VILLA displayed its photograph and LKR 100,000 rent; name filtering returned it and a LKR 90,000 ceiling excluded it. The enquiry handoff retained its property context. The authorized existing owner signed in directly to Properties, and reload retained the workspace and Bamba Living. Maintenance list and property-linked creation form rendered, but no maintenance request or enquiry was submitted. These are bounded browser observations, not complete rental-lifecycle acceptance.
+
+The prior first-property save/readback PASS below remains valid historical evidence; this session did not repeat that write. Correction validation, deployment and post-release rendered desktop/mobile review must be recorded separately. Item 1 and canonical #459 remain OPEN; Item 2/subscriptions have not started. No signature, consent, payment or customer transaction evidence was fabricated.
+
+---
+
+
 ## Selected real property → enquiry → sign-in continuity accepted — 1 November 2026
 
 PR #480 MERGED at `7419f5236f3d2591ad8c68b665549679b8c56488`, final reviewed head `1a59ec0b2f8c884e6589e36a95e61ee87e35e4d6`. Exact-head live anonymous Chromium #41312362953 PASS at 1280px and 390px; exact-head application verification #41312362946 PASS (PR deploy skipped). The final browser evidence includes 10 screenshots (search, empty, detail, selected enquiry and selected-property login at both widths). The browser navigated actual live LK catalog → one real public property detail → Express your interest → the same property context in the app enquiry view → real sign-in link retaining country and case-insensitively equal UUID. It verified anonymous enquiry send is absent, and **entered no credentials and submitted no enquiry**.
