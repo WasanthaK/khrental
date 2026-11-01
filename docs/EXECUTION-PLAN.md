@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Real production anonymous browser acceptance — 1 November 2026
+
+PR #478 MERGED at `c48950dd306eb871c500557413e03a3849a5ea2c`; final reviewed head `892de71b3764069e7c5c82f120c43b5633706c46`. Exact-head GET-only, anonymous real Chromium workflow #41301185167 PASS and application verification #41301185232 PASS (deploy job correctly skipped for PR). Six real-page screenshots were generated in artifact 13080879593. Tests loaded **eight actual LK residential cards** at desktop 1280px and mobile 390px; location-filter submit produced no matching cards and a clear empty state, clear restored inventory, real selected-property detail loaded, and an asynchronous `Express your interest` link was present with a country- and listing-scoped app URL at both widths. No horizontal overflow, customer login, enquiry submission, email, consent, transaction or account mutation. First run #41301000633 failed due premature test assertion against the loading placeholder; corrected the wait. Intermediate #41301081750 passed but detected the enquiry link asynchronously after desktop snapshot; final run explicitly waited for the link and passed on both viewports.
+
+Together with PR #477 read-only API probe #41300855915, this **accepts the anonymous public discovery → selected property → enquiry-entry/link presentation** at functional automated-browser level, subject to human screenshot/content review. It does **not** accept authentication, actual enquiries, viewing, applications, offers, Evia signature, deposit, activation or ongoing tenancy. Both tests run on current deployed marketing and app: serving app build `129ab69a3cbd0321cd5a93706cce18ac3a759661` as observed in the latest API probe; do not infer newer app build deployment. Earlier production MSSQL health probe's intermittent 503 was followed by repeated 200/ready observations; cause remains unknown. Brunei had no eligible public inventory in the read-only probe, so a real BN result/detail journey is not accepted. Full canonical #459 remains OPEN; subscriptions remain later.
+
+**Next independent gate:** authenticated existing owner and a verified renter execute one consent-approved property enquiry and owner reply (real live actions only with explicitly authorized test records), then viewing/application/offer and existing-agreement/tenancy transitions. Never fabricate consent, customer decisions, signatures or payments merely to close acceptance.
+
+---
+
 ## Read-only production rental entry acceptance — 1 November 2026
 
 **Public entry/serving gate materially advanced; actual rental transaction still OPEN.** PR #477 merged at `43953e616465da5c409f448854379a8ee507683c` after exact-head read-only production probe #41300855915 PASS and application verification #41300855998 PASS (PR deployment skipped). The probe has no credentials or customer mutations, and emits only counts/HTTP/build identity. It runs GETs to real production domains rather than synthetic browsing fixtures.
