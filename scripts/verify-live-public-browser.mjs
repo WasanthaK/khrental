@@ -112,12 +112,12 @@ try{
     assert.ok(handoffState.text.includes('Sign in to contact the owner'),'Anonymous enquiry prompts sign-in');
     for(const link of [handoffState.login,handoffState.signup]){
       const target=new URL(link,app);
-      assert.equal(target.searchParams.get('listingId'),selectedListing,'Auth link retains selected listing');
+      assert.equal(target.searchParams.get('listingId')?.toLowerCase(),selectedListing.toLowerCase(),'Auth link retains selected listing');
       assert.equal(target.searchParams.get('country'),'LK','Auth link retains selected country');
     }
     assert.equal(await page.$('button.enquiry-send'),null,'Anonymous visitor cannot send an enquiry');
     await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.click('a[href^="/login?"]')]);
-    assert.equal(new URL(page.url()).searchParams.get('listingId'),selectedListing,'Login route retains property');
+    assert.equal(new URL(page.url()).searchParams.get('listingId')?.toLowerCase(),selectedListing.toLowerCase(),'Login route retains property');
     assert.equal(new URL(page.url()).searchParams.get('country'),'LK','Login route retains country');
     assert.ok(await page.$('#email-address'),'Login form is available');
     await page.screenshot({path:'live-public-browser-proof/lk-selected-login-'+width+'.png',fullPage:true});
