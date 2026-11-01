@@ -1,0 +1,21 @@
+name: Verify serving Quixo public journey (read only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/verify-live-public-readonly.mjs'
+      - '.github/workflows/verify-live-public-readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify public routes, deployed filters, catalog isolation, app health
+        run: node scripts/verify-live-public-readonly.mjs
