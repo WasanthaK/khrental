@@ -1,0 +1,29 @@
+name: Verify live Quixo public browser journey (read only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/verify-live-public-browser.mjs'
+      - '.github/workflows/verify-live-public-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Check real public search, filter and selected property at desktop/mobile
+        run: node scripts/verify-live-public-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-public-browser-proof
+          path: live-public-browser-proof/
+          if-no-files-found: ignore
