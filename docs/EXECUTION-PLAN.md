@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## UX-08 — Public search filters in review — 1 November 2026
+
+Canonical #459 continues after UX-04/05/06. Draft PR #476 replaces disabled Sri Lanka/Brunei search widgets with functional public-data location/property-name and maximum monthly rent filters. Category and country selection continue using only allowlisted URL fields; listing/card photos and selected-property enquiry behavior remain unchanged. The country homepages now direct visitors to working search rather than depicting disabled controls. Unpublished bedrooms, bathrooms, furnishing, floor area and permitted use are not shown as available filters. This is anonymous read-only browsing, not a new backend authority, pricing/subscription feature or permission grant.
+
+CI browser tests use synthetic approved public catalog rows in both markets to verify combined filters, editable values, clear, no-results copy, category and country continuity, 390px/desktop appearance, and exclusion of unknown query parameters. **Implementation is not production acceptance.** Verify exact final head in application build, public privacy SQL and browser suite, inspect rendered screenshots and conduct governed merge, deployment and live acceptance. Prior UX-04/05/06 production serving-build verification remains separately open. Full enquiry-to-tenancy lifecycle #459 remains open; subscription management remains later.
+
+---
+
 ## UX-04/UX-05/UX-06 entry changes merged — 1 November 2026
 
 PR #475 merged at `129ab69a3cbd0321cd5a93706cce18ac3a759661` from reviewed head `8ddd33cc11aa249ceea56d4b8286c54a48385a64`. Application verification #41268505308 PASS (deploy job skipped on PR), public website browser #41268505293 PASS, enquiry journey #41268505296 PASS. Public responsive artifact 13067888005 and enquiry-browser artifact 13068540920 were generated; manual visual inspection of artifact contents and live post-merge acceptance remain pending. The original stale owner-entry assertion was corrected in the same PR after initial failure.
