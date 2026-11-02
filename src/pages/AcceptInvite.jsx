@@ -89,7 +89,7 @@ const AcceptInvite = () => {
         if (!cancelled) {
           setError(
             validationError.code === 'INVITATION_NOT_USABLE'
-              ? 'This invitation is expired, revoked, already used, or no longer matches the invited account. Please ask the administrator to resend it.'
+              ? 'This invitation is no longer available. If you already completed setup, sign in with your existing account. Otherwise, ask your administrator to check the invitation.'
               : validationError.message
           );
         }
