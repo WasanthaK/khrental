@@ -334,7 +334,7 @@ const CameraForm = () => {
                 id="renewalDate"
                 name="renewalDate"
                 value={formData.datapackageinfo.renewalDate ? new Date(formData.datapackageinfo.renewalDate).toISOString().split('T')[0] : ''}
-                onChange={handleRenewalDateChange}
+                onInput={handleRenewalDateChange} onChange={handleRenewalDateChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
             </div>

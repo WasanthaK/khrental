@@ -60,10 +60,11 @@ try{
  page=await browser.newPage();page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
  const click=async text=>{await page.evaluate(text=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()===text);if(!b)throw new Error('Missing button '+text);b.click();},text);};
- const fill=async(selector,value)=>page.$eval(selector,(e,value)=>{Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event('input',{bubbles:true}));},value);
+ const fill=async(selector,value)=>page.$eval(selector,(e,value)=>{if(['date','datetime-local'].includes(e.type)){e.value=value;}else{Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);}e.dispatchEvent(new Event('input',{bubbles:true}));},value);
  await page.setViewport({width:1280,height:1000});await page.goto(origin+'/owner',{waitUntil:'networkidle0'});
  await page.waitForSelector('[id$="-rent"]');
  for(const [key,value] of Object.entries({rent:'100.00',deposit:'200.00',fees:'0',startDate:'2027-01-01',endDate:'2028-01-01',offerUntil:'2026-11-01T12:00',holdUntil:'2026-11-02T12:00',terms:'Exact rental terms. The reservation ends at the stated deadline.'})){await fill('[id$="-'+key+'"]',value);}
+ for(const [key,value] of Object.entries({startDate:'2027-01-01',endDate:'2028-01-01',offerUntil:'2026-11-01T12:00',holdUntil:'2026-11-02T12:00'})){assert.equal(await page.$eval('[id$="-'+key+'"]',e=>e.value),value);}
  failNext=true;await click('Issue rental offer');await page.waitForSelector('[role="alert"]');await click('Issue rental offer');
  await page.waitForFunction(()=>document.body.innerText.includes('Offer version 1'));
  assert.equal(offer.offerUntil,'2026-11-01T06:30:00.000Z','Property-local deadline is independent of browser timezone');

@@ -104,7 +104,7 @@ const InvoiceGenerationWizard = () => {
           <input
             type="month"
             value={billingPeriod}
-            onChange={(event) => setBillingPeriod(event.target.value)}
+            onInput={(event) => setBillingPeriod(event.target.value)} onChange={(event) => setBillingPeriod(event.target.value)}
             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
           />
         </div>
@@ -113,7 +113,7 @@ const InvoiceGenerationWizard = () => {
           <input
             type="date"
             value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
+            onInput={(event) => setDueDate(event.target.value)} onChange={(event) => setDueDate(event.target.value)}
             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
           />
         </div>

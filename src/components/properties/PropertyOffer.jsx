@@ -64,7 +64,7 @@ const PropertyOffer=({enquiry,owner=false,call})=>{
         ['startDate','Rental start date','date'],['endDate','Rental end date','date'],['offerUntil','Offer acceptance deadline','datetime-local'],['holdUntil','Reservation deadline after acceptance','datetime-local']].map(([key,text,type])=><div key={key}>
         <label className="block" htmlFor={field+'-'+key}>{text}</label>
         <input id={field+'-'+key} type={type} required step={type==='number'?'0.01':undefined} min={type==='number'?'0':undefined}
-          value={draft[key]} disabled={busy} onChange={e=>update(key,e.target.value)} className="border rounded p-2 w-full max-w-sm" />
+          value={draft[key]} disabled={busy} onInput={type==='number'?undefined:e=>update(key,e.currentTarget.value)} onChange={e=>update(key,e.target.value)} className="border rounded p-2 w-full max-w-sm" />
       </div>)}
       <label className="block" htmlFor={field+'-terms'}>Terms, fees and reservation expiry conditions</label>
       <textarea id={field+'-terms'} required maxLength={8000} value={draft.terms} disabled={busy} onChange={e=>update('terms',e.target.value)} className="border rounded p-2 w-full min-h-28" />

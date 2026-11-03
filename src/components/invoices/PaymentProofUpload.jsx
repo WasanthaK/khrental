@@ -127,7 +127,7 @@ const PaymentProofUpload = ({ invoiceId, outstandingBalance, onSuccess, onError 
               type="date"
               required
               value={paymentDetails.paymentDate}
-              onChange={(event) => handleDetailChange('paymentDate', event.target.value)}
+              onInput={(event) => handleDetailChange('paymentDate', event.target.value)} onChange={(event) => handleDetailChange('paymentDate', event.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
           </div>

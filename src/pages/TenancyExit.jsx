@@ -302,8 +302,8 @@ const TenancyExit = () => {
                   <option value="termination_notice">Termination notice</option>
                   <option value="renewal_offer">Renewal offer</option>
                 </select>
-                <input type="date" value={notice.noticeDate} onChange={(event) => setNotice((current) => ({ ...current, noticeDate: event.target.value }))} className="border rounded-md px-3 py-2" />
-                <input type="date" value={notice.effectiveDate} onChange={(event) => setNotice((current) => ({ ...current, effectiveDate: event.target.value }))} className="border rounded-md px-3 py-2" />
+                <input type="date" value={notice.noticeDate} onInput={(event) => setNotice((current) => ({ ...current, noticeDate: event.target.value }))} onChange={(event) => setNotice((current) => ({ ...current, noticeDate: event.target.value }))} className="border rounded-md px-3 py-2" />
+                <input type="date" value={notice.effectiveDate} onInput={(event) => setNotice((current) => ({ ...current, effectiveDate: event.target.value }))} onChange={(event) => setNotice((current) => ({ ...current, effectiveDate: event.target.value }))} className="border rounded-md px-3 py-2" />
                 <input value={notice.content} onChange={(event) => setNotice((current) => ({ ...current, content: event.target.value }))} placeholder="Notice message" className="border rounded-md px-3 py-2" />
                 <button disabled={working} className="md:col-span-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm disabled:opacity-50">Send notice</button>
               </form>
@@ -320,8 +320,8 @@ const TenancyExit = () => {
                 </div>
               )}
               <form onSubmit={createDraft} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input required type="date" value={renewal.startDate} onChange={(event) => setRenewal((current) => ({ ...current, startDate: event.target.value }))} className="border rounded-md px-3 py-2" />
-                <input required type="date" value={renewal.endDate} onChange={(event) => setRenewal((current) => ({ ...current, endDate: event.target.value }))} className="border rounded-md px-3 py-2" />
+                <input required type="date" value={renewal.startDate} onInput={(event) => setRenewal((current) => ({ ...current, startDate: event.target.value }))} onChange={(event) => setRenewal((current) => ({ ...current, startDate: event.target.value }))} className="border rounded-md px-3 py-2" />
+                <input required type="date" value={renewal.endDate} onInput={(event) => setRenewal((current) => ({ ...current, endDate: event.target.value }))} onChange={(event) => setRenewal((current) => ({ ...current, endDate: event.target.value }))} className="border rounded-md px-3 py-2" />
                 <input type="number" min="0" step="0.01" value={renewal.rentAmount} onChange={(event) => setRenewal((current) => ({ ...current, rentAmount: event.target.value }))} placeholder={`Rent amount (${agreement.rentamount ?? 'current'})`} className="border rounded-md px-3 py-2" />
                 <input type="number" min="0" step="0.01" value={renewal.depositAmount} onChange={(event) => setRenewal((current) => ({ ...current, depositAmount: event.target.value }))} placeholder={`Deposit amount (${agreement.depositamount ?? 'current'})`} className="border rounded-md px-3 py-2" />
                 <input value={renewal.notes} onChange={(event) => setRenewal((current) => ({ ...current, notes: event.target.value }))} placeholder="Renewal notes" className="md:col-span-2 border rounded-md px-3 py-2" />
@@ -342,7 +342,7 @@ const TenancyExit = () => {
 
               {!data.inspection && !isClosed ? (
                 <form onSubmit={startInspection} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input type="datetime-local" value={inspection.inspectionDate} onChange={(event) => setInspection((current) => ({ ...current, inspectionDate: event.target.value }))} className="border rounded-md px-3 py-2" />
+                  <input type="datetime-local" value={inspection.inspectionDate} onInput={(event) => setInspection((current) => ({ ...current, inspectionDate: event.target.value }))} onChange={(event) => setInspection((current) => ({ ...current, inspectionDate: event.target.value }))} className="border rounded-md px-3 py-2" />
                   <input value={inspection.notes} onChange={(event) => setInspection((current) => ({ ...current, notes: event.target.value }))} placeholder="Inspection notes" className="border rounded-md px-3 py-2" />
                   <button disabled={working} className="md:col-span-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm disabled:opacity-50">Initialize inspection</button>
                 </form>
@@ -451,7 +451,7 @@ const TenancyExit = () => {
 
             {!isClosed && (
               <form onSubmit={finishTenancy} className="mt-5 border-t pt-4 space-y-3">
-                <input type="date" value={closure.effectiveEndDate} onChange={(event) => setClosure((current) => ({ ...current, effectiveEndDate: event.target.value }))} className="w-full border rounded-md px-3 py-2" />
+                <input type="date" value={closure.effectiveEndDate} onInput={(event) => setClosure((current) => ({ ...current, effectiveEndDate: event.target.value }))} onChange={(event) => setClosure((current) => ({ ...current, effectiveEndDate: event.target.value }))} className="w-full border rounded-md px-3 py-2" />
                 <input value={closure.reason} onChange={(event) => setClosure((current) => ({ ...current, reason: event.target.value }))} placeholder="Closure reason" className="w-full border rounded-md px-3 py-2" />
                 <button disabled={working || !canClose} className="w-full px-4 py-2 bg-red-600 text-white rounded-md font-medium disabled:bg-gray-300 disabled:cursor-not-allowed">Close tenancy & release unit</button>
               </form>

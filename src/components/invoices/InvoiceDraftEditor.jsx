@@ -160,7 +160,7 @@ const InvoiceDraftEditor = ({
           <input
             type="date"
             value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
+            onInput={(event) => setDueDate(event.target.value)} onChange={(event) => setDueDate(event.target.value)}
             className="w-full rounded-md border px-3 py-2"
           />
         </div>

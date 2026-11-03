@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## Date-input audit and live rental progress — 3 November 2026
+
+PR #487 corrects input-event handling across application move-in, offer dates/deadlines, agreements, property availability, invoice/payment dates and billing month, utility readings, camera renewal, tenancy notices/renewals/inspection/closure, and the reusable DatePicker. Viewing already handled input events after #486. Non-date dynamic fields are unchanged. Existing browser regressions now exercise tracked input events and date persistence after other field edits for applications and offers. Build/CI/deployment status must be verified before release acceptance; full live business transactions across every date field are not claimed.
+
+Live #486 follow-up PASSED: +111 sign-out/login refresh, +514 correct JEERY'S PLACE workspace after login and refresh, renter and owner viewing date controls enabled without keyboard workaround. The new demo slot on 3 November 11:30–11:45 Asia/Colombo was proposed by +514, accepted by +111, and recorded completed by +514 after its end; confirmed/completed states persisted after refresh. This was explicitly a demo with no physical visit. +111 application submitted for 1 December 2026, one occupant, 12 months, persisted after refresh. Submission required a keyboard workaround for the newly discovered move-in date defect; #487 addresses it. Owner review, offer and later transaction acceptance remain pending. Historical entries below describe earlier states, superseded by this update. Subscriptions remain deferred.
+
 ## Session recovery correction deployed — 3 November 2026
 
 PR #486 merged at `4ea6f4db4dd301fa08a7532b215cd7e45882c48e`; reviewed head `3543b03fec4f4258c56d0476cece0a1fe4e39a24`. All four PR CI suites PASSED, including native-input viewing regression and real AuthProvider lifecycle. Production deployment #41576898262 SUCCESS; merged authorization suite 830/830 PASSED, build and revision/public-build readiness PASSED.

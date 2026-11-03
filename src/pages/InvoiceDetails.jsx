@@ -517,7 +517,7 @@ const InvoiceDetails = () => {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Payment date</label>
-                <input type="date" required value={manualPayment.paymentDate} onChange={(event) => setManualPayment((current) => ({ ...current, paymentDate: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
+                <input type="date" required value={manualPayment.paymentDate} onInput={(event) => setManualPayment((current) => ({ ...current, paymentDate: event.target.value }))} onChange={(event) => setManualPayment((current) => ({ ...current, paymentDate: event.target.value }))} className="w-full rounded-md border px-3 py-2" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Method</label>
