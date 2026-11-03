@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Evia package audit fix deployed; existing download still failing — 3 November 2026
+
+[PR #489](https://github.com/WasanthaK/khrental/pull/489) merged as `035d42536aac01c05b9618482e694ba3b5b31390`; reviewed head `0ac9289970f2b4c65528a4e2e66654b9d24e738a`. All three PR workflows passed; main verification **840/840 PASS**, focused local Evia tests **102/102 PASS**, clean install and production build PASS. [Deployment #41617426391](https://github.com/WasanthaK/khrental/actions/runs/41617426391) **SUCCESS**: ready revision `0000449`, matching public build SHA and live MSSQL readiness.
+
+Implemented verified completed-package retrieval using the exact event URL/token, bounded ZIP/PDF/CRC validation, canonical audit filename, and audit-only evidence handling before terminal/duplicate acknowledgement. Verified package or inline-audit re-delivery can retain a missing audit without overwriting signed bytes, timestamps, signatories or agreement state. Existing valid audits skip repeated provider downloads. No schema, provider configuration, signing, payment or activation change.
+
+**Fresh live owner retest: FAIL / OPEN.** After signing in as +514 to JEERY'S PLACE, the agreement list still shows both signatories Signed and the agreement Completed / signed-onboarding-required. View Signing Audit for `D13ECCF2-A82A-41DB-9EB7-3AB968440BB0` returns "Signing audit PDF not found (HTTP 404). It may not have been retained in storage." One built-in recovery attempt then returns "Evia returned a non-JSON HTTP 404 response." No PDF was downloaded, and end-to-end audit acceptance is not complete.
+
+The current receiver supports a verified provider completion-package or audit re-delivery, but no usable re-delivery for this existing request has been observed. The missing historical audit is not recovered by deployment alone. Do not fabricate a webhook, repeat signing, or claim successful download. PDF layout and the wider rental lifecycle remain open. This release and retest supersede older pending-deployment / no-runtime-change statements below without replacing their historical evidence.
+
 ## Audit download investigation — 3 November 2026
 
 **BLOCKED, not fixed.** Credential-free live CI probes independently returned HTTP 404 for the configured Evia API-key exchange URL and its Sign-base variant. Current provider documentation still specifies the configured relative exchange route; the alternative completed-package flow lacks actual request-bound evidence for this agreement. All 45 focused local audit/retrieval/access tests pass, but are fixture-based and do not prove provider availability. No production runtime change, re-signing or stored-document overwrite. Full evidence, exact endpoints and the provider unblock are in [EVIA-AUDIT-RECOVERY.md](EVIA-AUDIT-RECOVERY.md#live-provider-routing-investigation--3-november-2026). Continue from a verified provider retrieval contract, not another authentication/signing loop.
