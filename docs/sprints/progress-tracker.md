@@ -4,7 +4,7 @@ Independent unauthenticated curl to the documented completed-document list retur
 
 Human-triggered audit recovery now passes the existing Evia OAuth access token to the already-authorized audit-only backend route. The browser previously sent an empty body and forced the failing integration exchange. Expired tokens use the existing V2 refresh broker; a provider document 401 refreshes and retries once. Application-session rejection, tenant denial, missing documents and outages do not trigger OAuth refresh or fall back to the unavailable exchange. A missing/rejected Evia connection exposes Connect to Evia Sign using the existing authorization flow in a separate tab with no opener; the user then retries recovery. No signature request is created or resent.
 
-Implementation checkpoint only; release and live OAuth audit retrieval remain OPEN. See [audit recovery details](../EVIA-AUDIT-RECOVERY.md#oauth-audit-recovery-alternative--3-november-2026).
+PR #490 is merged and deployment #41626677557 succeeded. All five final-head CI workflows passed, including 849 application tests and database archive/replay acceptance. Live OAuth audit retrieval remains OPEN; no successful audit download is claimed. Do not repeat browser login attempts. See [audit recovery details](../EVIA-AUDIT-RECOVERY.md#oauth-audit-recovery-alternative--3-november-2026).
 
 ## Evia completed-package audit capture — 3 November 2026
 
