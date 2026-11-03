@@ -102,11 +102,22 @@ test('recovers an already-stored provider-named audit without provider calls or 
     throw Object.assign(new Error('missing'), { status: 404 });
   };
   f.args.fetchImpl = () => { throw new Error('Retained audit must not contact provider'); };
-  const args = { ...f.args, loadAgreement: async () => ({ ...row, eviasignreference: requestId }) };
+  const args = { ...f.args, accessToken: '', localOnly: true,
+    loadAgreement: async () => ({ ...row, eviasignreference: requestId }) };
   assert.equal((await recoverHistoricEviaAudit(args)).recovered, true);
   assert.equal((await recoverHistoricEviaAudit(args)).recovered, false);
   assert.equal(f.counts().writes, 1);
   assert.deepEqual((await originalGet('documents', path)).body, pdf);
+});
+
+test('local-only recovery reports a missing retained audit without provider credentials or network calls', async () => {
+  const f = fixture();
+  await assert.rejects(recoverHistoricEviaAudit({ ...f.args, accessToken: '', apiKey: '', localOnly: true }),
+    { code: 'EVIA_AUDIT_LOCAL_MISSING', status: 404 });
+  assert.equal(f.calls.length, 0); assert.equal(f.counts().writes, 0);
+  f.setRetained(pdf);
+  assert.equal((await recoverHistoricEviaAudit({ ...f.args, accessToken: '', localOnly: true })).recovered, false);
+  assert.equal(f.calls.length, 0);
 });
 
 test('conflicting or invalid stored audit aliases fail without provider fetch or writes', async () => {
@@ -225,6 +236,12 @@ test('HTTP recovery route requires session and tenant context and ignores caller
     const target = `http://127.0.0.1:${server.address().port}/agreements/${agreementId}/audit-trail`;
     assert.equal((await fetch(target, { method: 'POST' })).status, 401);
     assert.equal((await fetch(target, { method: 'POST', headers: { authorization: 'Bearer admin', 'x-tenant-id': agreementId } })).status, 403);
+    const localResult = await fetch(target, { method: 'POST', headers: {
+      authorization: 'Bearer admin', 'x-tenant-id': tenantId, 'content-type': 'application/json'
+    }, body: JSON.stringify({ localOnly: true, requestId: 'foreign-request', path: 'other.pdf' }) });
+    assert.equal(localResult.status, 404);
+    assert.equal((await localResult.json()).code, 'EVIA_AUDIT_LOCAL_MISSING');
+    assert.equal(f.calls.length, 0); assert.equal(f.counts().writes, 0);
     const result = await fetch(target, { method: 'POST', headers: { authorization: 'Bearer admin', 'x-tenant-id': tenantId, 'content-type': 'application/json' },
       body: JSON.stringify({ requestId: 'foreign-request', path: 'other.pdf', accessToken: 'test-token' }) });
     assert.equal(result.status, 200); assert.equal(result.headers.get('cache-control'), 'no-store');
