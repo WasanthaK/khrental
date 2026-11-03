@@ -112,7 +112,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await assert.rejects(store.change(foreignOwner,replacementCandidate.id,replace,true),{code:'ENQUIRY_NOT_FOUND'});
  const replacement=await store.change(owner,replacementCandidate.id,replace,true);
  assert.notEqual(replacement.offer.agreementId,cancelledDraft.offer.agreementId);
- assert.equal(replacement.offer.holdUntil,cancelledDraft.offer.holdUntil);
+ assert.deepEqual(replacement.offer.holdUntil,cancelledDraft.offer.holdUntil);
  assert.equal(replacement.offer.rent,cancelledDraft.offer.rent);
  assert.equal((await store.change(owner,replacementCandidate.id,replace,true)).offer.agreementId,replacement.offer.agreementId);
  await assert.rejects(store.change(owner,replacementCandidate.id,request('agreement',3,true,{templateId:newTemplate}),true),{code:'OFFER_CHANGED'});

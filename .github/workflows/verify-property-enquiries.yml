@@ -86,6 +86,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Agreement membership identity and retry browser proof
+        run: node scripts/test-agreement-identity-browser.mjs
       - name: Renter authentication lifecycle through actual provider
         run: node scripts/test-renter-auth-browser.mjs
       - name: Seeker verification through actual application entry
@@ -104,8 +106,6 @@ jobs:
         env:
           ENQUIRY_PROOF_DIR: enquiry-browser-proof
         run: node scripts/test-property-enquiries-browser.mjs
-      - name: Agreement membership identity and retry browser proof
-        run: node scripts/test-agreement-identity-browser.mjs
       - name: Rental offers and agreement continuation browser proof
         run: node scripts/test-rental-offers-browser.mjs
       - uses: actions/upload-artifact@v4
