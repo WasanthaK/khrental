@@ -1,0 +1,35 @@
+name: Diagnose Evia public API contract
+on:
+  push:
+    branches: [fix/evia-audit-download]
+    paths: ['.github/workflows/diagnose-evia-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read public provider contract without credentials
+        run: |
+          node --input-type=module <<'JS'
+          for (const path of [
+            '/evia-sign-api/v2/authorization-and-authentication/api-app-credentials-and-api-keys.md',
+            '/evia-sign-api/v2/webhook-management/retrieve-completed-documents-from-a-webhook.md'
+          ]) {
+            const response = await fetch('https://docs.sign.enadocapp.com' + path);
+            console.log('PUBLIC_DOC', path, response.status);
+            const body = await response.text();
+            if (response.ok && !body.trim().startsWith('<')) console.log(body.slice(0,40000));
+          }
+          for (const base of ['/api/v2', '/_apis/sign/api/v2']) {
+            const response = await fetch('https://evia.enadocapp.com' + base + '/oauth/exchange', {
+              method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}', redirect: 'manual'
+            });
+            console.log('UNAUTHENTICATED_EXCHANGE', base, response.status, response.headers.get('content-type'));
+          }
+          JS
