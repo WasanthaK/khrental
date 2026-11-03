@@ -1,4 +1,4 @@
-name: Diagnose Evia public API contract
+name: Read current Evia API documentation
 on:
   push:
     branches: [fix/evia-audit-download]
@@ -14,21 +14,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Read public provider contract without credentials
+      - name: Read current public documentation
         run: |
           node --input-type=module <<'JS'
           for (const path of [
-            '/evia-sign-api/v2/webhook-management/store-completed-documents-in-sharepoint-using-microsoft-power-automate.md'
+            '/llms.txt',
+            '/evia-sign-api/v2/authorization-and-authentication.md',
+            '/evia-sign-api/v2/webhook-management.md',
+            '/evia-sign-api/document.md'
           ]) {
             const response = await fetch('https://docs.sign.enadocapp.com' + path);
             console.log('PUBLIC_DOC', path, response.status);
             const body = await response.text();
-            if (response.ok && !body.trim().startsWith('<')) console.log(body.slice(0,40000));
-          }
-          for (const base of []) {
-            const response = await fetch('https://evia.enadocapp.com' + base + '/oauth/exchange', {
-              method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}', redirect: 'manual'
-            });
-            console.log('UNAUTHENTICATED_EXCHANGE', base, response.status, response.headers.get('content-type'));
+            if (response.ok && !body.trim().startsWith('<')) console.log(body.slice(0,60000));
           }
           JS
