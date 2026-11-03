@@ -15,7 +15,7 @@ const validPdf = body => Buffer.isBuffer(body) && body.length >= 5
 export const retainEviaAuditForVerifiedRequest = async ({
   tenantId, agreementId, requestId, signedDocumentUrl, accessToken = '',
   storageDriver = getStorageDriver(), fetchImpl = fetch,
-  apiKey = process.env.EVIA_SIGN_API_KEY || ''
+  apiKey = process.env.EVIA_SIGN_API_KEY || '', loadAuditBody = null
 }) => {
   const prefix = `/storage/documents/tenants/${tenantId}/agreements/${agreementId}/signed/`;
   const validSigned = typeof signedDocumentUrl === 'string'
@@ -32,21 +32,26 @@ export const retainEviaAuditForVerifiedRequest = async ({
     return { auditTrailUrl, recovered: false };
   } catch (error) { if (!missing(error)) throw error; }
 
-  let token = String(accessToken || '').trim();
-  const supplied = Boolean(token);
-  if (!token) token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
-  const withRefresh = async operation => {
-    try { return await operation(token); }
-    catch (error) {
-      if (error.status !== 401 || supplied) throw error;
-      token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
-      return operation(token);
-    }
-  };
-  const documents = await withRefresh(accessToken => listEviaCompletedDocuments({ requestId, accessToken, fetchImpl }));
-  const audits = documents.filter(document => document.documentName.toLowerCase() === 'audit_trail.pdf');
-  if (audits.length !== 1) throw failure('Evia must return exactly one audit_trail.pdf for this agreement request.', 502, 'EVIA_AUDIT_DOCUMENT_MISSING_OR_AMBIGUOUS');
-  const downloaded = await withRefresh(accessToken => downloadEviaCompletedDocument({ downloadUrl: audits[0].downloadUrl, accessToken, fetchImpl }));
+  let downloaded;
+  if (loadAuditBody) {
+    downloaded = { body: await loadAuditBody() };
+  } else {
+    let token = String(accessToken || '').trim();
+    const supplied = Boolean(token);
+    if (!token) token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
+    const withRefresh = async operation => {
+      try { return await operation(token); }
+      catch (error) {
+        if (error.status !== 401 || supplied) throw error;
+        token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
+        return operation(token);
+      }
+    };
+    const documents = await withRefresh(accessToken => listEviaCompletedDocuments({ requestId, accessToken, fetchImpl }));
+    const audits = documents.filter(document => document.documentName.toLowerCase() === 'audit_trail.pdf');
+    if (audits.length !== 1) throw failure('Evia must return exactly one audit_trail.pdf for this agreement request.', 502, 'EVIA_AUDIT_DOCUMENT_MISSING_OR_AMBIGUOUS');
+    downloaded = await withRefresh(accessToken => downloadEviaCompletedDocument({ downloadUrl: audits[0].downloadUrl, accessToken, fetchImpl }));
+  }
   if (!validPdf(downloaded.body)) throw failure('Evia did not return a valid audit PDF.', 502, 'EVIA_AUDIT_PDF_INVALID');
   await storageDriver.createEviaAuditIfAbsent('documents', objectPath, downloaded.body);
   const retained = await storageDriver.getObject('documents', objectPath);

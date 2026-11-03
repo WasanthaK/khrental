@@ -10,6 +10,7 @@ import { isEviaFencedArchiveCanaryEligible } from './fencedCanaryPolicy.js';
 import { runDormantEviaFencedArchive, stageEviaDocumentsForFencedLease } from './archiveCoordinator.js';
 import { retrieveAndStoreEviaCompletedDocuments, storeEviaWebhookCompletedDocuments } from './completedDocuments.js';
 import { retainEviaAuditForVerifiedRequest } from './auditRecovery.js';
+import { prepareEviaCompletionEvidence } from './completionEvidence.js';
 
 const COMPLETED_STATUSES = new Set(['completed', 'complete', 'signed', 'signing_complete']);
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'recalled']);
@@ -361,6 +362,7 @@ export const normalizeEviaWebhookPayload = (payload = {}) => {
     recipientName,
     subject,
     deliveryStatus,
+    completedPackage: firstDefined(root.completedPackage, root.CompletedPackage, data.completedPackage, data.CompletedPackage, nestedPayload.completedPackage, nestedPayload.CompletedPackage) || null,
     documents: Array.isArray(documents) ? documents : []
   };
 };
@@ -738,6 +740,24 @@ export const processEviaWebhook = async (payload = {}, {
     canonicalSignatureStatus: agreement.signature_status || null,
     storedSignatories: summarizeStoredSignatories(agreement.signatories_status)
   });
+
+  // Retain new evidence even when signature state is already final. This
+  // branch cannot rewrite signed bytes or change the agreement's status.
+  try {
+    normalized.documents = await prepareEviaCompletionEvidence({
+      verifiedRequest, completed: mapFinalAgreementState(normalized)?.signatureStatus === 'completed',
+      agreement, requestId: normalized.requestId, completedPackage: normalized.completedPackage,
+      documents: normalized.documents, signedDocumentUrl: getStoredSignedDocumentUrl(agreement)
+    });
+  } catch (error) {
+    console.warn('[EviaDiag] completion_evidence_retry_required', {
+      agreementId: shortId(agreement.id), code: error?.code || 'EVIA_PACKAGE_FAILED'
+    });
+    // No delivery claim has been made yet, so a verified re-delivery can
+    // retry immediately. Never acknowledge a failed package as archived.
+    return { statusCode: 503, body: { received: false, matched: true, updated: false,
+      retryable: true, code: error?.code || 'EVIA_PACKAGE_FAILED' } };
+  }
 
   const alreadyProcessed = await hasProcessedWebhookDelivery({
     tenantId: agreement.tenant_id,
