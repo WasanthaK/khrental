@@ -1,5 +1,9 @@
 # KH Rentals Execution Plan
 
+## Audit download investigation — 3 November 2026
+
+**BLOCKED, not fixed.** Credential-free live CI probes independently returned HTTP 404 for the configured Evia API-key exchange URL and its Sign-base variant. Current provider documentation still specifies the configured relative exchange route; the alternative completed-package flow lacks actual request-bound evidence for this agreement. All 45 focused local audit/retrieval/access tests pass, but are fixture-based and do not prove provider availability. No production runtime change, re-signing or stored-document overwrite. Full evidence, exact endpoints and the provider unblock are in [EVIA-AUDIT-RECOVERY.md](EVIA-AUDIT-RECOVERY.md#live-provider-routing-investigation--3-november-2026). Continue from a verified provider retrieval contract, not another authentication/signing loop.
+
 ## Signed agreement, document and onboarding acceptance — 3 November 2026
 
 User completed Evia/Microsoft signing externally; subsequent owner-session inspection verified persisted completion. Do not repeat authentication, sending or signing merely to re-establish this evidence.
