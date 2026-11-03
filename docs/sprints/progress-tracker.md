@@ -1,3 +1,7 @@
+## Evia completed-package audit capture — 3 November 2026
+
+Implemented verified completed-package download and audit-only late/replayed completion handling. Provider ZIP validation and conditional audit retention prevent signed-document overwrites. Local Evia 102/102 tests and build pass; authorization 839 pass with one Chrome-unavailable browser test. CI/deployment/live existing-audit recovery pending. See [audit recovery details](../EVIA-AUDIT-RECOVERY.md#completed-package-implementation--3-november-2026). The full rental lifecycle remains open.
+
 ## Agreement replacement and membership identity correction — 3 November 2026
 
 Live demo acceptance found three linked blockers: the new-agreement renter list used legacy default-tenant identity filtering instead of the working membership directory; signing loaded the owner through that same obsolete association; and cancelling an unsigned offer-bound draft left no replacement path. Test4 remains an active member of JEERY’S PLACE. Do not deactivate or duplicate the identity to work around these defects.

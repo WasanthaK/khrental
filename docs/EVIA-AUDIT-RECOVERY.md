@@ -55,3 +55,13 @@ At the user's request, read the **live** full documentation index and current au
 - Neither returned a token, so no authenticated list/download was attempted. No request was sent/recreated and no storage was written.
 
 **Corrected conclusion:** the old-URL hypothesis was investigated, but no working replacement URL is established. Do not report a general Evia outage or assert that a URL-only patch fixes this. Current docs also recommend consuming completedPackage.url and its event-scoped token for ZIP retrieval; this app does not implement that adapter. Supporting that newer path requires a verified request-bound payload/URL contract and token-expiry/recovery handling, especially for already-completed agreements. Audit acceptance remains open.
+
+## Completed-package implementation — 3 November 2026
+
+The receiver now consumes `completedPackage.url` and its event-scoped token from a verified completion webhook after matching the persisted request to its agreement. It uses the exact provider-supplied URL on the trusted Evia Sign origin, disables redirects, enforces expiry/time/size limits, and validates the ZIP directory, entry names, expansion sizes, CRCs and PDF headers before storage. A signed PDF and exactly one audit are required. Package retrieval does not use the failing API-key exchange endpoint. The old API fallback remains for callbacks without a package.
+
+Evidence handling runs before duplicate/terminal acknowledgements: an already-signed agreement can receive its missing audit from a verified package or inline audit attachment. This reuses conditional audit-only creation and exact readback; signed bytes, signatory rows, signing timestamps and agreement state remain unchanged. An existing valid audit skips download entirely, including an expired replay token. Package failures return a retryable response before claiming the delivery, allowing provider retry without another signature request. Tokens/URLs/package contents are not stored in webhook logs. Fenced staging retains its existing protocol.
+
+Validation before CI: 102 Evia tests pass (10 new package/replay cases), clean lockfile install succeeds, production build succeeds. Broader local authorization suite: 839 pass, one existing browser test blocked by unavailable Chrome. CI and production/live acceptance remain pending at this checkpoint.
+
+Existing missing audits cannot be reconstructed from signed PDFs. The already-completed agreement still needs a verified Evia re-delivery with an unexpired package descriptor or an inline audit. Do not claim that implementing future capture has recovered that historical file. No new signing is required by this implementation.
