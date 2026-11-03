@@ -1,12 +1,24 @@
 # KH Rentals Execution Plan
 
+## Signed agreement, document and onboarding acceptance — 3 November 2026
+
+User completed Evia/Microsoft signing externally; subsequent owner-session inspection verified persisted completion. Do not repeat authentication, sending or signing merely to re-establish this evidence.
+
+- Replacement agreement `D13ECCF2-A82A-41DB-9EB7-3AB968440BB0`: **Signed — onboarding required**, signature **Completed**. Both landlord and Test4 signatories show Signed on 3 November. Evia reference `5CD08BD4-87A7-4E06-BE61-8EDC44E3AF7C`. Original cancelled agreement remains cancelled.
+- **Signed document retrieval PASS:** View Document opens and downloads the four-page PDF. Reviewed extracted content throughout and signature page visually: correct property/renter, agreement ID, LKR 125,000 rent/deposit, 2 December 2026–1 December 2027, due day 5, notice 30 days, accepted rental schedule and demo-only conditions. No unresolved merge placeholders. Optional unspecified fields remain blank. Both signature images are present. Email delivery is not tracked, so delivery is not claimed.
+- **Document visual acceptance FAIL:** tenant signature overlaps the LANDLORD SIGNATURE heading; landlord signature overlaps the closing text. Page-four footer shows overlapping/incorrect page numbering (Page 4 / 1). Fix signature-space reservation and pagination in future generated documents, with rendered before/after regression evidence. Do not overwrite or alter this completed signed historical document.
+- **Signing audit retrieval FAIL:** View Signing Audit returns stored PDF HTTP 404. One built-in Recover existing audit from Evia attempt also fails with a non-JSON HTTP 404 response. Audit evidence remains missing; investigate provider endpoint/retention and recovery handling. A visible audit button is not proof of a retained audit. Do not repeat recovery loops or recreate the signed request.
+- **Onboarding verified:** account access Accepted; membership active; accepted reservation current; correct whole-property assignment; agreement signed. Created the move-in checklist successfully. It reports completed because this property has no configured checklist items; this is an empty checklist, not evidence of a physical inspection.
+- **Activation correctly BLOCKED:** required deposit LKR 125,000, recorded received LKR 0, confirmation advance LKR 0. Activate tenancy is disabled and explicitly identifies the deposit shortfall. No payment was invented or recorded; no tenancy activation performed.
+- **Next work:** resolve audit recovery and PDF layout defects; retain this signed-demo acceptance evidence. Deposit collection/ledger acceptance and activation remain pending supported payment evidence or an explicitly defined simulated payment test. Canonical #459 remains open; full lifecycle acceptance and subscriptions are not complete.
+
 ## Agreement replacement defects deployed and live retested — 3 November 2026
 
 PR #488 merged at `15034e5df0f828b7a575d904175effceef073bc4`; reviewed head `b0b8a059bdcb22188b2806e9e1d4b8db5d6b82f9`. Four final-head CI workflows passed, including actual-component owner-profile retry/null handling, membership renter selection, and disposable SQL replacement/history/idempotency/expiry/authorization cases. Production deployment #41601135559 SUCCESS, including serving-revision and exact public-build readiness. Local 23 focused tests passed; local browser launch was unavailable under the execution sandbox, with browser regressions verified in CI instead.
 
 Live +514 JEERY'S PLACE acceptance: Test4 is now selectable in manual agreement creation. The accepted offer exposed Prepare replacement agreement for the cancelled unsigned draft. New agreement `D13ECCF2-A82A-41DB-9EB7-3AB968440BB0` was prepared using template `58196AA9-5AF0-4027-832C-9C8F8FD4B625`; offer advanced to version 4, retaining LKR 125,000 rent/deposit, zero other fees, 2 December 2026–1 December 2027 dates and 6 November 18:00 Asia/Colombo reservation expiry. Original cancelled agreement remains in history. Correct template and Test4 merge values verified in the new agreement preview. Signing now opens with landlord and Test4 roles and exact signature markers: Missing user data is resolved in the live flow. No identity deactivation or duplicate renter creation.
 
-Evia authentication is the next external prerequisite: the login popup is open. No signature request, signature, payment or activation has been completed. Canonical #459 remains open; subscriptions deferred. Prior application resubmission, owner acceptance, offer issue/acceptance and draft preparation passed live, superseding the older pending statuses below.
+Superseded by the signed-document/onboarding acceptance above: external signing is now completed and persisted. No payment or activation has been completed. Canonical #459 remains open; subscriptions deferred. Prior application resubmission, owner acceptance, offer issue/acceptance and draft preparation passed live, superseding the older pending statuses below.
 
 
 ## Date-input audit and live rental progress — 3 November 2026
