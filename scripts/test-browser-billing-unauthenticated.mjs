@@ -36,6 +36,17 @@ try {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();
+  // This isolated frontend has no SQL backend. Supply readiness only; actual
+  // authentication and protected-route checks still run without a session.
+  await page.setRequestInterception(true);
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.pathname === '/api/mssql/health') {
+      return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, connection: 'ready' }) });
+    }
+    if (url.origin === 'http://127.0.0.1:' + port || url.protocol === 'data:') return request.continue();
+    return request.abort();
+  });
   await page.setViewport({ width: 1280, height: 800 });
   await page.evaluateOnNewDocument(() => {
     localStorage.clear();

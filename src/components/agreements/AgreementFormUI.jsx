@@ -204,7 +204,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Control
                   type="date"
                   value={formData.terms?.startDate || new Date().toISOString().split('T')[0]}
-                  onChange={(e) => handleInputChange('terms.startDate', e.target.value)}
+                  onInput={(e) => handleInputChange('terms.startDate', e.target.value)} onChange={(e) => handleInputChange('terms.startDate', e.target.value)}
                   disabled={readOnly || !isAgreementEditable}
                   required
                 />
@@ -222,7 +222,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Control
                   type="date"
                   value={formData.terms?.endDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                  onChange={(e) => handleInputChange('terms.endDate', e.target.value)}
+                  onInput={(e) => handleInputChange('terms.endDate', e.target.value)} onChange={(e) => handleInputChange('terms.endDate', e.target.value)}
                   disabled={readOnly || !isAgreementEditable}
                   required
                   min={formData.terms?.startDate || new Date().toISOString().split('T')[0]}

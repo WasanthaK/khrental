@@ -2186,6 +2186,15 @@ async function main() {
     const resetMailbox = createControlledResetMailbox();
     const app = express();
     app.use(express.json());
+    // Match the production public readiness contract against disposable SQL.
+    app.get('/api/mssql/health', async (_req, res) => {
+      try {
+        await pool.request().query('SELECT 1 AS ready');
+        res.json({ ok: true, connection: 'ready' });
+      } catch {
+        res.status(503).json({ ok: false, connection: 'unavailable' });
+      }
+    });
     // Use the real disposable storage object bytes for payment proof images.
     // Keep the audit-trail's dedicated fake byte handler for existing Evia
     // history acceptance; neither is a production R2 agreement assertion.

@@ -360,7 +360,7 @@ const UtilityReadingForm = () => {
           <input
             type="date"
             value={formData.readingDate}
-            onChange={(e) => setFormData(prev => ({ ...prev, readingDate: e.target.value }))}
+            onInput={(e) => setFormData(prev => ({ ...prev, readingDate: e.target.value }))} onChange={(e) => setFormData(prev => ({ ...prev, readingDate: e.target.value }))}
             className="w-full p-3 text-lg border rounded-lg shadow-sm"
             required
             disabled={loading}

@@ -279,7 +279,7 @@ const UtilityMeterForm = ({
               name="readingDate"
               type="date"
               value={formData.readingDate}
-              onChange={handleInputChange}
+              onInput={handleInputChange} onChange={handleInputChange}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
