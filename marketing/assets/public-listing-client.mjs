@@ -208,12 +208,24 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
     };
     previewArea.hidden=false;
     const loading=previewArea.querySelector('[data-public-listing-cards]');
-    if(loading){loading.textContent='Loading available properties…';loading.setAttribute('aria-live','polite');}
-    const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);
-    const feed=detailPage&&!validDetailId?Promise.reject(new Error('Choose a property from search')):fetch(endpoint.toString(),{
-      method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
-      headers:{Accept:'application/json'},signal:controller.signal
-    });
+    if(loading){loading.textContent='We’re gathering our minions to serve you… Getting your properties ready.';loading.setAttribute('aria-live','polite');}
+    const loadFeed=async()=>{
+      for(let attempt=0;attempt<3;attempt+=1){
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),18000);
+        try{
+          const response=await fetch(endpoint.toString(),{
+            method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+            headers:{Accept:'application/json'},signal:controller.signal
+          });
+          if(response.ok||response.status<500)return response;
+        }catch{/* Retry only this read-only public request. */}
+        finally{clearTimeout(timeout);}
+        if(attempt<2)await new Promise(resolve=>setTimeout(resolve,3000));
+      }
+      throw new Error('Listing feed unavailable');
+    };
+    const feed=detailPage&&!validDetailId?Promise.reject(new Error('Choose a property from search')):loadFeed();
     feed.then(async response=>{
       if(!response.ok)throw new Error('Listing feed unavailable');
       const data=await response.json();
@@ -230,10 +242,14 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
       if(list){
         list.replaceChildren();
         const msg=document.createElement('p');
-        msg.textContent=detailPage?'This property is unavailable or no longer publicly listed. Return to search for available properties.':'Rental listings are temporarily unavailable. Please try again.';
+        msg.textContent=detailPage?'This property is unavailable or no longer publicly listed. Return to search for available properties.':'Our minions need another moment. Rental listings are temporarily unavailable. Please try again.';
         list.append(msg);
+        const retry=document.createElement('button');
+        retry.type='button';retry.textContent='Try again';
+        retry.addEventListener('click',()=>location.reload());
+        list.append(retry);
       }
       previewArea.hidden=false;
-    }).finally(()=>clearTimeout(timeout));
+    });
   }
 }
