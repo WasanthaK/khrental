@@ -1,5 +1,17 @@
 # KH Rentals Execution Plan
 
+## Database wake-up release completed — 3 November 2026
+
+PR #485 MERGED at `264a86d28fe627b415cbc6bcff842225669d4fb5`. Application deployment #41555447578 SUCCESS: 822/822 tests, production build, Ready revision 0000445, live SQL connection ready and exact public build fingerprint. Marketing deployment #41555447544 SUCCESS on retry after an Azure CLI ETXTBSY launch failure; no product-code workaround was needed.
+
+Final-head CI at `0b696fbb136b999efdfcd396c8462b57575177c5`: application #41554931779, public listing #41554931867, public browser #41554931770 and enquiry lifecycle #41554931848 all PASS. Actual Chromium desktop/390px loading and retry screenshots inspected; bounded three-probe failure, manual recovery and preservation of an unsaved form after a subsequent outage PASS. Evidence is retained in the verification-browse-proof artifact of #41554931770.
+
+Live browser acceptance PASS: public Sri Lanka search displayed the minions loading copy then automatically rendered 10 properties; the application on the exact merged build displayed the minions readiness screen then automatically continued to the normal sign-in form. No credentials or business records were changed. A naturally paused Azure database was not independently identified during these observations, so genuine paused-to-online timing is not claimed; outage/retry behavior is proven using controlled browser fixtures.
+
+Database wake-up UX is IMPLEMENTED, DEPLOYED and bounded acceptance PASSED. No capacity/auto-pause setting, background keepalive or hosting tier changed. Staff Dashboard/Maintenance remains owner-ACCEPTED from PR #484. Canonical #459 remains OPEN for real renter enquiry/owner reply, viewing/application/offer and agreement/signing/deposit/activation; subscriptions remain deferred.
+
+---
+
 ## Demand-driven database readiness — 3 November 2026
 
 Owner requested a friendly, playful waiting experience while the low-cost database resumes. Add an anonymous readiness gate before app/auth initialization (including isolated verification), shared preflight for central platform/MSSQL clients, and bounded retries of read-only public listing loads. Copy: “We’re gathering our minions to serve you…” followed by automatic continuation, or a Try again state after three attempts. Readiness success is cached for 30 seconds; no background interval, keepalive, capacity change or auto-pause change. No business command is automatically replayed, and already-mounted forms remain mounted behind the waiting overlay.
