@@ -1,9 +1,6 @@
 name: Verify Evia audit retrieval with curl
 on:
   workflow_dispatch:
-  push:
-    branches: [fix/evia-audit-download]
-    paths: [.github/workflows/diagnose-evia-contract.yml]
 permissions:
   contents: read
 jobs:
