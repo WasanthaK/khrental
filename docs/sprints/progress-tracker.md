@@ -1,3 +1,15 @@
+## Current canonical reconciliation — 3 November 2026
+
+**Current agreement audit view/download: CLOSED — live PASS.** The administrator opened and downloaded the matching two-page audit, then reopened it after a full application reload. #491 fixes exported audit filenames and retained aliases; #492 checks local storage before requesting Evia authentication. #492 deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175) passed on ready revision 0000452 with exact build and MSSQL readiness; application CI **863/863**, focused Evia **125/125**, build and provider integration checks passed.
+
+The current live demo has also passed enquiry/reply/readback, viewing completion, application review/resubmission/acceptance, offer acceptance, replacement agreement preparation, both signatures and signed-PDF retrieval. Historical OPEN/not-sent statements below are superseded for these observed paths. Future automatic signed-PDF/audit capture needs one next-contract acceptance; it does not reopen the current download.
+
+**Next:** contract signature spacing/pagination, meaningful move-in checklist plus deposit evidence and explicit activation, active-tenant operations and exit, then consolidated website acceptance. #459 stays OPEN; subscriptions follow the operational website. Original R1 owner acceptance and deferred invoice archive R2 remain unchanged. The March sprint overview below is a historical migration baseline, not the current product-status dashboard.
+
+Full status, evidence boundaries and ordered work are in the [current canonical plan](../EXECUTION-PLAN.md#current-canonical-status-and-plan-review--3-november-2026).
+
+## Historical checkpoints
+
 ## OAuth audit recovery alternative — 3 November 2026
 
 Independent unauthenticated curl to the documented completed-document list returned HTTP 401 / application/json, while both integration-key exchange URL interpretations returned HTTP 404. This establishes a reachable authentication boundary, not successful OAuth document retrieval.

@@ -1,5 +1,15 @@
 # One-property public pilot — current canonical status
 
+## Current controlling status — 3 November 2026
+
+This document's earlier pilot/release checkpoints are historical. The [current canonical plan](EXECUTION-PLAN.md#current-canonical-status-and-plan-review--3-november-2026) controls status and priorities, including the later approved open-product testing direction.
+
+The live demo has passed enquiry/reply/readback, viewing completion, application review/acceptance, accepted offer and agreement preparation, both signatures, signed-document retrieval, and now **signing-audit view/download after reload**. The current audit defect is CLOSED with #491/#492 release and live acceptance evidence. Earlier audit-failure and offer-release-pending statements do not describe current status.
+
+The full website milestone #459 remains OPEN: contract signature/footer layout, meaningful move-in/deposit acceptance and explicit activation, then active-tenant operations and exit/relisting still need completion. Future automatic audit retention is a next-contract check, not a reason to repeat the successful current download. Subscriptions follow the operational website; earlier subscription-first queues below are superseded. Prior owner waivers, deferred invoice archive and scaling decisions remain unchanged.
+
+## Historical pilot checkpoints
+
 Updated 2026-10-29 (Asia/Colombo). The [master program plan](EXECUTION-PLAN.md) retains program scope; this redacted companion reconciles the current pilot evidence and supersedes its earlier readiness/OFF checkpoints.
 
 ## Current website priorities

@@ -1,5 +1,17 @@
 # Recover an existing Evia signing audit
 
+## Current recovery behavior and acceptance — 3 November 2026
+
+**Current agreement audit retrieval CLOSED — live PASS.** View Signing Audit and Download returned the matching two-page completion audit in the authorized administrator session, and reopening after a full page reload passed. #491 and #492 are merged/deployed; #492 passed 863 application tests and deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175), with ready revision 0000452, matching build and MSSQL readiness.
+
+The browser now sends an authorized local-only recovery request first. The server reuses a valid canonical audit or recovers a supported `EviaSign_AuditTrail_<UUID>.pdf` alias scoped to the persisted agreement/request. This path needs no Evia connection and cannot contact the provider. Only the exact local-missing response proceeds to existing OAuth recovery; application authorization or storage errors stop immediately. PDF validation, conditional creation and byte readback remain enforced; signed documents and agreement state are preserved.
+
+Provider-named audits are normalized in both inline and completed-package handling. Future automatic retention of both signed and audit PDFs is still to be checked during the next legitimate contract acceptance, separately from the now-completed current download. Do not re-sign the existing agreement, repeat browser login loops, or import an audit belonging to another request.
+
+The following original procedure and investigation entries are historical where they describe integration-key-first recovery or an unresolved current audit. The [current canonical plan](EXECUTION-PLAN.md#current-canonical-status-and-plan-review--3-november-2026) controls the remaining work and preserves the older R1 waiver without retrospectively declaring its historic agreement verified.
+
+## Historical procedure and investigation
+
 Use this action when a completed historic agreement already has a locally
 retained signed PDF, its signing audit is missing from KH Rentals, and the
 audit exists in Evia. This does not initiate signing or resend invitations.
