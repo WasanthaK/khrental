@@ -299,7 +299,10 @@ const AuthProvider = ({ children }) => {
       setLoading(true);
       try {
         const profile=session?.user?await fetchUserProfile(session.user):null;
-        if(active&&request===generation){setUserData(profile);}
+        const current = await platformClient.auth.getSession();
+        if(active&&request===generation){
+          setUserData(session?.access_token === current.data?.session?.access_token ? profile : null);
+        }
       } catch {
         if(active&&request===generation){
           setUserData(null);setError('We couldn’t load your account. Please sign in again.');
@@ -466,13 +469,13 @@ const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       setError(null);
+      setUserData(null);
       const { error } = await signOut();
       
       if (error) {
         throw error;
       }
       
-      setUserData(null);
       return {};
     } catch (error) {
       console.error('[Auth] Error logging out:', error.message);

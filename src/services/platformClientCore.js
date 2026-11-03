@@ -79,6 +79,15 @@ const persistSession = (session, event = 'SIGNED_IN') => {
   notifyAuthListeners(event, currentSession);
 };
 
+// Another tab's sign-out/account switch must invalidate in-memory identity too.
+if (isBrowser && window.addEventListener) {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== 'khrental.local.session' && event.key !== null) return;
+    currentSession = loadStoredSession();
+    notifyAuthListeners(currentSession ? 'SIGNED_IN' : 'SIGNED_OUT', currentSession);
+  });
+}
+
 const readErrorPayload = async (response) => {
   const contentType = response.headers.get('content-type') || '';
 
@@ -100,18 +109,29 @@ const apiRequest = async (path, options = {}) => {
   } = options;
 
   await ensureDatabaseReady();
+  const requestHeaders = {
+    ...(body !== undefined && !raw ? { 'Content-Type': 'application/json' } : {}),
+    ...buildRequestContextHeaders(headers)
+  };
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
-    headers: {
-      ...(body !== undefined && !raw ? { 'Content-Type': 'application/json' } : {}),
-      ...buildRequestContextHeaders(headers)
-    },
+    headers: requestHeaders,
     ...(body !== undefined ? { body: raw ? body : JSON.stringify(body) } : {}),
     ...rest
   });
 
   if (!response.ok) {
-    throw new Error(await readErrorPayload(response));
+    const error = new Error(await readErrorPayload(response));
+    error.status = response.status;
+    // Only a rejected authenticated request invalidates its own session.
+    // A delayed failure for A must never sign out a newly signed-in B.
+    const token = currentSession?.access_token;
+    if (response.status === 401 && path !== '/api/platform/auth/sign-in' && token &&
+        requestHeaders.Authorization === `Bearer ${token}` &&
+        loadStoredSession()?.access_token === token) {
+      persistSession(null, 'SIGNED_OUT');
+    }
+    throw error;
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -265,9 +285,13 @@ const authClient = {
   },
 
   async getTenantContext() {
+    const token = currentSession?.access_token;
     try {
       const payload = await apiRequest('/api/platform/auth/context');
       const tenantContext = payload?.data || null;
+      if (token !== currentSession?.access_token || token !== loadStoredSession()?.access_token) {
+        throw new Error('Your signed-in account changed. Please retry.');
+      }
       if (tenantContext?.tenantId) {
         setActiveTenantId(tenantContext.tenantId);
       }
@@ -316,14 +340,20 @@ const authClient = {
   },
 
   async signOut() {
+    const token = currentSession?.access_token;
+    // Clear synchronously: navigation or an unavailable server must not retain
+    // a revoked credential, and late revocation must not clear a new login.
+    persistSession(null, 'SIGNED_OUT');
     try {
-      if (currentSession?.access_token) {
-        await apiRequest('/api/platform/auth/sign-out', { method: 'POST' });
+      if (token) {
+        await apiRequest('/api/platform/auth/sign-out', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}` }
+        });
       }
-    } finally {
-      persistSession(null, 'SIGNED_OUT');
+      return { error: null };
+    } catch (error) {
+      return { error };
     }
-    return { error: null };
   },
 
   async resetPasswordForEmail(email) {

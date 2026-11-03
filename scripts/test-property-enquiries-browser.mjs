@@ -283,7 +283,8 @@ try {
   console.log('BROWSER_STAGE=seeker_reads_reply');
   const localDate=new Date(Date.now()+86400000).toISOString().slice(0,16);
   const chooseTime=async p=>p.$eval('input[type="datetime-local"]',(input,value)=>{
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+    // Picker/autofill-style input must update state even when React tracks the value.
+    input.value=value;
     input.dispatchEvent(new Event('input',{bubbles:true}));
   },localDate);
   await chooseTime(page);
