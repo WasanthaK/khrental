@@ -2,7 +2,7 @@ import {PERSONAL_RENTAL_EMAIL_PROOF_SQL} from '../auth/seekerContext.js';
 import {randomUUID} from 'node:crypto';
 import {createEnquiryStore} from './store.js';
 import {enquiryError} from './contract.js';
-import {assertOfferVersion,offerReceipt} from './offerContract.js';
+import {assertOfferVersion,offerReceipt,canReplaceRentalDraft} from './offerContract.js';
 import {PUBLIC_LISTING_ELIGIBILITY_SQL} from '../publicListings/store.js';
 
 const conflict=(code,message)=>enquiryError(409,code,message);
@@ -38,9 +38,10 @@ export const createOfferStore=({poolProvider}={})=>{
   const read=async(q,e,owner)=>{
     const row=(await current(q,e.id))[0];
     const ap=(await q('SELECT status,version FROM dbo.property_applications WHERE enquiry_id=@id',{id:e.id}))[0];
-    const a=row?.agreement_id?(await q('SELECT id,status,signature_status,signature_completed_at FROM dbo.agreements WHERE id=@id AND tenant_id=@tenantId',{id:row.agreement_id,tenantId:e.tenant_id}))[0]:null;
+    const a=row?.agreement_id?(await q('SELECT * FROM dbo.agreements WHERE id=@id AND tenant_id=@tenantId',{id:row.agreement_id,tenantId:e.tenant_id}))[0]:null;
     return {offer:offerReceipt(row),applicationAccepted:ap?.status==='accepted',applicationVersion:ap?.version||0,
       agreement:a?{id:a.id,status:a.status,signatureStatus:a.signature_status,signedAt:a.signature_completed_at}:null,
+      canReplaceAgreement:owner&&row?.status==='agreement'&&canReplaceRentalDraft(a),
       ...(owner?await options(q,e):{})};
   };
   const eligible=async(q,e)=>Boolean((await q(`SELECT TOP(1) p.id ${PUBLIC_LISTING_ELIGIBILITY_SQL}
@@ -113,7 +114,10 @@ export const createOfferStore=({poolProvider}={})=>{
         await checkDwelling(q,e,old.unit_id,parent.status);
         await q("UPDATE dbo.property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),consent_version='rental-offer-v1',version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id});
       }else if(input.action==='agreement'&&owner){
-        if(old?.status!=='accepted'||old.hold_until<=now||ap?.status!=='accepted'||ap.version!==old.application_version||!['pending','responded'].includes(e.status)){
+        const previous = old?.status === 'agreement' && old.agreement_id
+          ? (await q('SELECT * FROM dbo.agreements WITH(UPDLOCK,HOLDLOCK) WHERE id=@id AND tenant_id=@tenantId', {id:old.agreement_id,tenantId:e.tenant_id}))[0] : null;
+        const replacing = canReplaceRentalDraft(previous);
+        if((old?.status!=='accepted'&&!replacing)||old.hold_until<=now||ap?.status!=='accepted'||ap.version!==old.application_version||!['pending','responded'].includes(e.status)){
           throw conflict('RENTAL_HOLD_EXPIRED','A current accepted offer and reservation are required.');
         }
         const source=(await q(`SELECT pref.public_id FROM dbo.public_listing_preferences pref
@@ -138,23 +142,26 @@ export const createOfferStore=({poolProvider}={})=>{
         if(!template?.content){throw conflict('RENTAL_TEMPLATE_REQUIRED','Select a populated agreement template in this workspace.');}
         const membership=(await q('SELECT id,role,status FROM dbo.tenant_memberships WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND app_user_id=@seekerId',{tenantId:e.tenant_id,seekerId:e.seeker_id}))[0];
         if(membership&&(membership.status!=='active'||!['rentee','tenant'].includes(membership.role))){throw conflict('RENTAL_MEMBERSHIP_CONFLICT','Existing account access requires an authorised review.');}
+        const previousLink = replacing ? (await q('SELECT accepted_version FROM dbo.rental_offer_agreement_links WHERE agreement_id=@id AND enquiry_id=@enquiryId', {id:previous.id,enquiryId:id}))[0] : null;
+        if (replacing && !previousLink) throw conflict('RENTAL_AGREEMENT_LINK_MISSING','The cancelled agreement needs review before replacement.');
+        const acceptedVersion = previousLink?.accepted_version || old.version;
         const agreementId=randomUUID();
         const terms=JSON.stringify({monthlyRent:Number(old.rent),depositAmount:Number(old.deposit),feesAmount:Number(old.fees),
           startDate:new Date(old.start_date).toISOString().slice(0,10),endDate:new Date(old.end_date).toISOString().slice(0,10),
-          additionalTerms:old.terms,currency:old.currency,offerUntil:new Date(old.offer_until).toISOString(),holdUntil:new Date(old.hold_until).toISOString(),rentalOfferEnquiry:id,rentalOfferVersion:old.version,agreementTemplateVersion:template.version});
+          additionalTerms:old.terms,currency:old.currency,offerUntil:new Date(old.offer_until).toISOString(),holdUntil:new Date(old.hold_until).toISOString(),rentalOfferEnquiry:id,rentalOfferVersion:acceptedVersion,agreementTemplateVersion:template.version});
         await q(`INSERT INTO dbo.agreements(id,tenant_id,templateid,renteeid,propertyid,unitid,status,startdate,enddate,rentamount,depositamount,title,content,terms,needs_document_generation)
           VALUES(@agreementId,@tenantId,@templateId,@seekerId,@propertyId,@unitId,'draft',@startDate,@endDate,@rent,@deposit,@title,@content,@terms,1)`,
         {agreementId,tenantId:e.tenant_id,templateId:template.id,seekerId:e.seeker_id,propertyId:e.property_id,unitId:old.unit_id||null,
           startDate:old.start_date,endDate:old.end_date,rent:old.rent,deposit:old.deposit,title:e.listing_title,content:template.content,terms});
         await q(`INSERT INTO dbo.rental_offer_agreement_links(agreement_id,enquiry_id,accepted_version,application_version,unit_id,rent,deposit,start_date,end_date)
           VALUES(@agreementId,@id,@acceptedVersion,@applicationVersion,@unitId,@rent,@deposit,@startDate,@endDate)`,
-        {agreementId,id,acceptedVersion:old.version,applicationVersion:old.application_version,unitId:old.unit_id||null,rent:old.rent,deposit:old.deposit,startDate:old.start_date,endDate:old.end_date});
+        {agreementId,id,acceptedVersion,applicationVersion:old.application_version,unitId:old.unit_id||null,rent:old.rent,deposit:old.deposit,startDate:old.start_date,endDate:old.end_date});
         if(!membership){await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,role,status,is_default)
           VALUES(@id,@tenantId,@seekerId,'rentee','active',0)`,{id:randomUUID(),tenantId:e.tenant_id,seekerId:e.seeker_id});}
         await q("UPDATE dbo.property_rental_offers SET agreement_id=@agreementId,status='agreement',version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id,agreementId});
         await q(`INSERT INTO dbo.tenancy_lifecycle_events(tenant_id,agreement_id,event_type,actor_user_id,metadata)
           VALUES(@tenantId,@agreementId,'accepted_offer_linked',@actorId,@metadata)`,
-        {tenantId:e.tenant_id,agreementId,actorId:actor.actorId,metadata:JSON.stringify({enquiryId:id,acceptedVersion:old.version,applicationVersion:old.application_version,existingIdentity:true,membershipCreated:!membership})});
+        {tenantId:e.tenant_id,agreementId,actorId:actor.actorId,metadata:JSON.stringify({enquiryId:id,acceptedVersion,applicationVersion:old.application_version,existingIdentity:true,membershipCreated:!membership,replacesAgreementId:previous?.id||null})});
       }else if(old&&['offered','accepted','agreement'].includes(old.status)&&
           (input.action==='withdraw'||(!owner&&input.action==='decline'&&old.status==='offered'))){
         await q("UPDATE dbo.property_rental_offers SET status=@status,version=version+1,updated_at=SYSUTCDATETIME() WHERE enquiry_id=@id",{id,status:input.action==='decline'?'declined':'withdrawn'});

@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths:
       - 'src/api/enquiries/**'
+      - 'scripts/test-agreement-identity-browser.mjs'
+      - 'src/components/agreements/AgreementFormContainer.jsx'
+      - 'src/hooks/useAgreementForm.js'
+      - 'src/services/mssqlApiClient.js'
       - 'src/api/platform/ownerOnboarding.js'
       - 'src/api/platform/router.js'
       - 'src/pages/OwnerSetup.jsx'
@@ -82,6 +86,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Agreement membership identity and retry browser proof
+        run: node scripts/test-agreement-identity-browser.mjs
       - name: Renter authentication lifecycle through actual provider
         run: node scripts/test-renter-auth-browser.mjs
       - name: Seeker verification through actual application entry

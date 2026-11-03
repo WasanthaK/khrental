@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {parseOfferAction,assertOfferVersion,offerReceipt} from '../src/api/enquiries/offerContract.js';
+import {parseOfferAction,assertOfferVersion,offerReceipt,canReplaceRentalDraft} from '../src/api/enquiries/offerContract.js';
 import {createEnquiriesRouter} from '../src/api/enquiries/router.js';
 import {requestSeekerEnquiries} from '../src/services/seekerContextClient.js';
 const uuid=()=>crypto.randomUUID();
@@ -57,4 +57,17 @@ test('the signed document includes the accepted fee/term schedule even when the 
  assert.equal(rentalOfferSchedule({terms:{}}),'');
  const html=rentalOfferSchedule({terms:{rentalOfferEnquiry:uuid(),currency:'LKR',monthlyRent:100,depositAmount:200,feesAmount:30,startDate:'2027-01-01',endDate:'2028-01-01',additionalTerms:'<script>private proposal</script>',holdUntil:'2026-11-02T04:00:00.000Z'}});
  assert.match(html,/Other fees: LKR 30/);assert.match(html,/&lt;script&gt;/);assert.ok(!html.includes('<script>'));
+});
+
+test('only cancelled drafts without provider, signing or activation evidence can be replaced',()=>{
+ const draft={status:'cancelled',signature_status:null};
+ assert.equal(canReplaceRentalDraft(draft),true);
+ assert.equal(canReplaceRentalDraft({...draft,signatories_status:JSON.stringify([{status:'pending'}])}),true);
+ for(const extra of [{status:'draft'},{status:'active'},{eviasignreference:'provider-request'},{signature_request_id:'request'},{signature_sent_at:'2026-11-03'},{signeddate:'2026-11-03'},
+  {signature_completed_at:'2026-11-03'},{activated_at:'2026-11-03'},{signature_status:'completed'},
+  {signature_status:'failed'},{signeddocumenturl:'archive'},{signatories_status:'malformed'},
+  {signatories_status:[{status:'completed'}]},{signatories_status:[{status:'pending',signedAt:'2026-11-03'}]}]){
+  assert.equal(canReplaceRentalDraft({...draft,...extra}),false,JSON.stringify(extra));
+ }
+ assert.equal(canReplaceRentalDraft(null),false);
 });

@@ -11,7 +11,6 @@ import {
   saveAgreementForStatus,
   updateAgreementCanonical
 } from '../../services/agreementWorkflowService';
-import { findAppUserByAuthId } from '../../services/appUserService';
 import { prepareRentalAgreementSignatories, matchesPendingRentalRoster } from '../../utils/rentalAgreementSignatories';
 
 const offerBound=record=>{
@@ -44,29 +43,6 @@ const AgreementFormContainer = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadUserData = async () => {
-      try {
-        const { data: { user } } = await platformClient.auth.getUser();
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        const appUserResult = await findAppUserByAuthId(user.id);
-        if (!appUserResult?.success || !appUserResult.data) {
-          throw new Error(appUserResult?.error || 'App user profile not found');
-        }
-
-        if (!cancelled) {
-          setCurrentUser(appUserResult.data);
-        }
-      } catch (error) {
-        console.error('Error loading user data:', error);
-        if (!cancelled) {
-          toast.error('Failed to load user data');
-        }
-      }
-    };
-
     const loadAgreement = async () => {
       if (!id) {
         setLoading(false);
@@ -95,7 +71,6 @@ const AgreementFormContainer = () => {
       }
     };
 
-    loadUserData();
     loadAgreement();
 
     return () => {
@@ -117,6 +92,14 @@ const AgreementFormContainer = () => {
       const existingId = getExistingAgreementId(formData);
 
       if (status === AGREEMENT_STATUS.PENDING) {
+        // Resolve the current global identity through the authenticated workspace
+        // context, not app_users' obsolete default-tenant pointer. Retry on each
+        // attempt so a transient lookup failure does not strand the draft.
+        const { data: context, error: contextError } = await platformClient.auth.getTenantContext();
+        if (contextError || !context?.tenantId || !context?.user?.id || !context?.user?.email) {
+          throw new Error('Unable to load your signing profile. Please retry.');
+        }
+        setCurrentUser(context.user);
         const savedDraft = await saveAgreementForStatus({
           formData,
           status: AGREEMENT_STATUS.DRAFT,

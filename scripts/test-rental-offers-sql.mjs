@@ -98,6 +98,37 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await assert.rejects(store.change(c.actor,c.id,request('withdraw',3)),{code:'RENTAL_ALREADY_ACTIVE'});
  await q("UPDATE tenant_memberships SET status='revoked' WHERE app_user_id=@id",{id:c.actor.actorId});
  assert.equal((await store.get(c.actor,c.id)).agreement.id,agreementId,'Revoked workspace access does not erase verified personal rental history');
+ // Cancel/recreate preserves the accepted commercial terms, identity and history.
+ const replacementProperty=await property(),replacementCandidate=await candidate(replacementProperty);
+ await store.change(owner,replacementCandidate.id,request('issue',0,true,terms()),true);
+ await store.change(replacementCandidate.actor,replacementCandidate.id,request('accept',1,false,{consent:true}));
+ const cancelledDraft=await store.change(owner,replacementCandidate.id,request('agreement',2,true,{templateId}),true);
+ await assert.rejects(store.change(owner,replacementCandidate.id,request('agreement',3,true,{templateId}),true),{code:'RENTAL_HOLD_EXPIRED'});
+ await q("UPDATE agreements SET status='cancelled' WHERE id=@id",{id:cancelledDraft.offer.agreementId});
+ assert.equal((await store.get(owner,replacementCandidate.id,true)).canReplaceAgreement,true);
+ assert.equal((await store.get(replacementCandidate.actor,replacementCandidate.id)).canReplaceAgreement,false);
+ const newTemplate=uuid();await q("INSERT agreement_templates(id,tenant_id,name,version,content) VALUES(@id,@tenantId,'Replacement',1,'<p>For Tenant:</p><p>For Landlord:</p>')",{id:newTemplate,tenantId:owner.tenantId});
+ const replace=request('agreement',3,true,{templateId:newTemplate});
+ await assert.rejects(store.change(foreignOwner,replacementCandidate.id,replace,true),{code:'ENQUIRY_NOT_FOUND'});
+ const replacement=await store.change(owner,replacementCandidate.id,replace,true);
+ assert.notEqual(replacement.offer.agreementId,cancelledDraft.offer.agreementId);
+ assert.deepEqual(replacement.offer.holdUntil,cancelledDraft.offer.holdUntil);
+ assert.equal(replacement.offer.rent,cancelledDraft.offer.rent);
+ assert.equal((await store.change(owner,replacementCandidate.id,replace,true)).offer.agreementId,replacement.offer.agreementId);
+ await assert.rejects(store.change(owner,replacementCandidate.id,request('agreement',3,true,{templateId:newTemplate}),true),{code:'OFFER_CHANGED'});
+ const oldRecord=(await q('SELECT status FROM agreements WHERE id=@id',{id:cancelledDraft.offer.agreementId}))[0];assert.equal(oldRecord.status,'cancelled');
+ const newRecord=(await q('SELECT renteeid,templateid,terms FROM agreements WHERE id=@id',{id:replacement.offer.agreementId}))[0];
+ assert.equal(newRecord.renteeid.toLowerCase(),replacementCandidate.actor.actorId.toLowerCase());
+ assert.equal(newRecord.templateid.toLowerCase(),newTemplate.toLowerCase());assert.equal(JSON.parse(newRecord.terms).rentalOfferVersion,2);
+ assert.equal((await q('SELECT COUNT(*) AS n FROM rental_offer_agreement_links WHERE enquiry_id=@id',{id:replacementCandidate.id}))[0].n,2);
+ assert.deepEqual(await reservation(cancelledDraft.offer.agreementId),{valid:false});assert.deepEqual(await reservation(replacement.offer.agreementId),{valid:true});
+ await q("UPDATE agreements SET status='cancelled',signature_status='completed' WHERE id=@id",{id:replacement.offer.agreementId});
+ assert.equal((await store.get(owner,replacementCandidate.id,true)).canReplaceAgreement,false);
+ await assert.rejects(store.change(owner,replacementCandidate.id,request('agreement',4,true,{templateId}),true),{code:'RENTAL_HOLD_EXPIRED'});
+ await q("UPDATE agreements SET signature_status=NULL WHERE id=@id",{id:replacement.offer.agreementId});
+ await q("UPDATE property_rental_offers SET hold_until=DATEADD(second,-1,SYSUTCDATETIME()),offer_until=DATEADD(day,-1,SYSUTCDATETIME()) WHERE enquiry_id=@id",{id:replacementCandidate.id});
+ const expiredReplacement=await store.get(owner,replacementCandidate.id,true);assert.equal(expiredReplacement.canReplaceAgreement,false);
+ await assert.rejects(store.change(owner,replacementCandidate.id,request('agreement',expiredReplacement.offer.version,true,{templateId}),true),{code:'RENTAL_HOLD_EXPIRED'});
  // Different seekers race for overlapping whole-property/unit holds.
  const multi=await property(2),whole=await candidate(multi),unit=await candidate(multi);
  await store.change(owner,whole.id,request('issue',0,true,terms()),true);

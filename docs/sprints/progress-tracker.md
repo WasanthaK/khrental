@@ -1,3 +1,13 @@
+## Agreement replacement and membership identity correction — 3 November 2026
+
+Live demo acceptance found three linked blockers: the new-agreement renter list used legacy default-tenant identity filtering instead of the working membership directory; signing loaded the owner through that same obsolete association; and cancelling an unsigned offer-bound draft left no replacement path. Test4 remains an active member of JEERY’S PLACE. Do not deactivate or duplicate the identity to work around these defects.
+
+The correction reuses the renter directory and fresh authenticated workspace context. Null API data remains null and owner-profile failures are retriable before saving/opening signing. A current accepted reservation may prepare a replacement only when the previous agreement is cancelled with no provider request, signature or activation evidence. The old agreement and links remain; replacement retains the accepted commercial version, dates, amounts, applicant, consent and reservation expiry, and records its predecessor. Expired/withdrawn reservations, revoked access and stale requests remain blocked.
+
+Live test position: original agreement `1C75A53E-B181-4A55-B055-BC2DAC02C230` cancelled; replacement template `58196AA9-5AF0-4027-832C-9C8F8FD4B625` saved with merge fields and exact landlord/tenant signature markers. No signature request sent. Local build and 23 focused tests pass; new browser and disposable-SQL coverage added. Deployment and post-deployment live acceptance remain pending until recorded below. Overall goal remains the complete rental journey before subscription management.
+
+---
+
 # Multi-Tenant Progress Tracker
 
 ## Overall Status

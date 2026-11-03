@@ -66,7 +66,7 @@ export const requestMssqlApi = async (path, options = {}) => {
 
   if (contentType.includes('application/json')) {
     const payload = await response.json();
-    return payload?.data ?? payload;
+    return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
   }
 
   return response.text();

@@ -76,12 +76,13 @@ const PropertyOffer=({enquiry,owner=false,call})=>{
       <button className={button} disabled={busy||!consent} onClick={()=>run('accept')}>Accept offer and reserve</button>{' '}
       <button className={button} disabled={busy} onClick={()=>run('decline')}>Decline rental offer</button>
     </div>}
-    {data?.actionsEnabled&&owner&&offer?.status==='accepted'&&<div className="space-y-3">
+    {data?.actionsEnabled&&owner&&(offer?.status==='accepted'||data.canReplaceAgreement)&&<div className="space-y-3">
+      {data.canReplaceAgreement&&<p>The previous draft was cancelled before signing. Select a template to prepare its replacement with the same accepted terms and reservation deadline. The cancelled agreement remains in history.</p>}
       <label className="block" htmlFor={field+'-template'}>Agreement template</label>
       <select id={field+'-template'} value={templateId} disabled={busy} onChange={e=>setTemplateId(e.target.value)} className="border rounded p-2">
         <option value="">Select template</option>{data.templates?.map(t=><option key={t.id} value={t.id}>{t.name} (v{t.version})</option>)}
       </select>
-      <button className={button} disabled={busy||!templateId} onClick={()=>run('agreement')}>Prepare agreement for existing account</button>
+      <button className={button} disabled={busy||!templateId} onClick={()=>run('agreement')}>{data.canReplaceAgreement?'Prepare replacement agreement':'Prepare agreement for existing account'}</button>
     </div>}
     {offer?.agreementId&&<div className="flex flex-wrap gap-4">
       {owner?<><a className="underline" href={'/dashboard/agreements/'+offer.agreementId}>Review agreement and arrange signing</a>
