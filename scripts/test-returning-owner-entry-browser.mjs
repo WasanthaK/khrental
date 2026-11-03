@@ -43,6 +43,7 @@ const context=x=>{
 try{
   vite=await createServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
+  app.get('/api/mssql/health',(_req,res)=>res.json({ok:true,connection:'ready'}));
   app.post('/api/platform/auth/sign-in',async(req,res)=>{
     // Let React commit the pending state before returning an actual HTTP error.
     await new Promise(resolve=>setTimeout(resolve,150));
