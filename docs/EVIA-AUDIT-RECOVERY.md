@@ -102,3 +102,10 @@ Focused OAuth client, broker and immutable recovery tests: 23/23 PASS. Initial a
 PR #490 is merged and deployment #41626677557 succeeded. All five final-head CI workflows passed, including 849 application tests and the disposable database archive/replay checks. The public build matches the merged release.
 
 Human-triggered recovery now reuses the existing OAuth connection used for signing. This corrects the earlier assumption that token acquisition was generally unavailable. Live audit-download acceptance remains OPEN; deployment and automated tests do not prove that the missing audit was recovered. Do not repeat browser login attempts. Continue from existing API evidence without requesting credentials in chat.
+
+
+## Official completed-package contract rechecked — 3 November 2026
+
+The [official guide](https://docs.sign.enadocapp.com/evia-sign-api/v2/webhook-management/store-completed-documents-in-sharepoint-using-microsoft-power-automate) documents a GET to the completion event's exact package URL, using `X-Webhook-Download-Token: Bearer <event token>` and `Accept: application/zip`. The event token expires and is separate from the OAuth connection used for signing. The deployed receiver follows this contract.
+
+The documentation review does not prove recovery of the existing audit PDF. Live audit-download acceptance remains OPEN until the actual file is retrieved and verified. No new runtime change was made from this review.
