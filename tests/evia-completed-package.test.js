@@ -32,6 +32,26 @@ function zip(entries = [{ name: 'signed.pdf', body: signed }, { name: 'audit_tra
 }
 const descriptor = { url: 'https://evia.enadocapp.com/_apis/sign/api/v2/test-package', token: 'event-scoped-token', expiresAt: '2099-01-01T00:00:00Z' };
 const args = { completedPackage: descriptor, verifiedRequest: true };
+const exportedAudit = 'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf';
+
+test('accepts a foldered Evia export with its request-specific audit first and preserves PDF bytes', async () => {
+  const documents = await extractEviaPackagePdfs(zip([
+    { name: `EviaSign_request/${exportedAudit}` },
+    { name: 'EviaSign_request/agreement.pdf', body: signed }
+  ]));
+  assert.deepEqual(documents.map(document => document.DocumentName), ['audit_trail.pdf', 'agreement.pdf']);
+  assert.deepEqual(Buffer.from(documents[0].DocumentContent, 'base64'), pdf);
+  assert.deepEqual(Buffer.from(documents[1].DocumentContent, 'base64'), signed);
+});
+
+test('rejects multiple audit aliases rather than choosing or overwriting an audit', async () => {
+  for (const second of ['audit_trail.pdf', exportedAudit.toLowerCase(),
+    'EviaSign_AuditTrail_44444444-4444-4444-8444-444444444444.pdf']) {
+    await assert.rejects(extractEviaPackagePdfs(zip([
+      { name: 'agreement.pdf', body: signed }, { name: exportedAudit }, { name: second }
+    ])), { code: 'EVIA_PACKAGE_ENTRY_INVALID' });
+  }
+});
 
 test('uses exact supplied package URL and event token without an API-key exchange', async () => {
   const calls = [];
@@ -135,6 +155,20 @@ test('late inline audit is retained without fetching any provider endpoint', asy
   await prepareEviaCompletionEvidence({ verifiedRequest: true, completed: true, agreement,
     requestId: 'persisted-request', signedDocumentUrl: signedUrl,
     documents: [{ DocumentName: 'audit_trail.pdf', DocumentContent: pdf.toString('base64') }],
+    downloadPackage: () => { throw new Error('No package request'); },
+    retainAudit: async ({ loadAuditBody }) => { saved = await loadAuditBody(); }
+  });
+  assert.deepEqual(saved, pdf);
+});
+
+test('late inline exported audit reaches audit-only retention without selecting the agreement', async () => {
+  let saved;
+  await prepareEviaCompletionEvidence({ verifiedRequest: true, completed: true, agreement,
+    requestId: 'persisted-request', signedDocumentUrl: signedUrl,
+    documents: [
+      { DocumentName: exportedAudit, DocumentContent: pdf.toString('base64') },
+      { DocumentName: 'agreement.pdf', DocumentContent: signed.toString('base64') }
+    ],
     downloadPackage: () => { throw new Error('No package request'); },
     retainAudit: async ({ loadAuditBody }) => { saved = await loadAuditBody(); }
   });

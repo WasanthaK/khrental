@@ -20,11 +20,56 @@ import {
 import {
   retrieveAndStoreEviaCompletedDocuments,
   sanitizeCompletedDocumentName,
+  normalizeEviaCompletedDocumentName,
   storeEviaWebhookCompletedDocuments,
   validateEviaDownloadUrl,
   createEviaArchiveAttemptId,
   buildEviaCompletedDocumentPath
 } from '../src/api/evia/completedDocuments.js';
+
+const exportedAuditName = 'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf';
+
+test('recognizes only canonical and request-specific Evia audit filenames', () => {
+  for (const name of ['AUDIT_TRAIL.PDF', exportedAuditName, exportedAuditName.toLowerCase(), `folder/${exportedAuditName}`]) {
+    assert.equal(normalizeEviaCompletedDocumentName(name), 'audit_trail.pdf');
+  }
+  for (const name of ['audit.pdf', 'my_audit_trail.pdf', 'EviaSign_AuditTrail_invalid.pdf',
+    `${exportedAuditName}.pdf`, 'agreement.pdf']) {
+    assert.notEqual(normalizeEviaCompletedDocumentName(name), 'audit_trail.pdf');
+  }
+});
+
+test('inline audit-first exports keep the signed PDF separate and store the audit at its canonical path', async () => {
+  for (const archiveAttemptId of [null, '44444444-4444-4444-8444-444444444444']) {
+    const writes = [];
+    const audit = Buffer.from('%PDF-audit'), signed = Buffer.from('%PDF-agreement');
+    const result = await storeEviaWebhookCompletedDocuments({
+      tenantId: 'tenant-1', agreementId: 'agreement-1', archiveAttemptId,
+      documents: [
+        { DocumentName: exportedAuditName, DocumentContent: audit.toString('base64') },
+        { DocumentName: 'agreement.pdf', DocumentContent: signed.toString('base64') }
+      ],
+      storageDriver: { upload: async (bucket, path, body) => writes.push({ bucket, path, body }) }
+    });
+    const prefix = 'tenants/tenant-1/agreements/agreement-1/signed/' +
+      (archiveAttemptId ? `staged/${archiveAttemptId}/` : '');
+    assert.equal(result.auditTrailUrl, '/storage/documents/' + prefix + 'audit_trail.pdf');
+    assert.equal(result.signedDocumentUrl, '/storage/documents/' + prefix + 'agreement.pdf');
+    assert.deepEqual(writes.map(write => write.body), [audit, signed]);
+  }
+});
+
+test('inline normalization collisions are rejected before any storage write', async () => {
+  let writes = 0;
+  await assert.rejects(storeEviaWebhookCompletedDocuments({
+    tenantId: 'tenant-1', agreementId: 'agreement-1',
+    documents: ['agreement.pdf', exportedAuditName, 'audit_trail.pdf'].map(DocumentName => ({
+      DocumentName, DocumentContent: Buffer.from('%PDF-document').toString('base64')
+    })),
+    storageDriver: { upload: async () => { writes++; } }
+  }), { code: 'EVIA_COMPLETED_DOCUMENT_NAME_COLLISION' });
+  assert.equal(writes, 0);
+});
 
 const jsonResponse = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,

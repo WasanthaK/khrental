@@ -1,11 +1,33 @@
 import { getStorageDriver } from '../storage/index.js';
 import { authorizeHistoricEviaAuditTrailRead } from './auditTrailAccess.js';
-import { listEviaCompletedDocuments, downloadEviaCompletedDocument, exchangeEviaIntegrationApiKey } from './completedDocuments.js';
+import { listEviaCompletedDocuments, downloadEviaCompletedDocument, exchangeEviaIntegrationApiKey, normalizeEviaCompletedDocumentName } from './completedDocuments.js';
 
 const failure = (message, status, code) => Object.assign(new Error(message), { status, code });
 const missing = error => error?.status === 404 || error?.code === 'ENOENT' || error?.code === 'STORAGE_OBJECT_NOT_FOUND';
 const validPdf = body => Buffer.isBuffer(body) && body.length >= 5
   && body.length <= 50 * 1024 * 1024 && body.subarray(0, 5).toString() === '%PDF-';
+
+// Earlier callbacks stored Evia's exported audit name unchanged. Only read
+// candidates derived from the persisted request inside this agreement's path.
+const readPreviouslyStoredAudit = async ({ storageDriver, objectPath, requestId }) => {
+  const id = String(requestId);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+  const prefix = objectPath.slice(0, objectPath.lastIndexOf('/') + 1);
+  const names = new Set([id, id.toUpperCase(), id.toLowerCase()]
+    .map(value => `EviaSign_AuditTrail_${value}.pdf`));
+  let retained = null;
+  for (const name of names) {
+    let object;
+    try { object = await storageDriver.getObject('documents', prefix + name); }
+    catch (error) { if (missing(error)) continue; throw error; }
+    if (!validPdf(object.body)) throw failure('The retained audit is invalid; recovery will not overwrite it.', 409, 'EVIA_AUDIT_RETAINED_INVALID');
+    if (retained && !retained.equals(object.body)) {
+      throw failure('Retained audit copies conflict.', 409, 'EVIA_AUDIT_READBACK_CONFLICT');
+    }
+    retained = object.body;
+  }
+  return retained;
+};
 
 // Recover only the existing provider audit. Never rewrite the signed PDF,
 // agreement status, signature rows or fenced archive publication records.
@@ -21,7 +43,7 @@ export const retainEviaAuditForVerifiedRequest = async ({
   const validSigned = typeof signedDocumentUrl === 'string'
     && signedDocumentUrl.toLowerCase().startsWith(prefix.toLowerCase())
     && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.pdf$/i.test(signedDocumentUrl.slice(prefix.length))
-    && !signedDocumentUrl.toLowerCase().endsWith('/audit_trail.pdf');
+    && normalizeEviaCompletedDocumentName(signedDocumentUrl.slice(prefix.length)) !== 'audit_trail.pdf';
   if (!validSigned) throw failure('Only retained historic agreement audits can be recovered here.', 409, 'EVIA_AUDIT_RECOVERY_SCOPE');
   if (!String(requestId || '').trim()) throw failure('Agreement has no Evia request reference.', 409, 'EVIA_REQUEST_REFERENCE_MISSING');
   const objectPath = signedDocumentUrl.slice('/storage/documents/'.length, signedDocumentUrl.lastIndexOf('/') + 1) + 'audit_trail.pdf';
@@ -33,7 +55,10 @@ export const retainEviaAuditForVerifiedRequest = async ({
   } catch (error) { if (!missing(error)) throw error; }
 
   let downloaded;
-  if (loadAuditBody) {
+  const previousAudit = await readPreviouslyStoredAudit({ storageDriver, objectPath, requestId });
+  if (previousAudit) {
+    downloaded = { body: previousAudit };
+  } else if (loadAuditBody) {
     downloaded = { body: await loadAuditBody() };
   } else {
     let token = String(accessToken || '').trim();

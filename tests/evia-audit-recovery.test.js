@@ -55,6 +55,76 @@ test('recovers the missing audit independently and repeat recovery never contact
   assert.equal(f.calls.length, 2); assert.equal(f.counts().writes, 1);
 });
 
+test('provider export filename recovers to canonical audit path without downloading the signed PDF', async () => {
+  const f = fixture();
+  const fetchImpl = async request => {
+    if (request.endsWith('/documents')) return response([
+      { documentName: 'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf', downloadUrl: url },
+      { documentName: 'Signed.pdf', downloadUrl: url.replace('/audit/', '/signed/') }
+    ]);
+    assert.equal(request, url);
+    return response(pdf);
+  };
+  assert.deepEqual(await recoverHistoricEviaAudit({ ...f.args, fetchImpl }), {
+    auditTrailUrl: '/storage/documents/' + path, recovered: true
+  });
+  assert.equal(f.counts().writes, 1);
+});
+
+test('provider list with both audit naming forms fails before any download or write', async () => {
+  const f = fixture(); let calls = 0;
+  await assert.rejects(recoverHistoricEviaAudit({ ...f.args, fetchImpl: async request => {
+    calls++; assert.ok(request.endsWith('/documents'));
+    return response(['audit_trail.pdf', 'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf']
+      .map(documentName => ({ documentName, downloadUrl: url })));
+  } }), { code: 'EVIA_COMPLETED_DOCUMENT_NAME_COLLISION' });
+  assert.equal(calls, 1); assert.equal(f.counts().writes, 0);
+});
+
+test('an exported audit filename cannot masquerade as the retained signed agreement', async () => {
+  const f = fixture();
+  await assert.rejects(retainEviaAuditForVerifiedRequest({
+    ...f.args, requestId: row.eviasignreference,
+    signedDocumentUrl: row.signed_document_url.replace('Signed.pdf',
+      'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf')
+  }), { code: 'EVIA_AUDIT_RECOVERY_SCOPE' });
+  assert.equal(f.calls.length, 0); assert.equal(f.counts().writes, 0);
+});
+
+test('recovers an already-stored provider-named audit without provider calls or signed-file writes', async () => {
+  const f = fixture(); const requestId = 'abcdef12-3456-4789-8abc-123456789abc';
+  const existingPath = path.replace('audit_trail.pdf', `EviaSign_AuditTrail_${requestId.toUpperCase()}.pdf`);
+  const originalGet = f.args.storageDriver.getObject;
+  f.args.storageDriver.getObject = async (bucket, key) => {
+    if (key === path) return originalGet(bucket, key);
+    assert.ok(key.startsWith(`tenants/${tenantId}/agreements/${agreementId}/signed/EviaSign_AuditTrail_`));
+    if (key === existingPath) return { body: pdf };
+    throw Object.assign(new Error('missing'), { status: 404 });
+  };
+  f.args.fetchImpl = () => { throw new Error('Retained audit must not contact provider'); };
+  const args = { ...f.args, loadAgreement: async () => ({ ...row, eviasignreference: requestId }) };
+  assert.equal((await recoverHistoricEviaAudit(args)).recovered, true);
+  assert.equal((await recoverHistoricEviaAudit(args)).recovered, false);
+  assert.equal(f.counts().writes, 1);
+  assert.deepEqual((await originalGet('documents', path)).body, pdf);
+});
+
+test('conflicting or invalid stored audit aliases fail without provider fetch or writes', async () => {
+  for (const invalid of [true, false]) {
+    const f = fixture(); const requestId = 'abcdef12-3456-4789-8abc-123456789abc';
+    f.args.storageDriver.getObject = async (bucket, key) => {
+      if (key === path) throw Object.assign(new Error('missing'), { status: 404 });
+      return { body: invalid ? Buffer.from('invalid') :
+        key.includes(requestId.toUpperCase()) ? Buffer.from('%PDF-different audit') : pdf };
+    };
+    f.args.fetchImpl = () => { throw new Error('Stored evidence conflict must not fetch'); };
+    await assert.rejects(recoverHistoricEviaAudit({ ...f.args,
+      loadAgreement: async () => ({ ...row, eviasignreference: requestId })
+    }), { code: invalid ? 'EVIA_AUDIT_RETAINED_INVALID' : 'EVIA_AUDIT_READBACK_CONFLICT' });
+    assert.equal(f.counts().writes, 0);
+  }
+});
+
 test('server integration connection recovers without browser OAuth and refreshes an expired provider token once', async () => {
   const f = fixture(); let exchanges = 0, lists = 0;
   const normalFetch = f.args.fetchImpl;

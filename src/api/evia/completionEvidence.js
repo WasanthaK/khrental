@@ -1,9 +1,10 @@
 import { downloadEviaCompletedPackage } from './completedPackage.js';
 import { retainEviaAuditForVerifiedRequest } from './auditRecovery.js';
 import { withEviaArchiveCapacity } from './archiveCapacity.js';
+import { normalizeEviaCompletedDocumentName } from './completedDocuments.js';
 
 const auditDocuments = documents => documents.filter(document =>
-  String(document.DocumentName || document.documentName || '').toLowerCase() === 'audit_trail.pdf');
+  normalizeEviaCompletedDocumentName(document.DocumentName || document.documentName) === 'audit_trail.pdf');
 
 // Invoked only after the verified webhook has matched the persisted Evia
 // request to an agreement. Runs before terminal/duplicate acknowledgements:
