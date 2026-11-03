@@ -74,7 +74,7 @@ const PropertyViewing=({enquiry,owner=false,call})=>{
     {snapshot.loaded&&canSchedule&&<form className="space-y-3" onSubmit={e=>{e.preventDefault();run(owner?'propose':'request');}}>
       <label className="block" htmlFor={field+'-date'}>{viewing?'Request a different time':'Preferred date and time'} ({zone})</label>
       <input id={field+'-date'} required type="datetime-local" value={date} disabled={busy}
-        onChange={e=>setDate(e.target.value)} className="border rounded p-2 block max-w-full" />
+        onInput={e=>setDate(e.currentTarget.value)} onChange={e=>setDate(e.target.value)} className="border rounded p-2 block max-w-full" />
       <label className="block" htmlFor={field+'-duration'}>Duration</label>
       <select id={field+'-duration'} disabled={busy} value={minutes} onChange={e=>setMinutes(e.target.value)} className="border rounded p-2">
         {[15,30,45,60,90,120,180].map(n=><option key={n} value={n}>{n} minutes</option>)}

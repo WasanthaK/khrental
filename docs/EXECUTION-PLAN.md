@@ -1,5 +1,12 @@
 # KH Rentals Execution Plan
 
+## Live rental acceptance and session-recovery blocker — 3 November 2026
+
+Owner-authorized demo acceptance: +111 sent an enquiry with explicit consent for SUWADA villa in +514’s JEERY’S PLACE. Owner receipt/reply and renter readback after refresh PASSED. Public reference 8B647B58-8957-4AF5-9C0B-B97D4D02826A displays “Home for rent” because the public headline is blank. Viewing request, owner confirmation, private demo instructions and renter readback after refresh PASSED for the original 4 November slot. A subsequent 3 November 09:45–10:00 Asia/Colombo request remains REQUESTED, not confirmed; do not claim completion or application acceptance.
+
+Account switching REOPENED: navigating away during sign-out was followed by a persistent invalid-session / authenticated-role Access Denied loop, including a fresh login tab. Source inspection found cleanup delayed until revocation completes and HTTP 401 profile failures retaining a cached identity. Targeted correction clears local identity before revocation, invalidates only the matching rejected session, synchronizes other-tab auth changes and rejects stale profile results. Viewing date input also listens to native input events; browser regression exercises a picker/autofill-style value update. Implementation/tests/deployment acceptance must be recorded separately. No capacity, auto-pause, permissions, signatures or payment changes. Item #459 remains open; subscriptions deferred.
+
+
 ## Database wake-up release completed — 3 November 2026
 
 PR #485 MERGED at `264a86d28fe627b415cbc6bcff842225669d4fb5`. Application deployment #41555447578 SUCCESS: 822/822 tests, production build, Ready revision 0000445, live SQL connection ready and exact public build fingerprint. Marketing deployment #41555447544 SUCCESS on retry after an Azure CLI ETXTBSY launch failure; no product-code workaround was needed.
