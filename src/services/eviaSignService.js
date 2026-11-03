@@ -45,7 +45,9 @@ const requestEviaToken = async (payload) => {
     : { error: await response.text() };
 
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || `Evia token request failed with status ${response.status}`);
+    throw Object.assign(new Error(data?.error || data?.message || `Evia token request failed with status ${response.status}`), {
+      status: response.status, code: data?.code
+    });
   }
 
   return data;
@@ -68,7 +70,12 @@ const persistEviaAuth = (data, fallbackUserEmail = null) => {
   return authData;
 };
 
-const getActiveEviaAccessToken = async () => {
+const eviaAuthenticationRequired = () => Object.assign(
+  new Error('Connect to Evia Sign, then try again.'),
+  { code: 'EVIA_AUTHENTICATION_REQUIRED' }
+);
+
+const getActiveEviaAccessToken = async ({ forceRefresh = false } = {}) => {
   let storedAuth = {};
   try {
     storedAuth = JSON.parse(localStorage.getItem(EVIA_AUTH_STORAGE_KEY) || '{}');
@@ -76,19 +83,29 @@ const getActiveEviaAccessToken = async () => {
     storedAuth = {};
   }
 
-  if (storedAuth.authToken && storedAuth.expiresAt && storedAuth.expiresAt > Date.now()) {
+  if (!forceRefresh && storedAuth.authToken && storedAuth.expiresAt && storedAuth.expiresAt > Date.now()) {
     return storedAuth.authToken;
   }
 
   if (!storedAuth.refreshToken) {
-    throw new Error('Evia Sign authentication is required.');
+    throw eviaAuthenticationRequired();
   }
 
-  const refreshed = await requestEviaToken({
-    grantType: 'refresh_token',
-    refreshToken: storedAuth.refreshToken
-  });
-  return persistEviaAuth(refreshed, storedAuth.userEmail).authToken;
+  try {
+    const refreshed = await requestEviaToken({
+      grantType: 'refresh_token',
+      refreshToken: storedAuth.refreshToken
+    });
+    return persistEviaAuth({
+      ...refreshed,
+      refreshToken: refreshed.refreshToken || refreshed.refresh_token || storedAuth.refreshToken
+    }, storedAuth.userEmail).authToken;
+  } catch (error) {
+    if (error.code === 'EVIA_TOKEN_EXCHANGE_FAILED' && [400, 401].includes(error.status)) {
+      throw eviaAuthenticationRequired();
+    }
+    throw error;
+  }
 };
 
 export async function reconcileEviaSignedDocument(agreementId) {
@@ -121,18 +138,42 @@ export async function reconcileEviaSignedDocument(agreementId) {
 
 export async function recoverEviaAuditTrail(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required to recover its audit.');
-  // Recovery uses the existing server-side Evia integration connection.
-  // An unrelated browser signing session must not block archive recovery.
-  const response = await fetch(
-    `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
-      method: 'POST',
-      headers: buildRequestContextHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-      body: JSON.stringify({})
+  // Human-triggered recovery reuses the sender's existing OAuth connection.
+  // Supplying the token bypasses the unavailable integration-key exchange;
+  // the server still authorizes the administrator and stored request binding.
+  let accessToken = await getActiveEviaAccessToken();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
+        method: 'POST',
+        headers: buildRequestContextHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify({ accessToken })
+      }
+    );
+    const data = (response.headers.get('content-type') || '').includes('application/json')
+      ? await response.json() : {};
+    const providerTokenRejected = response.status === 401 && [
+      'EVIA_COMPLETED_DOCUMENT_LIST_FAILED', 'EVIA_COMPLETED_DOCUMENT_DOWNLOAD_FAILED'
+    ].includes(data?.code);
+    if (providerTokenRejected) {
+      if (attempt === 1) throw eviaAuthenticationRequired();
+      accessToken = await getActiveEviaAccessToken({ forceRefresh: true });
+      continue;
     }
-  );
-  const data = await response.json();
-  if (!response.ok || !data?.auditTrailUrl) throw new Error(data?.error || 'Unable to recover the existing Evia audit.');
-  return data;
+    if (!response.ok || !data?.auditTrailUrl) {
+      throw Object.assign(new Error(data?.error || 'Unable to recover the existing Evia audit.'), {
+        status: response.status, code: data?.code
+      });
+    }
+    return data;
+  }
+}
+
+export function connectEviaAuditRecovery() {
+  // The existing callback stores the connection in this origin. The user can
+  // retry recovery in the original tab after completing sign-in; no new request
+  // or signature is created. Do not give the provider tab an opener reference.
+  window.open(getAuthorizationUrl(), '_blank', 'noopener,noreferrer');
 }
 
 export async function getEviaAgreementCallbackUrl(agreementId) {

@@ -115,6 +115,21 @@ test('first completion returns verified package PDFs for the existing archival p
   assert.equal(documents.length, 2);
 });
 
+test('published fenced replay stays with its archive guards and never invokes historic recovery', async () => {
+  const documents = [{ DocumentName: 'audit_trail.pdf', DocumentContent: pdf.toString('base64') }];
+  for (const signedDocumentUrl of [
+    signedUrl.replace('/signed/', '/signed/staged/attempt/'),
+    signedUrl.replace('/signed/', '/signed/staged/attempt/').toUpperCase()
+  ]) {
+    assert.equal(await prepareEviaCompletionEvidence({ verifiedRequest: true, completed: true,
+      agreement, requestId: 'persisted-request', signedDocumentUrl, documents,
+      completedPackage: { ...descriptor, expiresAt: '2000-01-01' },
+      downloadPackage: () => { throw new Error('Published replay must not fetch expired package'); },
+      retainAudit: () => { throw new Error('Historic recovery must not modify fenced publication'); }
+    }), documents);
+  }
+});
+
 test('late inline audit is retained without fetching any provider endpoint', async () => {
   let saved;
   await prepareEviaCompletionEvidence({ verifiedRequest: true, completed: true, agreement,

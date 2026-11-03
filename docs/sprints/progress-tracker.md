@@ -1,3 +1,11 @@
+## OAuth audit recovery alternative — 3 November 2026
+
+Independent unauthenticated curl to the documented completed-document list returned HTTP 401 / application/json, while both integration-key exchange URL interpretations returned HTTP 404. This establishes a reachable authentication boundary, not successful OAuth document retrieval.
+
+Human-triggered audit recovery now passes the existing Evia OAuth access token to the already-authorized audit-only backend route. The browser previously sent an empty body and forced the failing integration exchange. Expired tokens use the existing V2 refresh broker; a provider document 401 refreshes and retries once. Application-session rejection, tenant denial, missing documents and outages do not trigger OAuth refresh or fall back to the unavailable exchange. A missing/rejected Evia connection exposes Connect to Evia Sign using the existing authorization flow in a separate tab with no opener; the user then retries recovery. No signature request is created or resent.
+
+Implementation checkpoint only; release and live OAuth audit retrieval remain OPEN. See [audit recovery details](../EVIA-AUDIT-RECOVERY.md#oauth-audit-recovery-alternative--3-november-2026).
+
 ## Evia completed-package audit capture — 3 November 2026
 
 Implemented verified completed-package download and audit-only late/replayed completion handling. Provider ZIP validation and conditional audit retention prevent signed-document overwrites. Local Evia 102/102 tests and build pass; authorization 839 pass with one Chrome-unavailable browser test. PR #489 merged; deployment #41617426391 succeeded at ready revision 0000449 with matching build and MSSQL readiness. CI 840/840 PASS. Fresh +514 live retest FAIL: stored audit HTTP 404 and built-in Evia recovery non-JSON HTTP 404. Independent authenticated curl run #41623929241 reproduced 404 at both origin-relative and Sign-prefixed exchange URLs; neither returned a token, so provider audit retrieval could not proceed. Existing audit acceptance remains OPEN pending a working retrieval route or verified provider package/audit re-delivery. See [audit recovery details](../EVIA-AUDIT-RECOVERY.md#completed-package-implementation--3-november-2026). The full rental lifecycle remains open.

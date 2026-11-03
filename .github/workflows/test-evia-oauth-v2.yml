@@ -8,6 +8,7 @@ on:
       - 'src/services/eviaSignService.js'
       - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-audit-oauth-client.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'Dockerfile'
@@ -19,6 +20,7 @@ on:
       - 'src/services/eviaSignService.js'
       - 'src/services/eviaV2SigningService.js'
       - 'tests/evia-oauth-v2.test.js'
+      - 'tests/evia-audit-oauth-client.test.js'
       - 'tests/evia-signing-v2.test.js'
       - 'scripts/verify-evia-real-session-audit-http.mjs'
       - 'Dockerfile'
@@ -37,4 +39,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/evia-oauth-v2.test.js tests/evia-signing-v2.test.js
+      - run: node --test tests/evia-audit-oauth-client.test.js tests/evia-oauth-v2.test.js tests/evia-signing-v2.test.js
