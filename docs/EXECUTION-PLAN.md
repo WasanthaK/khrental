@@ -1,5 +1,12 @@
 # KH Rentals Execution Plan
 
+## Session recovery correction deployed — 3 November 2026
+
+PR #486 merged at `4ea6f4db4dd301fa08a7532b215cd7e45882c48e`; reviewed head `3543b03fec4f4258c56d0476cece0a1fe4e39a24`. All four PR CI suites PASSED, including native-input viewing regression and real AuthProvider lifecycle. Production deployment #41576898262 SUCCESS; merged authorization suite 830/830 PASSED, build and revision/public-build readiness PASSED.
+
+Live before/after using the same browser storage: before rollout, opening login reproduced invalid-session Access Denied; after rollout, opening login recovered automatically to the email/password form and a further reload retained that form. No storage purge or privilege change was used. Expired-session recovery is live-verified. Fresh authenticated sign-out/account-switch and production date-entry recheck remain pending user sign-in; do not close those broader checks from CI alone. Rental journey testing stays paused until these focused regressions pass. The earlier 3 November viewing request is not confirmed and must not be marked completed as a real visit.
+
+
 ## Live rental acceptance and session-recovery blocker — 3 November 2026
 
 Owner-authorized demo acceptance: +111 sent an enquiry with explicit consent for SUWADA villa in +514’s JEERY’S PLACE. Owner receipt/reply and renter readback after refresh PASSED. Public reference 8B647B58-8957-4AF5-9C0B-B97D4D02826A displays “Home for rent” because the public headline is blank. Viewing request, owner confirmation, private demo instructions and renter readback after refresh PASSED for the original 4 November slot. A subsequent 3 November 09:45–10:00 Asia/Colombo request remains REQUESTED, not confirmed; do not claim completion or application acceptance.
