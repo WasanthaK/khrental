@@ -29,56 +29,15 @@ jobs:
           az extension add --name containerapp --upgrade --yes >/dev/null
           ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
           test -n "$ready_revision"
+          fqdn=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail --silent --show-error --max-time 120 "https://$fqdn/api/mssql/health" >/dev/null
+          replica=$(az containerapp replica list --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ready_revision" --query '[0].name' -o tsv)
+          test -n "$replica"
           cat > metadata-readonly.js <<'JS'
-          (async () => {
-            const { runSingleQuery } = await import('./src/api/mssql/query.js');
-            // Read-only aggregate: no request/agreement IDs, personal data,
-            // filenames, URLs, tokens, full payloads or credentials leave SQL.
-            const row = await runSingleQuery(`
-              WITH completion_events AS (
-                SELECT CASE WHEN ISJSON(raw_data) = 1 THEN raw_data ELSE '{}' END AS metadata,
-                       CASE WHEN processed = 1 THEN 1 ELSE 0 END AS processed
-                FROM dbo.webhook_events
-                WHERE createdat >= DATEADD(hour, -24, SYSUTCDATETIME())
-                  AND event_type IN ('request.completed', 'signing_completed')
-              ), flags AS (
-                SELECT processed,
-                  CASE WHEN EXISTS (
-                    SELECT 1 FROM OPENJSON(metadata, '$.payloadKeys')
-                    WHERE LOWER(CONVERT(nvarchar(128), value)) = 'completedpackage'
-                  ) THEN 1 ELSE 0 END AS package_key,
-                  CASE WHEN EXISTS (
-                    SELECT 1 FROM OPENJSON(metadata, '$.payloadKeys')
-                    WHERE LOWER(CONVERT(nvarchar(128), value)) IN ('data', 'payload')
-                  ) THEN 1 ELSE 0 END AS nested_envelope,
-                  CASE WHEN TRY_CONVERT(int, JSON_VALUE(metadata, '$.documentCount')) > 0 THEN 1 ELSE 0 END AS documents_present,
-                  CASE WHEN EXISTS (
-                    SELECT 1 FROM OPENJSON(metadata, '$.documents')
-                    WHERE LOWER(JSON_VALUE(value, '$.name')) LIKE '%audit%'
-                      AND JSON_VALUE(value, '$.hasContent') = 'true'
-                  ) THEN 1 ELSE 0 END AS inline_audit_present,
-                  CASE WHEN JSON_QUERY(metadata, '$.payloadKeys') IS NOT NULL THEN 1 ELSE 0 END AS keys_recorded
-                FROM completion_events
-              )
-              SELECT COUNT(*) AS completion_events_24h,
-                     COALESCE(SUM(processed), 0) AS processed_events,
-                     COALESCE(SUM(keys_recorded), 0) AS events_with_keys_recorded,
-                     COALESCE(SUM(package_key), 0) AS events_with_package_key,
-                     COALESCE(SUM(nested_envelope), 0) AS events_with_opaque_nested_envelope,
-                     COALESCE(SUM(documents_present), 0) AS events_with_documents,
-                     COALESCE(SUM(inline_audit_present), 0) AS events_with_inline_audit
-              FROM flags;
-            `);
-            console.log('EVIA_PACKAGE_METADATA_COUNTS=' + JSON.stringify(row));
-            console.log('EVIA_PACKAGE_METADATA_READONLY_OK');
-            process.exit(0);
-          })().catch(() => {
-            console.error('EVIA_PACKAGE_METADATA_READONLY_FAILED');
-            process.exit(1);
-          });
+          (async()=>{let{runSingleQuery:q}=await import('./src/api/mssql/query.js');let r=await q(`SELECT COUNT(*) n,SUM(CASE WHEN LOWER(JSON_QUERY(raw_data,'$.payloadKeys')) LIKE '%"completedpackage"%' THEN 1 ELSE 0 END) package_keys,SUM(CASE WHEN LOWER(JSON_QUERY(raw_data,'$.payloadKeys')) LIKE '%"data"%' OR LOWER(JSON_QUERY(raw_data,'$.payloadKeys')) LIKE '%"payload"%' OR LOWER(JSON_QUERY(raw_data,'$.payloadKeys')) LIKE '%"eventdata"%' THEN 1 ELSE 0 END) opaque_envelopes,SUM(CASE WHEN JSON_QUERY(raw_data,'$.payloadKeys') IS NOT NULL THEN 1 ELSE 0 END) keys_recorded FROM dbo.webhook_events WHERE ISJSON(raw_data)=1 AND createdat>=DATEADD(hour,-24,SYSUTCDATETIME()) AND (TRY_CONVERT(int,event_id)=3 OR event_type IN('request.completed','signing_completed'))`);console.log('EVIA_PACKAGE_METADATA_COUNTS='+JSON.stringify(r));console.log('EVIA_PACKAGE_METADATA_READONLY_OK');process.exit(0)})().catch(()=>{console.error('EVIA_PACKAGE_METADATA_READONLY_FAILED');process.exit(1)})
           JS
           encoded=$(base64 -w0 metadata-readonly.js)
           remote_command="node -e \"eval(Buffer.from('$encoded','base64').toString())\""
-          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ready_revision" --command "$remote_command"
+          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ready_revision" --replica "$replica" --command "$remote_command"
           script -q -e -c "$exec_command" /dev/null | tee metadata-result.txt
           grep -Fq EVIA_PACKAGE_METADATA_READONLY_OK metadata-result.txt
