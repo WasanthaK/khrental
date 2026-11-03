@@ -319,12 +319,14 @@ try {
   await page.waitForSelector('input[type="date"]');
   const appDate=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   await page.$eval('input[type="date"]',(input,value)=>{
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+    // Picker/autofill input must update React state before other fields rerender.
+    input.value=value;
     input.dispatchEvent(new Event('input',{bubbles:true}));
   },appDate);
   await page.type('textarea[id$="-statement"]','Synthetic rental application plans.');
   assert.equal(await page.$eval('section[aria-label^="Application for"] button[type="submit"]',e=>e.disabled),true);
   await page.click('section[aria-label^="Application for"] input[type="checkbox"]');
+  assert.equal(await page.$eval('input[type="date"]',e=>e.value),appDate);
   await page.click('::-p-text(Submit application)');
   await page.waitForFunction(()=>document.body.innerText.includes('Application status: submitted'));
   await ownerPage.bringToFront();await ownerPage.click('::-p-text(Refresh application)');
