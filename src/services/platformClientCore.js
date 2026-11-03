@@ -1,3 +1,4 @@
+import { ensureDatabaseReady } from '../utils/databaseReadiness';
 import { getApiBaseUrl } from '../utils/env';
 import {normalizePropertyRentalValues} from '../utils/listingCategories.js';
 import {
@@ -98,6 +99,7 @@ const apiRequest = async (path, options = {}) => {
     ...rest
   } = options;
 
+  await ensureDatabaseReady();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     headers: {

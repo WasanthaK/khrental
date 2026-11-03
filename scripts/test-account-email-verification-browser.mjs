@@ -33,6 +33,7 @@ let vite,server,browser,verified=false,sends=0,redeems=0,forbiddenAuth=0,lastReq
 try{
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
+  app.get('/api/mssql/health',(_req,res)=>res.json({ok:true,connection:'ready'}));
   app.get('/fixture-forbidden-auth',(_req,res)=>{forbiddenAuth++;res.sendStatus(500);});
   app.post('/api/platform/owner-setup',(req,res)=>{
     assert.equal(req.get('authorization'),'Bearer synthetic-existing-token');

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import DatabaseReadiness from './components/DatabaseReadiness';
 import { BrowserRouter } from 'react-router-dom';
 import VerifySeekerEmail from './pages/VerifySeekerEmail';
 import VerifyAccountEmail from './pages/VerifyAccountEmail';
@@ -82,10 +83,10 @@ if (window.location.pathname === '/verify-email') {
   root.render(
     <React.StrictMode>
       <ErrorBoundary>
-        <BrowserRouter>{initialContext.accountChallenge?<VerifyAccountEmail initialContext={initialContext} />:<VerifySeekerEmail initialContext={initialContext} />}</BrowserRouter>
+        <DatabaseReadiness><BrowserRouter>{initialContext.accountChallenge?<VerifyAccountEmail initialContext={initialContext} />:<VerifySeekerEmail initialContext={initialContext} />}</BrowserRouter></DatabaseReadiness>
       </ErrorBoundary>
     </React.StrictMode>
   );
 } else {
-  root.render(AppWithErrorHandling);
+  root.render(<DatabaseReadiness>{AppWithErrorHandling}</DatabaseReadiness>);
 }

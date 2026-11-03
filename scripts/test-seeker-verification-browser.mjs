@@ -31,6 +31,7 @@ const plugin={name:'verification-bootstrap-fixture',enforce:'pre',resolveId(sour
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
+  app.get('/api/mssql/health',(_req,res)=>res.json({ok:true,connection:'ready'}));
   app.get('/fixture-auth',(req,res)=>{authRequests++;releaseAuth=()=>{if(!res.writableEnded)res.json({ok:true});};});
   app.post('/api/public-signup/redeem',(req,res)=>{
     redemptions++;
