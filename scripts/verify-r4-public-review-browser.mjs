@@ -166,7 +166,8 @@ try{
     assert.ok(!targets.other.includes('privateKey'),from+' cross-market query privacy');
     if((lkLive&&from==='lk')||(bnLive&&from==='bn')){
       assert.equal(await tab.evaluate(()=>!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden),true,'API failure must not show example cards as real inventory');
-      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('temporarily unavailable')),'Show a clear unavailable state');
+      await tab.waitForSelector('[data-catalog-retry]',{timeout:15000});
+      assert.ok(await tab.$eval('[data-public-listing-cards]',n=>n.textContent.includes('Our minions need another moment')),'Show a friendly unavailable state after bounded retries');
     }
     await tab.goto(origin+targets.other,{waitUntil:'domcontentloaded'});
     assert.equal(await tab.$eval('body',node=>node.dataset.country),to.toUpperCase());
