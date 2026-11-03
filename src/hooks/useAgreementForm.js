@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { AGREEMENT_STATUS } from '../constants/agreementStatus';
-import { fetchAppUsers } from '../services/appUserService';
+import { fetchRenteeDirectory } from '../services/renteeDirectoryService';
 import {
   fetchProperty,
   fetchPropertyUnit,
@@ -111,7 +111,7 @@ export const useAgreementForm = (initialData = null) => {
         const [templateRows, propertyRows, renteeRows] = await Promise.all([
           listTemplates(),
           listProperties(),
-          fetchAppUsers('rentee')
+          fetchRenteeDirectory()
         ]);
 
         if (cancelled) {

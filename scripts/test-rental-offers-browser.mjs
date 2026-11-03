@@ -9,6 +9,7 @@ import puppeteer from 'puppeteer';
 import {parseOfferAction} from '../src/api/enquiries/offerContract.js';
 const id='22222222-2222-4222-8222-222222222222',templateId='33333333-3333-4333-8333-333333333333',agreementId='44444444-4444-4444-8444-444444444444';
 const enquiry={id,title:'Synthetic rental',country:'LK',status:'responded',message:'Synthetic enquiry',response:'Synthetic reply'};
+let cancelled=false;
 let offer=null,open=true,failNext=false,pendingRead=null,releaseRead=null,readStarted=null;
 const requests=new Map();
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter} from 'react-router-dom';
@@ -28,7 +29,7 @@ const plugin={name:'rental-offer-fixture',enforce:'pre',resolveId(source,importe
  if(id==='\0rental-platform')return `export const getPlatformClient=()=>({auth:{getSession:async()=>({data:{session:{access_token:'synthetic-only'}}})}});`;
 }};
 let vite,server,browser,page;
-const snapshot=()=>({offer,actionsEnabled:open,applicationAccepted:true,applicationVersion:1,units:[],templates:[{id:templateId,name:'Synthetic template',version:1}],agreement:offer?.agreementId?{id:agreementId,status:'draft',signatureStatus:null}:null});
+const snapshot=()=>({offer,actionsEnabled:open,applicationAccepted:true,applicationVersion:1,units:[],templates:[{id:templateId,name:'Synthetic template',version:1}],canReplaceAgreement:cancelled,agreement:offer?.agreementId?{id:agreementId,status:cancelled?'cancelled':'draft',signatureStatus:null}:null});
 try{
  vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
  const app=express();app.use(express.json());
@@ -47,7 +48,7 @@ try{
    assert.equal(input.version,offer?.version??0);
    if(input.action==='issue'){offer={...input,status:'offered',currency:'LKR',unitLabel:null,applicationVersion:1,version:(offer?.version??0)+1};}
    else if(input.action==='accept'){assert.equal(input.consent,true);offer={...offer,status:'accepted',version:offer.version+1,acceptedAt:new Date().toISOString()};}
-   else if(input.action==='agreement'){offer={...offer,status:'agreement',agreementId,version:offer.version+1};}
+   else if(input.action==='agreement'){cancelled=false;offer={...offer,status:'agreement',agreementId,version:offer.version+1};}
    else{offer={...offer,status:input.action==='decline'?'declined':'withdrawn',version:offer.version+1};}
    requests.set(input.requestId,input.payloadHash);res.json({data:snapshot()});
   }catch(error){res.status(409).json({error:error.message});}
@@ -74,12 +75,16 @@ try{
  assert.equal(offer.status,'accepted');assert.equal(offer.agreementId,undefined,'Acceptance is not an agreement or signature');
  await page.goto(origin+'/owner',{waitUntil:'networkidle0'});await page.waitForSelector('[id$="-template"]');await page.select('[id$="-template"]',templateId);
  await click('Prepare agreement for existing account');await page.waitForSelector('a[href$="/onboarding"]');assert.equal(offer.status,'agreement');
+ cancelled=true;await page.reload({waitUntil:'networkidle0'});await page.waitForSelector('[id$="-template"]');
+ await page.select('[id$="-template"]',templateId);await click('Prepare replacement agreement');
+ await page.waitForFunction(()=>document.body.innerText.includes('Offer version 4'));
+ assert.equal(cancelled,false);assert.equal(await page.$('[id$="-template"]'),null);
  await page.goto(origin+'/rental-journey',{waitUntil:'networkidle0'});await page.waitForSelector('a[href="/rentee/agreements"]');
  await page.setViewport({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
  await fs.mkdir('enquiry-browser-proof',{recursive:true});await page.screenshot({path:'enquiry-browser-proof/rental-offer-to-agreement.png',fullPage:true});
  // A stale response cannot paint a pre-withdrawal offer over the new version.
  pendingRead=true;const started=new Promise(resolve=>{readStarted=resolve;});await click('Refresh rental offer');await started;
- await click('Withdraw offer or reservation');await page.waitForFunction(()=>document.body.innerText.includes('Offer version 4'));
+ await click('Withdraw offer or reservation');await page.waitForFunction(()=>document.body.innerText.includes('Offer version 5'));
  releaseRead();await new Promise(resolve=>setTimeout(resolve,200));assert.equal(await page.evaluate(()=>document.body.innerText.includes('withdrawn')),true);
  open=false;await page.reload({waitUntil:'networkidle0'});assert.equal(await page.$('input[type="checkbox"]'),null);
  assert.deepEqual(errors,[]);

@@ -36,3 +36,18 @@ export const offerReceipt=row=>row?{
 export const assertOfferVersion=(row,input)=>{
   if((row?.version??0)!==input.version){throw enquiryError(409,'OFFER_CHANGED','This offer changed. Refresh and review its current terms.');}
 };
+
+// A replacement preserves history and must never overlap a provider signing
+// request, any recorded signature, or an activated tenancy.
+export const canReplaceRentalDraft = (agreement) => {
+  if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') return false;
+  if (agreement.eviasignreference || agreement.signeddate || agreement.signature_completed_at || agreement.activated_at
+      || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) return false;
+  if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) return false;
+  let roster = agreement.signatories_status;
+  if (typeof roster === 'string') {
+    try { roster = JSON.parse(roster); } catch { return false; }
+  }
+  if (roster && (!Array.isArray(roster) || roster.some(s => !['pending', ''].includes(String(s?.status || '').toLowerCase()) || s?.signedAt || s?.signed_at))) return false;
+  return true;
+};

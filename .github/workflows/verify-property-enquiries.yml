@@ -100,6 +100,8 @@ jobs:
         env:
           ENQUIRY_PROOF_DIR: enquiry-browser-proof
         run: node scripts/test-property-enquiries-browser.mjs
+      - name: Agreement membership identity and retry browser proof
+        run: node scripts/test-agreement-identity-browser.mjs
       - name: Rental offers and agreement continuation browser proof
         run: node scripts/test-rental-offers-browser.mjs
       - uses: actions/upload-artifact@v4
