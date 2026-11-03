@@ -1,8 +1,5 @@
 name: Verify documented Evia audit authentication
 on:
-  push:
-    branches: [fix/evia-audit-download]
-    paths: ['.github/workflows/diagnose-evia-contract.yml']
   workflow_dispatch:
 permissions:
   contents: read
