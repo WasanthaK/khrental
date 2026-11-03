@@ -1,0 +1,84 @@
+name: Inspect retained Evia package metadata
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnose/evia-package-metadata]
+    paths: [.github/workflows/diagnose-evia-package-metadata.yml]
+permissions:
+  contents: read
+  id-token: write
+env:
+  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 8
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Count completion metadata using existing runtime SQL connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+          test -n "$ready_revision"
+          cat > metadata-readonly.js <<'JS'
+          (async () => {
+            const { runSingleQuery } = await import('./src/api/mssql/query.js');
+            // Read-only aggregate: no request/agreement IDs, personal data,
+            // filenames, URLs, tokens, full payloads or credentials leave SQL.
+            const row = await runSingleQuery(`
+              WITH completion_events AS (
+                SELECT CASE WHEN ISJSON(raw_data) = 1 THEN raw_data ELSE '{}' END AS metadata,
+                       CASE WHEN processed = 1 THEN 1 ELSE 0 END AS processed
+                FROM dbo.webhook_events
+                WHERE createdat >= DATEADD(hour, -24, SYSUTCDATETIME())
+                  AND event_type IN ('request.completed', 'signing_completed')
+              ), flags AS (
+                SELECT processed,
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM OPENJSON(metadata, '$.payloadKeys')
+                    WHERE LOWER(CONVERT(nvarchar(128), value)) = 'completedpackage'
+                  ) THEN 1 ELSE 0 END AS package_key,
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM OPENJSON(metadata, '$.payloadKeys')
+                    WHERE LOWER(CONVERT(nvarchar(128), value)) IN ('data', 'payload')
+                  ) THEN 1 ELSE 0 END AS nested_envelope,
+                  CASE WHEN TRY_CONVERT(int, JSON_VALUE(metadata, '$.documentCount')) > 0 THEN 1 ELSE 0 END AS documents_present,
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM OPENJSON(metadata, '$.documents')
+                    WHERE LOWER(JSON_VALUE(value, '$.name')) LIKE '%audit%'
+                      AND JSON_VALUE(value, '$.hasContent') = 'true'
+                  ) THEN 1 ELSE 0 END AS inline_audit_present,
+                  CASE WHEN JSON_QUERY(metadata, '$.payloadKeys') IS NOT NULL THEN 1 ELSE 0 END AS keys_recorded
+                FROM completion_events
+              )
+              SELECT COUNT(*) AS completion_events_24h,
+                     COALESCE(SUM(processed), 0) AS processed_events,
+                     COALESCE(SUM(keys_recorded), 0) AS events_with_keys_recorded,
+                     COALESCE(SUM(package_key), 0) AS events_with_package_key,
+                     COALESCE(SUM(nested_envelope), 0) AS events_with_opaque_nested_envelope,
+                     COALESCE(SUM(documents_present), 0) AS events_with_documents,
+                     COALESCE(SUM(inline_audit_present), 0) AS events_with_inline_audit
+              FROM flags;
+            `);
+            console.log('EVIA_PACKAGE_METADATA_COUNTS=' + JSON.stringify(row));
+            console.log('EVIA_PACKAGE_METADATA_READONLY_OK');
+            process.exit(0);
+          })().catch(() => {
+            console.error('EVIA_PACKAGE_METADATA_READONLY_FAILED');
+            process.exit(1);
+          });
+          JS
+          encoded=$(base64 -w0 metadata-readonly.js)
+          remote_command="node -e \"eval(Buffer.from('$encoded','base64').toString())\""
+          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ready_revision" --command "$remote_command"
+          script -q -e -c "$exec_command" /dev/null | tee metadata-result.txt
+          grep -Fq EVIA_PACKAGE_METADATA_READONLY_OK metadata-result.txt
