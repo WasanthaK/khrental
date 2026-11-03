@@ -245,7 +245,7 @@ if(previewArea?.dataset.publicListingEnabled==='true'){
         msg.textContent=detailPage?'This property is unavailable or no longer publicly listed. Return to search for available properties.':'Our minions need another moment. Rental listings are temporarily unavailable. Please try again.';
         list.append(msg);
         const retry=document.createElement('button');
-        retry.type='button';retry.textContent='Try again';
+        retry.type='button';retry.textContent='Try again';retry.dataset.catalogRetry='true';
         retry.addEventListener('click',()=>location.reload());
         list.append(retry);
       }
