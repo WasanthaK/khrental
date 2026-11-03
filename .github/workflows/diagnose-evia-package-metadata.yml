@@ -1,9 +1,6 @@
 name: Inspect retained Evia package metadata
 on:
   workflow_dispatch:
-  push:
-    branches: [diagnose/evia-package-metadata]
-    paths: [.github/workflows/diagnose-evia-package-metadata.yml]
 permissions:
   contents: read
   id-token: write
