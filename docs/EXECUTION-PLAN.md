@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## Demand-driven database readiness — 3 November 2026
+
+Owner requested a friendly, playful waiting experience while the low-cost database resumes. Add an anonymous readiness gate before app/auth initialization (including isolated verification), shared preflight for central platform/MSSQL clients, and bounded retries of read-only public listing loads. Copy: “We’re gathering our minions to serve you…” followed by automatic continuation, or a Try again state after three attempts. Readiness success is cached for 30 seconds; no background interval, keepalive, capacity change or auto-pause change. No business command is automatically replayed, and already-mounted forms remain mounted behind the waiting overlay.
+
+Functional tests cover concurrent checks, readiness caching, bounded failure and manual recovery. Deployment, rendered desktop/mobile acceptance and real paused-database recovery remain OPEN; do not infer all three from unit-test success.
+
+Staff correction PR #484 merged at 772d60e23168dd066715a1177dedbeb8efd04b2c; deployment #41549918147 succeeded. Owner subsequently confirmed staff Dashboard/Maintenance acceptance and requested closure. This bounded staff item is ACCEPTED; canonical #459 remains open for the renter-to-tenancy journey.
+
+---
+
 ## Staff dashboard acceptance correction — 2 November 2026
 
 Live owner-provided evidence: a newly invited Staff / Contractor in JEERY'S PLACE reached the dashboard but received an invoices.read permission error. The dashboard unconditionally requested invoice and agreement data. The platform-admin status GET was also rejected by the outer legacy business-route guard before reaching its authenticated boolean-status handler.
