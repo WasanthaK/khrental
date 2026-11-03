@@ -1,5 +1,49 @@
 # KH Rentals Execution Plan
 
+## Current canonical status and plan review — 3 November 2026
+
+**Controlling status:** the current completed agreement's signing-audit view/download defect is **CLOSED — live acceptance passed**. This checkpoint supersedes conflicting current/next and audit-failure statements in the historical entries below and supporting trackers. It does not close the whole operational-website milestone: [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for the remaining rental journey. The agreed order is still **fully operational rental website, then subscription management**.
+
+### Audit close-out
+
+- [#491](https://github.com/WasanthaK/khrental/pull/491) recognizes Evia's `EviaSign_AuditTrail_<UUID>.pdf` export name, preserves the signed/audit distinction and permits authorized recovery of previously retained aliases. The supplied completed-package example reproduced the old filename failure; corrected parsing preserved both PDFs' bytes. It was a different request and was not imported into the current agreement.
+- [#492](https://github.com/WasanthaK/khrental/pull/492) checks existing storage with application-session/tenant/administrator authorization before requesting provider OAuth. Only an explicit local-missing result proceeds to provider retrieval; authorization/storage errors do not trigger login or token refresh.
+- **Live acceptance PASS:** the current administrator session displays View Signing Audit; Download returned a valid two-page PDF whose request reference matches the completed agreement. The certificate records completion and both signatories. A full page reload followed by reopening the audit also passed, without another Evia login. The current signed agreement and onboarding state were preserved.
+- **Release proof:** #491 deployment [41665420269](https://github.com/WasanthaK/khrental/actions/runs/41665420269) passed. #492 deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175) passed at ready revision `0000452`, serving build `52b213e4d680b9aee6ea5c9974c3a325ed500d3c`, with live MSSQL readiness. #492 PR checks passed **863/863** application tests, build, Evia V2 integration and webhook tests; focused Evia tests passed **125/125**.
+- This closes the current agreement's audit retrieval acceptance. It does not prove that a future completion callback automatically retains both files without recovery. Verify that on the next legitimate contract test after the layout correction; do not re-sign the completed agreement or reopen its successful download merely for evidence.
+
+### Rental journey status
+
+| Stage | Current evidence and disposition | Remaining acceptance |
+| --- | --- | --- |
+| Public discovery and selected-property continuation | **PASS for the recorded LK desktop/mobile browsing and authenticated continuation scope.** | Preserve these results; final release review covers remaining customer design and unavailable/withdrawn/rented-stock cases. Real BN inventory acceptance is separate. |
+| Owner setup, property persistence, account switching and staff access | **PASS for the recorded bounded live checks.** Owner/property fixes and subsequent account-switch/session tests are accepted; staff dashboard/maintenance was owner-accepted. | Do not equate this with paid owner onboarding or every role/device scenario. |
+| Renter enquiry → owner reply → renter readback | **CLOSED — two-account live demo PASS**, including refresh. | Preserve existing privacy/retry regressions; no duplicate enquiry needed. |
+| Viewing request/proposal → acceptance → completion | **CLOSED for the authorized demo workflow**, including persistent confirmed/completed states. | No physical visit is claimed. Cancellation/no-show/concurrency fixture coverage remains distinct from live participant evidence. |
+| Application → owner review → resubmission/acceptance | **CLOSED for the recorded live demo path.** | Remaining negative/withdrawal/privacy scenarios stay in final acceptance where not already evidenced. |
+| Offer issue → renter acceptance → agreement preparation | **PASS for the recorded live path**, including replacement of a cancelled unsigned draft with preserved history. | Final occupancy, reservation-expiry and stock-withdrawal behavior must be checked with activation; fixture race coverage is not a live occupancy result. |
+| Contract terms, both signatures and signed-PDF access | **Functional PASS; document design OPEN.** Accepted terms and both signatures are present, and signed-PDF retrieval works. | Correct signature-space overlap and the final-page numbering defect for future documents. Do not alter the signed historical PDF. |
+| Signing-audit view/download | **CLOSED — live PASS**, including download and reload. | Future automatic completion-package retention remains the separate next-contract regression described above. |
+| Membership and move-in readiness | **PARTIAL.** Account access/membership, property assignment and signed-agreement prerequisites were verified. The deposit guard correctly blocks activation. | The generated checklist had zero configured items; this is not physical inspection acceptance. Validate a meaningful checklist and payment evidence before activation. |
+| Deposit, explicit tenancy activation and availability | **OPEN.** No deposit receipt or tenancy activation has been recorded in this test. | Genuine payment evidence or an explicitly defined simulated-payment case; ledger/readback, explicit activation, correct occupancy and public-stock withdrawal. |
+| Active tenant operations and exit | **OPEN for this end-to-end journey.** Existing isolated invoice/receipt, maintenance and exit tests remain retained evidence. | Tenant agreements/access, invoice/payment/receipt and maintenance lifecycle; then notice/exit, settlement and eligible relisting with history and isolation. |
+| Whole operational website / #459 | **OPEN.** | Complete the remaining business journey and consolidated content/UX/UI/usability acceptance. |
+| Subscription management and paid-owner launch | **AFTER website acceptance.** | Global Admin market-pricing policy, governed Stripe subscription/quantity/entitlement lifecycle and paid-owner acceptance. |
+
+### Remaining execution order
+
+1. **Next: contract layout correction.** Use the existing template/Evia document flow to reserve clear signature areas and correct pagination. Review a rendered representative contract and its signature positions. Keep the already signed document immutable. During the next legitimate signing acceptance, verify automatic signed-PDF plus audit retention once.
+2. **Complete move-in and activation.** Validate meaningful checklist items and the deposit evidence/ledger path, then explicit owner activation and persistent occupancy/public availability. A simulated demo receipt, if used, must be explicitly identified and must not be represented as real money received or a real inspection.
+3. **Complete active-tenancy and exit acceptance.** Exercise the existing tenant/owner invoice-payment-receipt and maintenance journeys, then notice/termination, settlement and relisting. Keep actor/workspace access and preserved document/history checks tied to each actual task.
+4. **Close the website milestone.** Consolidate remaining desktop/mobile customer-design and negative-path evidence with the accepted journey. Close #459 only when those exits pass; successful CI alone is not whole-product acceptance.
+5. **Then subscription management.** Implement platform-admin-only market settings, published pricing versions and approved Stripe mapping; Checkout, signed/idempotent webhooks, server-owned dwelling quantities, proration, renewal/failure/cancellation and entitlements. Settle unresolved market thresholds and excess-rate policy before enabling them. Standard listing remains included, with no separate listing fee or premium listing at launch.
+
+**Prior dispositions retained:** original R1 remains owner-closed (24 October), including its narrow historical C02/C03 waivers; today's different agreement does not retrospectively verify the old waived records. Invoice immutable-archive milestone R2 remains owner-deferred and incomplete. Single-replica/scaling limits and staged regional-launch obligations remain separate. This review does not initiate billing, change permissions/capacity, create payments, or activate a tenancy.
+
+## Historical evidence and checkpoints
+
+The dated sections below are retained evidence. Where their status or next-action wording conflicts, the current canonical checkpoint above controls.
+
 ## Evia package audit fix deployed; existing download still failing — 3 November 2026
 
 [PR #489](https://github.com/WasanthaK/khrental/pull/489) merged as `035d42536aac01c05b9618482e694ba3b5b31390`; reviewed head `0ac9289970f2b4c65528a4e2e66654b9d24e738a`. All three PR workflows passed; main verification **840/840 PASS**, focused local Evia tests **102/102 PASS**, clean install and production build PASS. [Deployment #41617426391](https://github.com/WasanthaK/khrental/actions/runs/41617426391) **SUCCESS**: ready revision `0000449`, matching public build SHA and live MSSQL readiness.
