@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchData, platform as platformClient } from '../services/platformClient';
+import { fetchData } from '../services/platformClient';
 import { fetchAppUsers } from '../services/appUserService';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { INVOICE_STATUS } from '../utils/constants';
@@ -8,11 +8,16 @@ import { useAuth } from '../hooks/useAuth';
 import { PERMISSIONS, hasPermission } from '../utils/permissions';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, activeTenantId } = useAuth();
   const canCreateProperty = hasPermission(user, PERMISSIONS.CREATE_PROPERTY);
   const canCreateInvoice = hasPermission(user, PERMISSIONS.CREATE_INVOICE);
   const canCreateAgreement = hasPermission(user, PERMISSIONS.CREATE_AGREEMENT);
   const canCreateMaintenance = hasPermission(user, PERMISSIONS.CREATE_MAINTENANCE);
+  const canViewProperties = hasPermission(user, PERMISSIONS.VIEW_PROPERTIES);
+  const canViewInvoices = hasPermission(user, PERMISSIONS.VIEW_INVOICES);
+  const canViewAgreements = hasPermission(user, PERMISSIONS.VIEW_AGREEMENTS);
+  const canViewRentees = hasPermission(user, PERMISSIONS.VIEW_RENTEES);
+  const canViewMaintenance = hasPermission(user, PERMISSIONS.VIEW_MAINTENANCE);
   const canViewTeam = hasPermission(user, PERMISSIONS.VIEW_TEAM);
 
   const [stats, setStats] = useState({
@@ -33,166 +38,57 @@ const Dashboard = () => {
   const [activeSection, setActiveSection] = useState('overview');
 
   useEffect(() => {
+    let cancelled = false;
     const fetchDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+      setActiveSection('overview');
       try {
-        setLoading(true);
-        
-        // DEBUG: Check user counts by type directly
-        const usersByType = canViewTeam ? await fetchAppUsers() : [];
-        
-        let directRenteeCount = 0;
-        
-        if (usersByType) {
-          // Group by user_type
-          const typeCount = {};
-          usersByType.forEach(userRecord => {
-            const type = userRecord.user_type || 'unknown';
-            typeCount[type] = (typeCount[type] || 0) + 1;
-          });
-          console.log('DEBUG - Users by type:', typeCount);
-          console.log('Total users:', usersByType.length);
-          
-          // Get direct rentee count
-          directRenteeCount = usersByType.filter(userRecord => userRecord.user_type === 'rentee').length;
-          console.log('Direct rentee count:', directRenteeCount);
-        }
-        
-        // DEBUG: Check invoice counts by status directly
-        const { data: invoicesByStatus } = await platformClient
-          .from('invoices')
-          .select('status');
-          
-        let directInvoiceCounts = {
-          overdue: 0,
-          pending: 0,
-          paid: 0
+        const read = async (allowed, options) => {
+          if (!allowed) { return { data: [], count: 0 }; }
+          const result = await fetchData(options);
+          if (result.error) { throw result.error; }
+          return result;
         };
-        
-        if (invoicesByStatus) {
-          // Group by status
-          const statusCount = {};
-          invoicesByStatus.forEach(invoice => {
-            const status = invoice.status || 'unknown';
-            statusCount[status] = (statusCount[status] || 0) + 1;
-          });
-          console.log('DEBUG - Invoices by status:', statusCount);
-          console.log('Total invoices:', invoicesByStatus.length);
-          
-          // Get direct invoice counts
-          directInvoiceCounts = {
-            overdue: invoicesByStatus.filter(invoice => invoice.status === INVOICE_STATUS.OVERDUE).length,
-            pending: invoicesByStatus.filter(invoice => invoice.status === INVOICE_STATUS.PENDING).length,
-            paid: invoicesByStatus.filter(invoice => invoice.status === INVOICE_STATUS.PAID).length
-          };
-          console.log('Direct invoice counts:', directInvoiceCounts);
-        }
-        
-        // Fetch properties count
-        let propertiesCount = 0;
-        try {
-          const { count, error } = await fetchData({
-            table: 'properties',
-            count: true
-          });
-          if (!error) {
-            propertiesCount = count || 0;
-          } else {
-            console.error('Error fetching properties count:', error);
-          }
-        } catch (err) {
-          console.error('Exception fetching properties count:', err);
-        }
-        
-        // Fetch rentees count - use direct count from earlier as fallback
-        let renteesCount = directRenteeCount;
-        try {
-          renteesCount = usersByType.filter((userRecord) => userRecord.user_type === 'rentee').length || directRenteeCount;
-        } catch (err) {
-          console.error('Exception fetching rentees count:', err);
-        }
-        
-        // Fetch agreements count
-        let agreementsCount = 0;
-        try {
-          const { count, error } = await fetchData({
-            table: 'agreements',
-            count: true
-          });
-          if (!error) {
-            agreementsCount = count || 0;
-          } else {
-            console.error('Error fetching agreements count:', error);
-          }
-        } catch (err) {
-          console.error('Exception fetching agreements count:', err);
-        }
-        
-        // Fetch maintenance requests count
-        let maintenanceCount = 0;
-        try {
-          const { count, error } = await fetchData({
-            table: 'maintenance_requests',
-            count: true,
+        // Match navigation permissions before issuing requests. Server-side
+        // row scoping remains authoritative for every permitted read.
+        const [properties, agreements, maintenance, invoices, users] = await Promise.all([
+          read(canViewProperties, { table: 'properties', count: true }),
+          read(canViewAgreements, { table: 'agreements', count: true }),
+          read(canViewMaintenance, {
+            table: 'maintenance_requests', count: true,
             filters: [{ column: 'status', operator: 'eq', value: 'pending' }]
-          });
-          if (!error) {
-            maintenanceCount = count || 0;
-          } else {
-            console.error('Error fetching maintenance count:', error);
-          }
-        } catch (err) {
-          console.error('Exception fetching maintenance count:', err);
-        }
-        
-        // Fetch team members count only when the current role can see Team.
-        let teamCount = 0;
-        if (canViewTeam) {
-          try {
-            teamCount = usersByType.filter((userRecord) => userRecord.user_type === 'staff').length || 0;
-          } catch (err) {
-            console.error('Exception fetching team count:', err);
-          }
-        }
-        
-        // Fetch recent invoices
-        let recentInvoicesData = [];
-        try {
-          const { data, error } = await fetchData({
-            table: 'invoices',
-            order: { column: 'createdAt', ascending: false },
-            limit: 5
-          });
-          if (!error) {
-            recentInvoicesData = data || [];
-          } else {
-            console.error('Error fetching recent invoices:', error);
-          }
-        } catch (err) {
-          console.error('Exception fetching recent invoices:', err);
-        }
-        
-        // Update stats
-        setStats({
-          properties: propertiesCount,
-          rentees: renteesCount,
-          agreements: agreementsCount,
-          maintenanceRequests: maintenanceCount,
-          teamMembers: teamCount,
-          invoices: directInvoiceCounts
+          }),
+          read(canViewInvoices, { table: 'invoices', select: 'status' }),
+          canViewTeam ? fetchAppUsers() : Promise.resolve([])
+        ]);
+        const recent = await read(canViewInvoices, {
+          table: 'invoices', order: { column: 'createdAt', ascending: false }, limit: 5
         });
-        
-        // Update recent invoices
-        setRecentInvoices(recentInvoicesData);
+        if (cancelled) { return; }
+        const invoiceRows = invoices.data || [];
+        setStats({
+          properties: properties.count || 0,
+          rentees: users.filter(record => record.user_type === 'rentee').length,
+          agreements: agreements.count || 0,
+          maintenanceRequests: maintenance.count || 0,
+          teamMembers: users.filter(record => record.user_type === 'staff').length,
+          invoices: {
+            overdue: invoiceRows.filter(invoice => invoice.status === INVOICE_STATUS.OVERDUE).length,
+            pending: invoiceRows.filter(invoice => invoice.status === INVOICE_STATUS.PENDING).length,
+            paid: invoiceRows.filter(invoice => invoice.status === INVOICE_STATUS.PAID).length
+          }
+        });
+        setRecentInvoices(recent.data || []);
       } catch (error) {
-        console.error('Error fetching dashboard data:', error.message);
-        setError(error.message);
+        if (!cancelled) { setError(error.message); }
       } finally {
-        setLoading(false);
+        if (!cancelled) { setLoading(false); }
       }
     };
-    
     fetchDashboardData();
-  }, [canViewTeam]);
+    return () => { cancelled = true; };
+  }, [user?.id, activeTenantId, canViewProperties, canViewAgreements, canViewMaintenance, canViewInvoices, canViewTeam]);
 
   // Get status badge color
   const getStatusBadgeColor = (status) => {
@@ -344,14 +240,14 @@ const Dashboard = () => {
       >
         Overview
       </button>
-      <button
+      {canViewInvoices && (<button
         onClick={() => setActiveSection('invoices')}
         className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg ${
           activeSection === 'invoices' ? 'bg-white shadow' : 'text-gray-500'
         }`}
       >
         Invoices
-      </button>
+      </button>)}
       <button
         onClick={() => setActiveSection('actions')}
         className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg ${
@@ -373,7 +269,7 @@ const Dashboard = () => {
         <div className="space-y-0">
           {/* Main Stats - Single column layout for mobile */}
           <div className="flex flex-col">
-            {renderStatCard(
+            {canViewProperties && renderStatCard(
               'Properties', 
               stats.properties, 
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -383,7 +279,7 @@ const Dashboard = () => {
               '/dashboard/properties'
             )}
             
-            {renderStatCard(
+            {canViewRentees && canViewTeam && renderStatCard(
               'Rentees',
               stats.rentees,
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -393,7 +289,7 @@ const Dashboard = () => {
               '/dashboard/rentees'
             )}
             
-            {renderStatCard(
+            {canViewAgreements && renderStatCard(
               'Agreements',
               stats.agreements,
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -406,7 +302,7 @@ const Dashboard = () => {
         </div>
       )}
       
-      {activeSection === 'invoices' && (
+      {canViewInvoices && activeSection === 'invoices' && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold mb-3">Invoice Status</h2>
           <div className="space-y-4">
@@ -540,7 +436,7 @@ const Dashboard = () => {
           </div>
           
           <div className="mt-6">
-            {renderStatCard(
+            {canViewMaintenance && renderStatCard(
               'Maintenance',
               stats.maintenanceRequests,
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -575,7 +471,7 @@ const Dashboard = () => {
           <span className="text-xs">Overview</span>
         </button>
         
-        <button 
+        {canViewInvoices && (<button
           onClick={() => setActiveSection('invoices')} 
           className={`flex flex-col items-center ${activeSection === 'invoices' ? 'text-blue-600' : 'text-gray-500'}`}
         >
@@ -583,7 +479,7 @@ const Dashboard = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <span className="text-xs">Invoices</span>
-        </button>
+        </button>)}
         
         <button 
           onClick={() => setActiveSection('actions')} 

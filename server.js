@@ -387,6 +387,9 @@ async function createServer() {
   const resolveMssqlCompatibilityUser = createTenantContextMiddleware({ requireUser: true, auditLabel: 'mssql-compatibility-admin', auditUnsafeOnly: false });
   const guardMssqlCompatibilityRoutes = (req, res, next) => {
     if (req.path === '/health' || req.path === '/me' || req.path === '/tenant-context') { next(); return; }
+    // This identity-only read has its own requireResolvedUser middleware.
+    // It exposes a boolean, never tenant data or platform-admin powers.
+    if (req.method === 'GET' && req.path === '/platform-admin/status') { next(); return; }
     resolveMssqlCompatibilityUser(req, res, (error) => {
       if (error) { next(error); return; }
       const isAgreementPut = req.method === 'PUT' && /^\/agreements\/[^/]+$/.test(req.path);

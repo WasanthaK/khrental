@@ -1,5 +1,17 @@
 # KH Rentals Execution Plan
 
+## Staff dashboard acceptance correction — 2 November 2026
+
+Live owner-provided evidence: a newly invited Staff / Contractor in JEERY'S PLACE reached the dashboard but received an invoices.read permission error. The dashboard unconditionally requested invoice and agreement data. The platform-admin status GET was also rejected by the outer legacy business-route guard before reaching its authenticated boolean-status handler.
+
+Correction: gate dashboard requests, cards and invoice navigation using existing permissions; cancel stale dashboard results on identity/workspace changes; permit only the exact GET status route to reach its existing authenticated handler. Platform management and all business authorization remain unchanged. Unusable invitation links remain rejected; recovery copy directs already-registered users to sign in rather than unconditionally request another invitation. The reported invitation 400's exact state was not captured, so no claim is made that invitation redemption itself failed.
+
+Implementation and automated regression are separate from release and physical acceptance. Staff dashboard and Maintenance production acceptance remain OPEN pending deployment and retest of the existing staff account.
+
+Owner-confirmed acceptance in this session: fresh owner verification/workspace/first-property creation (SUWADA villa in JEERY'S PLACE), persistence after refresh, and switching between that owner and Nivasi/Bamba Living passed. Returning-owner and owner-to-renter-purpose navigation had also passed live browser checks. Missing-photo fallback was subsequently accepted by the owner. These bounded closures do not close canonical #459 or the complete renter-to-tenancy transaction. Maintain existing database auto-pause and capacity during testing; subscriptions remain deferred.
+
+---
+
 ## Item 1 property and maintenance persistence acceptance — 1 November 2026
 
 Live authorized demo maintenance create/readback/reload/cancel/reload PASS in the existing owner workspace. Request `190ACAC8-65E8-488C-8D7C-5458A72CC6CA` (`MR-202611-OTH-190A`) was explicitly labelled as a test, low priority, Other, for Bamba Living. It is retained in **cancelled** state; no real repair or work completion was claimed. Detail view preserved the property and management-origin context. No staff assignment, actual repair, signature, payment or rental enquiry was fabricated.
