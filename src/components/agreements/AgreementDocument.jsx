@@ -5,23 +5,33 @@ import { FiDownload, FiX } from 'react-icons/fi';
 /**
  * Component for viewing PDF documents in agreements
  */
-const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document', onRecover }) => {
+const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document', onRecover, onAuthenticate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState(null);
+  const [needsEviaSignIn, setNeedsEviaSignIn] = useState(false);
   const documentState = useAuthenticatedAgreementDocument(documentUrl, reloadKey);
   const recover = async () => {
     if (recovering || !onRecover) return;
-    setRecovering(true); setRecoveryError(null);
+    setRecovering(true); setRecoveryError(null); setNeedsEviaSignIn(false);
     try {
       await onRecover();
       setLoading(true);
       setReloadKey(value => value + 1);
     } catch (error) {
       setRecoveryError(error?.message || 'Unable to recover the existing audit.');
+      setNeedsEviaSignIn(error?.code === 'EVIA_AUTHENTICATION_REQUIRED');
     } finally { setRecovering(false); }
+  };
+  const connectEvia = () => {
+    try {
+      onAuthenticate();
+      setRecoveryError('Sign in to Evia with the account that sent this agreement, then return here and try recovery again.');
+    } catch (error) {
+      setRecoveryError(error?.message || 'Unable to open Evia Sign.');
+    }
   };
   useEffect(() => { setLoading(true); setError(null); }, [documentUrl]);
   
@@ -97,6 +107,12 @@ const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document',
                 </div>
                 <p role="alert">{viewerError}</p>
                 {recoveryError && <p role="alert" className="mt-2">{recoveryError}</p>}
+                {needsEviaSignIn && onAuthenticate && (
+                  <button type="button" onClick={connectEvia} disabled={recovering}
+                    className="mt-4 mr-3 px-3 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
+                    Connect to Evia Sign
+                  </button>
+                )}
                 {onRecover && (
                   <button type="button" disabled={recovering} onClick={recover}
                     className="mt-4 px-3 py-2 border rounded disabled:opacity-50">

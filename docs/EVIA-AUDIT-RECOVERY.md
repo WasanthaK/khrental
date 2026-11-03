@@ -86,3 +86,13 @@ At the user's request, [curl diagnostic #41623929241](https://github.com/Wasanth
 | https://evia.enadocapp.com/_apis/sign/api/v2/oauth/exchange | 0 | 404 | absent | 0 |
 
 Results at **16:30:31–16:30:32 Asia/Colombo**. Neither response supplied an access token, so authenticated document listing and audit download could not proceed. A separate local unauthenticated curl request also returned 404/text-html; the Production-key result above is the relevant authenticated reproduction. The successful diagnostic workflow means the probe ran, **not** that audit retrieval passed. The diagnostic branch was returned to manual-only triggering afterward; no runtime deployment or signed-document mutation occurred. Current live audit download remains FAIL / OPEN.
+
+## OAuth audit recovery alternative — 3 November 2026
+
+Independent unauthenticated curl to the documented completed-document list returned HTTP 401 / application/json, while both integration-key exchange URL interpretations returned HTTP 404. This establishes a reachable authentication boundary, not successful OAuth document retrieval.
+
+Human-triggered audit recovery now passes the existing Evia OAuth access token to the already-authorized audit-only backend route. The browser previously sent an empty body and forced the failing integration exchange. Expired tokens use the existing V2 refresh broker; a provider document 401 refreshes and retries once. Application-session rejection, tenant denial, missing documents and outages do not trigger OAuth refresh or fall back to the unavailable exchange. A missing/rejected Evia connection exposes Connect to Evia Sign using the existing authorization flow in a separate tab with no opener; the user then retries recovery. No signature request is created or resent.
+
+Provider audit retrieval and retention remain bound to the stored agreement/request and existing administrator/tenant checks. Conditional creation, PDF validation and exact readback remain unchanged. Signed bytes, status and signatories are not rewritten. Webhook package capture and the separate server integration path are unchanged.
+
+Focused OAuth client, broker and immutable recovery tests: 23/23 PASS. Broader CI, deployment and actual provider OAuth audit download remain pending at this checkpoint. Do not mark the historical audit recovered until the PDF can be downloaded and read back.
