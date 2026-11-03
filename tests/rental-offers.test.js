@@ -63,7 +63,7 @@ test('only cancelled drafts without provider, signing or activation evidence can
  const draft={status:'cancelled',signature_status:null};
  assert.equal(canReplaceRentalDraft(draft),true);
  assert.equal(canReplaceRentalDraft({...draft,signatories_status:JSON.stringify([{status:'pending'}])}),true);
- for(const extra of [{status:'draft'},{status:'active'},{eviasignreference:'provider-request'},{signeddate:'2026-11-03'},
+ for(const extra of [{status:'draft'},{status:'active'},{eviasignreference:'provider-request'},{signature_request_id:'request'},{signature_sent_at:'2026-11-03'},{signeddate:'2026-11-03'},
   {signature_completed_at:'2026-11-03'},{activated_at:'2026-11-03'},{signature_status:'completed'},
   {signature_status:'failed'},{signeddocumenturl:'archive'},{signatories_status:'malformed'},
   {signatories_status:[{status:'completed'}]},{signatories_status:[{status:'pending',signedAt:'2026-11-03'}]}]){

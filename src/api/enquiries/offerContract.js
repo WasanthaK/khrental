@@ -41,7 +41,7 @@ export const assertOfferVersion=(row,input)=>{
 // request, any recorded signature, or an activated tenancy.
 export const canReplaceRentalDraft = (agreement) => {
   if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') return false;
-  if (agreement.eviasignreference || agreement.signeddate || agreement.signature_completed_at || agreement.activated_at
+  if (agreement.eviasignreference || agreement.signature_request_id || agreement.signature_sent_at || agreement.signeddate || agreement.signature_completed_at || agreement.activated_at
       || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) return false;
   if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) return false;
   let roster = agreement.signatories_status;
