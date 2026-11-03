@@ -65,6 +65,7 @@ const PropertyApplication=({enquiry,owner=false,call})=>{
       <p>Share only the rental details requested here. Do not include identity documents, financial account details or sensitive personal information. Document uploads are not available in this step.</p>
       <label className="block" htmlFor={field+'-date'}>Proposed move-in date (property local date)</label>
       <input id={field+'-date'} type="date" required value={draft.moveInDate} disabled={busy}
+        onInput={e=>change('moveInDate',e.currentTarget.value)}
         onChange={e=>change('moveInDate',e.target.value)} className="border rounded p-2" />
       <label className="block" htmlFor={field+'-occupants'}>Number of occupants</label>
       <input id={field+'-occupants'} type="number" min="1" max="50" required value={draft.occupants} disabled={busy}
