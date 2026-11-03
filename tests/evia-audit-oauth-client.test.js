@@ -14,9 +14,10 @@ const fresh = { authToken: 'oauth-original', expiresAt: Date.now() + 3600000, re
 const json = (payload, status = 200) => new Response(JSON.stringify(payload), {
   status, headers: { 'Content-Type': 'application/json' }
 });
-function fixture(auth = fresh, respond = () => json({ auditTrailUrl })) {
+function fixture(auth = fresh, respond = () => json({ auditTrailUrl }),
+  localResponse = () => json({ code: 'EVIA_AUDIT_LOCAL_MISSING' }, 404)) {
   let stored = JSON.stringify(auth);
-  const requests = [], opened = [], timers = [];
+  const requests = [], localRequests = [], opened = [], timers = [];
   const context = vm.createContext({
     console, Date, Error, JSON, URL, encodeURIComponent,
     ENV: { EVIA_SIGN_CLIENT_ID: 'configured-client' }, getApiBaseUrl: () => '',
@@ -24,16 +25,45 @@ function fixture(auth = fresh, respond = () => json({ auditTrailUrl })) {
     localStorage: { getItem: () => stored, setItem: (_key, value) => { stored = value; } },
     window: { location: { origin: 'https://app.example' }, open: (...args) => opened.push(args),
       setInterval: callback => { timers.push(callback); return timers.length; }, clearInterval: () => {} },
-    fetch: async (url, options) => { requests.push({ url, options }); return respond(url, options, requests.length); }
+    fetch: async (url, options) => {
+      if (JSON.parse(options.body).localOnly === true) {
+        localRequests.push({ url, options }); return localResponse(url, options);
+      }
+      requests.push({ url, options }); return respond(url, options, requests.length);
+    }
   });
   vm.runInContext(source + '\nglobalThis.subject = { recoverEviaAuditTrail, connectEviaAuditRecovery };', context);
-  return { ...context.subject, requests, opened, stored: () => JSON.parse(stored), setStored: value => { stored = value; } };
+  return { ...context.subject, requests, localRequests, opened, stored: () => JSON.parse(stored), setStored: value => { stored = value; } };
 }
+
+test('retained audit recovery works without an Evia connection using only application authorization', async () => {
+  const f = fixture(null, () => { throw new Error('Must not call token broker or provider recovery'); },
+    () => json({ auditTrailUrl, recovered: true }));
+  assert.equal((await f.recoverEviaAuditTrail(agreementId)).auditTrailUrl, auditTrailUrl);
+  assert.equal(f.requests.length, 0); assert.equal(f.localRequests.length, 1);
+  const { url, options } = f.localRequests[0];
+  assert.equal(url, `/api/evia/agreements/${agreementId}/audit-trail`);
+  assert.equal(options.headers.Authorization, 'Bearer application-session');
+  assert.equal(options.headers['x-tenant-id'], 'current-tenant');
+  assert.deepEqual(JSON.parse(options.body), { localOnly: true });
+  assert.equal(f.opened.length, 0);
+});
+
+test('local authorization, storage failures and malformed success do not access provider credentials', async () => {
+  for (const [status, code] of [[401, 'API_SESSION_REQUIRED'], [403, 'EVIA_AUDIT_RECOVERY_DENIED'],
+    [404, 'OTHER_NOT_FOUND'], [503, 'STORAGE_UNAVAILABLE'], [200, undefined]]) {
+    const f = fixture({ ...fresh, expiresAt: 1 }, () => { throw new Error('Must not refresh'); },
+      () => json({ code }, status));
+    await assert.rejects(f.recoverEviaAuditTrail(agreementId), { status });
+    assert.equal(f.localRequests.length, 1); assert.equal(f.requests.length, 0);
+  }
+});
 
 test('audit recovery uses existing OAuth and keeps application session and tenant authorization', async () => {
   const f = fixture();
   assert.equal((await f.recoverEviaAuditTrail(agreementId)).auditTrailUrl, auditTrailUrl);
   assert.equal(f.requests.length, 1);
+  assert.equal(f.localRequests.length, 1);
   const { url, options } = f.requests[0];
   assert.equal(url, `/api/evia/agreements/${agreementId}/audit-trail`);
   assert.equal(options.method, 'POST');
@@ -47,6 +77,7 @@ test('missing or corrupt Evia connection asks for sign-in without calling the fa
     const f = fixture(); f.setStored(raw);
     await assert.rejects(f.recoverEviaAuditTrail(agreementId), { code: 'EVIA_AUTHENTICATION_REQUIRED' });
     assert.equal(f.requests.length, 0); assert.equal(f.opened.length, 0);
+    assert.equal(f.localRequests.length, 1);
   }
 });
 

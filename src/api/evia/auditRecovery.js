@@ -37,7 +37,7 @@ const readPreviouslyStoredAudit = async ({ storageDriver, objectPath, requestId 
 export const retainEviaAuditForVerifiedRequest = async ({
   tenantId, agreementId, requestId, signedDocumentUrl, accessToken = '',
   storageDriver = getStorageDriver(), fetchImpl = fetch,
-  apiKey = process.env.EVIA_SIGN_API_KEY || '', loadAuditBody = null
+  apiKey = process.env.EVIA_SIGN_API_KEY || '', loadAuditBody = null, localOnly = false
 }) => {
   const prefix = `/storage/documents/tenants/${tenantId}/agreements/${agreementId}/signed/`;
   const validSigned = typeof signedDocumentUrl === 'string'
@@ -58,6 +58,8 @@ export const retainEviaAuditForVerifiedRequest = async ({
   const previousAudit = await readPreviouslyStoredAudit({ storageDriver, objectPath, requestId });
   if (previousAudit) {
     downloaded = { body: previousAudit };
+  } else if (localOnly) {
+    throw failure('No retained audit was found for this agreement.', 404, 'EVIA_AUDIT_LOCAL_MISSING');
   } else if (loadAuditBody) {
     downloaded = { body: await loadAuditBody() };
   } else {
@@ -91,7 +93,7 @@ export const retainEviaAuditForVerifiedRequest = async ({
 export const recoverHistoricEviaAudit = async ({
   agreementId, tenantId, user, membership, loadAgreement, accessToken = '',
   storageDriver = getStorageDriver(), fetchImpl = fetch,
-  apiKey = process.env.EVIA_SIGN_API_KEY || ''
+  apiKey = process.env.EVIA_SIGN_API_KEY || '', localOnly = false
 }) => {
   const path = `tenants/${tenantId}/agreements/${agreementId}/signed/audit_trail.pdf`;
   let agreement;
@@ -108,6 +110,6 @@ export const recoverHistoricEviaAudit = async ({
       && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.pdf$/i.test(value.slice(prefix.length)));
   return retainEviaAuditForVerifiedRequest({
     tenantId, agreementId, requestId: agreement.eviasignreference,
-    signedDocumentUrl, accessToken, storageDriver, fetchImpl, apiKey
+    signedDocumentUrl, accessToken, storageDriver, fetchImpl, apiKey, localOnly
   });
 };

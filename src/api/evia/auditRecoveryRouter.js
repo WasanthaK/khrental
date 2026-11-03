@@ -11,7 +11,8 @@ export const createEviaAuditRecoveryRouter = ({ requireApiSession, resolveTenant
       }
       const result = await recoverAudit({
         agreementId, tenantId: req.tenantId, user: req.user, membership: req.membership,
-        loadAgreement, accessToken: String(req.body?.accessToken || '').trim()
+        loadAgreement, accessToken: String(req.body?.accessToken || '').trim(),
+        localOnly: req.body?.localOnly === true
       });
       console.info('[EviaDiag] audit_recovery_completed', {
         agreementId, tenantId: req.tenantId, actorId: req.user?.id,

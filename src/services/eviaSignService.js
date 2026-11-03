@@ -138,20 +138,35 @@ export async function reconcileEviaSignedDocument(agreementId) {
 
 export async function recoverEviaAuditTrail(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required to recover its audit.');
-  // Human-triggered recovery reuses the sender's existing OAuth connection.
-  // Supplying the token bypasses the unavailable integration-key exchange;
-  // the server still authorizes the administrator and stored request binding.
-  let accessToken = await getActiveEviaAccessToken();
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const requestAudit = async body => {
     const response = await fetch(
       `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
         method: 'POST',
         headers: buildRequestContextHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-        body: JSON.stringify({ accessToken })
+        body: JSON.stringify(body)
       }
     );
     const data = (response.headers.get('content-type') || '').includes('application/json')
       ? await response.json() : {};
+    return { response, data };
+  };
+  const recoveryError = ({ response, data }) => Object.assign(
+    new Error(data?.error || 'Unable to recover the existing Evia audit.'), {
+      status: response.status, code: data?.code
+    }
+  );
+  // Existing storage needs only the application's administrator/tenant checks.
+  // This request cannot contact Evia or exchange provider credentials.
+  const local = await requestAudit({ localOnly: true });
+  if (local.response.ok && local.data?.auditTrailUrl) return local.data;
+  if (local.response.status !== 404 || local.data?.code !== 'EVIA_AUDIT_LOCAL_MISSING') {
+    throw recoveryError(local);
+  }
+
+  // A confirmed local miss may use the sender's existing OAuth connection.
+  let accessToken = await getActiveEviaAccessToken();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { response, data } = await requestAudit({ accessToken });
     const providerTokenRejected = response.status === 401 && [
       'EVIA_COMPLETED_DOCUMENT_LIST_FAILED', 'EVIA_COMPLETED_DOCUMENT_DOWNLOAD_FAILED'
     ].includes(data?.code);
@@ -161,9 +176,7 @@ export async function recoverEviaAuditTrail(agreementId) {
       continue;
     }
     if (!response.ok || !data?.auditTrailUrl) {
-      throw Object.assign(new Error(data?.error || 'Unable to recover the existing Evia audit.'), {
-        status: response.status, code: data?.code
-      });
+      throw recoveryError({ response, data });
     }
     return data;
   }
