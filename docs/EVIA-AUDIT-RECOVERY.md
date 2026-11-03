@@ -75,3 +75,14 @@ Implemented verified completed-package retrieval using the exact event URL/token
 **Fresh live owner retest: FAIL / OPEN.** After signing in as +514 to JEERY'S PLACE, the agreement list still shows both signatories Signed and the agreement Completed / signed-onboarding-required. View Signing Audit for `D13ECCF2-A82A-41DB-9EB7-3AB968440BB0` returns "Signing audit PDF not found (HTTP 404). It may not have been retained in storage." One built-in recovery attempt then returns "Evia returned a non-JSON HTTP 404 response." No PDF was downloaded, and end-to-end audit acceptance is not complete.
 
 The current receiver supports a verified provider completion-package or audit re-delivery, but no usable re-delivery for this existing request has been observed. The missing historical audit is not recovered by deployment alone. Do not fabricate a webhook, repeat signing, or claim successful download. PDF layout and the wider rental lifecycle remain open. This release and retest supersede older pending-deployment / no-runtime-change statements below without replacing their historical evidence.
+
+## Independent authenticated curl reproduction — 3 November 2026
+
+At the user's request, [curl diagnostic #41623929241](https://github.com/WasanthaK/khrental/actions/runs/41623929241), job `125876389710`, repeated the existing integration-key exchange using curl on GitHub Actions. The existing Production key was passed through stdin headers to the exact Evia host, without verbose logging, redirects, printed credentials or raw response contents. Both requests used POST, JSON content type, X-Api-Key and body `{}`.
+
+| Exact endpoint | curl exit | HTTP | Content type | Response bytes |
+| --- | --- | --- | --- | --- |
+| https://evia.enadocapp.com/api/v2/oauth/exchange | 0 | 404 | text/html | 153 |
+| https://evia.enadocapp.com/_apis/sign/api/v2/oauth/exchange | 0 | 404 | absent | 0 |
+
+Results at **16:30:31–16:30:32 Asia/Colombo**. Neither response supplied an access token, so authenticated document listing and audit download could not proceed. A separate local unauthenticated curl request also returned 404/text-html; the Production-key result above is the relevant authenticated reproduction. The successful diagnostic workflow means the probe ran, **not** that audit retrieval passed. The diagnostic branch was returned to manual-only triggering afterward; no runtime deployment or signed-document mutation occurred. Current live audit download remains FAIL / OPEN.
