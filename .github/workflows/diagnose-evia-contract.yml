@@ -1,4 +1,4 @@
-name: Read current Evia API documentation
+name: Verify documented Evia audit authentication
 on:
   push:
     branches: [fix/evia-audit-download]
@@ -9,23 +9,41 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
+    environment: Production
     timeout-minutes: 3
     steps:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Read current public documentation
+      - name: Verify configured integration against documented routes
+        env:
+          EVIA_API_KEY: ${{ secrets.EVIA_SIGN_API_KEY }}
         run: |
           node --input-type=module <<'JS'
-          for (const path of [
-            '/llms.txt',
-            '/evia-sign-api/v2/authorization-and-authentication.md',
-            '/evia-sign-api/v2/webhook-management.md',
-            '/evia-sign-api/document.md'
-          ]) {
-            const response = await fetch('https://docs.sign.enadocapp.com' + path);
-            console.log('PUBLIC_DOC', path, response.status);
-            const body = await response.text();
-            if (response.ok && !body.trim().startsWith('<')) console.log(body.slice(0,60000));
+          const key = process.env.EVIA_API_KEY;
+          if (!key) throw new Error('Configured integration key is unavailable.');
+          for (const base of ['/api/v2', '/_apis/sign/api/v2']) {
+            const response = await fetch('https://evia.enadocapp.com' + base + '/oauth/exchange', {
+              method: 'POST', headers: {'Content-Type': 'application/json', 'X-Api-Key': key},
+              body: '{}', redirect: 'manual', signal: AbortSignal.timeout(20000)
+            });
+            const kind = response.headers.get('content-type') || '';
+            console.log('EXCHANGE', base, 'status', response.status, 'type', kind);
+            if (!response.ok || !kind.includes('application/json')) continue;
+            const payload = await response.json();
+            const token = payload.access_token || payload.accessToken;
+            console.log('TOKEN_RETURNED', Boolean(token));
+            if (!token) continue;
+            const list = await fetch('https://evia.enadocapp.com/_apis/sign/api/v2/requests/5CD08BD4-87A7-4E06-BE61-8EDC44E3AF7C/documents', {
+              headers: {Authorization: 'Bearer ' + token, Accept: 'application/json'},
+              redirect: 'manual', signal: AbortSignal.timeout(20000)
+            });
+            console.log('COMPLETED_LIST', list.status, list.headers.get('content-type'));
+            if (list.ok && (list.headers.get('content-type') || '').includes('application/json')) {
+              const data = await list.json();
+              const docs = Array.isArray(data) ? data : data.documents;
+              console.log('DOCUMENT_COUNT', Array.isArray(docs) ? docs.length : null);
+              console.log('AUDIT_PRESENT', Array.isArray(docs) && docs.some(d => String(d.documentName || d.DocumentName).toLowerCase() === 'audit_trail.pdf'));
+            }
           }
           JS
