@@ -96,3 +96,9 @@ Human-triggered audit recovery now passes the existing Evia OAuth access token t
 Provider audit retrieval and retention remain bound to the stored agreement/request and existing administrator/tenant checks. Conditional creation, PDF validation and exact readback remain unchanged. Signed bytes, status and signatories are not rewritten. Database CI also exposed an earlier completed-package replay regression: already-published fenced URLs were incorrectly sent to the historic audit writer and returned 503. Completion evidence now leaves those request-bound staged publications with their existing archive/replay guards. A regression covers duplicate delivery and expired package descriptors without a provider fetch or historic write. The separate server integration path is unchanged.
 
 Focused OAuth client, broker and immutable recovery tests: 23/23 PASS. Initial application CI passed 848/848; the fenced replay correction and client/recovery regression set pass 32/32 locally. Final-head database CI, deployment and actual provider OAuth audit download remain pending at this checkpoint. Do not mark the historical audit recovered until the PDF can be downloaded and read back.
+
+## OAuth recovery release status — 3 November 2026
+
+PR #490 is merged and deployment #41626677557 succeeded. All five final-head CI workflows passed, including 849 application tests and the disposable database archive/replay checks. The public build matches the merged release.
+
+Human-triggered recovery now reuses the existing OAuth connection used for signing. This corrects the earlier assumption that token acquisition was generally unavailable. Live audit-download acceptance remains OPEN; deployment and automated tests do not prove that the missing audit was recovered. Do not repeat browser login attempts. Continue from existing API evidence without requesting credentials in chat.
