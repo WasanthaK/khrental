@@ -1,3 +1,4 @@
+import { ensureDatabaseReady } from '../utils/databaseReadiness';
 import { getApiBaseUrl, isMssqlApiEnabled } from '../utils/env';
 import { buildRequestContextHeaders } from './requestContext';
 
@@ -29,6 +30,7 @@ export const requestMssqlApi = async (path, options = {}) => {
     ...rest
   } = options;
 
+  await ensureDatabaseReady();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     headers: {
