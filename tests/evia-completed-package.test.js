@@ -43,6 +43,8 @@ test('uses exact supplied package URL and event token without an API-key exchang
   } });
   assert.equal(calls.length, 1); assert.equal(documents.length, 2);
   assert.deepEqual(Buffer.from(documents[1].DocumentContent, 'base64'), pdf);
+  const upper = await extractEviaPackagePdfs(zip([{ name: 'Signed.pdf', body: signed }, { name: 'AUDIT_TRAIL.PDF' }]));
+  assert.equal(upper[1].DocumentName, 'audit_trail.pdf');
 });
 
 test('rejects unverified, expired or unsafe descriptors before any fetch', async () => {

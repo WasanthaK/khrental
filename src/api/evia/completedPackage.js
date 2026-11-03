@@ -70,7 +70,8 @@ export const extractEviaPackagePdfs = async body => {
       const pdf = await readBounded(stream, entry.uncompressedSize);
       if (pdf.length !== entry.uncompressedSize || crc32(pdf) !== entry.crc32
           || pdf.subarray(0, 5).toString() !== '%PDF-') throw fail('EVIA_PACKAGE_PDF_INVALID');
-      documents.push({ DocumentName: storedName, DocumentContent: pdf.toString('base64'), ContentType: 'application/pdf' });
+      documents.push({ DocumentName: storedName.toLowerCase() === 'audit_trail.pdf' ? 'audit_trail.pdf' : storedName,
+        DocumentContent: pdf.toString('base64'), ContentType: 'application/pdf' });
     }
     if (!names.has('audit_trail.pdf') || documents.length < 2) throw fail('EVIA_PACKAGE_DOCUMENT_PAIR_REQUIRED');
     return documents;
