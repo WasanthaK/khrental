@@ -44,3 +44,14 @@ unauthorized users. Passing fixture tests is not live provider acceptance.
 ### Concrete unblock / provider handoff
 
 Confirm or restore the deployed absolute API-key exchange URL for evia.enadocapp.com and demonstrate an authorized completed-document list plus audit download for the existing request. Alternatively supply the supported completed-package retrieval/reissue contract for an already completed request (including URL scope, token format/expiry and safe retry). Then implement the verified adapter correction and prove audit-only immutable retention/readback, repeat-download idempotency and unauthorized denial. Do not request new signatures merely to obtain another webhook. The provider backend is not available in the connected KH Rentals repository; its routes cannot be repaired here.
+
+### Current-documentation recheck and authenticated route comparison
+
+At the user's request, read the **live** full documentation index and current authorization, webhook and document guides in [41614023043](https://github.com/WasanthaK/khrental/actions/runs/41614023043), rather than relying on the older repository copy or search excerpts. The authorization guide defines the Sign base as https://evia.enadocapp.com/_apis/sign. The retrieval guide gives a relative /api/v2/oauth/exchange, so omission of that base was a plausible integration bug, not enough evidence to declare a provider outage.
+
+[41614207312](https://github.com/WasanthaK/khrental/actions/runs/41614207312) then tested **both interpretations with the existing Production integration API key**, keeping credentials and response contents out of logs:
+- Origin-relative /api/v2/oauth/exchange: HTTP 404, text/html.
+- Sign-base /_apis/sign/api/v2/oauth/exchange: HTTP 404, no content type.
+- Neither returned a token, so no authenticated list/download was attempted. No request was sent/recreated and no storage was written.
+
+**Corrected conclusion:** the old-URL hypothesis was investigated, but no working replacement URL is established. Do not report a general Evia outage or assert that a URL-only patch fixes this. Current docs also recommend consuming completedPackage.url and its event-scoped token for ZIP retrieval; this app does not implement that adapter. Supporting that newer path requires a verified request-bound payload/URL contract and token-expiry/recovery handling, especially for already-completed agreements. Audit acceptance remains open.
