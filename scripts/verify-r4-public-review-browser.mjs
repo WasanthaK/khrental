@@ -78,7 +78,7 @@ try{
       livePanel:document.querySelector('[data-public-listing-market]')?.dataset.publicListingEnabled,
       liveTitles:[...document.querySelectorAll('[data-public-listing-cards] h3')].map(n=>n.textContent),
       examplesHidden:!document.querySelector('.results .cards:not([data-public-listing-cards])')||document.querySelector('.results .cards:not([data-public-listing-cards])').hidden,
-      enabledButtons:document.querySelectorAll('button:not([disabled])').length,
+      enabledButtons:document.querySelectorAll('button:not([disabled]):not([data-catalog-retry])').length,
       liveWarnings:document.body.textContent.includes('UNPUBLISHED DESIGN DRAFT')||document.body.textContent.includes('PUBLIC DESIGN REVIEW')||document.body.textContent.includes('LIMITED PUBLIC PILOT'),
       photos:[...document.querySelectorAll('img.preview-photo,img.approved-wordmark,img[src$=".webp"]')].map(i=>({src:i.getAttribute('src'),width:i.naturalWidth,loaded:i.complete})),
       photoStyles:[...document.querySelectorAll('.hero,.home-hero,.review-market-card,.category-grid a,.owner-hero')].map(n=>getComputedStyle(n).backgroundImage).filter(s=>s.includes('.webp'))
