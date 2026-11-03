@@ -52,7 +52,7 @@ export const buildEviaCompletedDocumentPath = ({
 }) => {
   const safeTenantId = safeStorageSegment(tenantId, 'tenant ID');
   const safeAgreementId = safeStorageSegment(agreementId, 'agreement ID');
-  const safeName = sanitizeCompletedDocumentName(documentName);
+  const safeName = normalizeEviaCompletedDocumentName(documentName);
   if (archiveAttemptId === null || archiveAttemptId === undefined) {
     // Preserve the production-referenced path until a fenced promotion
     // protocol has been tested and explicitly enabled.
@@ -79,6 +79,23 @@ export const sanitizeCompletedDocumentName = (value, fallback = 'signed_agreemen
     .slice(0, 180);
 
   return normalized || fallback;
+};
+
+// Evia exports request-specific audit names as well as audit_trail.pdf.
+// Keep one storage name so the audit is never selected as the signed agreement.
+export const normalizeEviaCompletedDocumentName = (value, fallback = 'signed_agreement.pdf') => {
+  const leaf = String(value || '').split(/[\\/]+/).filter(Boolean).pop() || '';
+  if (/^(?:audit_trail|EviaSign_AuditTrail_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$/i.test(leaf)) {
+    return 'audit_trail.pdf';
+  }
+  return sanitizeCompletedDocumentName(value, fallback);
+};
+
+const assertUniqueDocumentNames = (names) => {
+  const unique = new Set(names.map(name => name.toLowerCase()));
+  if (unique.size !== names.length) {
+    throw createHttpError('Evia returned conflicting completed-document names.', 502, 'EVIA_COMPLETED_DOCUMENT_NAME_COLLISION');
+  }
 };
 
 export const validateEviaDownloadUrl = (value) => {
@@ -161,14 +178,16 @@ export const listEviaCompletedDocuments = async ({
     throw createHttpError('Evia returned no completed documents for the request.', 502, 'EVIA_COMPLETED_DOCUMENTS_EMPTY');
   }
 
-  return documents.map((document, index) => ({
+  const normalizedDocuments = documents.map((document, index) => ({
     index,
-    documentName: sanitizeCompletedDocumentName(
+    documentName: normalizeEviaCompletedDocumentName(
       document?.documentName || document?.DocumentName,
       `signed_document_${index + 1}.pdf`
     ),
     downloadUrl: validateEviaDownloadUrl(document?.downloadUrl || document?.DownloadUrl)
   }));
+  assertUniqueDocumentNames(normalizedDocuments.map(document => document.documentName));
+  return normalizedDocuments;
 };
 
 export const downloadEviaCompletedDocument = async ({
@@ -255,16 +274,18 @@ export const storeEviaWebhookCompletedDocuments = async ({
   const safeAgreementId = safeStorageSegment(agreementId, 'agreement ID');
   const sourceDocuments = Array.isArray(documents) ? documents : [];
   const storedDocuments = [];
+  const documentNames = sourceDocuments.map((document, index) => normalizeEviaCompletedDocumentName(
+    document?.DocumentName || document?.documentName, `signed_document_${index + 1}.pdf`
+  ));
+  // Detect canonical/alias collisions before writing either document.
+  assertUniqueDocumentNames(documentNames);
 
   for (let index = 0; index < sourceDocuments.length; index += 1) {
     const document = sourceDocuments[index] || {};
     const body = decodeWebhookDocumentContent(document.DocumentContent || document.documentContent);
     if (!body) continue;
 
-    const documentName = sanitizeCompletedDocumentName(
-      document.DocumentName || document.documentName,
-      `signed_document_${index + 1}.pdf`
-    );
+    const documentName = documentNames[index];
     const relativePath = buildEviaCompletedDocumentPath({
       tenantId: safeTenantId,
       agreementId: safeAgreementId,

@@ -1,6 +1,6 @@
 import yauzl from 'yauzl';
 import { crc32 } from 'node:zlib';
-import { sanitizeCompletedDocumentName } from './completedDocuments.js';
+import { normalizeEviaCompletedDocumentName } from './completedDocuments.js';
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_ENTRIES = 100;
@@ -59,7 +59,7 @@ export const extractEviaPackagePdfs = async body => {
       // The archive is never extracted to disk. Reject ambiguous leaf names,
       // symlinks and non-PDF entries before any object is written.
       const leaf = name.split('/').pop();
-      const storedName = sanitizeCompletedDocumentName(leaf);
+      const storedName = normalizeEviaCompletedDocumentName(leaf);
       if (!/^[A-Za-z0-9_-][A-Za-z0-9 ._-]*\.pdf$/i.test(leaf)
           || names.has(storedName.toLowerCase()) || entry.isEncrypted()
           || ((entry.externalFileAttributes >>> 16) & 0o170000) === 0o120000) throw fail('EVIA_PACKAGE_ENTRY_INVALID');
