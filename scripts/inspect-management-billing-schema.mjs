@@ -1,4 +1,4 @@
-const required={
+export const managementBillingColumns={
   management_pricing_versions:['id','market','version','rules_json','status','stripe_price_id','created_by','created_at','published_at'],
   management_billing_accounts:['tenant_id','stripe_account_id','stripe_customer_id','stripe_subscription_id','stripe_item_id','stripe_schedule_id','stripe_price_id',
     'pricing_version_id','market',
@@ -29,7 +29,7 @@ export const inspectManagementBilling=async pool=>{
   `);
   const [columns=[],indexes=[],checks=[],fks=[]]=result.recordsets||[];
   const problems=[];
-  for(const [table,fields] of Object.entries(required)){
+  for(const [table,fields] of Object.entries(managementBillingColumns)){
     for(const name of fields) if(!columns.some(c=>c.table_name===table&&c.name===name))problems.push(`${table}.${name}`);
     const key=table==='management_billing_accounts'?'tenant_id':table==='management_billing_events'?'stripe_event_id':'id';
     if(!indexes.some(i=>i.table_name===table&&i.is_primary_key&&!i.is_disabled&&i.keys===key))problems.push(`${table}.primary_key`);
