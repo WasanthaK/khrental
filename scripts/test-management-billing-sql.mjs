@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {inspectManagementBilling} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
 import {BILLING_PRICE,BILLING_PRODUCT,hash,problem} from '../src/api/managementBilling/contract.js';
@@ -13,6 +14,28 @@ export const verifyManagementBilling=async pool=>{
   await pool.request().query('ALTER TABLE dbo.management_billing_accounts NOCHECK CONSTRAINT CK_management_billing_sandbox');
   assert.equal((await inspectManagementBilling(pool)).satisfied,false);
   await pool.request().query('ALTER TABLE dbo.management_billing_accounts WITH CHECK CHECK CONSTRAINT CK_management_billing_sandbox');
+  // Reproduce the production web identity: DML allowed, definitions hidden.
+  await pool.request().batch(`CREATE USER billing_readiness_probe WITHOUT LOGIN;
+    GRANT SELECT,INSERT,UPDATE ON dbo.management_pricing_versions TO billing_readiness_probe;
+    GRANT SELECT,INSERT,UPDATE ON dbo.management_billing_accounts TO billing_readiness_probe;
+    GRANT SELECT,INSERT,UPDATE ON dbo.management_billing_commands TO billing_readiness_probe;
+    GRANT SELECT,INSERT ON dbo.management_billing_events TO billing_readiness_probe;
+    GRANT SELECT,INSERT ON dbo.management_billing_audit TO billing_readiness_probe;
+    DENY VIEW DEFINITION TO billing_readiness_probe;`);
+  const restricted={request:()=>({query:statement=>pool.request().query(`
+    EXECUTE AS USER='billing_readiness_probe'; BEGIN TRY
+    ${statement}; REVERT; END TRY BEGIN CATCH REVERT; THROW; END CATCH;
+  `)})};
+  assert.equal((await inspectManagementBilling(restricted)).satisfied,false,'Hidden definitions cannot prove structural acceptance');
+  assert.equal((await inspectManagementBillingApplicationAccess(restricted)).satisfied,true,'Runtime access does not require definition privileges');
+  await pool.request().query('REVOKE INSERT ON dbo.management_billing_audit FROM billing_readiness_probe');
+  assert.equal((await inspectManagementBillingApplicationAccess(restricted)).satisfied,false,'Missing audit write fails closed');
+  await pool.request().query('GRANT INSERT ON dbo.management_billing_audit TO billing_readiness_probe');
+  await pool.request().query('REVOKE SELECT ON dbo.management_billing_events FROM billing_readiness_probe');
+  await assert.rejects(inspectManagementBillingApplicationAccess(restricted),'Missing read access fails closed');
+  assert.equal((await pool.request().query('SELECT COUNT(*) AS n FROM dbo.management_billing_audit')).recordset[0].n,0,'Readiness creates no audit rows');
+  await pool.request().query('DROP USER billing_readiness_probe');
+  console.log('PASS: billing runtime restricted definitions, required DML, denied audit/read access and no writes');
   // Use the existing disposable migration proof actors, never production records.
   const actor=(await pool.request().query('SELECT TOP 1 id FROM dbo.app_users')).recordset[0];
   assert.ok(actor,'The migration proof must provide an actor fixture.');

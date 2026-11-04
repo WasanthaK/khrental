@@ -67,3 +67,7 @@ Release order:
 6. Complete an explicitly enrolled demo organization's hosted sandbox Checkout and confirm real Stripe event reconciliation before claiming end-to-end acceptance.
 
 Rollback: run the same release workflow with mode `rollback` and confirmation `CLOSE-SANDBOX-BILLING`. Existing renter and development access remains governed by existing authorization.
+
+### Runtime readiness correction — 2026-11-04
+
+Release 41890029841 and diagnostic preflight 41892510734 stopped before secret binding or activation. Strict executor verification passed, while the application identity had all required DML permissions and no VIEW DEFINITION permission on the five billing tables. Hidden filtered-index/check definitions caused the runtime structural inspector to report a false failure. Runtime readiness now uses zero-row column access plus required DML permission checks, following the enquiry readiness pattern. Full structural acceptance remains mandatory through the isolated executor; no database grants change. Disposable SQL regression coverage reproduces hidden definitions and rejects missing audit-write or read access. This correction alone does not prove Stripe delivery or Checkout acceptance.
