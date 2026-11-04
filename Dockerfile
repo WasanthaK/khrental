@@ -8,11 +8,11 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PORT=5174
 ENV HOST=0.0.0.0
 
-COPY package.json ./
+COPY package.json package-lock.json ./
 RUN npm config set fetch-retries 5 \
   && npm config set fetch-retry-mintimeout 20000 \
   && npm config set fetch-retry-maxtimeout 120000 \
-  && npm install --include=dev --no-audit --no-fund
+  && npm ci --include=dev --no-audit --no-fund
 
 COPY . .
 
