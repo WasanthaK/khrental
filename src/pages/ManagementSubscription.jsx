@@ -1,0 +1,53 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {useAuth} from '../hooks/useAuth';
+import {requestMssqlApi} from '../services/mssqlApiClient';
+
+const button='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40';
+export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction})=><div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+  <header><p className="text-sm font-semibold uppercase tracking-wider text-teal-700">Workspace billing</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Management subscription</h1><p className="mt-2 text-slate-600">A monthly subscription for the dwellings your organization manages.</p></header>
+  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Sandbox test · No live charging</strong><p className="mt-1">This test does not change your workspace’s existing access. Rent, deposits and renter documents are separate from this subscription.</p></div>
+  {error&&<p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{error} <button onClick={onReload} className="underline">Retry</button></p>}
+  {notice&&<p role="status" className="rounded-xl bg-slate-100 p-4 text-slate-800">{notice}</p>}
+  {loading?<p role="status">Loading subscription…</p>:data&&<>
+    <div className="grid gap-4 sm:grid-cols-3">{[['Managed dwellings',data.inventoryQuantity],['Current billed quantity',data.billedQuantity],['Subscription',data.status.replaceAll('_',' ')]].map(([title,value])=><section key={title} className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-sm text-slate-500">{title}</h2><p className="mt-2 text-2xl font-semibold capitalize">{value}</p></section>)}</div>
+    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Billing actions</h2>
+      {!data.enrolled?<p className="text-slate-600">A platform administrator must enroll this development workspace before sandbox checkout is available.</p>:!data.configured?<p className="text-slate-600">The sandbox connection is being configured. Your existing records remain available.</p>:<>
+        <p className="text-sm text-slate-600">Monthly, no trial. Additions are prorated onto the next regular invoice. Reductions apply at renewal. A failed renewal has a seven-day grace period.</p>
+        <div className="flex flex-wrap gap-3">
+          {data.status==='pending'&&<button className={button} disabled={busy} onClick={()=>onAction('checkout',{inventoryHash:data.inventoryHash})}>Open sandbox checkout</button>}
+          <button className={button} disabled={busy} onClick={()=>onAction('refresh',{})}>Refresh Stripe status</button>
+          {data.status!=='pending'&&<><button className={button} disabled={busy} onClick={()=>onAction('portal',{})}>Payment method & invoices</button><button className={button} disabled={busy||data.entitlement.state!=='active'} onClick={()=>onAction('quantity-preview',{})}>Review quantity change</button></>}
+        </div>
+        {data.pendingOperation&&<div className="text-sm text-amber-800"><p>An operation is awaiting confirmation: {data.pendingOperation.kind.replaceAll('_',' ')}.</p><button className={`${button} mt-2`} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button></div>}
+        {preview&&<div className="rounded-xl border border-teal-200 bg-teal-50 p-4"><h3 className="font-semibold">Quantity change: {preview.from} → {preview.to}</h3><p className="mt-2 text-sm">{preview.timing==='prorated_next_invoice'?'Proration is added to the next regular invoice; no immediate collection.':preview.timing==='next_renewal'?'The lower quantity starts at the next renewal. No current-period refund.':'The quantity is unchanged.'}</p>{preview.nextInvoiceTotalMinor!==null&&<p className="mt-2 font-semibold">Estimated next invoice: {new Intl.NumberFormat('en',{style:'currency',currency:preview.currency}).format(preview.nextInvoiceTotalMinor/100)}</p>}<button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('quantity-apply',{previewId:preview.previewId})}>Confirm sandbox quantity change</button></div>}
+        {['active','past_due'].includes(data.status)&&<div className="border-t pt-4"><h3 className="font-semibold">Renewal</h3><p className="mt-2 text-sm text-slate-600">{data.cancelAtPeriodEnd?'This subscription is set to end at renewal.':'Your monthly subscription renews automatically.'} Historical records and renter access are preserved after cancellation.</p><button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('cancellation',{cancelAtPeriodEnd:!data.cancelAtPeriodEnd})}>{data.cancelAtPeriodEnd?'Keep subscription renewing':'End subscription at renewal'}</button></div>}
+      </>}
+    </section>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="py-3 text-sm">{item.label}</li>)}</ul></section>
+  </>}
+</div>;
+
+export default function ManagementSubscription(){
+  const {user,membership}=useAuth();
+  const tenantId=membership?.tenant_id || user?.tenant_id;
+  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preview,setPreview]=useState(null);
+  const context=useRef('');context.current=`${user?.id}:${tenantId}`;
+  const requests=useRef(new Map());
+  const load=async()=>{const scope=context.current;setLoading(true);setError('');try{const result=await requestMssqlApi('/api/management-billing/status');if(context.current===scope)setData(result);}catch(e){if(context.current===scope)setError(e.message);}finally{if(context.current===scope)setLoading(false);}};
+  useEffect(()=>{setData(null);setPreview(null);setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
+  const action=async(kind,payload,resumeId)=>{
+    const scope=context.current;setBusy(true);setNotice('');
+    const key=`${scope}:${kind}:${JSON.stringify(payload)}`;
+    let requestId=resumeId || requests.current.get(key);
+    if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
+    try{
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:{...payload,requestId}});
+      if(context.current!==scope)return;
+      requests.current.delete(key);
+      if(result.url){window.location.assign(result.url);return;}
+      if(kind==='quantity-preview')setPreview(result);else{setPreview(null);setNotice('Stripe status updated.');}
+      await load();
+    }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500)requests.current.delete(key);await load();}}finally{if(context.current===scope)setBusy(false);}
+  };
+  return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview}} onReload={load} onAction={action}/>;
+}

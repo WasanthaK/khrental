@@ -1,5 +1,13 @@
 ## Current canonical reconciliation — 3 November 2026
 
+## Active R4/R5 delivery programme — 4 November 2026
+
+The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+
+The [R4/R5 delivery ledger](../R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+
+---
+
 **Current agreement audit view/download: CLOSED — live PASS.** The administrator opened and downloaded the matching two-page audit, then reopened it after a full application reload. #491 fixes exported audit filenames and retained aliases; #492 checks local storage before requesting Evia authentication. #492 deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175) passed on ready revision 0000452 with exact build and MSSQL readiness; application CI **863/863**, focused Evia **125/125**, build and provider integration checks passed.
 
 The current live demo has also passed enquiry/reply/readback, viewing completion, application review/resubmission/acceptance, offer acceptance, replacement agreement preparation, both signatures and signed-PDF retrieval. Historical OPEN/not-sent statements below are superseded for these observed paths. Future automatic signed-PDF/audit capture needs one next-contract acceptance; it does not reopen the current download.

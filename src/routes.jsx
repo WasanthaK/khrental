@@ -67,6 +67,8 @@ import TeamMemberForm from './pages/TeamMemberForm';
 import TeamMemberDetails from './pages/TeamMemberDetails';
 import Settings from './pages/Settings';
 import TenantAdmin from './pages/TenantAdmin';
+import ManagementPricing from './pages/ManagementPricing';
+import ManagementSubscription from './pages/ManagementSubscription';
 import AdminTools from './pages/AdminTools';
 import FileUploadTest from './pages/FileUploadTest';
 import AdminDashboard from './pages/AdminDashboard';
@@ -470,6 +472,14 @@ const routes = [
           {
             path: 'tenant-admin',
             element: permissionRoute([PERMISSIONS.MEMBERSHIPS_MANAGE], <TenantAdmin />)
+          },
+          {
+            path: 'management-pricing',
+            element: permissionRoute([PERMISSIONS.MEMBERSHIPS_MANAGE], <ManagementPricing />)
+          },
+          {
+            path: 'subscription',
+            element: permissionRoute([PERMISSIONS.TENANT_SETTINGS_MANAGE], <ManagementSubscription />)
           },
           {
             path: 'settings',

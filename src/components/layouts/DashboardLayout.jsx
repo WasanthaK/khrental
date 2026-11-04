@@ -67,7 +67,7 @@ const DashboardLayout = () => {
       return;
     }
 
-    if (location.pathname !== '/dashboard/tenant-admin') {
+    if (!['/dashboard/tenant-admin','/dashboard/management-pricing'].includes(location.pathname)) {
       navigate('/dashboard/tenant-admin', { replace: true });
     }
   }, [hasTenantAccess, isPlatformAdmin, platformAdminLoading, location.pathname, navigate]);
@@ -278,6 +278,8 @@ const DashboardLayout = () => {
               Platform Admin
             </NavLink>
           )}
+          {isPlatformAdmin && <NavLink to="/dashboard/management-pricing" className={getNavLinkClass}>Management pricing</NavLink>}
+          {showSettings && <NavLink to="/dashboard/subscription" className={getNavLinkClass}>Management subscription</NavLink>}
         </nav>
       </div>
     </div>

@@ -27,7 +27,7 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-const isPlatformAdmin = async (user) => {
+export const isPlatformAdmin = async (user) => {
   if (!user?.id) {
     return false;
   }

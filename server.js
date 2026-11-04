@@ -38,6 +38,7 @@ import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
 import { createEviaAuditRecoveryRouter } from './src/api/evia/auditRecoveryRouter.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
+import { createManagementBillingRouter, createManagementBillingWebhook } from './src/api/managementBilling/router.js';
 
 dotenv.config();
 
@@ -91,6 +92,8 @@ async function createServer() {
   app.use('/api/public-signup', createPublicSignupRuntime());
   // R4 marketplace: public-safe availability projection; dual release-gate defaults 404.
   app.use('/api/public-listings', createPublicListingsRouter());
+  // Stripe signatures cover the original bytes; this route must precede JSON/session middleware.
+  app.use('/api/management-billing/webhook', createManagementBillingWebhook());
   // Credential-gated, temporarily enabled read-only R3 ingress peer attestation.
   // Absent its one-time environment secret this route always responds 404.
   app.post('/api/internal/r3-ingress-peer', (req, res) => observeR3IngressPeer(req, res));
@@ -116,6 +119,8 @@ async function createServer() {
     }
     next();
   };
+
+  app.use('/api/management-billing', requireApiSession, createManagementBillingRouter());
 
   app.get('/api/health', (_req, res) => {
     const databaseStatus = getMssqlConfigStatus();

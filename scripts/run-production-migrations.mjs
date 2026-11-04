@@ -1,4 +1,5 @@
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
+import {inspectManagementBilling} from './inspect-management-billing-schema.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -490,6 +491,12 @@ const MIGRATIONS = [
     file: 'migrations/20261029_01_rental_offers_and_holds.sql',
     inspect: inspectRentalOffers,
     verify: async pool => assertSatisfied(inspectRentalOffers(pool), 'Rental offer and occupancy schema verification failed.')
+  },
+  {
+    id: '20261103_01_management_billing',
+    file: 'migrations/20261103_01_management_billing.sql',
+    inspect: inspectManagementBilling,
+    verify: async pool => assertSatisfied(inspectManagementBilling(pool), 'Management billing schema verification failed.')
   }
 ];
 
