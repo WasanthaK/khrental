@@ -4,6 +4,7 @@ import {inspectPropertyApplications} from './inspect-property-applications-schem
 import {inspectPropertyViewings} from './inspect-property-viewings-schema.mjs';
 import {inspectPropertyEnquiries} from './inspect-property-enquiries-schema.mjs';
 import assert from 'node:assert/strict';
+import {verifyManagementBilling} from './test-management-billing-sql.mjs';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -53,7 +54,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261028_01_property_enquiries',
   '20261028_02_property_viewings',
   '20261028_03_property_applications',
-  '20261029_01_rental_offers_and_holds'
+  '20261029_01_rental_offers_and_holds',
+  '20261103_01_management_billing'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1065,6 +1067,7 @@ const main = async () => {
     assert.equal((await inspectRentalOffers(testPool)).satisfied,false);
     await testPool.request().query('ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
     console.log('PASS: governed offer/hold migration double apply, exact enabled trigger proof and drift denial');
+    await verifyManagementBilling(testPool);
 
 
   } finally {
