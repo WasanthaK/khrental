@@ -100,6 +100,34 @@ jobs:
           test "$exec_status" = 0
           grep -Fq 'MANAGEMENT_BILLING_RELEASE_SCHEMA=PASS' "$folder/preflight"
           echo 'MANAGEMENT_BILLING_RELEASE_PREFLIGHT=PASS exact_build single_revision min_max_1 billing_schema runtime_permissions'
+      - name: Diagnose failed runtime preflight without business data
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(cat <<'JS' | base64 -w0
+          (async()=>{
+            let pool;
+            try {
+              const {getMssqlPool}=await import('/app/src/api/mssql/pool.js');
+              const {inspectManagementBilling}=await import('/app/scripts/inspect-management-billing-schema.mjs');
+              pool=await getMssqlPool();
+              const schema=await inspectManagementBilling(pool);
+              console.log('BILLING_DIAGNOSTIC_SCHEMA='+JSON.stringify(schema));
+              for(const table of ['management_pricing_versions','management_billing_accounts','management_billing_commands','management_billing_events','management_billing_audit']){
+                const result=await pool.request().input('object','dbo.'+table).query("SELECT HAS_PERMS_BY_NAME(@object,'OBJECT','SELECT') AS can_read,HAS_PERMS_BY_NAME(@object,'OBJECT','INSERT') AS can_insert,HAS_PERMS_BY_NAME(@object,'OBJECT','UPDATE') AS can_update,HAS_PERMS_BY_NAME(@object,'OBJECT','VIEW DEFINITION') AS can_view_definition");
+                console.log('BILLING_DIAGNOSTIC_PERMISSION='+JSON.stringify({table,...result.recordset[0]}));
+              }
+            }catch(error){console.log('BILLING_DIAGNOSTIC_ERROR='+JSON.stringify({code:error.code||'UNKNOWN',number:error.number||null}));}
+            finally{await pool?.close().catch(()=>{});}
+          })();
+          JS
+          )
+          command="node -e \"eval(Buffer.from('$payload','base64').toString())\""
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          printf -v invocation '%q ' az containerapp exec -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --command "$command"
+          script -q -e -c "$invocation" /dev/null > "$folder/diagnostic" 2>&1 || true
+          grep -Eo 'BILLING_DIAGNOSTIC_[A-Z_]+=.*' "$folder/diagnostic"
       - name: Bind sandbox secrets and apply sandbox switches only
         id: enable
         if: inputs.mode != 'preflight'
