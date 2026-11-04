@@ -51,8 +51,8 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     await q(`UPDATE dbo.tenants SET [plan]='development-testing',status='active' WHERE id IN(@a,@b)`,{a:tenantA,b:tenantB});
     for(const tenantId of [tenantA,tenantB])await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role)
       VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
-    for(const [id,tenantId] of [[propA,tenantA],[propB,tenantB]])await q(`INSERT INTO dbo.properties(id,tenant_id,name,propertytype)
-      VALUES(@id,@tenantId,'Synthetic billing proof home','house')`,{id,tenantId});
+    for(const [id,tenantId] of [[propA,tenantA],[propB,tenantB]])await q(`INSERT INTO dbo.properties(id,tenant_id,name,propertytype,country_code)
+      VALUES(@id,@tenantId,'Synthetic billing proof home','house','LK')`,{id,tenantId});
   });
   for(const tenantId of [tenantA,tenantB]) await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Synthetic SQL transaction acceptance only.'});
   const accounts=await store.read('SELECT tenant_id FROM dbo.management_billing_accounts');assert.equal(accounts.length,2);
