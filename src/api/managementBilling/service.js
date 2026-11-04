@@ -33,9 +33,21 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     await q(`UPDATE dbo.management_billing_accounts SET subscription_status=@subscription_status,stripe_item_id=@stripe_item_id,
       quantity=@quantity,initial_payment_verified=@initial_payment_verified,paid_through=@paid_through,
       grace_started_at=@grace_started_at,cancel_at_period_end=@cancel_at_period_end,stripe_schedule_id=@stripe_schedule_id,
+      pending_quantity=CASE WHEN pending_quantity=@quantity THEN NULL ELSE pending_quantity END,
       version=version+1,updated_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId`,{tenantId,...projection,
       paid_through:projection.paid_through?new Date(projection.paid_through):null,
       grace_started_at:projection.grace_started_at?new Date(projection.grace_started_at):null});
+  };
+  const loadInvoice=async id=>{
+    const invoice=await stripe.request('GET',`/v1/invoices/${id}`);
+    let page=invoice.lines;
+    const lines=[...(page?.data || [])];
+    while(page?.has_more){
+      if(!page.data?.length || lines.length>=10000) throw problem(409,'BILLING_INVOICE_REVIEW','Invoice lines could not be fully reconciled.');
+      page=await stripe.request('GET',`/v1/invoices/${id}/lines`,{limit:100,starting_after:page.data.at(-1).id});
+      lines.push(...page.data);
+    }
+    return {...invoice,lines:{...invoice.lines,data:lines,has_more:false}};
   };
   const reconcileLocked=async(q,account)=>{
     if(!account.stripe_subscription_id){
@@ -56,7 +68,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     if(!account.stripe_subscription_id) return account;
     const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`);
     const invoiceId=objectId(subscription.latest_invoice);
-    const invoice=invoiceId?await stripe.request('GET',`/v1/invoices/${invoiceId}`):null;
+    const invoice=invoiceId?await loadInvoice(invoiceId):null;
     const projection=subscriptionProjection({subscription,invoice,account});
     await saveProjection(q,account.tenant_id,projection);
     return {...account,...projection};
@@ -77,8 +89,9 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   const runCommand=async({tenantId,id,kind,payload,actorId,action})=>{
     await stripe.assertAccount();
     await requireAccount(tenantId);
-    await store.beginCommand({tenantId,id,kind,payload});
+    await store.beginCommand({tenantId,id,kind,payload,actorId});
     return store.locked(tenantId,async q=>{
+      await store.assertActor(q,tenantId,actorId);
       const command=(await q('SELECT * FROM dbo.management_billing_commands WHERE id=@id',{id}))[0];
       if(command.status==='completed') return JSON.parse(command.result_json);
       const account=await requireAccount(tenantId,q);
@@ -142,7 +155,15 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     account=await reconcileLocked(q,account);
     if(!account.stripe_subscription_id || !['active','past_due'].includes(account.subscription_status))
       throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');
-    if(account.stripe_schedule_id) throw problem(409,'BILLING_SCHEDULE_REVIEW','Reconcile the scheduled quantity change before changing cancellation.');
+    if(account.stripe_schedule_id){
+      if(!cancelAtPeriodEnd) throw problem(409,'BILLING_SCHEDULE_REVIEW','This subscription already has an active renewal schedule.');
+      const schedule=await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`);
+      if(objectId(schedule.subscription)!==account.stripe_subscription_id || objectId(schedule.customer)!==account.stripe_customer_id)
+        throw problem(409,'BILLING_SCHEDULE_MISMATCH','The quantity schedule does not belong to this subscription.');
+      // Canceling at renewal means its scheduled next-period quantity will not be billed.
+      await stripe.request('POST',`/v1/subscription_schedules/${schedule.id}/release`,{preserve_cancel_date:false},`${key}:release`);
+      await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId});
+    }
     await stripe.request('POST',`/v1/subscriptions/${account.stripe_subscription_id}`,{cancel_at_period_end:cancelAtPeriodEnd},key);
     const confirmed=await reconcileLocked(q,account);
     if(confirmed.cancel_at_period_end!==cancelAtPeriodEnd) throw problem(502,'BILLING_CANCELLATION_UNCONFIRMED','Stripe has not confirmed the cancellation change.');

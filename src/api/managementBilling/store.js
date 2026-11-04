@@ -23,6 +23,14 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     } catch (error) { await tx.rollback().catch(()=>{}); throw error; }
   };
   const account = async (tenantId, q = read) => (await q('SELECT * FROM dbo.management_billing_accounts WHERE tenant_id=@tenantId',{tenantId}))[0] || null;
+  const assertActor = async(q,tenantId,actorId)=>{
+    const allowed=await q(`SELECT TOP 1 m.id FROM dbo.tenant_memberships m
+      JOIN dbo.app_users u ON u.id=m.app_user_id JOIN dbo.tenants t ON t.id=m.tenant_id
+      WHERE m.tenant_id=@tenantId AND m.app_user_id=@actorId AND LOWER(m.role)='admin'
+      AND LOWER(COALESCE(m.status,'active'))='active' AND LOWER(COALESCE(u.status,'active'))='active'
+      AND LOWER(t.status)='active'`,{tenantId,actorId});
+    if(!allowed.length) throw problem(403,'BILLING_ADMIN_REQUIRED','The workspace administrator membership is no longer active.');
+  };
   const audit = (q, {tenantId=null,actorId=null,action,resourceId,previous=null,current,reason}) =>
     q(`INSERT INTO dbo.management_billing_audit(tenant_id,actor_id,action,resource_id,previous_hash,current_hash,reason)
       VALUES(@tenantId,@actorId,@action,@resourceId,@previous,@current,@reason)`,
@@ -65,7 +73,8 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     await audit(q,{tenantId,actorId,action:'sandbox.enrolled',resourceId:tenantId,current:{inventory:items,market,price:selectedPrice,pricingVersion,useApprovedSandboxBaseline},reason});
     return account(tenantId,q);
   });
-  const beginCommand = ({tenantId,id,kind,payload}) => locked(tenantId,async q => {
+  const beginCommand = ({tenantId,id,kind,payload,actorId}) => locked(tenantId,async q => {
+    await assertActor(q,tenantId,actorId);
     const existing=(await q('SELECT * FROM dbo.management_billing_commands WHERE id=@id',{id}))[0];
     const digest=hash(payload);
     if(existing){
@@ -83,5 +92,5 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   });
   const completeCommand = (q,id,result) => q(`UPDATE dbo.management_billing_commands SET status='completed',result_json=@result,
     completed_at=SYSUTCDATETIME() WHERE id=@id`,{id,result:JSON.stringify(result)});
-  return {read,locked,account,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand};
+  return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand};
 };

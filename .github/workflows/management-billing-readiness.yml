@@ -1,0 +1,30 @@
+name: Management billing sandbox readiness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/managementBilling/**'
+      - 'scripts/check-management-billing-readiness.mjs'
+      - '.github/workflows/management-billing-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect configured sandbox only
+        env:
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          STRIPE_SANDBOX_WEBHOOK_SECRET: ${{ secrets.STRIPE_SANDBOX_WEBHOOK_SECRET }}
+        run: node scripts/check-management-billing-readiness.mjs
