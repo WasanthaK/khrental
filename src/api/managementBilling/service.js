@@ -89,17 +89,30 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   const runCommand=async({tenantId,id,kind,payload,actorId,action})=>{
     await stripe.assertAccount();
     await requireAccount(tenantId);
-    await store.beginCommand({tenantId,id,kind,payload,actorId});
-    return store.locked(tenantId,async q=>{
+    const started=await store.beginCommand({tenantId,id,kind,payload,actorId});
+    try {return await store.locked(tenantId,async q=>{
       await store.assertActor(q,tenantId,actorId);
       const command=(await q('SELECT * FROM dbo.management_billing_commands WHERE id=@id',{id}))[0];
       if(command.status==='completed') return JSON.parse(command.result_json);
+      if(command.status==='failed') {const failure=JSON.parse(command.result_json);throw problem(failure.status,failure.code,failure.error);}
       const account=await requireAccount(tenantId,q);
-      const result=await action(q,account,`quixo:${tenantId}:${id}`);
+      const result=await action(q,account,`quixo:${tenantId}:${id}`,!started.createdNow);
       await store.completeCommand(q,id,result);
       await store.audit(q,{tenantId,actorId,action:`sandbox.${kind}`,resourceId:id,current:result,reason:'Authenticated sandbox billing operation.'});
       return result;
-    });
+    });}catch(error){
+      // These checks occur before a provider write. Do not let a rejected preview or stale form
+      // strand a workspace. Ambiguous provider outcomes and resumed commands remain pending.
+      const noRemoteChange=new Set(['BILLING_INVENTORY_CHANGED','BILLING_SUBSCRIPTION_EXISTS','BILLING_CUSTOMER_REQUIRED',
+        'BILLING_PORTAL_UNSAFE','BILLING_CANCELLATION_UNAVAILABLE','BILLING_GOOD_STANDING_REQUIRED','BILLING_ZERO_POLICY_PENDING',
+        'BILLING_PREVIEW_REQUIRED','BILLING_PREVIEW_EXPIRED','BILLING_PREVIEW_STALE']);
+      if(started.createdNow&&noRemoteChange.has(error.code))await store.locked(tenantId,async q=>{
+        await q(`UPDATE dbo.management_billing_commands SET status='failed',result_json=@result,completed_at=SYSUTCDATETIME()
+          WHERE id=@id AND status='pending'`,{id,result:JSON.stringify({error:error.message,code:error.code,status:error.status})});
+        await store.audit(q,{tenantId,actorId,action:`sandbox.${kind}.rejected`,resourceId:id,current:{code:error.code},reason:'Operation rejected before any provider write.'});
+      });
+      throw error;
+    }
   };
   const checkout=async({tenantId,id,actorId,inventoryHash})=>{
     const origin=configuredOrigin();
@@ -186,41 +199,41 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       nextInvoiceTotalMinor:invoice?.total ?? null,currency:invoice?.currency || 'usd',
       timing:target>account.quantity?'prorated_next_invoice':target<account.quantity?'next_renewal':'unchanged'};
   }});
-  const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key)=>{
+  const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
     const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
       AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
     if(!row) throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');
     const preview=JSON.parse(row.result_json);
     const inventory=await store.inventory(tenantId,q);
-    if(hash(inventory)!==preview.inventoryHash || Date.parse(preview.expiresAt)<Date.now())
+    if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
       throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
     account=await reconcileLocked(q,account);
-    if(entitlement(account).state!=='active' || account.quantity!==preview.from)
+    if(entitlement(account).state!=='active' || (account.quantity!==preview.from && !(resuming&&account.quantity===Math.max(preview.from,preview.to))))
       throw problem(409,'BILLING_PREVIEW_STALE','The subscription changed. Request a new preview.');
     const target=inventory.length;
     const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`);
     const item=subscription.items.data[0];
-    if(target<account.quantity || account.stripe_schedule_id){
+    if(target<preview.from || account.stripe_schedule_id){
       const schedule=account.stripe_schedule_id ? await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`) :
         await stripe.request('POST','/v1/subscription_schedules',{from_subscription:subscription.id},`${key}:schedule`);
       if(objectId(schedule.subscription)!==subscription.id || objectId(schedule.customer)!==account.stripe_customer_id || schedule.status!=='active')
         throw problem(409,'BILLING_SCHEDULE_MISMATCH','The schedule does not match this organization subscription.');
-      const currentQuantity=Math.max(account.quantity,target);
+      const currentQuantity=Math.max(preview.from,target);
       await stripe.request('POST',`/v1/subscription_schedules/${schedule.id}`,{
-        end_behavior:'release',proration_behavior:target>account.quantity?'create_prorations':'none',
+        end_behavior:'release',proration_behavior:target>preview.from?'create_prorations':'none',
         phases:[
           {start_date:schedule.current_phase.start_date,end_date:item.current_period_end,
             items:[{price:account.stripe_price_id,quantity:currentQuantity}],proration_behavior:'none'},
           {start_date:item.current_period_end,duration:{interval:'month',interval_count:1},
             items:[{price:account.stripe_price_id,quantity:target}],proration_behavior:'none'}]
       },`${key}:phases`);
-    } else if(target>account.quantity){
+    } else if(target>preview.from){
       await stripe.request('POST',`/v1/subscriptions/${subscription.id}`,{
         items:[{id:account.stripe_item_id,quantity:target}],proration_behavior:'create_prorations',proration_date:preview.prorationDate
       },`${key}:increase`);
     }
     const confirmed=await reconcileLocked(q,account);
-    if(confirmed.quantity!==Math.max(account.quantity,target)) throw problem(502,'BILLING_QUANTITY_UNCONFIRMED','Stripe has not confirmed the expected current quantity.');
+    if(confirmed.quantity!==Math.max(preview.from,target)) throw problem(502,'BILLING_QUANTITY_UNCONFIRMED','Stripe has not confirmed the expected current quantity.');
     await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
       {tenantId,inventory:JSON.stringify(inventory),pending:target<confirmed.quantity?target:null});
     return {currentQuantity:confirmed.quantity,nextRenewalQuantity:target,timing:preview.timing};

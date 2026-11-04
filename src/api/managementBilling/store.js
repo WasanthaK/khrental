@@ -82,13 +82,13 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
         throw problem(409,'BILLING_REQUEST_CONFLICT','This request identifier belongs to a different operation.');
       if(existing.status==='pending' && Date.now()-new Date(existing.created_at).getTime()>23*3600000)
         throw problem(409,'BILLING_RECONCILIATION_REQUIRED','An older interrupted operation needs reconciliation before retrying.');
-      return existing;
+      return {...existing,createdNow:false};
     }
     const pending=(await q(`SELECT TOP 1 id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'`,{tenantId}))[0];
     if(pending) throw problem(409,'BILLING_COMMAND_PENDING','Retry the unfinished billing operation before starting another.');
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(payload)});
-    return {id,status:'pending'};
+    return {id,status:'pending',createdNow:true};
   });
   const completeCommand = (q,id,result) => q(`UPDATE dbo.management_billing_commands SET status='completed',result_json=@result,
     completed_at=SYSUTCDATETIME() WHERE id=@id`,{id,result:JSON.stringify(result)});

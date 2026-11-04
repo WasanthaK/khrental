@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Active R4/R5 delivery programme — 4 November 2026
+
+The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+
+The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+
+---
+
 ## Current canonical status and plan review — 3 November 2026
 
 **Controlling status:** the current completed agreement's signing-audit view/download defect is **CLOSED — live acceptance passed**. This checkpoint supersedes conflicting current/next and audit-failure statements in the historical entries below and supporting trackers. It does not close the whole operational-website milestone: [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for the remaining rental journey. The agreed order is still **fully operational rental website, then subscription management**.

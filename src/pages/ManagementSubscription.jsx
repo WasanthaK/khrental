@@ -47,7 +47,7 @@ export default function ManagementSubscription(){
       if(result.url){window.location.assign(result.url);return;}
       if(kind==='quantity-preview')setPreview(result);else{setPreview(null);setNotice('Stripe status updated.');}
       await load();
-    }catch(e){if(context.current===scope)setNotice(e.message);}finally{if(context.current===scope)setBusy(false);}
+    }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500)requests.current.delete(key);await load();}}finally{if(context.current===scope)setBusy(false);}
   };
   return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview}} onReload={load} onAction={action}/>;
 }

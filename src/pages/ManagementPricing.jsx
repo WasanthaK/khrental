@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import usePlatformAdminStatus from '../hooks/usePlatformAdminStatus';
 import {requestMssqlApi} from '../services/mssqlApiClient';
+import {listAdminTenants} from '../services/tenantAdminService';
 
 const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:''};
 const money=(minor,currency='USD')=>new Intl.NumberFormat('en',{style:'currency',currency}).format(minor/100);
@@ -14,7 +15,7 @@ const rulesFrom=form=>({market:form.market,billingCurrency:form.billingCurrency,
 const field='mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const button='rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40';
 
-export const ManagementPricingView=({versions=[],ready=false,loading=false,error='',notice='',form,setForm,preview,quantity,setQuantity,busy=false,onPreview,onSave,onPublish,onReload})=>{
+export const ManagementPricingView=({versions=[],ready=false,loading=false,error='',notice='',form,setForm,preview,quantity,setQuantity,busy=false,onPreview,onSave,onPublish,onReload,enrollment})=>{
   const update=(key,value)=>setForm(previous=>({...previous,[key]:value,...(key==='market'?{rentCurrency:value==='LK'?'LKR':'BND',includedRent:'',reason:''}:{})}));
   return <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
     <header><p className="text-sm font-semibold uppercase tracking-wider text-teal-700">Platform administration</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Management pricing</h1>
@@ -44,6 +45,15 @@ export const ManagementPricingView=({versions=[],ready=false,loading=false,error
     <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Pricing history</h2><p className="mt-1 text-sm text-slate-500">{ready?'Sandbox connection configured.':'Sandbox connection is not yet configured.'}</p>
       {!versions.length?<p className="mt-4 text-slate-600">No market pricing versions have been saved.</p>:<div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b text-slate-500"><tr>{['Market / version','Base fee','Included rent','Effective date','Status',''].map((label,index)=><th key={index} className="whitespace-nowrap px-2 py-3">{label}</th>)}</tr></thead><tbody>{versions.map(version=><tr key={version.id} className="border-b last:border-0"><td className="px-2 py-3">{version.market} · v{version.version}</td><td className="px-2 py-3">{money(version.rules.baseFeeMinor)}</td><td className="px-2 py-3">{version.rules.includedRentMinor===null?'Pending':money(version.rules.includedRentMinor,version.rules.rentCurrency)}</td><td className="px-2 py-3">{version.rules.effectiveAt?.slice(0,10)||'Pending'}</td><td className="px-2 py-3">{version.status==='sandbox_published'?'Published to sandbox':'Draft'}</td><td className="px-2 py-3">{version.status==='draft'&&<button className="font-semibold text-teal-800 underline disabled:text-slate-400" disabled={busy||!ready} onClick={()=>onPublish(version.id)}>Publish to sandbox</button>}</td></tr>)}</tbody></table></div>}
     </section>
+    {enrollment&&<section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Sandbox workspace enrollment</h2><p className="text-sm text-slate-600">Choose a development workspace for billing acceptance. Its existing development access stays available during testing.</p>
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={event=>{event.preventDefault();enrollment.submit();}}>
+        <label className="text-sm font-medium">Development workspace<select className={field} required value={enrollment.value.tenantId} onChange={e=>enrollment.update('tenantId',e.target.value)}><option value="">Select a workspace</option>{enrollment.workspaces.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="text-sm font-medium">Billing market<select className={field} value={enrollment.value.market} onChange={e=>enrollment.update('market',e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei</option></select></label>
+        <label className="text-sm font-medium">Sandbox pricing<select className={field} value={enrollment.value.useApprovedSandboxBaseline?'baseline':'market'} onChange={e=>enrollment.update('useApprovedSandboxBaseline',e.target.value==='baseline')}><option value="market">Effective published market version</option><option value="baseline">Approved USD 5 sandbox baseline</option></select></label>
+        <label className="text-sm font-medium">Enrollment reason<input className={field} required minLength={10} maxLength={1000} value={enrollment.value.reason} onChange={e=>enrollment.update('reason',e.target.value)}/></label>
+        <div><button type="submit" className={button} disabled={busy||Boolean(error)}>Enroll for sandbox testing</button></div>
+      </form>
+    </section>}
   </div>;
 };
 
@@ -51,13 +61,15 @@ export default function ManagementPricing(){
   const {isPlatformAdmin,loading:authorityLoading}=usePlatformAdminStatus();
   const [versions,setVersions]=useState([]),[ready,setReady]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('1'),[preview,setPreview]=useState(null),[busy,setBusy]=useState(false);
-  const load=async()=>{setLoading(true);setError('');try{const data=await requestMssqlApi('/api/management-billing/admin/pricing');setVersions(data.versions);setReady(data.sandboxConfigured);}catch(e){setError(e.message);}finally{setLoading(false);}};
+  const [workspaces,setWorkspaces]=useState([]),[enrollment,setEnrollment]=useState({tenantId:'',market:'LK',useApprovedSandboxBaseline:false,reason:''});
+  const load=async()=>{setLoading(true);setError('');try{const [data,tenants]=await Promise.all([requestMssqlApi('/api/management-billing/admin/pricing'),listAdminTenants({pageSize:100})]);setVersions(data.versions);setReady(data.sandboxConfigured);setWorkspaces((Array.isArray(tenants)?tenants:tenants.items||[]).filter(t=>t.plan==='development-testing'&&t.status==='active'));}catch(e){setError(e.message);}finally{setLoading(false);}};
   useEffect(()=>{if(isPlatformAdmin)load();},[isPlatformAdmin]);
   useEffect(()=>setPreview(null),[form,quantity]);
   const run=async action=>{setBusy(true);setNotice('');try{await action();}catch(e){setNotice(e.message);}finally{setBusy(false);}};
   if(authorityLoading)return <p className="p-6">Checking platform access…</p>;
   if(!isPlatformAdmin)return <p role="alert" className="p-6">Platform administrator access is required.</p>;
   return <ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load}
+    enrollment={{workspaces,value:enrollment,update:(key,value)=>setEnrollment(previous=>({...previous,[key]:value})),submit:()=>run(async()=>{await requestMssqlApi('/api/management-billing/admin/enroll',{method:'POST',body:enrollment});setNotice('Workspace enrolled. Its administrator can open Management subscription to test checkout.');})}}
     onPreview={()=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{rules:rulesFrom(form),quantity:Number(quantity)}})))}
     onSave={event=>{event.preventDefault();run(async()=>{await requestMssqlApi('/api/management-billing/admin/pricing',{method:'POST',body:{rules:rulesFrom(form),expectedVersion:Math.max(0,...versions.filter(v=>v.market===form.market).map(v=>v.version))}});await load();setNotice('New draft saved. Existing subscriptions are unchanged.');});}}
     onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/>;

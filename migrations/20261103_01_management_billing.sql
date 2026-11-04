@@ -69,7 +69,7 @@ BEGIN
     result_json NVARCHAR(MAX) NULL,
     created_at DATETIME2 NOT NULL CONSTRAINT DF_management_billing_commands_created DEFAULT SYSUTCDATETIME(),
     completed_at DATETIME2 NULL,
-    CONSTRAINT CK_management_billing_commands_status CHECK(status IN('pending','completed')),
+    CONSTRAINT CK_management_billing_commands_status CHECK(status IN('pending','completed','failed')),
     CONSTRAINT CK_management_billing_commands_payload CHECK(ISJSON(payload_json)=1),
     CONSTRAINT CK_management_billing_commands_result CHECK(result_json IS NULL OR ISJSON(result_json)=1)
   );

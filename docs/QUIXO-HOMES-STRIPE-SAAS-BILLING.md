@@ -1,5 +1,13 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Active R4/R5 delivery programme — 4 November 2026
+
+The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+
+The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+
+---
+
 ## Controlling owner decision — configurable market pricing, 30 October 2026
 
 This section supersedes the earlier fixed-USD-5/no-app-side-pricing-edit restriction below. The owner requires **global-admin-controlled base fees and included rental-value thresholds**, informed by market research, without a code release for each price change. This is a commercial/configuration requirement for the subscription-management phase, not evidence of implemented controls or live billing activation.

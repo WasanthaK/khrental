@@ -57,7 +57,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   for(const tenantId of [tenantA,tenantB]) await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Synthetic SQL transaction acceptance only.'});
   const accounts=await store.read('SELECT tenant_id FROM dbo.management_billing_accounts');assert.equal(accounts.length,2);
   const remote=new Map(),idempotency=new Map(),calls=[];
-  let customerCount=0,sessionCount=0,timeoutOnce=true;
+  let customerCount=0,sessionCount=0,timeoutOnce=true,quantityTimeoutOnce=true;
   const price={id:BILLING_PRICE,product:BILLING_PRODUCT,active:true,livemode:false,type:'recurring',billing_scheme:'per_unit',currency:'usd',unit_amount:500,
     recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
   const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={},key)=>{
@@ -72,7 +72,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     let result;
     if(path==='/v1/customers')result={id:`cus_fixture${++customerCount}`,livemode:false};
     else if(path==='/v1/checkout/sessions'){
-      result={id:`cs_fixture${++sessionCount}`,customer:body.customer,mode:'subscription',livemode:false,status:'open',url:'https://checkout.stripe.com/c/pay/cs_fixture'};
+      result={id:`cs_fixture${++sessionCount}`,object:'checkout.session',customer:body.customer,mode:'subscription',livemode:false,status:'open',url:'https://checkout.stripe.com/c/pay/cs_fixture'};
       remote.set(`/v1/checkout/sessions/${result.id}`,result);
     }else if(path==='/v1/invoices/create_preview')result={total:1250,currency:'usd'};
     else if(path==='/v1/subscription_schedules'){
@@ -93,6 +93,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     }else throw new Error(`Unhandled synthetic POST ${path}`);
     idempotency.set(key,{hash:hash({path,body}),value:structuredClone(result)});
     if(path==='/v1/checkout/sessions'&&timeoutOnce){timeoutOnce=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic response loss after provider success.');}
+    if(path.startsWith('/v1/subscriptions/')&&body.items&&quantityTimeoutOnce){quantityTimeoutOnce=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic quantity response loss.');}
     return structuredClone(result);
   }};
   const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://app.quixo.homes'}});
@@ -106,9 +107,9 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   const repeated=await service.checkout({tenantId:tenantA,actorId,id:requestId,inventoryHash});assert.equal(repeated.sessionId,session.sessionId);
   await assert.rejects(service.checkout({tenantId:tenantB,actorId,id:requestId,inventoryHash:hash(await store.inventory(tenantB))}),{code:'BILLING_REQUEST_CONFLICT'});
   const checkout=remote.get(`/v1/checkout/sessions/${session.sessionId}`);
-  const time=Math.floor(Date.now()/1000),sub={id:'sub_fixtureA',customer:checkout.customer,livemode:false,status:'active',latest_invoice:'in_fixtureA',cancel_at_period_end:false,
+  const time=Math.floor(Date.now()/1000),sub={id:'sub_fixtureA',object:'subscription',customer:checkout.customer,livemode:false,status:'active',latest_invoice:'in_fixtureA',cancel_at_period_end:false,
     items:{data:[{id:'si_fixtureA',price,quantity:1,current_period_start:time-1000,current_period_end:time+2592000}]}};
-  const invoice={id:'in_fixtureA',livemode:false,customer:checkout.customer,parent:{subscription_details:{subscription:sub.id}},currency:'usd',status:'paid',amount_due:500,amount_paid:500,amount_remaining:0,
+  const invoice={id:'in_fixtureA',object:'invoice',livemode:false,customer:checkout.customer,parent:{subscription_details:{subscription:sub.id}},currency:'usd',status:'paid',amount_due:500,amount_paid:500,amount_remaining:0,
     lines:{data:[{id:'il_fixture',parent:{subscription_item_details:{subscription_item:'si_fixtureA',proration:false}},period:{end:time+2592000}}],has_more:false}};
   checkout.status='complete';checkout.subscription=sub.id;remote.set(`/v1/subscriptions/${sub.id}`,sub);remote.set('/v1/invoices/in_fixtureA',invoice);
   const event={id:'evt_fixturePaid',type:'invoice.paid',livemode:false,data:{object:invoice}};remote.set(`/v1/events/${event.id}`,event);
@@ -124,7 +125,9 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
       {id,tenantId:tenantA,propertyId:propA,number:id.slice(0,8)});
   });
   const increase=await service.quantityPreview({tenantId:tenantA,id:crypto.randomUUID(),actorId});assert.equal(increase.to,2);
-  await service.quantityApply({tenantId:tenantA,id:crypto.randomUUID(),actorId,previewId:increase.previewId});
+  const increaseCommand=crypto.randomUUID();
+  await assert.rejects(service.quantityApply({tenantId:tenantA,id:increaseCommand,actorId,previewId:increase.previewId}),{code:'STRIPE_UNAVAILABLE'});
+  await service.quantityApply({tenantId:tenantA,id:increaseCommand,actorId,previewId:increase.previewId});
   assert.equal((await store.account(tenantA)).quantity,2);
   const change=calls.find(c=>c.path===`/v1/subscriptions/${sub.id}`&&c.body.items);
   assert.equal(change.body.proration_behavior,'create_prorations');assert.equal(change.body.proration_date,increase.prorationDate);
@@ -136,6 +139,8 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');assert.equal(schedule.phases[1].items[0].quantity,1);
   await service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:true});
   assert.equal(schedule.status,'released');assert.equal(sub.cancel_at_period_end,true);assert.equal((await store.account(tenantA)).pending_quantity,null);
+  await assert.rejects(service.quantityPreview({tenantId:tenantB,id:crypto.randomUUID(),actorId}),{code:'BILLING_GOOD_STANDING_REQUIRED'});
+  assert.equal((await service.summary(tenantB)).pendingOperation,null,'A validation rejection cannot strand the workspace behind a pending command.');
   await store.locked(tenantB,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId:tenantB,actorId}));
   await assert.rejects(service.checkout({tenantId:tenantB,id:crypto.randomUUID(),actorId,inventoryHash:hash(await store.inventory(tenantB))}),{code:'BILLING_ADMIN_REQUIRED'});
   console.log('PASS: real SQL two-organization billing isolation, ambiguous checkout recovery, first payment, duplicate/out-of-order binding, quantity proration, deferred decrease and schedule cancellation; synthetic Stripe transport');
