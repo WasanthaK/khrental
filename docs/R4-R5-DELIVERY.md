@@ -50,3 +50,20 @@ Keep credentials exclusively in the existing GitHub/Azure secret mechanism. Neve
 Retain the approved monthly/no-trial, next-invoice proration, next-renewal reduction, seven-day grace and historical/renter preservation rules. Remaining commercial decisions are final LK/BN thresholds, excess-rate/FX/rounding policy, zero-dwelling/cessation/reactivation details, cancellation disclosures, unusual bulk-increase controls and merchant/tax responsibility. Research examples are not defaults. Do not silently select Managed Payments or a tax-liability fallback.
 
 Evidence references: [canonical execution plan](EXECUTION-PLAN.md), [billing contract](QUIXO-HOMES-STRIPE-SAAS-BILLING.md), [billing readiness](BILLING-READINESS-20261027.md), [one-property pilot](ONE-PROPERTY-PILOT-STATUS.md), and GitHub issues #375 and #459.
+
+## Sandbox release evidence — 4 November 2026
+
+PR #494 merged at `f946074acf37c0380b049688aed23b1d681791a7` as a disabled sandbox foundation. Its seven CI workflows passed, including real SQL migration/concurrency and two-organization recovery tests with synthetic Stripe transport. The full authorization suite passed 875 tests, and the pricing/subscription views passed desktop/mobile checks; the enrollment section was visually reviewed. These do not close live rental acceptance.
+
+The owner saved the sandbox API key and endpoint signing secret. Read-only job `126775402416` confirmed secret presence, the selected account/catalogue/restricted portal, and the registered webhook. Its legacy `sandboxRuntimeReady` label represents configuration discovery only: deployed receiver readiness and Stripe-origin signed delivery were not established by that job.
+
+Release order:
+
+1. Wait for the accepted source SHA to be the Ready application revision.
+2. Run **Run production database migrations** on `main`, mode `apply`, through `20261103_01_management_billing`, confirmation `APPLY-PRODUCTION`. This uses the existing dedicated migration executor and never upgrades the runtime identity.
+3. Run **Management billing sandbox release controls** on `main`, mode `sandbox`, expected_build equal to the accepted serving SHA, confirmation `ENABLE-SANDBOX-BILLING`.
+4. The release workflow requires strict migration verification, exact public/image build agreement, one-replica configuration and runtime table permissions before binding secrets and enabling only sandbox flags. Failure after enablement disables both billing flags again.
+5. Its signed synthetic transport probe verifies HMAC transport and unsigned denial without customer/database mutations. It is not Stripe-origin event acceptance and must not be reported as a real Checkout/payment test.
+6. Complete an explicitly enrolled demo organization's hosted sandbox Checkout and confirm real Stripe event reconciliation before claiming end-to-end acceptance.
+
+Rollback: run the same release workflow with mode `rollback` and confirmation `CLOSE-SANDBOX-BILLING`. Existing renter and development access remains governed by existing authorization.
