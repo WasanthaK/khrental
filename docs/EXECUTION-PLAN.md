@@ -1,12 +1,18 @@
 # KH Rentals Execution Plan
 
-## R5 continuation — 5 November 2026
+## Current R5 checkpoint — 5 November 2026
 
-The owner directed execution of the R5 handoff. Signed-in live acceptance remains blocked. The next required role is the approved property owner/Administrator for move-in/deposit/activation; rentee and assigned maintenance staff are separate later acceptance roles. Platform administration is reserved for pricing/billing. Account identifiers and sign-in diagnostics remain outside this public progress update.
+[PR #506](https://github.com/WasanthaK/khrental/pull/506) is **implemented, tested and deployed**. Move-in deposits and exit settlements use persisted agreement `terms.currency`; absent/malformed currency is disclosed instead of silently labelling amounts LKR. Historical amounts, agreements and PDFs are unchanged.
 
-Independent source correction now uses persisted agreement `terms.currency` for move-in deposit and exit-settlement displays. It does not infer denomination from the current property market or rewrite historical amounts/documents. Missing or malformed currency is explicitly identified rather than silently shown as LKR. Existing unrelated currency callers keep their previous behavior. Source and focused tests are prepared; CI/browser verification and deployment are pending. No live tenancy, inspection, payment or signature is claimed. R1–R4 scope decisions and single-replica capacity remain unchanged; R5 stays active and live charging disabled.
+All four workflows passed on reviewed head `72a3a22a15675ba72a20ef03573317c457ed7dce`: [authorization/build](https://github.com/WasanthaK/khrental/actions/runs/42023781150) **889/889**, [browser proof](https://github.com/WasanthaK/khrental/actions/runs/42023780887), [rental transaction chain](https://github.com/WasanthaK/khrental/actions/runs/42023781290) and [public listings](https://github.com/WasanthaK/khrental/actions/runs/42023781115). The actual onboarding and settlement screenshots were inspected at 1440px and 390px, including BND and missing-currency states; the LKR/BND/missing/malformed refresh matrix passed. These are fixture checks, not live participant acceptance.
 
-## R5 deployment checkpoint — 5 November 2026
+[Release 42024644370](https://github.com/WasanthaK/khrental/actions/runs/42024644370) passed: application build **0024293698963a9eddad7c3c885e9b91f0ded9b7**, Ready revision **0000459**, MSSQL connection ready, min/max replicas **1**. An independent live browser read of `https://app.quixo.homes/build-info.json` matched. Marketing remains at its last recorded **537bef5** release. This is the current application fingerprint; older checkpoints below are historical.
+
+**Next live role: property owner / organization Administrator** for the approved demo move-in/deposit/activation journey. Rentee and assigned maintenance staff are separate acceptance roles. Global/platform administration is for pricing and complimentary controls; the organization owner acts as the sandbox billing customer. Verify the persisted participant and assignment before each switch. Signed-in live acceptance remains **blocked**; no new production deposit, inspection, signature or tenancy activation is claimed.
+
+R1 remains closed; R2 deferred; R3 closed within the single-replica scope; R4 closed for its sandbox foundation. **R5 remains active.** Genuine payment/lifecycle acceptance, production enforcement and merchant/commercial readiness remain open, and live charging remains disabled.
+
+## Earlier R5 deployment checkpoint — before PR #506
 
 The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) records merged [PR #503](https://github.com/WasanthaK/khrental/pull/503), application CI **886/886**, passing browser/PDF and disposable SQL acceptance, and successful [deployment 41991277841](https://github.com/WasanthaK/khrental/actions/runs/41991277841). Public build **268e409b33a86b789e8cd6f1e0e767d596b6ac2b** is serving from revision **0000458** with live MSSQL connectivity and unchanged single-replica capacity. Future-contract layout and move-in/deposit retry corrections are deployed. Historical signed documents are unchanged.
 
