@@ -132,11 +132,15 @@ try{
     if(p==='/'||p.endsWith('/search/')||p.endsWith('/property/'))assert.ok(data.photos.length>=1,p+' expected photographic preview cards');
     if(p==='/'||p==='/lk/'||p==='/bn/')assert.ok(data.photoStyles.length>=1,p+' expected photographic hero/category CSS');
     for(const l of data.links){
-      if(l.startsWith('#')||l.startsWith('https://'))continue;
+      if(l.startsWith('#')||l.startsWith('https://')||l==='mailto:support@quixo.online')continue;
       const u=new URL(l,origin+p);
       assert.equal(u.origin,origin,p+' unexpected origin '+l);
       const file=path.resolve(base,'.'+u.pathname+(u.pathname.endsWith('/')?'index.html':''));
       assert.ok(file.startsWith(base+path.sep)&&fs.existsSync(file),p+' broken internal link '+l);
+    }
+    if(p==='/lk/how-it-works/'&&(width===390||width===1280)){
+      fs.mkdirSync('verification-browse-proof',{recursive:true});
+      await page.screenshot({path:'verification-browse-proof/lk-help-'+width+'.png',fullPage:true});
     }
     if(width===390){
       await page.keyboard.press('Tab');
