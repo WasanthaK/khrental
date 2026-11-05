@@ -4,7 +4,7 @@
 
 The five-task [R5 acceptance ledger](../R5-LIFECYCLE-ACCEPTANCE-20261105.md) records merged [PR #503](https://github.com/WasanthaK/khrental/pull/503), application CI **886/886**, passing browser/PDF and disposable SQL acceptance, and successful [deployment 41991277841](https://github.com/WasanthaK/khrental/actions/runs/41991277841). Public build **268e409b33a86b789e8cd6f1e0e767d596b6ac2b** is serving from revision **0000458** with live MSSQL connectivity and unchanged single-replica capacity. Future-contract layout and move-in/deposit retry corrections are deployed. Historical signed documents are unchanged.
 
-Signed-in browser acceptance remains blocked after one secure-authentication timeout and one fresh-tab connection failure; no repeated login request was made. Exit/settlement regression and Sri Lanka support/policy links are being verified separately. Implementation, automated tests, deployment and live participant acceptance remain distinct. R1–R4 retain PR #502's owner decisions; R5 remains active and live charging remains disabled.
+Signed-in browser acceptance remains blocked: one secure-authentication request timed out, and the post-deployment verification tab reaches the ordinary sign-in page without an authenticated session. No repeated login request was made. [PR #504](https://github.com/WasanthaK/khrental/pull/504) passed disposable SQL exit/settlement/closure/history checks and 44 public page/viewport checks; its support/policy links were deployed by [marketing release 41993738422](https://github.com/WasanthaK/khrental/actions/runs/41993738422) and observed on the live LK help page. Implementation, automated tests, deployment and live participant acceptance remain distinct. R1–R4 retain PR #502's owner decisions; R5 remains active and live charging remains disabled.
 
 ## Current owner decision — 5 November 2026
 
@@ -14,7 +14,7 @@ Signed-in browser acceptance remains blocked after one secure-authentication tim
 | R2 — Invoice immutable archive | OWNER-DEFERRED; incomplete |
 | R3 — Safe registration/account access | CLOSED BY OWNER for the single-replica release; verify separately before scaling |
 | R4 — Paying organizations | CLOSED BY OWNER for the deployed sandbox foundation |
-| R5 — Marketplace/regional rollout | ACTIVE; contract layout is next, then move-in/activation, tenancy/exit, Sri Lanka and Brunei |
+| R5 — Marketplace/regional rollout | ACTIVE; layout/move-in fixes deployed; live retention, tenancy/exit, Sri Lanka and Brunei remain open |
 
 R4's genuine payment lifecycle, production inventory/entitlement enforcement and merchant/commercial readiness remain explicit R5 paid-launch prerequisites. They have not passed by milestone closure. Live charging remains disabled. Preserve completed signing/audit evidence and continue the operational R5 journey without repeating accepted R3/R4 work.
 
