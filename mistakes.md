@@ -15,3 +15,7 @@ Use active agreements for current renters rather than the global user type or ol
 ## Render persisted currency and image shapes consistently
 
 Do not hard-code a dollar sign or infer a historical agreement's denomination from locale. Display its recorded currency, disclose missing currency, and keep zero rent valid. Registered property photos may be JSON strings or image objects; extract the URL and use the tenant-scoped display helper, with a graceful failure placeholder.
+
+## Resolve billing participants through the invoice relationship
+
+An organization-scoped invoice references a global app_users identity. Do not filter that identity by its legacy tenant_id: a member may rent in another organization. Keep invoice authorization and tenant scope authoritative and preserve historical participant readback. Exercise the same global renter in both organizations in SQL acceptance.

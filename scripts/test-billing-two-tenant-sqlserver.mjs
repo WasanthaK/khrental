@@ -2936,6 +2936,10 @@ async function main() {
         token: sharedToken, tenantId: own.tenantId
       });
       assert.equal(ownAccount.status, 200, JSON.stringify(ownAccount));
+      assert.equal(ownAccount.payload.data.invoice.rentee_name, 'Shared Test Renter',
+        'invoice must resolve its global renter in either organization');
+      assert.equal(ownAccount.payload.data.invoice.rentee_email, sharedEmail,
+        'issue must retain the recorded renter delivery address across organizations');
       assert.equal(Number(ownAccount.payload.data.outstandingBalance), own.outstanding);
       assert.equal(ownAccount.payload.data.receipts[0].receipt_number, own.receiptNumber);
       const hiddenAccount = await call('/api/billing/invoices/' + foreign.invoiceId + '/account', {
