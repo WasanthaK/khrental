@@ -105,7 +105,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal(await available(p),false,'an active tenancy still suppresses stock');
  await q("UPDATE agreements SET status='closed' WHERE id=@id",{id:agreementId});
  assert.equal(await available(p),true,'closed linked reservation cannot hide available stock until its old deadline');
- const retirement={tenantId:owner.tenantId,propertyId:p.id,agreementId,actorId:owner.actorId};
+ const retirement={tenantId:owner.tenantId,propertyId:p.id,agreementId};
  assert.equal(await retireClosedRentalOffers(q,{...retirement,tenantId:foreignOwner.tenantId}),0);
  assert.equal(await retireClosedRentalOffers(q,{...retirement,agreementId:uuid()}),0);
  // If retirement audit fails, the same transaction must retain the old hold.

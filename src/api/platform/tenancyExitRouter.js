@@ -612,7 +612,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         if (process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY === 'true') {
           await retireClosedRentalOffers((statement, params) => queryTransaction(transaction, statement, params), {
             tenantId: req.tenantId, propertyId: agreement.propertyid,
-            agreementId: agreement.id, actorId: req.user.id
+            agreementId: agreement.id
           });
         }
         if (agreement.unitid) {

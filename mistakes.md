@@ -31,3 +31,7 @@ A global account may have role authenticated while its selected organization mem
 ## A closed tenancy must not leave its old reservation suppressing stock
 
 A public-stock check that reads only the offer status/deadline can keep an available property hidden after explicit settled closure. Ignore holds linked to a closed agreement on public reads, retire those exact holds transactionally at closure, and reconcile older closed holds on governed offer reads. Preserve other valid reservations, active tenancy guards, unsigned replacement reservations, agreement links and audit history.
+
+## Respect the offer audit request constraint for system events
+
+Offer audit actor/request/hash fields are an all-or-none request group. A closure-driven offer retirement is a system lifecycle event, like expiry, and uses the existing null request group. The acting administrator remains on the agreement and tenancy closure audit in the same transaction. Do not invent a client request or weaken the schema constraint.
