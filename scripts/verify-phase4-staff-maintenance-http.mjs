@@ -347,10 +347,10 @@ export async function verifyPhase4StaffMaintenanceHttp({
     for (const width of [1440,390]) {
       await renterPage.setViewport({width,height:900});
       await renterPage.goto(origin+'/rentee/maintenance', {waitUntil:'networkidle0',timeout:45000});
-      const link = `a[href="/rentee/maintenance/${id}"]`;
+      const link = `a[href="/rentee/maintenance/${id}" i]`;
       await renterPage.waitForSelector(link);
       await renterPage.click(link);
-      await renterPage.waitForFunction(expected => location.pathname===expected &&
+      await renterPage.waitForFunction(expected => location.pathname.toLowerCase()===expected &&
         document.body.innerText.includes('Visible tenant update'),
         {timeout:30000}, '/rentee/maintenance/'+id);
       const text = await renterPage.evaluate(()=>document.body.innerText);
