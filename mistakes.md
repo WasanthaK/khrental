@@ -39,3 +39,7 @@ Offer audit actor/request/hash fields are an all-or-none request group. A closur
 ## Protected document buttons must carry the active account context
 
 Opening a protected storage URL in a new window drops bearer and selected-organization headers. Renter agreement actions must use the existing authenticated document viewer, including after closure, with signed-only selection and temporary-byte cleanup. Keep storage authorization unchanged and click the actual renter button in browser acceptance.
+
+## Closed is a retained-document lifecycle state
+
+Retained signed-PDF and administrator audit authorization must recognize explicitly closed tenancies. Preserve the exact tenant, participant/administrator, completed signature, retained object and published archive checks. Test authenticated closed-tenant access through the actual browser button; testing only signed or active agreements misses this lifecycle boundary.

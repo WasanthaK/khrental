@@ -5,6 +5,8 @@ import {
   authorizeSignedAgreementDocumentRead
 } from '../src/api/evia/signedDocumentAccess.js';
 
+import { authorizeHistoricEviaAuditTrailRead, authorizeFencedEviaAuditTrailRead } from '../src/api/evia/auditTrailAccess.js';
+
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const foreignTenantId = '22222222-2222-4222-8222-222222222222';
 const agreementId = '33333333-3333-4333-8333-333333333333';
@@ -140,4 +142,42 @@ test('Phase 5: staged signed PDF requires a published matching completion lease'
   assert.deepEqual(await check({ ...base, loadPublishedArchive: undefined }), {
     applies: true, allowed: false, reason: 'archive_not_published'
   });
+});
+
+
+test('closed tenancy retains exact signed PDF access with participant and archive guards', async () => {
+  const closed = path => ({ ...retainedAgreement(path), status:'closed' });
+  const loadSignedAgreement = async () => closed(stablePath);
+  assert.equal((await check({loadSignedAgreement})).allowed,true);
+  assert.equal((await check({loadSignedAgreement,user:administrator,membership:adminMembership})).allowed,true);
+  for(const override of [
+    {user:{id:strangerId,role:'rentee'}},
+    {membership:{...renterMembership,status:'revoked'}},
+    {tenantId:foreignTenantId},
+    {loadSignedAgreement:async()=>({...closed(stablePath),signature_status:'pending'})},
+    {loadSignedAgreement:async()=>({...closed(stablePath),signed_document_url:null})}
+  ]){
+    assert.equal((await check({loadSignedAgreement,...override})).allowed,false);
+  }
+  const staged = {path:stagedPath,loadSignedAgreement:async()=>closed(stagedPath),loadPublishedArchive:async()=>publishedArchive()};
+  assert.equal((await check(staged)).allowed,true);
+  assert.equal((await check({...staged,loadPublishedArchive:async()=>publishedArchive({lease_processed:false})})).allowed,false);
+});
+
+test('closed audit history remains administrator-only with completed publication evidence', async () => {
+  const closed={...retainedAgreement(),status:'closed'};
+  const historic={bucket:'documents',path:stablePath.replace('Signed.pdf','audit_trail.pdf'),tenantId,
+    user:administrator,membership:adminMembership,loadHistoricAgreement:async()=>closed};
+  assert.equal((await authorizeHistoricEviaAuditTrailRead(historic)).allowed,true);
+  assert.equal((await authorizeHistoricEviaAuditTrailRead({...historic,user:renter,membership:renterMembership})).allowed,false);
+  assert.equal((await authorizeHistoricEviaAuditTrailRead({...historic,loadHistoricAgreement:async()=>({...closed,signature_status:'pending'})})).allowed,false);
+  const auditPath=stagedPath.replace('Signed.pdf','audit_trail.pdf');
+  const publication={...publishedArchive(),status:'closed',signature_status:'completed',lease_raw_data:JSON.stringify({
+    state:'completed',agreementId,attemptId,signedDocumentUrl:storageUrl(stagedPath),auditTrailUrl:storageUrl(auditPath)
+  })};
+  const fenced={bucket:'documents',path:auditPath,tenantId,user:administrator,membership:adminMembership,
+    loadPublishedArchive:async()=>publication};
+  assert.equal((await authorizeFencedEviaAuditTrailRead(fenced)).allowed,true);
+  assert.equal((await authorizeFencedEviaAuditTrailRead({...fenced,user:renter,membership:renterMembership})).allowed,false);
+  assert.equal((await authorizeFencedEviaAuditTrailRead({...fenced,loadPublishedArchive:async()=>({...publication,lease_processed:false})})).allowed,false);
 });
