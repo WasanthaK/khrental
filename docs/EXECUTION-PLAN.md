@@ -1,14 +1,24 @@
 # KH Rentals Execution Plan
 
-## Active R4/R5 delivery programme — 4 November 2026
+## Controlling owner decision — R3/R4 closed; R5 active — 5 November 2026
 
-The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+The owner requested closing R3 and R4 and moving to R5 after reviewing the deployed evidence and remaining work. **R3 and R4 are CLOSED BY OWNER for the scopes recorded below. R5 is the active priority.** This supersedes older R3/R4-active or R4-incomplete milestone status wording; the underlying evidence and unfinished technical obligations remain visible.
 
-The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+| Milestone | Canonical disposition | Accepted scope / remaining work |
+| --- | --- | --- |
+| R1 — Original rental operations release | **CLOSED BY OWNER** | Existing accepted release and narrow historic waivers are retained. |
+| R2 — Invoice immutable archive | **OWNER-DEFERRED; incomplete** | Parked outside the current execution queue. |
+| R3 — Safe registration and account access | **CLOSED BY OWNER — single-replica scope** | Public registration/owner setup, property persistence and bounded identity/account-switch/staff checks accepted. Multi-replica verification remains mandatory before scaling. |
+| R4 — Paying property-management organizations | **CLOSED BY OWNER — deployed sandbox foundation** | Pricing/versioning, development-workspace enrollment, receiver activation, complimentary controls and quantity/recovery foundation accepted. Genuine payment lifecycle, production enforcement and merchant/commercial readiness are carried into R5 paid-launch prerequisites; they have not passed by this closure. |
+| R5 — Marketplace and regional rollout | **ACTIVE; partially delivered** | Preserve discovery-through-signing/audit acceptance. Finish contract layout, move-in/deposit/activation, tenancy operations/exit/relisting, then Sri Lanka commercial acceptance and subsequently Brunei. |
+
+R4 closure is a scope and sequencing decision, not certification of live paid service. Live charging remains disabled. No further R3/R4 reopening or repeated acceptance is required merely to advance the operational R5 work. The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) retains the exact carried-forward paid-launch prerequisites and the [R3/R4 evidence checkpoint](R4-SANDBOX-RUNTIME-ACCEPTANCE-20261104.md) records deployed proof.
+
+**Immediate R5 task:** correct signature overlap and final-page numbering in future contracts through the existing template/Evia flow; preserve the already signed historical document. Then proceed through meaningful move-in readiness, authorized deposit evidence, explicit activation/stock withdrawal, active tenancy and exit. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for that business journey.
 
 ---
 
-## Current canonical status and plan review — 3 November 2026
+## Retained journey evidence and plan review — 3 November 2026
 
 **Controlling status:** the current completed agreement's signing-audit view/download defect is **CLOSED — live acceptance passed**. This checkpoint supersedes conflicting current/next and audit-failure statements in the historical entries below and supporting trackers. It does not close the whole operational-website milestone: [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for the remaining rental journey. The agreed order is still **fully operational rental website, then subscription management**.
 

@@ -1,10 +1,10 @@
 # Quixo.Homes canonical SaaS billing contract
 
-## Active R4/R5 delivery programme — 4 November 2026
+## Current milestone disposition — 5 November 2026
 
-The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+The owner closed R3 for the accepted single-replica release and R4 for its deployed sandbox foundation, and made R5 the active priority. See the [canonical status](EXECUTION-PLAN.md) and [delivery ledger](R4-R5-DELIVERY.md).
 
-The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+The commercial contract below is unchanged. Genuine hosted payment/lifecycle acceptance, production inventory and entitlement enforcement, unresolved pricing/cessation/reactivation rules and merchant/tax readiness remain **R5 paid-launch prerequisites carried from R4**. They are not certified by the milestone closure, and live charging remains disabled. Operational R5 work proceeds without waiting for those paid-launch exits.
 
 ---
 

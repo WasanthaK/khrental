@@ -1,6 +1,12 @@
 # R3/R4 current acceptance checkpoint
 
-## Current evidence — 5 November 2026
+## Owner closure and handoff — 5 November 2026
+
+After reviewing the evidence and unfinished work below, the owner requested closing R3/R4 and moving to R5. **R3 is CLOSED BY OWNER within the accepted single-replica scope; R4 is CLOSED BY OWNER for the deployed sandbox foundation; R5 is ACTIVE.** The [canonical plan](EXECUTION-PLAN.md) and [delivery ledger](R4-R5-DELIVERY.md) control the next work.
+
+The remaining checks below are retained as pre-scaling or R5 paid-launch prerequisites, not represented as passed or removed. No live charge, scale change, payment acceptance or production enforcement is established by this closure.
+
+## Evidence at closure — 5 November 2026
 
 This checkpoint supersedes older pending-activation and pending-enrollment wording for R4. It preserves the canonical milestone scope: production payment enforcement and commercial launch are separate from sandbox transport and fixture tests.
 
@@ -18,7 +24,7 @@ PR #500 reviewed head: `6b246d24605f2f3be4557a30e96681edc9f24966`; merge: `f9839
 
 Production [deployment 41972688322](https://github.com/WasanthaK/khrental/actions/runs/41972688322) passed: all 881 application tests, production build, ready revision `0000457`, live MSSQL `connection=ready` and exact public build `f98398c3cf275b659ebe71524b595b93f13b93fc`. The separate main-branch disposable SQL proof also passed. Deployment readiness does not replace the still-open hosted payment journey.
 
-The interactive browser became unavailable during the secure owner sign-in. A fresh-tab recovery and connection reset also timed out. Do not infer successful owner sign-in or Checkout, request repeated login into a broken connection, or manufacture payment events. Resume hosted Checkout in the enrolled workspace when authenticated browser access is available; independently continue production inventory/entitlement engineering. R4 remains incomplete.
+The interactive browser became unavailable during the secure owner sign-in. A fresh-tab recovery and connection reset also timed out. Do not infer successful owner sign-in or Checkout, request repeated login into a broken connection, or manufacture payment events. Hosted Checkout and production inventory/entitlement engineering remain in the R5 paid-launch prerequisites. The owner-closed R4 milestone is not reopened by those retained obligations; operational R5 work is the current priority.
 
 Prior milestones are unchanged: R1 remains owner-closed with its recorded narrow waivers; R2 invoice immutability remains owner-deferred and incomplete. R5 retains the accepted demo discovery-through-signing and audit retrieval evidence, with contract layout, meaningful move-in/deposit/activation, active-tenancy/exit and LK-then-BN commercial acceptance still open.
 
@@ -30,6 +36,6 @@ The receiver rejected unsigned requests and accepted a correctly signed syntheti
 
 Two defects were corrected: runtime readiness no longer requires database definition visibility, and the production container installs the tested dependency lockfile. Restricted-identity SQL regression tests and build checks passed. No database grants or dependency versions were changed.
 
-At activation time, development-workspace enrollment and hosted sandbox Checkout remained pending; the enrollment is superseded by the 5 November evidence above. Genuine Stripe event reconciliation, quantity changes, renewal/failure/cancellation, production entitlement and inventory guards, merchant readiness and regional launch remain open. No customer, subscription, payment or workspace enrollment was created by the activation release. Live charging remains disabled. R4 and R5 remain open.
+At activation time, development-workspace enrollment and hosted sandbox Checkout remained pending; the enrollment is superseded by the 5 November evidence above. Genuine Stripe event reconciliation, quantity changes, renewal/failure/cancellation, production entitlement and inventory guards, merchant readiness and regional launch remain open. No customer, subscription, payment or workspace enrollment was created by the activation release. Live charging remains disabled. R4 was open at activation; its later owner closure is recorded above. R5 remains active.
 
 Interactive Checkout testing could not continue at this activation checkpoint because the shared browser disconnected. Later enrollment and pricing acceptance is recorded above. This checkpoint intentionally contains no tenant or Stripe account identifiers.

@@ -1,39 +1,49 @@
 # R4 and R5 delivery programme
 
-## Controlling execution instruction — 4 November 2026
+## Controlling owner decision — 5 November 2026
 
-The owner requested completion of R4 (paying property-management organizations) and R5 (marketplace and regional rollout). This authorizes progressing independent subscription engineering alongside the remaining rental lifecycle work. It supersedes the former blanket instruction to postpone all subscription implementation until website completion. It does not establish merchant readiness or authorize live customer charges, invented commercial decisions or fabricated tenancy evidence.
+The owner requested closing R3/R4 and moving to R5 after the deployed evidence and remaining work were reported. **R3 is CLOSED BY OWNER for its single-replica scope. R4 is CLOSED BY OWNER for the deployed sandbox foundation. R5 is ACTIVE.** This supersedes the 4 November instruction to progress both milestones as open workstreams.
 
-Sri Lanka is the first commercial acceptance market; Brunei follows it. Keep one canonical programme and record evidence against the outcomes below. Existing R1 closure, R2 owner deferral and R3 single-replica acceptance remain scoped as previously recorded.
+Closure accepts the recorded scope and changes the execution priority. It does not certify genuine Stripe payment acceptance, production paid-access enforcement, merchant readiness or scaling. The unfinished obligations are retained below as R5 paid-launch prerequisites or pre-scaling checks. They do not block the operational rental journey from proceeding.
 
-## Completion ledger
+## Accepted R4 foundation
 
-| Outcome | Current evidence | Remaining acceptance |
+| Outcome | Accepted evidence at owner closure | Carried-forward paid-launch work |
 | --- | --- | --- |
-| R4.1 Global Admin pricing | Draft implementation: market versions, UTC effective dates, minor-unit amounts, threshold decisions, preview, audit and optimistic concurrency | SQL execution proof, rendered review, platform-admin live acceptance; approved market thresholds and excess/FX policy |
-| R4.2 Sandbox Checkout | Draft implementation binds organization/customer/session/subscription IDs, derives quantity on the server, reuses the approved catalogue and pins existing subscription pricing | Configured runtime credentials, a real sandbox hosted Checkout payment and return/refresh acceptance |
-| R4.3 Webhooks | Draft implementation validates raw-body signatures and timestamps, retrieves authenticated Stripe events, deduplicates in SQL and reconciles current subscription/invoice state | Registered verified endpoint, delivery/retry/out-of-order/concurrent SQL proof and actual sandbox event evidence |
-| R4.4 Quantity lifecycle | Draft inventory and preview/quantity commands; occupied/vacant and public visibility do not change count; parent/children counted once | Durable command recovery and verified proration/schedule readback; staged activation/cessation across create/import/restore/split paths; no bypass through generic writes |
-| R4.5 Entitlements and comp | Initial-payment, seven-day grace, cancellation and risk-hold projection drafted; existing development access is preserved | Production operation guards, admin comp grant/revoke/expiry workflow, asynchronous reconciliation, every route/job/import covered |
-| R4.6 Renewal/cancellation | Sandbox renewal reconciliation and period-end cancellation drafted | Test-clock success/failure/grace expiry, scheduled decrease plus cancellation, interrupted command recovery, payment method update and preserved renter access |
-| R4.7 Merchant readiness | Selected sandbox and catalogue verified; live collection is disabled | Merchant/MoR eligibility and terms, verified support/business details, country tax responsibility, live collection/payout readiness and customer-facing terms |
-| R5.1 Discovery through signing | Scoped demo acceptance already recorded; current signed document and audit PDF download passed | Preserve these accepted results; template formatting review is distinct from an assumed signing application defect |
-| R5.2 Move-in and activation | Deposit and move-in readiness guards exist | Meaningful inspection/checklist evidence, an actual authorized deposit record, activation and occupied-stock withdrawal |
-| R5.3 Ongoing tenancy and exit | Existing billing/payment/maintenance and exit implementations have automated coverage | Complete the agreed end-to-end demo: invoice, payment/receipt, maintenance, exit, settlement and relisting; distinguish synthetic fixtures from actual operational evidence |
-| R5.4 Sri Lanka commercial acceptance | Operational website testing active | Country content/currency/date/notifications, landlord/renter support, commercial terms, privacy/retention, subscription and operational launch checklist |
-| R5.5 Brunei acceptance | Regional surface partially prepared | Repeat country-specific commercial and lifecycle acceptance after Sri Lanka; do not infer acceptance from LK results |
+| R4.1 Global Admin pricing | Market versions, UTC effective dates, minor-unit preview, audit and concurrency checks; live USD 5 preview and persisted LK draft; one development workspace enrolled | Final thresholds/excess/FX policy and effective commercial publication |
+| R4.2 Sandbox Checkout | Deployed organization/customer/session/subscription binding, server-derived inventory and pinned catalogue; credentials configured | Genuine hosted Checkout payment and return/refresh, two-organization acceptance |
+| R4.3 Webhooks | Registered receiver activated; strict schema/runtime permissions, signed synthetic probe and unsigned denial passed; SQL duplicate/concurrent/isolation proof | Genuine Stripe-origin events, retry/out-of-order and lifecycle reconciliation |
+| R4.4 Quantity lifecycle | Server inventory counting, proration/deferred reduction commands, confirmed schedule readback and durable retry proof | Actual Stripe quantity/proration/renewal testing; staged create/import/restore/split/cessation with no generic-write bypass |
+| R4.5 Entitlements and complimentary access | Initial-payment/grace/cancellation/risk projection plus audited grant/revoke/expiry controls deployed; SQL and desktop/mobile evidence | Live complimentary operations; production guards and asynchronous reconciliation across routes, jobs and imports |
+| R4.6 Renewal/cancellation | Deployed reconciliation and period-end cancellation; synthetic schedule-decrease/cancellation/recovery proof | Genuine renewal success/failure/recovery, seven-day expiry, cancellation, payment-method update and history/renter preservation |
+| R4.7 Merchant readiness | Selected sandbox/catalogue retained; live collection remains disabled | Merchant eligibility, tax responsibility, collection/payout readiness, commercial terms and unresolved lifecycle policies |
 
-Neither R4 nor R5 is closed by source preparation or a green unit test suite. The current implementation is deliberately restricted to platform-admin-enrolled `development-testing` organizations and the selected sandbox. Billing projections do not yet replace application authorization.
+Evidence: [R3/R4 closure checkpoint](R4-SANDBOX-RUNTIME-ACCEPTANCE-20261104.md), deployed [PR #500](https://github.com/WasanthaK/khrental/pull/500) and successful [deployment](https://github.com/WasanthaK/khrental/actions/runs/41972688322). All 881 merged application tests passed. Acceptance types remain distinct: real application observations, disposable SQL/browser fixtures, synthetic Stripe transport and genuine hosted payment events are not interchangeable.
+
+## Active R5 execution ledger
+
+| Work item | Current evidence | Remaining exit / next action |
+| --- | --- | --- |
+| R5.1 Contract design and completion artifacts — **NEXT** | Demo discovery, enquiry/reply, viewing, application, offer, both signatures, signed PDF and current audit download/reload accepted | Correct signature overlap and final-page numbering for future contracts using the existing template/Evia flow. Keep the signed historical PDF immutable. At the next legitimate signing test, verify automatic signed-PDF and audit retention. |
+| R5.2 Move-in and activation | Membership/assignment and signed-agreement prerequisites verified; deposit guard works | Meaningful checklist evidence, authorized deposit ledger/readback, explicit tenancy activation, occupancy and public-stock withdrawal. An empty checklist is not inspection evidence; any authorized simulation must be labelled. |
+| R5.3 Ongoing tenancy and exit | Existing invoice/payment/maintenance and exit implementation has isolated automated coverage | Complete the same demo journey through invoice, payment/receipt, maintenance, notice/exit, settlement and eligible relisting with history and actor/workspace isolation. |
+| R5.4 Sri Lanka commercial acceptance | Scoped LK browsing and operational journey results retained | Consolidated desktop/mobile content/UX/UI/usability, country currency/date/notifications, support, terms, privacy/retention, unavailable/withdrawn-stock cases and applicable paid-launch prerequisites below. |
+| R5.5 Brunei rollout | Regional surface partially prepared | Follow Sri Lanka acceptance with country-specific commercial and complete lifecycle verification. LK results do not establish BN acceptance. |
+| R5.6 Paid-launch prerequisites carried from R4 | Sandbox foundation accepted and milestone owner-closed | Complete every carried-forward item in the R4 table before live paid launch: genuine payment lifecycle; inventory/entitlement enforcement; final commercial/lifecycle policies; merchant/tax/collection readiness. Operational R5 work continues while these remain open. |
+
+Execution order: **future-contract layout → meaningful move-in/deposit/activation → ongoing tenancy/exit/relisting → Sri Lanka launch acceptance → Brunei**. Paid-launch prerequisites must pass before collecting live subscription payments; they are not a reason to repeat accepted R3/R4 work or pause the operational journey. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains the active operational tracker.
+
+R1 remains owner-closed with its recorded narrow waivers. R2 invoice immutability remains owner-deferred and incomplete. Multi-replica R3 verification remains a separate mandatory pre-scaling check. Live charging remains disabled. No runtime flag, access grant, payment, tenancy, capacity or deployment change is made by this status decision.
 
 ## Current sandbox bindings
 
 - Account: `acct_1UTgcdQ4sARuLNQa`, `livemode=false`. Account selection is closed.
 - Approved baseline product: `prod_VUjs23Auy0fWYE`; price: `price_1UTkOuQ4sARuLNQaJnbZ03Hs`, USD 5 monthly licensed quantity, no trial.
 - Portal: `bpc_1UTku3Q4sARuLNQanUojlMVj`, payment methods/customer details/invoice history; direct subscription changes, cancellation and pause disabled.
-- Fresh read-only check: active baseline price and portal confirmed; zero webhook endpoints and zero tax registrations. A second existing unnamed USD 5 price was observed and is not the canonical binding.
-- No new Stripe customer, subscription, payment, webhook registration or tax record was created by that inspection.
+- Current receiver configuration/activation and 5 November enrollment evidence are recorded in the closure checkpoint. The older zero-webhook snapshot is superseded by the registered, activated receiver. Merchant/tax readiness is not established by sandbox configuration.
+- Reuse the selected baseline and restricted portal; do not duplicate catalogue objects.
 
-## Runtime configuration and release sequence
+## Retained runtime procedure — use only for the applicable paid-launch work
 
 Keep credentials exclusively in the existing GitHub/Azure secret mechanism. Never put secret keys in Vite variables, source files, browser storage, logs, canonical documents or chat.
 
@@ -45,13 +55,13 @@ Keep credentials exclusively in the existing GitHub/Azure secret mechanism. Neve
 6. Exercise two-organization hosted Checkout, complete event delivery, quantity changes, renewal failure/recovery, cancellation, comp and preserved historical/renter access. Record actual test evidence.
 7. Complete production inventory/entitlement enforcement and the merchant/regional launch decisions before any live rollout. Sandbox keys cannot be used to establish live readiness.
 
-## Decisions still needed for commercial release
+## R5 paid-launch commercial decisions carried from R4
 
 Retain the approved monthly/no-trial, next-invoice proration, next-renewal reduction, seven-day grace and historical/renter preservation rules. Remaining commercial decisions are final LK/BN thresholds, excess-rate/FX/rounding policy, zero-dwelling/cessation/reactivation details, cancellation disclosures, unusual bulk-increase controls and merchant/tax responsibility. Research examples are not defaults. Do not silently select Managed Payments or a tax-liability fallback.
 
 Evidence references: [canonical execution plan](EXECUTION-PLAN.md), [billing contract](QUIXO-HOMES-STRIPE-SAAS-BILLING.md), [billing readiness](BILLING-READINESS-20261027.md), [one-property pilot](ONE-PROPERTY-PILOT-STATUS.md), and GitHub issues #375 and #459.
 
-## Sandbox release evidence — 4 November 2026
+## Historical sandbox release evidence — 4 November 2026
 
 PR #494 merged at `f946074acf37c0380b049688aed23b1d681791a7` as a disabled sandbox foundation. Its seven CI workflows passed, including real SQL migration/concurrency and two-organization recovery tests with synthetic Stripe transport. The full authorization suite passed 875 tests, and the pricing/subscription views passed desktop/mobile checks; the enrollment section was visually reviewed. These do not close live rental acceptance.
 
