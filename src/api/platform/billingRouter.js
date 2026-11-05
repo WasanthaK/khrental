@@ -81,9 +81,11 @@ const loadInvoice = async (tenantId, invoiceId) => {
      LEFT JOIN properties p
        ON p.id = i.propertyid
       AND p.tenant_id = i.tenant_id
+     -- The tenant-scoped invoice owns the renter relationship; app_users is
+     -- global and its legacy tenant_id may name another organization. Keep
+     -- historical identity readback even after that renter leaves.
      LEFT JOIN app_users au
        ON au.id = i.renteeid
-      AND au.tenant_id = i.tenant_id
      LEFT JOIN invoice_payment_references refs
        ON refs.invoice_id = i.id AND refs.tenant_id = i.tenant_id
      WHERE i.tenant_id = @tenantId AND i.id = @invoiceId`,
