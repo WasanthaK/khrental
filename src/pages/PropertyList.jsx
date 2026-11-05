@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { listTenantProperties } from '../services/propertyDirectoryService';
 import PropertyCard from '../components/properties/PropertyCard';
 import PropertyMarketReadiness from '../components/properties/PropertyMarketReadiness';
+import { getPropertyAvailability } from '../utils/propertyDetailFields.js';
 import { useAuth } from '../hooks/useAuth';
 
 const PropertyList = () => {
@@ -42,8 +43,8 @@ const PropertyList = () => {
     if (filter === 'all') return matchesSearch;
     
     // Add more filters as needed
-    if (filter === 'available') return matchesSearch && property.status === 'available';
-    if (filter === 'occupied') return matchesSearch && property.status === 'occupied';
+    if (filter === 'available') return matchesSearch && getPropertyAvailability(property.status).value === 'available';
+    if (filter === 'occupied') return matchesSearch && getPropertyAvailability(property.status).value === 'rented';
     
     return matchesSearch;
   });
@@ -110,7 +111,7 @@ const PropertyList = () => {
             >
               <option value="all">All Properties</option>
               <option value="available">Available</option>
-              <option value="occupied">Occupied</option>
+              <option value="occupied">Rented</option>
             </select>
           </div>
         </div>

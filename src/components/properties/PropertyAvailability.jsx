@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getPropertyAvailability } from '../../utils/propertyDetailFields.js';
 import { formatDate } from '../../utils/helpers';
 
 const PropertyAvailability = ({ 
@@ -38,7 +39,11 @@ const PropertyAvailability = ({
   const getStatusBadgeColor = () => {
     switch (status) {
       case 'active':
+      case 'available':
         return 'bg-green-100 text-green-800';
+      case 'rented':
+      case 'occupied':
+        return 'bg-red-100 text-red-800';
       case 'reserved':
         return 'bg-yellow-100 text-yellow-800';
       case 'maintenance':
@@ -51,23 +56,10 @@ const PropertyAvailability = ({
   };
 
   // Get status label
-  const getStatusLabel = () => {
-    switch (status) {
-      case 'active':
-        return 'Available';
-      case 'reserved':
-        return 'Reserved';
-      case 'maintenance':
-        return 'Under Maintenance';
-      case 'inactive':
-        return 'Inactive';
-      default:
-        return 'Unknown';
-    }
-  };
+  const getStatusLabel = () => getPropertyAvailability(status).label;
 
   // If read-only, just display the status
-  if (readOnly) {
+  if (readOnly || getPropertyAvailability(status).value === 'rented') {
     return (
       <div className="space-y-2">
         <div className="flex items-center">
@@ -93,7 +85,7 @@ const PropertyAvailability = ({
         </label>
         <select
           id="propertyStatus"
-          value={status || 'active'}
+          value={status === 'available' ? 'active' : status || 'active'}
           onChange={handleStatusChange}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         >

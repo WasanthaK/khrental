@@ -224,7 +224,8 @@ const RenteeDetails = () => {
           // Map the rentee data to the state
           const renteeInfo = {
             ...mapAppUserToRentee(renteeData),
-            structuredAssociations: Array.isArray(renteeData?.associated_properties) ? renteeData.associated_properties : []
+            structuredAssociations: renteeData.current_properties
+              ?? (Array.isArray(renteeData?.associated_properties) ? renteeData.associated_properties : [])
           };
           
           setRentee(renteeInfo);
@@ -592,4 +593,4 @@ const RenteeDetails = () => {
   );
 };
 
-export default RenteeDetails; 
+export default RenteeDetails;

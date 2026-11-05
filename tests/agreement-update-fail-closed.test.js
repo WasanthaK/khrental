@@ -87,3 +87,24 @@ test('legacy agreement update failures surface without alternate retries', async
   assert.deepEqual(f.apiCalls, []);
   assert.equal(f.genericCalls.filter(c => c[0] === 'update').length, 1);
 });
+
+test('draft cancellation never performs a separate property availability write', async () => {
+  const start=source.indexOf('export const cancelAgreement = ');
+  const end=source.indexOf('\n};',start)+3;
+  const cancelSource=source.slice(start,end).replace('export const ','const ');
+  const calls=[];
+  const run=new Function('fetchAgreement','updateAgreementData','updatePropertyData','toast','console',
+    cancelSource+'; return cancelAgreement;');
+  for (const status of ['draft','review']) {
+    const cancel=run(async()=>({id:'a',propertyid:'p',status}),async(_id,payload)=>{calls.push(payload);return {id:'a',...payload};},
+      ()=>{throw Error('Browser must not release property');},{error(){}},{log(){},error(){}});
+    assert.equal((await cancel('a','Demo cancellation')).status,'cancelled');
+  }
+  assert.equal(calls.length,2);
+  for (const status of ['active','signed']) {
+    const denied=Object.assign(new Error('Signed agreements cannot be changed'),{status:409});
+    const cancel=run(async()=>({id:'a',propertyid:'p',status}),async()=>{throw denied;},
+      ()=>{throw Error('Rejected cancellation must not release occupancy');},{error(){}},{log(){},error(){}});
+    await assert.rejects(cancel('a'),error=>error===denied);
+  }
+});

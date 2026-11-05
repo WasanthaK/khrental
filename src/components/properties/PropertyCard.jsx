@@ -1,4 +1,4 @@
-import { propertyImageDisplayUrl } from '../../utils/propertyDetailFields.js';
+import { propertyImageDisplayUrl, getPropertyAvailability } from '../../utils/propertyDetailFields.js';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '../../utils/helpers';
 import { DEFAULT_IMAGE } from '../../utils/constants';
@@ -52,10 +52,10 @@ const PropertyCard = ({ property }) => {
 
   // Get status badge color
   const getStatusBadgeColor = (status) => {
-    switch (status) {
+    switch (getPropertyAvailability(status).value) {
       case 'available':
         return 'bg-green-100 text-green-800';
-      case 'occupied':
+      case 'rented':
         return 'bg-red-100 text-red-800';
       case 'maintenance':
         return 'bg-yellow-100 text-yellow-800';
@@ -81,7 +81,7 @@ const PropertyCard = ({ property }) => {
         />
         {status && (
           <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(status)}`}>
-            {status}
+            {getPropertyAvailability(status).label}
           </div>
         )}
       </div>

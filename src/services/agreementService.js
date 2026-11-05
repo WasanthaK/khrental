@@ -792,16 +792,8 @@ export const cancelAgreement = async (agreementId, cancelReason = '') => {
     
     const updatedAgreement = await updateAgreementData(agreementId, updateData);
 
-    if (
-      existingAgreement.propertyid &&
-      ['active', 'signed', 'completed'].includes(existingAgreement.status)
-    ) {
-      await updatePropertyData(existingAgreement.propertyid, {
-        status: 'available',
-        updatedat: new Date().toISOString()
-      });
-    }
-    
+    // A cancelled draft does not own occupancy. Active tenancies release stock
+    // only through the server's exit/inspection/settlement transaction.
     console.log('Agreement cancelled successfully:', updatedAgreement.id);
     return updatedAgreement;
   } catch (error) {

@@ -34,7 +34,7 @@ export const mapAppUserToRentee = (rentee) => ({
   idCopyURL: rentee.id_copy_url,
   idCopyUrl: rentee.id_copy_url,
   registrationDate: rentee.createdat || rentee.created_at,
-  associatedPropertyIds: rentee.associated_property_ids || [],
+  associatedPropertyIds: rentee.current_property_ids ?? rentee.associated_property_ids ?? [],
   invited: rentee.invited,
   authId: rentee.auth_id,
   createdAt: rentee.createdat || rentee.created_at || new Date().toISOString(),
