@@ -329,6 +329,44 @@ export async function verifyPhase4StaffMaintenanceHttp({
     { staffUserId: readOnlyA.userId }), 400, 'INVALID_MAINTENANCE_ASSIGNEE');
   assert.equal((await snapshot(managerFixtureId)).request.assignedto, null);
 
+  // Exercise the actual renter card link with the global role used by live
+  // multi-organization accounts. An ordinary detail-route visit misses this bug.
+  const previousRenter = await one('SELECT role FROM app_users WHERE id=@id', { id:a.renteeId });
+  await sqlRows("UPDATE app_users SET role='authenticated' WHERE id=@id", { id:a.renteeId });
+  const beforeRenterRead = await snapshot(id);
+  const renterPage = await browser.newPage();
+  try {
+    await renterPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId', tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token:token, user:{id:authId,email,role:'authenticated'}
+      }));
+    }, tokenA, a.tenantId, a.authId, a.email);
+    await fs.mkdir('billing-sql-proof', { recursive:true });
+    for (const width of [1440,390]) {
+      await renterPage.setViewport({width,height:900});
+      await renterPage.goto(origin+'/rentee/maintenance', {waitUntil:'networkidle0',timeout:45000});
+      const link = `a[href="/rentee/maintenance/${id}"]`;
+      await renterPage.waitForSelector(link);
+      await renterPage.click(link);
+      await renterPage.waitForFunction(expected => location.pathname===expected &&
+        document.body.innerText.includes('Visible tenant update'),
+        {timeout:30000}, '/rentee/maintenance/'+id);
+      const text = await renterPage.evaluate(()=>document.body.innerText);
+      assert.match(text,/Staff lifecycle acceptance/);
+      assert.doesNotMatch(text,/Staff-only diagnosis|Access Denied/);
+      assert.ok(await renterPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await renterPage.screenshot({path:`billing-sql-proof/renter-maintenance-card-${width}.png`,fullPage:true});
+      await renterPage.reload({waitUntil:'networkidle0'});
+      assert.ok((await renterPage.evaluate(()=>document.body.innerText)).includes('Staff lifecycle acceptance'));
+    }
+    assert.deepEqual(await snapshot(id), beforeRenterRead, 'card and detail reads must preserve business records');
+  } finally {
+    await renterPage.close();
+    await sqlRows('UPDATE app_users SET role=@role WHERE id=@id', {id:a.renteeId,role:previousRenter.role});
+  }
+
   const managerPage = await browser.newPage();
   try {
     await managerPage.evaluateOnNewDocument((token, tenantId, authId, email) => {

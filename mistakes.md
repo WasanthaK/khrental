@@ -23,3 +23,7 @@ An organization-scoped invoice references a global app_users identity. Do not fi
 ## Resolve maintenance participants through scoped request references
 
 Do not apply app_users.tenant_id to a request's renter, assigned worker or comment author. These are global identities referenced by tenant-scoped maintenance records. Keep membership, property, assignment and private-comment authorization intact; verify names and privacy when identities originated elsewhere.
+
+## Test the actual renter navigation link
+
+A global account may have role authenticated while its selected organization membership is rentee. Maintenance cards must select the portal from the active membership. Opening the correct detail route directly does not prove that the list card links there; click the real card in desktop/mobile browser acceptance.
