@@ -56,3 +56,29 @@ export const propertyImageDisplayUrl = (input, { tenantId, appOrigin } = {}) => 
   if (!match || !tenantId || match[1].toLowerCase() !== String(tenantId).toLowerCase()) {return '';}
   return parsed.pathname;
 };
+
+// Preserve persisted values; this maps the legacy vocabulary for display only.
+export const getPropertyAvailability = status => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (['active', 'available'].includes(normalized)) return { value: 'available', label: 'Available' };
+  if (['rented', 'occupied'].includes(normalized)) return { value: 'rented', label: 'Rented' };
+  const labels = { reserved: 'Reserved', maintenance: 'Under Maintenance', inactive: 'Inactive' };
+  return { value: normalized, label: labels[normalized] || 'Unknown' };
+};
+
+// An active agreement is the current relationship even if its contractual end
+// date has passed: occupancy ends only when the exit workflow closes it.
+export const getCurrentPropertyRentees = (agreements, propertyId) => {
+  if (!propertyId) return [];
+  const sameId = (a, b) => Boolean(a && b) && String(a).toLowerCase() === String(b).toLowerCase();
+  const renters = new Map();
+  for (const agreement of Array.isArray(agreements) ? agreements : []) {
+    if (String(agreement?.status || '').toLowerCase() !== 'active'
+        || !sameId(agreement.propertyid, propertyId) || !agreement.renteeid) continue;
+    const renter = agreement.rentee;
+    if (renter && sameId(renter.id, agreement.renteeid)) {
+      renters.set(String(renter.id).toLowerCase(), renter);
+    }
+  }
+  return [...renters.values()];
+};

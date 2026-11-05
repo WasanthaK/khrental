@@ -1,16 +1,14 @@
-import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
+import { propertyImageDisplayUrl, getCurrentPropertyRentees, getPropertyAvailability } from '../utils/propertyDetailFields.js';
 import { PROPERTY_COUNTRIES } from '../utils/constants.js';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { deleteData, updateData } from '../services/platformClient';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { DEFAULT_IMAGE } from '../utils/constants';
-import { getRenteesByProperty } from '../services/renteeService';
 import { toast } from 'react-hot-toast';
 import { deleteFile } from '../services/fileService';
-import { fetchAppUsers } from '../services/appUserService';
-import { getTenantPropertyById, listTenantPropertyUnits } from '../services/propertyDirectoryService';
-import { listAgreementsByProperty, listAgreementsByUnitIds } from '../services/agreementService';
+import { getTenantPropertyById } from '../services/propertyDirectoryService';
+import { listAgreementsByProperty } from '../services/agreementService';
 
 // Components
 import PropertyMap from '../components/properties/PropertyMap';
@@ -259,75 +257,10 @@ const PropertyDetails = () => {
           const agreementsData = await listAgreementsByProperty(id);
           setAgreements(agreementsData);
           
-          // Fetch all rentees associated with this property using the dedicated service
-          console.log('Fetching rentees for property ID:', id);
-          
-          try {
-            const allRentees = await fetchAppUsers('rentee');
-            const renteesById = new Map((allRentees || []).map((rentee) => [rentee.id, rentee]));
-            const directRentees = (allRentees || []).filter((rentee) => Array.isArray(rentee.associated_property_ids) && rentee.associated_property_ids.includes(id));
+          // Active agreements own the current renter relationship. Manual global
+          // property-id arrays and cancelled/expired contracts are history only.
+          setRentees(getCurrentPropertyRentees(agreementsData, id));
 
-            if (directRentees && directRentees.length > 0) {
-              console.log('Found rentees via direct query:', directRentees.length);
-              setRentees(directRentees);
-            } else {
-              console.log('No rentees found with associated property IDs, checking agreements...');
-              
-              // Reuse the explicit property-scoped agreement list to find linked rentees.
-              const agreementRentees = (agreementsData || []).filter((agreement) =>
-                ['active', 'pending', 'review', 'signed'].includes(String(agreement.status || '').toLowerCase())
-              );
-                
-              if (agreementRentees.length > 0) {
-                console.log('Found rentees via agreements:', agreementRentees.length);
-                
-                // Get unique rentee IDs from agreements
-                const renteeIds = [...new Set(agreementRentees.map(a => a.renteeid).filter(Boolean))];
-                
-                // Fetch the actual rentee records
-                const fullRentees = renteeIds.map((renteeId) => renteesById.get(renteeId)).filter(Boolean);
-                console.log('Retrieved rentees from agreements:', fullRentees?.length || 0);
-                setRentees(fullRentees || []);
-              } else {
-                console.log('No rentees found in agreements, checking units...');
-                
-                // Check if property has units through the explicit tenant-scoped property directory.
-                const propertyUnits = await listTenantPropertyUnits(id);
-                  
-                if (propertyUnits && propertyUnits.length > 0) {
-                  // Property has units, check for agreements on these units
-                  const unitIds = propertyUnits.map(unit => unit.id);
-                  
-                  const unitAgreements = await listAgreementsByUnitIds(
-                    unitIds,
-                    ['active', 'pending', 'review', 'signed']
-                  );
-                    
-                  if (unitAgreements && unitAgreements.length > 0) {
-                    console.log('Found rentees via unit agreements:', unitAgreements.length);
-                    
-                    // Get unique rentee IDs from unit agreements
-                    const unitRenteeIds = [...new Set(unitAgreements.map(a => a.renteeid))];
-                    
-                    // Fetch the actual rentee records
-                    const unitRentees = unitRenteeIds.map((renteeId) => renteesById.get(renteeId)).filter(Boolean);
-                    console.log('Retrieved rentees from unit agreements:', unitRentees?.length || 0);
-                    setRentees(unitRentees || []);
-                  } else {
-                    console.log('No rentees found in unit agreements');
-                    setRentees([]);
-                  }
-                } else {
-                  console.log('Property has no units');
-                  setRentees([]);
-                }
-              }
-            }
-          } catch (err) {
-            console.error('Exception fetching rentees:', err);
-            setRentees([]);
-          }
-          
         } else {
           throw new Error('Property not found');
         }
@@ -632,11 +565,11 @@ const PropertyDetails = () => {
                 <p className="text-sm text-gray-500">Availability</p>
                 <div className="mt-1">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    property.status === 'available' ? 'bg-green-100 text-green-800' : 
-                    property.status === 'occupied' ? 'bg-red-100 text-red-800' : 
+                    getPropertyAvailability(property.status).value === 'available' ? 'bg-green-100 text-green-800' :
+                    getPropertyAvailability(property.status).value === 'rented' ? 'bg-red-100 text-red-800' :
                     'bg-gray-100 text-gray-800'
                   }`}>
-                    {property.status ? property.status.charAt(0).toUpperCase() + property.status.slice(1) : 'Unknown'}
+                    {getPropertyAvailability(property.status).label}
                   </span>
                   
                   {property.availablefrom && property.status !== 'available' && (

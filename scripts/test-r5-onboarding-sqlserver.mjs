@@ -29,6 +29,7 @@ try {
   const {ensureAuthSchema,createAuthRecord,issueAuthSession,createSessionAuthMiddleware}=await import('../src/api/auth/index.js');
   const {createTenancyOnboardingRouter}=await import('../src/api/platform/tenancyOnboardingRouter.js');
   const {createTenancyExitRouter}=await import('../src/api/platform/tenancyExitRouter.js');
+  const {listTenantRentees}=await import('../src/api/mssql/renteeRepository.js');
   ({closeMssqlPool}=await import('../src/api/mssql/pool.js'));
   await ensureAuthSchema();
   const q=async(text,params={})=>{const r=pool.request();for(const [k,v] of Object.entries(params))r.input(k,v);return (await r.query(text)).recordset||[];};
@@ -89,6 +90,9 @@ try {
   assert.equal((await q("SELECT id FROM tenancy_lifecycle_events WHERE agreement_id=@id AND event_type='tenancy_activated'",{id:a.agreementId})).length,1);
   assert.equal((await call('/onboarding')).json.data.agreement.status,'active');
   assert.equal((await one('SELECT status FROM properties WHERE id=@id',{id:a.propertyId})).status,'rented');
+  const currentRenter=(await listTenantRentees(a.tenantId)).find(row=>row.id===a.renter.id);
+  assert.deepEqual(currentRenter.current_property_ids,[a.propertyId],'activation projects property association without changing global user fields');
+  assert.equal((await listTenantRentees(b.tenantId)).some(row=>row.id===a.renter.id),false,'current association cannot leak across organizations');
   assert.equal((await call(`/checklist/items/${checklist.items[0].id}`,{status:'pending'},a.owner,a.tenantId,'PATCH')).status,404,'activated inspection retained');
   const summary=await fetch(`${origin}/api/tenancies/me/summary`,{headers:{Authorization:`Bearer ${a.renter.token}`,'x-tenant-id':a.tenantId}});
   assert.equal((await summary.json()).data.tenancies.length,1);
@@ -125,6 +129,8 @@ try {
   assert.equal(historical.settlement.status,'settled');assert.equal(historical.settlement.refund_amount,125000);
   assert.equal(historical.notices[0].status,'acknowledged');assert.equal(historical.agreement.signature_status,'completed');
   assert.equal((await one('SELECT status FROM properties WHERE id=@id',{id:a.propertyId})).status,'available','closed tenancy releases stock eligibility');
+  assert.deepEqual((await listTenantRentees(a.tenantId)).find(row=>row.id===a.renter.id).current_property_ids,[],
+    'settled closure clears current association while retaining renter and agreement history');
   assert.equal((await q("SELECT id FROM tenancy_lifecycle_events WHERE agreement_id=@id AND event_type='tenancy_closed'",{id:a.agreementId})).length,1);
   assert.equal((await call('/onboarding')).json.data.deposit.transactions.length,1,'deposit history survives closure');
   assert.equal((await exitCall(`/move-out-inspection/items/${inspection.json.data.inspection.items[0].id}`,{conditionStatus:'damaged'},a.owner,a.tenantId,'PATCH')).status,404,'completed inspection is immutable');

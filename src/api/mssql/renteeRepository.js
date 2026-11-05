@@ -128,6 +128,12 @@ const mapRenteeRow = (row) => {
   }
 
   mapped.associated_property_ids ??= [];
+  // Current occupancy is organization-scoped agreement data, not a mutation of
+  // this global identity's manually configured associations in other tenants.
+  const currentAssociations = parseJsonValue(mapped.current_tenancy_associations);
+  mapped.current_properties = Array.isArray(currentAssociations) ? currentAssociations : [];
+  mapped.current_property_ids = [...new Set(mapped.current_properties.map(entry => entry.propertyId))];
+  delete mapped.current_tenancy_associations;
   mapped.skills ??= [];
   mapped.availability ??= null;
   mapped.invited = Boolean(mapped.invited);
@@ -205,6 +211,11 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250, stat
   const rows = await runQuery(
     `SELECT TOP (${safePageSize})
        au.*,
+       (SELECT DISTINCT a.propertyid AS propertyId, a.unitid AS unitId
+        FROM agreements a
+        JOIN properties p ON p.id = a.propertyid AND p.tenant_id = a.tenant_id
+        WHERE a.tenant_id = @tenantId AND a.renteeid = au.id AND a.status = 'active'
+        FOR JSON PATH) AS current_tenancy_associations,
        tm_link.id AS tenant_membership_id,
        tm_link.role AS tenant_membership_role,
        tm_link.status AS tenant_membership_status,

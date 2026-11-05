@@ -14,6 +14,13 @@ on:
       - 'src/api/platform/tenancyOnboardingRouter.js'
       - 'src/api/platform/tenancyActivation.js'
       - 'src/pages/TenancyOnboarding.jsx'
+      - 'src/pages/PropertyDetails.jsx'
+      - 'src/pages/PropertyList.jsx'
+      - 'src/components/properties/PropertyAvailability.jsx'
+      - 'src/components/properties/PropertyCard.jsx'
+      - 'src/utils/propertyDetailFields.js'
+      - 'src/services/agreementService.js'
+      - 'scripts/test-r5-onboarding-sqlserver.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,6 +42,8 @@ jobs:
         env:
           PROPERTY_RENTAL_OFFERS_SCHEMA_READY: 'true'
         run: node scripts/test-property-enquiries-sqlserver.mjs
+      - name: Activation, renter linkage and settled exit restore property availability
+        run: node scripts/test-r5-onboarding-sqlserver.mjs
       - name: Real enquiry, owner inbox, viewing and application components
         env:
           ENQUIRY_PROOF_DIR: transaction-browser-proof

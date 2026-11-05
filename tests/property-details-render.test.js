@@ -32,3 +32,25 @@ test('card to details destination is registered, while matched-render errors are
   assert.match(details,/property\?\.coordinates \|\| null/);
   assert.match(renderError,/isRouteErrorResponse/);
 });
+
+test('property availability treats activation and closure vocabulary consistently', async () => {
+  const { getPropertyAvailability } = await import('../src/utils/propertyDetailFields.js');
+  for (const status of ['rented','occupied','RENTED']) assert.deepEqual(getPropertyAvailability(status),{value:'rented',label:'Rented'});
+  for (const status of ['active','available']) assert.deepEqual(getPropertyAvailability(status),{value:'available',label:'Available'});
+  assert.equal(getPropertyAvailability('reserved').value,'reserved');
+  assert.equal(getPropertyAvailability(null).label,'Unknown');
+});
+
+test('current renter follows activation and closure, including global seeker identity and elapsed contract dates', async () => {
+  const { getCurrentPropertyRentees } = await import('../src/utils/propertyDetailFields.js');
+  const renter = {id:'RENTER',name:'Demo renter',user_type:'seeker',associated_property_ids:[]};
+  const agreement = {status:'active',propertyid:'PROPERTY',renteeid:'renter',rentee:renter,enddate:'2020-01-01'};
+  assert.deepEqual(getCurrentPropertyRentees([agreement],'property'),[renter]);
+  for (const status of ['draft','review','pending','signed','cancelled','expired','closed','terminated']) {
+    assert.deepEqual(getCurrentPropertyRentees([{...agreement,status}],'property'),[]);
+  }
+  assert.deepEqual(getCurrentPropertyRentees([agreement,{...agreement,id:'other-unit'}],'property'),[renter]);
+  assert.deepEqual(getCurrentPropertyRentees([agreement],'foreign'),[]);
+  assert.deepEqual(getCurrentPropertyRentees([{...agreement,rentee:{id:'foreign'}}],'property'),[]);
+  assert.deepEqual(getCurrentPropertyRentees(null,'property'),[]);
+});

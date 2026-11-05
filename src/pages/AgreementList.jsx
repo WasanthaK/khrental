@@ -145,11 +145,7 @@ const AgreementList = () => {
   const handleCancelAgreement = async (agreementId, cancelReason = '') => {
     try {
       const updatedAgreement = await cancelAgreement(agreementId, cancelReason);
-      const releasedProperty = ['active', 'signed', 'completed'].includes(agreements.find((agreement) => agreement.id === agreementId)?.status);
-
-      toast.success(releasedProperty
-        ? 'Agreement cancelled and property set as available'
-        : 'Agreement cancelled successfully');
+      toast.success('Agreement cancelled successfully');
 
       setAgreements((prevAgreements) =>
         prevAgreements.map((agreement) =>
