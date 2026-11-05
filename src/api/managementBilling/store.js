@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import {getMssqlPool, sql} from '../mssql/pool.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory, complimentaryChange, entitlement} from './contract.js';
 
 export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   const query = async (connection, statement, params = {}) => {
@@ -92,5 +92,32 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   });
   const completeCommand = (q,id,result) => q(`UPDATE dbo.management_billing_commands SET status='completed',result_json=@result,
     completed_at=SYSUTCDATETIME() WHERE id=@id`,{id,result:JSON.stringify(result)});
-  return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand};
+  const complimentaryStatus = async (tenantId, q = read) => {
+    const current = await account(tenantId, q);
+    if (!current || current.stripe_account_id !== BILLING_ACCOUNT) {
+      throw problem(409, 'BILLING_NOT_ENROLLED', 'Enroll this sandbox workspace before managing complimentary access.');
+    }
+    return {version:current.version, mode:current.comp_type, expiresAt:current.comp_expires_at || null,
+      entitlement:entitlement(current), riskHold:Boolean(current.risk_hold), liveChargingEnabled:false};
+  };
+  const setComplimentary = ({tenantId, actorId, ...input}) => locked(tenantId, async q => {
+    const change = complimentaryChange(input);
+    const current = await account(tenantId, q);
+    if (!current || current.stripe_account_id !== BILLING_ACCOUNT) {
+      throw problem(409, 'BILLING_NOT_ENROLLED', 'Enroll this sandbox workspace before managing complimentary access.');
+    }
+    if (current.version !== change.expectedVersion) {
+      throw problem(409, 'BILLING_STALE_VERSION', 'Billing changed. Reload and review the current access before saving.');
+    }
+    const compType = change.mode === 'revoke' ? null : change.mode;
+    await q(`UPDATE dbo.management_billing_accounts SET comp_type=@compType,comp_expires_at=@expiry,
+      version=version+1,updated_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId`,
+    {tenantId,compType,expiry:change.expiresAt ? new Date(change.expiresAt) : null});
+    await audit(q, {tenantId,actorId,action:`sandbox.complimentary.${change.mode}`,resourceId:tenantId,
+      previous:{type:current.comp_type,expiresAt:current.comp_expires_at},
+      current:{type:compType,expiresAt:change.expiresAt},reason:change.reason});
+    return complimentaryStatus(tenantId, q);
+  });
+  return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
+    complimentaryStatus,setComplimentary};
 };

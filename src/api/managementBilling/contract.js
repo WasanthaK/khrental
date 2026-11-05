@@ -95,6 +95,27 @@ export const entitlement = (account, now = Date.now()) => {
   return {state:account.initial_payment_verified ? 'read_only' : 'payment_pending', management:false, historicalAccess:true};
 };
 
+export const complimentaryChange = (input, now = Date.now()) => {
+  if (!input || !['fixed', 'ongoing', 'revoke'].includes(input.mode)) {
+    throw problem(400, 'BILLING_COMP_INVALID', 'Choose fixed-term, ongoing or revoke complimentary access.');
+  }
+  if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    throw problem(400, 'BILLING_VERSION_INVALID', 'Reload the current billing account before changing access.');
+  }
+  const expires = input.expiresAt;
+  if (input.mode === 'fixed') {
+    if (typeof expires !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(expires) ||
+        !Number.isFinite(Date.parse(expires)) || Date.parse(expires) <= now ||
+        new Date(expires).toISOString().replace('.000Z', 'Z') !== expires.replace('.000Z', 'Z')) {
+      throw problem(400, 'BILLING_COMP_EXPIRY_INVALID', 'Fixed-term access requires a valid future UTC expiry.');
+    }
+  } else if (expires !== null) {
+    throw problem(400, 'BILLING_COMP_EXPIRY_INVALID', 'Ongoing access and revocation must not include an expiry.');
+  }
+  return {mode:input.mode, expiresAt:input.mode === 'fixed' ? new Date(expires).toISOString() : null,
+    expectedVersion:input.expectedVersion, reason:reason(input.reason)};
+};
+
 export const verifyStripeSignature = ({body, signature, secret, now = Date.now()}) => {
   if (!Buffer.isBuffer(body) || !secret || typeof signature !== 'string')
     throw problem(400, 'STRIPE_SIGNATURE_INVALID', 'Invalid webhook signature.');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature} from '../src/api/managementBilling/contract.js';
+import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange} from '../src/api/managementBilling/contract.js';
 import {createStripeClient,stripeForm,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 
@@ -54,6 +54,19 @@ test('fixed complimentary grants expire, ongoing grants are explicit',()=>{
   assert.equal(entitlement({comp_type:'fixed',comp_expires_at:new Date(now+1).toISOString()},now).management,true);
   assert.equal(entitlement({comp_type:'fixed',comp_expires_at:new Date(now).toISOString()},now).management,false);
   assert.equal(entitlement({comp_type:'ongoing'},now).state,'complimentary');
+});
+test('complimentary changes require an explicit mode, fresh version, decision note and exact future expiry',()=>{
+  const input={mode:'fixed',expiresAt:'2026-11-04T12:00:00Z',expectedVersion:1,reason:'Authorized sandbox acceptance grant.'};
+  assert.equal(complimentaryChange(input,now).expiresAt,'2026-11-04T12:00:00.000Z');
+  for(const change of [{mode:'free'},{expiresAt:null},{expiresAt:'2026-11-03T12:00:00Z'},
+    {expiresAt:'2026-02-30T00:00:00Z'},{expiresAt:'2026-11-04'},{expiresAt:'2026-11-04T12:00:00+00:00'},
+    {expectedVersion:0},{expectedVersion:1.5},{reason:'short'},{mode:'ongoing'},{mode:'revoke'}]) {
+    assert.throws(()=>complimentaryChange({...input,...change},now));
+  }
+  for(const mode of ['ongoing','revoke']) {
+    assert.equal(complimentaryChange({...input,mode,expiresAt:null},now).expiresAt,null);
+  }
+  assert.equal(entitlement({comp_type:'ongoing',risk_hold:true},now).management,false,'A comp grant never clears a risk hold');
 });
 test('webhook signatures require original bytes, bounded timestamps, sandbox and account binding',()=>{
   const secret='whsec_fixture';const body=Buffer.from(JSON.stringify({id:'evt_test',type:'invoice.paid',livemode:false,data:{object:{id:'in_test'}}}));
@@ -117,6 +130,26 @@ test('pricing API rejects stale version authority fields and never accepts a cli
     assert.equal((await call({rules,expectedVersion:0,stripePriceId:'price_attacker'})).status,400);
     assert.equal((await call({rules,expectedVersion:0})).status,409);assert.equal(saved,1);
   });
+});
+test('complimentary API is platform-admin only and never accepts caller-supplied actor or Stripe fields',async()=>{
+  let writes=0;
+  for(const allowed of [false,true]) {
+    const router=createManagementBillingRouter({env:{MANAGEMENT_BILLING_SCHEMA_READY:'true'},
+      store:{setComplimentary:async args=>{writes++;assert.equal(args.actorId,tenant);return {version:2,mode:'ongoing'};}},
+      stripe:{configured:()=>true},resolveContext:(req,_res,next)=>{req.authSession={};req.user={id:tenant};next();},
+      checkPlatformAdmin:async()=>allowed});
+    await withServer(router,async origin=>{
+      const call=body=>fetch(`${origin}/admin/complimentary/${other}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const body={mode:'ongoing',expiresAt:null,expectedVersion:1,reason:'Sandbox grant acceptance only.'};
+      assert.equal((await call(body)).status,allowed?200:403);
+      if(allowed) {
+        assert.equal((await call({...body,actorId:other})).status,400);
+        assert.equal((await call({...body,risk_hold:false})).status,400);
+        assert.equal((await call({...body,stripe_subscription_id:'sub_other'})).status,400);
+      }
+    });
+  }
+  assert.equal(writes,1);
 });
 test('disabled webhook does not read the store or acknowledge events as processed',async()=>{
   await withServer(createManagementBillingWebhook({env:{},store:{},stripe:{configured:()=>false}}),async origin=>{

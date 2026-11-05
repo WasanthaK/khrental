@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import usePlatformAdminStatus from '../hooks/usePlatformAdminStatus';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 import {listAdminTenants} from '../services/tenantAdminService';
@@ -14,6 +14,52 @@ const rulesFrom=form=>({market:form.market,billingCurrency:form.billingCurrency,
   effectiveAt:form.effectiveDate?new Date(`${form.effectiveDate}T00:00:00.000Z`).toISOString():null,reason:form.reason});
 const field='mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const button='rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40';
+
+export const ManagementComplimentaryView=({workspaces=[],tenantId='',status=null,mode='fixed',expiry='',note='',busy=false,error='',notice='',
+  onSelect,onMode,onExpiry,onNote,onSave,onReload})=><section className="mx-auto mb-8 max-w-6xl px-4 sm:px-6">
+  <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 className="text-xl font-semibold">Complimentary access</h2>
+    <p className="text-sm text-slate-600">Grant time-limited or ongoing complimentary management access to an enrolled test workspace, or revoke an existing grant. Existing records and renter access are preserved.</p>
+    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Sandbox only. Granting complimentary access does not cancel an existing Stripe subscription or stop its test invoices. A billing risk hold still requires review.</p>
+    <label className="block text-sm font-medium">Complimentary workspace<select className={field} value={tenantId} disabled={busy} onChange={e=>onSelect(e.target.value)}><option value="">Select an enrolled workspace</option>{workspaces.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    {error&&<p role="alert" className="text-sm text-red-800">{error} {tenantId&&<button className="underline" disabled={busy} onClick={onReload}>Reload access</button>}</p>}
+    {notice&&<p role="status" className="text-sm text-teal-800">{notice}</p>}
+    {status&&<form className="space-y-4" onSubmit={event=>{event.preventDefault();onSave();}}>
+      <p className="text-sm text-slate-700">Current access: <strong>{status.entitlement.state.replaceAll('_',' ')}</strong>{status.mode==='fixed'&&status.expiresAt?` · complimentary expiry ${new Date(status.expiresAt).toISOString().replace('T',' ').replace('.000Z',' UTC')}`:''}</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm font-medium">Access change<select className={field} value={mode} disabled={busy} onChange={e=>onMode(e.target.value)}><option value="fixed">Grant until an expiry date</option><option value="ongoing">Grant until revoked</option><option value="revoke">Revoke complimentary access</option></select></label>
+        {mode==='fixed'&&<label className="text-sm font-medium">Expiry (UTC)<input className={field} type="datetime-local" required value={expiry} disabled={busy} onChange={e=>onExpiry(e.target.value)}/></label>}
+      </div>
+      <label className="block text-sm font-medium">Access decision note<textarea className={field} required rows={2} minLength={10} maxLength={1000} value={note} disabled={busy} onChange={e=>onNote(e.target.value)}/></label>
+      <p className="text-sm text-slate-500">Fixed-term access expires automatically. Revoking a grant returns the workspace to its verified subscription status.</p>
+      <button type="submit" className={button} disabled={busy||Boolean(error)}>{busy?'Saving…':mode==='revoke'?'Revoke complimentary access':'Save complimentary access'}</button>
+    </form>}
+  </div>
+</section>;
+
+const ComplimentaryAccess=({workspaces})=>{
+  const [tenantId,setTenantId]=useState(''),[status,setStatus]=useState(null),[mode,setMode]=useState('fixed'),[expiry,setExpiry]=useState(''),[note,setNote]=useState('');
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const selected=useRef('');
+  const load=async id=>{
+    selected.current=id;setTenantId(id);setStatus(null);setError('');setNotice('');setNote('');setExpiry('');
+    if(!id){return;}
+    setBusy(true);
+    try{const data=await requestMssqlApi(`/api/management-billing/admin/complimentary/${id}`);if(selected.current===id){setStatus(data);}}
+    catch(e){if(selected.current===id){setError(e.message);}}
+    finally{if(selected.current===id){setBusy(false);}}
+  };
+  const save=async()=>{
+    const id=tenantId;setBusy(true);setError('');setNotice('');
+    try{
+      const expiresAt=mode==='fixed'?new Date(`${expiry}:00.000Z`).toISOString():null;
+      const data=await requestMssqlApi(`/api/management-billing/admin/complimentary/${id}`,{method:'POST',body:{mode,expiresAt,reason:note,expectedVersion:status.version}});
+      if(selected.current===id){setStatus(data);setNote('');setNotice(mode==='revoke'?'Complimentary access revoked. Verified subscription access now applies.':'Complimentary access saved. Existing Stripe billing is unchanged.');}
+    }catch(e){if(selected.current===id){setError(e.message);}}
+    finally{if(selected.current===id){setBusy(false);}}
+  };
+  return <ManagementComplimentaryView {...{workspaces,tenantId,status,mode,expiry,note,busy,error,notice}} onSelect={load} onMode={setMode} onExpiry={setExpiry} onNote={setNote} onSave={save} onReload={()=>load(tenantId)}/>;
+};
 
 export const ManagementPricingView=({versions=[],ready=false,loading=false,error='',notice='',form,setForm,preview,quantity,setQuantity,busy=false,onPreview,onSave,onPublish,onReload,enrollment})=>{
   const update=(key,value)=>setForm(previous=>({...previous,[key]:value,...(key==='market'?{rentCurrency:value==='LK'?'LKR':'BND',includedRent:'',reason:''}:{})}));
@@ -68,9 +114,9 @@ export default function ManagementPricing(){
   const run=async action=>{setBusy(true);setNotice('');try{await action();}catch(e){setNotice(e.message);}finally{setBusy(false);}};
   if(authorityLoading)return <p className="p-6">Checking platform access…</p>;
   if(!isPlatformAdmin)return <p role="alert" className="p-6">Platform administrator access is required.</p>;
-  return <ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load}
+  return <><ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load}
     enrollment={{workspaces,value:enrollment,update:(key,value)=>setEnrollment(previous=>({...previous,[key]:value})),submit:()=>run(async()=>{await requestMssqlApi('/api/management-billing/admin/enroll',{method:'POST',body:enrollment});setNotice('Workspace enrolled. Its administrator can open Management subscription to test checkout.');})}}
     onPreview={()=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{rules:rulesFrom(form),quantity:Number(quantity)}})))}
     onSave={event=>{event.preventDefault();run(async()=>{await requestMssqlApi('/api/management-billing/admin/pricing',{method:'POST',body:{rules:rulesFrom(form),expectedVersion:Math.max(0,...versions.filter(v=>v.market===form.market).map(v=>v.version))}});await load();setNotice('New draft saved. Existing subscriptions are unchanged.');});}}
-    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/>;
+    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/><ComplimentaryAccess workspaces={workspaces}/></>;
 }

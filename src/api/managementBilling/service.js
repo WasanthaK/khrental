@@ -227,6 +227,16 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
           {start_date:item.current_period_end,duration:{interval:'month',interval_count:1},
             items:[{price:account.stripe_price_id,quantity:target}],proration_behavior:'none'}]
       },`${key}:phases`);
+      const savedSchedule=await stripe.request('GET',`/v1/subscription_schedules/${schedule.id}`);
+      const currentPhase=savedSchedule.phases?.find(phase=>phase.start_date===schedule.current_phase.start_date);
+      const nextPhase=savedSchedule.phases?.find(phase=>phase.start_date===item.current_period_end);
+      const matches=(phase,quantity)=>phase?.items?.length===1 &&
+        objectId(phase.items[0].price)===account.stripe_price_id && phase.items[0].quantity===quantity;
+      if(savedSchedule.status!=='active' || objectId(savedSchedule.subscription)!==subscription.id ||
+          objectId(savedSchedule.customer)!==account.stripe_customer_id || savedSchedule.end_behavior!=='release' ||
+          currentPhase?.end_date!==item.current_period_end || !matches(currentPhase,currentQuantity) || !matches(nextPhase,target)) {
+        throw problem(502,'BILLING_SCHEDULE_UNCONFIRMED','Stripe has not confirmed the expected renewal quantity. Retry this operation.');
+      }
     } else if(target>preview.from){
       await stripe.request('POST',`/v1/subscriptions/${subscription.id}`,{
         items:[{id:account.stripe_item_id,quantity:target}],proration_behavior:'create_prorations',proration_date:preview.prorationDate
