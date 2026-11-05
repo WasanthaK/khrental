@@ -1,6 +1,38 @@
 # KH Rentals Execution Plan
 
-## Current R5 checkpoint — 5 November 2026
+## Current canonical progress — 5 November 2026, after PR #510
+
+This progress-only checkpoint supersedes older current/next statements below. Existing historical evidence is retained. The agreed sequence remains complete rental operations, then paid/commercial launch; Sri Lanka before Brunei.
+
+| Milestone | Current status | Remaining boundary |
+| --- | --- | --- |
+| R1 — Original rental operations release | CLOSED BY OWNER | Existing accepted scope retained. |
+| R2 — Invoice immutable archive | OWNER-DEFERRED; incomplete | Outside the active queue. |
+| R3 — Registration and account access | CLOSED BY OWNER — single-replica scope | Scaling acceptance remains separate. |
+| R4 — Paying property-management organizations | CLOSED BY OWNER — sandbox foundation | Paid lifecycle, production enforcement and merchant/commercial readiness carried into R5. Live charging remains disabled. |
+| R5 — Marketplace and regional rollout | ACTIVE; partially delivered | Active tenancy operations, live exit/relisting, future-document regression and regional/commercial acceptance remain open. |
+
+### Live demo progress now accepted
+
+- The meaningful move-in checklist and deposit ledger path completed as an explicitly labelled **simulation**. The owner approved activation, and the tenancy became active. No real funds received or physical inspection/move-in is claimed.
+- Renter access, organization selection, active-tenancy/agreement visibility and refresh persistence passed. The earlier multi-organization Access Denied blocker is resolved for this tested path.
+- Owner readback passed: property **Rented**, current renter link, and reciprocal associated-property link. Private release preview reports the rented property ineligible for public listing. Independent anonymous withdrawal/relisting acceptance remains open.
+- The renter-details property photo and recorded-currency rent labels passed live owner readback after [PR #510](https://github.com/WasanthaK/khrental/pull/510). No historical signed documents or amounts were rewritten.
+
+### Supporting verification
+
+[PR #508](https://github.com/WasanthaK/khrental/pull/508), [#509](https://github.com/WasanthaK/khrental/pull/509) and [#510](https://github.com/WasanthaK/khrental/pull/510) are merged and deployed. [PR #510 application CI](https://github.com/WasanthaK/khrental/actions/runs/42062177002) passed **898/898** tests and build; desktop/mobile currency/photo screenshots were inspected. [Release 42062656866](https://github.com/WasanthaK/khrental/actions/runs/42062656866) passed, and the independent public build check matched. Automated disposable SQL proved activation/linkage and inspected, settled closure restoring availability with retained history and isolation; **this is not live exit acceptance**.
+
+### Remaining execution order
+
+1. **Active-tenancy operations:** organization Administrator prepares the demo invoice; renter verifies invoice/payment-proof/receipt access. Complete renter maintenance submission, owner triage, existing assigned staff work and participant readback. Identify the exact account and organization before every switch.
+2. **Live exit and eligible relisting:** notice/response, move-out inspection, financial settlement and closure; verify availability/public eligibility and retained documents/history. Do not release stock while another active tenancy or reservation still blocks it.
+3. **Final operational acceptance:** next legitimate provider signing verifies layout/signature positions and automatic signed-PDF plus audit retention; finish remaining desktop/mobile and negative-path checks. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains **OPEN**.
+4. **Paid/regional launch:** complete payment lifecycle, production entitlement enforcement and merchant/disclosure prerequisites for Sri Lanka, then separate Brunei inventory/currency/lifecycle/commercial acceptance. Do not reopen owner-closed R3/R4 merely to advance the remaining R5 work.
+
+A contract end date alone does not establish physical vacancy: active tenancy release remains governed by inspection, settlement and closure. Unsigned document cancellation and accepted-reservation withdrawal/expiry are separate transitions. Live cancellation/expiry/exit acceptance is not claimed from fixture tests.
+
+## Historical PR #506 checkpoint — 5 November 2026
 
 [PR #506](https://github.com/WasanthaK/khrental/pull/506) is **implemented, tested and deployed**. Move-in deposits and exit settlements use persisted agreement `terms.currency`; absent/malformed currency is disclosed instead of silently labelling amounts LKR. Historical amounts, agreements and PDFs are unchanged.
 
