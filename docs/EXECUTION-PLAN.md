@@ -4,7 +4,7 @@
 
 The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) records merged [PR #503](https://github.com/WasanthaK/khrental/pull/503), application CI **886/886**, passing browser/PDF and disposable SQL acceptance, and successful [deployment 41991277841](https://github.com/WasanthaK/khrental/actions/runs/41991277841). Public build **268e409b33a86b789e8cd6f1e0e767d596b6ac2b** is serving from revision **0000458** with live MSSQL connectivity and unchanged single-replica capacity. Future-contract layout and move-in/deposit retry corrections are deployed. Historical signed documents are unchanged.
 
-Signed-in browser acceptance remains blocked after one secure-authentication timeout and one fresh-tab connection failure; no repeated login request was made. Exit/settlement regression and Sri Lanka support/policy links are being verified separately. Implementation, automated tests, deployment and live participant acceptance remain distinct. R1–R4 retain PR #502's owner decisions; R5 remains active and live charging remains disabled.
+Signed-in browser acceptance remains blocked: one secure-authentication request timed out, and the post-deployment verification tab reaches the ordinary sign-in page without an authenticated session. No repeated login request was made. [PR #504](https://github.com/WasanthaK/khrental/pull/504) passed disposable SQL exit/settlement/closure/history checks and 44 public page/viewport checks; its support/policy links were deployed by [marketing release 41993738422](https://github.com/WasanthaK/khrental/actions/runs/41993738422) and observed on the live LK help page. Implementation, automated tests, deployment and live participant acceptance remain distinct. R1–R4 retain PR #502's owner decisions; R5 remains active and live charging remains disabled.
 
 ## Controlling owner decision — R3/R4 closed; R5 active — 5 November 2026
 
@@ -20,7 +20,7 @@ The owner requested closing R3 and R4 and moving to R5 after reviewing the deplo
 
 R4 closure is a scope and sequencing decision, not certification of live paid service. Live charging remains disabled. No further R3/R4 reopening or repeated acceptance is required merely to advance the operational R5 work. The [R4/R5 delivery ledger](R4-R5-DELIVERY.md) retains the exact carried-forward paid-launch prerequisites and the [R3/R4 evidence checkpoint](R4-SANDBOX-RUNTIME-ACCEPTANCE-20261104.md) records deployed proof.
 
-**Immediate R5 task:** correct signature overlap and final-page numbering in future contracts through the existing template/Evia flow; preserve the already signed historical document. Then proceed through meaningful move-in readiness, authorized deposit evidence, explicit activation/stock withdrawal, active tenancy and exit. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for that business journey.
+**Immediate R5 task:** verify the deployed future-contract layout with the next legitimate provider signing and automatic retention. Continue the approved live demo through meaningful move-in readiness, labelled simulated deposit evidence if used, explicit activation/stock withdrawal, active tenancy and exit. Layout and move-in corrections are deployed; disposable tests do not replace those live exits. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains open for that business journey.
 
 ---
 
