@@ -1,20 +1,28 @@
-## Current canonical reconciliation — 3 November 2026
+# Canonical progress tracker
 
-## Active R4/R5 delivery programme — 4 November 2026
+## Current owner decision — 5 November 2026
 
-The owner has instructed completion of paying property-management organizations and marketplace/regional rollout. Proceed with independent R4 subscription engineering alongside the remaining R5 rental lifecycle work. This replaces the blanket website-first deferral of all subscription implementation; live paid launch still requires the actual merchant, commercial and regional acceptance evidence. Sri Lanka precedes Brunei.
+| Milestone | Current disposition |
+| --- | --- |
+| R1 — Original rental operations | CLOSED BY OWNER; existing narrow waivers retained |
+| R2 — Invoice immutable archive | OWNER-DEFERRED; incomplete |
+| R3 — Safe registration/account access | CLOSED BY OWNER for the single-replica release; verify separately before scaling |
+| R4 — Paying organizations | CLOSED BY OWNER for the deployed sandbox foundation |
+| R5 — Marketplace/regional rollout | ACTIVE; contract layout is next, then move-in/activation, tenancy/exit, Sri Lanka and Brunei |
 
-The [R4/R5 delivery ledger](../R4-R5-DELIVERY.md) records the work, current draft implementation, remaining engineering and launch decisions. R4 and R5 remain incomplete; source preparation is not production acceptance. Preserve prior scoped closures, owner deferrals and completed signed-document/audit-download acceptance.
+R4's genuine payment lifecycle, production inventory/entitlement enforcement and merchant/commercial readiness remain explicit R5 paid-launch prerequisites. They have not passed by milestone closure. Live charging remains disabled. Preserve completed signing/audit evidence and continue the operational R5 journey without repeating accepted R3/R4 work.
 
----
+The [canonical plan](../EXECUTION-PLAN.md) and [R5 delivery ledger](../R4-R5-DELIVERY.md) contain the detailed evidence, remaining obligations and execution order. [Issue #459](https://github.com/WasanthaK/khrental/issues/459) stays open for operational acceptance.
+
+## Retained journey evidence — 3 November 2026
 
 **Current agreement audit view/download: CLOSED — live PASS.** The administrator opened and downloaded the matching two-page audit, then reopened it after a full application reload. #491 fixes exported audit filenames and retained aliases; #492 checks local storage before requesting Evia authentication. #492 deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175) passed on ready revision 0000452 with exact build and MSSQL readiness; application CI **863/863**, focused Evia **125/125**, build and provider integration checks passed.
 
 The current live demo has also passed enquiry/reply/readback, viewing completion, application review/resubmission/acceptance, offer acceptance, replacement agreement preparation, both signatures and signed-PDF retrieval. Historical OPEN/not-sent statements below are superseded for these observed paths. Future automatic signed-PDF/audit capture needs one next-contract acceptance; it does not reopen the current download.
 
-**Next:** contract signature spacing/pagination, meaningful move-in checklist plus deposit evidence and explicit activation, active-tenant operations and exit, then consolidated website acceptance. #459 stays OPEN; subscriptions follow the operational website. Original R1 owner acceptance and deferred invoice archive R2 remain unchanged. The March sprint overview below is a historical migration baseline, not the current product-status dashboard.
+**Next:** contract signature spacing/pagination, meaningful move-in checklist plus deposit evidence and explicit activation, active-tenant operations and exit, then consolidated website acceptance. #459 stays OPEN; paid-launch prerequisites are now tracked under R5 as recorded above. Original R1 owner acceptance and deferred invoice archive R2 remain unchanged. The March sprint overview below is a historical migration baseline, not the current product-status dashboard.
 
-Full status, evidence boundaries and ordered work are in the [current canonical plan](../EXECUTION-PLAN.md#current-canonical-status-and-plan-review--3-november-2026).
+Full status, evidence boundaries and ordered work are in the [current canonical plan](../EXECUTION-PLAN.md).
 
 ## Historical checkpoints
 
