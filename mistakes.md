@@ -19,3 +19,7 @@ Do not hard-code a dollar sign or infer a historical agreement's denomination fr
 ## Resolve billing participants through the invoice relationship
 
 An organization-scoped invoice references a global app_users identity. Do not filter that identity by its legacy tenant_id: a member may rent in another organization. Keep invoice authorization and tenant scope authoritative and preserve historical participant readback. Exercise the same global renter in both organizations in SQL acceptance.
+
+## Resolve maintenance participants through scoped request references
+
+Do not apply app_users.tenant_id to a request's renter, assigned worker or comment author. These are global identities referenced by tenant-scoped maintenance records. Keep membership, property, assignment and private-comment authorization intact; verify names and privacy when identities originated elsewhere.
