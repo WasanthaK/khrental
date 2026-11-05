@@ -34,6 +34,19 @@ const AuthProvider = ({ children }) => {
   const platformClient = getPlatformClient();
 
   const normalizeTenantState = (userRecord, tenantContext = null) => {
+    // A verified list of choices is not an active membership. Keep every
+    // cached tenant/role out until the user explicitly selects and reloads it.
+    if (tenantContext?.resolution === 'selection-required') {
+      return {
+        ...userRecord,
+        tenantContextVerified: true,
+        ownerOnboarding: null,
+        tenantId: null, tenant_id: null, tenant: null, membership: null,
+        memberships: tenantContext.memberships,
+        tenantResolution: 'selection-required',
+        hasTenantAccess: false
+      };
+    }
     const memberships = Array.isArray(tenantContext?.memberships)
       ? tenantContext.memberships
       : Array.isArray(userRecord?.memberships)
@@ -241,6 +254,9 @@ const AuthProvider = ({ children }) => {
         started.data.session.access_token!==current.data?.session?.access_token||
         String(activeAuthUser.id)!==String(current.data?.session?.user?.id)){
         throw new Error('Your signed-in account changed. Try again with your current account.');
+      }
+      if (fallbackAuthUser?.tenantResolution === 'selection-required' && !refreshedUser?.tenantContextVerified) {
+        throw new Error('We could not open this organization. Please try again.');
       }
       setUserData(refreshedUser);
 
@@ -544,7 +560,7 @@ const AuthProvider = ({ children }) => {
   };
 
   const memberships = Array.isArray(userData?.memberships) ? userData.memberships : [];
-  const activeMembership = userData?.membership
+  const activeMembership = userData?.tenantResolution === 'selection-required' ? null : userData?.membership
     || memberships.find((entry) => (entry?.tenant_id || entry?.tenant?.id) === userData?.tenantId)
     || memberships.find((entry) => entry?.is_default)
     || memberships[0]
@@ -552,7 +568,8 @@ const AuthProvider = ({ children }) => {
   const activeTenant = userData?.tenant || activeMembership?.tenant || null;
   const activeTenantId = userData?.tenantId || activeTenant?.id || activeMembership?.tenant_id || null;
   const hasMultipleTenants = memberships.length > 1;
-  const hasTenantAccess = !!userData && (userData?.hasTenantAccess || memberships.length > 0 || !!activeTenantId);
+  const hasTenantAccess = !!userData && userData.tenantResolution !== 'selection-required'
+    && (userData?.hasTenantAccess || memberships.length > 0 || !!activeTenantId);
 
   // Create context value
   const value = {

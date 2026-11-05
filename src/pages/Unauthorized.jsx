@@ -1,10 +1,52 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { getDefaultLandingPath } from '../utils/accessPolicy.js';
 
 const Unauthorized = () => {
-  const { user } = useAuth();
-  
+  const { user, switchTenant, isSwitchingTenant, logout } = useAuth();
+  const navigate = useNavigate();
+  const [selectionError, setSelectionError] = useState(null);
+
+  if (user?.tenantResolution === 'selection-required') {
+    const selectWorkspace = async (tenantId) => {
+      setSelectionError(null);
+      const { data, error } = await switchTenant(tenantId);
+      if (error || !data?.tenantContextVerified || !data?.membership
+          || String(data.membership.tenant_id).toLowerCase() !== String(tenantId).toLowerCase()) {
+        setSelectionError(error?.message || 'We could not open this organization. Please try again.');
+        return;
+      }
+      navigate(getDefaultLandingPath({ user: data, membership: data.membership }), { replace: true });
+    };
+
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
+        <div className="max-w-md w-full space-y-6 rounded-xl border bg-white p-6 shadow-sm">
+          <div>
+            <p className="text-sm text-gray-600 break-words">{user.email}</p>
+            <h1 className="mt-2 text-2xl font-bold text-gray-900">Choose an organization</h1>
+            <p className="mt-2 text-sm text-gray-600">Your account belongs to more than one organization. Choose where to continue.</p>
+          </div>
+          {selectionError && <p role="alert" className="text-sm text-red-700">{selectionError}</p>}
+          <div className="space-y-3">
+            {user.memberships.map((entry) => (
+              <button key={entry.tenant_id} type="button" disabled={isSwitchingTenant}
+                onClick={() => selectWorkspace(entry.tenant_id)}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-left text-gray-900 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                <span className="block font-semibold">{entry.tenant?.name || 'Organization'}</span>
+                <span className="block text-sm text-gray-600">{['rentee', 'tenant'].includes(entry.role) ? 'Renter' : entry.role === 'admin' ? 'Administrator' : 'Staff'}</span>
+              </button>
+            ))}
+          </div>
+          {isSwitchingTenant && <p role="status" className="text-sm text-gray-600">Opening your organization…</p>}
+          <button type="button" onClick={async () => { await logout(); navigate('/login', { replace: true }); }}
+            className="text-sm text-blue-700 underline">Sign out</button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 text-center">
@@ -16,7 +58,7 @@ const Unauthorized = () => {
             You don't have permission to access this page.
           </p>
         </div>
-        
+
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mt-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -31,7 +73,7 @@ const Unauthorized = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="mt-6">
           <Link
             to="/"
@@ -45,4 +87,4 @@ const Unauthorized = () => {
   );
 };
 
-export default Unauthorized; 
+export default Unauthorized;

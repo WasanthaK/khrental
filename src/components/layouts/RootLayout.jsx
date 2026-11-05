@@ -9,11 +9,13 @@ import ForceRefresh from '../common/ForceRefresh';
 import { ConfirmContextProvider } from '../../contexts/ConfirmContext';
 import NavigationRegistrar from './NavigationRegistrar';
 import WelcomeGuide from '../WelcomeGuide';
+import Unauthorized from '../../pages/Unauthorized';
 
 const RootLayout = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const isAuthFlowIsolated = isAuthFlowIsolatedPath(location.pathname);
+  const isAuthFlowIsolated = isAuthFlowIsolatedPath(location.pathname)
+    || user?.tenantResolution === 'selection-required';
   const [initStatus, setInitStatus] = useState({
     initialized: false,
     error: null,
@@ -63,6 +65,10 @@ const RootLayout = () => {
   // password changes, tenant context or redirects. Invitation redemption may
   // still inspect a valid existing session inside AcceptInvite solely to avoid
   // replacing a different signed-in user's browser session.
+  if (user?.tenantResolution === 'selection-required') {
+    return <Unauthorized />;
+  }
+
   if (isAuthFlowIsolated) {
     return <Outlet />;
   }

@@ -93,10 +93,14 @@ const readErrorPayload = async (response) => {
 
   if (contentType.includes('application/json')) {
     const payload = await response.json().catch(() => null);
-    return payload?.error || payload?.message || JSON.stringify(payload);
+    return {
+      message: payload?.error || payload?.message || JSON.stringify(payload),
+      code: payload?.code,
+      details: payload?.details
+    };
   }
 
-  return response.text().catch(() => '');
+  return { message: await response.text().catch(() => '') };
 };
 
 const apiRequest = async (path, options = {}) => {
@@ -121,7 +125,10 @@ const apiRequest = async (path, options = {}) => {
   });
 
   if (!response.ok) {
-    const error = new Error(await readErrorPayload(response));
+    const payload = await readErrorPayload(response);
+    const error = new Error(payload.message);
+    error.code = payload.code;
+    error.details = payload.details;
     error.status = response.status;
     // Only a rejected authenticated request invalidates its own session.
     // A delayed failure for A must never sign out a newly signed-in B.
@@ -297,6 +304,19 @@ const authClient = {
       }
       return { data: tenantContext, error: null };
     } catch (error) {
+      if (error.status === 409 && error.code === 'TENANT_SELECTION_REQUIRED'
+          && Array.isArray(error.details?.memberships)
+          && error.details.memberships.length > 1
+          && error.details.memberships.every(entry => entry?.status === 'active'
+            && typeof entry.tenant_id === 'string' && entry.tenant_id)
+          && token && token === currentSession?.access_token
+          && token === loadStoredSession()?.access_token) {
+        return { data: {
+          tenantId: null, tenant: null, membership: null,
+          memberships: error.details.memberships,
+          resolution: 'selection-required'
+        }, error: null };
+      }
       return { data: null, error };
     }
   },
