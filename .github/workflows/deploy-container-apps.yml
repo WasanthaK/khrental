@@ -17,6 +17,8 @@ on:
       # CI-only executable acceptance scripts are not runtime container code.
       # PR-head verification still runs without path filters.
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'scripts/test-r5-onboarding-sqlserver.mjs'
+      - 'scripts/test-r5-layout-browser.mjs'
       # Standalone operator audit; not imported by the serving application.
       - 'scripts/audit-r2-public-access.mjs'
       # Operator-only pilot verifier must not redeploy the application.

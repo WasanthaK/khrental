@@ -21,13 +21,14 @@ try {
   }
   await pool.request().query('CREATE DATABASE r5proof'); await pool.close();
   pool=await new sql.ConnectionPool({...config,database:'r5proof'}).connect();
-  for(const file of ['20260913_00_create_fresh_mssql_schema.sql','20260915_01_create_staff_property_assignments.sql','20260915_02_create_user_invitations.sql','20260916_02_add_staff_permission_bundles.sql','20260916_03_add_tenancy_onboarding.sql']) {
+  for(const file of ['20260913_00_create_fresh_mssql_schema.sql','20260915_01_create_staff_property_assignments.sql','20260915_02_create_user_invitations.sql','20260916_02_add_staff_permission_bundles.sql','20260916_03_add_tenancy_onboarding.sql','20260916_04_add_billing_payment_lifecycle.sql','20260916_06_add_tenancy_exit_settlement.sql']) {
     await pool.request().batch(fs.readFileSync(`migrations/${file}`,'utf8'));
   }
   Object.assign(process.env,{MSSQL_SERVER:'127.0.0.1',MSSQL_PORT:String(port),MSSQL_DATABASE:'r5proof',MSSQL_USER:'sa',MSSQL_PASSWORD:password,MSSQL_AUTHENTICATION:'sql-password',MSSQL_ENCRYPT:'false',MSSQL_TRUST_SERVER_CERTIFICATE:'true',ALLOW_LEGACY_AUTH_HEADERS:'false'});
   delete process.env.VITE_ENABLE_DEV_BYPASS;
   const {ensureAuthSchema,createAuthRecord,issueAuthSession,createSessionAuthMiddleware}=await import('../src/api/auth/index.js');
   const {createTenancyOnboardingRouter}=await import('../src/api/platform/tenancyOnboardingRouter.js');
+  const {createTenancyExitRouter}=await import('../src/api/platform/tenancyExitRouter.js');
   ({closeMssqlPool}=await import('../src/api/mssql/pool.js'));
   await ensureAuthSchema();
   const q=async(text,params={})=>{const r=pool.request();for(const [k,v] of Object.entries(params))r.input(k,v);return (await r.query(text)).recordset||[];};
@@ -49,6 +50,7 @@ try {
   };
   const a=await fixture('r5-a'),b=await fixture('r5-b');
   const app=express();app.use(express.json());app.use('/api',createSessionAuthMiddleware());app.use('/api/tenancies',createTenancyOnboardingRouter());
+  app.use('/api/tenancy-exit',createTenancyExitRouter());
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin=`http://127.0.0.1:${server.address().port}`;
@@ -90,6 +92,45 @@ try {
   assert.equal((await call(`/checklist/items/${checklist.items[0].id}`,{status:'pending'},a.owner,a.tenantId,'PATCH')).status,404,'activated inspection retained');
   const summary=await fetch(`${origin}/api/tenancies/me/summary`,{headers:{Authorization:`Bearer ${a.renter.token}`,'x-tenant-id':a.tenantId}});
   assert.equal((await summary.json()).data.tenancies.length,1);
+  const exitCall=async(suffix='',body,who=a.owner,tenantId=a.tenantId,method=body?'POST':'GET',notice=false)=>{
+    const route=notice?suffix:`/agreements/${a.agreementId}${suffix}`;
+    const response=await fetch(`${origin}/api/tenancy-exit${route}`,{method,headers:{Authorization:`Bearer ${who.token}`,'x-tenant-id':tenantId,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+    return {status:response.status,json:await response.json()};
+  };
+  assert.equal((await exitCall('',null,b.owner,b.tenantId)).status,404);
+  assert.equal((await exitCall('/close',{})).status,409,'closure requires inspection and settlement');
+  const notice=await exitCall('/notices',{noticeType:'termination_notice',noticeDate:'2026-11-05',effectiveDate:'2026-12-05',content:'DISPOSABLE DEMO notice; no real tenancy affected.'});
+  assert.equal(notice.status,201);
+  const noticePath=`/notices/${notice.json.data.id}/respond`;
+  assert.equal((await exitCall(noticePath,{response:'acknowledged'},b.renter,b.tenantId,'POST',true)).status,404);
+  assert.equal((await exitCall(noticePath,{response:'acknowledged'},a.renter,a.tenantId,'POST',true)).status,200);
+  assert.equal((await exitCall(noticePath,{response:'acknowledged'},a.renter,a.tenantId,'POST',true)).status,409);
+  const inspection=await exitCall('/move-out-inspection',{inspectionDate:'2026-12-05',notes:'Synthetic inspection fixture; no physical inspection claimed.'});
+  assert.equal(inspection.status,201);assert.equal(inspection.json.data.inspection.items.length,3);
+  assert.equal((await exitCall('/move-out-inspection/complete',{})).status,409);
+  assert.equal((await exitCall('/move-out-inspection/complete',{},a.renter)).status,403);
+  for(const item of inspection.json.data.inspection.items) {
+    assert.equal((await exitCall(`/move-out-inspection/items/${item.id}`,{conditionStatus:'good',notes:'Synthetic fixture condition'},a.owner,a.tenantId,'PATCH')).status,200);
+  }
+  assert.equal((await exitCall('/move-out-inspection/complete',{})).status,200);
+  const approved=await exitCall('/settlement/approve',{notes:'SIMULATED TEST refund; no funds transferred.'});
+  assert.equal(approved.status,200);assert.equal(approved.json.data.calculation.refundAmount,125000);assert.equal(approved.json.data.calculation.amountDue,0);
+  assert.equal((await exitCall('/settlement/settle',{})).status,400,'refund reference required');
+  assert.equal((await exitCall('/settlement/settle',{reference:'SIMULATED-R5-REFUND'})).status,200);
+  const closeBody={effectiveEndDate:'2026-12-05',reason:'DISPOSABLE DEMO closure'};
+  const closures=await Promise.all([exitCall('/close',closeBody),exitCall('/close',closeBody)]);
+  assert.deepEqual(closures.map(x=>x.status).sort(),[200,409],'only one concurrent closure may change occupancy');
+  const historical=(await exitCall('',null,a.renter)).json.data;
+  assert.equal(historical.agreement.status,'closed');assert.equal(historical.inspection.status,'completed');
+  assert.equal(historical.settlement.status,'settled');assert.equal(historical.settlement.refund_amount,125000);
+  assert.equal(historical.notices[0].status,'acknowledged');assert.equal(historical.agreement.signature_status,'completed');
+  assert.equal((await one('SELECT status FROM properties WHERE id=@id',{id:a.propertyId})).status,'available','closed tenancy releases stock eligibility');
+  assert.equal((await q("SELECT id FROM tenancy_lifecycle_events WHERE agreement_id=@id AND event_type='tenancy_closed'",{id:a.agreementId})).length,1);
+  assert.equal((await call('/onboarding')).json.data.deposit.transactions.length,1,'deposit history survives closure');
+  assert.equal((await exitCall(`/move-out-inspection/items/${inspection.json.data.inspection.items[0].id}`,{conditionStatus:'damaged'},a.owner,a.tenantId,'PATCH')).status,404,'completed inspection is immutable');
+  assert.equal((await exitCall('/settlement/approve',{})).status,409,'settled history cannot be reapproved');
+  assert.equal((await call('/activate',{})).status,409,'closed tenancy cannot be reactivated');
+  console.log('R5_EXIT_SQL=PASS notice_ack isolation inspection settlement refund_reference closure_race stock_release history renter_readback');
   console.log('R5_ONBOARDING_SQL=PASS empty_denial repair concurrency deposits replay conflict rollback isolation activation readback retained_inspection renter_access');
 } finally {
   await new Promise(r=>server?server.close(r):r());await closeMssqlPool?.();await pool?.close();if(started)docker(['rm','-f',name]);

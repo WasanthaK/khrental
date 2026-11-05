@@ -1,9 +1,10 @@
 # KH Rentals Execution Plan
 
-## R5 implementation checkpoint — 5 November 2026
+## R5 deployment checkpoint — 5 November 2026
 
-The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) now records the contract-footer/signature-space correction and move-in empty-checklist/deposit-retry defects under implementation. CI, deployment and live evidence are separate gates. Secure browser authentication timed out; signed-in acceptance is unverified. R1–R4 retain the owner decisions in PR #502. R5 remains active.
+The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) records merged [PR #503](https://github.com/WasanthaK/khrental/pull/503), application CI **886/886**, passing browser/PDF and disposable SQL acceptance, and successful [deployment 41991277841](https://github.com/WasanthaK/khrental/actions/runs/41991277841). Public build **268e409b33a86b789e8cd6f1e0e767d596b6ac2b** is serving from revision **0000458** with live MSSQL connectivity and unchanged single-replica capacity. Future-contract layout and move-in/deposit retry corrections are deployed. Historical signed documents are unchanged.
 
+Signed-in browser acceptance remains blocked after one secure-authentication timeout and one fresh-tab connection failure; no repeated login request was made. Exit/settlement regression and Sri Lanka support/policy links are being verified separately. Implementation, automated tests, deployment and live participant acceptance remain distinct. R1–R4 retain PR #502's owner decisions; R5 remains active and live charging remains disabled.
 
 ## Controlling owner decision — R3/R4 closed; R5 active — 5 November 2026
 
