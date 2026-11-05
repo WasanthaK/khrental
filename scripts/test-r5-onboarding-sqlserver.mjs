@@ -59,7 +59,7 @@ try {
   assert.equal((await call('/onboarding',null,b.owner,b.tenantId)).status,404);
   assert.equal((await call('/onboarding',null,a.renter)).status,403);
   assert.equal((await call('/checklist',{})).status,409,'empty property cannot manufacture an inspection');
-  const empty=await one("INSERT tenancy_move_in_checklists(tenant_id,agreement_id,propertyid,status) OUTPUT INSERTED.id VALUES(@tenantId,@agreementId,@propertyId,'completed')",a);
+  const empty=await one("INSERT tenancy_move_in_checklists(tenant_id,agreement_id,propertyid,status) OUTPUT INSERTED.id VALUES(@tenantId,@agreementId,@propertyId,'completed')",{tenantId:a.tenantId,agreementId:a.agreementId,propertyId:a.propertyId});
   assert.equal((await call('/onboarding')).json.data.readiness.checks.moveInChecklistComplete,false,'legacy empty completed header is not evidence');
   await q('UPDATE properties SET checklistitems=@items WHERE id=@id',{id:a.propertyId,items:JSON.stringify(['Keys counted','Meter readings recorded','Room condition reviewed'])});
   const initialized=await Promise.all([call('/checklist',{}),call('/checklist',{})]);
