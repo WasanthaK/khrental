@@ -27,3 +27,19 @@ Do not apply app_users.tenant_id to a request's renter, assigned worker or comme
 ## Test the actual renter navigation link
 
 A global account may have role authenticated while its selected organization membership is rentee. Maintenance cards must select the portal from the active membership. Opening the correct detail route directly does not prove that the list card links there; click the real card in desktop/mobile browser acceptance.
+
+## A closed tenancy must not leave its old reservation suppressing stock
+
+A public-stock check that reads only the offer status/deadline can keep an available property hidden after explicit settled closure. Ignore holds linked to a closed agreement on public reads, retire those exact holds transactionally at closure, and reconcile older closed holds on governed offer reads. Preserve other valid reservations, active tenancy guards, unsigned replacement reservations, agreement links and audit history.
+
+## Respect the offer audit request constraint for system events
+
+Offer audit actor/request/hash fields are an all-or-none request group. A closure-driven offer retirement is a system lifecycle event, like expiry, and uses the existing null request group. The acting administrator remains on the agreement and tenancy closure audit in the same transaction. Do not invent a client request or weaken the schema constraint.
+
+## Protected document buttons must carry the active account context
+
+Opening a protected storage URL in a new window drops bearer and selected-organization headers. Renter agreement actions must use the existing authenticated document viewer, including after closure, with signed-only selection and temporary-byte cleanup. Keep storage authorization unchanged and click the actual renter button in browser acceptance.
+
+## Closed is a retained-document lifecycle state
+
+Retained signed-PDF and administrator audit authorization must recognize explicitly closed tenancies. Preserve the exact tenant, participant/administrator, completed signature, retained object and published archive checks. Test authenticated closed-tenant access through the actual browser button; testing only signed or active agreements misses this lifecycle boundary.

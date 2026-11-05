@@ -1,4 +1,5 @@
 import express from 'express';
+import { retireClosedRentalOffers } from '../enquiries/offerStore.js';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
@@ -608,6 +609,12 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
           { tenantId: req.tenantId, agreementId: agreement.id, endDate: effectiveEndDate, closedBy: req.user.id, reason: req.body?.reason || 'tenancy_closed' }
         );
         if (!closed) throw createRequestError(409, 'Tenancy status changed before closure.', 'TENANCY_STATE_CONFLICT');
+        if (process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY === 'true') {
+          await retireClosedRentalOffers((statement, params) => queryTransaction(transaction, statement, params), {
+            tenantId: req.tenantId, propertyId: agreement.propertyid,
+            agreementId: agreement.id
+          });
+        }
         if (agreement.unitid) {
           await queryTransaction(
             transaction,

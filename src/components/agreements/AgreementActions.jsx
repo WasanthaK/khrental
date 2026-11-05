@@ -12,6 +12,7 @@ import SignatureStatusTracker from '../ui/SignatureStatusTracker';
 import SignatureStatusNotification from '../ui/SignatureStatusNotification';
 import SignatureProcessDetails from '../ui/SignatureProcessDetails';
 import AgreementStatusDashboard from './AgreementStatusDashboard';
+import AgreementDocument from './AgreementDocument';
 
 const shortId = (value) => String(value || '').slice(0, 8);
 const summarizeStoredSignatories = (value) => {
@@ -48,6 +49,7 @@ const summarizePolledSignatories = (value) => (
 
 const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnabled = true }) => {
   const [loading, setLoading] = useState(false);
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [error, setError] = useState(null);
   const [signatureStatus, setSignatureStatus] = useState(null);
   const [prevSignatureStatus, setPrevSignatureStatus] = useState(null);
@@ -61,7 +63,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
   
   // Track if we should show the send button - only in review status
   const showSendButton = agreement.status === 'review' && agreement.documenturl;
-  const isSignatureComplete = ['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
+  const isSignatureComplete = ['signed', 'completed', 'active', 'closed'].includes(String(agreement.status || '').toLowerCase())
     || ['signed', 'completed', 'signing_complete'].includes(String(agreement.signature_status || '').toLowerCase());
   const retainedSignedDocumentUrl = [
     agreement.signed_document_url,
@@ -362,7 +364,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
 
   const handleViewDocument = () => {
     if (viewDocumentUrl) {
-      window.open(viewDocumentUrl, '_blank', 'noopener,noreferrer');
+      setShowDocumentViewer(true);
     } else if (isSignatureComplete) {
       toast.error('Signed document is still being retained. Please try again shortly.');
     } else {
@@ -536,6 +538,10 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
         <div className="mt-2 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
           {error}
         </div>
+      )}
+
+      {showDocumentViewer && viewDocumentUrl && (
+        <AgreementDocument documentUrl={viewDocumentUrl} onClose={() => setShowDocumentViewer(false)} />
       )}
 
       <AgreementStatusDashboard

@@ -12,7 +12,24 @@ const audit=(q,row,actor=null,input=null,eventType=row.status)=>q(`INSERT INTO d
  VALUES(@id,@actorId,@requestId,@hash,@version,@eventType,@snapshot)`,
  {id:row.enquiry_id,actorId:actor?.actorId||null,requestId:input?.requestId||null,hash:input?.payloadHash||null,
    version:row.version,eventType,snapshot:JSON.stringify(offerReceipt(row))});
-export const expireRentalOffers=async(q,propertyId)=>{
+// Run inside the caller's transaction. Keep the offer/agreement bridge and
+// immutable terms, but retire only holds belonging to a closed tenancy.
+export const retireClosedRentalOffers=async(q,{tenantId,propertyId,agreementId=null})=>{
+  const rows=await q(`UPDATE h SET status='invalidated',version=h.version+1,updated_at=SYSUTCDATETIME()
+    OUTPUT INSERTED.* FROM dbo.property_rental_offers h
+    WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId
+      AND h.status IN('accepted','agreement')
+      AND (@agreementId IS NULL OR h.agreement_id=@agreementId)
+      AND EXISTS(SELECT 1 FROM dbo.agreements ended WHERE ended.id=h.agreement_id
+        AND ended.tenant_id=h.tenant_id AND ended.propertyid=h.property_id
+        AND (ended.unitid=h.unit_id OR (ended.unitid IS NULL AND h.unit_id IS NULL)) AND ended.status='closed')`,{tenantId,propertyId,agreementId});
+  // This is a system lifecycle event, like expiry. The closure actor remains
+  // in agreements.closed_by and the transaction's tenancy_lifecycle_events.
+  for(const row of rows){await audit(q,row,null,null,'tenancy_closed');}
+  return rows.length;
+};
+export const expireRentalOffers=async(q,propertyId,tenantId)=>{
+  await retireClosedRentalOffers(q,{tenantId,propertyId});
   const rows=await q(`UPDATE dbo.property_rental_offers SET status='expired',version=version+1,updated_at=SYSUTCDATETIME()
     OUTPUT INSERTED.* WHERE property_id=@propertyId AND
     ((status='offered' AND offer_until<=SYSUTCDATETIME()) OR (status IN('accepted','agreement') AND hold_until<=SYSUTCDATETIME()))
@@ -26,7 +43,7 @@ export const createOfferStore=({poolProvider}={})=>{
       JOIN dbo.tenants t ON t.id=p.tenant_id WHERE p.id=@propertyId AND p.tenant_id=@tenantId
       AND (t.status IS NULL OR t.status='active')`,{propertyId:e.property_id,tenantId:e.tenant_id}))[0];
     if(!parent){throw conflict('RENTAL_PROPERTY_UNAVAILABLE','The property workspace is unavailable.');}
-    await expireRentalOffers(q,e.property_id);
+    await expireRentalOffers(q,e.property_id,e.tenant_id);
     return work(q,e,parent);
   },true);
   const options=async(q,e)=>{

@@ -40,7 +40,7 @@ export const authorizeSignedAgreementDocumentRead = async ({
   const agreement = await loadSignedAgreement(target);
   if (!agreement || !same(agreement.id, target.agreementId)
       || !same(agreement.tenant_id, target.tenantId)
-      || !['signed', 'completed', 'active'].includes(String(agreement.status || '').toLowerCase())
+      || !['signed', 'completed', 'active', 'closed'].includes(String(agreement.status || '').toLowerCase())
       || (agreement.eviasignreference &&
         String(agreement.signature_status || '').toLowerCase() !== 'completed')) {
     return deny('agreement_not_completed');

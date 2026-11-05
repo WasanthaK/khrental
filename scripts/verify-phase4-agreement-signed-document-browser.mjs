@@ -218,5 +218,41 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
   assert.equal(stillSigned.status, 200);
   assert.equal(lower(stillSigned.payload.data.signed_document_url), lower(signedUrl));
   assert.equal(stillSigned.payload.data.notes || null, null);
-  console.log('PASS: signed-PDF bytes, real-session tenant isolation, immutable signing authority and browser cleanup');
+  // The renter's actual View Document action must retain authenticated byte
+  // transport after closure, instead of opening the protected URL anonymously.
+  await q("UPDATE agreements SET status='closed' WHERE id=@agreementId AND tenant_id=@tenantId",
+    {agreementId,tenantId:a.tenantId});
+  const renterContext=await browser.createBrowserContext();
+  const renterPage=await renterContext.newPage();
+  try {
+    await renterPage.evaluateOnNewDocument((token,tenantId,id,email)=>{
+      localStorage.removeItem('dev_bypass_role');
+      localStorage.setItem('khrental.activeTenantId',tenantId);
+      localStorage.setItem('khrental.local.session',JSON.stringify({access_token:token,user:{id,email,role:'rentee'}}));
+    },tokenA,a.tenantId,a.authId,a.email);
+    for(const width of [1440,390]){
+      await renterPage.setViewport({width,height:900});
+      await renterPage.goto(origin+'/rentee/agreements',{waitUntil:'networkidle0',timeout:45000});
+      await renterPage.waitForFunction(expected=>document.body.innerText.includes(expected),{timeout:30000},title);
+      const clicked=await renterPage.evaluate(expected=>{
+        const card=[...document.querySelectorAll('div.bg-white.rounded-lg.shadow-md')]
+          .find(node=>node.innerText.includes(expected)&&[...node.querySelectorAll('button')].some(b=>b.textContent.trim()==='View Document'));
+        const button=card&&[...card.querySelectorAll('button')].find(b=>b.textContent.trim()==='View Document');
+        button?.click();return Boolean(button);
+      },title);
+      assert.equal(clicked,true,'closed renter agreement must retain its document action');
+      await renterPage.waitForSelector('iframe[title="Agreement Document Viewer"][src^="blob:"]',{timeout:30000});
+      const retained=await renterPage.evaluate(async()=>{
+        const url=document.querySelector('iframe[title="Agreement Document Viewer"]').getAttribute('src');
+        const download=[...document.querySelectorAll('a[download]')].find(a=>a.textContent.includes('Download'));
+        return {url,download:download?.getAttribute('href'),bytes:await (await fetch(url)).text()};
+      });
+      assert.ok(retained.bytes.startsWith('%PDF-disposable-audit-test'));
+      assert.equal(retained.download,retained.url);
+      assert.ok(await renterPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await renterPage.click('button[aria-label="Close document viewer"]');
+      await renterPage.waitForFunction(async old=>{try{await fetch(old);return false;}catch{return true;}},{timeout:15000},retained.url);
+    }
+  } finally {await renterContext.close();}
+  console.log('PASS: signed-PDF bytes, real-session tenant isolation, immutable signing authority, closed-renter desktop/mobile access and browser cleanup');
 }
