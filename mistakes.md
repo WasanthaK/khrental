@@ -35,3 +35,7 @@ A public-stock check that reads only the offer status/deadline can keep an avail
 ## Respect the offer audit request constraint for system events
 
 Offer audit actor/request/hash fields are an all-or-none request group. A closure-driven offer retirement is a system lifecycle event, like expiry, and uses the existing null request group. The acting administrator remains on the agreement and tenancy closure audit in the same transaction. Do not invent a client request or weaken the schema constraint.
+
+## Protected document buttons must carry the active account context
+
+Opening a protected storage URL in a new window drops bearer and selected-organization headers. Renter agreement actions must use the existing authenticated document viewer, including after closure, with signed-only selection and temporary-byte cleanup. Keep storage authorization unchanged and click the actual renter button in browser acceptance.
