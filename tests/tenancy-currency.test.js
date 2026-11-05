@@ -24,3 +24,12 @@ test('legacy callers retain their existing LKR presentation', () => {
     style: 'currency', currency: 'LKR', minimumFractionDigits: 2, maximumFractionDigits: 2
   }).format(125000));
 });
+
+test('renter detail rent labels use recorded terms, including zero and missing currency', async () => {
+  const { formatAgreementRent } = await import('../src/utils/helpers.js');
+  assert.match(formatAgreementRent({rentamount:125000,terms:'{"currency":"LKR"}'}),/^LKR\s125,000\.00$/);
+  assert.match(formatAgreementRent({rentamount:0,terms:{currency:'BND',monthlyRent:125000}}),/^BND\s0\.00$/);
+  assert.equal(formatAgreementRent({terms:{monthlyRent:10}}),'10.00 (currency not recorded)');
+  assert.equal(formatAgreementRent({rentamount:125000,terms:'broken'}),'125,000.00 (currency not recorded)');
+  assert.equal(formatAgreementRent({terms:{currency:'LKR'}}),'Rent not recorded');
+});

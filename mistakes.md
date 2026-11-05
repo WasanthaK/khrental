@@ -11,3 +11,7 @@ An authenticated account with multiple active memberships may need an explicit o
 ## Treat occupancy as a tenancy relationship
 
 Use active agreements for current renters rather than the global user type or old manual property arrays. Normalize rented/occupied and active/available consistently for display. Browser cancellation must not independently set a property available; actual tenancy closure and settlement remain server-owned. Passing an end date does not prove move-out.
+
+## Render persisted currency and image shapes consistently
+
+Do not hard-code a dollar sign or infer a historical agreement's denomination from locale. Display its recorded currency, disclose missing currency, and keep zero rent valid. Registered property photos may be JSON strings or image objects; extract the URL and use the tenant-scoped display helper, with a graceful failure placeholder.

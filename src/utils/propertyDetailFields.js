@@ -14,6 +14,16 @@ const checklistText = value => {
   return typeof label === 'string' ? label.trim() : '';
 };
 
+export const getPrimaryPropertyImageUrl = images => {
+  const parsed = parseJson(images, []);
+  if (!Array.isArray(parsed)) return '';
+  return parsed.map((image, index) => ({
+    url: typeof image === 'string' ? image : image?.image_url,
+    order: Number.isFinite(Number(image?.order)) ? Number(image.order) : index
+  })).filter(image => typeof image.url === 'string' && image.url.trim())
+    .sort((a, b) => a.order - b.order)[0]?.url || '';
+};
+
 export const normalizePropertyChecklist = input => {
   const parsed = parseJson(input, []);
   return Array.isArray(parsed) ? parsed.map(checklistText).filter(Boolean) : [];

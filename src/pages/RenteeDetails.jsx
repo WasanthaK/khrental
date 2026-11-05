@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { platform as platformClient } from '../services/platformClient';
-import { formatDate } from '../utils/helpers';
+import { formatDate, formatAgreementRent } from '../utils/helpers';
+import { getPrimaryPropertyImageUrl, propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { toast } from 'react-toastify';
 import InvitationStatusBadge from '../components/common/InvitationStatusBadge';
 import useInvitationStatus from '../hooks/useInvitationStatus';
@@ -99,7 +100,7 @@ const AgreementSummaryCard = ({ agreement, property, rentee }) => {
           <div className="flex justify-between">
             <span className="text-gray-500">Monthly Rent:</span>
             <span className="font-medium">
-              ${agreement.terms?.monthlyRent ? Number(agreement.terms.monthlyRent).toLocaleString() : 'N/A'}
+              {formatAgreementRent(agreement)}
             </span>
           </div>
           {agreement.signeddate && (
@@ -115,7 +116,10 @@ const AgreementSummaryCard = ({ agreement, property, rentee }) => {
 };
 
 // Custom PropertyCard component for RenteeDetails
-const RenteePropertyCard = ({ property }) => {
+const RenteePropertyCard = ({ property, agreement }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = propertyImageDisplayUrl(getPrimaryPropertyImageUrl(property.images), { tenantId: property.tenant_id });
+  useEffect(() => { setImageFailed(false); }, [imageUrl]);
   const isApartment = property.propertytype === 'apartment';
   const hasAssignedUnits = isApartment && property.assignedUnits && property.assignedUnits.length > 0;
   
@@ -123,11 +127,12 @@ const RenteePropertyCard = ({ property }) => {
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
       <Link to={`/dashboard/properties/${property.id}`} className="block">
         <div className="relative h-40 bg-gray-100">
-          {property.images && property.images.length > 0 ? (
+          {imageUrl && !imageFailed ? (
             <img 
-              src={property.images[0]} 
+              src={imageUrl}
               alt={property.name} 
               className="w-full h-full object-cover"
+              onError={() => setImageFailed(true)}
             />
           ) : (
             <div className="flex items-center justify-center h-full bg-gray-200">
@@ -154,7 +159,7 @@ const RenteePropertyCard = ({ property }) => {
           
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-900">
-              ${property.rentalvalues?.rent ? property.rentalvalues.rent.toLocaleString() : '0'}/month
+              {formatAgreementRent(agreement)}/month
             </span>
             <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-700">
               {property.propertytype || 'Residential'}
@@ -258,6 +263,7 @@ const RenteeDetails = () => {
             const associatedProperties = await Promise.all(propertiesData.map(async (property) => {
               const propertyItem = {
                 id: property.id,
+                tenant_id: property.tenant_id,
                 name: property.name || property.address || 'Unnamed Property',
                 address: property.address || '',
                 propertytype: property.propertytype || property.type || 'Residential',
@@ -542,6 +548,8 @@ const RenteeDetails = () => {
                   <RenteePropertyCard 
                     key={property.id} 
                     property={property} 
+                    agreement={agreements.find(agreement => agreement.status === 'active'
+                      && String(agreement.propertyid).toLowerCase() === String(property.id).toLowerCase())}
                   />
                 ))}
               </div>

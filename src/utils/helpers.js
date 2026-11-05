@@ -56,6 +56,18 @@ export const getAgreementCurrency = (agreement) => {
   }
 };
 
+export const formatAgreementRent = (agreement) => {
+  let terms;
+  try { terms = typeof agreement?.terms === 'string' ? JSON.parse(agreement.terms) : agreement?.terms; }
+  catch { terms = null; }
+  const amount = agreement?.rentamount ?? terms?.monthlyRent;
+  if (amount === undefined || amount === null || amount === '' || !Number.isFinite(Number(amount))) {
+    return 'Rent not recorded';
+  }
+  const currency = getAgreementCurrency(agreement);
+  return formatCurrency(amount, currency) + (currency ? '' : ' (currency not recorded)');
+};
+
 // Validation functions
 export const validateEmail = (email) => {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
