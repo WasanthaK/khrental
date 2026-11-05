@@ -352,7 +352,14 @@ const selectActiveMembership = ({ requestedTenantId, memberships, user }) => {
       409,
       'Multiple tenant memberships are available. Specify x-tenant-id to select the active tenant.',
       'TENANT_SELECTION_REQUIRED',
-      { membershipCount: memberships.length }
+      {
+        membershipCount: memberships.length,
+        // Only this authenticated user's active memberships, never a tenant list.
+        memberships: memberships.map(({ id, tenant_id, role, status, tenant }) => ({
+          id, tenant_id, role, status,
+          tenant: { id: tenant?.id || tenant_id, name: tenant?.name }
+        }))
+      }
     );
   }
 
@@ -549,6 +556,9 @@ export const createTenantContextMiddleware = ({
       next();
     } catch (error) {
       if (error?.status) {
+        if (error.code === 'TENANT_SELECTION_REQUIRED') {
+          res.set('Cache-Control', 'no-store, private');
+        }
         res.status(error.status).json({
           error: error.message,
           code: error.code || 'TENANT_CONTEXT_ERROR',

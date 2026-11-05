@@ -69,3 +69,33 @@ test('failed remote sign-out still leaves local identity cleared',async()=>{
  const x=fixture(),pending=x.auth.signOut();await x.respond(503);assert.ok((await pending).error);
  assert.equal(x.state().stored,null);
 });
+
+test('ambiguous organization selection preserves session and exposes choices without selecting one', async () => {
+  const x=fixture(), pending=x.auth.getTenantContext();
+  const memberships=[{tenant_id:'org-one',role:'staff',status:'active',tenant:{id:'org-one',name:'One'}},
+    {tenant_id:'org-two',role:'rentee',status:'active',tenant:{id:'org-two',name:'Two'}}];
+  await x.respond(409,{error:'Choose an organization',code:'TENANT_SELECTION_REQUIRED',details:{memberships}});
+  const result=await pending;
+  assert.equal(result.error,null);
+  assert.equal(result.data.resolution,'selection-required');
+  assert.equal(result.data.tenantId,null);
+  assert.equal(result.data.membership,null);
+  assert.equal(result.data.memberships,memberships);
+  assert.equal(x.state().stored,A);
+  assert.equal(x.state().tenant,'tenant-A', 'no automatic organization selection');
+});
+test('late organization choices cannot be adopted by another signed-in account',async()=>{
+  const x=fixture(),pending=x.auth.getTenantContext();
+  await new Promise(r=>setImmediate(r));x.change(B);
+  await x.respond(409,{error:'Choose',code:'TENANT_SELECTION_REQUIRED',details:{memberships:[{tenant_id:'old-org'}]}});
+  assert.ok((await pending).error);
+  assert.equal(x.state().stored,B);
+});
+test('permission failures and malformed choices never become a selectable context',async()=>{
+  for(const [status,code,details] of [[403,'TENANT_ACCESS_DENIED',{memberships:[]}],
+    [409,'TENANT_SELECTION_REQUIRED',null],[409,'OTHER',{memberships:[]}]]) {
+    const x=fixture(),pending=x.auth.getTenantContext();
+    await x.respond(status,{error:'Rejected',code,details});
+    assert.ok((await pending).error);
+  }
+});
