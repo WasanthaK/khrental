@@ -21,7 +21,8 @@ export const retireClosedRentalOffers=async(q,{tenantId,propertyId,agreementId=n
       AND h.status IN('accepted','agreement')
       AND (@agreementId IS NULL OR h.agreement_id=@agreementId)
       AND EXISTS(SELECT 1 FROM dbo.agreements ended WHERE ended.id=h.agreement_id
-        AND ended.tenant_id=h.tenant_id AND ended.status='closed')`,{tenantId,propertyId,agreementId});
+        AND ended.tenant_id=h.tenant_id AND ended.propertyid=h.property_id
+        AND (ended.unitid=h.unit_id OR (ended.unitid IS NULL AND h.unit_id IS NULL)) AND ended.status='closed')`,{tenantId,propertyId,agreementId});
   // This is a system lifecycle event, like expiry. The closure actor remains
   // in agreements.closed_by and the transaction's tenancy_lifecycle_events.
   for(const row of rows){await audit(q,row,null,null,'tenancy_closed');}

@@ -8,7 +8,8 @@ const holdsReady=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true';
 // A reservation linked to a settled, explicitly closed tenancy is no longer
 // current stock. Other accepted/draft reservations still suppress availability.
 const holdStillCurrent=`AND NOT EXISTS(SELECT 1 FROM dbo.agreements ended
-  WHERE ended.id=h.agreement_id AND ended.tenant_id=h.tenant_id AND ended.status='closed')`;
+  WHERE ended.id=h.agreement_id AND ended.tenant_id=h.tenant_id AND ended.propertyid=h.property_id
+        AND (ended.unitid=h.unit_id OR (ended.unitid IS NULL AND h.unit_id IS NULL)) AND ended.status='closed')`;
 const wholeHold=holdsReady?`AND NOT EXISTS(SELECT 1 FROM dbo.property_rental_offers h WHERE h.property_id=p.id
   AND h.tenant_id=p.tenant_id AND h.unit_id IS NULL AND h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME() ${holdStillCurrent})`:'';
 const unitHold=holdsReady?`AND NOT EXISTS(SELECT 1 FROM dbo.property_rental_offers h WHERE h.property_id=p.id

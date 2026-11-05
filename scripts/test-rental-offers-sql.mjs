@@ -105,6 +105,14 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  assert.equal(await available(p),false,'an active tenancy still suppresses stock');
  await q("UPDATE agreements SET status='closed' WHERE id=@id",{id:agreementId});
  assert.equal(await available(p),true,'closed linked reservation cannot hide available stock until its old deadline');
+ // A malformed pointer to another closed dwelling must remain fail-closed.
+ const unrelatedClosedProperty=await property(),unrelatedClosedId=uuid();
+ await q("INSERT agreements(id,tenant_id,propertyid,status) VALUES(@id,@tenantId,@propertyId,'closed')",{id:unrelatedClosedId,tenantId:owner.tenantId,propertyId:unrelatedClosedProperty.id});
+ await q('UPDATE property_rental_offers SET agreement_id=@agreementId WHERE enquiry_id=@id',{agreementId:unrelatedClosedId,id:c.id});
+ assert.equal(await available(p),false,'a different closed dwelling cannot release this hold');
+ assert.equal(await retireClosedRentalOffers(q,{tenantId:owner.tenantId,propertyId:p.id}),0);
+ await q('UPDATE property_rental_offers SET agreement_id=@agreementId WHERE enquiry_id=@id',{agreementId,id:c.id});
+ assert.equal(await available(p),true);
  const retirement={tenantId:owner.tenantId,propertyId:p.id,agreementId};
  assert.equal(await retireClosedRentalOffers(q,{...retirement,tenantId:foreignOwner.tenantId}),0);
  assert.equal(await retireClosedRentalOffers(q,{...retirement,agreementId:uuid()}),0);
