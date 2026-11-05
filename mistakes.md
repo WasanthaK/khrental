@@ -27,3 +27,7 @@ Do not apply app_users.tenant_id to a request's renter, assigned worker or comme
 ## Test the actual renter navigation link
 
 A global account may have role authenticated while its selected organization membership is rentee. Maintenance cards must select the portal from the active membership. Opening the correct detail route directly does not prove that the list card links there; click the real card in desktop/mobile browser acceptance.
+
+## A closed tenancy must not leave its old reservation suppressing stock
+
+A public-stock check that reads only the offer status/deadline can keep an available property hidden after explicit settled closure. Ignore holds linked to a closed agreement on public reads, retire those exact holds transactionally at closure, and reconcile older closed holds on governed offer reads. Preserve other valid reservations, active tenancy guards, unsigned replacement reservations, agreement links and audit history.

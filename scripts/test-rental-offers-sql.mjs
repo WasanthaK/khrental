@@ -2,8 +2,9 @@ import {loadRentalReservationReadiness} from '../src/api/platform/tenancyActivat
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import sql from 'mssql';
 import {createEnquiryStore} from '../src/api/enquiries/store.js';
-import {createOfferStore} from '../src/api/enquiries/offerStore.js';
+import {createOfferStore,retireClosedRentalOffers} from '../src/api/enquiries/offerStore.js';
 import {createApplicationStore} from '../src/api/enquiries/applicationStore.js';
 import {parseOfferAction} from '../src/api/enquiries/offerContract.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
@@ -98,6 +99,37 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  await assert.rejects(store.change(c.actor,c.id,request('withdraw',3)),{code:'RENTAL_ALREADY_ACTIVE'});
  await q("UPDATE tenant_memberships SET status='revoked' WHERE app_user_id=@id",{id:c.actor.actorId});
  assert.equal((await store.get(c.actor,c.id)).agreement.id,agreementId,'Revoked workspace access does not erase verified personal rental history');
+ // A closure before the reservation deadline must release public stock,
+ // including legacy closed rows before any lazy retirement write occurs.
+ await q('UPDATE property_rental_offers SET offer_until=DATEADD(day,1,SYSUTCDATETIME()),hold_until=DATEADD(day,2,SYSUTCDATETIME()) WHERE enquiry_id=@id',{id:c.id});
+ assert.equal(await available(p),false,'an active tenancy still suppresses stock');
+ await q("UPDATE agreements SET status='closed' WHERE id=@id",{id:agreementId});
+ assert.equal(await available(p),true,'closed linked reservation cannot hide available stock until its old deadline');
+ const retirement={tenantId:owner.tenantId,propertyId:p.id,agreementId,actorId:owner.actorId};
+ assert.equal(await retireClosedRentalOffers(q,{...retirement,tenantId:foreignOwner.tenantId}),0);
+ assert.equal(await retireClosedRentalOffers(q,{...retirement,agreementId:uuid()}),0);
+ // If retirement audit fails, the same transaction must retain the old hold.
+ await pool.request().batch("CREATE TRIGGER dbo.closed_offer_fixture_rollback ON dbo.property_rental_offer_events AFTER INSERT AS BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE event_type='tenancy_closed') THROW 51099,'CLOSED_OFFER_AUDIT_ROLLBACK',1; END");
+ const releaseTx=new sql.Transaction(pool);await releaseTx.begin();
+ const releaseQuery=async(statement,params={})=>{
+   const r=new sql.Request(releaseTx);for(const [key,value] of Object.entries(params)){r.input(key,value);}
+   return (await r.query(statement)).recordset||[];
+ };
+ try{await assert.rejects(retireClosedRentalOffers(releaseQuery,retirement),e=>e.number===51099);}
+ finally{await releaseTx.rollback().catch(()=>{});await pool.request().batch('DROP TRIGGER dbo.closed_offer_fixture_rollback');}
+ assert.equal((await q('SELECT status FROM property_rental_offers WHERE enquiry_id=@id',{id:c.id}))[0].status,'agreement');
+ assert.equal(await retireClosedRentalOffers(q,retirement),1);
+ assert.equal(await retireClosedRentalOffers(q,retirement),0,'retirement replay must not duplicate audit');
+ assert.equal((await q("SELECT COUNT(*) AS n FROM property_rental_offer_events WHERE enquiry_id=@id AND event_type='tenancy_closed'",{id:c.id}))[0].n,1);
+ assert.equal((await store.get(c.actor,c.id)).offer.status,'invalidated');
+ assert.equal((await store.get(c.actor,c.id)).offer.agreementId,agreementId,'retain original linked agreement history');
+ const nextCandidate=await candidate(p);
+ await store.change(owner,nextCandidate.id,request('issue',0,true,terms()),true);
+ await store.change(nextCandidate.actor,nextCandidate.id,request('accept',1,false,{consent:true}));
+ assert.equal(await retireClosedRentalOffers(q,retirement),0);
+ assert.equal(await available(p),false,'a different valid reservation still withholds the property');
+ await store.change(nextCandidate.actor,nextCandidate.id,request('withdraw',2));
+ assert.equal(await available(p),true);
  // Cancel/recreate preserves the accepted commercial terms, identity and history.
  const replacementProperty=await property(),replacementCandidate=await candidate(replacementProperty);
  await store.change(owner,replacementCandidate.id,request('issue',0,true,terms()),true);
