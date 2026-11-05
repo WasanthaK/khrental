@@ -193,11 +193,31 @@ export async function verifyPhase4StaffMaintenanceHttp({
     { comment: 'Staff-only diagnosis', isInternal: true }), 201);
   check(await request(a, tokenA, 'POST', id, '/comments',
     { comment: 'Visible tenant update' }), 201);
+  // Legacy origin differs from the active membership. Reads must retain the
+  // same linked participants without allowing foreign request access.
+  const renterIdentity = await one('SELECT name, email FROM app_users WHERE id=@id', { id:a.renteeId });
+  await sqlRows('UPDATE app_users SET tenant_id=@origin WHERE id IN (@renter,@worker)',
+    { origin:b.tenantId, renter:a.renteeId, worker:workerA.userId });
   const renterProjection = check(await request(a, tokenA, 'GET', id), 200);
   assert.ok(renterProjection.comments.some(c => c.comment === 'Visible tenant update'));
   assert.ok(!renterProjection.comments.some(c => c.comment === 'Staff-only diagnosis'));
   const staffProjection = check(await request(a, workerA.token, 'GET', id), 200);
   assert.ok(staffProjection.comments.some(c => c.comment === 'Staff-only diagnosis'));
+  assert.equal(renterProjection.request.rentee_name, renterIdentity.name);
+  assert.equal(renterProjection.request.rentee_email, renterIdentity.email);
+  assert.equal(renterProjection.request.assigned_name, 'Fixture Staff');
+  assert.equal(staffProjection.comments.find(c => c.comment === 'Staff-only diagnosis').user_name, 'Fixture Staff');
+  assert.equal(renterProjection.comments.find(c => c.comment === 'Visible tenant update').user_name, renterIdentity.name);
+  const linkedList = check(await request(a, managerA.token, 'GET', null), 200);
+  const linked = linkedList.find(row => guid(row.id) === id);
+  assert.equal(linked.rentee.name, renterIdentity.name);
+  assert.equal(linked.rentee.email, renterIdentity.email);
+  assert.equal(linked.assigned_staff.name, 'Fixture Staff');
+  check(await request(b, tokenB, 'GET', id), 404, 'MAINTENANCE_REQUEST_NOT_FOUND');
+  check(await request(a, idleWorkerA.token, 'GET', id), 403, 'RESOURCE_ACCESS_DENIED');
+  await sqlRows('UPDATE app_users SET tenant_id=@origin WHERE id IN (@renter,@worker)',
+    { origin:a.tenantId, renter:a.renteeId, worker:workerA.userId });
+
   check(await request(a, idleWorkerA.token, 'POST', id, '/comments',
     { comment: 'Unauthorized write' }), 403, 'RESOURCE_ACCESS_DENIED');
 

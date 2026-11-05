@@ -87,6 +87,8 @@ const listEligibleMaintenanceAssignees = async (tenantId, staffUserId = null) =>
     .map(({ id, name, role, permission_bundle }) => ({ id, name, role, permission_bundle }));
 };
 
+// Participant identities are global. The tenant-scoped request/comment owns
+// each reference; row scope and assertReadAccess remain the access authority.
 const loadRequest = async (tenantId, requestId) => {
   const request = await runSingleQuery(
     `SELECT TOP 1 mr.*,
@@ -95,8 +97,8 @@ const loadRequest = async (tenantId, requestId) => {
             assigned.name AS assigned_name
      FROM maintenance_requests mr
      LEFT JOIN properties p ON p.id = mr.propertyid AND p.tenant_id = mr.tenant_id
-     LEFT JOIN app_users au ON au.id = mr.renteeid AND au.tenant_id = mr.tenant_id
-     LEFT JOIN app_users assigned ON assigned.id = mr.assignedto AND assigned.tenant_id = mr.tenant_id
+     LEFT JOIN app_users au ON au.id = mr.renteeid
+     LEFT JOIN app_users assigned ON assigned.id = mr.assignedto
      WHERE mr.tenant_id = @tenantId AND mr.id = @requestId`,
     { tenantId, requestId }
   );
@@ -153,7 +155,7 @@ const loadProjection = async (req, requestId) => {
     runQuery(
       `SELECT c.*, u.name AS user_name
        FROM maintenance_request_comments c
-       LEFT JOIN app_users u ON u.id = c.user_id AND u.tenant_id = c.tenant_id
+       LEFT JOIN app_users u ON u.id = c.user_id
        WHERE c.tenant_id = @tenantId
          AND c.maintenance_request_id = @requestId
          ${isTenant ? 'AND c.is_internal = 0' : ''}
@@ -215,8 +217,8 @@ export const createMaintenanceLifecycleRouter = () => {
                 assigned.name AS assigned_name
          FROM maintenance_requests mr
          LEFT JOIN properties p ON p.id=mr.propertyid AND p.tenant_id=mr.tenant_id
-         LEFT JOIN app_users renter ON renter.id=mr.renteeid AND renter.tenant_id=mr.tenant_id
-         LEFT JOIN app_users assigned ON assigned.id=mr.assignedto AND assigned.tenant_id=mr.tenant_id
+         LEFT JOIN app_users renter ON renter.id=mr.renteeid
+         LEFT JOIN app_users assigned ON assigned.id=mr.assignedto
          WHERE mr.tenant_id=@tenantId AND ${scope.predicate}
          ORDER BY mr.createdat DESC, mr.id DESC
          OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
