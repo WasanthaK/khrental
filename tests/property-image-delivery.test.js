@@ -37,3 +37,11 @@ test('unrelated image providers and unsaved local previews are never rebased or 
   }
   assert.equal(propertyImageDisplayUrl(null,options),'');
 });
+
+test('renter detail photo accepts SQL JSON, registered image objects and old string arrays', async () => {
+  const { getPrimaryPropertyImageUrl } = await import('../src/utils/propertyDetailFields.js');
+  assert.equal(getPrimaryPropertyImageUrl(['first.jpg','second.jpg']),'first.jpg');
+  assert.equal(getPrimaryPropertyImageUrl(JSON.stringify([{image_url:'second.jpg',order:2},{image_url:'first.jpg',order:0}])),'first.jpg');
+  for(const images of [null,'broken',{},[{},null]]) assert.equal(getPrimaryPropertyImageUrl(images),'');
+  assert.equal(propertyImageDisplayUrl(getPrimaryPropertyImageUrl([{image_url:oldOrigin+imagePath}]),options),imagePath);
+});

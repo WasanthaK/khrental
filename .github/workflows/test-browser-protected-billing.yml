@@ -16,6 +16,9 @@ on:
       - 'src/pages/ManagementSubscription.jsx'
       - 'src/pages/TenancyOnboarding.jsx'
       - 'src/pages/TenancyExit.jsx'
+      - 'src/pages/RenteeDetails.jsx'
+      - 'src/utils/propertyDetailFields.js'
+      - 'scripts/test-rentee-details-browser.mjs'
       - 'src/utils/helpers.js'
       - 'tests/tenancy-currency.test.js'
       - 'src/services/DocumentService.js'
@@ -48,6 +51,8 @@ jobs:
         run: node scripts/verify-management-billing-browser.mjs
       - name: Future contract layout and move-in screen
         run: node scripts/test-r5-layout-browser.mjs
+      - name: Renter detail agreement currency and protected property photographs
+        run: node scripts/test-rentee-details-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
