@@ -4,14 +4,15 @@ import { formatDate } from '../../utils/helpers';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../../utils/constants';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import { isTenant } from '../../utils/accessModel';
 import { cancelMaintenanceRequest } from '../../services/maintenanceService';
 
 const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { userData } = useAuth();
-  
-  // Determine if this is a rentee view based on user role
-  const isRenteeView = userData?.role === 'rentee';
+  const { user, membership } = useAuth();
+
+  // The selected organization determines the workspace for a global identity.
+  const isRenteeView = isTenant({ user, membership });
   
   // Extract request details with proper null checks
   const { 
