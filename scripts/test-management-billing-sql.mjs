@@ -181,7 +181,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     return result;
   };
   await assert.rejects(service.quantityApply({tenantId:tenantA,id:reductionCommand,actorId,previewId:reduction.previewId}),{code:'BILLING_SCHEDULE_UNCONFIRMED'});
-  assert.equal((await service.summary(tenantA)).pendingOperation.id,reductionCommand,'Unconfirmed future quantity remains recoverable');
+  assert.equal((await service.summary(tenantA)).pendingOperation.id.toLowerCase(),reductionCommand,'Unconfirmed future quantity remains recoverable');
   await service.quantityApply({tenantId:tenantA,id:reductionCommand,actorId,previewId:reduction.previewId});
   assert.equal((await store.account(tenantA)).quantity,2);assert.equal((await store.account(tenantA)).pending_quantity,1);
   const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');assert.equal(schedule.phases[1].items[0].quantity,1);
