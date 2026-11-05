@@ -1,8 +1,8 @@
 # KH Rentals Execution Plan
 
-## Current canonical progress — 5 November 2026, after PR #510
+## Current operational checkpoint — live demo closure acceptance
 
-This progress-only checkpoint supersedes older current/next statements below. Existing historical evidence is retained. The agreed sequence remains complete rental operations, then paid/commercial launch; Sri Lanka before Brunei.
+This progress-only checkpoint supersedes older current/next statements below. Historical evidence remains retained. The agreed sequence remains complete rental operations, then paid/commercial launch; Sri Lanka before Brunei.
 
 | Milestone | Current status | Remaining boundary |
 | --- | --- | --- |
@@ -10,27 +10,32 @@ This progress-only checkpoint supersedes older current/next statements below. Ex
 | R2 — Invoice immutable archive | OWNER-DEFERRED; incomplete | Outside the active queue. |
 | R3 — Registration and account access | CLOSED BY OWNER — single-replica scope | Scaling acceptance remains separate. |
 | R4 — Paying property-management organizations | CLOSED BY OWNER — sandbox foundation | Paid lifecycle, production enforcement and merchant/commercial readiness carried into R5. Live charging remains disabled. |
-| R5 — Marketplace and regional rollout | ACTIVE; partially delivered | Active tenancy operations, live exit/relisting, future-document regression and regional/commercial acceptance remain open. |
+| R5 — Marketplace and regional rollout | ACTIVE; partially delivered | The recorded demo operations and closure passed; future-document, final customer acceptance and regional/commercial prerequisites remain open. |
 
-### Live demo progress now accepted
+### Accepted live demo path
 
-- The meaningful move-in checklist and deposit ledger path completed as an explicitly labelled **simulation**. The owner approved activation, and the tenancy became active. No real funds received or physical inspection/move-in is claimed.
-- Renter access, organization selection, active-tenancy/agreement visibility and refresh persistence passed. The earlier multi-organization Access Denied blocker is resolved for this tested path.
-- Owner readback passed: property **Rented**, current renter link, and reciprocal associated-property link. Private release preview reports the rented property ineligible for public listing. Independent anonymous withdrawal/relisting acceptance remains open.
-- The renter-details property photo and recorded-currency rent labels passed live owner readback after [PR #510](https://github.com/WasanthaK/khrental/pull/510). No historical signed documents or amounts were rewritten.
+- Meaningful move-in readiness, labelled simulated deposit evidence and explicit owner activation passed. Owner readback showed Rented with reciprocal current-renter/property links.
+- Invoice issuance, renter proof submission, owner verification and receipt readback passed. The invoice is Paid with zero outstanding balance; receipt and invoice history remain accessible after closure. Email was accepted by the delivery provider; mailbox delivery remains unconfirmed.
+- Renter maintenance submission, owner triage/assignment, existing assigned staff start/completion and renter readback passed. The real renter card opens the correct portal detail; public updates are visible and the staff-private comment is absent.
+- The labelled demo notice was acknowledged. A meaningful three-part simulated move-out inspection, zero-deduction simulated settlement and explicit owner closure passed. Owner property readback shows Available with no current renter; reciprocal current-property linkage is removed. The renter dashboard reports no active tenancy while closed agreements and paid invoice history remain.
+- All payment, deposit, inspection, work and exit activity above is explicitly **simulated**. No real funds, physical attendance, repair, move-in, move-out, eviction or legal termination is claimed. Historical signed bytes and agreement dates remain unchanged.
 
-### Supporting verification
+- Post-closure signed-document access passed through the renter's actual View Document action: the original retained four-page agreement renders in the authenticated viewer. The renter's receipt also remains accessible with zero balance.
+- Independent anonymous residential search now includes the exact previously withheld listing; its public detail page offers enquiries again. Existing public copy and media preferences are preserved. No private property details or photographs were published for this check.
 
-[PR #508](https://github.com/WasanthaK/khrental/pull/508), [#509](https://github.com/WasanthaK/khrental/pull/509) and [#510](https://github.com/WasanthaK/khrental/pull/510) are merged and deployed. [PR #510 application CI](https://github.com/WasanthaK/khrental/actions/runs/42062177002) passed **898/898** tests and build; desktop/mobile currency/photo screenshots were inspected. [Release 42062656866](https://github.com/WasanthaK/khrental/actions/runs/42062656866) passed, and the independent public build check matched. Automated disposable SQL proved activation/linkage and inspected, settled closure restoring availability with retained history and isolation; **this is not live exit acceptance**.
+### Fixes and release evidence
+
+[PR #512](https://github.com/WasanthaK/khrental/pull/512) and [#513](https://github.com/WasanthaK/khrental/pull/513) corrected global participant readback within scoped invoice and maintenance relationships. [PR #514](https://github.com/WasanthaK/khrental/pull/514) corrected the renter maintenance card destination and passed actual desktop/mobile card interactions. All are merged and deployed.
+
+[PR #515](https://github.com/WasanthaK/khrental/pull/515) retires only reservations linked to the matching explicitly closed tenancy, preserves other valid holds and history, and restores authorized retained-document access after closure. All six PR workflows passed, including disposable SQL isolation/rollback/replay checks and desktop/mobile document interactions. [Application release 42083606318](https://github.com/WasanthaK/khrental/actions/runs/42083606318) passed; an independent browser build check matched commit `08cd7f15e7119ae61d6d73982f89d695b6181937`. The final renter PDF and anonymous relisting checks above were performed against that deployed build.
 
 ### Remaining execution order
 
-1. **Active-tenancy operations:** organization Administrator prepares the demo invoice; renter verifies invoice/payment-proof/receipt access. Complete renter maintenance submission, owner triage, existing assigned staff work and participant readback. Identify the exact account and organization before every switch.
-2. **Live exit and eligible relisting:** notice/response, move-out inspection, financial settlement and closure; verify availability/public eligibility and retained documents/history. Do not release stock while another active tenancy or reservation still blocks it.
-3. **Final operational acceptance:** next legitimate provider signing verifies layout/signature positions and automatic signed-PDF plus audit retention; finish remaining desktop/mobile and negative-path checks. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains **OPEN**.
-4. **Paid/regional launch:** complete payment lifecycle, production entitlement enforcement and merchant/disclosure prerequisites for Sri Lanka, then separate Brunei inventory/currency/lifecycle/commercial acceptance. Do not reopen owner-closed R3/R4 merely to advance the remaining R5 work.
+1. Next legitimate provider signing: verify future-document layout, signature positions and automatic retention of both signed PDF and audit. Do not re-sign or rewrite the accepted historical document.
+2. Finish consolidated customer content/UX/UI/usability review and remaining desktop/mobile, unavailable-stock and negative-path acceptance. [Issue #459](https://github.com/WasanthaK/khrental/issues/459) remains **OPEN**; this demo does not close the whole operational website or R5.
+3. Complete genuine payment lifecycle, production entitlement enforcement and merchant/disclosure prerequisites for Sri Lanka, then separate Brunei inventory/currency/lifecycle/commercial acceptance. Live charging remains disabled.
 
-A contract end date alone does not establish physical vacancy: active tenancy release remains governed by inspection, settlement and closure. Unsigned document cancellation and accepted-reservation withdrawal/expiry are separate transitions. Live cancellation/expiry/exit acceptance is not claimed from fixture tests.
+A contract end date alone does not establish physical vacancy. Active tenancy release requires the governed inspection, settlement and explicit closure path. Unsigned document cancellation and accepted-reservation withdrawal/expiry are separate transitions. Their automated regression evidence is retained; do not describe every cancellation/expiry scenario as live participant acceptance.
 
 ## Historical PR #506 checkpoint — 5 November 2026
 
