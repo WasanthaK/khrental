@@ -227,11 +227,22 @@ const TenancyOnboarding = () => {
                 </select>
                 <input required type="number" min="0.01" step="0.01" placeholder="Amount" value={deposit.amount} onChange={(e) => setDeposit((current) => ({ ...current, amount: e.target.value }))} className="border rounded-md px-3 py-2" />
                 <input placeholder="Payment method" value={deposit.paymentMethod} onChange={(e) => setDeposit((current) => ({ ...current, paymentMethod: e.target.value }))} className="border rounded-md px-3 py-2" />
-                <input placeholder="Reference" value={deposit.paymentReference} onChange={(e) => setDeposit((current) => ({ ...current, paymentReference: e.target.value }))} className="border rounded-md px-3 py-2" />
+                <input required maxLength={255} aria-label="Payment reference" placeholder="Payment reference (required)" value={deposit.paymentReference} onChange={(e) => setDeposit((current) => ({ ...current, paymentReference: e.target.value }))} className="border rounded-md px-3 py-2" />
                 <input placeholder="Notes" value={deposit.notes} onChange={(e) => setDeposit((current) => ({ ...current, notes: e.target.value }))} className="border rounded-md px-3 py-2 md:col-span-2" />
+                <p className="text-sm text-gray-600 md:col-span-2">Use the same reference when retrying a payment. Check the ledger before recording another payment.</p>
                 <button disabled={working} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 md:col-span-2">Record payment</button>
               </form>
             )}
+            <div className="mt-5 space-y-3">
+              <h3 className="font-medium">Deposit ledger</h3>
+              {(data.deposit?.transactions || []).length === 0 ? <p className="text-sm text-gray-500">No payments recorded.</p> : data.deposit.transactions.map(transaction => (
+                <div key={transaction.id} className="border rounded-md p-3 text-sm break-words">
+                  <p className="font-medium">{transaction.transaction_type === 'security_deposit' ? 'Security deposit' : 'Confirmation advance'} · {formatCurrency(transaction.amount)} · {transaction.status}</p>
+                  <p>{transaction.payment_reference || 'No reference recorded'} · {transaction.payment_method || 'Method not recorded'} · {formatDate(transaction.received_at)}</p>
+                  {transaction.notes && <p className="text-gray-600 mt-1">{transaction.notes}</p>}
+                </div>
+              ))}
+            </div>
           </section>
 
           <section className="bg-white rounded-lg shadow p-5">
@@ -263,7 +274,7 @@ const TenancyOnboarding = () => {
                 <h2 className="text-lg font-semibold">5. Move-in checklist</h2>
                 <p className="text-sm text-gray-500">Creates a historical snapshot from the property's checklist items.</p>
               </div>
-              {checklist && <span className={`text-xs font-medium px-2 py-1 rounded-full ${checklist.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{checklist.status}</span>}
+              {checklist && <span className={`text-xs font-medium px-2 py-1 rounded-full ${readiness.checks.moveInChecklistComplete ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{readiness.checks.moveInChecklistComplete ? 'completed' : 'open'}</span>}
             </div>
 
             {!checklist ? (
@@ -281,7 +292,10 @@ const TenancyOnboarding = () => {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-green-700">This property has no configured checklist items; the empty checklist is complete.</p>
+              <div className="space-y-3">
+                <p className="text-sm text-amber-800">No inspection items have been recorded. An empty checklist cannot complete move-in. Add required items to the property checklist, such as keys, meter readings and room condition, then load them here.</p>
+                {!isActive && <button disabled={working} onClick={handleCreateChecklist} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm disabled:opacity-50">Load property checklist items</button>}
+              </div>
             )}
           </section>
         </div>

@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'scripts/test-r5-onboarding-sqlserver.mjs'
+      - 'src/api/platform/tenancyOnboardingRouter.js'
+      - 'src/api/platform/tenancyActivation.js'
       # Maintenance business contracts are exercised by the same disposable
       # two-tenant SQL/Puppeteer harness; runtime edits must trigger this gate.
       - 'scripts/verify-phase4-staff-maintenance-http.mjs'
@@ -86,6 +89,8 @@ jobs:
       - run: node --check scripts/test-billing-two-tenant-sqlserver.mjs
       - name: Execute disposable SQL Server billing acceptance
         run: npm run test:billing:sqlserver
+      - name: Move-in deposit retry and activation acceptance
+        run: node scripts/test-r5-onboarding-sqlserver.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

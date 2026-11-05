@@ -41,7 +41,7 @@ const normalizeChecklistItems = (rawItems) => {
   return parsed
     .map((item, index) => {
       if (typeof item === 'string') {
-        return { label: item.trim(), isRequired: true, itemOrder: index + 1 };
+        return item.trim() ? { label: item.trim(), isRequired: true, itemOrder: index + 1 } : null;
       }
 
       const label = String(item?.label || item?.name || item?.title || item?.description || '').trim();
@@ -274,7 +274,7 @@ const refreshChecklistCompletion = async (tenantId, checklistId, actorUserId) =>
 
   const requiredItems = Number(summary?.required_items) || 0;
   const completedRequiredItems = Number(summary?.completed_required_items) || 0;
-  const isComplete = requiredItems === completedRequiredItems;
+  const isComplete = requiredItems > 0 && requiredItems === completedRequiredItems;
 
   await runQuery(
     `UPDATE tenancy_move_in_checklists
@@ -463,47 +463,70 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         throw createRequestError(400, 'amount must be greater than zero.', 'INVALID_DEPOSIT_AMOUNT');
       }
 
+      const paymentReference = String(req.body?.paymentReference || req.body?.payment_reference || '').trim();
+      const paymentMethod = String(req.body?.paymentMethod || req.body?.payment_method || '').trim() || null;
+      const receivedAt = req.body?.receivedAt || req.body?.received_at || null;
+      if (!paymentReference || paymentReference.length > 255 || (paymentMethod?.length || 0) > 100) {
+        throw createRequestError(400, 'Enter a payment reference (up to 255 characters). Reuse the same reference when retrying the same payment.', 'DEPOSIT_REFERENCE_REQUIRED');
+      }
+      if (Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001 || amount > 999999999999.99) {
+        throw createRequestError(400, 'Enter an amount with no more than two decimal places.', 'INVALID_DEPOSIT_AMOUNT');
+      }
+      if (receivedAt && !Number.isFinite(Date.parse(receivedAt))) {
+        throw createRequestError(400, 'Enter a valid received date.', 'INVALID_DEPOSIT_DATE');
+      }
+      // Serialize retries on the existing agreement row. The ledger and audit
+      // event commit together; an ambiguous response can be retried safely.
       const transaction = await runSingleQuery(
-        `INSERT INTO tenancy_deposit_transactions (
-           tenant_id, agreement_id, renteeid, propertyid, unitid,
-           transaction_type, amount, status, payment_method, payment_reference,
-           received_at, notes, recorded_by
-         )
-         OUTPUT INSERTED.*
-         VALUES (
-           @tenantId, @agreementId, @renteeId, @propertyId, @unitId,
-           @transactionType, @amount, 'received', @paymentMethod, @paymentReference,
-           COALESCE(@receivedAt, SYSUTCDATETIME()), @notes, @recordedBy
-         )`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          renteeId: agreement.renteeid,
-          propertyId: agreement.propertyid,
-          unitId: agreement.unitid || null,
-          transactionType,
-          amount,
-          paymentMethod: req.body?.paymentMethod || req.body?.payment_method || null,
-          paymentReference: req.body?.paymentReference || req.body?.payment_reference || null,
-          receivedAt: req.body?.receivedAt || req.body?.received_at || null,
-          notes: req.body?.notes || null,
-          recordedBy: req.user.id
-        }
+        `SET NOCOUNT ON; SET XACT_ABORT ON;
+         BEGIN TRY
+           BEGIN TRANSACTION;
+           DECLARE @currentStatus NVARCHAR(50), @transactionId UNIQUEIDENTIFIER, @replayed BIT = 0;
+           SELECT @currentStatus=status FROM agreements WITH (UPDLOCK,HOLDLOCK)
+             WHERE tenant_id=@tenantId AND id=@agreementId;
+           IF @currentStatus IS NULL OR @currentStatus IN ('closed','cancelled')
+             THROW 51105, 'DEPOSIT_AGREEMENT_UNAVAILABLE', 1;
+           SELECT @transactionId=id FROM tenancy_deposit_transactions
+             WHERE tenant_id=@tenantId AND agreement_id=@agreementId
+               AND payment_reference=@paymentReference;
+           IF @transactionId IS NOT NULL
+           BEGIN
+             IF EXISTS(SELECT 1 FROM tenancy_deposit_transactions WHERE id=@transactionId
+               AND (amount<>@amount OR transaction_type<>@transactionType OR status<>'received'
+                 OR ISNULL(payment_method,'')<>ISNULL(@paymentMethod,'')
+                 OR (@receivedAt IS NOT NULL AND received_at<>CONVERT(DATETIMEOFFSET,@receivedAt))))
+               THROW 51106, 'DEPOSIT_REFERENCE_CONFLICT', 1;
+             SET @replayed=1;
+           END
+           ELSE
+           BEGIN
+             SET @transactionId=NEWID();
+             INSERT INTO tenancy_deposit_transactions (
+               id,tenant_id,agreement_id,renteeid,propertyid,unitid,transaction_type,
+               amount,status,payment_method,payment_reference,received_at,notes,recorded_by)
+             VALUES (@transactionId,@tenantId,@agreementId,@renteeId,@propertyId,@unitId,@transactionType,
+               @amount,'received',@paymentMethod,@paymentReference,
+               COALESCE(CONVERT(DATETIMEOFFSET,@receivedAt),SYSUTCDATETIME()),@notes,@recordedBy);
+             INSERT INTO tenancy_lifecycle_events(tenant_id,agreement_id,event_type,actor_user_id,metadata)
+             VALUES(@tenantId,@agreementId,'deposit_recorded',@recordedBy,
+               (SELECT @transactionId AS transactionId,@amount AS amount,@transactionType AS transactionType FOR JSON PATH,WITHOUT_ARRAY_WRAPPER));
+           END;
+           COMMIT TRANSACTION;
+           SELECT *,@replayed AS replayed FROM tenancy_deposit_transactions WHERE id=@transactionId;
+         END TRY
+         BEGIN CATCH
+           IF @@TRANCOUNT>0 ROLLBACK TRANSACTION;
+           THROW;
+         END CATCH;`,
+        { tenantId: req.tenantId, agreementId: agreement.id, renteeId: agreement.renteeid,
+          propertyId: agreement.propertyid, unitId: agreement.unitid || null,
+          transactionType, amount, paymentMethod, paymentReference, receivedAt,
+          notes: req.body?.notes || null, recordedBy: req.user.id }
       );
-
-      await runQuery(
-        `INSERT INTO tenancy_lifecycle_events (tenant_id, agreement_id, event_type, actor_user_id, metadata)
-         VALUES (@tenantId, @agreementId, 'deposit_recorded', @actorUserId, @metadata)`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          actorUserId: req.user.id,
-          metadata: JSON.stringify({ transactionType, amount, transactionId: transaction.id })
-        }
-      );
-
-      res.status(201).json({ data: transaction, error: null });
+      res.status(transaction.replayed ? 200 : 201).json({ data: transaction, error: null });
     } catch (error) {
+      if (error?.number === 51106) return next(createRequestError(409, 'This reference already records a different payment. Check the ledger before continuing.', 'DEPOSIT_REFERENCE_CONFLICT'));
+      if (error?.number === 51105) return next(createRequestError(409, 'This agreement is no longer open for deposit recording.', 'DEPOSIT_AGREEMENT_UNAVAILABLE'));
       next(error);
     }
   });
@@ -515,58 +538,59 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       requirePropertyScope(req, agreement.propertyid);
 
       const existing = await loadChecklist(req.tenantId, agreement.id);
-      if (existing) {
+      if (existing?.items?.length) {
         res.json({ data: existing, error: null });
         return;
       }
 
-      const checklist = await runSingleQuery(
-        `INSERT INTO tenancy_move_in_checklists (
-           tenant_id, agreement_id, propertyid, unitid, status, created_by
-         )
-         OUTPUT INSERTED.*
-         VALUES (@tenantId, @agreementId, @propertyId, @unitId, 'open', @createdBy)`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          propertyId: agreement.propertyid,
-          unitId: agreement.unitid || null,
-          createdBy: req.user.id
-        }
-      );
-
+      if (['active', 'closed', 'cancelled'].includes(String(agreement.status).toLowerCase())) {
+        throw createRequestError(409, 'The move-in record is retained after activation or closure.', 'MOVE_IN_RECORD_LOCKED');
+      }
       const sourceItems = normalizeChecklistItems(agreement.property_checklistitems);
-      for (const item of sourceItems) {
-        await runQuery(
-          `INSERT INTO tenancy_move_in_checklist_items (
-             tenant_id, checklist_id, item_order, label, is_required, status
-           ) VALUES (
-             @tenantId, @checklistId, @itemOrder, @label, @isRequired, 'pending'
-           )`,
-          {
-            tenantId: req.tenantId,
-            checklistId: checklist.id,
-            itemOrder: item.itemOrder,
-            label: item.label,
-            isRequired: item.isRequired ? 1 : 0
-          }
-        );
+      if (!sourceItems.some(item => item.isRequired) || sourceItems.some(item => item.label.length > 500)) {
+        throw createRequestError(409, 'Add at least one required inspection item to the property checklist, then create the move-in checklist. An empty checklist is not inspection evidence.', 'MOVE_IN_ITEMS_REQUIRED');
       }
 
-      await refreshChecklistCompletion(req.tenantId, checklist.id, req.user.id);
-      const created = await loadChecklist(req.tenantId, agreement.id);
-
+      // Lock the agreement while creating or filling a legacy empty snapshot.
+      // Never replace an existing nonempty inspection or partially commit items.
       await runQuery(
-        `INSERT INTO tenancy_lifecycle_events (tenant_id, agreement_id, event_type, actor_user_id, metadata)
-         VALUES (@tenantId, @agreementId, 'move_in_checklist_created', @actorUserId, @metadata)`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          actorUserId: req.user.id,
-          metadata: JSON.stringify({ itemCount: sourceItems.length })
-        }
+        `SET NOCOUNT ON; SET XACT_ABORT ON;
+         BEGIN TRY
+           BEGIN TRANSACTION;
+           DECLARE @currentStatus NVARCHAR(50), @checklistId UNIQUEIDENTIFIER;
+           SELECT @currentStatus=status FROM agreements WITH(UPDLOCK,HOLDLOCK)
+             WHERE tenant_id=@tenantId AND id=@agreementId;
+           IF @currentStatus IS NULL OR @currentStatus IN ('active','closed','cancelled')
+             THROW 51107,'MOVE_IN_RECORD_LOCKED',1;
+           SELECT @checklistId=id FROM tenancy_move_in_checklists
+             WHERE tenant_id=@tenantId AND agreement_id=@agreementId;
+           IF @checklistId IS NULL
+           BEGIN
+             SET @checklistId=NEWID();
+             INSERT INTO tenancy_move_in_checklists(id,tenant_id,agreement_id,propertyid,unitid,status,created_by)
+             VALUES(@checklistId,@tenantId,@agreementId,@propertyId,@unitId,'open',@actorUserId);
+           END;
+           IF NOT EXISTS(SELECT 1 FROM tenancy_move_in_checklist_items WHERE tenant_id=@tenantId AND checklist_id=@checklistId)
+           BEGIN
+             INSERT INTO tenancy_move_in_checklist_items(tenant_id,checklist_id,item_order,label,is_required,status)
+             SELECT @tenantId,@checklistId,itemOrder,label,isRequired,'pending'
+             FROM OPENJSON(@items) WITH(itemOrder INT,label NVARCHAR(500),isRequired BIT);
+             UPDATE tenancy_move_in_checklists SET status='open',completed_at=NULL,completed_by=NULL,updatedat=SYSUTCDATETIME()
+               WHERE id=@checklistId AND tenant_id=@tenantId;
+             INSERT INTO tenancy_lifecycle_events(tenant_id,agreement_id,event_type,actor_user_id,metadata)
+             VALUES(@tenantId,@agreementId,'move_in_checklist_created',@actorUserId,@metadata);
+           END;
+           COMMIT TRANSACTION;
+         END TRY
+         BEGIN CATCH
+           IF @@TRANCOUNT>0 ROLLBACK TRANSACTION;
+           THROW;
+         END CATCH;`,
+        { tenantId: req.tenantId, agreementId: agreement.id, propertyId: agreement.propertyid,
+          unitId: agreement.unitid || null, actorUserId: req.user.id,
+          items: JSON.stringify(sourceItems), metadata: JSON.stringify({ itemCount: sourceItems.length }) }
       );
-
+      const created = await loadChecklist(req.tenantId, agreement.id);
       res.status(201).json({ data: created, error: null });
     } catch (error) {
       next(error);
@@ -598,11 +622,13 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
          OUTPUT INSERTED.*
          WHERE tenant_id = @tenantId
            AND checklist_id = @checklistId
-           AND id = @itemId`,
+           AND id = @itemId
+           AND EXISTS (SELECT 1 FROM agreements WITH (UPDLOCK,HOLDLOCK) WHERE id=@agreementId AND tenant_id=@tenantId AND status NOT IN ('active','closed','cancelled'))`,
         {
           tenantId: req.tenantId,
           checklistId: checklist.id,
           itemId: req.params.itemId,
+          agreementId: agreement.id,
           status,
           actorUserId: req.user.id,
           notesProvided: Object.prototype.hasOwnProperty.call(req.body || {}, 'notes') ? 1 : 0,
@@ -720,6 +746,22 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
          BEGIN TRY
            BEGIN TRANSACTION;
 
+           DECLARE @currentStatus NVARCHAR(50);
+           SELECT @currentStatus=status FROM agreements WITH(UPDLOCK,HOLDLOCK)
+             WHERE tenant_id=@tenantId AND id=@agreementId;
+           IF @currentStatus IS NULL OR @currentStatus IN ('closed','cancelled')
+             THROW 51104,'TENANCY_STATE_CHANGED',1;
+           IF @currentStatus <> 'active'
+           BEGIN
+           IF NOT EXISTS(SELECT 1 FROM tenancy_move_in_checklists c WITH(HOLDLOCK)
+             WHERE c.tenant_id=@tenantId AND c.agreement_id=@agreementId AND c.status='completed'
+               AND EXISTS(SELECT 1 FROM tenancy_move_in_checklist_items i WITH(HOLDLOCK)
+                 WHERE i.tenant_id=@tenantId AND i.checklist_id=c.id AND i.is_required=1)
+               AND NOT EXISTS(SELECT 1 FROM tenancy_move_in_checklist_items i WITH(HOLDLOCK)
+                 WHERE i.tenant_id=@tenantId AND i.checklist_id=c.id
+                   AND ((i.is_required=1 AND i.status<>'completed') OR LTRIM(RTRIM(i.label))='')))
+             THROW 51104,'MOVE_IN_EVIDENCE_REQUIRED',1;
+
            UPDATE agreements
            SET status = 'active',
                activated_at = SYSUTCDATETIME(),
@@ -748,6 +790,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
            ) VALUES (
              @tenantId, @agreementId, 'tenancy_activated', @fromStatus, 'active', @actorUserId, @metadata
            );
+           END;
 
            COMMIT TRANSACTION;
          END TRY

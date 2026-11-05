@@ -3,6 +3,7 @@ import { platform as platformClient } from './platformClient';
 import { toast } from 'react-toastify';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
 import { alignedTextX, readBlockTextAlignment } from '../utils/documentFormatting';
+import { EVIA_SIGNATURE_ANCHORS } from '../utils/documentUtils';
 import { buildStorageUrl, downloadTenantFile, listTenantFiles, uploadTenantFile } from './storageApiService';
 
 /**
@@ -729,15 +730,21 @@ export const saveMergedDocument = async (content, agreementId) => {
       }
     };
     
-    // Process parsed content - keep the existing implementation
-    parsedContent.forEach(item => {
-      // Rest of the existing code for processing content items
-      // ...
-      // Add a new page if we're near the bottom
-      if (y < margin + 100) {
+    // Evia locates the signature at the marker. Keep its space in the source
+    // document; ordinary paragraph spacing is not enough for the provider stamp.
+    const isSignatureMarker = (item) => Object.values(EVIA_SIGNATURE_ANCHORS)
+      .some(anchor => String(item?.text || '').includes(anchor));
+    const signatureSpace = 100;
+    parsedContent.forEach((item, index) => {
+      const signatureMarker = isSignatureMarker(item);
+      const nextItem = parsedContent.slice(index + 1).find(next => next.text?.trim() || next.type === 'table');
+      const keepSignatureHeading = item.type === 'heading' && isSignatureMarker(nextItem);
+      if (y < margin + (signatureMarker || keepSignatureHeading ? signatureSpace + 80 : 100)) {
         page = pdfDoc.addPage([612, 792]);
         y = height - margin;
       }
+
+      if (signatureMarker) y -= 20;
       
       if (item.type === 'heading') {
         const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
@@ -924,30 +931,21 @@ export const saveMergedDocument = async (content, agreementId) => {
           y = tableY - 15;
         }
       }
+      if (signatureMarker) y -= signatureSpace;
     });
-    
-    // Footer with page number
-    page.drawText('Page 1', {
-      x: width / 2 - 20,
-      y: 30,
-      size: 10,
-      font: helveticaFont
-    });
-    
-    // For multiple pages, add page numbers to all pages
+
+    // Number every page once, after pagination. `page` above is the LAST page.
     const pageCount = pdfDoc.getPageCount();
-    if (pageCount > 1) {
-      for (let i = 1; i < pageCount; i++) {
+    for (let i = 0; i < pageCount; i++) {
         const currentPage = pdfDoc.getPage(i);
         const { width } = currentPage.getSize();
-        
-        currentPage.drawText(`Page ${i + 1}`, {
-          x: width / 2 - 20,
+        const label = `Page ${i + 1} of ${pageCount}`;
+        currentPage.drawText(label, {
+          x: (width - helveticaFont.widthOfTextAtSize(label, 10)) / 2,
           y: 30,
           size: 10,
           font: helveticaFont
         });
-      }
     }
     
     // Save the PDF to bytes
@@ -1696,4 +1694,4 @@ const mapStatusForTracker = (eviaStatus) => {
 export {
   processHtmlContent,
   createDocument
-}; 
+};

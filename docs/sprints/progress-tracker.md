@@ -1,5 +1,10 @@
 # Canonical progress tracker
 
+## R5 implementation checkpoint — 5 November 2026
+
+The five-task [R5 acceptance ledger](../R5-LIFECYCLE-ACCEPTANCE-20261105.md) now records the contract-footer/signature-space correction and move-in empty-checklist/deposit-retry defects under implementation. CI, deployment and live evidence are separate gates. Secure browser authentication timed out; signed-in acceptance is unverified. R1–R4 retain the owner decisions in PR #502. R5 remains active.
+
+
 ## Current owner decision — 5 November 2026
 
 | Milestone | Current disposition |
