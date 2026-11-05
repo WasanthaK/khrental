@@ -26,20 +26,33 @@ export const formatDateTime = (dateString) => {
 };
 
 // Currency formatting
-export const formatCurrency = (amount) => {
-  if (amount === undefined || amount === null) return 'LKR 0.00';
-  
-  // Format with Sri Lankan Rupee symbol
+export const formatCurrency = (amount, currency) => {
+  if (currency === undefined && (amount === undefined || amount === null)) return 'LKR 0.00';
+  const value = amount === undefined || amount === null ? 0 : Number(amount);
+  const code = currency === undefined ? 'LKR'
+    : typeof currency === 'string' && /^[A-Z]{3}$/.test(currency) ? currency : null;
+
   try {
     return new Intl.NumberFormat('en-LK', {
-      style: 'currency',
-      currency: 'LKR',
+      ...(code ? { style: 'currency', currency: code, ...(currency === undefined ? {} : { currencyDisplay: 'code' }) } : { style: 'decimal' }),
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(amount);
+    }).format(value);
   } catch (e) {
-    // Fallback formatting if Intl support is limited
-    return `LKR ${Number(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+    return `${code ? `${code} ` : ''}${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  }
+};
+
+// The accepted terms own the denomination. Never infer it from today's market,
+// account settings or browser locale, or rewrite a historical agreement.
+export const getAgreementCurrency = (agreement) => {
+  try {
+    const terms = typeof agreement?.terms === 'string' ? JSON.parse(agreement.terms) : agreement?.terms;
+    const currency = terms?.currency;
+    return typeof currency === 'string' && /^[A-Za-z]{3}$/.test(currency.trim())
+      ? currency.trim().toUpperCase() : null;
+  } catch {
+    return null;
   }
 };
 
@@ -197,4 +210,4 @@ export const ensureValidTimestamps = (record) => {
   }
   
   return result;
-}; 
+};
