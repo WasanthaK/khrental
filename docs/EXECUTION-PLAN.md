@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## R5 continuation — 5 November 2026
+
+The owner directed execution of the R5 handoff. A fresh browser reached the ordinary sign-in form after bounded readiness recovery. One secure credential submission returned **Invalid login credentials**; no account reset or repeated credential request followed. The next required role was clarified as **JEERY’S PLACE owner/Administrator, approved alias +514** for move-in/deposit/activation. Rentee and assigned maintenance staff are separate later acceptance roles; Global Admin is for platform pricing/billing. Name the account and purpose before every switch.
+
+Independent source correction now uses persisted agreement `terms.currency` for move-in deposit and exit-settlement displays. It does not infer denomination from the current property market or rewrite historical amounts/documents. Missing or malformed currency is explicitly identified rather than silently shown as LKR. Existing unrelated currency callers keep their previous behavior. Source and focused tests are prepared; CI/browser verification and deployment are pending. No live tenancy, inspection, payment or signature is claimed. R1–R4 scope decisions and single-replica capacity remain unchanged; R5 stays active and live charging disabled.
+
 ## R5 deployment checkpoint — 5 November 2026
 
 The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) records merged [PR #503](https://github.com/WasanthaK/khrental/pull/503), application CI **886/886**, passing browser/PDF and disposable SQL acceptance, and successful [deployment 41991277841](https://github.com/WasanthaK/khrental/actions/runs/41991277841). Public build **268e409b33a86b789e8cd6f1e0e767d596b6ac2b** is serving from revision **0000458** with live MSSQL connectivity and unchanged single-replica capacity. Future-contract layout and move-in/deposit retry corrections are deployed. Historical signed documents are unchanged.

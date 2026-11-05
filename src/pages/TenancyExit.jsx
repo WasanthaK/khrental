@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, getAgreementCurrency } from '../utils/helpers';
 import {
   addTenancySettlementItem,
   approveTenancySettlement,
@@ -181,6 +181,8 @@ const TenancyExit = () => {
   }
 
   const { agreement } = data;
+  const currency = getAgreementCurrency(agreement);
+  const formatAmount = (amount) => formatCurrency(amount, currency);
   const isClosed = agreement.status === 'closed';
 
   const sendNotice = async (event) => {
@@ -368,17 +370,18 @@ const TenancyExit = () => {
                 <div>
                   <h2 className="text-lg font-semibold">3. Deposit and financial settlement</h2>
                   <p className="text-sm text-gray-500">Approved deductions plus outstanding invoices are reconciled against security deposit received.</p>
+                  <p className="text-sm text-gray-600 mt-2">{currency ? `Agreement currency: ${currency}` : 'Currency is not recorded in this agreement. Check the signed terms before recording amounts.'}</p>
                 </div>
                 <StatusBadge status={settlement?.status || 'draft'} />
               </div>
 
               {settlement && (
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5 text-sm">
-                  <div className="border rounded p-3"><p className="text-gray-500">Deposit received</p><p className="font-semibold">{formatCurrency(settlement.deposit_received || 0)}</p></div>
-                  <div className="border rounded p-3"><p className="text-gray-500">Deductions</p><p className="font-semibold">{formatCurrency(settlement.approved_deductions || 0)}</p></div>
-                  <div className="border rounded p-3"><p className="text-gray-500">Outstanding invoices</p><p className="font-semibold">{formatCurrency(settlement.outstanding_invoices || 0)}</p></div>
-                  <div className="border rounded p-3"><p className="text-gray-500">Refund</p><p className="font-semibold text-green-700">{formatCurrency(settlement.refund_amount || 0)}</p></div>
-                  <div className="border rounded p-3"><p className="text-gray-500">Amount due</p><p className="font-semibold text-red-700">{formatCurrency(settlement.amount_due || 0)}</p></div>
+                  <div className="border rounded p-3"><p className="text-gray-500">Deposit received</p><p className="font-semibold">{formatAmount(settlement.deposit_received || 0)}</p></div>
+                  <div className="border rounded p-3"><p className="text-gray-500">Deductions</p><p className="font-semibold">{formatAmount(settlement.approved_deductions || 0)}</p></div>
+                  <div className="border rounded p-3"><p className="text-gray-500">Outstanding invoices</p><p className="font-semibold">{formatAmount(settlement.outstanding_invoices || 0)}</p></div>
+                  <div className="border rounded p-3"><p className="text-gray-500">Refund</p><p className="font-semibold text-green-700">{formatAmount(settlement.refund_amount || 0)}</p></div>
+                  <div className="border rounded p-3"><p className="text-gray-500">Amount due</p><p className="font-semibold text-red-700">{formatAmount(settlement.amount_due || 0)}</p></div>
                 </div>
               )}
 
@@ -388,7 +391,7 @@ const TenancyExit = () => {
                     <div key={item.id} className="border rounded-md p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                       <div>
                         <p className="font-medium">{item.description}</p>
-                        <p className="text-xs text-gray-500 capitalize">{item.item_type} · {formatCurrency(item.amount)}</p>
+                        <p className="text-xs text-gray-500 capitalize">{item.item_type} · {formatAmount(item.amount)}</p>
                         {item.notes && <p className="text-xs text-gray-600 mt-1">{item.notes}</p>}
                       </div>
                       <div className="flex items-center gap-2">

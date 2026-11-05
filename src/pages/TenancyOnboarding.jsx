@@ -10,7 +10,7 @@ import {
   updateMoveInChecklistItem
 } from '../services/platformClient';
 import { resendInvitation } from '../services/invitationService';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, getAgreementCurrency } from '../utils/helpers';
 
 const CheckRow = ({ label, complete }) => (
   <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
@@ -150,6 +150,8 @@ const TenancyOnboarding = () => {
   }
 
   const { agreement, rentee, property, unit, invitation, readiness, checklist } = data;
+  const currency = getAgreementCurrency(agreement);
+  const formatAmount = (amount) => formatCurrency(amount, currency);
   const isActive = agreement?.status === 'active';
   const isManuallySigned = agreement?.signature_status === 'manual_signed';
 
@@ -157,7 +159,7 @@ const TenancyOnboarding = () => {
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
         <div>
-          <p className="text-sm text-gray-500 mb-1">Phase 4 tenancy onboarding</p>
+          <p className="text-sm text-gray-500 mb-1">Move-in and tenancy activation</p>
           <h1 className="text-2xl font-bold text-gray-900">{rentee?.name || 'Tenant'} · {property?.name || 'Property not assigned'}</h1>
           <p className="text-gray-600 mt-1">
             {unit?.unitnumber ? `Unit ${unit.unitnumber} · ` : ''}{property?.address || ''}
@@ -213,10 +215,11 @@ const TenancyOnboarding = () => {
           <section className="bg-white rounded-lg shadow p-5">
             <h2 className="text-lg font-semibold mb-1">3. Advance and security deposit</h2>
             <p className="text-sm text-gray-500 mb-4">Contract amount stays on the agreement; actual collections are recorded in the tenancy ledger.</p>
+            <p className="text-sm text-gray-600 mb-4">{currency ? `Agreement currency: ${currency}` : 'Currency is not recorded in this agreement. Check the signed terms before recording amounts.'}</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5 text-sm">
-              <div className="border rounded p-3"><p className="text-gray-500">Required security deposit</p><p className="font-semibold">{formatCurrency(readiness.requiredDeposit || 0)}</p></div>
-              <div className="border rounded p-3"><p className="text-gray-500">Security deposit received</p><p className="font-semibold">{formatCurrency(readiness.securityDepositReceived || 0)}</p></div>
-              <div className="border rounded p-3"><p className="text-gray-500">Confirmation advance</p><p className="font-semibold">{formatCurrency(data.deposit?.confirmationAdvance || 0)}</p></div>
+              <div className="border rounded p-3"><p className="text-gray-500">Required security deposit</p><p className="font-semibold">{formatAmount(readiness.requiredDeposit || 0)}</p></div>
+              <div className="border rounded p-3"><p className="text-gray-500">Security deposit received</p><p className="font-semibold">{formatAmount(readiness.securityDepositReceived || 0)}</p></div>
+              <div className="border rounded p-3"><p className="text-gray-500">Confirmation advance</p><p className="font-semibold">{formatAmount(data.deposit?.confirmationAdvance || 0)}</p></div>
             </div>
 
             {!isActive && (
@@ -225,7 +228,7 @@ const TenancyOnboarding = () => {
                   <option value="security_deposit">Security deposit</option>
                   <option value="confirmation_advance">Confirmation advance</option>
                 </select>
-                <input required type="number" min="0.01" step="0.01" placeholder="Amount" value={deposit.amount} onChange={(e) => setDeposit((current) => ({ ...current, amount: e.target.value }))} className="border rounded-md px-3 py-2" />
+                <input required type="number" min="0.01" step="0.01" aria-label={currency ? `Amount (${currency})` : 'Amount (check agreement currency)'} placeholder={currency ? `Amount (${currency})` : 'Amount (check agreement currency)'} value={deposit.amount} onChange={(e) => setDeposit((current) => ({ ...current, amount: e.target.value }))} className="border rounded-md px-3 py-2" />
                 <input placeholder="Payment method" value={deposit.paymentMethod} onChange={(e) => setDeposit((current) => ({ ...current, paymentMethod: e.target.value }))} className="border rounded-md px-3 py-2" />
                 <input required maxLength={255} aria-label="Payment reference" placeholder="Payment reference (required)" value={deposit.paymentReference} onChange={(e) => setDeposit((current) => ({ ...current, paymentReference: e.target.value }))} className="border rounded-md px-3 py-2" />
                 <input placeholder="Notes" value={deposit.notes} onChange={(e) => setDeposit((current) => ({ ...current, notes: e.target.value }))} className="border rounded-md px-3 py-2 md:col-span-2" />
@@ -237,7 +240,7 @@ const TenancyOnboarding = () => {
               <h3 className="font-medium">Deposit ledger</h3>
               {(data.deposit?.transactions || []).length === 0 ? <p className="text-sm text-gray-500">No payments recorded.</p> : data.deposit.transactions.map(transaction => (
                 <div key={transaction.id} className="border rounded-md p-3 text-sm break-words">
-                  <p className="font-medium">{transaction.transaction_type === 'security_deposit' ? 'Security deposit' : 'Confirmation advance'} · {formatCurrency(transaction.amount)} · {transaction.status}</p>
+                  <p className="font-medium">{transaction.transaction_type === 'security_deposit' ? 'Security deposit' : 'Confirmation advance'} · {formatAmount(transaction.amount)} · {transaction.status}</p>
                   <p>{transaction.payment_reference || 'No reference recorded'} · {transaction.payment_method || 'Method not recorded'} · {formatDate(transaction.received_at)}</p>
                   {transaction.notes && <p className="text-gray-600 mt-1">{transaction.notes}</p>}
                 </div>

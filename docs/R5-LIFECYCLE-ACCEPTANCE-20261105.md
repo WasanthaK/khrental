@@ -1,5 +1,11 @@
 # R5 rental lifecycle acceptance — 5 November 2026
 
+## R5 continuation — 5 November 2026
+
+The owner directed execution of the R5 handoff. A fresh browser reached the ordinary sign-in form after bounded readiness recovery. One secure credential submission returned **Invalid login credentials**; no account reset or repeated credential request followed. The next required role was clarified as **JEERY’S PLACE owner/Administrator, approved alias +514** for move-in/deposit/activation. Rentee and assigned maintenance staff are separate later acceptance roles; Global Admin is for platform pricing/billing. Name the account and purpose before every switch.
+
+Independent source correction now uses persisted agreement `terms.currency` for move-in deposit and exit-settlement displays. It does not infer denomination from the current property market or rewrite historical amounts/documents. Missing or malformed currency is explicitly identified rather than silently shown as LKR. Existing unrelated currency callers keep their previous behavior. Source and focused tests are prepared; CI/browser verification and deployment are pending. No live tenancy, inspection, payment or signature is claimed. R1–R4 scope decisions and single-replica capacity remain unchanged; R5 stays active and live charging disabled.
+
 R1 remains owner-closed; R2 remains deferred; R3 remains closed within the single-replica scope; R4 remains closed for its deployed sandbox foundation. R5 is active. This record supersedes no accepted historical signing/download evidence.
 
 ## Current work and evidence
