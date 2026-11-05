@@ -62,6 +62,13 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
       throw problem(400,'BILLING_ENROLLMENT_INVALID','Choose an explicit market and sandbox pricing policy.');
     await store.enroll({tenantId:identifier(req.body.tenantId),actorId:req.user.id,reason:reason(req.body.reason),market:req.body.market,useApprovedSandboxBaseline:req.body.useApprovedSandboxBaseline});send(res,{enrolled:true});
   }));
+  router.get('/admin/complimentary/:tenantId',globalAdmin,wrap(async(req,res)=>{
+    send(res,await store.complimentaryStatus(identifier(req.params.tenantId)));
+  }));
+  router.post('/admin/complimentary/:tenantId',globalAdmin,wrap(async(req,res)=>{
+    exact(req.body,['mode','expiresAt','reason','expectedVersion']);
+    send(res,await store.setComplimentary({tenantId:identifier(req.params.tenantId),actorId:req.user.id,...req.body}));
+  }));
   router.get('/status',orgAdmin,wrap(async(req,res)=>send(res,await service.summary(req.tenantId))));
   router.post('/refresh',orgAdmin,wrap(async(req,res)=>{exact(req.body,[]);send(res,await service.refresh(req.tenantId));}));
   const command=(kind,extraKeys,run)=>router.post(`/${kind}`,orgAdmin,wrap(async(req,res)=>{

@@ -12,6 +12,10 @@ on:
       - 'src/components/common/ProtectedRoute.jsx'
       - 'src/pages/InvoiceManagementDashboard.jsx'
       - 'src/pages/rentee/**'
+      - 'src/pages/ManagementPricing.jsx'
+      - 'src/pages/ManagementSubscription.jsx'
+      - 'tests/fixtures/management-billing/**'
+      - 'scripts/verify-management-billing-browser.mjs'
       - '.github/workflows/test-browser-protected-billing.yml'
   workflow_dispatch:
 
@@ -31,3 +35,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:browser:billing-unauthenticated
+      - name: Management subscription, pricing and complimentary access screens
+        env:
+          BILLING_SCREENSHOT_DIR: management-billing-screens
+        run: node scripts/verify-management-billing-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: management-billing-screens
+          path: management-billing-screens/
+          if-no-files-found: ignore

@@ -79,8 +79,22 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   });
   for(const tenantId of [tenantA,tenantB]) await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Synthetic SQL transaction acceptance only.'});
   const accounts=await store.read('SELECT tenant_id FROM dbo.management_billing_accounts');assert.equal(accounts.length,2);
+  const compChange={tenantId:tenantB,actorId,mode:'fixed',expiresAt:new Date(Date.now()+3600000).toISOString(),
+    expectedVersion:1,reason:'Synthetic complimentary-access acceptance only.'};
+  const comp=await store.setComplimentary(compChange);
+  assert.equal(comp.entitlement.management,true);assert.equal(comp.version,2);
+  await assert.rejects(store.setComplimentary(compChange),{code:'BILLING_STALE_VERSION'});
+  await store.locked(tenantB,q=>q('UPDATE dbo.management_billing_accounts SET comp_expires_at=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId',{tenantId:tenantB}));
+  assert.equal((await store.complimentaryStatus(tenantB)).entitlement.management,false,'Expiry applies without a scheduled job');
+  const ongoing=await store.setComplimentary({...compChange,mode:'ongoing',expiresAt:null,expectedVersion:2});
+  assert.equal(ongoing.entitlement.state,'complimentary');
+  const revoked=await store.setComplimentary({...compChange,mode:'revoke',expiresAt:null,expectedVersion:ongoing.version});
+  assert.equal(revoked.entitlement.management,false);assert.equal(revoked.mode,null);
+  const compAudit=await store.read("SELECT action FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action LIKE 'sandbox.complimentary.%'",{tenantId:tenantB});
+  assert.equal(compAudit.length,3,'Stale writes produce no duplicate grant or audit');
+  console.log('PASS: complimentary fixed-term expiry, ongoing grant, revoke, stale-write rejection and durable audit');
   const remote=new Map(),idempotency=new Map(),calls=[];
-  let customerCount=0,sessionCount=0,timeoutOnce=true,quantityTimeoutOnce=true;
+  let customerCount=0,sessionCount=0,timeoutOnce=true,quantityTimeoutOnce=true,scheduleMismatchOnce=true;
   const price={id:BILLING_PRICE,product:BILLING_PRODUCT,active:true,livemode:false,type:'recurring',billing_scheme:'per_unit',currency:'usd',unit_amount:500,
     recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
   const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={},key)=>{
@@ -103,7 +117,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
       result={id:'sub_sched_fixture',customer:sub.customer,subscription:sub.id,status:'active',current_phase:{start_date:sub.items.data[0].current_period_start}};
       sub.schedule=result.id;remote.set(`/v1/subscription_schedules/${result.id}`,result);
     }else if(path==='/v1/subscription_schedules/sub_sched_fixture'){
-      const schedule=remote.get(path);schedule.phases=body.phases;remote.get(`/v1/subscriptions/${schedule.subscription}`).items.data[0].quantity=body.phases[0].items[0].quantity;
+      const schedule=remote.get(path);schedule.phases=body.phases;schedule.end_behavior=body.end_behavior;remote.get(`/v1/subscriptions/${schedule.subscription}`).items.data[0].quantity=body.phases[0].items[0].quantity;
       result=schedule;
     }else if(path==='/v1/subscription_schedules/sub_sched_fixture/release'){
       const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');schedule.status='released';
@@ -157,7 +171,18 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   assert.equal(calls.some(c=>c.path==='/v1/invoices'||c.body.proration_behavior==='always_invoice'),false,'Routine quantity addition must not collect immediately.');
   await store.locked(tenantA,q=>q('DELETE dbo.property_units WHERE id=@id',{id:unit2}));
   const reduction=await service.quantityPreview({tenantId:tenantA,id:crypto.randomUUID(),actorId});
-  await service.quantityApply({tenantId:tenantA,id:crypto.randomUUID(),actorId,previewId:reduction.previewId});
+  const reductionCommand=crypto.randomUUID();
+  const regularRequest=stripe.request;
+  stripe.request=async(...args)=>{
+    const result=await regularRequest(...args);
+    if(args[0]==='GET'&&args[1]==='/v1/subscription_schedules/sub_sched_fixture'&&result.phases&&scheduleMismatchOnce){
+      scheduleMismatchOnce=false;result.phases[1].items[0].quantity=99;
+    }
+    return result;
+  };
+  await assert.rejects(service.quantityApply({tenantId:tenantA,id:reductionCommand,actorId,previewId:reduction.previewId}),{code:'BILLING_SCHEDULE_UNCONFIRMED'});
+  assert.equal((await service.summary(tenantA)).pendingOperation.id,reductionCommand,'Unconfirmed future quantity remains recoverable');
+  await service.quantityApply({tenantId:tenantA,id:reductionCommand,actorId,previewId:reduction.previewId});
   assert.equal((await store.account(tenantA)).quantity,2);assert.equal((await store.account(tenantA)).pending_quantity,1);
   const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');assert.equal(schedule.phases[1].items[0].quantity,1);
   await service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:true});
