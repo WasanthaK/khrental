@@ -17,7 +17,7 @@ const readyInput = () => ({
   },
   rentee: { auth_id: 'auth-1' },
   membership: { status: 'active', role: 'tenant' },
-  checklist: { status: 'completed' },
+  checklist: { status: 'completed', items: [{label: 'Keys and room condition checked', is_required: true, status: 'completed'}] },
   securityDepositReceived: 1000
 });
 
@@ -194,3 +194,10 @@ test('an expired or replaced rental reservation blocks an otherwise ready activa
   assert.equal(evaluateTenancyActivationReadiness({...readyInput(),rentalReservation:{valid:true}}).canActivate,true);
   assert.equal(evaluateTenancyActivationReadiness({...readyInput(),agreement:{...readyInput().agreement,status:'active'},rentalReservation:{valid:false}}).canActivate,true,'An already active tenancy does not revert when its former hold deadline passes');
 });
+
+for (const items of [undefined, [], [{label:'Keys',is_required:false,status:'completed'}], [{label:'',is_required:true,status:'completed'}], [{label:'Keys',is_required:true,status:'pending'}]]) {
+  test(`a completed header cannot substitute for required inspection evidence: ${JSON.stringify(items)}`, () => {
+    const input=readyInput();input.checklist={status:'completed',items};
+    assert.equal(evaluateTenancyActivationReadiness(input).canActivate,false);
+  });
+}

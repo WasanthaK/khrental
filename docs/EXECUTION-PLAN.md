@@ -1,5 +1,10 @@
 # KH Rentals Execution Plan
 
+## R5 implementation checkpoint — 5 November 2026
+
+The five-task [R5 acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) now records the contract-footer/signature-space correction and move-in empty-checklist/deposit-retry defects under implementation. CI, deployment and live evidence are separate gates. Secure browser authentication timed out; signed-in acceptance is unverified. R1–R4 retain the owner decisions in PR #502. R5 remains active.
+
+
 ## Controlling owner decision — R3/R4 closed; R5 active — 5 November 2026
 
 The owner requested closing R3 and R4 and moving to R5 after reviewing the deployed evidence and remaining work. **R3 and R4 are CLOSED BY OWNER for the scopes recorded below. R5 is the active priority.** This supersedes older R3/R4-active or R4-incomplete milestone status wording; the underlying evidence and unfinished technical obligations remain visible.

@@ -10,6 +10,15 @@ const SIGNATURE_COMPLETE_STATUSES = new Set([
 ]);
 const TENANT_MEMBERSHIP_ROLES = new Set(['tenant', 'rentee']);
 
+export const isMoveInChecklistComplete = (checklist) => {
+  const items = Array.isArray(checklist?.items) ? checklist.items : [];
+  const required = items.filter(item => item.is_required === true || Number(item.is_required) === 1);
+  return normalizeStatus(checklist?.status) === 'completed'
+    && required.length > 0
+    && items.every(item => String(item.label || '').trim())
+    && required.every(item => normalizeStatus(item.status) === 'completed');
+};
+
 export const isAgreementSignatureComplete = (agreement = {}) => {
   if (SIGNED_STATUSES.has(normalizeStatus(agreement.status))) {
     return true;
@@ -49,7 +58,7 @@ export const evaluateTenancyActivationReadiness = ({
     membershipActive: isActiveTenantMembership(membership),
     agreementSigned: isAgreementSignatureComplete(agreement),
     securityDepositSatisfied: requiredDeposit <= 0 || receivedDeposit >= requiredDeposit,
-    moveInChecklistComplete: normalizeStatus(checklist?.status) === 'completed'
+    moveInChecklistComplete: isMoveInChecklistComplete(checklist)
   };
   if (rentalReservation && normalizeStatus(agreement.status) !== 'active') {
     checks.rentalReservationValid = rentalReservation.valid === true;

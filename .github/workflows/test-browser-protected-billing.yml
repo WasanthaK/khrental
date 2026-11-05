@@ -14,6 +14,10 @@ on:
       - 'src/pages/rentee/**'
       - 'src/pages/ManagementPricing.jsx'
       - 'src/pages/ManagementSubscription.jsx'
+      - 'src/pages/TenancyOnboarding.jsx'
+      - 'src/services/DocumentService.js'
+      - 'src/utils/documentUtils.js'
+      - 'scripts/test-r5-layout-browser.mjs'
       - 'tests/fixtures/management-billing/**'
       - 'scripts/verify-management-billing-browser.mjs'
       - '.github/workflows/test-browser-protected-billing.yml'
@@ -39,6 +43,14 @@ jobs:
         env:
           BILLING_SCREENSHOT_DIR: management-billing-screens
         run: node scripts/verify-management-billing-browser.mjs
+      - name: Future contract layout and move-in screen
+        run: node scripts/test-r5-layout-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r5-contract-onboarding-proof
+          path: r5-browser-proof/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
