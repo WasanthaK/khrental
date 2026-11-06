@@ -1,5 +1,9 @@
 # KH Rentals implementation mistakes
 
+## Automatic listing preferences participate in property deletion
+
+Every registered property receives a public-listing preference, even when inactive or opted out. Deleting a genuinely unused property must remove that preference in the same transaction as the tenant-scoped property. Preserve all existing foreign keys: media, enquiries and other history must block deletion and roll back preference cleanup. Do not drop constraints or delete historical child records to complete a test.
+
 ## Finish membership switching at the new portal
 
 A verified tenant switch can change an account from administrator to renter (or back). Retaining the old role's route produces Access Denied even though selection succeeded. After exact selected-membership verification, replace the document at its policy-derived landing path so the remounted tenant router starts correctly. Never infer authority from the global account role or navigate on failed, unverified or mismatched context.

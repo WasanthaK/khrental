@@ -4,6 +4,7 @@
  * Does not read production credentials, connect to Azure, or enable any release flags.
  */
 import assert from 'node:assert/strict';
+import {buildPropertyDeleteSql} from '../src/api/platform/router.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -346,6 +347,30 @@ try{
   await query("UPDATE dbo.properties SET country_code='LK' WHERE id=@pid",{pid:id(1)});
   // Wrong-country classification is rejected by the database, too.
   await assert.rejects(query("UPDATE dbo.public_listing_preferences SET country_code=N'XX' WHERE property_id=@pid",{pid:id(1)}));
+  // Execute the exact production deletion batch against real constraints.
+  await property(90,A,'inactive');await property(91,B,'inactive');
+  const deleteSql=buildPropertyDeleteSql('WHERE id=@pid AND tenant_id=@tenant');
+  const denied=await query(deleteSql,{pid:id(91),tenant:A});
+  assert.equal(denied.recordset.length,0,'Foreign property cannot enter the deletion target');
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(91)})).recordset[0].n,1);
+  const deleted=await query(deleteSql,{pid:id(90),tenant:A});
+  assert.equal(deleted.recordset[0].id.toLowerCase(),id(90));
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.properties WHERE id=@pid',{pid:id(90)})).recordset[0].n,0);
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(90)})).recordset[0].n,0);
+  assert.equal((await query(deleteSql,{pid:id(90),tenant:A})).recordset.length,0,'Repeated deletion is empty');
+  // Other domain history must roll back preference cleanup as well.
+  await pool.request().batch('CREATE TABLE dbo.property_delete_history_fixture(property_id UNIQUEIDENTIFIER REFERENCES dbo.properties(id));');
+  await property(92,A,'inactive');
+  await query('INSERT dbo.property_delete_history_fixture VALUES(@pid)',{pid:id(92)});
+  await assert.rejects(query(deleteSql,{pid:id(92),tenant:A}),/REFERENCE constraint/);
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.properties WHERE id=@pid',{pid:id(92)})).recordset[0].n,1);
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:id(92)})).recordset[0].n,1,'Rollback preserves listing preference with retained history');
+  // Real media/review history in the exact listing schema is also preserved.
+  const protectedMedia=(await query('SELECT TOP 1 pref.property_id,pref.tenant_id FROM dbo.public_listing_preferences pref JOIN dbo.public_listing_media m ON m.listing_public_id=pref.public_id')).recordset[0];
+  assert.ok(protectedMedia);
+  await assert.rejects(query(deleteSql,{pid:protectedMedia.property_id,tenant:protectedMedia.tenant_id}),/REFERENCE constraint/);
+  assert.equal((await query('SELECT COUNT(*) n FROM dbo.public_listing_preferences WHERE property_id=@pid',{pid:protectedMedia.property_id})).recordset[0].n,1);
+  console.log('PROPERTY_DELETE_SQL=PASS unused_listing atomic_cleanup cross_tenant_denial repeated_delete history_rollback media_retention');
   console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; membership-revocation; optout; lease; vacancy; country; redaction');
 }finally{
   if(pool)await pool.close().catch(()=>{});
