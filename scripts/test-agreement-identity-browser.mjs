@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
 const owner = { id: 'owner-global', email: 'owner@example.invalid', name: 'Workspace Owner' };
 const counts = { contexts: 0, saves: [], generated: 0, sent: 0, previews: 0 };
-const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter} from 'react-router-dom';import {Toaster} from 'react-hot-toast';import Form from '/src/components/agreements/AgreementFormContainer.jsx';import '/src/index.css';createRoot(document.getElementById('root')).render(<BrowserRouter><Toaster/><Form/></BrowserRouter>);`;
+const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter} from 'react-router-dom';import {Toaster} from 'react-hot-toast';import Form from '/src/components/agreements/AgreementFormContainer.jsx';import 'bootstrap/dist/css/bootstrap.min.css';import '/src/index.css';createRoot(document.getElementById('root')).render(<BrowserRouter><Toaster/><Form/></BrowserRouter>);`;
 const modules = {
   platformClient: `export const platform={auth:{getTenantContext:async()=>{const r=await fetch('/api/context');return r.json();},getSession:async()=>({data:{session:{user:{id:'owner-global'}}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})}};`,
   agreementService: `export const listTemplates=async()=>[{id:'template',name:'Fixture'}];export const listProperties=async()=>[{id:'property',name:'House',propertytype:'house',rentalvalues:{rent:100,deposit:0}}];export const listPropertyUnits=async()=>[];export const fetchProperty=async()=>({id:'property',propertytype:'house',rentalvalues:{rent:100,deposit:0}});export const fetchPropertyUnit=async()=>null;export const getTemplate=async()=>({content:'<p>For Tenant:</p><p>For Landlord:</p>'});export const fetchAgreement=async()=>null;`,
@@ -29,7 +29,10 @@ const plugin = { name: 'agreement-identity-proof', enforce: 'pre', resolveId(sou
   if (id.startsWith('\0fixture-')) return modules[id.slice(9)];
 }};
 let vite, server, browser, saved;
-const click = (page, text) => page.evaluate(text => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === text).click(), text);
+const click = async (page, text) => {
+  await page.waitForFunction(text => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === text && !button.disabled), {}, text);
+  await page.evaluate(text => [...document.querySelectorAll('button')].find(button => button.textContent.trim() === text && !button.disabled).click(), text);
+};
 try {
   vite = await createServer({ configFile: false, plugins: [plugin, react()], server: { middlewareMode: true }, appType: 'custom' });
   const app = express(); app.use(express.json());

@@ -48,3 +48,8 @@ Retained signed-PDF and administrator audit authorization must recognize explici
 ## Prepare the document before opening signing review
 
 The signing form requires a document URL. Saving only a draft before opening it forces a separate manual review/save step. Save and retain the agreement ID, prepare the document automatically, and offer the existing authenticated preview before sending that same document. Do not regenerate after review. Use the editable-status predicate's result rather than treating its function as a boolean; validate real submit actions and lock duplicate submissions.
+
+
+## Wait for the rendered form after preparation retry
+
+Saving a new agreement initializes the form hook with its persisted ID. The brief loading state can outlast an error toast; browser acceptance must wait for the enabled action to return before clicking retry. Include the production Bootstrap stylesheet in the fixture before judging rendered layout.
