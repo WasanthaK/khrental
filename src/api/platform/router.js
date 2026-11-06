@@ -808,6 +808,31 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
   return { data: mappedRows, error: null };
 };
 
+// Remove only the automatic listing preference. Any media, enquiry or other
+// history still blocks deletion through its existing FK and rolls back both
+// changes. The target set comes exclusively from authorized tenant filters.
+export const buildPropertyDeleteSql = (whereClause) => `
+  SET XACT_ABORT ON;
+  BEGIN TRY
+    BEGIN TRANSACTION;
+    SELECT * INTO #quixo_property_delete_targets
+      FROM properties WITH (UPDLOCK,HOLDLOCK) ${whereClause};
+    IF OBJECT_ID(N'dbo.public_listing_preferences',N'U') IS NOT NULL
+      EXEC(N'DELETE pref FROM dbo.public_listing_preferences pref
+        JOIN #quixo_property_delete_targets target
+          ON target.id=pref.property_id AND target.tenant_id=pref.tenant_id');
+    DELETE p FROM properties p JOIN #quixo_property_delete_targets target ON target.id=p.id;
+    COMMIT TRANSACTION;
+    SELECT * FROM #quixo_property_delete_targets;
+    DROP TABLE #quixo_property_delete_targets;
+  END TRY
+  BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF OBJECT_ID(N'tempdb..#quixo_property_delete_targets') IS NOT NULL
+      DROP TABLE #quixo_property_delete_targets;
+    THROW;
+  END CATCH;`;
+
 const executeDelete = async ({ table, filters = [], tenantId = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const { whereClause, params, postFilters } = buildWhereClause(getScopedFilters({ table: safeTable, filters, tenantId }));
@@ -819,7 +844,8 @@ const executeDelete = async ({ table, filters = [], tenantId = null }) => {
 
   try {
     rows = await runQuery(
-      `DELETE FROM ${safeTable} OUTPUT DELETED.* ${whereClause}`,
+      safeTable === 'properties' ? buildPropertyDeleteSql(whereClause)
+        : `DELETE FROM ${safeTable} OUTPUT DELETED.* ${whereClause}`,
       params
     );
   } catch (error) {
