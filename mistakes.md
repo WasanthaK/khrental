@@ -43,3 +43,18 @@ Opening a protected storage URL in a new window drops bearer and selected-organi
 ## Closed is a retained-document lifecycle state
 
 Retained signed-PDF and administrator audit authorization must recognize explicitly closed tenancies. Preserve the exact tenant, participant/administrator, completed signature, retained object and published archive checks. Test authenticated closed-tenant access through the actual browser button; testing only signed or active agreements misses this lifecycle boundary.
+
+
+## Prepare the document before opening signing review
+
+The signing form requires a document URL. Saving only a draft before opening it forces a separate manual review/save step. Save and retain the agreement ID, prepare the document automatically, and offer the existing authenticated preview before sending that same document. Do not regenerate after review. Use the editable-status predicate's result rather than treating its function as a boolean; validate real submit actions and lock duplicate submissions.
+
+
+## Wait for the rendered form after preparation retry
+
+Saving a new agreement initializes the form hook with its persisted ID. The brief loading state can outlast an error toast; browser acceptance must wait for the enabled action to return before clicking retry. Include the production Bootstrap stylesheet in the fixture before judging rendered layout.
+
+
+## Inspect settled review screenshots
+
+Wait until the preview iframe closes and transient notifications disappear before capturing recipient review. Capture the scrollable panel's final actions separately on mobile. Preparation retry errors should share a notification ID with preparation success so stale failure notices do not obscure the successful review.
