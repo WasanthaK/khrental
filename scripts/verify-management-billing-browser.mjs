@@ -28,8 +28,28 @@ try{
    await page.waitForFunction(()=>document.body.innerText.includes('Included monthly rent (BND)'));
    assert.equal(await page.evaluate(()=>document.body.innerText.includes('$60.00')),true,'The isolated view displays supplied preview state; controller resets it in the application.');
   }else if(screen==='subscription'){
+   assert.equal(await page.$('#scheduled-quantity-title'),null,'No scheduled reduction without a pending quantity');
    await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='End subscription at renewal').click());
    await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: cancellation'));
+   for(const scenario of ['pending','missing-date','invalid-date','applied','cancelled']){
+    await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
+    const scheduled=await page.$('section[aria-labelledby="scheduled-quantity-title"]');
+    if(['applied','cancelled'].includes(scenario)){
+     assert.equal(scheduled,null,`${scenario} does not promise a future reduction`);
+    }else{
+     assert.ok(scheduled);
+     const text=await scheduled.evaluate(n=>n.innerText);
+     assert.match(text,/from 2 to 1 at your next renewal/);
+     assert.match(text,/current period remains billed for 2 dwellings/);
+     assert.match(text,/No current-period refund/);
+     if(scenario==='pending')assert.match(text,/6 December 2026 \(UTC\)/);
+     else assert.match(text,/renewal date is not available yet/);
+     await page.reload({waitUntil:'networkidle2'});
+     assert.ok(await page.$('#scheduled-quantity-title'),'Pending reduction survives reload');
+    }
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+    await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
+   }
   }else{
    const selects=await page.$$('select');
    await selects[1].select('revoke');
