@@ -1,5 +1,24 @@
 # KH Rentals Execution Plan
 
+
+## R5 hosted sandbox Checkout acceptance — 6 November 2026
+
+This checkpoint supersedes the earlier signed-out owner-readback and no-Stripe-events statements below. An authenticated organization Administrator was verified in the intended organization. The live new-agreement form displays **Save draft** and **Review and send**. Only closed/cancelled historical agreements were present; no replacement agreement, signature invitation or historical-document change was created for acceptance.
+
+The owner explicitly approved the USD 5 monthly hosted sandbox subscription test. The real application Checkout action opened the selected Quixo Homes sandbox, with provider readback `livemode=false`, USD 5.00 due and one monthly managed dwelling. A standard provider test card completed hosted Checkout; no real funds moved. The return page and a full reload both show **active**, managed dwellings **1**, billed quantity **1** in the same organization.
+
+| Verified functional result | Evidence and limit |
+| --- | --- |
+| Genuine hosted sandbox Checkout | Provider session is complete and paid; monthly USD 5.00, quantity 1, no trial. This is provider test-mode evidence, not synthetic transport or live-money acceptance. |
+| Matching provider objects | Checkout session, active subscription and paid USD 5.00 initial invoice reference the same provider customer/subscription chain. |
+| Genuine Stripe-origin events | `checkout.session.completed`, `customer.subscription.created` and `invoice.paid` were read directly from the selected sandbox. Each reports zero pending webhook deliveries. Receiver-specific persisted event audit was not independently retrieved. |
+| Application readback | Authenticated organization-scoped subscription status remains active with quantity 1 after the provider return and full reload. |
+| Restricted portal | The actual Payment method & invoices action opens the correct sandbox portal, showing the paid USD 5 invoice, test payment method and 6 December 2026 renewal. No subscription-quantity editing or cancellation control was exposed there. Return restores the same active application state. |
+
+Replacement payment-method and cancellation/resume mutations were not executed; separate explicit approval is pending. No real customer payment information was used, no Link account was created, and no live billing was enabled. Private customer/session/subscription/invoice identifiers and account contact details are omitted from this public checkpoint.
+
+**Still open:** second-approved-organization hosted testing and isolation, persisted event replay/out-of-order/retry evidence, actual quantity and renewal/failure/recovery/grace behavior, payment-method update, period-end cancellation/resume, complimentary operations, production entitlement/inventory enforcement and commercial/merchant decisions. Future legitimate provider signing and automatic signed-PDF/audit retention remain open. R5 remains active; R1/R3/R4 dispositions and deferred R2 are unchanged. Brunei acceptance follows Sri Lanka readiness.
+
 ## R5 handoff implementation — 6 November 2026
 
 Contract preparation is being simplified to **Save draft** or **Review and send**. The latter saves the agreement, prepares its document automatically, and opens recipient review with an authenticated preview. Sending uses that prepared document; it does not regenerate it or sign for a participant. Validation, preparation retry on the saved agreement, and duplicate-click protection are included. [PR #517](https://github.com/WasanthaK/khrental/pull/517) is merged at `18c93d857e4ffe73cee62c0fce93e01da0692961`. Reviewed head `28d2ebe164140d1f3c7328977370993413f353fb` passed [authorization/build CI](https://github.com/WasanthaK/khrental/actions/runs/42141854985) and [full enquiry/SQL/browser CI](https://github.com/WasanthaK/khrental/actions/runs/42141854809). Actual 1440px/390px form, recipient-review and final-action screenshots were inspected. Preparation errors are replaced on successful retry. [Release 42142489151](https://github.com/WasanthaK/khrental/actions/runs/42142489151) passed runtime readiness and exact public-build validation; an independent browser read of build-info.json matched `18c93d857e4ffe73cee62c0fce93e01da0692961`. Live owner readback remains pending because the browser is signed out.
