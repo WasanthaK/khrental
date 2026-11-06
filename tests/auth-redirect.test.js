@@ -18,6 +18,8 @@ test('tenant switch navigation refuses missing, unverified, revoked or mismatche
     assert.equal(getTenantSwitchLandingPath(result,'next'),null);
   }
   assert.equal(getTenantSwitchLandingPath(valid,''),null);
+  assert.equal(getTenantSwitchLandingPath({...valid,membership:{...valid.membership,role:undefined}},'next'),null);
+  assert.equal(getTenantSwitchLandingPath({...valid,membership:{...valid.membership,role:'unknown'}},'next'),null);
 });
 
 test('existing property workspace navigation follows active membership, not email or a global role',()=>{

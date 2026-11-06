@@ -9,7 +9,8 @@ export const getTenantSwitchLandingPath = (user, selectedTenantId) => {
       || String(membership?.tenant_id || '').toLowerCase() !== String(selectedTenantId).toLowerCase()) {
     return null;
   }
-  return getDefaultLandingPath({ user, membership });
+  const path = getDefaultLandingPath({ user: null, membership });
+  return path === '/unauthorized' ? null : path;
 };
 
 // This server projection selects a task only; route/API guards retain authority.
