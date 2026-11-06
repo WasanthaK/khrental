@@ -1,5 +1,10 @@
 # R4 and R5 delivery programme
 
+## Current sandbox Checkout checkpoint — 6 November 2026
+
+Single-organization genuine hosted sandbox Checkout, initial USD 5 payment, active quantity-1 subscription, matching provider events, reload persistence and restricted billing-portal invoice access passed. The [canonical execution plan](EXECUTION-PLAN.md#r5-hosted-sandbox-checkout-acceptance--6-november-2026) records the exact scope and limits. This supersedes older statements that no genuine payment event has been observed; it does not complete two-organization isolation, subsequent billing lifecycle, production enforcement or paid/regional launch. Replacement test-card and cancellation/resume mutations await explicit approval. Live charging remains disabled.
+
+
 ## Current R5 checkpoint — 5 November 2026
 
 [PR #506](https://github.com/WasanthaK/khrental/pull/506) is **implemented, tested and deployed**. Move-in deposits and exit settlements use persisted agreement `terms.currency`; absent/malformed currency is disclosed instead of silently labelling amounts LKR. Historical amounts, agreements and PDFs are unchanged.
