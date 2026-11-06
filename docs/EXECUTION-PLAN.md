@@ -1,6 +1,23 @@
 # KH Rentals Execution Plan
 
 
+
+## R5 approved sandbox cancellation and renewal restoration — 6 November 2026
+
+The owner explicitly approved replacing the sandbox test card, scheduling cancellation at renewal and restoring renewal. Approval remains valid for the unfinished card step. Application sign-in was not resumed, so the completed mutations below used the connected selected Stripe sandbox directly; they are **provider-side acceptance**, not application-button or hosted-portal acceptance.
+
+| Operation | Independently verified provider result |
+| --- | --- |
+| Starting boundary | Exact existing sandbox customer/subscription; `livemode=false`, status active, one USD 5 monthly dwelling, cancellation not scheduled. |
+| Schedule cancellation at renewal | Updated only `cancel_at_period_end=true`; a subsequent provider GET confirmed active status, quantity 1 and cancellation at the existing 6 December 2026 period end. No immediate cancellation. |
+| Restore renewal | Updated only `cancel_at_period_end=false`; a subsequent provider GET confirmed active status, quantity 1, no scheduled cancellation and `cancel_at=null`. |
+| Genuine events | Two matching `customer.subscription.updated` events show false → true and true → false cancellation transitions. Both report zero pending webhook deliveries. Persisted application receiver-event audit was not independently queried. |
+| Final payment/invoice state | The original test payment method and latest paid initial invoice remain unchanged. No new invoice, payment, refund, quantity or pricing mutation was requested. No real funds moved; live charging stays disabled. |
+
+**Card replacement remains unperformed:** the billing portal needs an authenticated application session, sign-in was declined, and the connected API operations do not expose payment-method creation/attachment. No replacement method was added or selected. Do not substitute a legacy payment source or claim portal acceptance from direct provider operations. Next: resume the approved replacement through the signed-in portal, then verify the selected method on this exact subscription. Application cancellation/resume button handling and post-mutation organization/renter-history readback also remain open.
+
+R5 remains active. Second-organization isolation, subsequent inventory/quantity and renewal/failure/grace/recovery cases, complimentary controls, production enforcement, future legitimate contract signing/automatic retention, and commercial/regional readiness remain open. This checkpoint supersedes the earlier pending-approval wording for cancellation/resume; it does not reopen owner-closed milestones.
+
 ## R5 hosted sandbox Checkout acceptance — 6 November 2026
 
 This checkpoint supersedes the earlier signed-out owner-readback and no-Stripe-events statements below. An authenticated organization Administrator was verified in the intended organization. The live new-agreement form displays **Save draft** and **Review and send**. Only closed/cancelled historical agreements were present; no replacement agreement, signature invitation or historical-document change was created for acceptance.
@@ -15,7 +32,7 @@ The owner explicitly approved the USD 5 monthly hosted sandbox subscription test
 | Application readback | Authenticated organization-scoped subscription status remains active with quantity 1 after the provider return and full reload. |
 | Restricted portal | The actual Payment method & invoices action opens the correct sandbox portal, showing the paid USD 5 invoice, test payment method and 6 December 2026 renewal. No subscription-quantity editing or cancellation control was exposed there. Return restores the same active application state. |
 
-Replacement payment-method and cancellation/resume mutations were not executed; separate explicit approval is pending. No real customer payment information was used, no Link account was created, and no live billing was enabled. Private customer/session/subscription/invoice identifiers and account contact details are omitted from this public checkpoint.
+At the Checkout-only checkpoint, replacement payment-method and cancellation/resume mutations were not executed and separate approval was pending. The approved provider-only lifecycle checkpoint above supersedes that approval/cancellation status. No real customer payment information was used, no Link account was created, and no live billing was enabled. Private customer/session/subscription/invoice identifiers and account contact details are omitted from this public checkpoint.
 
 **Still open:** second-approved-organization hosted testing and isolation, persisted event replay/out-of-order/retry evidence, actual quantity and renewal/failure/recovery/grace behavior, payment-method update, period-end cancellation/resume, complimentary operations, production entitlement/inventory enforcement and commercial/merchant decisions. Future legitimate provider signing and automatic signed-PDF/audit retention remain open. R5 remains active; R1/R3/R4 dispositions and deferred R2 are unchanged. Brunei acceptance follows Sri Lanka readiness.
 
