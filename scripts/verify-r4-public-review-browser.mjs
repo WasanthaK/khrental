@@ -138,6 +138,10 @@ try{
       const file=path.resolve(base,'.'+u.pathname+(u.pathname.endsWith('/')?'index.html':''));
       assert.ok(file.startsWith(base+path.sep)&&fs.existsSync(file),p+' broken internal link '+l);
     }
+    if(p==='/'&&(width===390||width===1280)){
+      fs.mkdirSync('verification-browse-proof',{recursive:true});
+      await page.screenshot({path:'verification-browse-proof/home-rental-copy-'+width+'.png',fullPage:true});
+    }
     if(p==='/lk/how-it-works/'&&(width===390||width===1280)){
       fs.mkdirSync('verification-browse-proof',{recursive:true});
       await page.screenshot({path:'verification-browse-proof/lk-help-'+width+'.png',fullPage:true});

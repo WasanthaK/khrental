@@ -2,6 +2,10 @@
 
 
 
+## R5 public homepage content correction — 6 November 2026
+
+Final operational content review found that the global homepage still called current rental browsing “planned” choices and “layouts,” while its country links already reach working public search. The narrow correction describes public rental browsing, monthly rent and country selection, and keeps stock illustrations explicitly separate from actual availability. Approved images, navigation targets, prices and public data preferences are unchanged. Source is prepared; the existing 11-page/four-viewport browser check, inspected 390px/1280px homepage renders, deployment and live text readback remain required. This does not close final customer acceptance or R5.
+
 ## R5 approved sandbox cancellation and renewal restoration — 6 November 2026
 
 The owner explicitly approved replacing the sandbox test card, scheduling cancellation at renewal and restoring renewal. Approval remains valid for the unfinished card step. Application sign-in was not resumed, so the completed mutations below used the connected selected Stripe sandbox directly; they are **provider-side acceptance**, not application-button or hosted-portal acceptance.
