@@ -1,5 +1,17 @@
 # KH Rentals Execution Plan
 
+## R5 handoff implementation — 6 November 2026
+
+Contract preparation is being simplified to **Save draft** or **Review and send**. The latter saves the agreement, prepares its document automatically, and opens recipient review with an authenticated preview. Sending uses that prepared document; it does not regenerate it or sign for a participant. Validation, preparation retry on the saved agreement, and duplicate-click protection are included. [PR #517](https://github.com/WasanthaK/khrental/pull/517) is merged at `18c93d857e4ffe73cee62c0fce93e01da0692961`. Reviewed head `28d2ebe164140d1f3c7328977370993413f353fb` passed [authorization/build CI](https://github.com/WasanthaK/khrental/actions/runs/42141854985) and [full enquiry/SQL/browser CI](https://github.com/WasanthaK/khrental/actions/runs/42141854809). Actual 1440px/390px form, recipient-review and final-action screenshots were inspected. Preparation errors are replaced on successful retry. Deployment and live owner readback remain pending.
+
+| Remaining handoff task | Current position and next evidence |
+| --- | --- |
+| Future contract design and automatic retention | Preparation UX correction merged and fixture-verified; deployment pending. Provider signature placement and automatic signed-PDF/audit retention still require the next legitimate authorized contract and participant signing. Historical closed documents remain unchanged. |
+| Final operational acceptance | Completed demo evidence below remains accepted. Passing desktop/mobile browser regression exercises the actual agreement form, retry, recipient review, authenticated preview and send action with disposable service fixtures. Consolidated public/unavailable-stock/negative-path evidence remains open. |
+| Paid Sri Lanka then Brunei launch | Accepted sandbox foundation retained. The selected sandbox and enabled application webhook were confirmed read-only on 6 November; endpoint registration alone is not signed-event delivery evidence. The recent-event query returned no Checkout-completed, invoice paid/failed or subscription-updated events. Genuine hosted two-organization Checkout/events, provider quantity/renewal/cancellation readback, complete entitlement enforcement and unresolved commercial/merchant decisions remain prerequisites. Live charging stays disabled; Brunei follows Sri Lanka acceptance. |
+
+Existing live demo results below remain accepted. Additional local disposable checks passed: 87 retained-document/provider-callback fixture tests and 38 reservation/exit/access/billing boundary tests. These do not establish new provider signatures, genuine Stripe events or full live negative-path acceptance. Owner acceptance next needs an authenticated organization Administrator and the next legitimate authorized agreement. Paid testing separately needs a verified Platform Admin and a confirmed second approved organization. R1/R3/R4 closures and deferred R2 are unchanged. Browser fixtures cannot certify provider signing or genuine payment events.
+
 ## Current operational checkpoint — live demo closure acceptance
 
 This progress-only checkpoint supersedes older current/next statements below. Historical evidence remains retained. The agreed sequence remains complete rental operations, then paid/commercial launch; Sri Lanka before Brunei.
