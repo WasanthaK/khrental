@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { 
   getAuthorizationUrl,
@@ -6,6 +6,7 @@ import {
 } from '../../services/eviaSignService';
 import { platform as platformClient } from '../../services/platformClient';
 import Button from '../ui/Button';
+import AgreementDocument from './AgreementDocument';
 import { toast } from 'react-hot-toast';
 import { fetchAppUser } from '../../services/appUserService';
 import { prepareRentalAgreementSignatories } from '../../utils/rentalAgreementSignatories';
@@ -68,6 +69,8 @@ const SignatureForm = ({
     }
   ]);
   const [loading, setLoading] = useState(false);
+  const submissionRef = useRef(false);
+  const [showDocument, setShowDocument] = useState(false);
   const [error, setError] = useState('');
   const [isEviaAuthenticated, setIsEviaAuthenticated] = useState(false);
   const [eviaUserEmail, setEviaUserEmail] = useState(null);
@@ -417,7 +420,10 @@ const SignatureForm = ({
   // Function to handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submit button clicked - form submission started');
+    if (submissionRef.current) {
+      return;
+    }
+    submissionRef.current = true;
     setLoading(true);
     setError('');
 
@@ -506,6 +512,7 @@ const SignatureForm = ({
       console.error('Error submitting form:', err);
       setError(err.message || 'An error occurred during submission');
     } finally {
+      submissionRef.current = false;
       setLoading(false);
       console.log('Form submission process ended');
     }
@@ -524,9 +531,14 @@ const SignatureForm = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-        <h2 className="text-xl font-bold mb-4">Signature Request Details</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-2xl max-h-[90dvh] overflow-y-auto">
+        <h2 className="text-xl font-bold mb-4">Review and send agreement</h2>
+        <p className="mb-4 text-gray-600">Your agreement is saved. Check the document and recipient details below. Sending invites the recipients to review and sign; it does not sign on their behalf.</p>
+        <Button type="button" variant="secondary" onClick={() => setShowDocument(true)} disabled={loading || !agreement.documenturl}>
+          Preview agreement
+        </Button>
+        {showDocument && <AgreementDocument documentUrl={agreement.documenturl} onClose={() => setShowDocument(false)} />}
         
         {/* Authentication Status Section */}
         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -671,9 +683,10 @@ const SignatureForm = ({
             <Button
               type="button"
               onClick={onCancel}
+              disabled={loading}
               variant="secondary"
             >
-              Cancel
+              Back to agreement
             </Button>
             {isEviaAuthenticated ? (
               <Button

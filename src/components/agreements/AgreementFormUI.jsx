@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Row, Col, Card, Spinner } from 'react-bootstrap';
 import { useAgreementForm } from '../../hooks/useAgreementForm';
 import { AGREEMENT_STATUS } from '../../constants/agreementStatus';
@@ -20,26 +20,33 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
     isAgreementEditable
   } = useAgreementForm(initialData);
 
+  const editable = isAgreementEditable();
   const [submitting, setSubmitting] = useState(false);
   const [validated, setValidated] = useState(false);
+  const submissionRef = useRef(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    
-    if (form.checkValidity() === false) {
-      e.preventDefault();
-      e.stopPropagation();
-      setValidated(true);
+    if (submissionRef.current) {
       return;
     }
-
-    const formDataWithContent = {
-      ...formData,
-      processedContent
-    };
-
-    await onSubmit(formDataWithContent);
+    const form = e.currentTarget;
+    const status = e.nativeEvent.submitter?.value === AGREEMENT_STATUS.DRAFT
+      ? AGREEMENT_STATUS.DRAFT : AGREEMENT_STATUS.PENDING;
+    if (!form.checkValidity()) {
+      e.stopPropagation();
+      setValidated(true);
+      form.querySelector(':invalid')?.focus();
+      return;
+    }
+    submissionRef.current = true;
+    setSubmitting(true);
+    try {
+      await onSubmit({ ...formData, processedContent }, status);
+    } finally {
+      submissionRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -60,7 +67,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Select
                   value={formData.templateid || ''}
                   onChange={(e) => handleTemplateChange(e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 >
                   <option value="">Select Template</option>
@@ -81,7 +88,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Select
                   value={formData.propertyid || ''}
                   onChange={(e) => handlePropertyChange(e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 >
                   <option value="">Select Property</option>
@@ -105,7 +112,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Select
                   value={formData.unitid || ''}
                   onChange={(e) => handleInputChange('unitid', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable || !formData.propertyid || formData.propertyType !== 'apartment'}
+                  disabled={readOnly || !editable || !formData.propertyid || formData.propertyType !== 'apartment'}
                   required={formData.propertyType === 'apartment'}
                 >
                   <option value="">Select Unit</option>
@@ -139,7 +146,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Select
                   value={formData.renteeid || ''}
                   onChange={(e) => handleInputChange('renteeid', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 >
                   <option value="">Select Rentee</option>
@@ -170,9 +177,9 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Label>Monthly Rent</Form.Label>
                 <Form.Control
                   type="number"
-                  value={formData.terms?.monthlyRent || ''}
+                  value={formData.terms?.monthlyRent ?? ''}
                   onChange={(e) => handleInputChange('terms.monthlyRent', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 />
                 <Form.Control.Feedback type="invalid">
@@ -185,9 +192,9 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Label>Security Deposit</Form.Label>
                 <Form.Control
                   type="number"
-                  value={formData.terms?.depositAmount || ''}
+                  value={formData.terms?.depositAmount ?? ''}
                   onChange={(e) => handleInputChange('terms.depositAmount', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 />
                 <Form.Control.Feedback type="invalid">
@@ -205,7 +212,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                   type="date"
                   value={formData.terms?.startDate || new Date().toISOString().split('T')[0]}
                   onInput={(e) => handleInputChange('terms.startDate', e.target.value)} onChange={(e) => handleInputChange('terms.startDate', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 />
                 <Form.Text className="text-muted">
@@ -223,7 +230,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                   type="date"
                   value={formData.terms?.endDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                   onInput={(e) => handleInputChange('terms.endDate', e.target.value)} onChange={(e) => handleInputChange('terms.endDate', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                   min={formData.terms?.startDate || new Date().toISOString().split('T')[0]}
                 />
@@ -247,7 +254,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                   max="31"
                   value={formData.terms?.paymentDueDay || ''}
                   onChange={(e) => handleInputChange('terms.paymentDueDay', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 />
                 <Form.Control.Feedback type="invalid">
@@ -261,9 +268,9 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 <Form.Control
                   type="number"
                   min="0"
-                  value={formData.terms?.noticePeriod || ''}
+                  value={formData.terms?.noticePeriod ?? ''}
                   onChange={(e) => handleInputChange('terms.noticePeriod', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                   required
                 />
                 <Form.Control.Feedback type="invalid">
@@ -282,7 +289,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                   rows={3}
                   value={formData.terms?.additionalTerms || ''}
                   onChange={(e) => handleInputChange('terms.additionalTerms', e.target.value)}
-                  disabled={readOnly || !isAgreementEditable}
+                  disabled={readOnly || !editable}
                 />
               </Form.Group>
             </Col>
@@ -335,73 +342,25 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         }
       `}</style>
 
-      <div className="d-flex justify-content-end gap-2">
+      {editable && (
+        <p className="text-muted">
+          Review and send saves your agreement and prepares the document automatically.
+          You can check the document and recipients before sending any signing invitations.
+        </p>
+      )}
+      <div className="d-flex flex-wrap justify-content-end gap-2" aria-busy={submitting}>
         {onCancel && (
           <Button variant="secondary" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
         )}
-
-        {isAgreementEditable && (
+        {editable && (
           <>
-            <Button
-              variant="outline-primary"
-              type="button"
-              onClick={() => {
-                console.log("Save as Draft clicked");
-                const formDataWithContent = {
-                  ...formData,
-                  processedContent
-                };
-                onSubmit(formDataWithContent, AGREEMENT_STATUS.DRAFT);
-              }}
-              disabled={submitting}
-            >
-              Save as Draft
+            <Button variant="outline-primary" type="submit" value={AGREEMENT_STATUS.DRAFT} disabled={submitting}>
+              Save draft
             </Button>
-            <Button
-              variant="outline-info"
-              type="button"
-              onClick={() => {
-                console.log("Save for Review clicked");
-                const formDataWithContent = {
-                  ...formData,
-                  processedContent
-                };
-                onSubmit(formDataWithContent, AGREEMENT_STATUS.REVIEW);
-              }}
-              disabled={submitting}
-            >
-              Save for Review
-            </Button>
-            <Button
-              variant="primary"
-              type="button"
-              onClick={() => {
-                console.log("Send for Signature clicked - VERBOSE DEBUG");
-                console.log("Form data:", formData);
-                console.log("Agreement Status:", AGREEMENT_STATUS.PENDING);
-                try {
-                  const formDataWithContent = {
-                    ...formData,
-                    processedContent
-                  };
-                  console.log("Calling onSubmit with status PENDING");
-                  onSubmit(formDataWithContent, AGREEMENT_STATUS.PENDING);
-                } catch (error) {
-                  console.error("Error in Send for Signature button handler:", error);
-                }
-              }}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <>
-                  <Spinner as="span" animation="border" size="sm" className="me-2" />
-                  Processing...
-                </>
-              ) : (
-                'Send for Signature'
-              )}
+            <Button variant="primary" type="submit" value={AGREEMENT_STATUS.PENDING} disabled={submitting}>
+              {submitting ? <><Spinner as="span" animation="border" size="sm" className="me-2" />Preparing…</> : 'Review and send'}
             </Button>
           </>
         )}

@@ -107,14 +107,19 @@ const AgreementFormContainer = () => {
         });
 
         sentEviaRequestRef.current = false;
+        // Retain the saved ID even if document preparation fails, so retry updates it.
         const normalizedDraft = storeAgreementState(savedDraft);
+        const preparedAgreement = storeAgreementState(await generateAndAttachAgreementDocument({
+          agreement: normalizedDraft,
+          finalStatus: AGREEMENT_STATUS.REVIEW
+        }));
         setFormDataToSign({
           ...formData,
-          id: normalizedDraft.id,
-          processedContent: normalizedDraft.processedcontent || formData.processedContent || null
+          id: preparedAgreement.id,
+          processedContent: preparedAgreement.processedcontent || formData.processedContent || null
         });
         setShowSignatureForm(true);
-        toast.success('Agreement saved. Add signatories to continue.');
+        toast.success('Agreement saved and prepared. Review the document and recipients before sending.');
         return;
       }
 
@@ -151,11 +156,8 @@ const AgreementFormContainer = () => {
       }
       const { submitted, pending } = prepareRentalAgreementSignatories(signatureData?.signatories);
 
-      const documentAgreement = normalizeAgreementRecord(await generateAndAttachAgreementDocument({
-        agreement
-      }));
-      storeAgreementState(documentAgreement);
-
+      // Send the prepared document that was available for review, without regenerating it.
+      const documentAgreement = agreement;
       const documentUrl = documentAgreement.documenturl;
       if (!documentUrl || typeof documentUrl !== 'string' || !documentUrl.startsWith('http')) {
         throw new Error('Generated agreement document URL is invalid');

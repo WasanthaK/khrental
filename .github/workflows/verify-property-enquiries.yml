@@ -6,6 +6,8 @@ on:
       - 'src/api/enquiries/**'
       - 'scripts/test-agreement-identity-browser.mjs'
       - 'src/components/agreements/AgreementFormContainer.jsx'
+      - 'src/components/agreements/AgreementFormUI.jsx'
+      - 'src/components/agreements/SignatureForm.jsx'
       - 'src/hooks/useAgreementForm.js'
       - 'src/services/mssqlApiClient.js'
       - 'src/api/platform/ownerOnboarding.js'
