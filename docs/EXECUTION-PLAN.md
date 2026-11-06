@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## R5 organization-switch navigation correction — 6 November 2026
+
+Live multi-membership acceptance found that switching between an administrator organization and a renter organization preserves the previous portal route, displaying Access Denied until Return to Home. The selected membership itself is correct; existing route authorization remains intact. PR #524 resets the document to the shared policy's landing path only after a verified active membership exactly matches the selected organization. Failed, unverified and mismatched results do not navigate. Tenant-scoped providers and the router start fresh at the correct portal.
+
+PR #524 merged at a685b05c6556949b78b815508dec454e7f95d8f8. Final-head authorization/build CI 42222838509 passed 902/902 tests; enquiry/SQL/browser CI 42222838499 passed, including actual-switcher 1440px/390px checks in both role directions, reload persistence and negative context responses. All four switch renders were inspected. Release 42223643111 passed; independent browser build-info readback matched the merge SHA. Live signed-in switching from administrator to renter landed automatically at /rentee, preserved paid invoice and closed/cancelled agreement history, and switching back landed automatically at /dashboard with the correct organization inventory. The previous manual Return to Home step was unnecessary. R5 remains open. This checkpoint covers navigation only and does not change billing, membership or API authority.
+
 
 
 ## R5 public homepage content correction — 6 November 2026
