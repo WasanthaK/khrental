@@ -103,7 +103,11 @@ try {
     await page.waitForFunction(() => document.querySelector('iframe')?.src.startsWith('blob:'));
     assert.equal(counts.previews, 1, 'Preview uses authenticated viewer');
     await page.click('[aria-label="Close document viewer"]');
+    await page.waitForSelector('iframe', { hidden: true });
+    await page.waitForFunction(() => !document.body.innerText.includes('Agreement saved and prepared.'));
     await page.screenshot({ path: `enquiry-browser-proof/agreement-review-${width}.png`, fullPage: true });
+    await page.evaluate(() => { const modal = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (modal) modal.scrollTop = modal.scrollHeight; });
+    await page.screenshot({ path: `enquiry-browser-proof/agreement-review-actions-${width}.png`, fullPage: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal overflow');
     await page.evaluate(() => {
       const form = [...document.querySelectorAll('form')].at(-1);

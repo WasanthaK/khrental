@@ -119,7 +119,7 @@ const AgreementFormContainer = () => {
           processedContent: preparedAgreement.processedcontent || formData.processedContent || null
         });
         setShowSignatureForm(true);
-        toast.success('Agreement saved and prepared. Review the document and recipients before sending.');
+        toast.success('Agreement saved and prepared. Review the document and recipients before sending.', { id: 'agreement-preparation' });
         return;
       }
 
@@ -141,7 +141,7 @@ const AgreementFormContainer = () => {
       }
     } catch (error) {
       console.error('Error handling agreement submission:', error);
-      toast.error('Failed to save agreement: ' + error.message);
+      toast.error('Failed to save agreement: ' + error.message, { id: 'agreement-preparation' });
     }
   };
 

@@ -53,3 +53,8 @@ The signing form requires a document URL. Saving only a draft before opening it 
 ## Wait for the rendered form after preparation retry
 
 Saving a new agreement initializes the form hook with its persisted ID. The brief loading state can outlast an error toast; browser acceptance must wait for the enabled action to return before clicking retry. Include the production Bootstrap stylesheet in the fixture before judging rendered layout.
+
+
+## Inspect settled review screenshots
+
+Wait until the preview iframe closes and transient notifications disappear before capturing recipient review. Capture the scrollable panel's final actions separately on mobile. Preparation retry errors should share a notification ID with preparation success so stale failure notices do not obscure the successful review.
