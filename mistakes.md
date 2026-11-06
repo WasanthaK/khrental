@@ -1,5 +1,9 @@
 # KH Rentals implementation mistakes
 
+## Finish membership switching at the new portal
+
+A verified tenant switch can change an account from administrator to renter (or back). Retaining the old role's route produces Access Denied even though selection succeeded. After exact selected-membership verification, replace the document at its policy-derived landing path so the remounted tenant router starts correctly. Never infer authority from the global account role or navigate on failed, unverified or mismatched context.
+
 ## Check existing journey records before creating replacements
 
 Read the current agreement list before preparing another contract. Continue the existing signed SUWADA villa agreement; a new demo draft was unnecessary and was cancelled. Do not alter historical signed documents.

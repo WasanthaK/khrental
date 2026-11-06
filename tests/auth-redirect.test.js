@@ -1,7 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildReturnPath, getPostLoginPath,getExistingPropertyWorkspacePath } from '../src/utils/authRedirect.js';
+import { buildReturnPath, getPostLoginPath,getExistingPropertyWorkspacePath,getTenantSwitchLandingPath } from '../src/utils/authRedirect.js';
+
+test('tenant switching selects the verified membership portal independently of global role', () => {
+  for (const role of ['admin', 'authenticated', 'rentee']) {
+    const user = { role, tenantContextVerified: true };
+    assert.equal(getTenantSwitchLandingPath({...user,membership:{tenant_id:'next',status:'active',role:'admin'}},'NEXT'),'/dashboard');
+    assert.equal(getTenantSwitchLandingPath({...user,membership:{tenant_id:'next',status:'active',role:'rentee'}},'next'),'/rentee');
+    assert.equal(getTenantSwitchLandingPath({...user,membership:{tenant_id:'next',status:'active',role:'staff'}},'next'),'/dashboard');
+  }
+});
+
+test('tenant switch navigation refuses missing, unverified, revoked or mismatched membership results', () => {
+  const valid = {tenantContextVerified:true,role:'admin',membership:{tenant_id:'next',status:'active',role:'admin'}};
+  for (const result of [null,{role:'admin'}, {...valid,tenantContextVerified:false}, {...valid,tenantContextVerified:undefined}, {...valid,membership:null}, {...valid,membership:{...valid.membership,status:'revoked'}}, {...valid,membership:{...valid.membership,tenant_id:'previous'}}]) {
+    assert.equal(getTenantSwitchLandingPath(result,'next'),null);
+  }
+  assert.equal(getTenantSwitchLandingPath(valid,''),null);
+});
 
 test('existing property workspace navigation follows active membership, not email or a global role',()=>{
   const membership={tenant_id:'current-business',role:'admin',status:'active'};

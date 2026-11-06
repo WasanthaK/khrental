@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import { getTenantSwitchLandingPath } from '../../utils/authRedirect.js';
 
 const buildTenantOptions = (memberships = []) => {
   const entries = memberships.filter(Boolean);
@@ -51,10 +52,11 @@ const TenantSwitcher = ({ compact = false }) => {
       return;
     }
 
-    const { error } = await switchTenant(nextTenantId);
+    const { data, error } = await switchTenant(nextTenantId);
+    const landingPath = getTenantSwitchLandingPath(data, nextTenantId);
 
-    if (error) {
-      toast.error(error.message || 'Failed to switch tenant');
+    if (error || !landingPath) {
+      toast.error(error?.message || 'We could not open this organization. Please try again.');
       return;
     }
 
@@ -66,6 +68,10 @@ const TenantSwitcher = ({ compact = false }) => {
       position: 'bottom-center',
       id: 'tenant-switch-success'
     });
+    // Switching remounts the tenant-scoped router and providers. Replace the
+    // document so its new router starts at the new membership's portal rather
+    // than retaining an incompatible route (or using the disposed old router).
+    window.location.replace(landingPath);
   };
 
   if (!isAuthenticated) {

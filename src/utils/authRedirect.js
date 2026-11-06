@@ -1,5 +1,17 @@
 import {getDefaultLandingPath,hasPermission,PERMISSIONS} from './accessPolicy.js';
 
+// A completed switch must resolve the explicitly selected active membership.
+// Never choose a portal from the global account role or a stale workspace.
+export const getTenantSwitchLandingPath = (user, selectedTenantId) => {
+  const membership = user?.membership;
+  if (user?.tenantContextVerified !== true || !selectedTenantId
+      || String(membership?.status).toLowerCase() !== 'active'
+      || String(membership?.tenant_id || '').toLowerCase() !== String(selectedTenantId).toLowerCase()) {
+    return null;
+  }
+  return getDefaultLandingPath({ user, membership });
+};
+
 // This server projection selects a task only; route/API guards retain authority.
 export const getOwnerContinuationPath = ({user,membership=user?.membership}={}) => {
   if(user?.tenantContextVerified===false){return null;}

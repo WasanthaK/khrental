@@ -3,6 +3,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'src/components/common/TenantSwitcher.jsx'
+      - 'scripts/test-tenant-switch-browser.mjs'
       - 'src/api/enquiries/**'
       - 'scripts/test-agreement-identity-browser.mjs'
       - 'src/components/agreements/AgreementFormContainer.jsx'
@@ -88,6 +90,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Membership switch portal navigation through actual switcher
+        run: node scripts/test-tenant-switch-browser.mjs
       - name: Agreement membership identity and retry browser proof
         run: node scripts/test-agreement-identity-browser.mjs
       - name: Renter authentication lifecycle through actual provider
