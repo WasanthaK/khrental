@@ -67,3 +67,19 @@
 .filters [data-rental-filters] button:focus-visible,.filters [data-rental-filters] input:focus-visible{outline:3px solid #3B8DCC;outline-offset:2px}
 .filters [data-clear-rental-filters]{font-size:13px;text-align:center;text-decoration:underline}
 .filters [data-rental-filter-status]{font-size:13px;margin-top:16px}
+
+/* Keep category names readable without splitting words on narrow phones. */
+@media (max-width: 420px) {
+  .page-intro .search-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .page-intro .search-tabs a {
+    min-height: 48px;
+    padding: 14px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}

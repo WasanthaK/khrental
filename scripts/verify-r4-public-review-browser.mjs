@@ -171,6 +171,21 @@ try{
       fs.mkdirSync('verification-browse-proof',{recursive:true});
       await page.screenshot({path:'verification-browse-proof/lk-help-'+width+'.png',fullPage:true});
     }
+    if(width===390&&p.endsWith('/search/')){
+      const splitWords=await page.$$eval('.page-intro .search-tabs a',links=>links.flatMap(link=>{
+        const node=link.firstChild;
+        if(!node||node.nodeType!==Node.TEXT_NODE)return ['missing category text'];
+        const bad=[];
+        for(const match of node.textContent.matchAll(/\S+/g)){
+          const range=document.createRange();range.setStart(node,match.index);range.setEnd(node,match.index+match[0].length);
+          if(range.getClientRects().length>1)bad.push(match[0]);
+        }
+        return bad;
+      }));
+      assert.deepEqual(splitWords,[],p+' category words remain intact');
+      fs.mkdirSync('verification-browse-proof',{recursive:true});
+      await page.screenshot({path:'verification-browse-proof/category-search-'+p.split('/')[1]+'-'+width+'.png',fullPage:true});
+    }
     if(width===390){
       await page.keyboard.press('Tab');
       const focused=await page.evaluate(()=>document.activeElement?.className);

@@ -14,6 +14,8 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
     rentees,
     templateContent,
     processedContent,
+    documentReady,
+    documentError,
     handleInputChange,
     handlePropertyChange,
     handleTemplateChange,
@@ -39,6 +41,9 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
       form.querySelector(':invalid')?.focus();
       return;
     }
+    if (!documentReady) {
+      return;
+    }
     submissionRef.current = true;
     setSubmitting(true);
     try {
@@ -62,7 +67,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         <Card.Body>
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-template">
                 <Form.Label>Template</Form.Label>
                 <Form.Select
                   value={formData.templateid || ''}
@@ -83,7 +88,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-property">
                 <Form.Label>Property</Form.Label>
                 <Form.Select
                   value={formData.propertyid || ''}
@@ -107,7 +112,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-unit">
                 <Form.Label>Unit</Form.Label>
                 <Form.Select
                   value={formData.unitid || ''}
@@ -141,7 +146,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-rentee">
                 <Form.Label>Rentee</Form.Label>
                 <Form.Select
                   value={formData.renteeid || ''}
@@ -173,7 +178,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         <Card.Body>
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-monthly-rent">
                 <Form.Label>Monthly Rent</Form.Label>
                 <Form.Control
                   type="number"
@@ -188,7 +193,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-deposit">
                 <Form.Label>Security Deposit</Form.Label>
                 <Form.Control
                   type="number"
@@ -206,7 +211,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-start-date">
                 <Form.Label>Start Date</Form.Label>
                 <Form.Control
                   type="date"
@@ -224,7 +229,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-end-date">
                 <Form.Label>End Date</Form.Label>
                 <Form.Control
                   type="date"
@@ -246,7 +251,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-payment-due-day">
                 <Form.Label>Payment Due Day</Form.Label>
                 <Form.Control
                   type="number"
@@ -263,7 +268,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-notice-period">
                 <Form.Label>Notice Period (days)</Form.Label>
                 <Form.Control
                   type="number"
@@ -282,7 +287,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-additional-terms">
                 <Form.Label>Additional Terms</Form.Label>
                 <Form.Control
                   as="textarea"
@@ -342,6 +347,16 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         }
       `}</style>
 
+      {editable && formData.templateid && !documentReady && (
+        documentError ? (
+          <div role="alert" className="mb-3">
+            <p>{documentError}</p>
+            <Button type="button" variant="outline-primary" onClick={() => handleTemplateChange(formData.templateid)}>
+              Retry template
+            </Button>
+          </div>
+        ) : <p role="status">Preparing the selected template and your latest details for preview…</p>
+      )}
       {editable && (
         <p className="text-muted">
           Review and send saves your agreement and prepares the document automatically.
@@ -356,10 +371,10 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         )}
         {editable && (
           <>
-            <Button variant="outline-primary" type="submit" value={AGREEMENT_STATUS.DRAFT} disabled={submitting}>
+            <Button variant="outline-primary" type="submit" value={AGREEMENT_STATUS.DRAFT} disabled={submitting || Boolean(formData.templateid && !documentReady)}>
               Save draft
             </Button>
-            <Button variant="primary" type="submit" value={AGREEMENT_STATUS.PENDING} disabled={submitting}>
+            <Button variant="primary" type="submit" value={AGREEMENT_STATUS.PENDING} disabled={submitting || Boolean(formData.templateid && !documentReady)}>
               {submitting ? <><Spinner as="span" animation="border" size="sm" className="me-2" />Preparing…</> : 'Review and send'}
             </Button>
           </>
