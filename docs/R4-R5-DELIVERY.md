@@ -1,5 +1,14 @@
 # R4 and R5 delivery programme
 
+## Controlling R5 prelaunch checkpoint 7 November 2026
+
+The [consolidated R5 case ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#current-r5-prelaunch-completion-ledger-7-november-2026) supersedes older pending wording without erasing dated history. Accepted: controlled demo activation through invoices/receipts, maintenance, notice/settlement/closure and relisting; actual organization switching; two separate hosted sandbox Checkouts; first-organization card replacement/cancellation/resume; second-organization increase and scheduled next-renewal reduction; deployed customer policies. Mailbox delivery remains unconfirmed. These are prelaunch tests, with simulated financial/physical operations, not commercial customer activity.
+
+Still open: fresh authorized participant signing and automatic signed-PDF/audit retention; remaining operational/stock/negative/presentation cases; genuine renewal/failure/recovery and persisted receiver evidence; actual complimentary controls; production inventory/write/job/import enforcement; unresolved commercial/privacy/retention/merchant decisions; Sri Lanka readiness then separate Brunei acceptance. Clock advancement remains unavailable through the connected operations search on 7 November. Existing provider objects must be retained. Independent engineering continues while signing and renewal are blocked.
+
+Source correction and expanded synthetic receiver regressions are being prepared for delayed first-renewal failure timing; CI/release evidence must be added before claiming delivery. Live charging remains disabled. R1/R3/R4 owner dispositions and deferred R2 remain unchanged. Full R5 remains incomplete; LK readiness and subsequent BN acceptance are recorded separately.
+
+
 ## Current sandbox Checkout checkpoint — 6 November 2026
 
 Single-organization genuine hosted sandbox Checkout, initial USD 5 payment, active quantity-1 subscription, matching provider events, reload persistence and restricted billing-portal invoice access passed. The [canonical execution plan](EXECUTION-PLAN.md#r5-hosted-sandbox-checkout-acceptance--6-november-2026) records the exact scope and limits. This supersedes older statements that no genuine payment event has been observed; it does not complete two-organization isolation, subsequent billing lifecycle, production enforcement or paid/regional launch. The owner subsequently approved replacement test-card and cancellation/resume testing. Provider-side period-end cancellation and renewal restoration passed with matching events and unchanged quantity; application-button acceptance remains open. Card replacement remains unperformed because portal sign-in was not resumed and creation/attachment is unavailable through the connected provider operations. Approval is retained; no legacy-source workaround was used. Live charging remains disabled.

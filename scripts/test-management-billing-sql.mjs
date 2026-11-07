@@ -101,6 +101,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     calls.push({method,path,body,key});
     if(method==='GET'){
       if(path===`/v1/prices/${BILLING_PRICE}`)return structuredClone(price);
+      if(path==='/v1/events') return {data:[...remote.values()].filter(value=>value.type===body.type && value.created>=body.created.gte),has_more:false};
       const value=remote.get(path);assert.ok(value,`Unhandled synthetic GET ${path}`);return structuredClone(value);
     }
     assert.ok(key,'All synthetic provider writes need idempotency keys.');
@@ -156,6 +157,62 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   assert.equal((await service.summary(tenantB)).entitlement.management,false);
   const crossEvent={id:'evt_fixtureCross',type:'invoice.paid',livemode:false,data:{object:{...invoice,parent:{subscription_details:{subscription:'sub_foreign'}}}}};remote.set(`/v1/events/${crossEvent.id}`,crossEvent);
   await assert.rejects(service.webhook(crossEvent),{code:'BILLING_EVENT_SUBSCRIPTION_MISMATCH'});
+  // Persisted receiver proof with synthetic provider state, never a genuine renewal.
+  const firstFailedAt=time-2*86400;
+  invoice.status='open';invoice.amount_paid=0;invoice.amount_remaining=500;
+  invoice.attempted=true;invoice.created=firstFailedAt-3600;invoice.period_end=time+28*86400;
+  sub.status='past_due';
+  const failedEvent=(id,created)=>({id,type:'invoice.payment_failed',livemode:false,created,data:{object:structuredClone(invoice)}});
+  const firstFailed=failedEvent('evt_fixtureFirstFailure',firstFailedAt);
+  const retriedFailure=failedEvent('evt_fixtureRetryFailure',time-86400);
+  remote.set(`/v1/events/${firstFailed.id}`,firstFailed);
+  remote.set(`/v1/events/${retriedFailure.id}`,retriedFailure);
+  // Newest notification arrives first; lookup must still pin the earliest attempt.
+  const normalRequest=stripe.request;
+  let failLookup=true;
+  stripe.request=async(...args)=>{
+    if(args[1]==='/v1/events'&&failLookup){failLookup=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic history lookup interruption.');}
+    return normalRequest(...args);
+  };
+  const beforeFailure=await store.account(tenantA);
+  await assert.rejects(service.webhook(retriedFailure),{code:'STRIPE_UNAVAILABLE'});
+  assert.equal((await store.account(tenantA)).subscription_status,beforeFailure.subscription_status,'Failed reconciliation rolls back account changes');
+  assert.equal((await store.read('SELECT stripe_event_id FROM dbo.management_billing_events WHERE stripe_event_id=@id',{id:retriedFailure.id})).length,0,'Failed event remains retryable');
+  await service.webhook(retriedFailure);
+  const graceAccount=await store.account(tenantA);
+  assert.equal(new Date(graceAccount.grace_started_at).getTime(),firstFailedAt*1000);
+  assert.equal((await service.summary(tenantA)).entitlement.state,'grace');
+  await service.webhook(firstFailed);
+  assert.equal((await service.webhook(retriedFailure)).duplicate,true);
+  assert.equal(new Date((await store.account(tenantA)).grace_started_at).getTime(),firstFailedAt*1000,'Delayed and duplicate events do not extend grace');
+  const failureLedger=await store.read("SELECT stripe_event_id FROM dbo.management_billing_events WHERE tenant_id=@tenantId AND event_type='invoice.payment_failed'",{tenantId:tenantA});
+  assert.equal(failureLedger.length,2);
+  assert.equal((await service.summary(tenantB)).entitlement.management,false,'Failure does not cross organization scope');
+  invoice.status='paid';invoice.amount_paid=500;invoice.amount_remaining=0;sub.status='active';
+  const recovery={id:'evt_fixtureRecovery',type:'invoice.paid',livemode:false,data:{object:structuredClone(invoice)}};
+  remote.set(`/v1/events/${recovery.id}`,recovery);
+  // Fail after projection writes but before event/audit completion: all must roll back.
+  await pool.request().batch(`CREATE TRIGGER dbo.billing_fixture_receiver_rollback ON dbo.management_billing_events
+    AFTER INSERT AS BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE stripe_event_id='evt_fixtureRecovery')
+    THROW 51001, 'Synthetic receiver rollback proof', 1; END`);
+  const auditBefore=(await store.read('SELECT COUNT(*) AS n FROM dbo.management_billing_audit WHERE tenant_id=@tenantId',{tenantId:tenantA}))[0].n;
+  try {
+    await assert.rejects(service.webhook(recovery),/Synthetic receiver rollback proof/);
+    assert.equal((await store.account(tenantA)).subscription_status,'past_due');
+    assert.equal((await store.read('SELECT stripe_event_id FROM dbo.management_billing_events WHERE stripe_event_id=@id',{id:recovery.id})).length,0);
+    assert.equal((await store.read('SELECT COUNT(*) AS n FROM dbo.management_billing_audit WHERE tenant_id=@tenantId',{tenantId:tenantA}))[0].n,auditBefore);
+  } finally {
+    await pool.request().query('DROP TRIGGER dbo.billing_fixture_receiver_rollback');
+  }
+  await service.webhook(recovery);
+  assert.equal((await store.account(tenantA)).grace_started_at,null);
+  assert.equal((await service.summary(tenantA)).entitlement.management,true);
+  const lateFailure={...firstFailed,id:'evt_fixtureLateFailure'};
+  remote.set(`/v1/events/${lateFailure.id}`,lateFailure);
+  await service.webhook(lateFailure);
+  assert.equal((await service.summary(tenantA)).entitlement.state,'active','Old failure cannot overwrite recovered provider state');
+  stripe.request=normalRequest;
+  console.log('PASS: synthetic delayed first failure, durable receiver retry/rollback, duplicate and out-of-order events, grace pinning, recovery and two-organization isolation');
   const unit1=crypto.randomUUID(),unit2=crypto.randomUUID();
   await store.locked(tenantA,async q=>{
     for(const id of [unit1,unit2])await q('INSERT INTO dbo.property_units(id,tenant_id,propertyid,unitnumber) VALUES(@id,@tenantId,@propertyId,@number)',
