@@ -106,6 +106,14 @@ try {
     await page.waitForFunction(() => document.body.innerText.includes('Preparation temporarily unavailable'));
     await click(page, 'Review and send');
     await page.waitForFunction(() => document.body.innerText.includes('Review and send agreement'));
+    const recipientLabels=await page.$$eval('form label',labels=>labels.map(label=>({text:label.textContent.trim(),id:label.control?.id})));
+    assert.equal(recipientLabels.length,10,'Title, message and both recipients have accessible field labels');
+    assert.equal(new Set(recipientLabels.map(label=>label.id)).size,10,'Review labels target distinct fields');
+    for(const label of recipientLabels){
+      assert.ok(label.id,'Signing review label identifies its control: '+label.text);
+      await page.click('label[for="'+label.id+'"]');
+      assert.equal(await page.evaluate(()=>document.activeElement.id),label.id,'Signing review label focuses '+label.text);
+    }
     assert.deepEqual(counts.saves, [null, 'saved'], 'Preparation retry reuses saved agreement');
     assert.equal(counts.sent, 0, 'Review does not send invitations');
     assert.equal(counts.generated, 2);

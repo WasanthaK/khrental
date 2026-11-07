@@ -579,10 +579,11 @@ const SignatureForm = ({
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="signing-review-title" className="block text-sm font-medium text-gray-700 mb-1">
               Title
             </label>
             <input
+              id="signing-review-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -592,10 +593,11 @@ const SignatureForm = ({
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="signing-review-message" className="block text-sm font-medium text-gray-700 mb-1">
               Message
             </label>
             <textarea
+              id="signing-review-message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="w-full p-2 border rounded"
@@ -605,9 +607,9 @@ const SignatureForm = ({
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <p className="block text-sm font-medium text-gray-700 mb-1">
               Signatories
-            </label>
+            </p>
             {signatories.map((signatory, index) => (
               <div key={index} className="mb-4 p-3 border rounded bg-gray-50">
                 <div className="flex justify-between items-center mb-2">
@@ -625,9 +627,10 @@ const SignatureForm = ({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Name</label>
+                    <label htmlFor={`signing-review-${index}-name`} className="block text-sm font-medium mb-1">Name</label>
                     <input
                       type="text"
+                      id={`signing-review-${index}-name`}
                       value={signatory.name}
                       onChange={(e) => handleSignatoryChange(index, 'name', e.target.value)}
                       className="w-full p-2 border rounded"
@@ -636,9 +639,10 @@ const SignatureForm = ({
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1">Email</label>
+                    <label htmlFor={`signing-review-${index}-email`} className="block text-sm font-medium mb-1">Email</label>
                     <input
                       type="email"
+                      id={`signing-review-${index}-email`}
                       value={signatory.email}
                       onChange={(e) => handleSignatoryChange(index, 'email', e.target.value)}
                       className="w-full p-2 border rounded"
@@ -647,9 +651,10 @@ const SignatureForm = ({
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1">Identifier</label>
+                    <label htmlFor={`signing-review-${index}-identifier`} className="block text-sm font-medium mb-1">Identifier</label>
                     <input
                       type="text"
+                      id={`signing-review-${index}-identifier`}
                       value={signatory.identifier}
                       onChange={(e) => handleSignatoryChange(index, 'identifier', e.target.value)}
                       className="w-full p-2 border rounded"
@@ -658,9 +663,10 @@ const SignatureForm = ({
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1">Text Marker</label>
+                    <label htmlFor={`signing-review-${index}-textMarker`} className="block text-sm font-medium mb-1">Text Marker</label>
                     <input
                       type="text"
+                      id={`signing-review-${index}-textMarker`}
                       value={signatory.textMarker}
                       onChange={(e) => handleSignatoryChange(index, 'textMarker', e.target.value)}
                       className="w-full p-2 border rounded"
