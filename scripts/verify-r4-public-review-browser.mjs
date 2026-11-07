@@ -101,8 +101,14 @@ try{
       assert.equal(new URL(page.url()).hash,toc.at(-1),'Section navigation works');
       await page.reload({waitUntil:'networkidle0'});
       assert.equal(await page.$eval('h1',element=>element.innerText),p==='/terms/'?'Terms of service':'Privacy notice','Direct reload retains the policy');
+      const anchorVisibility=await page.evaluate(hash=>({
+        headingTop:document.querySelector(hash).getBoundingClientRect().top,
+        headerBottom:document.querySelector('.site-header').getBoundingClientRect().bottom
+      }),toc.at(-1));
+      assert.ok(anchorVisibility.headingTop>=anchorVisibility.headerBottom,'Linked policy heading is not hidden by the sticky header');
       if(width===390||width===1280){
         fs.mkdirSync('verification-browse-proof',{recursive:true});
+        await page.evaluate(()=>window.scrollTo(0,0));
         await page.screenshot({path:'verification-browse-proof/policy-'+(p==='/terms/'?'terms':'privacy')+'-'+width+'.png',fullPage:true});
       }
       await page.goto(origin+p,{waitUntil:'networkidle0'});

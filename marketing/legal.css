@@ -4,11 +4,11 @@
 .policy-intro p:last-child{color:var(--muted);font-size:14px;margin-bottom:0}
 .policy-layout{display:grid;grid-template-columns:225px minmax(0,740px);gap:56px;justify-content:center;padding-top:44px;padding-bottom:64px}
 .policy-layout aside{min-width:0}
-.policy-toc{position:sticky;top:24px;border:1px solid var(--line);border-radius:16px;padding:20px;background:white}
+.policy-toc{position:sticky;top:100px;border:1px solid var(--line);border-radius:16px;padding:20px;background:white}
 .policy-toc p{font-weight:750;margin:0 0 12px}
 .policy-toc a{display:block;padding:9px 0;font-size:14px;line-height:1.5;color:#075c9b}
 .policy-content{min-width:0;font-size:16px;line-height:1.8}
-.policy-content h2{font-size:25px;letter-spacing:-.025em;line-height:1.3;margin:36px 0 14px;scroll-margin-top:24px}
+.policy-content h2{font-size:25px;letter-spacing:-.025em;line-height:1.3;margin:36px 0 14px;scroll-margin-top:100px}
 .policy-content h2:first-child{margin-top:0}
 .policy-content p{margin:0 0 18px}
 .policy-content a{color:#075c9b;text-decoration:underline;text-underline-offset:3px}
