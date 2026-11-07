@@ -323,17 +323,10 @@ async function createServer() {
         return;
       }
 
-      const accessToken = String(req.body?.accessToken || '').trim();
-      if (!accessToken) {
-        res.status(401).json({ error: 'Evia Sign authentication is required to retrieve the signed document.', code: 'EVIA_ACCESS_TOKEN_REQUIRED' });
-        return;
-      }
-
       const retained = await retrieveAndStoreEviaCompletedDocuments({
         requestId,
         tenantId: agreement.tenant_id,
-        agreementId: agreement.id,
-        accessToken
+        agreementId: agreement.id
       });
 
       await runQuery(`

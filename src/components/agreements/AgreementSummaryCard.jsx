@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isAdministrator } from '../../utils/accessModel';
 import { getEviaAuditTrailUrl } from '../../utils/eviaAuditTrailLink';
-import { reconcileEviaSignedDocument, recoverEviaAuditTrail, connectEviaAuditRecovery } from '../../services/eviaSignService';
+import { reconcileEviaSignedDocument, recoverEviaAuditTrail } from '../../services/eviaSignService';
 
 /**
  * AgreementSummaryCard - Displays a summary of an agreement with signature status
@@ -419,7 +419,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
       )}
 
       {showAuditViewer && auditTrailUrl && (
-        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} onRecover={() => recoverEviaAuditTrail(agreement.id)} onAuthenticate={connectEviaAuditRecovery} />
+        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} onRecover={() => recoverEviaAuditTrail(agreement.id)} />
       )}
       {showDocumentViewer && documentUrlToView && (
         <AgreementDocument 

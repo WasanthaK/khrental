@@ -1,5 +1,14 @@
 # Recover an existing Evia signing audit
 
+## Evia service ownership correction — 8 November 2026
+
+Evia is Quixo's service integration. Organization users, including landlords, do not need an Evia account to recover completed documents. Earlier sender-login recovery guidance is superseded. The bounded correction routes signed-document and audit recovery through the authenticated Quixo server using its service credentials, ignores caller-supplied provider tokens and removes the customer Evia sign-in action. Application session, organization membership and agreement authorization remain mandatory. Source validation is in progress; deployment and live acceptance are not yet established.
+
+Read-only service authentication probes reached the provider: both documented API-key exchange candidates returned HTTP 404 (run 42405787092); the existing API-app client-credentials probe using deployment credential aliases returned HTTP 501 without a token (run 42405894400). These are transport observations, not proof of invalid credentials or a provider outage. The temporary diagnostic workflow is retired with no environment, secrets or cloud permissions. No production SQL mutation, document resend, re-sign or activation was performed.
+
+The supported service token exchange or genuine completed-package delivery still needs confirmation from Evia. Do not substitute a landlord login or guess grants/routes. Current audit retention remains FAILED/OPEN (CT03), and R5 remains incomplete with live charging disabled. Existing sending/signature-management browser OAuth is outside this bounded recovery correction and has not been accepted as a service-owned flow.
+
+
 ## Fresh completion retry correction — 7 November 2026
 
 The authorized prelaunch test recorded completed signatures and opens its signed-document viewer, but its audit returns HTTP 404. Read-only diagnostic 42399878728 found completion metadata containing the signed PDF without an audit or completed-package descriptor. The configured integration credentials were present; successful provider retrieval was not established.

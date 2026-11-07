@@ -15,7 +15,7 @@ import { useAuth } from '../hooks/useAuth';
 import { isAdministrator } from '../utils/accessModel';
 import { getEviaAuditTrailUrl } from '../utils/eviaAuditTrailLink';
 import AgreementDocument from '../components/agreements/AgreementDocument';
-import { recoverEviaAuditTrail, connectEviaAuditRecovery } from '../services/eviaSignService';
+import { recoverEviaAuditTrail } from '../services/eviaSignService';
 
 const normalizeAgreementRecord = (record) => {
   if (!record) {
@@ -507,7 +507,7 @@ const AgreementDetails = () => {
       )}
       
       {showAuditViewer && auditTrailUrl && (
-        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} onRecover={() => recoverEviaAuditTrail(agreement.id)} onAuthenticate={connectEviaAuditRecovery} />
+        <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} onRecover={() => recoverEviaAuditTrail(agreement.id)} />
       )}
       {/* Sign Confirmation Modal */}
       {showSignConfirm && (

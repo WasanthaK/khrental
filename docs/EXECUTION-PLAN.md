@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Evia service ownership correction — 8 November 2026
+
+Evia is Quixo's service integration. Organization users, including landlords, do not need an Evia account to recover completed documents. Earlier sender-login recovery guidance is superseded. The bounded correction routes signed-document and audit recovery through the authenticated Quixo server using its service credentials, ignores caller-supplied provider tokens and removes the customer Evia sign-in action. Application session, organization membership and agreement authorization remain mandatory. Source validation is in progress; deployment and live acceptance are not yet established.
+
+Read-only service authentication probes reached the provider: both documented API-key exchange candidates returned HTTP 404 (run 42405787092); the existing API-app client-credentials probe using deployment credential aliases returned HTTP 501 without a token (run 42405894400). These are transport observations, not proof of invalid credentials or a provider outage. The temporary diagnostic workflow is retired with no environment, secrets or cloud permissions. No production SQL mutation, document resend, re-sign or activation was performed.
+
+The supported service token exchange or genuine completed-package delivery still needs confirmation from Evia. Do not substitute a landlord login or guess grants/routes. Current audit retention remains FAILED/OPEN (CT03), and R5 remains incomplete with live charging disabled. Existing sending/signature-management browser OAuth is outside this bounded recovery correction and has not been accepted as a service-owned flow.
+
+
 ## R5 audit retry release — 7 November 2026
 
 [PR #533](https://github.com/WasanthaK/khrental/pull/533) is merged and deployed at application source `d6d94f90caf3d69f19b9f18391707ec705e4e80c`. [Release 42402625224](https://github.com/WasanthaK/khrental/actions/runs/42402625224) passed with ready revision `0000473`, live MSSQL readiness and min/max replicas **1**. Independent public build-info matched. Marketing remains at `2463d000260802d2cf3ce034b0bd5d0d32226bc8`.
