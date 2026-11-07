@@ -1,161 +1,77 @@
-name: Diagnose Container Apps revision
+name: Inspect Evia service authentication (read-only)
 
 on:
+  push:
+    branches: [diag/evia-service-auth-20261108]
   workflow_dispatch:
-    inputs:
-      restart_latest:
-        description: 'Restart the latest revision before checking it'
-        required: true
-        type: boolean
-        default: false
-      expected_build:
-        description: Optional exact serving build to verify without deployment
-        required: false
-        type: string
 
 permissions:
   contents: read
   id-token: write
 
-env:
-  AZURE_SUBSCRIPTION_ID: 3d42a180-fda5-4013-afcc-fdba10266f9b
-  AZURE_RESOURCE_GROUP: khrental-prod-rg
-  AZURE_CONTAINER_APP_NAME: khrental-app
-
 jobs:
-  diagnose:
-    name: inspect production revision
+  inspect:
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - name: Sign in to Azure with OIDC
+      - name: Sign in to Azure with existing Production OIDC
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Inspect latest revision
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Inspect existing service credentials without returning tokens or document data
         shell: bash
-        env:
-          RESTART_LATEST: ${{ inputs.restart_latest }}
-          EXPECTED_BUILD: ${{ inputs.expected_build }}
         run: |
           set -euo pipefail
+          cat > evia-service-auth-readonly.mjs <<'JS'
+          (async () => {
+            const results = [];
+            const knownErrors = new Set(['unsupported_grant_type', 'invalid_client', 'invalid_grant', 'invalid_scope', 'invalid_request', 'unauthorized_client', 'access_denied']);
+            const probe = async (method, url, options) => {
+              try {
+                const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(20000) });
+                const json = (response.headers.get('content-type') || '').includes('application/json');
+                const data = json ? await response.json() : {};
+                const token = data.access_token || data.accessToken || data.authToken || data.token;
+                const scopes = typeof data.scope === 'string' ? data.scope.split(/\s+/) : [];
+                const result = { method, status: response.status, json,
+                  tokenPresent: response.ok && typeof token === 'string' && token.length > 0,
+                  scopeReported: scopes.length > 0,
+                  documentsReadReported: scopes.includes('documents:read'), auditReadReported: scopes.includes('audit:read') };
+                if (knownErrors.has(data.error)) result.errorCode = data.error;
+                results.push(result);
+                return result;
+              } catch { const result = { method, networkError: true, tokenPresent: false }; results.push(result); return result; }
+            };
+            const apiKey = process.env.EVIA_SIGN_API_KEY || '';
+            if (apiKey) {
+              const options = { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey, Accept: 'application/json' }, body: '{}' };
+              const first = await probe('integration_key_origin', 'https://evia.enadocapp.com/api/v2/oauth/exchange', options);
+              if (!first.tokenPresent && first.status === 404) {
+                await probe('integration_key_sign_base', 'https://evia.enadocapp.com/_apis/sign/api/v2/oauth/exchange', options);
+              }
+            } else { results.push({ method: 'integration_key', notConfigured: true, tokenPresent: false }); }
+            if (!results.some(item => item.tokenPresent)) {
+              const clientId = process.env.EVIA_SIGN_CLIENT_ID || '';
+              const clientSecret = process.env.EVIA_SIGN_CLIENT_SECRET || '';
+              if (clientId && clientSecret) {
+                const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret, scope: 'documents:read audit:read' });
+                await probe('api_app_read_only', 'https://evia.enadocapp.com/_apis/falcon/auth/api/v2/token', {
+                  method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64'),
+                    'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: body.toString()
+                });
+              } else { results.push({ method: 'api_app_read_only', notConfigured: true, tokenPresent: false }); }
+            }
+            console.log('R5_SERVICE_AUTH_READONLY=' + JSON.stringify({ serviceAuthenticationEstablished: results.some(item => item.tokenPresent), results }));
+          })().catch(() => { console.log('R5_SERVICE_AUTH_READONLY_FAILED'); process.exitCode = 1; });
+          JS
+          encoded=$(base64 -w0 evia-service-auth-readonly.mjs)
+          command="node --input-type=module -e \"eval(Buffer.from('$encoded','base64').toString())\""
+          printf -v command_quoted '%q' "$command"
           az extension add --name containerapp --upgrade --yes >/dev/null
-
-          latest_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestRevisionName -o tsv)
-          ready_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestReadyRevisionName -o tsv)
-
-          echo "Latest revision: $latest_revision"
-          echo "Latest ready revision: $ready_revision"
-
-          echo "Read-only scaling and active revision inventory:"
-          az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "{revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas}" -o json
-          az containerapp revision list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "[].{name:name,active:properties.active,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" -o json
-
-          az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight,createdTime:properties.createdTime}" \
-            -o jsonc
-
-          echo "System logs for the Container App:"
-          az containerapp logs show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --type system \
-            --tail 100 \
-            --format json
-
-          echo "Replica inventory for $latest_revision:"
-          az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query "[].{name:name,createdTime:properties.createdTime,runningState:properties.runningState,containers:properties.containers[].{name:name,ready:ready,restartCount:restartCount,runningState:runningState,runningStateDetails:runningStateDetails,started:started}}" \
-            -o jsonc || true
-
-          if [ "$RESTART_LATEST" = "true" ]; then
-            echo "Restarting $latest_revision..."
-            az containerapp revision restart \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision"
-
-            for attempt in $(seq 1 30); do
-              state=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.runningState -o tsv)
-              health=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.healthState -o tsv)
-              echo "Post-restart state: running=$state health=$health (attempt $attempt/30)"
-              if [ "$state" = "Running" ] && { [ "$health" = "Healthy" ] || [ "$health" = "None" ]; }; then
-                break
-              fi
-              sleep 6
-            done
-          fi
-
-          replica=$(az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query '[0].name' -o tsv 2>/dev/null || true)
-
-          if [ -n "$replica" ]; then
-            echo "Console logs for replica $replica:"
-            az containerapp logs show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision" \
-              --replica "$replica" \
-              --type console \
-              --tail 100 \
-              --format text || true
-          fi
-
-          final_state=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.runningState -o tsv)
-          final_health=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.healthState -o tsv)
-
-          echo "Final state: revision=$latest_revision running=$final_state health=$final_health"
-
-          # Optional acceptance of the existing rollout, without rebuilding or mutating it.
-          if [ -n "${EXPECTED_BUILD:-}" ]; then
-            [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
-            ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
-            test "$latest_revision" = "$ready_revision"
-            fqdn=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
-            build=$(curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/build-info.json")
-            test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
-            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
-            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/mssql/health"
-            echo "RELEASE_ACCEPTANCE=PASS expected_build=$EXPECTED_BUILD ready_revision=$ready_revision"
-          fi
+          ready_revision=$(az containerapp show --name khrental-app --resource-group khrental-prod-rg --query properties.latestReadyRevisionName -o tsv)
+          exec_command="az containerapp exec --name khrental-app --resource-group khrental-prod-rg --revision '$ready_revision' --command $command_quoted"
+          script -q -e -c "$exec_command" /dev/null | tee evia-service-auth-result.txt
+          grep -Fq 'R5_SERVICE_AUTH_READONLY={' evia-service-auth-result.txt
