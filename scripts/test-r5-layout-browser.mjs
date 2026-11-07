@@ -13,7 +13,7 @@ window.draws=[];const original=PDFPage.prototype.drawText;PDFPage.prototype.draw
 const terms=Array.from({length:65},(_,i)=>'<p>Clause '+(i+1)+': This representative demo agreement reserves the home for the stated term. The parties retain their contract and deposit records. No signature or payment is represented by this fixture.</p>').join('');
 const html='<h1>Representative rental agreement</h1>'+terms+'<h2>TENANT SIGNATURE</h2><p>For Tenant: ____________________________</p><h2>LANDLORD SIGNATURE</h2><p>For Landlord: ____________________________</p><p>Closing text: each party keeps a copy of this agreement.</p>';
 window.proof=saveMergedDocument(html,'00000000-0000-4000-8000-000000000001').then(()=>({draws:window.draws,pdf:window.fixturePdf}));
-createRoot(document.getElementById('root')).render(<BrowserRouter><Routes><Route path="/dashboard/agreements/:id/onboarding" element={<Onboarding/>}/><Route path="/dashboard/agreements/:id/exit" element={<Exit/>}/><Route path="/audit-recovery" element={<AgreementDocument title="Signing audit" documentUrl="/storage/documents/fixture/audit_trail.pdf" onRecover={()=>recoverEviaAuditTrail("22222222-2222-4222-8222-222222222222")} onClose={()=>{window.auditClosed=true;}}/>}/></Routes></BrowserRouter>);`;
+createRoot(document.getElementById('root')).render(<BrowserRouter><Routes><Route path="/dashboard/agreements/:id/onboarding" element={<Onboarding/>}/><Route path="/dashboard/agreements/:id/exit" element={<Exit/>}/><Route path="/audit-recovery" element={<AgreementDocument title="Signing audit" documentUrl="/storage/documents/tenants/11111111-1111-4111-8111-111111111111/agreements/22222222-2222-4222-8222-222222222222/signed/audit_trail.pdf" onRecover={()=>recoverEviaAuditTrail("22222222-2222-4222-8222-222222222222")} onClose={()=>{window.auditClosed=true;}}/>}/></Routes></BrowserRouter>);`;
 const modules={
   eviaSignServiceLegacy:`export {};`,
   requestContext:`export const buildRequestContextHeaders=(headers={})=>({...headers,Authorization:'Bearer fixture-quixo-session','x-tenant-id':'fixture-tenant'});`,
@@ -45,9 +45,9 @@ try {
       assert.deepEqual(body,{},'customer requests cannot supply provider credentials');
       if(auditAttempts++===0) return r.respond({status:503,contentType:'application/json',body:JSON.stringify({code:'EVIA_API_KEY_EXCHANGE_FAILED',error:'fixture provider unavailable'})});
       auditRecovered=true;
-      return r.respond({status:200,contentType:'application/json',body:JSON.stringify({auditTrailUrl:'/storage/documents/fixture/audit_trail.pdf'})});
+      return r.respond({status:200,contentType:'application/json',body:JSON.stringify({auditTrailUrl:'/storage/documents/tenants/11111111-1111-4111-8111-111111111111/agreements/22222222-2222-4222-8222-222222222222/signed/audit_trail.pdf'})});
     }
-    if(url.origin===origin && url.pathname==='/storage/documents/fixture/audit_trail.pdf') {
+    if(url.origin===origin && url.pathname==='/storage/documents/tenants/11111111-1111-4111-8111-111111111111/agreements/22222222-2222-4222-8222-222222222222/signed/audit_trail.pdf') {
       assert.equal(r.headers().authorization,'Bearer fixture-quixo-session');
       return r.respond(auditRecovered?{status:200,headers:{'Cache-Control':'no-store'},contentType:'application/pdf',body:auditPdf}:{status:404,headers:{'Cache-Control':'no-store'},contentType:'application/json',body:'{}'});
     }
