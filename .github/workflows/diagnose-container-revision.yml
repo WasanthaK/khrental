@@ -17,9 +17,8 @@ jobs:
       - name: Check existing service authentication without returning credentials or documents
         shell: bash
         env:
-          EVIA_SIGN_API_KEY: ${{ secrets.EVIA_SIGN_API_KEY }}
-          EVIA_SIGN_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID }}
-          EVIA_SIGN_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET }}
+          EVIA_SIGN_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
+          EVIA_SIGN_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
         run: |
           set -euo pipefail
           node --input-type=module <<'JS'
@@ -42,14 +41,6 @@ jobs:
                 return result;
               } catch { const result = { method, networkError: true, tokenPresent: false }; results.push(result); return result; }
             };
-            const apiKey = process.env.EVIA_SIGN_API_KEY || '';
-            if (apiKey) {
-              const options = { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey, Accept: 'application/json' }, body: '{}' };
-              const first = await probe('integration_key_origin', 'https://evia.enadocapp.com/api/v2/oauth/exchange', options);
-              if (!first.tokenPresent && first.status === 404) {
-                await probe('integration_key_sign_base', 'https://evia.enadocapp.com/_apis/sign/api/v2/oauth/exchange', options);
-              }
-            } else { results.push({ method: 'integration_key', notConfigured: true, tokenPresent: false }); }
             if (!results.some(item => item.tokenPresent)) {
               const clientId = process.env.EVIA_SIGN_CLIENT_ID || '';
               const clientSecret = process.env.EVIA_SIGN_CLIENT_SECRET || '';
