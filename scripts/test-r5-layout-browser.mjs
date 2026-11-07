@@ -106,7 +106,8 @@ try {
   for(const width of [1440,390]) {
     auditRecovered=false;auditAttempts=0;auditRequests.length=0;
     await page.setViewport({width,height:1000});
-    await page.goto(`${origin}/audit-recovery`,{waitUntil:'networkidle0'});
+    await page.goto(`${origin}/audit-recovery`,{waitUntil:'domcontentloaded'});
+    await page.screenshot({path:`${output}/audit-service-initial-${width}.png`,fullPage:true});
     await page.waitForFunction(()=>document.body.innerText.includes('Signing audit PDF not found'));
     const clickRecover=async()=>{
       const buttons=await page.$$('button');
@@ -125,6 +126,7 @@ try {
     await page.screenshot({path:`${output}/audit-service-error-${width}.png`,fullPage:true});
     await clickRecover();
     await page.waitForSelector('iframe[src^="blob:"]');
+    await page.waitForFunction(()=>!document.body.innerText.includes('Loading document...'));
     assert.equal(await page.evaluate(()=>[...document.querySelectorAll('a')].some(el=>el.textContent.includes('Download'))),true);
     assert.equal(auditRequests.length,4,'retry remains scoped to the same audit without provider login');
     await page.screenshot({path:`${output}/audit-service-recovered-${width}.png`,fullPage:true});
