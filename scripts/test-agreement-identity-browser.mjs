@@ -128,7 +128,7 @@ try {
     await page.select('#agreement-template','template');
     await page.waitForFunction(()=>!document.querySelector('button[value="pending"]').disabled);
     assert.equal(counts.saves.length,0,'Template selection, failure and retry never create an agreement');
-    await page.waitForFunction(()=>!document.body.innerText.includes('Failed to load agreement template')); 
+    await page.waitForFunction(()=>!document.body.innerText.includes('Failed to load agreement template'));
     await page.screenshot({ path: `enquiry-browser-proof/agreement-form-${width}.png`, fullPage: true });
     await click(page, 'Review and send');
     await page.waitForFunction(() => document.body.innerText.includes('Unable to load your signing profile'));
