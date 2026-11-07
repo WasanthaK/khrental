@@ -1,5 +1,5 @@
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, hash, problem} from './contract.js';
-import {invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
+import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
 
 const safeUrl = (value, host) => {
   const url = new URL(value);
@@ -69,7 +69,9 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`);
     const invoiceId=objectId(subscription.latest_invoice);
     const invoice=invoiceId?await loadInvoice(invoiceId):null;
-    const projection=subscriptionProjection({subscription,invoice,account});
+    const firstFailureAt=subscription.status==='past_due' && invoice?.status==='open' && invoice.attempted===true && account.initial_payment_verified
+      ? await firstRenewalFailure({stripe,invoice,account}) : null;
+    const projection=subscriptionProjection({subscription,invoice,account,firstFailureAt});
     await saveProjection(q,account.tenant_id,projection);
     return {...account,...projection};
   };

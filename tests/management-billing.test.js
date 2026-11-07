@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
 import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange} from '../src/api/managementBilling/contract.js';
-import {createStripeClient,stripeForm,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
+import {createStripeClient,stripeForm,firstRenewalFailure,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 
 const tenant='11111111-1111-4111-8111-111111111111';
@@ -92,7 +92,7 @@ test('paid invoice graph and line period, not active status, establish initial p
 test('repeated failed-invoice reconciliation cannot extend grace',()=>{
   const failure={...invoice,status:'open',amount_remaining:1000,attempted:true,period_end:now/1000};
   const pastDue={...subscription,status:'past_due'};
-  const first=subscriptionProjection({subscription:pastDue,invoice:failure,account:{...account,initial_payment_verified:true},now});
+  const first=subscriptionProjection({subscription:pastDue,invoice:failure,account:{...account,initial_payment_verified:true},firstFailureAt:new Date(now).toISOString(),now});
   const retry=subscriptionProjection({subscription:pastDue,invoice:failure,account:{...account,...first},now:now+2*86400000});
   assert.equal(first.grace_started_at,retry.grace_started_at);
 });
@@ -156,3 +156,57 @@ test('disabled webhook does not read the store or acknowledge events as processe
     assert.equal((await fetch(origin,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,404);
   });
 });
+
+test('delayed first failure uses provider attempt time and expires at exactly seven days',()=>{
+  const failedAt=now-2*86400000;
+  const failure={...invoice,status:'open',amount_remaining:1000,attempted:true,created:failedAt/1000-3600,period_end:now/1000+28*86400};
+  const pastDue={...subscription,status:'past_due'};
+  const project=extra=>subscriptionProjection({subscription:pastDue,invoice:failure,
+    account:{...account,initial_payment_verified:true},now,...extra});
+  const state=project({firstFailureAt:new Date(failedAt).toISOString()});
+  assert.equal(state.grace_started_at,new Date(failedAt).toISOString());
+  assert.equal(entitlement(state,failedAt+7*86400000-1).management,true);
+  assert.equal(entitlement(state,failedAt+7*86400000).management,false);
+  assert.equal(entitlement(state,failedAt+7*86400000).historicalAccess,true);
+  for(const firstFailureAt of [null,'invalid',new Date(now+86400000).toISOString()]) {
+    assert.equal(project({firstFailureAt}).grace_started_at,null,'Unconfirmed timestamps cannot start grace');
+  }
+  const retry=project({account:{...account,...state},firstFailureAt:new Date(now).toISOString()});
+  assert.equal(retry.grace_started_at,state.grace_started_at);
+  const correction=project({account:{...account,...state,grace_started_at:new Date(now).toISOString()},firstFailureAt:new Date(failedAt).toISOString()});
+  assert.equal(correction.grace_started_at,state.grace_started_at,'Earlier provider evidence corrects a delayed stored timestamp');
+  const recovered=subscriptionProjection({subscription,invoice,account:{...account,...state},now});
+  assert.equal(recovered.grace_started_at,null);
+  assert.equal(entitlement(recovered,now).management,true);
+});
+
+test('failure lookup exhausts pagination and binds the earliest attempt to its invoice and subscription',async()=>{
+  const created=now/1000-3*86400;
+  const failure={...invoice,created};
+  const event=(id,at,change={})=>({id,type:'invoice.payment_failed',livemode:false,created:at,data:{object:failure},...change});
+  const pages=[{data:[event('evt_retry',created+2*86400),event('evt_foreign',created+1,{data:{object:{...failure,customer:'cus_foreign'}}})],has_more:true},
+    {data:[event('evt_first',created+3600),event('evt_otherSub',created+2,{data:{object:{...failure,parent:{subscription_details:{subscription:'sub_foreign'}}}}}),
+      event('evt_live',created+3,{livemode:true}),event('evt_otherInvoice',created+4,{data:{object:{...failure,id:'in_other'}}}),
+      event('evt_otherAccount',created+5,{account:'acct_foreign'})],has_more:false}];
+  const calls=[];
+  const stripe={request:async(method,path,params)=>{calls.push({method,path,params});return pages[calls.length-1];}};
+  assert.equal(await firstRenewalFailure({stripe,invoice:failure,account,now}),new Date((created+3600)*1000).toISOString());
+  assert.deepEqual(calls[0],{method:'GET',path:'/v1/events',params:{type:'invoice.payment_failed',created:{gte:created},limit:100}});
+  assert.equal(calls[1].params.starting_after,'evt_foreign');
+});
+
+test('missing failure history cannot invent grace and incomplete pagination cannot select a retry',async()=>{
+  const failure={...invoice,created:now/1000-86400};
+  assert.equal(await firstRenewalFailure({stripe:{request:async()=>({data:[],has_more:false})},invoice:failure,account,now}),null);
+  for(const page of [{data:[],has_more:true},{data:null,has_more:false},{data:[],has_more:'false'}]) {
+    await assert.rejects(firstRenewalFailure({stripe:{request:async()=>page},invoice:failure,account,now}),{code:'BILLING_FAILURE_TIME_UNCONFIRMED'});
+  }
+  await assert.rejects(firstRenewalFailure({stripe:{request:async()=>({data:[{id:'evt_same'}],has_more:true})},invoice:failure,account,now}),{code:'BILLING_FAILURE_TIME_UNCONFIRMED'});
+});
+
+ test('expired provider event history cannot make a recent retry the first failure',async()=>{
+  let calls=0;
+  const failure={...invoice,created:now/1000-31*86400};
+  assert.equal(await firstRenewalFailure({stripe:{request:async()=>{calls++;}},invoice:failure,account,now}),null);
+  assert.equal(calls,0);
+ });

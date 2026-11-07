@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import puppeteer from 'puppeteer';
 const market='https://quixo.homes';
 const app='https://app.quixo.homes';
-const widths=[1280,390];
+const widths=[1440,390];
 const label='LIVE_PUBLIC_BROWSER';
 let browser;
 try{
@@ -45,11 +45,11 @@ try{
     const url=market+'/lk/search/?type=residential';
     const response=await page.goto(url,{waitUntil:'networkidle2',timeout:45000});
     assert.equal(response.status(),200,'Live LK rental search');
-    await page.waitForFunction(()=>{
-      const area=document.querySelector('[data-public-listing-cards]');
-      return !!area&&(!!area.querySelector('article.listing')||
-        (!area.textContent.includes('Loading available properties')&&area.textContent.trim().length>0));
-    },{timeout:22000});
+    // Loading is text-only; rendered results/empty/error states contain children.
+    // Wait for the actual terminal structure instead of obsolete loading copy.
+    await page.waitForFunction(()=>!!document.querySelector(
+      '[data-public-listing-cards] article.listing, [data-public-listing-cards] > p, [data-public-listing-cards] [data-catalog-retry]'
+    ),{timeout:65000});
     const before=await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length);
     if(!before){
       await page.screenshot({path:'live-public-browser-proof/lk-missing-inventory-'+width+'.png',fullPage:true});
@@ -64,15 +64,21 @@ try{
     const detailHref=await page.$eval('[data-public-listing-cards] article.listing a',a=>a.getAttribute('href'));
     assert.ok(/^\/lk\/property\/\?id=[0-9a-f-]+$/i.test(detailHref),'First card opens public property');
     await page.type('input[name=location]','NoSuchLocation99999');
-    await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.click('[data-rental-filters] button[type=submit]')]);
+    await page.focus('input[name=location]');
+    await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.keyboard.press('Enter')]);
+    await page.waitForSelector('[data-public-listing-cards] > p',{timeout:65000});
     const after=await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length);
     assert.equal(after,0,'Non-matching location filters all cards');
     assert.match(await page.$eval('[data-public-listing-cards]',n=>n.innerText),/No properties match these filters/,'Clear no-results state');
     await page.screenshot({path:'live-public-browser-proof/lk-no-results-'+width+'.png',fullPage:true});
     await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.click('[data-clear-rental-filters]')]);
+    await page.waitForSelector('[data-public-listing-cards] article.listing',{timeout:65000});
     assert.ok(await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length)>0,'Clear restores catalog');
-    const detail=await page.goto(market+detailHref,{waitUntil:'networkidle2',timeout:45000});
-    assert.equal(detail.status(),200,'Selected public property detail');
+    // Click the actual rendered card using keyboard activation; a direct URL
+    // alone would not prove the customer can continue from discovery.
+    await page.focus('[data-public-listing-cards] article.listing a');
+    await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.keyboard.press('Enter')]);
+    assert.equal(page.url(),market+detailHref,'Actual listing card retains selected property');
     await page.waitForFunction(()=>!!document.querySelector('[data-public-listing-cards] .listing'),{timeout:22000});
     const title=await page.$eval('[data-public-listing-cards] h3',e=>e.textContent);
     assert.ok(title.trim().length>0,'Public property detail has name');
@@ -89,8 +95,9 @@ try{
     // even for an anonymous visitor. No message or account action is sent.
     const intent=new URL(enquiryHref);
     const selectedListing=intent.searchParams.get('listingId');
-    const handoff=await page.goto(enquiryHref,{waitUntil:'networkidle2',timeout:45000});
-    assert.equal(handoff.status(),200,'Enquiry app page responds');
+    await page.focus('a[href*="/enquire?listingId="]');
+    await Promise.all([page.waitForNavigation({waitUntil:'networkidle2',timeout:45000}),page.keyboard.press('Enter')]);
+    assert.equal(page.url(),enquiryHref,'Actual interest link retains selected property');
     await page.waitForFunction(()=>{
       const body=document.body.innerText;
       return body.includes('Sign in to contact the owner')||
@@ -121,8 +128,13 @@ try{
     assert.equal(new URL(page.url()).searchParams.get('country'),'LK','Login route retains country');
     assert.ok(await page.$('#email-address'),'Login form is available');
     await page.screenshot({path:'live-public-browser-proof/lk-selected-login-'+width+'.png',fullPage:true});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Login fits viewport');
+    await page.reload({waitUntil:'networkidle2'});
+    await page.waitForSelector('#email-address');
+    assert.equal(new URL(page.url()).searchParams.get('listingId')?.toLowerCase(),selectedListing.toLowerCase(),'Reload retains selected property');
+    assert.equal(new URL(page.url()).searchParams.get('country'),'LK','Reload retains selected market');
     assert.deepEqual(rejects,[],'No private/mutating requests');
-    console.log(label+'=PASS viewport='+width+' initialCards='+before+' filteredEmpty=true restored=true propertyDetail=true enquiryLink=available selectedLogin=PASS');
+    console.log(label+'=PASS viewport='+width+' initialCards='+before+' filteredEmpty=true restored=true propertyDetail=true enquiryLink=available selectedLogin=PASS keyboardDiscovery=PASS reloadContinuation=PASS');
     await context.close();
   }
 }finally{await browser?.close();}

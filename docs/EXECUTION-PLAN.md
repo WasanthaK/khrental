@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Controlling R5 prelaunch checkpoint 7 November 2026
+
+The [consolidated R5 case ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#current-r5-prelaunch-completion-ledger-7-november-2026) supersedes older pending wording without erasing dated history. Accepted: controlled demo activation through invoices/receipts, maintenance, notice/settlement/closure and relisting; actual organization switching; two separate hosted sandbox Checkouts; first-organization card replacement/cancellation/resume; second-organization increase and scheduled next-renewal reduction; deployed customer policies. Mailbox delivery remains unconfirmed. These are prelaunch tests, with simulated financial/physical operations, not commercial customer activity.
+
+Still open: fresh authorized participant signing and automatic signed-PDF/audit retention; remaining operational/stock/negative/presentation cases; genuine renewal/failure/recovery and persisted receiver evidence; actual complimentary controls; production inventory/write/job/import enforcement; unresolved commercial/privacy/retention/merchant decisions; Sri Lanka readiness then separate Brunei acceptance. Clock advancement remains unavailable through the connected operations search on 7 November. Existing provider objects must be retained. Independent engineering continues while signing and renewal are blocked.
+
+Source correction and expanded synthetic receiver regressions are being prepared for delayed first-renewal failure timing; CI/release evidence must be added before claiming delivery. Live charging remains disabled. R1/R3/R4 owner dispositions and deferred R2 remain unchanged. Full R5 remains incomplete; LK readiness and subsequent BN acceptance are recorded separately.
+
+
 ## R5 organization-switch navigation correction — 6 November 2026
 
 Live multi-membership acceptance found that switching between an administrator organization and a renter organization preserves the previous portal route, displaying Access Denied until Return to Home. The selected membership itself is correct; existing route authorization remains intact. PR #524 resets the document to the shared policy's landing path only after a verified active membership exactly matches the selected organization. Failed, unverified and mismatched results do not navigate. Tenant-scoped providers and the router start fresh at the correct portal.
