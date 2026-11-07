@@ -1,57 +1,13 @@
-name: Inspect Evia service authentication (read-only)
+name: Evia service diagnostic retired
 
 on:
-  push:
-    branches: [diag/evia-service-auth-20261108]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  inspect:
+  retired:
     runs-on: ubuntu-latest
-    environment: Production
-    timeout-minutes: 3
     steps:
-      - name: Check existing service authentication without returning credentials or documents
-        shell: bash
-        env:
-          EVIA_SIGN_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
-          EVIA_SIGN_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'JS'
-          (async () => {
-            const results = [];
-            const knownErrors = new Set(['unsupported_grant_type', 'invalid_client', 'invalid_grant', 'invalid_scope', 'invalid_request', 'unauthorized_client', 'access_denied']);
-            const probe = async (method, url, options) => {
-              try {
-                const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(20000) });
-                const json = (response.headers.get('content-type') || '').includes('application/json');
-                const data = json ? await response.json() : {};
-                const token = data.access_token || data.accessToken || data.authToken || data.token;
-                const scopes = typeof data.scope === 'string' ? data.scope.split(/\s+/) : [];
-                const result = { method, status: response.status, json,
-                  tokenPresent: response.ok && typeof token === 'string' && token.length > 0,
-                  scopeReported: scopes.length > 0,
-                  documentsReadReported: scopes.includes('documents:read'), auditReadReported: scopes.includes('audit:read') };
-                if (knownErrors.has(data.error)) result.errorCode = data.error;
-                results.push(result);
-                return result;
-              } catch { const result = { method, networkError: true, tokenPresent: false }; results.push(result); return result; }
-            };
-            if (!results.some(item => item.tokenPresent)) {
-              const clientId = process.env.EVIA_SIGN_CLIENT_ID || '';
-              const clientSecret = process.env.EVIA_SIGN_CLIENT_SECRET || '';
-              if (clientId && clientSecret) {
-                const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret, scope: 'documents:read audit:read' });
-                await probe('api_app_read_only', 'https://evia.enadocapp.com/_apis/falcon/auth/api/v2/token', {
-                  method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64'),
-                    'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: body.toString()
-                });
-              } else { results.push({ method: 'api_app_read_only', notConfigured: true, tokenPresent: false }); }
-            }
-            console.log('R5_SERVICE_AUTH_READONLY=' + JSON.stringify({ serviceAuthenticationEstablished: results.some(item => item.tokenPresent), results }));
-          })().catch(() => { console.log('R5_SERVICE_AUTH_READONLY_FAILED'); process.exitCode = 1; });
-          JS
+      - run: echo 'Read-only service probes completed in runs 42405787092 and 42405894400. No service credentials or production access remain in this temporary workflow.'
