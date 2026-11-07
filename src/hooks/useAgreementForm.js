@@ -94,6 +94,10 @@ export const useAgreementForm = (initialData = null) => {
   const [rentees, setRentees] = useState([]);
   const [templateContent, setTemplateContent] = useState('');
   const [processedContent, setProcessedContent] = useState('');
+  const [loadedTemplateId, setLoadedTemplateId] = useState(null);
+  const [processedSnapshot, setProcessedSnapshot] = useState(null);
+  const [documentError, setDocumentError] = useState(null);
+  const templateVersionRef = useRef(0);
   const renderVersionRef = useRef(0);
 
   useEffect(() => {
@@ -144,14 +148,20 @@ export const useAgreementForm = (initialData = null) => {
           const template = await getTemplate(selectedTemplateId);
           if (!cancelled) {
             setTemplateContent(template?.content || '');
+            setLoadedTemplateId(selectedTemplateId);
+            setDocumentError(template?.content ? null : 'This template has no content. Please retry or choose another template.');
           }
         } else if (!cancelled) {
           setTemplateContent('');
+          setLoadedTemplateId(null);
         }
       } catch (loadError) {
         console.error('Error loading agreement form data:', loadError);
         if (!cancelled) {
           setError(loadError.message);
+          if (initialData?.templateid) {
+            setDocumentError('The document preview could not be loaded. Please retry.');
+          }
           toast.error('Failed to load agreement form data');
         }
       } finally {
@@ -168,7 +178,8 @@ export const useAgreementForm = (initialData = null) => {
   }, [initialData?.id, initialData?.propertyid, initialData?.templateid]);
 
   useEffect(() => {
-    if (!templateContent) {
+    setProcessedSnapshot(null);
+    if (!templateContent || String(loadedTemplateId).toLowerCase() !== String(formData.templateid).toLowerCase()) {
       setProcessedContent('');
       return undefined;
     }
@@ -194,11 +205,14 @@ export const useAgreementForm = (initialData = null) => {
 
         if (!cancelled && version === renderVersionRef.current) {
           setProcessedContent(rendered);
+          setProcessedSnapshot({formData,templateContent,properties,propertyUnits,rentees});
+          setDocumentError(rendered ? null : 'The document preview is empty. Please retry.');
         }
       } catch (renderError) {
         console.error('Error rendering agreement preview:', renderError);
         if (!cancelled && version === renderVersionRef.current) {
           setProcessedContent('');
+          setDocumentError('The document preview could not be prepared. Please retry.');
         }
       }
     };
@@ -207,7 +221,7 @@ export const useAgreementForm = (initialData = null) => {
     return () => {
       cancelled = true;
     };
-  }, [formData, templateContent, properties, propertyUnits, rentees]);
+  }, [formData, templateContent, loadedTemplateId, properties, propertyUnits, rentees]);
 
   const loadPropertyUnitsForProperty = async (propertyId) => {
     if (!propertyId) {
@@ -318,7 +332,14 @@ export const useAgreementForm = (initialData = null) => {
   };
 
   const handleTemplateChange = async (templateId) => {
+    const version = ++templateVersionRef.current;
+    ++renderVersionRef.current;
     setFormData((current) => ({ ...current, templateid: templateId }));
+    setLoadedTemplateId(null);
+    setTemplateContent('');
+    setProcessedContent('');
+    setProcessedSnapshot(null);
+    setDocumentError(null);
 
     if (!templateId) {
       setTemplateContent('');
@@ -327,12 +348,20 @@ export const useAgreementForm = (initialData = null) => {
 
     try {
       const template = await getTemplate(templateId);
+      if (version !== templateVersionRef.current) {
+        return;
+      }
       if (!template?.content) {
         throw new Error('Template not found');
       }
       setTemplateContent(template.content);
+      setLoadedTemplateId(templateId);
     } catch (templateError) {
+      if (version !== templateVersionRef.current) {
+        return;
+      }
       console.error('Error loading template:', templateError);
+      setDocumentError('The selected template could not be loaded. Please retry.');
       setTemplateContent('');
       toast.error('Failed to load agreement template');
     }
@@ -343,6 +372,12 @@ export const useAgreementForm = (initialData = null) => {
     || formData.status === AGREEMENT_STATUS.DRAFT
     || formData.status === AGREEMENT_STATUS.REVIEW
   );
+
+  const documentReady = Boolean(processedContent && formData.templateid &&
+    String(loadedTemplateId).toLowerCase() === String(formData.templateid).toLowerCase() &&
+    processedSnapshot?.formData === formData && processedSnapshot.templateContent === templateContent &&
+    processedSnapshot.properties === properties && processedSnapshot.propertyUnits === propertyUnits &&
+    processedSnapshot.rentees === rentees);
 
   return {
     formData,
@@ -355,7 +390,9 @@ export const useAgreementForm = (initialData = null) => {
     propertyUnits,
     rentees,
     templateContent,
-    processedContent,
+    processedContent:documentReady ? processedContent : '',
+    documentReady,
+    documentError,
     handleInputChange,
     handlePropertyChange,
     handleTemplateChange,

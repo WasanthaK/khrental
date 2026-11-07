@@ -14,6 +14,8 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
     rentees,
     templateContent,
     processedContent,
+    documentReady,
+    documentError,
     handleInputChange,
     handlePropertyChange,
     handleTemplateChange,
@@ -37,6 +39,9 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
       e.stopPropagation();
       setValidated(true);
       form.querySelector(':invalid')?.focus();
+      return;
+    }
+    if (!documentReady) {
       return;
     }
     submissionRef.current = true;
@@ -342,6 +347,16 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         }
       `}</style>
 
+      {editable && formData.templateid && !documentReady && (
+        documentError ? (
+          <div role="alert" className="mb-3">
+            <p>{documentError}</p>
+            <Button type="button" variant="outline-primary" onClick={() => handleTemplateChange(formData.templateid)}>
+              Retry template
+            </Button>
+          </div>
+        ) : <p role="status">Preparing the selected template and your latest details for preview…</p>
+      )}
       {editable && (
         <p className="text-muted">
           Review and send saves your agreement and prepares the document automatically.
@@ -356,10 +371,10 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         )}
         {editable && (
           <>
-            <Button variant="outline-primary" type="submit" value={AGREEMENT_STATUS.DRAFT} disabled={submitting}>
+            <Button variant="outline-primary" type="submit" value={AGREEMENT_STATUS.DRAFT} disabled={submitting || Boolean(formData.templateid && !documentReady)}>
               Save draft
             </Button>
-            <Button variant="primary" type="submit" value={AGREEMENT_STATUS.PENDING} disabled={submitting}>
+            <Button variant="primary" type="submit" value={AGREEMENT_STATUS.PENDING} disabled={submitting || Boolean(formData.templateid && !documentReady)}>
               {submitting ? <><Spinner as="span" animation="border" size="sm" className="me-2" />Preparing…</> : 'Review and send'}
             </Button>
           </>
