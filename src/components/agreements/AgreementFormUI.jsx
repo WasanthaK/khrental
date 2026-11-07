@@ -62,7 +62,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         <Card.Body>
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-template">
                 <Form.Label>Template</Form.Label>
                 <Form.Select
                   value={formData.templateid || ''}
@@ -83,7 +83,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-property">
                 <Form.Label>Property</Form.Label>
                 <Form.Select
                   value={formData.propertyid || ''}
@@ -107,7 +107,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-unit">
                 <Form.Label>Unit</Form.Label>
                 <Form.Select
                   value={formData.unitid || ''}
@@ -141,7 +141,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-rentee">
                 <Form.Label>Rentee</Form.Label>
                 <Form.Select
                   value={formData.renteeid || ''}
@@ -173,7 +173,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
         <Card.Body>
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-monthly-rent">
                 <Form.Label>Monthly Rent</Form.Label>
                 <Form.Control
                   type="number"
@@ -188,7 +188,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-deposit">
                 <Form.Label>Security Deposit</Form.Label>
                 <Form.Control
                   type="number"
@@ -206,7 +206,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-start-date">
                 <Form.Label>Start Date</Form.Label>
                 <Form.Control
                   type="date"
@@ -224,7 +224,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-end-date">
                 <Form.Label>End Date</Form.Label>
                 <Form.Control
                   type="date"
@@ -246,7 +246,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-payment-due-day">
                 <Form.Label>Payment Due Day</Form.Label>
                 <Form.Control
                   type="number"
@@ -263,7 +263,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
               </Form.Group>
             </Col>
             <Col md={6}>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-notice-period">
                 <Form.Label>Notice Period (days)</Form.Label>
                 <Form.Control
                   type="number"
@@ -282,7 +282,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
 
           <Row>
             <Col>
-              <Form.Group className="mb-3">
+              <Form.Group className="mb-3" controlId="agreement-additional-terms">
                 <Form.Label>Additional Terms</Form.Label>
                 <Form.Control
                   as="textarea"

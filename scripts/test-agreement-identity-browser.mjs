@@ -84,6 +84,16 @@ try {
     await page.evaluateOnNewDocument(() => localStorage.setItem('eviaSignAuth', JSON.stringify({ authToken: 'fixture-only', expiresAt: Date.now() + 600000 })));
     await page.goto(origin, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => document.body.innerText.includes('Membership Renter'));
+    const fieldLabels=await page.$$eval('form label',labels=>labels.map(label=>({text:label.textContent.trim(),id:label.control?.id,disabled:label.control?.disabled})));
+    assert.equal(fieldLabels.length,11,'Every agreement field has an accessible label');
+    assert.equal(new Set(fieldLabels.map(label=>label.id)).size,11,'Labels target distinct form fields');
+    for(const label of fieldLabels){
+      assert.ok(label.id,'Visible field label is associated with its control: '+label.text);
+      if(!label.disabled){
+        await page.click('label[for="'+label.id+'"]');
+        assert.equal(await page.evaluate(()=>document.activeElement.id),label.id,'Clicking label focuses '+label.text);
+      }
+    }
     await click(page, 'Review and send');
     assert.equal(counts.contexts, 0, 'Invalid form cannot save or open signing');
     const selects = await page.$$('select'); await selects[0].select('template'); await selects[1].select('property'); await selects[3].select('renter-global');
