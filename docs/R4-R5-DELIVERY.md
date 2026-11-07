@@ -1,5 +1,14 @@
 # R4 and R5 delivery programme
 
+## R5 prelaunch engineering and acceptance checkpoint 7 November 2026
+
+PRs [529](https://github.com/WasanthaK/khrental/pull/529) and [530](https://github.com/WasanthaK/khrental/pull/530) are merged and deployed. Current serving source is `2463d000260802d2cf3ce034b0bd5d0d32226bc8`, independently matched in the browser. Application release [42389750779](https://github.com/WasanthaK/khrental/actions/runs/42389750779) and marketing release [42389750759](https://github.com/WasanthaK/khrental/actions/runs/42389750759) passed separately. Corrected delayed first-failure grace, Closed history filtering, redundant cancellation, stale template previews/late responses, template retry notices, field/recipient labels and mobile category word wrapping. Passing reviewed-head CI and inspected desktop/mobile screenshots are recorded in the [case ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#current-r5-prelaunch-completion-ledger-7-november-2026).
+
+A separately labelled zero-rent/deposit test agreement and two-page unsigned PDF are prepared in the existing app. It creates no tenancy or payment obligation; no invitation or signature was sent. Participant consent and separate Evia login precede genuine signing, automatic two-file retention and readback. The historical signed agreement is preserved.
+
+**R5 remains active and incomplete.** Task 1 is blocked at genuine signing; Task 2 has new bounded evidence and remaining agreed cases; Task 3 has a released grace correction and expanded synthetic receiver proof, while genuine renewal/recovery, actual complimentary controls, production inventory/enforcement and commercial/merchant/privacy decisions remain. The ledger now gives concrete cessation, restoration, expiry-write, zero-inventory and commercial choices with implementation consequences. Clock advancement remains unavailable through connected operations; only the approved sandbox is connected. Sri Lanka is prelaunch and not ready for closure; Brunei remains subsequent and separately incomplete. Live charging remains disabled. R1/R3/R4 owner acceptance and deferred R2 are unchanged.
+
+
 ## Controlling R5 prelaunch checkpoint 7 November 2026
 
 The [consolidated R5 case ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#current-r5-prelaunch-completion-ledger-7-november-2026) supersedes older pending wording without erasing dated history. Accepted: controlled demo activation through invoices/receipts, maintenance, notice/settlement/closure and relisting; actual organization switching; two separate hosted sandbox Checkouts; first-organization card replacement/cancellation/resume; second-organization increase and scheduled next-renewal reduction; deployed customer policies. Mailbox delivery remains unconfirmed. These are prelaunch tests, with simulated financial/physical operations, not commercial customer activity.
