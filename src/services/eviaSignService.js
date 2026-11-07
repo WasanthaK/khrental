@@ -12,6 +12,15 @@ const EVIA_REQUEST_URL = 'https://evia.enadocapp.com/_apis/sign/api/Requests';
 let eviaAuthBridgeTimer = null;
 
 const shortId = (value) => String(value || '').slice(0, 8);
+const completedDocumentError = (response, data, fallback) => {
+  const code = String(data?.code || '');
+  const serviceFailure = code.startsWith('EVIA_') && ![
+    'EVIA_AUDIT_RECOVERY_DENIED', 'EVIA_AUDIT_RECOVERY_SCOPE', 'EVIA_REQUEST_REFERENCE_MISSING'
+  ].includes(code);
+  return Object.assign(new Error(serviceFailure ? fallback : (data?.error || fallback)), {
+    status: response.status, code: data?.code
+  });
+};
 const summarizeEviaSignatories = (signatories) => (
   Array.isArray(signatories)
     ? signatories.map((signatory, index) => ({
@@ -111,7 +120,6 @@ const getActiveEviaAccessToken = async ({ forceRefresh = false } = {}) => {
 export async function reconcileEviaSignedDocument(agreementId) {
   if (!agreementId) throw new Error('Agreement ID is required to retrieve the signed document.');
 
-  const accessToken = await getActiveEviaAccessToken();
   const response = await fetch(
     `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/signed-document`,
     {
@@ -120,7 +128,7 @@ export async function reconcileEviaSignedDocument(agreementId) {
         'Content-Type': 'application/json',
         Accept: 'application/json'
       }),
-      body: JSON.stringify({ accessToken })
+      body: JSON.stringify({})
     }
   );
 
@@ -130,7 +138,8 @@ export async function reconcileEviaSignedDocument(agreementId) {
     : { error: await response.text() };
 
   if (!response.ok || !data?.signedDocumentUrl) {
-    throw new Error(data?.error || 'Failed to retrieve the completed signed agreement.');
+    throw completedDocumentError(response, data,
+      'Unable to retrieve the signed agreement right now. Please try again later or contact support.');
   }
 
   return data;
@@ -150,11 +159,8 @@ export async function recoverEviaAuditTrail(agreementId) {
       ? await response.json() : {};
     return { response, data };
   };
-  const recoveryError = ({ response, data }) => Object.assign(
-    new Error(data?.error || 'Unable to recover the existing Evia audit.'), {
-      status: response.status, code: data?.code
-    }
-  );
+  const recoveryError = ({ response, data }) => completedDocumentError(response, data,
+    'Unable to retrieve the signing audit right now. Please try again later or contact support.');
   // Existing storage needs only the application's administrator/tenant checks.
   // This request cannot contact Evia or exchange provider credentials.
   const local = await requestAudit({ localOnly: true });
@@ -163,30 +169,13 @@ export async function recoverEviaAuditTrail(agreementId) {
     throw recoveryError(local);
   }
 
-  // A confirmed local miss may use the sender's existing OAuth connection.
-  let accessToken = await getActiveEviaAccessToken();
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const { response, data } = await requestAudit({ accessToken });
-    const providerTokenRejected = response.status === 401 && [
-      'EVIA_COMPLETED_DOCUMENT_LIST_FAILED', 'EVIA_COMPLETED_DOCUMENT_DOWNLOAD_FAILED'
-    ].includes(data?.code);
-    if (providerTokenRejected) {
-      if (attempt === 1) throw eviaAuthenticationRequired();
-      accessToken = await getActiveEviaAccessToken({ forceRefresh: true });
-      continue;
-    }
-    if (!response.ok || !data?.auditTrailUrl) {
-      throw recoveryError({ response, data });
-    }
-    return data;
+  // Evia is Quixo's service integration. Organization users authorize this
+  // application request; provider authentication belongs to the backend.
+  const { response, data } = await requestAudit({});
+  if (!response.ok || !data?.auditTrailUrl) {
+    throw recoveryError({ response, data });
   }
-}
-
-export function connectEviaAuditRecovery() {
-  // The existing callback stores the connection in this origin. The user can
-  // retry recovery in the original tab after completing sign-in; no new request
-  // or signature is created. Do not give the provider tab an opener reference.
-  window.open(getAuthorizationUrl(), '_blank', 'noopener,noreferrer');
+  return data;
 }
 
 export async function getEviaAgreementCallbackUrl(agreementId) {

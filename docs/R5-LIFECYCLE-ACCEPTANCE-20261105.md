@@ -1,5 +1,14 @@
 # Current R5 prelaunch completion ledger 7 November 2026
 
+## Evia service ownership correction — 8 November 2026
+
+Evia is Quixo's service integration. Organization users, including landlords, do not need an Evia account to recover completed documents. Earlier sender-login recovery guidance is superseded. The bounded correction routes signed-document and audit recovery through the authenticated Quixo server using its service credentials, ignores caller-supplied provider tokens and removes the customer Evia sign-in action. Application session, organization membership and agreement authorization remain mandatory. Source validation is in progress; deployment and live acceptance are not yet established.
+
+Read-only service authentication probes reached the provider: both documented API-key exchange candidates returned HTTP 404 (run 42405787092); the existing API-app client-credentials probe using deployment credential aliases returned HTTP 501 without a token (run 42405894400). These are transport observations, not proof of invalid credentials or a provider outage. The temporary diagnostic workflow is retired with no environment, secrets or cloud permissions. No production SQL mutation, document resend, re-sign or activation was performed.
+
+The supported service token exchange or genuine completed-package delivery still needs confirmation from Evia. Do not substitute a landlord login or guess grants/routes. Current audit retention remains FAILED/OPEN (CT03), and R5 remains incomplete with live charging disabled. Existing sending/signature-management browser OAuth is outside this bounded recovery correction and has not been accepted as a service-owned flow.
+
+
 This checkpoint controls current status; dated checkpoints below remain history. Quixo Homes has not launched. R1, R3 (single replica) and R4 (sandbox foundation) remain owner accepted. R2 remains deferred and incomplete. R5 remains active. Current application source: `d6d94f90caf3d69f19b9f18391707ec705e4e80c` (PR 533). Application release 42402625224 passed with ready revision 0000473, live MSSQL readiness and min/max replicas 1; independent public build-info matched. Marketing remains at `2463d000260802d2cf3ce034b0bd5d0d32226bc8`, release 42389750759, retaining the accepted category CSS. The starting baselines were application `7ed7aa1` and marketing `15fbb40`; their history remains below.
 
 The source for this reconciliation is issue 459, the 7 November prelaunch completion handoff, and its accepted evidence. Do not repeat accepted cases solely because older paragraphs call them pending. No commercial launch, live payment or physical activity is established by demo results.

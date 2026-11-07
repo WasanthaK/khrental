@@ -228,7 +228,10 @@ test('HTTP recovery route requires session and tenant context and ignores caller
       Object.assign(req, { tenantId, user: f.args.user, membership: f.args.membership }); next();
     },
     loadAgreement: f.args.loadAgreement,
-    recoverAudit: args => recoverHistoricEviaAudit({ ...f.args, ...args })
+    recoverAudit: args => {
+      assert.equal(Object.hasOwn(args, 'accessToken'), false, 'provider credentials belong to the service');
+      return recoverHistoricEviaAudit({ ...f.args, ...args });
+    }
   }));
   app.use((err, req, res, next) => res.status(err.status || 500).json({ code: err.code }));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
@@ -243,7 +246,7 @@ test('HTTP recovery route requires session and tenant context and ignores caller
     assert.equal((await localResult.json()).code, 'EVIA_AUDIT_LOCAL_MISSING');
     assert.equal(f.calls.length, 0); assert.equal(f.counts().writes, 0);
     const result = await fetch(target, { method: 'POST', headers: { authorization: 'Bearer admin', 'x-tenant-id': tenantId, 'content-type': 'application/json' },
-      body: JSON.stringify({ requestId: 'foreign-request', path: 'other.pdf', accessToken: 'test-token' }) });
+      body: JSON.stringify({ requestId: 'foreign-request', path: 'other.pdf', accessToken: 'caller-provider-token' }) });
     assert.equal(result.status, 200); assert.equal(result.headers.get('cache-control'), 'no-store');
     assert.equal((await result.json()).auditTrailUrl, '/storage/documents/' + path);
     assert.equal(f.calls[0].includes('foreign-request'), false);
