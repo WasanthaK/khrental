@@ -3034,6 +3034,10 @@ async function main() {
     const switchPage = await browser.newPage();
     try {
       await switchPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
+        // Seed this tab once; a real organization switch reloads the document
+        // and must retain the membership selected through the actual control.
+        if (sessionStorage.getItem('fixture.shared-session-seeded')) return;
+        sessionStorage.setItem('fixture.shared-session-seeded', '1');
         localStorage.removeItem('dev_bypass_role');
         localStorage.setItem('khrental.activeTenantId', tenantId);
         localStorage.setItem('khrental.local.session', JSON.stringify({
@@ -3123,6 +3127,12 @@ async function main() {
         }, next.tenantId);
         assert.ok(optionValue, 'authorized tenant must be selectable');
         await switchPage.select('header.hidden select', optionValue);
+        await switchPage.waitForFunction(tenantId => (
+          location.pathname === '/rentee'
+          && localStorage.getItem('khrental.activeTenantId')?.toLowerCase() === tenantId
+        ), { timeout: 30000 }, next.tenantId);
+        await switchPage.waitForSelector('a[href="/rentee/invoices"]', { visible: true });
+        await switchPage.click('a[href="/rentee/invoices"]');
         await assertScopedBrowser(next, foreign);
       }
     } finally {
