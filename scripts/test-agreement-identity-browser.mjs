@@ -128,6 +128,7 @@ try {
     await page.select('#agreement-template','template');
     await page.waitForFunction(()=>!document.querySelector('button[value="pending"]').disabled);
     assert.equal(counts.saves.length,0,'Template selection, failure and retry never create an agreement');
+    await page.waitForFunction(()=>!document.body.innerText.includes('Failed to load agreement template')); 
     await page.screenshot({ path: `enquiry-browser-proof/agreement-form-${width}.png`, fullPage: true });
     await click(page, 'Review and send');
     await page.waitForFunction(() => document.body.innerText.includes('Unable to load your signing profile'));
@@ -153,6 +154,7 @@ try {
     await page.click('[aria-label="Close document viewer"]');
     await page.waitForSelector('iframe', { hidden: true });
     await page.waitForFunction(() => !document.body.innerText.includes('Agreement saved and prepared.'));
+    await page.evaluate(() => { const panel = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (panel) panel.scrollTop = 0; });
     await page.screenshot({ path: `enquiry-browser-proof/agreement-review-${width}.png`, fullPage: true });
     await page.evaluate(() => { const modal = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (modal) modal.scrollTop = modal.scrollHeight; });
     await page.screenshot({ path: `enquiry-browser-proof/agreement-review-actions-${width}.png`, fullPage: true });

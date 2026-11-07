@@ -149,6 +149,9 @@ export const useAgreementForm = (initialData = null) => {
           if (!cancelled) {
             setTemplateContent(template?.content || '');
             setLoadedTemplateId(selectedTemplateId);
+            if (template?.content) {
+              toast.dismiss('agreement-template-load');
+            }
             setDocumentError(template?.content ? null : 'This template has no content. Please retry or choose another template.');
           }
         } else if (!cancelled) {
@@ -356,6 +359,7 @@ export const useAgreementForm = (initialData = null) => {
       }
       setTemplateContent(template.content);
       setLoadedTemplateId(templateId);
+      toast.dismiss('agreement-template-load');
     } catch (templateError) {
       if (version !== templateVersionRef.current) {
         return;
@@ -363,7 +367,7 @@ export const useAgreementForm = (initialData = null) => {
       console.error('Error loading template:', templateError);
       setDocumentError('The selected template could not be loaded. Please retry.');
       setTemplateContent('');
-      toast.error('Failed to load agreement template');
+      toast.error('Failed to load agreement template', {id:'agreement-template-load'});
     }
   };
 
