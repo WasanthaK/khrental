@@ -45,11 +45,11 @@ try{
     const url=market+'/lk/search/?type=residential';
     const response=await page.goto(url,{waitUntil:'networkidle2',timeout:45000});
     assert.equal(response.status(),200,'Live LK rental search');
-    await page.waitForFunction(()=>{
-      const area=document.querySelector('[data-public-listing-cards]');
-      return !!area&&(!!area.querySelector('article.listing')||
-        (!area.textContent.includes('Loading available properties')&&area.textContent.trim().length>0));
-    },{timeout:22000});
+    // Loading is text-only; rendered results/empty/error states contain children.
+    // Wait for the actual terminal structure instead of obsolete loading copy.
+    await page.waitForFunction(()=>!!document.querySelector(
+      '[data-public-listing-cards] article.listing, [data-public-listing-cards] > p, [data-public-listing-cards] [data-catalog-retry]'
+    ),{timeout:65000});
     const before=await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length);
     if(!before){
       await page.screenshot({path:'live-public-browser-proof/lk-missing-inventory-'+width+'.png',fullPage:true});
@@ -66,11 +66,13 @@ try{
     await page.type('input[name=location]','NoSuchLocation99999');
     await page.focus('input[name=location]');
     await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.keyboard.press('Enter')]);
+    await page.waitForSelector('[data-public-listing-cards] > p',{timeout:65000});
     const after=await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length);
     assert.equal(after,0,'Non-matching location filters all cards');
     assert.match(await page.$eval('[data-public-listing-cards]',n=>n.innerText),/No properties match these filters/,'Clear no-results state');
     await page.screenshot({path:'live-public-browser-proof/lk-no-results-'+width+'.png',fullPage:true});
     await Promise.all([page.waitForNavigation({waitUntil:'networkidle2'}),page.click('[data-clear-rental-filters]')]);
+    await page.waitForSelector('[data-public-listing-cards] article.listing',{timeout:65000});
     assert.ok(await page.$$eval('[data-public-listing-cards] article.listing',cards=>cards.length)>0,'Clear restores catalog');
     // Click the actual rendered card using keyboard activation; a direct URL
     // alone would not prove the customer can continue from discovery.
