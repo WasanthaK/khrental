@@ -190,6 +190,13 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
     { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId,
       requestId: completedId, signedUrl: '/storage/documents/tenants/test/agreement/signed.pdf' });
   const signedId = guid(completed.id);
+  const { getStorageDriver } = await import('../src/api/storage/index.js');
+  const retainedPrefix = `tenants/${a.tenantId}/agreements/${signedId}/signed/`;
+  await query(pool, 'UPDATE agreements SET signed_document_url = @url WHERE id = @id', {
+    id: signedId, url: '/storage/documents/' + retainedPrefix + 'signed.pdf'
+  });
+  await getStorageDriver().createEviaAuditIfAbsent('documents', retainedPrefix + 'audit_trail.pdf',
+    Buffer.from('%PDF-1.7 disposable preexisting audit'));
   const completedDeliveryId = 'completed-' + crypto.randomBytes(5).toString('hex');
   await query(pool,
     `INSERT INTO webhook_events (tenant_id, event_type, request_id, raw_data, processed)
@@ -202,7 +209,7 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
   const repeatedCompletion = await processEviaWebhook({
     event: 'request.completed', Status: 'Completed', RequestId: completedId,
     deliveryId: completedDeliveryId
-  }, { expectedAgreementId: signedId, expectedTenantId: a.tenantId });
+  }, { expectedAgreementId: signedId, expectedTenantId: a.tenantId, verifiedRequest: true });
   assert.equal(repeatedCompletion.statusCode, 200);
   assert.equal(repeatedCompletion.body.duplicate, true);
   assert.equal(repeatedCompletion.body.updated, false);
@@ -215,6 +222,81 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
     { tenantId: a.tenantId, requestId: completedId });
   assert.equal(completedEvents.length, 1);
   console.log('PASS: Evia verified processed-delivery idempotency and tenant-scoped callback isolation');
+}
+
+async function verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b) {
+  const { processEviaWebhook } = await import('../src/api/evia/webhook.js');
+  const { retainEviaAuditForVerifiedRequest } = await import('../src/api/evia/auditRecovery.js');
+  const requestId = 'audit-retry-' + crypto.randomBytes(6).toString('hex');
+  const row = await first(pool, `
+    INSERT INTO agreements (tenant_id, renteeid, propertyid, status, signature_status, eviasignreference)
+    OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'pending_signature', 'pending', @requestId)
+  `, { ...a, requestId });
+  const id = guid(row.id);
+  const prefix = `tenants/${a.tenantId}/agreements/${id}/signed/`;
+  const audit = Buffer.from('%PDF-1.7 disposable provider audit');
+  const signed = Buffer.from('%PDF-1.7 disposable signed agreement');
+  let retained, unavailable = true, fetches = 0, writes = 0;
+  const downloadUrl = 'https://evia.enadocapp.com/_apis/sign/api/v2/documents/audit/download';
+  const options = { expectedAgreementId: id, expectedTenantId: a.tenantId, verifiedRequest: true,
+    retainAudit: args => retainEviaAuditForVerifiedRequest({ ...args, apiKey: 'disposable-key',
+      storageDriver: {
+        getObject: async (bucket, key) => {
+          assert.equal(bucket, 'documents'); assert.equal(key.toLowerCase(), prefix + 'audit_trail.pdf');
+          if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+          return { body: retained };
+        },
+        createEviaAuditIfAbsent: async (bucket, key, body) => {
+          assert.equal(bucket, 'documents'); assert.equal(key.toLowerCase(), prefix + 'audit_trail.pdf');
+          writes++; retained ||= body;
+        }
+      },
+      fetchImpl: async url => {
+        fetches++;
+        if (unavailable) return Response.json({}, { status: 503 });
+        if (url.endsWith('/oauth/exchange')) return Response.json({ access_token: 'fixture-token' });
+        if (url.endsWith(`/requests/${requestId}/documents`)) return Response.json([
+          { documentName: 'audit_trail.pdf', downloadUrl }
+        ]);
+        assert.equal(url, downloadUrl, 'retry must not retrieve or rewrite the signed PDF');
+        return new Response(audit);
+      }
+    }) };
+  const payload = { RequestId: requestId, EventId: 3, deliveryId: 'audit-' + crypto.randomBytes(6).toString('hex'),
+    Documents: [{ DocumentName: 'signed.pdf', DocumentContent: signed.toString('base64') }] };
+  const snapshot = () => first(pool, `
+    SELECT status, signature_status, signeddate, signature_completed_at, signed_document_url, updatedat
+    FROM agreements WHERE id = @id`, { id });
+  const events = () => query(pool,
+    'SELECT processed, updatedat FROM webhook_events WHERE request_id = @requestId', { requestId });
+  const pending = await processEviaWebhook(payload, options);
+  assert.equal(pending.statusCode, 503);
+  assert.equal(pending.body.code, 'EVIA_AUDIT_RETENTION_PENDING');
+  const completed = await snapshot();
+  assert.equal(completed.status, 'signed'); assert.equal(completed.signature_status, 'completed');
+  assert.ok(completed.signeddate && completed.signature_completed_at);
+  assert.equal((await events())[0].processed, false);
+  assert.ok(Date.now() - new Date((await events())[0].updatedat).getTime() > 15 * 60 * 1000);
+  const { getStorageDriver } = await import('../src/api/storage/index.js');
+  const storedSigned = () => getStorageDriver().getObject('documents', completed.signed_document_url.slice('/storage/documents/'.length));
+  assert.deepEqual((await storedSigned()).body, signed);
+  const metadataOnly = { ...payload }; delete metadataOnly.Documents;
+  assert.equal((await processEviaWebhook(metadataOnly, options)).statusCode, 503);
+  assert.deepEqual(await snapshot(), completed);
+  const beforeForeign = fetches;
+  assert.equal((await processEviaWebhook(metadataOnly, { ...options, expectedTenantId: b.tenantId })).body.matched, false);
+  assert.equal(fetches, beforeForeign);
+  unavailable = false;
+  assert.equal((await processEviaWebhook(metadataOnly, options)).statusCode, 200);
+  assert.deepEqual(retained, audit); assert.equal(writes, 1);
+  const afterRecovery = fetches;
+  const replay = await processEviaWebhook(metadataOnly, options);
+  assert.equal(replay.statusCode, 200); assert.equal(replay.body.duplicate, true);
+  assert.equal(fetches, afterRecovery); assert.equal(writes, 1);
+  assert.deepEqual(await snapshot(), completed);
+  assert.deepEqual((await storedSigned()).body, signed);
+  assert.equal((await events()).length, 1); assert.equal((await events())[0].processed, true);
+  console.log('PASS: missing Evia audit stays retryable; metadata replay retains audit once with signed bytes/timestamps unchanged');
 }
 
 async function verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b) {
@@ -2134,6 +2216,7 @@ async function main() {
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
+    await verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b);
     await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
     await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
     await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);

@@ -15,7 +15,8 @@ export const prepareEviaCompletionEvidence = async ({
   downloadPackage = downloadEviaCompletedPackage,
   retainAudit = retainEviaAuditForVerifiedRequest
 }) => {
-  if (!completed || (!completedPackage && auditDocuments(documents).length === 0)) return documents;
+  const hasDeliveredAudit = Boolean(completedPackage) || auditDocuments(documents).length > 0;
+  if (!completed || (!signedDocumentUrl && !hasDeliveredAudit)) return documents;
   if (!verifiedRequest || !agreement?.id || !agreement?.tenant_id || !requestId) {
     throw Object.assign(new Error('Verified agreement-bound completion is required.'), { code: 'EVIA_PACKAGE_UNVERIFIED', status: 403 });
   }
@@ -33,11 +34,13 @@ export const prepareEviaCompletionEvidence = async ({
   if (!signedDocumentUrl) return loadDocuments();
   await retainAudit({
     tenantId: agreement.tenant_id, agreementId: agreement.id, requestId, signedDocumentUrl,
-    loadAuditBody: async () => {
+    // Metadata-only and signed-PDF-only replays must check retained evidence
+    // and retry the existing audit-only retrieval before being acknowledged.
+    ...(hasDeliveredAudit ? { loadAuditBody: async () => {
       const audits = auditDocuments(await loadDocuments());
       if (audits.length !== 1) throw Object.assign(new Error('A single provider audit PDF is required.'), { code: 'EVIA_PACKAGE_AUDIT_AMBIGUOUS', status: 502 });
       return Buffer.from(String(audits[0].DocumentContent || audits[0].documentContent || ''), 'base64');
-    }
+    } } : {})
   });
   return documents;
 };

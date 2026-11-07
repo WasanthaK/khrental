@@ -107,6 +107,57 @@ test('rejects traversal, duplicate audit, normalization collisions, symlinks, co
 const agreement = { id: '22222222-2222-4222-8222-222222222222', tenant_id: '11111111-1111-4111-8111-111111111111', status: 'signed', signature_status: 'completed' };
 const signedUrl = `/storage/documents/tenants/${agreement.tenant_id}/agreements/${agreement.id}/signed/signed.pdf`;
 
+test('metadata-only completion retries audit-only retrieval and then reuses the retained bytes', async () => {
+  let retained, unavailable = true, writes = 0, fetches = 0;
+  const before = JSON.stringify(agreement);
+  const downloadUrl = 'https://evia.enadocapp.com/_apis/sign/api/v2/documents/audit/download';
+  const storageDriver = {
+    getObject: async (bucket, key) => {
+      assert.equal(bucket, 'documents');
+      assert.equal(key, signedUrl.slice('/storage/documents/'.length).replace('signed.pdf', 'audit_trail.pdf'));
+      if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+      return { body: retained };
+    },
+    createEviaAuditIfAbsent: async (bucket, key, body) => { writes++; retained ||= body; }
+  };
+  const fetchImpl = async url => {
+    fetches++;
+    if (unavailable) return new Response('{}', { status: 503, headers: { 'content-type': 'application/json' } });
+    if (url.endsWith('/oauth/exchange')) return Response.json({ access_token: 'fixture-token' });
+    if (url.endsWith('/requests/persisted-request/documents')) return Response.json([
+      { documentName: 'audit_trail.pdf', downloadUrl }
+    ]);
+    assert.equal(url, downloadUrl, 'must never download or replace the signed document');
+    return new Response(pdf);
+  };
+  const input = { verifiedRequest: true, completed: true, agreement,
+    requestId: 'persisted-request', signedDocumentUrl: signedUrl,
+    retainAudit: args => retainEviaAuditForVerifiedRequest({ ...args, storageDriver, fetchImpl, apiKey: 'fixture-key' }) };
+  await assert.rejects(prepareEviaCompletionEvidence(input), { code: 'EVIA_API_KEY_EXCHANGE_FAILED' });
+  assert.equal(writes, 0);
+  unavailable = false;
+  await prepareEviaCompletionEvidence(input);
+  assert.deepEqual(retained, pdf);
+  const afterRecovery = fetches;
+  await prepareEviaCompletionEvidence(input);
+  assert.equal(fetches, afterRecovery);
+  assert.equal(writes, 1);
+  assert.equal(JSON.stringify(agreement), before, 'signature state and timestamps are immutable');
+});
+
+test('metadata-only audit retry requires verified scope and ignores failed or fenced agreements', async () => {
+  let calls = 0;
+  const input = { verifiedRequest: true, completed: true, agreement, requestId: 'persisted-request',
+    signedDocumentUrl: signedUrl, retainAudit: async () => { calls++; } };
+  await assert.rejects(prepareEviaCompletionEvidence({ ...input, verifiedRequest: false }), { code: 'EVIA_PACKAGE_UNVERIFIED' });
+  for (const status of ['cancelled', 'rejected', 'terminated', 'expired']) {
+    await prepareEviaCompletionEvidence({ ...input, agreement: { ...agreement, status } });
+  }
+  await prepareEviaCompletionEvidence({ ...input, completed: false });
+  await prepareEviaCompletionEvidence({ ...input, signedDocumentUrl: signedUrl.replace('/signed/', '/signed/staged/attempt/') });
+  assert.equal(calls, 0);
+});
+
 test('late completed-package replay writes only the missing audit, and repeat skips expired package download', async () => {
   let retained, downloads = 0; const writes = [];
   const storageDriver = {
