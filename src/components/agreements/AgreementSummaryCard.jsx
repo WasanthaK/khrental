@@ -159,7 +159,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
   const statusInfo = getStatusInfo();
 
   const handleCancelClick = () => {
-    if (agreementState === 'active' || agreementState === 'closed') {
+    if (['active', 'closed', 'cancelled'].includes(agreementState)) {
       return;
     }
     if (agreementState === 'completed' || agreementState === 'signed') {
@@ -364,7 +364,7 @@ const AgreementSummaryCard = ({ agreement, rentee, property, signatories = [], o
           {isSignatureComplete && auditTrailUrl && (
             <button type="button" onClick={() => setShowAuditViewer(true)} className="px-3 py-1 border border-indigo-400 text-indigo-700 rounded text-xs hover:bg-indigo-50">View Signing Audit</button>
           )}
-          {onCancelClick && !['active', 'closed'].includes(agreementState) && (
+          {onCancelClick && !['active', 'closed', 'cancelled'].includes(agreementState) && (
             <button
               onClick={handleCancelClick}
               className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors flex items-center"

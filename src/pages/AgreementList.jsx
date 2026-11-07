@@ -242,6 +242,7 @@ const AgreementList = () => {
               <option value="partially_signed">Partially Signed</option>
               <option value="signed">Signed</option>
               <option value="active">Active</option>
+              <option value="closed">Closed</option>
               <option value="expired">Expired</option>
               <option value="rejected">Rejected</option>
               <option value="cancelled">Cancelled</option>
