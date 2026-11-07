@@ -2216,7 +2216,6 @@ async function main() {
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
-    await verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b);
     await verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b);
     await verifyEviaTerminalOrderingAgainstDisposableSql(pool, a, b);
     await verifyEviaArchiveAgreementLockAgainstDisposableSql(pool, a, b);
@@ -3046,15 +3045,29 @@ async function main() {
         { waitUntil: 'domcontentloaded', timeout: 45000 });
 
       const assertScopedBrowser = async (own, foreign) => {
-        await switchPage.waitForFunction(
-          ({ property, other }) => {
-            const body = document.body.innerText;
-            return body.includes('My Invoices') && body.includes(property)
-              && !body.includes(other) && !body.includes('Loading your invoices...');
-          },
-          { timeout: 30000 },
-          { property: own.propertyName, other: foreign.propertyName }
-        );
+        try {
+          await switchPage.waitForFunction(
+            ({ property, other }) => {
+              const body = document.body.innerText;
+              return body.includes('My Invoices') && body.includes(property)
+                && !body.includes(other) && !body.includes('Loading your invoices...');
+            },
+            { timeout: 30000 },
+            { property: own.propertyName, other: foreign.propertyName }
+          );
+        } catch (error) {
+          const state = await switchPage.evaluate(({ property, other }) => ({
+            path: location.pathname,
+            headings: [...document.querySelectorAll('h1,h2')].map(el => el.innerText.slice(0, 120)),
+            expectedPropertyPresent: document.body.innerText.includes(property),
+            foreignPropertyPresent: document.body.innerText.includes(other),
+            invoiceLoadingPresent: document.body.innerText.includes('Loading your invoices...')
+          }), { property: own.propertyName, other: foreign.propertyName });
+          console.error('Tenant-switch browser timeout state:', JSON.stringify(state));
+          fs.mkdirSync('billing-sql-proof', { recursive: true });
+          await switchPage.screenshot({ path: 'billing-sql-proof/tenant-switch-failure.png', fullPage: true });
+          throw error;
+        }
         const beforeClick = await switchPage.evaluate(() => ({
           path: location.pathname, content: document.body.innerText,
           activeTenant: localStorage.getItem('khrental.activeTenantId'),
@@ -3127,6 +3140,9 @@ async function main() {
       pool, first, query, a, b, tokenA, tokenB, otherToken,
       call, createAuthRecord, issueAuthSession, browser, origin, invoiceMailbox
     });
+
+    // Keep the new signed mutation fixture after every existing read-only browser journey.
+    await verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b);
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
