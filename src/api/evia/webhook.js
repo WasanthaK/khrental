@@ -657,7 +657,8 @@ export const processEviaWebhook = async (payload = {}, {
   expectedAgreementId = null, expectedTenantId = null, verifiedRequest = false,
   fencedCanaryRunner = runDormantEviaFencedArchive,
   fencedCanaryStage = stageEviaDocumentsForFencedLease,
-  fencedCanaryEnv = process.env
+  fencedCanaryEnv = process.env,
+  retainAudit = retainEviaAuditForVerifiedRequest
 } = {}) => {
   const normalized = normalizeEviaWebhookPayload(payload);
 
@@ -747,7 +748,8 @@ export const processEviaWebhook = async (payload = {}, {
     normalized.documents = await prepareEviaCompletionEvidence({
       verifiedRequest, completed: mapFinalAgreementState(normalized)?.signatureStatus === 'completed',
       agreement, requestId: normalized.requestId, completedPackage: normalized.completedPackage,
-      documents: normalized.documents, signedDocumentUrl: getStoredSignedDocumentUrl(agreement)
+      documents: normalized.documents, signedDocumentUrl: getStoredSignedDocumentUrl(agreement),
+      retainAudit
     });
   } catch (error) {
     console.warn('[EviaDiag] completion_evidence_retry_required', {
@@ -1061,7 +1063,7 @@ SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
   // it must not force a re-sign or roll back genuine signature completion.
   if (finalState.signatureStatus === 'completed' && signedDocumentUrl && !auditTrailStored) {
     try {
-      const audit = await retainEviaAuditForVerifiedRequest({
+      const audit = await retainAudit({
         tenantId: agreement.tenant_id,
         agreementId: agreement.id,
         requestId: normalized.requestId,
@@ -1174,6 +1176,23 @@ SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
     duplicateDelivery,
     completedSignatoryCount: completedSignatories?.length || 0
   });
+
+  if (finalState.signatureStatus === 'completed' && signedDocumentUrl && !auditTrailStored) {
+    // Signature completion is genuine and stays committed. Only archival
+    // delivery remains outstanding; release its claim so Evia can retry now.
+    if (webhookEventId) {
+      await runQuery(`
+        UPDATE dbo.webhook_events
+        SET updatedat = DATEADD(MINUTE, -16, SYSUTCDATETIME())
+        WHERE id = @eventId AND tenant_id = @tenantId AND processed = 0
+      `, { eventId: webhookEventId, tenantId: agreement.tenant_id });
+    }
+    return { statusCode: 503, body: {
+      received: false, matched: true, updated: true, retryable: true,
+      code: 'EVIA_AUDIT_RETENTION_PENDING', agreementId: agreement.id,
+      status: finalState.agreementStatus, signatureStatus: finalState.signatureStatus
+    }};
+  }
 
   await markWebhookEventProcessed(webhookEventId);
 

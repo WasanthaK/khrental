@@ -1,5 +1,11 @@
 # Recover an existing Evia signing audit
 
+## Fresh completion retry correction — 7 November 2026
+
+The authorized prelaunch test recorded completed signatures and opens its signed-document viewer, but its audit returns HTTP 404. Read-only diagnostic 42399878728 found completion metadata containing the signed PDF without an audit or completed-package descriptor. The configured integration credentials were present; successful provider retrieval was not established.
+
+The receiver correction keeps genuine signing completion and signed bytes intact while returning a retryable response for missing audit retention. Verified metadata-only completion replays check or recover the audit before duplicate/terminal acknowledgement. Retained audits skip provider calls; failed, cancelled and fenced publications preserve their existing boundaries. Regression coverage includes provider failure, metadata-only recovery, repeat delivery and immutable signed bytes/timestamps, using synthetic provider transport and disposable SQL. CI and deployment are pending. This fixes retry handling; it does not establish a working provider exchange, recover the existing missing audit or close fresh automatic two-file acceptance. No resend or re-sign is required.
+
 ## Current recovery behavior and acceptance — 3 November 2026
 
 **Current agreement audit retrieval CLOSED — live PASS.** View Signing Audit and Download returned the matching two-page completion audit in the authorized administrator session, and reopening after a full page reload passed. #491 and #492 are merged/deployed; #492 passed 863 application tests and deployment [41668489175](https://github.com/WasanthaK/khrental/actions/runs/41668489175), with ready revision 0000452, matching build and MSSQL readiness.

@@ -190,6 +190,13 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
     { tenantId: a.tenantId, renteeId: a.renteeId, propertyId: a.propertyId,
       requestId: completedId, signedUrl: '/storage/documents/tenants/test/agreement/signed.pdf' });
   const signedId = guid(completed.id);
+  const { getStorageDriver } = await import('../src/api/storage/index.js');
+  const retainedPrefix = `tenants/${a.tenantId}/agreements/${signedId}/signed/`;
+  await query(pool, 'UPDATE agreements SET signed_document_url = @url WHERE id = @id', {
+    id: signedId, url: '/storage/documents/' + retainedPrefix + 'signed.pdf'
+  });
+  await getStorageDriver().createEviaAuditIfAbsent('documents', retainedPrefix + 'audit_trail.pdf',
+    Buffer.from('%PDF-1.7 disposable preexisting audit'));
   const completedDeliveryId = 'completed-' + crypto.randomBytes(5).toString('hex');
   await query(pool,
     `INSERT INTO webhook_events (tenant_id, event_type, request_id, raw_data, processed)
@@ -202,7 +209,7 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
   const repeatedCompletion = await processEviaWebhook({
     event: 'request.completed', Status: 'Completed', RequestId: completedId,
     deliveryId: completedDeliveryId
-  }, { expectedAgreementId: signedId, expectedTenantId: a.tenantId });
+  }, { expectedAgreementId: signedId, expectedTenantId: a.tenantId, verifiedRequest: true });
   assert.equal(repeatedCompletion.statusCode, 200);
   assert.equal(repeatedCompletion.body.duplicate, true);
   assert.equal(repeatedCompletion.body.updated, false);
@@ -215,6 +222,81 @@ async function verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b) {
     { tenantId: a.tenantId, requestId: completedId });
   assert.equal(completedEvents.length, 1);
   console.log('PASS: Evia verified processed-delivery idempotency and tenant-scoped callback isolation');
+}
+
+async function verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b) {
+  const { processEviaWebhook } = await import('../src/api/evia/webhook.js');
+  const { retainEviaAuditForVerifiedRequest } = await import('../src/api/evia/auditRecovery.js');
+  const requestId = 'audit-retry-' + crypto.randomBytes(6).toString('hex');
+  const row = await first(pool, `
+    INSERT INTO agreements (tenant_id, renteeid, propertyid, status, signature_status, eviasignreference)
+    OUTPUT INSERTED.id VALUES (@tenantId, @renteeId, @propertyId, 'pending_signature', 'pending', @requestId)
+  `, { ...a, requestId });
+  const id = guid(row.id);
+  const prefix = `tenants/${a.tenantId}/agreements/${id}/signed/`;
+  const audit = Buffer.from('%PDF-1.7 disposable provider audit');
+  const signed = Buffer.from('%PDF-1.7 disposable signed agreement');
+  let retained, unavailable = true, fetches = 0, writes = 0;
+  const downloadUrl = 'https://evia.enadocapp.com/_apis/sign/api/v2/documents/audit/download';
+  const options = { expectedAgreementId: id, expectedTenantId: a.tenantId, verifiedRequest: true,
+    retainAudit: args => retainEviaAuditForVerifiedRequest({ ...args, apiKey: 'disposable-key',
+      storageDriver: {
+        getObject: async (bucket, key) => {
+          assert.equal(bucket, 'documents'); assert.equal(key.toLowerCase(), prefix + 'audit_trail.pdf');
+          if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+          return { body: retained };
+        },
+        createEviaAuditIfAbsent: async (bucket, key, body) => {
+          assert.equal(bucket, 'documents'); assert.equal(key.toLowerCase(), prefix + 'audit_trail.pdf');
+          writes++; retained ||= body;
+        }
+      },
+      fetchImpl: async url => {
+        fetches++;
+        if (unavailable) return Response.json({}, { status: 503 });
+        if (url.endsWith('/oauth/exchange')) return Response.json({ access_token: 'fixture-token' });
+        if (url.endsWith(`/requests/${requestId}/documents`)) return Response.json([
+          { documentName: 'audit_trail.pdf', downloadUrl }
+        ]);
+        assert.equal(url, downloadUrl, 'retry must not retrieve or rewrite the signed PDF');
+        return new Response(audit);
+      }
+    }) };
+  const payload = { RequestId: requestId, EventId: 3, deliveryId: 'audit-' + crypto.randomBytes(6).toString('hex'),
+    Documents: [{ DocumentName: 'signed.pdf', DocumentContent: signed.toString('base64') }] };
+  const snapshot = () => first(pool, `
+    SELECT status, signature_status, signeddate, signature_completed_at, signed_document_url, updatedat
+    FROM agreements WHERE id = @id`, { id });
+  const events = () => query(pool,
+    'SELECT processed, updatedat FROM webhook_events WHERE request_id = @requestId', { requestId });
+  const pending = await processEviaWebhook(payload, options);
+  assert.equal(pending.statusCode, 503);
+  assert.equal(pending.body.code, 'EVIA_AUDIT_RETENTION_PENDING');
+  const completed = await snapshot();
+  assert.equal(completed.status, 'signed'); assert.equal(completed.signature_status, 'completed');
+  assert.ok(completed.signeddate && completed.signature_completed_at);
+  assert.equal((await events())[0].processed, false);
+  assert.ok(Date.now() - new Date((await events())[0].updatedat).getTime() > 15 * 60 * 1000);
+  const { getStorageDriver } = await import('../src/api/storage/index.js');
+  const storedSigned = () => getStorageDriver().getObject('documents', completed.signed_document_url.slice('/storage/documents/'.length));
+  assert.deepEqual((await storedSigned()).body, signed);
+  const metadataOnly = { ...payload }; delete metadataOnly.Documents;
+  assert.equal((await processEviaWebhook(metadataOnly, options)).statusCode, 503);
+  assert.deepEqual(await snapshot(), completed);
+  const beforeForeign = fetches;
+  assert.equal((await processEviaWebhook(metadataOnly, { ...options, expectedTenantId: b.tenantId })).body.matched, false);
+  assert.equal(fetches, beforeForeign);
+  unavailable = false;
+  assert.equal((await processEviaWebhook(metadataOnly, options)).statusCode, 200);
+  assert.deepEqual(retained, audit); assert.equal(writes, 1);
+  const afterRecovery = fetches;
+  const replay = await processEviaWebhook(metadataOnly, options);
+  assert.equal(replay.statusCode, 200); assert.equal(replay.body.duplicate, true);
+  assert.equal(fetches, afterRecovery); assert.equal(writes, 1);
+  assert.deepEqual(await snapshot(), completed);
+  assert.deepEqual((await storedSigned()).body, signed);
+  assert.equal((await events()).length, 1); assert.equal((await events())[0].processed, true);
+  console.log('PASS: missing Evia audit stays retryable; metadata replay retains audit once with signed bytes/timestamps unchanged');
 }
 
 async function verifyEviaConcurrentClaimAgainstDisposableSql(pool, a, b) {
@@ -2952,6 +3034,10 @@ async function main() {
     const switchPage = await browser.newPage();
     try {
       await switchPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
+        // Seed this tab once; a real organization switch reloads the document
+        // and must retain the membership selected through the actual control.
+        if (sessionStorage.getItem('fixture.shared-session-seeded')) return;
+        sessionStorage.setItem('fixture.shared-session-seeded', '1');
         localStorage.removeItem('dev_bypass_role');
         localStorage.setItem('khrental.activeTenantId', tenantId);
         localStorage.setItem('khrental.local.session', JSON.stringify({
@@ -2963,15 +3049,29 @@ async function main() {
         { waitUntil: 'domcontentloaded', timeout: 45000 });
 
       const assertScopedBrowser = async (own, foreign) => {
-        await switchPage.waitForFunction(
-          ({ property, other }) => {
-            const body = document.body.innerText;
-            return body.includes('My Invoices') && body.includes(property)
-              && !body.includes(other) && !body.includes('Loading your invoices...');
-          },
-          { timeout: 30000 },
-          { property: own.propertyName, other: foreign.propertyName }
-        );
+        try {
+          await switchPage.waitForFunction(
+            ({ property, other }) => {
+              const body = document.body.innerText;
+              return body.includes('My Invoices') && body.includes(property)
+                && !body.includes(other) && !body.includes('Loading your invoices...');
+            },
+            { timeout: 30000 },
+            { property: own.propertyName, other: foreign.propertyName }
+          );
+        } catch (error) {
+          const state = await switchPage.evaluate(({ property, other }) => ({
+            path: location.pathname,
+            headings: [...document.querySelectorAll('h1,h2')].map(el => el.innerText.slice(0, 120)),
+            expectedPropertyPresent: document.body.innerText.includes(property),
+            foreignPropertyPresent: document.body.innerText.includes(other),
+            invoiceLoadingPresent: document.body.innerText.includes('Loading your invoices...')
+          }), { property: own.propertyName, other: foreign.propertyName });
+          console.error('Tenant-switch browser timeout state:', JSON.stringify(state));
+          fs.mkdirSync('billing-sql-proof', { recursive: true });
+          await switchPage.screenshot({ path: 'billing-sql-proof/tenant-switch-failure.png', fullPage: true });
+          throw error;
+        }
         const beforeClick = await switchPage.evaluate(() => ({
           path: location.pathname, content: document.body.innerText,
           activeTenant: localStorage.getItem('khrental.activeTenantId'),
@@ -3027,6 +3127,12 @@ async function main() {
         }, next.tenantId);
         assert.ok(optionValue, 'authorized tenant must be selectable');
         await switchPage.select('header.hidden select', optionValue);
+        await switchPage.waitForFunction(tenantId => (
+          location.pathname === '/rentee'
+          && localStorage.getItem('khrental.activeTenantId')?.toLowerCase() === tenantId
+        ), { timeout: 30000 }, next.tenantId);
+        await switchPage.waitForSelector('a[href="/rentee/invoices"]', { visible: true });
+        await switchPage.click('a[href="/rentee/invoices"]');
         await assertScopedBrowser(next, foreign);
       }
     } finally {
@@ -3044,6 +3150,9 @@ async function main() {
       pool, first, query, a, b, tokenA, tokenB, otherToken,
       call, createAuthRecord, issueAuthSession, browser, origin, invoiceMailbox
     });
+
+    // Keep the new signed mutation fixture after every existing read-only browser journey.
+    await verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b);
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
