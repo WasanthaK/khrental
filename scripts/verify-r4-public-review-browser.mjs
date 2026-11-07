@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 const base=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../marketing');
-const sitePaths=['/',...['lk','bn'].flatMap(c=>['', 'search/','property/','owners/','how-it-works/'].map(x=>'/'+c+'/'+x))];
+const sitePaths=['/','/terms/','/privacy/',...['lk','bn'].flatMap(c=>['', 'search/','property/','owners/','how-it-works/'].map(x=>'/'+c+'/'+x))];
 const types={'.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.txt':'text/plain','.webp':'image/webp','.ico':'image/x-icon','.mjs':'text/javascript'};
 const app=http.createServer((req,res)=>{
   try{
@@ -88,6 +88,31 @@ try{
     assert.equal(data.h1,1,p+' needs exactly one h1');
     assert.ok(data.main&&data.logo,p+' structure/logo');
     assert.equal(data.liveWarnings,false,p+' no obsolete pilot restriction');
+    assert.ok(data.links.includes('/terms/')&&data.links.includes('/privacy/'),p+' Homes-specific policy links');
+    assert.ok(!data.links.some(href=>/^https:\/\/quixo.online\/(terms|privacy)/.test(href)),p+' no quotation-product policy links');
+    if(p==='/terms/'||p==='/privacy/'){
+      const policy=await page.$eval('.policy-content',element=>element.innerText);
+      assert.doesNotMatch(policy,/sandbox|test mode|publication hold|implementation|P[1-7] \|/i,'Customer policies exclude internal review and test status');
+      assert.match(policy,/support@quixo.online/,'Policy has customer support contact');
+      const toc=await page.$$eval('.policy-toc a',links=>links.map(a=>a.hash));
+      assert.ok(toc.length>=4,'Policy has section navigation');
+      for(const hash of toc)assert.equal(await page.$eval(hash,element=>element.tagName),'H2','Section link resolves');
+      await page.click('.policy-toc a:last-child');
+      assert.equal(new URL(page.url()).hash,toc.at(-1),'Section navigation works');
+      await page.reload({waitUntil:'networkidle0'});
+      assert.equal(await page.$eval('h1',element=>element.innerText),p==='/terms/'?'Terms of service':'Privacy notice','Direct reload retains the policy');
+      const anchorVisibility=await page.evaluate(hash=>({
+        headingTop:document.querySelector(hash).getBoundingClientRect().top,
+        headerBottom:document.querySelector('.site-header').getBoundingClientRect().bottom
+      }),toc.at(-1));
+      assert.ok(anchorVisibility.headingTop>=anchorVisibility.headerBottom,'Linked policy heading is not hidden by the sticky header');
+      if(width===390||width===1280){
+        fs.mkdirSync('verification-browse-proof',{recursive:true});
+        await page.evaluate(()=>window.scrollTo(0,0));
+        await page.screenshot({path:'verification-browse-proof/policy-'+(p==='/terms/'?'terms':'privacy')+'-'+width+'.png',fullPage:true});
+      }
+      await page.goto(origin+p,{waitUntil:'networkidle0'});
+    }
     assert.doesNotMatch(await page.$eval('body',e=>e.innerText),/Owner self-registration is not open|New customer onboarding is not yet open|New owner registration is not open/);
     if(p.endsWith('/owners/')){
       const country=p.startsWith('/bn/')?'BN':'LK';
