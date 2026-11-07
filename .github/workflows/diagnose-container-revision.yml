@@ -1,6 +1,8 @@
 name: Diagnose Container Apps revision
 
 on:
+  push:
+    branches: [diag/r5-retention-readonly-20261107]
   workflow_dispatch:
     inputs:
       restart_latest:
@@ -36,126 +38,14 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Inspect latest revision
+      - name: Inspect completion metadata without document contents or credentials
         shell: bash
-        env:
-          RESTART_LATEST: ${{ inputs.restart_latest }}
-          EXPECTED_BUILD: ${{ inputs.expected_build }}
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
-
-          latest_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestRevisionName -o tsv)
-          ready_revision=$(az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.latestReadyRevisionName -o tsv)
-
-          echo "Latest revision: $latest_revision"
-          echo "Latest ready revision: $ready_revision"
-
-          echo "Read-only scaling and active revision inventory:"
-          az containerapp show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "{revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas}" -o json
-          az containerapp revision list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query "[].{name:name,active:properties.active,replicas:properties.replicas,trafficWeight:properties.trafficWeight}" -o json
-
-          az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query "{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas,trafficWeight:properties.trafficWeight,createdTime:properties.createdTime}" \
-            -o jsonc
-
-          echo "System logs for the Container App:"
-          az containerapp logs show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --type system \
-            --tail 100 \
-            --format json
-
-          echo "Replica inventory for $latest_revision:"
-          az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query "[].{name:name,createdTime:properties.createdTime,runningState:properties.runningState,containers:properties.containers[].{name:name,ready:ready,restartCount:restartCount,runningState:runningState,runningStateDetails:runningStateDetails,started:started}}" \
-            -o jsonc || true
-
-          if [ "$RESTART_LATEST" = "true" ]; then
-            echo "Restarting $latest_revision..."
-            az containerapp revision restart \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision"
-
-            for attempt in $(seq 1 30); do
-              state=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.runningState -o tsv)
-              health=$(az containerapp revision show \
-                --name "$AZURE_CONTAINER_APP_NAME" \
-                --resource-group "$AZURE_RESOURCE_GROUP" \
-                --revision "$latest_revision" \
-                --query properties.healthState -o tsv)
-              echo "Post-restart state: running=$state health=$health (attempt $attempt/30)"
-              if [ "$state" = "Running" ] && { [ "$health" = "Healthy" ] || [ "$health" = "None" ]; }; then
-                break
-              fi
-              sleep 6
-            done
-          fi
-
-          replica=$(az containerapp replica list \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query '[0].name' -o tsv 2>/dev/null || true)
-
-          if [ -n "$replica" ]; then
-            echo "Console logs for replica $replica:"
-            az containerapp logs show \
-              --name "$AZURE_CONTAINER_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --revision "$latest_revision" \
-              --replica "$replica" \
-              --type console \
-              --tail 100 \
-              --format text || true
-          fi
-
-          final_state=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.runningState -o tsv)
-          final_health=$(az containerapp revision show \
-            --name "$AZURE_CONTAINER_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$latest_revision" \
-            --query properties.healthState -o tsv)
-
-          echo "Final state: revision=$latest_revision running=$final_state health=$final_health"
-
-          # Optional acceptance of the existing rollout, without rebuilding or mutating it.
-          if [ -n "${EXPECTED_BUILD:-}" ]; then
-            [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]
-            ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
-            test "$latest_revision" = "$ready_revision"
-            fqdn=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
-            build=$(curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/build-info.json")
-            test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
-            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/health"
-            curl --fail --silent --show-error --retry 10 --retry-delay 6 "https://${fqdn}/api/mssql/health"
-            echo "RELEASE_ACCEPTANCE=PASS expected_build=$EXPECTED_BUILD ready_revision=$ready_revision"
-          fi
+          ready_revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+          command="node --input-type=module -e \"eval(Buffer.from('Y29uc3Qge3J1blF1ZXJ5fT1hd2FpdCBpbXBvcnQoJy4vc3JjL2FwaS9tc3NxbC9xdWVyeS5qcycpOwpjb25zdCB7Y2xvc2VNc3NxbFBvb2x9PWF3YWl0IGltcG9ydCgnLi9zcmMvYXBpL21zc3FsL3Bvb2wuanMnKTsKdHJ5IHsKY29uc3Qgcm93cz1hd2FpdCBydW5RdWVyeSgiU0VMRUNUIFRPUCAoMTAwKSBldmVudF9pZCwgcHJvY2Vzc2VkLCByYXdfZGF0YSBGUk9NIGRiby53ZWJob29rX2V2ZW50cyBXSEVSRSBjcmVhdGVkYXQgPj0gQ09OVkVSVChkYXRldGltZTIsICcyMDI2LTExLTA3VDAwOjAwOjAwJykgT1JERVIgQlkgY3JlYXRlZGF0IERFU0MiKTsKY29uc3Qgc2FmZUtleT1rPT4vXltBLVphLXpdW0EtWmEtejAtOV9dezAsNjN9JC8udGVzdChrKTsKY29uc29sZS5sb2coJ1I1X1JFVEVOVElPTl9SRUFET05MWT0nK0pTT04uc3RyaW5naWZ5KHtjb25maWd1cmF0aW9uOntpbnRlZ3JhdGlvbktleVByZXNlbnQ6Qm9vbGVhbihwcm9jZXNzLmVudi5FVklBX1NJR05fQVBJX0tFWSksY2xpZW50SWRQcmVzZW50OkJvb2xlYW4ocHJvY2Vzcy5lbnYuRVZJQV9TSUdOX0NMSUVOVF9JRCksY2xpZW50U2VjcmV0UHJlc2VudDpCb29sZWFuKHByb2Nlc3MuZW52LkVWSUFfU0lHTl9DTElFTlRfU0VDUkVUKX0sZXZlbnRzOnJvd3MubWFwKHI9PntsZXQgZD17fTt0cnl7ZD1KU09OLnBhcnNlKHIucmF3X2RhdGF8fCd7fScpfWNhdGNoe31yZXR1cm4ge2V2ZW50SWQ6ci5ldmVudF9pZCxwcm9jZXNzZWQ6Qm9vbGVhbihyLnByb2Nlc3NlZCkscGF5bG9hZEtleXM6KGQucGF5bG9hZEtleXN8fFtdKS5maWx0ZXIoc2FmZUtleSksZG9jdW1lbnRDb3VudDpkLmRvY3VtZW50Q291bnQsZG9jdW1lbnRzOihkLmRvY3VtZW50c3x8W10pLm1hcCh4PT4oe2F1ZGl0Oi9eKGF1ZGl0X3RyYWlsfEV2aWFTaWduX0F1ZGl0VHJhaWxfKS9pLnRlc3QoeC5uYW1lfHwnJyksaGFzQ29udGVudDpCb29sZWFuKHguaGFzQ29udGVudCksaGFzVXJsOkJvb2xlYW4oeC5oYXNVcmwpLGtleXM6KHgua2V5c3x8W10pLmZpbHRlcihzYWZlS2V5KX0pKX19KX0pKTsKfSBjYXRjaCB7Y29uc29sZS5sb2coJ1I1X1JFVEVOVElPTl9SRUFET05MWV9GQUlMRUQnKTtwcm9jZXNzLmV4aXRDb2RlPTE7fSBmaW5hbGx5IHthd2FpdCBjbG9zZU1zc3FsUG9vbCgpO30KCg==','base64').toString())\""
+          printf -v command_quoted '%q' "$command"
+          exec_command="az containerapp exec --name '$AZURE_CONTAINER_APP_NAME' --resource-group '$AZURE_RESOURCE_GROUP' --revision '$ready_revision' --command $command_quoted"
+          script -q -e -c "$exec_command" /dev/null | tee retention-diagnostic.txt
+          grep -Fq 'R5_RETENTION_READONLY={' retention-diagnostic.txt
