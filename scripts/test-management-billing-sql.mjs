@@ -244,6 +244,36 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');assert.equal(schedule.phases[1].items[0].quantity,1);
   await service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:true});
   assert.equal(schedule.status,'released');assert.equal(sub.cancel_at_period_end,true);assert.equal((await store.account(tenantA)).pending_quantity,null);
+  await service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:false});
+  // A disposable fixture with no obligations can remove its final dwelling.
+  // This proves billing behavior only, not the separate management-cessation control.
+  await store.locked(tenantA,async q=>{
+    await q('DELETE dbo.property_units WHERE propertyid=@id',{id:propA});
+    await q('DELETE dbo.properties WHERE id=@id',{id:propA});
+  });
+  const zeroPreview=await service.quantityPreview({tenantId:tenantA,id:crypto.randomUUID(),actorId});
+  assert.equal(zeroPreview.to,0);assert.equal(zeroPreview.timing,'cancel_at_renewal');
+  const zeroCommand=crypto.randomUUID();let zeroResponseLost=true;
+  stripe.request=async(...args)=>{
+    const result=await regularRequest(...args);
+    if(args[0]==='POST'&&args[1]===`/v1/subscriptions/${sub.id}`&&args[2]?.cancel_at_period_end&&zeroResponseLost){
+      zeroResponseLost=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic cancellation response loss after success.');
+    }
+    return result;
+  };
+  await assert.rejects(service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId}),{code:'STRIPE_UNAVAILABLE'});
+  assert.equal((await service.summary(tenantA)).pendingOperation.id.toLowerCase(),zeroCommand);
+  // A separate readback can observe ending before the interrupted command resumes.
+  await service.refresh(tenantA);
+  assert.equal((await service.summary(tenantA)).entitlement.state,'ending');
+  const zeroResult=await service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId});
+  assert.equal(zeroResult.cancelAtPeriodEnd,true);assert.equal(zeroResult.currentQuantity,2);
+  assert.equal((await store.account(tenantA)).pending_quantity,0);
+  assert.deepEqual(await service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId}),zeroResult);
+  assert.equal(calls.some(c=>c.body.items?.some(i=>i.quantity===0)||c.body.phases?.some(p=>p.items.some(i=>i.quantity===0))),false);
+  await assert.rejects(service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:false}),{code:'BILLING_INVENTORY_EMPTY'});
+  assert.equal((await service.summary(tenantA)).pendingOperation,null);
+  console.log('PASS: zero-stock cancellation at renewal, retained current quantity, ambiguous-success retry, durable result and empty-stock renewal denial; synthetic Stripe transport');
   await assert.rejects(service.quantityPreview({tenantId:tenantB,id:crypto.randomUUID(),actorId}),{code:'BILLING_GOOD_STANDING_REQUIRED'});
   assert.equal((await service.summary(tenantB)).pendingOperation,null,'A validation rejection cannot strand the workspace behind a pending command.');
   await store.locked(tenantB,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId:tenantB,actorId}));

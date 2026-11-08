@@ -50,6 +50,23 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
+   for(const scenario of ['zero-preview','zero-ending']){
+    await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
+    if(scenario==='zero-preview'){
+     const confirm=await page.waitForSelector('button');
+     assert.ok(confirm);
+     const text=await page.$eval('body',el=>el.innerText);
+     assert.match(text,/no managed dwellings/);assert.match(text,/current period remains billed with no refund/);
+     assert.match(text,/Historical records and renter access are preserved/);
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm sandbox cancellation at renewal').click());
+     await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: quantity-apply'));
+    }else{
+     assert.match(await page.$eval('body',el=>el.innerText),/Add managed dwellings before choosing to renew again/);
+     assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Keep subscription renewing')),false);
+    }
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+    await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
+   }
   }else{
    const selects=await page.$$('select');
    await selects[1].select('revoke');

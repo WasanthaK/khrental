@@ -1,5 +1,21 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Sri Lanka handoff execution and owner decisions — 9 November 2026
+
+This checkpoint incorporates the owner's 8 November signing clarification and the Sri Lanka completion handoff. **Signing is completed and accepted; do not repeat signing or reopen the whole journey.** Preserve accepted demo move-in, invoicing/receipts, maintenance, exit/relisting, organization switching and the two existing sandbox subscriptions. Missing Evia audit retention remains a separate open item. R1/R3/R4 owner dispositions and deferred R2 remain unchanged; R5 is active and live charging stays disabled.
+
+The owner selected these business rules during handoff execution:
+
+- After subscription expiry, management becomes **read-only**, including existing-tenancy management writes. Preserve historical documents and renter reads; billing recovery must remain available.
+- Management cessation is allowed **only after obligations close**: no active tenancy, unresolved financial or maintenance work, or applicable hold.
+- Ceasing the final dwelling schedules **cancellation at renewal**, with retained history and explicit resumption when stock exists. Do not create a zero-quantity subscription.
+
+These decisions replace the corresponding open choices below. They are not evidence of full enforcement or cessation implementation. Automatic cessation eligibility, inventory staging, transaction guards across direct/generic/import/job paths, asynchronous reconciliation and actual complimentary controls remain open (BL07/BL08).
+
+Current investigation: the live database readiness endpoint returned `connection=ready` on 9 November; the previously observed unavailable state is no longer the current observation. Platform Administrator sign-in was declined, so no authenticated complimentary mutation, receiver-ledger query or page acceptance is claimed. No repeated sign-in request was issued. Read-only provider checks confirm the retained second subscription is active with two billed dwellings and an active schedule reducing to one at **6 December 2026 12:44:35 UTC**. The connected operation search still exposes clock creation, but not listing/advancement. BL04/BL05 and genuine deployed BL06 evidence remain blocked/open; existing provider objects were retained and no provider write occurred.
+
+The bounded source correction replaces the zero-stock policy-pending error with explicit period-end cancellation review and confirmation, preserves the current billed quantity, rejects empty-stock renewal restoration, and supports retry after a lost provider response and independent ending-state readback. It does **not** create management cessation or certify production enforcement. Local focused tests: **26/26**; affected production build: PASS; remaining stock/activation/exit/retained-document tests: **67/67**. Local full authorization: **908/909**, with the one failure caused by Chromium launch restrictions. Browser and disposable SQL evidence require CI; no deployment/live zero-stock acceptance is claimed yet.
+
 ## Current milestone disposition — 5 November 2026
 
 The owner closed R3 for the accepted single-replica release and R4 for its deployed sandbox foundation, and made R5 the active priority. See the [canonical status](EXECUTION-PLAN.md) and [delivery ledger](R4-R5-DELIVERY.md).

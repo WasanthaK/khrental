@@ -1,5 +1,31 @@
 # Current R5 prelaunch completion ledger 7 November 2026
 
+## Sri Lanka handoff execution and owner decisions — 9 November 2026
+
+This checkpoint incorporates the owner's 8 November signing clarification and the Sri Lanka completion handoff. **Signing is completed and accepted; do not repeat signing or reopen the whole journey.** Preserve accepted demo move-in, invoicing/receipts, maintenance, exit/relisting, organization switching and the two existing sandbox subscriptions. Missing Evia audit retention remains a separate open item. R1/R3/R4 owner dispositions and deferred R2 remain unchanged; R5 is active and live charging stays disabled.
+
+The owner selected these business rules during handoff execution:
+
+- After subscription expiry, management becomes **read-only**, including existing-tenancy management writes. Preserve historical documents and renter reads; billing recovery must remain available.
+- Management cessation is allowed **only after obligations close**: no active tenancy, unresolved financial or maintenance work, or applicable hold.
+- Ceasing the final dwelling schedules **cancellation at renewal**, with retained history and explicit resumption when stock exists. Do not create a zero-quantity subscription.
+
+These decisions replace the corresponding open choices below. They are not evidence of full enforcement or cessation implementation. Automatic cessation eligibility, inventory staging, transaction guards across direct/generic/import/job paths, asynchronous reconciliation and actual complimentary controls remain open (BL07/BL08).
+
+Current investigation: the live database readiness endpoint returned `connection=ready` on 9 November; the previously observed unavailable state is no longer the current observation. Platform Administrator sign-in was declined, so no authenticated complimentary mutation, receiver-ledger query or page acceptance is claimed. No repeated sign-in request was issued. Read-only provider checks confirm the retained second subscription is active with two billed dwellings and an active schedule reducing to one at **6 December 2026 12:44:35 UTC**. The connected operation search still exposes clock creation, but not listing/advancement. BL04/BL05 and genuine deployed BL06 evidence remain blocked/open; existing provider objects were retained and no provider write occurred.
+
+The bounded source correction replaces the zero-stock policy-pending error with explicit period-end cancellation review and confirmation, preserves the current billed quantity, rejects empty-stock renewal restoration, and supports retry after a lost provider response and independent ending-state readback. It does **not** create management cessation or certify production enforcement. Local focused tests: **26/26**; affected production build: PASS; remaining stock/activation/exit/retained-document tests: **67/67**. Local full authorization: **908/909**, with the one failure caused by Chromium launch restrictions. Browser and disposable SQL evidence require CI; no deployment/live zero-stock acceptance is claimed yet.
+
+### Remaining stock and denial evidence mapping
+
+| Cases | Existing coverage checked locally on 9 November | Remaining acceptance |
+| --- | --- | --- |
+| OP02 visibility | `tests/public-listing-eligibility.test.js`: available, rented/occupied/reserved/inactive, opt-out, stale active agreements and child-unit availability | Current deployment stock matrix, stale direct links and rendered unavailable states remain open; no occupied production stock was mutated |
+| OP02 privacy and denial | `tests/public-listing-router.test.js`: wrong market, private preview, revoked/non-admin access, pilot binding and post-read media eligibility | Disposable SQL predicate/media evidence retained in `scripts/test-public-listings-sqlserver.mjs`; no new SQL run claimed locally |
+| OP09 lifecycle failures | `tests/tenancy-activation.test.js` and `tests/tenancy-exit.test.js`: expired/replaced reservation, incomplete requirements, generic activation/closure denial and settlement readiness | Existing disposable SQL concurrency/rollback cases require current case-by-case CI reconciliation; do not repeat accepted live activation/exit |
+| CT04 retained documents | `tests/phase5-agreement-retained-access.test.js`: revoked/foreign membership, exact retained paths, incomplete/staged publication, participant history and audit restrictions | Unit portion passes; current live role readback is unperformed. This does not reopen accepted signing |
+| OP08 and OP10 | No new mailbox or final live desktop/mobile observation | Intended-recipient delivery and final affected-screen review remain open |
+
 ## Evia service ownership correction — 8 November 2026
 
 Evia is Quixo's service integration. Organization users, including landlords, do not need an Evia account to recover completed documents. Earlier sender-login recovery guidance is superseded. The bounded correction routes signed-document and audit recovery through the authenticated Quixo server using its service credentials, ignores caller-supplied provider tokens and removes the customer Evia sign-in action. Application session, organization membership and agreement authorization remain mandatory. Source validation is in progress; deployment and live acceptance are not yet established.
