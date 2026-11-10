@@ -130,6 +130,31 @@ try {
     await query('INSERT public_signup_challenges(email_normalized,sent_at,consumed_at) VALUES(@email,SYSUTCDATETIME(),SYSUTCDATETIME())',{email:a.actorId+'@example.test'});
     if(tenantId){await query(`INSERT tenant_memberships(id,tenant_id,app_user_id,role,status) VALUES(NEWID(),@tenantId,@actorId,N'admin',N'active')`,{tenantId,actorId:a.actorId});}
   }
+  await pool.request().batch(fs.readFileSync('migrations/20261103_01_management_billing.sql','utf8'));
+  const {BILLING_ACCOUNT,BILLING_PRICE}=await import('../src/api/managementBilling/contract.js');
+  await query(`INSERT management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json,comp_type)
+    VALUES(@tenant,@account,@price,'LK','[]','ongoing')`,{tenant,account:BILLING_ACCOUNT,price:BILLING_PRICE});
+  Object.assign(process.env,{MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',
+    MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant,MANAGEMENT_BILLING_SCHEMA_READY:'true'});
+  const denyExpired=async(label,operation)=>{
+    const snapshot=async()=>{
+      const state={};
+      for(const table of ['property_enquiries','property_enquiry_events','property_viewings','property_viewing_events',
+        'property_applications','property_application_events','property_rental_offers','property_rental_offer_events','agreements','tenant_memberships']){
+        state[table]=(await query(`SELECT * FROM dbo.${table}`)).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+      }
+      return state;
+    };
+    await query("UPDATE management_billing_accounts SET comp_type='fixed',comp_expires_at=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenant",{tenant});
+    try {
+      const before=await snapshot();
+      await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'},label);
+      assert.deepEqual(await snapshot(),before,label+': domain, history, hold and membership state are unchanged');
+      assert.ok(await query('SELECT id FROM property_enquiries'),'history remains readable');
+    } finally {
+      await query("UPDATE management_billing_accounts SET comp_type='ongoing',comp_expires_at=NULL WHERE tenant_id=@tenant",{tenant});
+    }
+  };
   for(let i=0;i<12;i++){
     await query(`INSERT properties VALUES(@propertyId,@tenant,N'available','LK',N'house',N'{"rent":1000,"listingCategory":"residential"}');
       INSERT public_listing_preferences VALUES(@listingId,@propertyId,@tenant,'LK',0,N'Synthetic rental',N'General location')`,
@@ -156,6 +181,7 @@ try {
   await assert.rejects(store.submit(actor,input()),{code:'ENQUIRY_ALREADY_OPEN'});
   assert.equal((await store.list(foreignOwner,true)).items.length,0);
   await assert.rejects(store.change(foreignOwner,saved.id,{status:'closed',response:'',version:1},true),{code:'ENQUIRY_NOT_FOUND'});
+  await denyExpired('owner enquiry reply',()=>store.change(owner,saved.id,{status:'responded',response:'Denied reply',version:1},true));
   const reply=await store.change(owner,saved.id,{status:'responded',response:'Please suggest a convenient time.',version:1},true);
   assert.equal(reply.version,2);
   await assert.rejects(store.change(owner,saved.id,{status:'closed',response:'',version:1},true),{code:'ENQUIRY_CHANGED'});
@@ -175,6 +201,7 @@ try {
   await assert.rejects(viewings.get(foreignOwner,saved.id,true),{code:'ENQUIRY_NOT_FOUND'});
   await assert.rejects(viewings.change(actor,saved.id,{...request,payloadHash:'changed'}),{code:'VIEWING_REQUEST_CONFLICT'});
   const confirm=action('confirm',1,true,{instructions:'Synthetic private meeting point'});
+  await denyExpired('owner viewing confirmation',()=>viewings.change(owner,saved.id,confirm,true));
   assert.equal((await viewings.change(owner,saved.id,confirm,true)).status,'confirmed');
   assert.equal((await viewings.get(actor,saved.id)).instructions,'Synthetic private meeting point');
   await assert.rejects(viewings.change(actor,saved.id,action('cancel',1)),{code:'VIEWING_CHANGED'});
@@ -217,6 +244,7 @@ try {
   const acceptance=apply('accept',3,true,{note:'Reviewed for offer preparation.'});
   await assert.rejects(applications.change(owner,saved.id,acceptance,true),{code:'LISTING_UNAVAILABLE'});
   await query('UPDATE public_listing_preferences SET opted_out=0 WHERE public_id=@id',{id:first.listingId});
+  await denyExpired('owner application acceptance',()=>applications.change(owner,saved.id,acceptance,true));
   assert.equal((await applications.change(owner,saved.id,acceptance,true)).application.status,'accepted');
   assert.equal((await query('SELECT COUNT(*) AS n FROM agreements'))[0].n,0,'Review does not create a tenancy');
   assert.equal((await applications.change(actor,saved.id,apply('withdraw',4))).application.status,'withdrawn');
@@ -267,7 +295,8 @@ try {
   assert.equal((await query('SELECT COUNT(*) AS n FROM tenant_memberships WHERE app_user_id=@id',{id:actor.actorId}))[0].n,0);
   console.log('PROPERTY_ENQUIRIES_SQL=PASS migration_rerun concurrent_idempotency scope consent_audit durable_quota revocation withdrawal');
   await query("UPDATE tenant_memberships SET status='active' WHERE app_user_id=@id",{id:owner.actorId});
-  await verifyRentalOffers({pool,query,owner,foreignOwner});
+  await verifyRentalOffers({pool,query,owner,foreignOwner,denyExpired});
+  console.log('OWNER_MANAGEMENT_WRITES_SQL=PASS expiry enquiry_reply viewing application offer agreement_bridge protected_state complimentary');
   await verifyOwnerOnboarding({pool,query});
   await verifyAccountEmailVerification({pool,query});
 } finally {

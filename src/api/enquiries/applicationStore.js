@@ -51,6 +51,6 @@ export const createApplicationStore=({poolProvider}={})=>{
         (enquiry_id,actor_id,request_id,payload_hash,status,move_in_date,occupants,term_months,statement,owner_note,consent_version,consent_at,version)
         VALUES(@id,@actorId,@requestId,@payloadHash,@status,@moveInDate,@occupants,@termMonths,@statement,@note,@consentVersion,@consentAt,@version)`,values);
       return receipt(query,id,enquiry);
-    })
+    },false,true)
   };
 };

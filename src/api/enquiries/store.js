@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import {PERSONAL_RENTAL_EMAIL_PROOF_SQL} from '../auth/seekerContext.js';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {PUBLIC_LISTING_ELIGIBILITY_SQL} from '../publicListings/store.js';
@@ -15,7 +16,7 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
       return (await req.query(statement)).recordset || [];
     };
     try {
-      const result = await work(query);
+      const result = await work(query,tx);
       await tx.commit();
       return result;
     } catch (err) {
@@ -49,7 +50,8 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
     (enquiry_id,actor_user_id,from_status,to_status,version,response) VALUES(@id,@actorId,@from,@to,@version,@response)`,
   {id:row.id,actorId,from,to:row.status,version:row.version,response:row.owner_response||null});
   return {
-    withEnquiry:(actor,id,owner,work,journey=false) => transaction(async query => {
+    withEnquiry:(actor,id,owner,work,journey=false,managementWrite=false) => transaction(async (query,tx) => {
+      if(owner && managementWrite) {await assertManagementWrite({tenantId:actor.tenantId,transaction:tx});}
       await requireActor(query,actor,owner,journey);
       const enquiry=(await query(`SELECT * FROM dbo.property_enquiries WITH(UPDLOCK,HOLDLOCK)
         WHERE id=@id AND ${owner?'tenant_id=@scope':'seeker_id=@scope'}`,
@@ -98,7 +100,8 @@ SELECT a.* FROM dbo.property_enquiries a JOIN @rental_changed c ON c.id=a.id;`,
       {scope:owner?actor.tenantId:actor.actorId,offset});
       return {items:rows.slice(0,50).map(owner?ownerReceipt:seekerReceipt),hasMore:rows.length>50};
     }),
-    change:(actor,id,input,owner=false) => transaction(async query => {
+    change:(actor,id,input,owner=false) => transaction(async (query,tx) => {
+      if(owner) {await assertManagementWrite({tenantId:actor.tenantId,transaction:tx});}
       await requireActor(query,actor,owner);
       const args={id,scope:owner?actor.tenantId:actor.actorId};
       const old=(await query(`SELECT * FROM dbo.property_enquiries WITH(UPDLOCK,HOLDLOCK)

@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import process from 'node:process';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {runQuery,runSingleQuery} from '../mssql/query.js';
@@ -126,6 +127,7 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
   const tx=new sql.Transaction(pool);
   await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   try{
+    await assertManagementWrite({tenantId,transaction:tx});
     const query=async(sqlText,params={})=>{
       const request=new sql.Request(tx);
       for(const [key,value] of Object.entries(params))request.input(key,value);

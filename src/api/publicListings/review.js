@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import crypto from 'node:crypto';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {getStorageDriver} from '../storage/index.js';
@@ -54,6 +55,7 @@ export const REVIEW_LOCKED_SQL=REVIEW_SOURCE_SQL
 export const finalizePhotoReview=async(args,{txFactory=begin}={})=>{
   const tx=await txFactory();
   try{
+    await assertManagementWrite({tenantId:args.tenantId,transaction:tx});
     const current=(await readWithin(tx,REVIEW_LOCKED_SQL,args))[0];
     if(!current)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');
     if(String(current.listingPublicId).toLowerCase()!==String(args.listingPublicId).toLowerCase() ||
@@ -121,6 +123,7 @@ export const withdrawPreparedPhoto=async({
   const tx=await txFactory();
   let publicId;
   try{
+    await assertManagementWrite({tenantId,transaction:tx});
     const args={tenantId,propertyId,actorId,mediaId};
     const row=(await readWithin(tx,REVIEW_LOCKED_SQL,args))[0];
     if(!row)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo access denied.');

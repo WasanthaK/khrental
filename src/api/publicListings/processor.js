@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import crypto from 'node:crypto';
 import {getMssqlPool,sql} from '../mssql/pool.js';
 import {runSingleQuery} from '../mssql/query.js';
@@ -71,6 +72,7 @@ export const commitWithheldDerivative=async({
   const tx=new sql.Transaction(pool);
   await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   try{
+    await assertManagementWrite({tenantId,transaction:tx});
     const request=async(query,params={})=>{
       const q=new sql.Request(tx);
       for(const [key,value] of Object.entries(params))q.input(key,value);
