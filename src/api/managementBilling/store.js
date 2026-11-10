@@ -133,8 +133,12 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     }
     const pending=(await q(`SELECT TOP 1 id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'`,{tenantId}))[0];
     if(pending) throw problem(409,'BILLING_COMMAND_PENDING','Retry the unfinished billing operation before starting another.');
+    // Commit the provider ownership boundary before any external write. Keep
+    // the caller payload hash unchanged so retries use the original binding.
+    const current=['cancellation','quantity_apply'].includes(kind)?await account(tenantId,q):null;
+    const storedPayload=current?{...payload,_subscriptionId:current.stripe_subscription_id}:payload;
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
-      VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(payload)});
+      VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
     return {id,status:'pending',createdNow:true};
   });
   const completeCommand = (q,id,result) => q(`UPDATE dbo.management_billing_commands SET status='completed',result_json=@result,

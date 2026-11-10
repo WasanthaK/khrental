@@ -269,10 +269,17 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   // A separate readback can observe ending before the interrupted command resumes.
   await service.refresh(tenantA);
   assert.equal((await service.summary(tenantA)).entitlement.state,'ending');
-  const zeroResult=await service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId});
+  await store.locked(tenantA,q=>q(`UPDATE dbo.management_billing_commands SET created_at=DATEADD(HOUR,-48,SYSUTCDATETIME()) WHERE id=@id`,{id:zeroCommand}));
+  await assert.rejects(service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId}),{code:'BILLING_RECONCILIATION_REQUIRED'});
+  const postsBeforeRecovery=calls.filter(call=>call.method==='POST').length;
+  await assert.rejects(service.reconcileCancellation({tenantId:tenantB,id:zeroCommand,actorId}),{code:'BILLING_COMMAND_NOT_FOUND'});
+  const zeroResult=await service.reconcileCancellation({tenantId:tenantA,id:zeroCommand,actorId});
   assert.equal(zeroResult.cancelAtPeriodEnd,true);assert.equal(zeroResult.currentQuantity,2);
   assert.equal((await store.account(tenantA)).pending_quantity,0);
   assert.deepEqual(await service.quantityApply({tenantId:tenantA,id:zeroCommand,actorId,previewId:zeroPreview.previewId}),zeroResult);
+  assert.deepEqual(await service.reconcileCancellation({tenantId:tenantA,id:zeroCommand,actorId}),zeroResult);
+  assert.equal(calls.filter(call=>call.method==='POST').length,postsBeforeRecovery,'Aged cancellation recovery never replays provider writes');
+  assert.equal((await store.read(`SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='sandbox.quantity_apply.reconciled'`,{id:zeroCommand})).length,1,'Recovery completion and audit are durable exactly once');
   assert.equal(calls.some(c=>c.body.items?.some(i=>i.quantity===0)||c.body.phases?.some(p=>p.items.some(i=>i.quantity===0))),false);
   await assert.rejects(service.cancel({tenantId:tenantA,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:false}),{code:'BILLING_INVENTORY_EMPTY'});
   assert.equal((await service.summary(tenantA)).pendingOperation,null);

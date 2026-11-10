@@ -80,12 +80,14 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     const inventory=await store.inventory(tenantId);
     const pending=account?(await store.read(`SELECT id,kind,created_at,payload_json FROM dbo.management_billing_commands
       WHERE tenant_id=@tenantId AND status='pending'`,{tenantId}))[0]||null:null;
+    const pendingPayload=pending?JSON.parse(pending.payload_json):null;
+    if(pendingPayload) delete pendingPayload._subscriptionId;
     return {mode:'sandbox',configured:stripe.configured(),enrolled:Boolean(account),inventory,
       inventoryHash:hash(inventory),inventoryQuantity:inventory.length,
       billedQuantity:account?.quantity || 0,pendingQuantity:account?.pending_quantity ?? null,
       status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account),
       cancelAtPeriodEnd:Boolean(account?.cancel_at_period_end),paidThrough:account?.paid_through || null,
-      pendingOperation:pending?{id:pending.id,kind:pending.kind,createdAt:pending.created_at,payload:JSON.parse(pending.payload_json)}:null,
+      pendingOperation:pending?{id:pending.id,kind:pending.kind,createdAt:pending.created_at,payload:pendingPayload}:null,
       liveChargingEnabled:false,applicationEnforcementEnabled:false};
   };
   const runCommand=async({tenantId,id,kind,payload,actorId,action})=>{
@@ -98,6 +100,9 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       if(command.status==='completed') return JSON.parse(command.result_json);
       if(command.status==='failed') {const failure=JSON.parse(command.result_json);throw problem(failure.status,failure.code,failure.error);}
       const account=await requireAccount(tenantId,q);
+      const binding=JSON.parse(command.payload_json)._subscriptionId;
+      if(binding && binding!==account.stripe_subscription_id)
+        throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription changed. The unfinished operation needs review.');
       const result=await action(q,account,`quixo:${tenantId}:${id}`,!started.createdNow);
       await store.completeCommand(q,id,result);
       await store.audit(q,{tenantId,actorId,action:`sandbox.${kind}`,resourceId:id,current:result,reason:'Authenticated sandbox billing operation.'});
@@ -155,6 +160,49 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     await stripe.assertAccount();
     await store.locked(tenantId,async q=>reconcileLocked(q,await requireAccount(tenantId,q)));
     return summary(tenantId);
+  };
+  // Read back an interrupted cancellation without replaying a provider write.
+  // This remains safe after the provider's idempotency retention window. Other
+  // command kinds need their own evidence; quantity equality alone is not proof
+  // that the intended proration or future schedule was applied.
+  const reconcileCancellation=async({tenantId,id,actorId})=>{
+    await stripe.assertAccount();
+    return store.locked(tenantId,async q=>{
+      await store.assertActor(q,tenantId,actorId);
+      const command=(await q(`SELECT * FROM dbo.management_billing_commands
+        WHERE id=@id AND tenant_id=@tenantId`,{id,tenantId}))[0];
+      if(!command) throw problem(404,'BILLING_COMMAND_NOT_FOUND','This billing operation was not found.');
+      if(command.status==='completed') return JSON.parse(command.result_json);
+      if(command.status!=='pending') throw problem(409,'BILLING_COMMAND_NOT_PENDING','This billing operation is no longer awaiting confirmation.');
+      const payload=JSON.parse(command.payload_json);
+      let inventory=null;
+      if(command.kind==='quantity_apply'){
+        const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
+          AND kind='quantity_preview' AND status='completed'`,{previewId:payload.previewId,tenantId}))[0];
+        const preview=row?JSON.parse(row.result_json):null;
+        if(!preview || preview.to!==0 || preview.timing!=='cancel_at_renewal')
+          throw problem(409,'BILLING_RECONCILIATION_REQUIRED','This quantity change needs further review. It has not been repeated.');
+        inventory=await store.inventory(tenantId,q);
+        if(inventory.length || hash(inventory)!==preview.inventoryHash)
+          throw problem(409,'BILLING_INVENTORY_CHANGED','Inventory changed. The unfinished cancellation needs review.');
+      }else if(command.kind!=='cancellation' || payload.cancelAtPeriodEnd!==true){
+        throw problem(409,'BILLING_RECONCILIATION_REQUIRED','This operation needs further review. It has not been repeated.');
+      }
+      const account=await requireAccount(tenantId,q);
+      if(!account.stripe_subscription_id || payload._subscriptionId!==account.stripe_subscription_id)
+        throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');
+      const confirmed=await reconcileLocked(q,account);
+      if(!confirmed.cancel_at_period_end || confirmed.stripe_schedule_id || !['active','past_due'].includes(confirmed.subscription_status))
+        throw problem(409,'BILLING_CANCELLATION_UNCONFIRMED','The subscription does not confirm this period-end cancellation. The operation remains pending.');
+      if(inventory!==null) await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=0 WHERE tenant_id=@tenantId`,
+        {tenantId,inventory:JSON.stringify(inventory)});
+      const result=inventory===null?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:
+        {currentQuantity:confirmed.quantity,nextRenewalQuantity:0,timing:'cancel_at_renewal',cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through};
+      await store.completeCommand(q,id,result);
+      await store.audit(q,{tenantId,actorId,action:`sandbox.${command.kind}.reconciled`,resourceId:id,current:result,
+        reason:'Confirmed interrupted cancellation by provider readback; no provider write replayed.'});
+      return result;
+    });
   };
   const portal=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'portal',payload:{},action:async(_q,account,key)=>{
     if(!account.stripe_customer_id) throw problem(409,'BILLING_CUSTOMER_REQUIRED','Start checkout before opening billing management.');
@@ -297,5 +345,5 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       return {received:true};
     });
   };
-  return {summary,checkout,refresh,portal,cancel,quantityPreview,quantityApply,webhook,price};
+  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,quantityPreview,quantityApply,webhook,price};
 };

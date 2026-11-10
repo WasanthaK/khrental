@@ -79,6 +79,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   command('portal',[],service.portal);
   command('quantity-preview',[],service.quantityPreview);
   command('quantity-apply',['previewId'],args=>service.quantityApply({...args,previewId:identifier(args.previewId)}));
+  command('reconcile-cancellation',[],service.reconcileCancellation);
   command('cancellation',['cancelAtPeriodEnd'],args=>{
     if(typeof args.cancelAtPeriodEnd!=='boolean') throw problem(400,'BILLING_CANCEL_INVALID','Choose whether the subscription ends at renewal.');
     return service.cancel(args);

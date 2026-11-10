@@ -18,6 +18,7 @@ function Fixture(){
   if(scenario==='invalid-date')data.paidThrough='invalid';
   if(['zero-preview','zero-ending'].includes(scenario))Object.assign(data,{inventoryQuantity:0,inventory:[],pendingQuantity:null});
   if(scenario==='zero-ending')Object.assign(data,{cancelAtPeriodEnd:true,pendingQuantity:0,entitlement:{state:'ending'}});
+  if(scenario==='interrupted-cancellation')data.pendingOperation={id:'fixture-interrupted',kind:'cancellation',payload:{cancelAtPeriodEnd:true}};
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
   return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} onAction={kind=>setNotice(`Fixture action: ${kind}`)} onReload={()=>{}}/>;
  }

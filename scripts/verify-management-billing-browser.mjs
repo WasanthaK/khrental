@@ -50,7 +50,7 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
     if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
@@ -60,6 +60,11 @@ try{
      assert.match(text,/Historical records and renter access are preserved/);
      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm sandbox cancellation at renewal').click());
      await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: quantity-apply'));
+    }else if(scenario==='interrupted-cancellation'){
+     assert.match(await page.$eval('body',el=>el.innerText),/This check does not repeat the change/);
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Check cancellation result').focus());
+     await page.keyboard.press('Enter');
+     await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: reconcile-cancellation'));
     }else{
      assert.match(await page.$eval('body',el=>el.innerText),/Add managed dwellings before choosing to renew again/);
      assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Keep subscription renewing')),false);
