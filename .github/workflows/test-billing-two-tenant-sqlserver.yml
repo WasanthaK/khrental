@@ -22,6 +22,7 @@ on:
       - 'src/pages/InvoiceDetails.jsx'
       - 'src/services/platformClient.js'
       - 'src/api/platform/billingRouter.js'
+      - 'src/api/platform/billingAdjustmentsRouter.js'
       - 'src/api/platform/monthlyBillingService.js'
       - 'src/api/platform/monthlyBillingRouter.js'
       - 'src/api/platform/monthlyBillingScheduler.js'
