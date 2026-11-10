@@ -85,6 +85,9 @@ const zeroStockFixture=()=>{
     if(statement.startsWith('UPDATE dbo.management_billing_accounts SET inventory_json')){
       state.account.inventory_json=params.inventory;state.account.pending_quantity=0;return [];
     }
+    if(statement.startsWith('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL')){
+      state.account.pending_quantity=null;return [];
+    }
     if(statement.includes("SET status='failed'")){
       Object.assign(state.commands[params.id],{status:'failed',result_json:params.result});return [];
     }
@@ -137,9 +140,11 @@ test('interrupted cancellation readback completes once without replaying provide
     // Recovery does not depend on the original command's idempotency window.
     f.state().commands[request.id].created_at=new Date(Date.now()-48*3600000);
     const before=f.calls.filter(call=>call.method==='POST').length;
+    if(kind==='cancellation')f.state().account.pending_quantity=1;
     const result=await f.service.reconcileCancellation(request);
     assert.equal(result.cancelAtPeriodEnd,true);
     if(kind==='quantity_apply')assert.equal(f.state().account.pending_quantity,0);
+    else assert.equal(f.state().account.pending_quantity,null);
     assert.equal(f.state().commands[request.id].status,'completed');
     assert.deepEqual(await f.service.reconcileCancellation(request),result);
     assert.equal(f.calls.filter(call=>call.method==='POST').length,before);

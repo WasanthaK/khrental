@@ -196,6 +196,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
         throw problem(409,'BILLING_CANCELLATION_UNCONFIRMED','The subscription does not confirm this period-end cancellation. The operation remains pending.');
       if(inventory!==null) await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=0 WHERE tenant_id=@tenantId`,
         {tenantId,inventory:JSON.stringify(inventory)});
+      else await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId});
       const result=inventory===null?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:
         {currentQuantity:confirmed.quantity,nextRenewalQuantity:0,timing:'cancel_at_renewal',cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through};
       await store.completeCommand(q,id,result);
