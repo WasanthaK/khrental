@@ -43,6 +43,7 @@ on:
           - 20261028_03_property_applications
           - 20261029_01_rental_offers_and_holds
           - 20261103_01_management_billing
+          - 20261110_01_management_inventory_staging
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false

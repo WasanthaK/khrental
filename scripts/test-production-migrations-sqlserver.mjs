@@ -55,7 +55,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261028_02_property_viewings',
   '20261028_03_property_applications',
   '20261029_01_rental_offers_and_holds',
-  '20261103_01_management_billing'
+  '20261103_01_management_billing',
+  '20261110_01_management_inventory_staging'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

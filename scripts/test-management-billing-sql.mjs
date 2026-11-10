@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import {inspectManagementBilling} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBilling,inspectManagementInventoryStaging} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
@@ -10,6 +10,12 @@ import {BILLING_PRICE,BILLING_PRODUCT,hash,problem} from '../src/api/managementB
 export const verifyManagementBilling=async pool=>{
   const sql=fs.readFileSync('migrations/20261103_01_management_billing.sql','utf8');
   await pool.request().batch(sql);await pool.request().batch(sql);
+  const stagedSql=fs.readFileSync('migrations/20261110_01_management_inventory_staging.sql','utf8');
+  await pool.request().batch(stagedSql);await pool.request().batch(stagedSql);
+  const stagedSchema=await inspectManagementInventoryStaging(pool);assert.equal(stagedSchema.satisfied,true,stagedSchema.detail);
+  await pool.request().query('ALTER TABLE dbo.management_inventory_staging NOCHECK CONSTRAINT CK_management_inventory_promotion');
+  assert.equal((await inspectManagementInventoryStaging(pool)).satisfied,false,'An untrusted/disabled promotion constraint fails inspection');
+  await pool.request().query('ALTER TABLE dbo.management_inventory_staging WITH CHECK CHECK CONSTRAINT CK_management_inventory_promotion');
   let result=await inspectManagementBilling(pool);assert.equal(result.satisfied,true,result.detail);
   await pool.request().query('ALTER TABLE dbo.management_billing_accounts NOCHECK CONSTRAINT CK_management_billing_sandbox');
   assert.equal((await inspectManagementBilling(pool)).satisfied,false);
@@ -289,4 +295,81 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   await store.locked(tenantB,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId:tenantB,actorId}));
   await assert.rejects(service.checkout({tenantId:tenantB,id:crypto.randomUUID(),actorId,inventoryHash:hash(await store.inventory(tenantB))}),{code:'BILLING_ADMIN_REQUIRED'});
   console.log('PASS: real SQL two-organization billing isolation, ambiguous checkout recovery, first payment, duplicate/out-of-order binding, quantity proration, deferred decrease and schedule cancellation; synthetic Stripe transport');
+  await verifyStagedStock(pool,actorId,stripe,remote,price,invoice);
+};
+
+const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice)=>{
+  const tenantId=crypto.randomUUID(),parent=crypto.randomUUID(),unit1=crypto.randomUUID(),unit2=crypto.randomUUID(),unit3=crypto.randomUUID();
+  const store=createBillingStore({getPool:async()=>pool,env:{MANAGEMENT_INVENTORY_SCHEMA_READY:'true'}});
+  const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://app.quixo.homes'}});
+  await pool.request().batch(`
+    IF COL_LENGTH('dbo.properties','rentalvalues') IS NULL ALTER TABLE dbo.properties ADD rentalvalues NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('dbo.property_units','status') IS NULL ALTER TABLE dbo.property_units ADD status NVARCHAR(50) NULL;
+  `);
+  await store.locked(tenantId,async q=>{
+    await q(`INSERT INTO dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')`,{tenantId,slug:`staged-${tenantId}`});
+    await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role) VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
+  });
+  const property={kind:'property',payload:{id:parent,name:'Prepared building',propertytype:'apartment',country_code:'LK',rentalvalues:{listingCategory:'residential'}}};
+  const unit=id=>({kind:'unit',payload:{id,propertyid:parent,unitnumber:id.slice(0,8)}});
+  const stage={tenantId,actorId,records:[unit(unit1),property,unit(unit2)],reason:'Disposable staged stock acceptance only.'};
+  const receipts=await Promise.all([store.stageStock(stage),store.stageStock(stage)]);
+  assert.deepEqual(receipts[0],receipts[1]);
+  assert.equal(await store.account(tenantId),null,'Preparing stock needs no billing account or paid entitlement');
+  assert.equal((await store.inventory(tenantId)).length,0,'Pending records cannot become operational/public property rows');
+  assert.equal((await store.inventory(tenantId,undefined,{includePending:true})).length,2,'Prepared building counts its units without double counting the parent');
+  assert.equal((await store.pendingStock(tenantId)).length,3);
+  const withdrawnProperty={...property,payload:{...property.payload,id:crypto.randomUUID(),name:'Withdrawn prepared home'}};
+  await store.stageStock({...stage,records:[withdrawnProperty]});
+  const withdrawal={tenantId,actorId,ids:[withdrawnProperty.payload.id],reason:stage.reason};
+  await store.withdrawStock(withdrawal);await store.withdrawStock(withdrawal);
+  await assert.rejects(store.stageStock({...stage,records:[withdrawnProperty]}),{code:'BILLING_STOCK_WITHDRAWN'});
+  await assert.rejects(store.withdrawStock({...withdrawal,ids:[parent]}),{code:'BILLING_STOCK_PARENT'});
+  assert.equal((await store.pendingStock(tenantId)).length,3,'Withdrawing a building alone cannot orphan its prepared units');
+  await assert.rejects(store.withdrawStock({...withdrawal,ids:[crypto.randomUUID()]}),{code:'BILLING_STOCK_NOT_FOUND'});
+  await assert.rejects(store.stageStock({...stage,actorId:crypto.randomUUID()}),{code:'BILLING_ADMIN_REQUIRED'});
+  await assert.rejects(store.stageStock({...stage,records:[{...property,payload:{...property.payload,id:crypto.randomUUID()}},{...property,payload:{...property.payload,name:'Conflicting identity'}}]}),{code:'BILLING_STOCK_CONFLICT'});
+  assert.equal((await store.pendingStock(tenantId)).length,3,'A failed import rolls back earlier prepared records');
+  await assert.rejects(store.stageStock({...stage,records:[{kind:'unit',payload:{id:crypto.randomUUID(),propertyid:crypto.randomUUID(),unitnumber:'Foreign parent'}}]}),{code:'BILLING_STOCK_PARENT'});
+  assert.equal((await store.pendingStock(tenantId)).length,3);
+  await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:stage.reason});
+  const snapshot=await store.inventory(tenantId,undefined,{includePending:true});
+  const session=await service.checkout({tenantId,id:crypto.randomUUID(),actorId,inventoryHash:hash(snapshot)});
+  await assert.rejects(store.withdrawStock({...withdrawal,ids:[parent,unit1,unit2]}),{code:'BILLING_STOCK_CHECKOUT_PENDING'});
+  assert.equal((await store.inventory(tenantId)).length,0,'Open/unpaid Checkout cannot promote stock');
+  await store.stageStock({...stage,records:[unit(unit3)]});
+  const checkout=remote.get(`/v1/checkout/sessions/${session.sessionId}`),time=Math.floor(Date.now()/1000);
+  const sub={id:'sub_staged_fixture',object:'subscription',customer:checkout.customer,livemode:false,status:'active',latest_invoice:'in_staged_fixture',cancel_at_period_end:false,
+    items:{data:[{id:'si_staged_fixture',price,quantity:2,current_period_start:time-1000,current_period_end:time+2592000}]}};
+  const paid={...structuredClone(invoice),id:'in_staged_fixture',customer:checkout.customer,status:'paid',amount_due:1000,amount_paid:1000,amount_remaining:0,
+    parent:{subscription_details:{subscription:sub.id}},lines:{data:[{id:'il_staged_fixture',parent:{subscription_item_details:{subscription_item:'si_staged_fixture',proration:false}},period:{end:time+2592000}}],has_more:false}};
+  Object.assign(checkout,{status:'complete',subscription:sub.id});
+  remote.set(`/v1/subscriptions/${sub.id}`,sub);remote.set(`/v1/invoices/${paid.id}`,paid);
+  await service.refresh(tenantId);
+  await assert.rejects(store.withdrawStock({...withdrawal,ids:[parent]}),{code:'BILLING_CESSATION_REQUIRED'});
+  assert.equal((await store.inventory(tenantId)).length,2,'Verified initial payment promotes exactly the reviewed checkout version');
+  assert.equal((await store.pendingStock(tenantId)).length,1,'Later prepared stock stays pending');
+  const preview=await service.quantityPreview({tenantId,id:crypto.randomUUID(),actorId});assert.equal(preview.to,3);
+  const request={tenantId,id:crypto.randomUUID(),actorId,previewId:preview.previewId};
+  const normal=stripe.request;let lost=true;
+  stripe.request=async(...args)=>{
+    const result=await normal(...args);
+    if(args[0]==='POST'&&args[1]===`/v1/subscriptions/${sub.id}`&&args[2]?.items&&lost){lost=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic staged promotion response loss.');}
+    return result;
+  };
+  try{
+    await assert.rejects(service.quantityApply(request),{code:'STRIPE_UNAVAILABLE'});
+    assert.equal((await store.inventory(tenantId)).length,2);assert.equal(sub.items.data[0].quantity,3);
+    await assert.rejects(store.stageStock({...stage,records:[unit(crypto.randomUUID())]}),{code:'BILLING_COMMAND_PENDING'});
+    await pool.request().batch(`CREATE TRIGGER dbo.staged_promotion_rollback ON dbo.management_billing_audit AFTER INSERT AS
+      BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE action='inventory.promoted') THROW 51000,'Synthetic staged promotion rollback',1; END`);
+    try{await assert.rejects(service.quantityApply(request),/Synthetic staged promotion rollback/);}
+    finally{await pool.request().query('DROP TRIGGER dbo.staged_promotion_rollback');}
+    assert.equal((await store.inventory(tenantId)).length,2);assert.equal((await store.pendingStock(tenantId)).length,1);
+    const result=await service.quantityApply(request);assert.equal(result.currentQuantity,3);
+    assert.equal((await store.inventory(tenantId)).length,3);assert.equal((await store.pendingStock(tenantId)).length,0);
+    assert.deepEqual(await service.quantityApply(request),result);
+    assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action='inventory.promoted'",{tenantId})).length,2,'Initial and addition promotion each audit once');
+  }finally{stripe.request=normal;}
+  console.log('PASS: durable pre-enrollment stock, parent/unit identity, atomic and concurrent imports, paid-only exact Checkout promotion, later-stock isolation, provider response loss and promotion audit rollback; synthetic provider');
 };

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {normalizePropertyRentalValues} from '../../utils/listingCategories.js';
 
 export const problem = (status, code, message) => Object.assign(new Error(message), {status, code});
 export const BILLING_ACCOUNT = 'acct_1UTgcdQ4sARuLNQa';
@@ -56,7 +57,44 @@ export const pricingPreview = (rule, quantity) => {
     appliesTo:'new_subscriptions_only'};
 };
 
-const residential = new Set(['house','condominium','apartment','apartment complex']);
+const residential = new Set(['house','condo','condominium','apartment','apartment complex']);
+export const stagedStock = input => {
+  if(!Array.isArray(input)||!input.length||input.length>100)
+    throw problem(400,'BILLING_STOCK_INVALID','Prepare between 1 and 100 property or unit records at a time.');
+  const seen=new Set();
+  return input.map(record=>{
+    if(!record||!['property','unit'].includes(record.kind)||Object.keys(record).some(k=>!['kind','payload'].includes(k)))
+      throw problem(400,'BILLING_STOCK_INVALID','Choose a property or unit to prepare.');
+    const fields=record.kind==='property'?['id','name','address','description','propertytype','country_code','rentalvalues']:
+      ['id','propertyid','unitnumber','description','rentalvalues','bedrooms','bathrooms','squarefeet','floor'];
+    const source=record.payload;
+    if(!source||typeof source!=='object'||Array.isArray(source)||Object.keys(source).some(k=>!fields.includes(k)))
+      throw problem(400,'BILLING_STOCK_FIELDS','Submit property details without management, organization or billing fields.');
+    const payload=Object.fromEntries(fields.filter(k=>source[k]!==undefined).map(k=>[k,source[k]]));
+    payload.id=identifier(payload.id);
+    if(seen.has(payload.id))throw problem(400,'BILLING_DUPLICATE_DWELLING','Each prepared record needs a distinct identifier.');
+    seen.add(payload.id);
+    const label=record.kind==='property'?'name':'unitnumber';
+    if(typeof payload[label]!=='string'||!payload[label].trim()||payload[label].length>(label==='name'?255:100))
+      throw problem(400,'BILLING_STOCK_LABEL','Include a valid property name or unit number.');
+    payload[label]=payload[label].trim();
+    if(record.kind==='property'){
+      if(!residential.has(payload.propertytype)||!['LK','BN'].includes(payload.country_code))
+        throw problem(400,'BILLING_STOCK_MARKET','Choose a residential property in Sri Lanka or Brunei.');
+      payload.rentalvalues=normalizePropertyRentalValues(payload.rentalvalues,{requireCategory:true});
+      if(payload.rentalvalues.listingCategory!=='residential')throw problem(400,'BILLING_STOCK_MARKET','Choose the residential listing category.');
+    }else{
+      payload.propertyid=identifier(payload.propertyid);
+      for(const field of ['bedrooms','bathrooms','squarefeet'])if(payload[field]!==undefined&&payload[field]!==null&&
+        (!Number.isFinite(payload[field])||payload[field]<0||(['bedrooms','bathrooms'].includes(field)&&!Number.isSafeInteger(payload[field]))))
+        throw problem(400,'BILLING_STOCK_INVALID','Room counts and floor area must be valid non-negative numbers.');
+    }
+    for(const field of ['address','description','floor'])if(payload[field]!==undefined&&payload[field]!==null&&typeof payload[field]!=='string')
+      throw problem(400,'BILLING_STOCK_INVALID','Use text for property descriptions and addresses.');
+    if(JSON.stringify(payload).length>32000)throw problem(400,'BILLING_STOCK_INVALID','This property record is too large.');
+    return {kind:record.kind,payload};
+  });
+};
 export const dwellingInventory = ({tenantId, properties, units}) => {
   const tenant = String(tenantId).toLowerCase();
   const seen = new Set();
@@ -107,6 +145,14 @@ export const managementWriteEnforced = (tenantId, env = process.env) => {
     throw problem(503, 'BILLING_ENFORCEMENT_CONFIGURATION', 'Management access could not be verified. Try again later.');
   }
   return scope.map(value => value.toLowerCase()).includes(identifier(tenantId));
+};
+
+export const assertInventoryMutation=({tenantId,table,action,env=process.env})=>{
+  if(env.MANAGEMENT_INVENTORY_SCHEMA_READY!=='true'||!['properties','property_units'].includes(table)||!managementWriteEnforced(tenantId,env))return;
+  if(['insert','upsert'].includes(action))throw problem(409,'BILLING_STOCK_PREPARATION_REQUIRED',
+    'Prepare new dwellings in Management subscription, then review and confirm billing before managing them.');
+  if(action==='delete')throw problem(409,'BILLING_CESSATION_REQUIRED',
+    'Removing managed stock requires the management-cessation checks. Existing records have been retained.');
 };
 
 export const complimentaryChange = (input, now = Date.now()) => {

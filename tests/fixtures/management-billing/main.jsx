@@ -19,6 +19,8 @@ function Fixture(){
   if(['zero-preview','zero-ending'].includes(scenario))Object.assign(data,{inventoryQuantity:0,inventory:[],pendingQuantity:null});
   if(scenario==='zero-ending')Object.assign(data,{cancelAtPeriodEnd:true,pendingQuantity:0,entitlement:{state:'ending'}});
   if(scenario==='interrupted-cancellation')data.pendingOperation={id:'fixture-interrupted',kind:'cancellation',payload:{cancelAtPeriodEnd:true}};
+  if(scenario==='staged-stock')Object.assign(data,{enrolled:false,stagingEnabled:true,inventoryQuantity:0,billedQuantity:0,status:'not_enrolled',inventory:[],
+    pendingStock:[{id:'staged-home',kind:'property',label:'Prepared home'}],proposedInventoryQuantity:1});
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
   return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} onAction={kind=>setNotice(`Fixture action: ${kind}`)} onReload={()=>{}}/>;
  }

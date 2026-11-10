@@ -49,7 +49,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     }
     return {...invoice,lines:{...invoice.lines,data:lines,has_more:false}};
   };
-  const reconcileLocked=async(q,account)=>{
+  const reconcileLocked=async(q,account,{promoteCheckout=true}={})=>{
     if(!account.stripe_subscription_id){
       const sessions=await q(`SELECT result_json FROM dbo.management_billing_commands
         WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed' ORDER BY created_at DESC`,{tenantId:account.tenant_id});
@@ -73,17 +73,37 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       ? await firstRenewalFailure({stripe,invoice,account}) : null;
     const projection=subscriptionProjection({subscription,invoice,account,firstFailureAt});
     await saveProjection(q,account.tenant_id,projection);
+    const snapshot=JSON.parse(account.inventory_json||'[]');
+    if(promoteCheckout&&snapshot[0]?.stagedRecords?.length&&projection.initial_payment_verified&&
+      entitlement({...account,...projection}).management){
+      const rows=await q(`SELECT id,result_json FROM dbo.management_billing_commands
+        WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed' ORDER BY created_at DESC`,{tenantId:account.tenant_id});
+      let matched=null;
+      for(const row of rows){
+        const session=await stripe.request('GET',`/v1/checkout/sessions/${JSON.parse(row.result_json).sessionId}`);
+        if(session.livemode===false&&session.mode==='subscription'&&session.status==='complete'&&
+          objectId(session.customer)===account.stripe_customer_id&&objectId(session.subscription)===account.stripe_subscription_id){matched=row;break;}
+      }
+      if(!matched)throw problem(409,'BILLING_STOCK_CONFIRMATION','The prepared stock needs a matching completed checkout.');
+      await store.promoteStock(q,{tenantId:account.tenant_id,snapshot,commandId:matched.id});
+      await q('UPDATE dbo.management_billing_accounts SET inventory_json=@inventory WHERE tenant_id=@tenantId',
+        {tenantId:account.tenant_id,inventory:JSON.stringify(await store.inventory(account.tenant_id,q))});
+    }
     return {...account,...projection};
   };
   const summary=async tenantId=>{
     const account=await store.account(tenantId);
     const inventory=await store.inventory(tenantId);
+    const proposedInventory=await store.inventory(tenantId,undefined,{includePending:true});
+    const staged=await store.pendingStock?.(tenantId)||[];
     const pending=account?(await store.read(`SELECT id,kind,created_at,payload_json FROM dbo.management_billing_commands
       WHERE tenant_id=@tenantId AND status='pending'`,{tenantId}))[0]||null:null;
     const pendingPayload=pending?JSON.parse(pending.payload_json):null;
     if(pendingPayload) delete pendingPayload._subscriptionId;
     return {mode:'sandbox',configured:stripe.configured(),enrolled:Boolean(account),inventory,
-      inventoryHash:hash(inventory),inventoryQuantity:inventory.length,
+      inventoryHash:hash(proposedInventory),inventoryQuantity:inventory.length,proposedInventoryQuantity:proposedInventory.length,
+      stagingEnabled:Boolean(store.stagingEnabled?.()),pendingStock:staged.map(row=>({id:row.id,kind:row.kind,
+        label:JSON.parse(row.payload_json)[row.kind==='property'?'name':'unitnumber']})),
       billedQuantity:account?.quantity || 0,pendingQuantity:account?.pending_quantity ?? null,
       status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account),
       cancelAtPeriodEnd:Boolean(account?.cancel_at_period_end),paidThrough:account?.paid_through || null,
@@ -125,11 +145,11 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     const origin=configuredOrigin();
     // Validate before opening a durable command so ordinary validation failures do not block retries.
     const current=await requireAccount(tenantId);
-    const inventory=await store.inventory(tenantId);
+    const inventory=await store.inventory(tenantId,undefined,{includePending:true});
     if(!inventory.length || hash(inventory)!==inventoryHash) throw problem(409,'BILLING_INVENTORY_CHANGED','Reload the dwelling preview before continuing.');
     await price(current.stripe_price_id);
     return runCommand({tenantId,id,actorId,kind:'checkout',payload:{inventoryHash},action:async(q,account,key)=>{
-      const items=await store.inventory(tenantId,q);
+      const items=await store.inventory(tenantId,q,{includePending:true});
       if(hash(items)!==inventoryHash) throw problem(409,'BILLING_INVENTORY_CHANGED','Inventory changed during checkout.');
       account=await reconcileLocked(q,account);
       if(account.stripe_subscription_id) throw problem(409,'BILLING_SUBSCRIPTION_EXISTS','This workspace already has a subscription.');
@@ -244,7 +264,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   const quantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
     account=await reconcileLocked(q,account);
     if(entitlement(account).state!=='active') throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');
-    const inventory=await store.inventory(tenantId,q);
+    const inventory=await store.inventory(tenantId,q,{includePending:true});
     const prorationDate=Math.floor(Date.now()/1000);
     const target=inventory.length;
     let invoice=null;
@@ -262,7 +282,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
     if(!row) throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');
     const preview=JSON.parse(row.result_json);
-    const inventory=await store.inventory(tenantId,q);
+    const inventory=await store.inventory(tenantId,q,{includePending:true});
     if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
       throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
     account=await reconcileLocked(q,account);
@@ -314,8 +334,9 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     }
     const confirmed=await reconcileLocked(q,account);
     if(confirmed.quantity!==Math.max(preview.from,target)) throw problem(502,'BILLING_QUANTITY_UNCONFIRMED','Stripe has not confirmed the expected current quantity.');
+    if(inventory[0]?.stagedRecords?.length)await store.promoteStock(q,{tenantId,snapshot:inventory,commandId:id});
     await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
-      {tenantId,inventory:JSON.stringify(inventory),pending:target<confirmed.quantity?target:null});
+      {tenantId,inventory:JSON.stringify(await store.inventory(tenantId,q)),pending:target<confirmed.quantity?target:null});
     return {currentQuantity:confirmed.quantity,nextRenewalQuantity:target,timing:preview.timing};
   }});
   const webhook=async event=>{
@@ -336,7 +357,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       if((await q('SELECT stripe_event_id FROM dbo.management_billing_events WHERE stripe_event_id=@id',{id:event.id})).length)
         return {received:true,duplicate:true};
       let account=await requireAccount(tenantId,q);
-      account=await reconcileLocked(q,account);
+      account=await reconcileLocked(q,account,{promoteCheckout:!risk});
       const targetSubscription=object.object==='subscription'?object.id:object.object==='invoice'?invoiceSubscription(object):object.object==='checkout.session'?objectId(object.subscription):null;
       if(!risk && (!account.stripe_subscription_id || targetSubscription!==account.stripe_subscription_id))
         throw problem(409,'BILLING_EVENT_SUBSCRIPTION_MISMATCH','The event subscription is not bound to this organization.');
