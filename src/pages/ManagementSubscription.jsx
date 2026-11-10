@@ -41,7 +41,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
       <PreparedStockForm busy={busy} onAction={onAction}/>
       {data.pendingStock?.length>0&&<div><h3 className="font-semibold">Awaiting billing confirmation</h3><ul className="mt-2 space-y-2 text-sm">{data.pendingStock.map(item=><li key={item.id}>{item.label} · {item.kind==='property'?'Property':'Unit'}</li>)}</ul>
         <button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('stock/withdraw',{ids:data.pendingStock.map(item=>item.id),reason:'Organization administrator withdrew prepared additions before management activation.'})}>Withdraw prepared additions</button>
-        <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed dwellings. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
+        <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed {data.proposedInventoryQuantity===1?'dwelling':'dwellings'}. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
       </div>}
     </section>}
     {reductionScheduled&&<section aria-labelledby="scheduled-quantity-title" className="rounded-2xl border border-teal-200 bg-teal-50 p-5 text-teal-950">
