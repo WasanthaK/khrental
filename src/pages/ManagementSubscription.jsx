@@ -30,7 +30,14 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
           <button className={button} disabled={busy} onClick={()=>onAction('refresh',{})}>Refresh Stripe status</button>
           {data.status!=='pending'&&<><button className={button} disabled={busy} onClick={()=>onAction('portal',{})}>Payment method & invoices</button><button className={button} disabled={busy||data.entitlement.state!=='active'} onClick={()=>onAction('quantity-preview',{})}>Review quantity change</button></>}
         </div>
-        {data.pendingOperation&&<div className="text-sm text-amber-800"><p>An operation is awaiting confirmation: {data.pendingOperation.kind.replaceAll('_',' ')}.</p><button className={`${button} mt-2`} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button></div>}
+        {data.pendingOperation&&<div className="space-y-2 text-sm text-amber-800">
+          <p>An operation is awaiting confirmation: {data.pendingOperation.kind.replaceAll('_',' ')}.</p>
+          <button className={button} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button>
+          {(data.pendingOperation.kind==='quantity_apply'||(data.pendingOperation.kind==='cancellation'&&data.pendingOperation.payload.cancelAtPeriodEnd===true))&&<div>
+            <p>If a cancellation was interrupted, check whether it already took effect. This check does not repeat the change.</p>
+            <button className={`${button} mt-2`} disabled={busy} onClick={()=>onAction('reconcile-cancellation',{},data.pendingOperation.id)}>Check cancellation result</button>
+          </div>}
+        </div>}
         {preview&&<div className="rounded-xl border border-teal-200 bg-teal-50 p-4">
           <h3 className="font-semibold">{preview.timing==='cancel_at_renewal'?'End subscription at renewal':`Quantity change: ${preview.from} → ${preview.to}`}</h3>
           <p className="mt-2 text-sm">{preview.timing==='cancel_at_renewal'

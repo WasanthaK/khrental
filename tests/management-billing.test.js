@@ -69,9 +69,12 @@ const zeroStockFixture=()=>{
   const remote={...structuredClone(subscription),latest_invoice:invoice.id,cancel_at_period_end:false};
   remote.items.data[0].current_period_end=end;
   const paid=structuredClone(invoice);paid.lines.data[0].period.end=end;
-  const calls=[];let loseResponse=false;
+  const calls=[];let loseResponse=false,denyActor=false,failAudit=false;
   const q=async(statement,params={})=>{
-    if(statement.startsWith('SELECT * FROM dbo.management_billing_commands'))return [state.commands[params.id]];
+    if(statement.startsWith('SELECT * FROM dbo.management_billing_commands')){
+      const saved=state.commands[params.id];
+      return saved&&(!params.tenantId||params.tenantId===saved.tenant_id)?[saved]:[];
+    }
     if(statement.startsWith('SELECT result_json')){
       const saved=state.commands[params.previewId];
       return saved?.tenant_id===params.tenantId && saved.kind==='quantity_preview' && saved.status==='completed'?[saved]:[];
@@ -82,6 +85,9 @@ const zeroStockFixture=()=>{
     if(statement.startsWith('UPDATE dbo.management_billing_accounts SET inventory_json')){
       state.account.inventory_json=params.inventory;state.account.pending_quantity=0;return [];
     }
+    if(statement.startsWith('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL')){
+      state.account.pending_quantity=null;return [];
+    }
     if(statement.includes("SET status='failed'")){
       Object.assign(state.commands[params.id],{status:'failed',result_json:params.result});return [];
     }
@@ -89,14 +95,16 @@ const zeroStockFixture=()=>{
   };
   const store={account:async()=>({...state.account}),inventory:async()=>structuredClone(state.inventory),
     read:async()=>Object.values(state.commands).filter(command=>command.status==='pending'),
-    assertActor:async()=>{},audit:async()=>{},
+    assertActor:async()=>{if(denyActor)throw Object.assign(new Error('Revoked actor'),{code:'BILLING_ADMIN_REQUIRED'});},
+    audit:async()=>{if(failAudit)throw new Error('Synthetic audit failure');},
     locked:async(_tenant,action)=>{
       const snapshot=structuredClone(state);
       try{return await action(q);}catch(error){state=snapshot;throw error;}
     },
     beginCommand:async({id,kind,payload,tenantId})=>{
       const existing=state.commands[id];if(existing)return {...existing,createdNow:false};
-      state.commands[id]={id,tenant_id:tenantId,kind,payload,payload_json:JSON.stringify(payload),status:'pending'};
+      const storedPayload=['cancellation','quantity_apply'].includes(kind)?{...payload,_subscriptionId:state.account.stripe_subscription_id}:payload;
+      state.commands[id]={id,tenant_id:tenantId,kind,payload,payload_json:JSON.stringify(storedPayload),status:'pending'};
       return {...state.commands[id],createdNow:true};
     },
     completeCommand:async(_q,id,result)=>Object.assign(state.commands[id],{status:'completed',result_json:JSON.stringify(result)})};
@@ -113,8 +121,75 @@ const zeroStockFixture=()=>{
     throw new Error(`Unexpected provider operation: ${method} ${path}`);
   }};
   return {service:createBillingService({store,stripe}),calls,remote,state:()=>state,
-    loseNextResponse:()=>{loseResponse=true;},restoreStock:()=>{state.inventory=[{key:'property:restored'}];}};
+    loseNextResponse:()=>{loseResponse=true;},restoreStock:()=>{state.inventory=[{key:'property:restored'}];},
+    denyActor:()=>{denyActor=true;},failAudit:()=>{failAudit=true;}};
 };
+
+const interruptedCancellation=async(kind='quantity_apply')=>{
+  const f=zeroStockFixture(),request={tenantId:tenant,id:crypto.randomUUID(),actorId:tenant};
+  const preview=await f.service.quantityPreview({...request,id:crypto.randomUUID()});
+  f.loseNextResponse();
+  await assert.rejects(kind==='quantity_apply'?f.service.quantityApply({...request,previewId:preview.previewId}):
+    f.service.cancel({...request,cancelAtPeriodEnd:true}),{code:'STRIPE_UNAVAILABLE'});
+  return {f,request};
+};
+
+test('interrupted cancellation readback completes once without replaying provider writes',async()=>{
+  for(const kind of ['quantity_apply','cancellation']){
+    const {f,request}=await interruptedCancellation(kind);
+    // Recovery does not depend on the original command's idempotency window.
+    f.state().commands[request.id].created_at=new Date(Date.now()-48*3600000);
+    const before=f.calls.filter(call=>call.method==='POST').length;
+    if(kind==='cancellation')f.state().account.pending_quantity=1;
+    const result=await f.service.reconcileCancellation(request);
+    assert.equal(result.cancelAtPeriodEnd,true);
+    if(kind==='quantity_apply')assert.equal(f.state().account.pending_quantity,0);
+    else assert.equal(f.state().account.pending_quantity,null);
+    assert.equal(f.state().commands[request.id].status,'completed');
+    assert.deepEqual(await f.service.reconcileCancellation(request),result);
+    assert.equal(f.calls.filter(call=>call.method==='POST').length,before);
+  }
+});
+
+test('cancellation readback rejects foreign commands and revoked actors before subscription access',async()=>{
+  for(const denied of ['foreign','revoked']){
+    const {f,request}=await interruptedCancellation();
+    const before=f.calls.length;
+    if(denied==='foreign')request.tenantId=other;else f.denyActor();
+    await assert.rejects(f.service.reconcileCancellation(request),{code:denied==='foreign'?'BILLING_COMMAND_NOT_FOUND':'BILLING_ADMIN_REQUIRED'});
+    assert.equal(f.calls.length,before);
+    assert.equal(f.state().commands[request.id].status,'pending');
+  }
+});
+
+test('unconfirmed cancellation, active schedule and changed stock retain pending work',async()=>{
+  for(const mismatch of ['flag','schedule','inventory','quantity','renewal','binding','legacy']){
+    const {f,request}=await interruptedCancellation();
+    if(mismatch==='flag')f.remote.cancel_at_period_end=false;
+    if(mismatch==='schedule')f.remote.schedule='sub_sched_unfinished';
+    if(mismatch==='inventory')f.restoreStock();
+    const preview=Object.values(f.state().commands).find(command=>command.kind==='quantity_preview');
+    if(mismatch==='quantity')preview.result_json=JSON.stringify({...JSON.parse(preview.result_json),to:1});
+    if(mismatch==='renewal')Object.assign(f.state().commands[request.id],{kind:'cancellation',payload_json:'{"cancelAtPeriodEnd":false}'});
+    if(mismatch==='binding'||mismatch==='legacy'){
+      const command=f.state().commands[request.id],payload=JSON.parse(command.payload_json);
+      if(mismatch==='binding')payload._subscriptionId='sub_other';else delete payload._subscriptionId;
+      command.payload_json=JSON.stringify(payload);
+    }
+    const before=f.calls.filter(call=>call.method==='POST').length;
+    await assert.rejects(f.service.reconcileCancellation(request));
+    assert.equal(f.state().commands[request.id].status,'pending');
+    assert.equal(f.calls.filter(call=>call.method==='POST').length,before);
+  }
+});
+
+test('cancellation recovery audit failure rolls back local completion and preserves remote truth',async()=>{
+  const {f,request}=await interruptedCancellation();
+  const before=structuredClone(f.state());f.failAudit();
+  await assert.rejects(f.service.reconcileCancellation(request),/Synthetic audit failure/);
+  assert.deepEqual(f.state(),before);
+  assert.equal(f.remote.cancel_at_period_end,true);
+});
 
 test('zero-stock preview and confirmation end at renewal without a zero-quantity subscription',async()=>{
   const f=zeroStockFixture(),actorId=tenant;
@@ -261,6 +336,23 @@ const withServer=async(router,run)=>{
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   try{await run(`http://127.0.0.1:${server.address().port}`);}finally{await new Promise(resolve=>server.close(resolve));}
 };
+test('cancellation reconciliation API requires a genuine organization administrator and rejects authority overrides',async()=>{
+  for(const denied of ['anonymous','bypass','participant','revoked','none']){
+    let accessed=false;
+    const identity={authSession:denied==='anonymous'?null:{},tenantId:tenant,
+      user:{id:tenant,is_dev_bypass:denied==='bypass'},
+      membership:{tenant_id:tenant,status:denied==='revoked'?'inactive':'active',role:denied==='participant'?'rentee':'admin'}};
+    const router=createManagementBillingRouter({env:{MANAGEMENT_BILLING_SCHEMA_READY:'true'},
+      store:{locked:async()=>{accessed=true;throw Error('Must reject before store access');}},
+      stripe:{assertAccount:async()=>{}},resolveContext:(req,_res,next)=>{Object.assign(req,identity);next();}});
+    await withServer(router,async origin=>{
+      const response=await fetch(`${origin}/reconcile-cancellation`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({requestId:tenant,...(denied==='none'?{tenantId:other,actorId:other}: {})})});
+      assert.equal(response.status,denied==='none'?400:denied==='anonymous'||denied==='bypass'?401:403);
+    });
+    assert.equal(accessed,false);
+  }
+});
 test('pricing API denies organization admins, absent sessions and development bypass',async()=>{
   const env={MANAGEMENT_BILLING_SCHEMA_READY:'true'};
   for(const identity of [{authSession:{},user:{id:tenant},admin:false},{authSession:null,user:{id:tenant},admin:true},{authSession:{},user:{id:tenant,is_dev_bypass:true},admin:true}]){

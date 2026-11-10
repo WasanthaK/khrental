@@ -1,5 +1,11 @@
 # Current R5 prelaunch completion ledger — 10 November 2026
 
+## Interrupted cancellation recovery preparation — 10 November 2026
+
+An independent BL08.11 slice adds administrator-authorized, transaction-scoped readback for interrupted period-end cancellation and zero-stock cancellation commands. New cancellation/quantity commands persist their subscription binding before provider activity. Recovery uses only provider GETs, verifies that original binding and (for zero stock) the original inventory preview, and commits completion plus audit together. It can confirm commands older than the 23-hour replay limit without issuing another provider write. Duplicate confirmation returns the saved result. Changed inventory/subscription, unconfirmed cancellation, active schedules, unsupported quantity changes and legacy commands without a durable binding remain pending for review; no inference of historical proration success is made.
+
+Local focused tests pass 30/30; the broader local run passed 916/917, with the browser case blocked by missing bundled Chrome. System Chromium also fails to launch because its socket operation is denied. Local production build passed. Added disposable SQL coverage ages a lost-response command to 48 hours and checks no-write recovery, tenant denial and one audit; added desktop/mobile keyboard fixture coverage for the visible check action. **CI SQL/browser, screenshot inspection, merge, deployment and live acceptance remain pending.** This does not implement staged stock, cessation or full asynchronous reconciliation, and does not close BL08.11. No migration, flag change, provider/live fixture mutation, real charge or repeat signing is included. Enforcement rollout and live charging remain disabled.
+
 ## Transactional management-write completion checkpoint — 10 November 2026
 
 Four reviewed implementation PRs are merged. This advances BL08.3/BL08.4/BL08.5 source and disposable acceptance; it does **not** complete BL08, enable management enforcement, certify live actor/resource acceptance or launch R5. No Stripe/Evia operation, retained production billing record, occupied stock, signed artifact, password, payout setting or rollout enable flag was changed by these tests.
