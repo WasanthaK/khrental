@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 export const managementBillingColumns={
   management_pricing_versions:['id','market','version','rules_json','status','stripe_price_id','created_by','created_at','published_at'],
   management_billing_accounts:['tenant_id','stripe_account_id','stripe_customer_id','stripe_subscription_id','stripe_item_id','stripe_schedule_id','stripe_price_id',
@@ -88,4 +89,48 @@ export const inspectManagementInventoryStaging=async pool=>{
     if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0))problems.push(`${column}.foreign_key`);
   }
   return {satisfied:problems.length===0,detail:problems.length?problems.join(', '):'Pending stock identities and promotion constraints verified.'};
+};
+
+export const inspectManagementCessation=async pool=>{
+  const result=await pool.request().query(`
+    SELECT c.name,ty.name AS type_name,c.max_length,c.is_nullable FROM sys.columns c
+      JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE c.object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT i.name,i.is_disabled,i.is_primary_key,i.is_unique,
+      (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX),c.name),',') WITHIN GROUP(ORDER BY ic.key_ordinal)
+       FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
+       WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0) AS keys
+      FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT name,is_disabled,is_not_trusted,definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT c.name AS column_name,rt.name AS referenced_table,fk.is_disabled,fk.is_not_trusted,fk.delete_referential_action
+      FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fc ON fc.constraint_object_id=fk.object_id
+      JOIN sys.tables rt ON rt.object_id=fk.referenced_object_id JOIN sys.columns c ON c.object_id=fk.parent_object_id AND c.column_id=fc.parent_column_id
+      WHERE fk.parent_object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT name,is_disabled,OBJECT_DEFINITION(object_id) AS definition FROM sys.triggers WHERE name LIKE '%[_]management[_]cessation';
+    SELECT c.name,d.definition FROM sys.columns c JOIN sys.default_constraints d ON d.object_id=c.default_object_id
+      WHERE c.object_id=OBJECT_ID('dbo.management_inventory_controls');
+  `);
+  const [columns=[],indexes=[],checks=[],fks=[],triggers=[],defaults=[]]=result.recordsets||[],problems=[];
+  for(const [name,type,length,nullable] of [['id','uniqueidentifier',16,false],['tenant_id','uniqueidentifier',16,false],
+    ['property_id','uniqueidentifier',16,false],['unit_id','uniqueidentifier',16,true],['state','varchar',12,false],
+    ['ceased_by','uniqueidentifier',16,false],['ceased_at','datetime2',8,false],['reason','nvarchar',2000,false]]){
+    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable))problems.push(name);
+  }
+  if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id'))problems.push('primary_key');
+  if(!indexes.some(i=>i.name==='UQ_management_inventory_resource'&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id'))problems.push('unique_resource');
+  const norm=v=>String(v||'').toLowerCase().replace(/[\s\[\]()]/g,'');
+  for(const [name,definition] of [['CK_management_inventory_control_state',"state='ceased'"],
+    ['CK_management_inventory_control_reason','lenltrimrtrimreason>=10andlenltrimrtrimreason<=1000']]){
+    if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===definition))problems.push(name);
+  }
+  for(const [column,target] of [['tenant_id','tenants'],['property_id','properties'],['unit_id','property_units'],['ceased_by','app_users']]){
+    if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0))problems.push(`${column}.foreign_key`);
+  }
+  for(const [name,definition] of [['state',"'ceased'"],['ceased_at','sysutcdatetime']])if(!defaults.some(d=>d.name===name&&norm(d.definition)===definition))problems.push(`${name}.default`);
+  const triggerNorm=v=>String(v||'').toLowerCase().replace(/create\s+(?:or\s+alter\s+)?trigger/,'trigger').replace(/\s+/g,'').trim();
+  const source=fs.readFileSync(new URL('../migrations/20261110_02_management_cessation.sql',import.meta.url),'utf8');
+  for(const match of source.matchAll(/EXEC\(N'((?:[^']|'')*)'\);/g)){
+    const expected=match[1].replace(/''/g,"'"),name=expected.match(/TR_\w+/)[0],actual=triggers.find(t=>t.name===name);
+    if(!actual||actual.is_disabled||triggerNorm(actual.definition)!==triggerNorm(expected))problems.push(name);
+  }
+  return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Cessation identity, audit constraints and exact enabled domain guards verified.'};
 };

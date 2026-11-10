@@ -12,9 +12,17 @@ export const runQuery = async (queryText, params = {}, transaction = null) => {
   const request = bindParams(transaction
     ? new sql.Request(transaction)
     : (await getMssqlPool()).request(), params);
-  const result = await request.query(queryText);
-
-  return result.recordset || [];
+  try {
+    const result = await request.query(queryText);
+    return result.recordset || [];
+  } catch (error) {
+    if(error.number>=51070&&error.number<=51074){
+      error.status=409;
+      error.code='MANAGEMENT_CEASED';
+      error.message='Management has ended for this property or unit. Existing records remain available.';
+    }
+    throw error;
+  }
 };
 
 export const runSingleQuery = async (queryText, params = {}, transaction = null) => {

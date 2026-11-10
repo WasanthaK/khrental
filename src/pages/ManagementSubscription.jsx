@@ -3,26 +3,23 @@ import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
 const button='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40';
-const PreparedStockForm=({busy,onAction})=>{
-  const [name,setName]=useState(''),[country,setCountry]=useState('LK'),[type,setType]=useState('house');
-  const identity=useRef(null);
-  if(!identity.current)identity.current=crypto.randomUUID();
+const PreparedStockForm=({busy,onAction,draft,onChange})=>{
+  const {id,name,country,type}=draft;
   return <form className="space-y-3" onSubmit={async event=>{
     event.preventDefault();
-    const saved=await onAction('stock/prepare',{records:[{kind:'property',payload:{id:identity.current,name,
+    await onAction('stock/prepare',{records:[{kind:'property',payload:{id,name,
       propertytype:type,country_code:country,rentalvalues:{listingCategory:'residential'}}}],
       reason:'Organization administrator prepared a dwelling for billing review.'});
-    if(saved===true){setName('');identity.current=crypto.randomUUID();}
   }}>
     <div className="grid gap-3 sm:grid-cols-3">
-      <label className="text-sm">Property name<input className="mt-1 w-full rounded-lg border p-2" required maxLength={255} value={name} onChange={e=>setName(e.target.value)}/></label>
-      <label className="text-sm">Country<select className="mt-1 w-full rounded-lg border p-2" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei</option></select></label>
-      <label className="text-sm">Property type<select className="mt-1 w-full rounded-lg border p-2" value={type} onChange={e=>setType(e.target.value)}><option value="house">House</option><option value="condo">Condominium</option></select></label>
+      <label className="text-sm">Property name<input className="mt-1 w-full rounded-lg border p-2" disabled={busy} required maxLength={255} value={name} onChange={e=>onChange({...draft,name:e.target.value})}/></label>
+      <label className="text-sm">Country<select className="mt-1 w-full rounded-lg border p-2" disabled={busy} value={country} onChange={e=>onChange({...draft,country:e.target.value})}><option value="LK">Sri Lanka</option><option value="BN">Brunei</option></select></label>
+      <label className="text-sm">Property type<select className="mt-1 w-full rounded-lg border p-2" disabled={busy} value={type} onChange={e=>onChange({...draft,type:e.target.value})}><option value="house">House</option><option value="condo">Condominium</option></select></label>
     </div>
     <button className={button} disabled={busy||!name.trim()}>Prepare dwelling</button>
   </form>;
 };
-export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction})=>{
+export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason})=>{
   const reductionScheduled=Number.isSafeInteger(data?.pendingQuantity)&&data.pendingQuantity>0
     &&data.pendingQuantity<data.billedQuantity&&!data.cancelAtPeriodEnd;
   const renewalTime=data?.paidThrough?Date.parse(data.paidThrough):NaN;
@@ -38,7 +35,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
     {data.stagingEnabled&&<section aria-labelledby="prepared-stock-title" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
       <h2 id="prepared-stock-title" className="text-xl font-semibold">Prepare additions</h2>
       <p className="text-sm text-slate-600">Prepare a dwelling before billing is set up. It stays private and unavailable for tenancy until billing is confirmed. No payment or subscription change is made by preparing it.</p>
-      <PreparedStockForm busy={busy} onAction={onAction}/>
+      <PreparedStockForm busy={busy} onAction={onAction} draft={stockDraft} onChange={onStockDraftChange}/>
       {data.pendingStock?.length>0&&<div><h3 className="font-semibold">Awaiting billing confirmation</h3><ul className="mt-2 space-y-2 text-sm">{data.pendingStock.map(item=><li key={item.id}>{item.label} · {item.kind==='property'?'Property':'Unit'}</li>)}</ul>
         <button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('stock/withdraw',{ids:data.pendingStock.map(item=>item.id),reason:'Organization administrator withdrew prepared additions before management activation.'})}>Withdraw prepared additions</button>
         <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed {data.proposedInventoryQuantity===1?'dwelling':'dwellings'}. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
@@ -60,7 +57,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
         </div>
         {data.pendingOperation&&<div className="space-y-2 text-sm text-amber-800">
           <p>An operation is awaiting confirmation: {data.pendingOperation.kind.replaceAll('_',' ')}.</p>
-          <button className={button} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button>
+          <button className={button} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind==='cessation'?'stock/cessation':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button>
           {(data.pendingOperation.kind==='quantity_apply'||(data.pendingOperation.kind==='cancellation'&&data.pendingOperation.payload.cancelAtPeriodEnd===true))&&<div>
             <p>If a cancellation was interrupted, check whether it already took effect. This check does not repeat the change.</p>
             <button className={`${button} mt-2`} disabled={busy} onClick={()=>onAction('reconcile-cancellation',{},data.pendingOperation.id)}>Check cancellation result</button>
@@ -80,7 +77,15 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
         </div>}
       </>}
     </section>
-    <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="py-3 text-sm">{item.label}</li>)}</ul></section>
+    {cessation&&<section aria-labelledby="cessation-title" className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <h2 id="cessation-title" className="text-xl font-semibold">End management: {cessation.label}</h2>
+      <p className="text-sm">Management ends only after tenancy, financial, maintenance and reservation obligations are closed. Existing records and documents are retained.</p>
+      <p className="text-sm">{cessation.remainingManagedDwellings} managed {cessation.remainingManagedDwellings===1?'dwelling':'dwellings'} will remain. {cessation.timing==='cancel_at_renewal'?'The subscription will end at renewal.':'The lower billed quantity starts at renewal.'} The current period remains billed with no immediate refund.</p>
+      {!cessation.eligible&&<ul role="alert" className="list-disc space-y-2 pl-5 text-sm">{cessation.blockers.map(item=><li key={item.code}>{item.message} ({item.count})</li>)}</ul>}
+      <label className="block text-sm">Reason for ending management<textarea className="mt-1 w-full rounded-lg border p-2" disabled={busy} minLength={10} maxLength={1000} value={cessationReason} onChange={e=>onCessationReason(e.target.value)}/></label>
+      <button className={button} disabled={busy||!cessation.eligible||cessationReason.trim().length<10} onClick={()=>onAction('stock/cessation',{propertyId:cessation.propertyId,unitId:cessation.unitId,inventoryHash:cessation.inventoryHash,reason:cessationReason})}>Confirm management cessation</button>
+    </section>}
+    <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span>{data.cessationEnabled&&<button className={button} disabled={busy} onClick={()=>onAction('stock/cessation-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review ending management</button>}</li>)}</ul></section>
   </>}
 </div>;
 };
@@ -89,24 +94,30 @@ export default function ManagementSubscription(){
   const {user,membership}=useAuth();
   const tenantId=membership?.tenant_id || user?.tenant_id;
   const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preview,setPreview]=useState(null);
+  const [stockDraft,setStockDraft]=useState(()=>({id:crypto.randomUUID(),name:'',country:'LK',type:'house'}));
+  const [cessation,setCessation]=useState(null),[cessationReason,setCessationReason]=useState('');
   const context=useRef('');context.current=`${user?.id}:${tenantId}`;
   const requests=useRef(new Map());
   const load=async()=>{const scope=context.current;setLoading(true);setError('');try{const result=await requestMssqlApi('/api/management-billing/status');if(context.current===scope)setData(result);}catch(e){if(context.current===scope)setError(e.message);}finally{if(context.current===scope)setLoading(false);}};
-  useEffect(()=>{setData(null);setPreview(null);setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
+  useEffect(()=>{setData(null);setPreview(null);setCessation(null);setCessationReason('');setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
   const action=async(kind,payload,resumeId)=>{
     const scope=context.current;setBusy(true);setNotice('');
     const key=`${scope}:${kind}:${JSON.stringify(payload)}`;
     let requestId=resumeId || requests.current.get(key);
     if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
     try{
-      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')?payload:{...payload,requestId}});
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')&&kind!=='stock/cessation'?payload:{...payload,requestId}});
       if(context.current!==scope)return;
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
-      if(kind==='quantity-preview')setPreview(result);else{setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
+      if(kind==='stock/cessation-preview'){setCessation(result);setCessationReason('');setPreview(null);}
+      else if(kind==='quantity-preview'){setPreview(result);setCessation(null);}
+      else{setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
+      if(kind==='stock/prepare')setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});
+      if(kind==='stock/cessation')setNotice('Management ended. Billing changes apply at renewal; historical records remain available.');
       await load();
       return true;
     }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500)requests.current.delete(key);await load();}}finally{if(context.current===scope)setBusy(false);}
   };
-  return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview}} onReload={load} onAction={action}/>;
+  return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason}} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
 }

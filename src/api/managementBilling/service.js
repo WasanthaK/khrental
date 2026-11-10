@@ -104,6 +104,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       inventoryHash:hash(proposedInventory),inventoryQuantity:inventory.length,proposedInventoryQuantity:proposedInventory.length,
       stagingEnabled:Boolean(store.stagingEnabled?.()),pendingStock:staged.map(row=>({id:row.id,kind:row.kind,
         label:JSON.parse(row.payload_json)[row.kind==='property'?'name':'unitnumber']})),
+      cessationEnabled:Boolean(store.cessationEnabled?.()),
       billedQuantity:account?.quantity || 0,pendingQuantity:account?.pending_quantity ?? null,
       status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account),
       cancelAtPeriodEnd:Boolean(account?.cancel_at_period_end),paidThrough:account?.paid_through || null,
@@ -132,7 +133,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       // strand a workspace. Ambiguous provider outcomes and resumed commands remain pending.
       const noRemoteChange=new Set(['BILLING_INVENTORY_CHANGED','BILLING_SUBSCRIPTION_EXISTS','BILLING_CUSTOMER_REQUIRED',
         'BILLING_PORTAL_UNSAFE','BILLING_CANCELLATION_UNAVAILABLE','BILLING_GOOD_STANDING_REQUIRED','BILLING_INVENTORY_EMPTY',
-        'BILLING_PREVIEW_REQUIRED','BILLING_PREVIEW_EXPIRED','BILLING_PREVIEW_STALE']);
+        'BILLING_PREVIEW_REQUIRED','BILLING_PREVIEW_EXPIRED','BILLING_PREVIEW_STALE','BILLING_CESSATION_BLOCKED','BILLING_CESSATION_QUANTITY_REVIEW']);
       if(started.createdNow&&noRemoteChange.has(error.code))await store.locked(tenantId,async q=>{
         await q(`UPDATE dbo.management_billing_commands SET status='failed',result_json=@result,completed_at=SYSUTCDATETIME()
           WHERE id=@id AND status='pending'`,{id,result:JSON.stringify({error:error.message,code:error.code,status:error.status})});
@@ -277,14 +278,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       nextInvoiceTotalMinor:invoice?.total ?? null,currency:invoice?.currency || 'usd',
       timing:target===0?'cancel_at_renewal':target>account.quantity?'prorated_next_invoice':target<account.quantity?'next_renewal':'unchanged'};
   }});
-  const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
-    const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
-      AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
-    if(!row) throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');
-    const preview=JSON.parse(row.result_json);
-    const inventory=await store.inventory(tenantId,q,{includePending:true});
-    if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
-      throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
+  const applyQuantityLocked=async(q,{tenantId,id,account,key,resuming,preview,inventory})=>{
     account=await reconcileLocked(q,account);
     const cancellationRetry=resuming && preview.to===0 && preview.timing==='cancel_at_renewal'
       && entitlement(account).state==='ending';
@@ -338,7 +332,54 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
       {tenantId,inventory:JSON.stringify(await store.inventory(tenantId,q)),pending:target<confirmed.quantity?target:null});
     return {currentQuantity:confirmed.quantity,nextRenewalQuantity:target,timing:preview.timing};
+  };
+  const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
+    const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
+      AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
+    if(!row) throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');
+    const preview=JSON.parse(row.result_json);
+    const inventory=await store.inventory(tenantId,q,{includePending:true});
+    if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
+      throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
+    return applyQuantityLocked(q,{tenantId,id,account,key,resuming,preview,inventory});
   }});
+  const cessationPreview=async({tenantId,actorId,propertyId,unitId=null})=>{
+    if(!store.cessationEnabled?.())throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');
+    await stripe.assertAccount();
+    return store.locked(tenantId,async q=>{
+      await store.assertActor(q,tenantId,actorId);
+      const account=await reconcileLocked(q,await requireAccount(tenantId,q));
+      const preview=await store.cessationPreviewLocked(q,{tenantId,actorId,propertyId,unitId});
+      const items=await store.inventory(tenantId,q);
+      const remaining=items.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
+      const blockers=[...preview.blockers];
+      if(!['active','ending'].includes(entitlement(account).state))blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});
+      const {record,...visible}=preview;
+      return {...visible,eligible:!blockers.length,blockers,currentBilledQuantity:account.quantity,remainingManagedDwellings:remaining.length,
+        timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'next_renewal'};
+    });
+  };
+  const ceaseStock=async({tenantId,id,actorId,propertyId,unitId=null,inventoryHash,reason})=>{
+    if(!store.cessationEnabled?.())throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');
+    return runCommand({tenantId,id,actorId,kind:'cessation',payload:{propertyId,unitId,inventoryHash,reason},action:async(q,account,key,resuming)=>{
+      account=await reconcileLocked(q,account);
+      if(!['active','ending'].includes(entitlement(account).state))throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription to good standing before confirming this management and billing change.');
+      const result=await store.ceaseStockLocked(q,{tenantId,actorId,id,propertyId,unitId,inventoryHash,reason});
+      const inventory=await store.inventory(tenantId,q);
+      if(inventory.length>account.quantity)throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the existing inventory and billed quantity before ending management. No stock or subscription change was saved.');
+      let billing;
+      if(result.alreadyCeased||account.cancel_at_period_end){
+        await q('UPDATE dbo.management_billing_accounts SET inventory_json=@inventory WHERE tenant_id=@tenantId',{tenantId,inventory:JSON.stringify(inventory)});
+        if(account.cancel_at_period_end)await q('UPDATE dbo.management_billing_accounts SET pending_quantity=0 WHERE tenant_id=@tenantId',{tenantId});
+        billing={currentQuantity:account.quantity,nextRenewalQuantity:account.cancel_at_period_end?0:account.pending_quantity??account.quantity,
+          cancelAtPeriodEnd:Boolean(account.cancel_at_period_end)};
+      }else{
+        const preview={from:account.quantity,to:inventory.length,timing:inventory.length?'next_renewal':'cancel_at_renewal'};
+        billing=await applyQuantityLocked(q,{tenantId,id,account,key,resuming,preview,inventory});
+      }
+      return {...billing,managementEnded:true,propertyId,unitId,ceasedAt:new Date(result.record.ceased_at).toISOString()};
+    }});
+  };
   const webhook=async event=>{
     await stripe.assertAccount();
     const supported=/^(checkout\.session\.(completed|async_payment_succeeded|async_payment_failed)|customer\.subscription\.(created|updated|deleted)|invoice\.(paid|payment_failed)|charge\.(refunded|dispute\.created)|radar\.early_fraud_warning\.created)$/;
@@ -367,5 +408,5 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       return {received:true};
     });
   };
-  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,quantityPreview,quantityApply,webhook,price};
+  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,quantityPreview,quantityApply,cessationPreview,ceaseStock,webhook,price};
 };
