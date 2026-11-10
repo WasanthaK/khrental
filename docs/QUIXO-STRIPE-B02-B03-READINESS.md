@@ -1,5 +1,74 @@
 # Quixo.Homes Stripe B02/B03 — merchant readiness and dwelling policy
 
+## Controlling commercial decision pack — 10 November 2026
+
+The 9 November owner decisions and 10 November completion handoff supersede older open questions below about post-expiry management writes, cessation eligibility and the last dwelling. This section prepares exact reviewable choices without publishing a price, changing provider settings or requesting repeated owner input while the owner is away.
+
+### Approved contract retained
+
+| Topic | Controlling treatment |
+| --- | --- |
+| Base/monthly/no trial | USD 5 per independently rentable managed residential dwelling per month; no trial and no separate listing fee |
+| Additions | Server-computed dwelling quantity; ordinary increases prorated onto the next invoice using the accepted preview/confirmation flow |
+| Removal | Audited obligations-closed cessation; quantity reduction at next renewal, with no immediate current-period reduction credit |
+| Zero stock | Final dwelling schedules cancellation at renewal; retain current billed quantity, never send subscription quantity zero; renewal cannot be restored with empty eligible stock |
+| Expiry | Management read-only, including existing-tenancy management writes; retain authorized historical reading and SaaS recovery |
+| Cessation | Only after applicable tenancy, financial, maintenance and hold obligations close; tenancy closure/relisting is a different operation |
+| Regions/charging | Sri Lanka readiness first; Brunei separately subsequent; live charging remains disabled |
+
+### CM01.3 exact calculation choices prepared, not selected
+
+Retain the owner's LKR 25,000 threshold and 2 percent excess direction. The candidate calculation below is a concrete proposal for the unresolved complete formula; it is not a newly approved commercial rule or a deployed price. No illustrative rate is substituted for an approved FX source.
+
+Let `R` be one dwelling's monthly contractual rent in LKR and `F` the approved LKR-per-USD conversion rate. Candidate per-dwelling monthly fee: USD 5 plus `0.02 × max(R − 25,000, 0) / F`. Proposed rounding: compute using decimal/rational arithmetic, convert once to USD cents using half-up rounding, then sum the per-dwelling rounded charges. A different aggregation/rounding choice needs an explicit decision. Do not use floating-point estimates to settle invoices.
+
+| Monthly dwelling rent | Excess rent above LKR 25,000 | 2% of that excess | Proposed monthly USD cents before tax |
+| --- | --- | --- | --- |
+| LKR 20,000 | LKR 0 | LKR 0 | 500 |
+| LKR 25,000 | LKR 0 | LKR 0 | 500 |
+| LKR 25,001 | LKR 1 | LKR 0.02 | `round_half_up(500 + 2/F)` |
+| LKR 50,000 | LKR 25,000 | LKR 500 | `round_half_up(500 + 50,000/F)` |
+| LKR 100,000 | LKR 75,000 | LKR 1,500 | `round_half_up(500 + 150,000/F)` |
+
+One owner decision remains to bind the exact rent/excess basis, approved FX source, rate observation/fallback time, whether the rate locks per period or price version, and per-dwelling versus invoice rounding. Boundary examples above are symbolic and deterministic; they establish no current exchange rate or tax amount. Existing sandbox USD 5 prices remain unchanged. `parsePricing` deliberately rejects percentage/FX publication until the commercial contract is implemented and approved; a draft `pending` rule must not be published as complete.
+
+### CM01.4–CM01.7 concrete publication and reactivation proposal
+
+| Topic | Reviewable proposed treatment | Required evidence before acceptance/publication |
+| --- | --- | --- |
+| Version/effective date | Save immutable commercial version with formula, currency, FX convention, rounding, tax presentation, effective UTC instant and approver; preview each customer cohort before publication | Current draft/version/preview controls exist; final commercial percentage implementation and approval are still missing. Never silently reprice existing subscriptions |
+| Existing customers | Preserve each existing subscription's recorded commercial version unless a separately approved change and notice process applies | Exact grandfathering/notice decision and a provider/application cohort readback |
+| Restore before paid period ends | Restore only through staged inventory authority; show any renewal schedule/resumption change explicitly; no arbitrary reactivation fee. Existing already-paid quantity is not charged twice | Approved timing plus provider preview, quantity/schedule confirmation and staged promotion proof |
+| Restore after expiry | Stage stock; require genuine confirmed payment under the approved effective commercial rule before management/public promotion. Prepare either a new period/subscription or a supported provider recovery operation based on actual object status | Owner selects the commercial treatment; source currently rejects duplicate Checkout when an existing subscription binding remains, so post-cancellation reactivation needs engineering rather than a new manual charge |
+| Exceptional bulk increase | Preserve ordinary next-invoice additions. If a separate exceptional path is needed, require a stated quantity/value threshold, approving role and visible preview/consent/audit; apply no invented threshold | Supported scope decision that the exception is unnecessary, or one approved explicit threshold/authority rule |
+| Credits/refunds | Preserve accepted next-renewal reductions and period-end cancellation. Do not infer a general no-refund policy from absence of immediate removal credits | Approved SaaS refund/credit/dispute treatment reconciled with actual provider settings and customer notice |
+
+Draft customer wording for already approved behavior: **“Your changes will be shown for review before you confirm. Added dwellings are prorated on your next invoice. Approved removals reduce the quantity at renewal. If you stop managing the final dwelling, your subscription ends at the end of the paid period. After access ends, management is read-only; your authorized historical records and subscription recovery remain available.”** Keep it as draft until the complete actual flow and final terms are reviewed. It does not describe renter rent/deposit collection, guarantee tax handling or settle the unresolved refund/reactivation terms.
+
+### CM02 readiness facts and owner-only evidence held
+
+Fresh 10 November connector inventory exposes only the approved Quixo Homes sandbox, `acct_1UTgcdQ4sARuLNQa`, with `livemode=false`. Therefore no current live collection/payout/merchant eligibility, actual bank destination, live tax registration or accepted Managed Payments terms is established here. Earlier account properties and fee/tax research below are dated historical observations, not a current live determination. No live account, bank detail, tax toggle, price, subscription or charge was created or edited.
+
+| Item | Exact evidence still needed | Prepared implementation/review boundary |
+| --- | --- | --- |
+| Intended merchant | Approved legal entity/name/address/country, actual Stripe live account, collection capability, outstanding verification requirements and payout readiness/destination confirmation | Read-only verification first; never substitute another merchant or change bank details to obtain a green status |
+| Tax | Merchant/customer country responsibilities, actual applicable registration evidence, tax-inclusive/exclusive presentation and approved SaaS invoice issuer | Verify current authoritative jurisdiction-specific sources after actual business facts are established. Do not enable `automatic_tax` or assert compliance from sandbox settings |
+| Privacy roles | Approved service entity/contact; Quixo/organization controller/processor responsibilities for actual operations | Reconcile exact policy text with deployed data processing rather than treating published company pages as substantive approval |
+| Providers/transfers | Actual provider account contracts, data locations/jurisdictions, subprocessors and transfer safeguards | Source identifies Azure runtime/SQL, R2 object storage, Evia documents, outbound email and Stripe billing; exact account-specific data locations and transfer facts must be evidenced. A runtime region does not establish all provider storage locations |
+| Retention/deletion | Approved purpose-based retention criteria, hold authority, actor verification, backup expiry/restoration limits and response process | Signed/staged Evia evidence remains protected from deletion. No retention period, legal hold expiry, purge or backup guarantee is invented |
+
+### CM02.5 prepared request-handling runbook, operational proof pending
+
+1. Record receipt, request ID, stated scope and requested outcome without copying credentials or excess personal data into the case.
+2. Verify the requester using existing authenticated authority; resolve global identity, organization membership and any legally authorized representative separately. Email spelling alone is not proof.
+3. Resolve exact record ownership and authorized scope. Identify signed artifacts, financial history, tenancy obligations and actual holds before deciding an action.
+4. Record the approved retention/hold decision and actor. When policy, legal authority or scope is unresolved, hold destructive action and continue separable work. Historical access remains governed by its existing permissions.
+5. Execute only an authorized action through the existing protected API, with durable audit, consistent storage/database results, failure/retry handling and a verified readback. Use reversible controlled fixtures for operational proof; do not purge real records to demonstrate a workflow.
+6. Explain the actual outcome and any retained material/backup limits in a scoped response. Record response time and actor. Do not promise immediate deletion from backups without verified capability and approved policy.
+
+This runbook is preparation, not an invented received request, completed deletion, legal approval or operational acceptance. A controlled end-to-end request and actual backup evidence remain open. The consolidated readiness and task dispositions are in `R5-LIFECYCLE-ACCEPTANCE-20261105.md`.
+
+
 ## Controlling billing test-account decision — 2026-10-27
 
 The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
