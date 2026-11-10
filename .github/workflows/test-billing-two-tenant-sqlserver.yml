@@ -23,6 +23,7 @@ on:
       - 'src/services/platformClient.js'
       - 'src/api/platform/billingRouter.js'
       - 'src/api/platform/monthlyBillingService.js'
+      - 'src/api/platform/monthlyBillingRouter.js'
       - 'src/api/platform/monthlyBillingScheduler.js'
       - 'src/api/managementBilling/**'
       - 'scripts/verify-phase4-payment-lifecycle-http.mjs'

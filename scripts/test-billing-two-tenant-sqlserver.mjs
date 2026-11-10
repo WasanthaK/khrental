@@ -1452,6 +1452,43 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       await denied(label, periodIndex % 2 ? 'automatic_scheduler' : 'manual');
     }
 
+    // Use a real disposable administrator session and the production router.
+    // Caller flags/body tenant cannot disable the server-owned selected scope.
+    const {createAuthRecord, issueAuthSession, createSessionAuthMiddleware} = await import('../src/api/auth/index.js');
+    const {createMonthlyBillingRouter} = await import('../src/api/platform/monthlyBillingRouter.js');
+    const authId = crypto.randomUUID();
+    const email = `monthly-guard-${crypto.randomBytes(6).toString('hex')}@example.invalid`;
+    const admin = await first(pool, `INSERT INTO app_users (tenant_id,name,email,role,user_type,auth_id)
+      OUTPUT INSERTED.id VALUES (@tenantId,'Disposable billing administrator',@email,'admin','admin',@authId)`,
+      {tenantId:scoped.tenantId, email, authId});
+    await query(pool, `INSERT INTO tenant_memberships (tenant_id,app_user_id,role,status,is_default)
+      VALUES (@tenantId,@userId,'admin','active',1)`, {tenantId:scoped.tenantId,userId:admin.id});
+    const record = await createAuthRecord({authId,appUserId:admin.id,email,role:'admin',password:crypto.randomBytes(24).toString('base64url')});
+    const token = (await issueAuthSession(record)).accessToken;
+    const app = express();
+    app.use(express.json());
+    app.use(createSessionAuthMiddleware());
+    app.use('/api/billing',createMonthlyBillingRouter());
+    app.use((error,_req,res,_next)=>res.status(error.status || 500).json({error:error.message,code:error.code}));
+    const server = await new Promise(resolve=>{const listening=app.listen(0,'127.0.0.1',()=>resolve(listening));});
+    try {
+      const post = () => fetch(`http://127.0.0.1:${server.address().port}/api/billing/monthly-invoices`,{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+        body:JSON.stringify({billingPeriod:'2035-11',tenantId:unscoped.tenantId,
+          MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+      const before = await snapshot();
+      const deniedResponse = await post();
+      assert.equal(deniedResponse.status,403);
+      const deniedBody = await deniedResponse.json();
+      assert.equal(deniedBody.code,'MANAGEMENT_READ_ONLY');
+      assert.match(deniedBody.error,/Management is read-only/);
+      assert.deepEqual(await snapshot(),before);
+      await setState('');
+      const allowedResponse = await post();
+      assert.equal(allowedResponse.status,200);
+      assert.equal((await allowedResponse.json()).data.created.length,1);
+    } finally { await new Promise(resolve=>server.close(resolve)); }
+
     for (const [label, change] of [
       ['Paid active subscription', 'cancel_at_period_end=0'],
       ['Period-end cancellation remains paid until expiry', 'cancel_at_period_end=1'],
@@ -2329,8 +2366,6 @@ async function main() {
     assert.equal((await query(pool,
       'SELECT id FROM utility_readings WHERE tenant_id = @tenantId AND invoice_id = @invoiceId',
       { tenantId: a.tenantId, invoiceId: invoiceB })).length, 0);
-
-    await verifyMonthlyManagementAccessAgainstDisposableSql(pool);
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);
@@ -3271,6 +3306,10 @@ async function main() {
 
     // Keep the new signed mutation fixture after every existing read-only browser journey.
     await verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b);
+
+    // Extra invoice fixtures must follow the established global read-only
+    // snapshot assertions, whose expected event counts remain unchanged.
+    await verifyMonthlyManagementAccessAgainstDisposableSql(pool);
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
