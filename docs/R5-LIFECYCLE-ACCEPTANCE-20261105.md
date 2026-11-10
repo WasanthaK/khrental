@@ -1,5 +1,22 @@
 # Current R5 prelaunch completion ledger — 10 November 2026
 
+## Transactional management-write completion checkpoint — 10 November 2026
+
+Four reviewed implementation PRs are merged. This advances BL08.3/BL08.4/BL08.5 source and disposable acceptance; it does **not** complete BL08, enable management enforcement, certify live actor/resource acceptance or launch R5. No Stripe/Evia operation, retained production billing record, occupied stock, signed artifact, password, payout setting or rollout enable flag was changed by these tests.
+
+| Change | Merged source | Reviewed evidence | Serving evidence |
+| --- | --- | --- | --- |
+| [#540](https://github.com/WasanthaK/khrental/pull/540) direct billing and maintenance | `209e4092c44249711c46d03e227a107e4918d1d3` | Final head `be2c74ea`; full authorization **912/912**, build, real-session disposable SQL/browser, migration/readiness/regression checks passed | Ready **0000477**; independent public build matched and SQL health HTTP 200 |
+| [#541](https://github.com/WasanthaK/khrental/pull/541) onboarding, activation and exit | `0276417b487c77067eb46ff16b24ba259fe1b237` | Reviewed head `fa56a10d`; all 7 applicable checks passed, including full rental transaction chain, expiry denial snapshots, rollback and retained reads | Ready **0000478**; release verified exact source and live SQL connectivity |
+| [#542](https://github.com/WasanthaK/khrental/pull/542) generic/repository/import/RPC, utilities and invoice master | `dbfb6bb76e0c0da05f7a8584d470c9b9ca0614b5` | Reviewed head `e39173b0`; all 9 checks passed. Actual SQL proved expired alternate-write denial, no caller override, atomic failed insert/upsert and valid bulk success | Ready **0000479**; independent build and SQL HTTP 200 at **10 November 2026 11:56 Asia/Colombo** |
+| [#543](https://github.com/WasanthaK/khrental/pull/543) owner rental/public listing commands and protected deletion | `9e92e61eafba5b7f00821c3cf6953d6ed8365b7c` | Reviewed head `9059131b`; all 7 applicable checks passed. Owner SQL proved enquiry/viewing/application/offer/agreement expiry denial with unchanged domain/hold/membership state. Dedicated deletion and public-writer expiry checks passed | [Release 42768760901](https://github.com/WasanthaK/khrental/actions/runs/42768760901) **passed**, Ready **0000480**, exact source/live SQL verified. Independent public build and SQL HTTP 200 matched at **10 November 2026 12:04:30 Asia/Colombo** |
+
+Final #543 review evidence: [authorization/build](https://github.com/WasanthaK/khrental/actions/runs/42768223781/job/129669653710), [disposable billing/tenancy SQL](https://github.com/WasanthaK/khrental/actions/runs/42768224126/job/129669657102), [rental transaction and owner expiry](https://github.com/WasanthaK/khrental/actions/runs/42768223791/job/129669652766), [enquiry SQL/browser](https://github.com/WasanthaK/khrental/actions/runs/42768223763/job/129669730472), [default-public/privacy](https://github.com/WasanthaK/khrental/actions/runs/42768223771/job/129669652779). All are fixtures; none supplies a genuine recurring Stripe renewal, inbox receipt or Evia audit artifact.
+
+Disposable SQL jobs completed successfully through their `finally` cleanup, removing their own isolated Docker databases/containers. The only deletion exercised was an explicitly unsigned, cancelled disposable agreement; production retained history was untouched. There are no new migrations or release-schema steps. The release reuses the existing pipeline, single-replica topology and secret bindings. No enforcement scope was configured by this execution; the handoff baseline remains OFF. An independent authenticated runtime flag/scope readback and controlled rollout acceptance remain open under BL08.2/12. Rollback uses the existing release procedure with the preceding verified source (for #543, `dbfb6bb76e0c0da05f7a8584d470c9b9ca0614b5`), without schema rollback or deleting data.
+
+The exact commercial calculation examples, version/publication/customer-cohort proposal, before/after-period-end restoration choices, refund/bulk decision and retention request runbook are prepared in the [existing commercial readiness record](QUIXO-STRIPE-B02-B03-READINESS.md#controlling-commercial-decision-pack--10-november-2026). They remain draft; no price, policy, tax configuration, merchant profile or live charge was published. Owner-only decisions are held for the owner's return.
+
 ## Autonomous completion handoff checkpoint — 10 November 2026
 
 Execution follows the owner's 10 November completion handoff. Owner-dependent actions are held while independent engineering proceeds. Accepted signing, controlled rental operations, two sandbox subscriptions and R1/R3/R4 dispositions remain closed within their recorded scope. R2 remains deferred; Brunei remains subsequent. Live charging and management enforcement rollout remain disabled.
@@ -12,7 +29,7 @@ Bounded external discovery:
 
 - Only the approved Stripe sandbox `acct_1UTgcdQ4sARuLNQa` is connected (`livemode=false`). A fresh supported-operation search for billing test-clock advancement returned clock **creation only**. No clock, retained subscription, payment method or schedule was mutated. Genuine recurring lifecycle and live merchant evidence remain unavailable through this connection.
 - Evia's current v2 index and authentication overview were inspected on 10 November. The overview documents authorization-code authentication; the index lists API-app/API-key and completed-webhook-package pages, but both detailed pages could not be retrieved by the research tool. This does not establish that service exchange is unsupported or explain the earlier 404/501 responses. No repeated credential/endpoint probes, signing or resend were performed. A working documented service grant or genuine supported package delivery is still required. References: https://docs.sign.enadocapp.com/evia-sign-api/v2 and https://docs.sign.enadocapp.com/evia-sign-api/v2/authorization-and-authentication.
-- Live browser preparation remained visible after one bounded reload. No signed-in session or role authority was established and no credential request was repeated. Independent public HTTP reads returned serving build `5caced59fa6b344ca5b21a91d114203ff9151c90` and `/api/mssql/health` HTTP 200, `connection=ready`. Browser availability is therefore a scoped acceptance limitation, not evidence of a service-wide database outage or a genuine paused-to-ready cycle.
+- Earlier live browser preparation remained visible after one bounded reload. No signed-in session or role authority was established and no credential request was repeated. Independent public HTTP reads returned serving build `5caced59fa6b344ca5b21a91d114203ff9151c90` and `/api/mssql/health` HTTP 200, `connection=ready`. Browser availability is therefore a scoped acceptance limitation, not evidence of a service-wide database outage or a genuine paused-to-ready cycle. A later fresh visible readback after runtime deployments reached the ordinary `https://app.quixo.homes/login` screen. The current live-role prerequisite is secure sign-in, not the earlier preparation screen. This is held until the owner returns; no repeated credential or takeover request was issued and no authenticated role acceptance is claimed.
 - No mailbox, approved platform-administrator session, intended live merchant/payout record, final FX convention or substantive legal/privacy approval was obtained. These dependencies do not block independent source work. Test identities/passwords/tokens are excluded from this record.
 
 ### Transactional endpoint and job matrix
@@ -22,17 +39,45 @@ All entries use server-resolved organization scope; body tenant identifiers or r
 | Writer / exception | Actor and organization authority | Boundary and evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Monthly manual/scheduled invoice generation | Authorized invoice manager / trusted tenant scheduler | Existing SERIALIZABLE transaction; prior real-SQL expiry, lock, rollback and isolation pass | Controlled rollout waits for complete BL08 dependencies |
-| Invoice draft edit; component add/edit/remove | Invoice manager plus persisted property scope, `req.tenantId` | PR #540 transaction begins before access lock; draft fields and new audit commit together; actual HTTP denial and SQL rollback fixtures | Final-head CI/release and affected live acceptance |
+| Invoice draft edit; component add/edit/remove | Invoice manager plus persisted property scope, `req.tenantId` | PR #540 transaction begins before access lock; draft fields and new audit commit together; actual HTTP denial and SQL rollback fixtures | Merged/deployed fixture proof; affected enabled-scope live acceptance remains |
 | Invoice issue, resend, failed-delivery retry, reference supplement | Invoice manager plus property scope | PR #540 guards original SERIALIZABLE command transaction before invoice/reference/delivery-attempt changes | Wider remaining role/concurrency matrix and live results |
 | Rent payment proof, verification, manual payment and receipt effects | Existing renter ownership or payment-manager/property authority | PR #540 guards actual payment/invoice/receipt transaction; these are rental records, separate from SaaS recovery | Remaining renter proof and receipt-specific enabled-scope cases |
-| Adjustment create/void; reminder record/send | Invoice manager plus agreement/invoice property scope | PR #540 guards create/void and dispatch-attempt transaction; reminder timestamp and event share transaction | Final-head proof; reminder result is an authorized continuation |
+| Adjustment create/void; reminder record/send | Invoice manager plus agreement/invoice property scope | PR #540 guards create/void and dispatch-attempt transaction; reminder timestamp and event share transaction | Merged/deployed fixture proof; enabled-scope live acceptance remains; reminder result is an authorized continuation |
 | Maintenance create/assign/start/complete/cancel | Renter's active tenancy or manager/assigned-worker authority | PR #540 guards actual lifecycle transaction before domain/event/notification writes | Dedicated live role matrix; activation/exit still separate |
 | Maintenance comments/images | Existing request ownership/worker/resource policy | PR #540 wraps standalone insert in shared guarded transaction | Image URL/access and broader stale-authority enabled-scope cases |
 | Invoice/receipt/history reads; SaaS recovery | Existing authorized tenant/renter/billing authority | No new management-write gate; retained invoice account HTTP read tested | Final deployed role readback |
 | Delivery-result persistence | Previously authorized durable dispatch attempt | Original result/audit path remains writable after expiry; never authorizes a new dispatch | Complete asynchronous reconciliation inventory |
-| Onboarding, activation, notices, inspection, settlement, closure | Existing agreement/resource authority | Follow-up source guards atomic SQL batches and existing transactions; billing-day audit, checklist completion and settlement/first-item persistence now share their mutation transaction | Follow-up full SQL/CI/release and enabled-scope acceptance |
-| Generic platform/MSSQL repositories/imports and other jobs | Actual server tenant context plus existing table/resource policy | Existing lifecycle bypass guards preserved; no claim of complete expiry enforcement | BL08.5/BL08.11 engineering and complete matrix |
+| Onboarding, activation, notices, inspection, settlement, closure | Existing agreement/resource authority | PR #541 merged/deployed: atomic SQL batches and existing transactions; billing-day audit, checklist completion and settlement/first-item persistence share their mutation transaction | Full SQL/CI/release passed; enabled-scope actor/resource acceptance remains |
+| Generic platform/MSSQL repositories/imports and other jobs | Actual server tenant context plus existing table/resource policy | PR #542 merged/deployed: business generic/import/RPC and repository paths guarded; batch insert/upsert uses one transaction | Stock staging, complete asynchronous inventory and live actor/resource matrix remain |
+| Owner enquiry/viewing/application/offer decisions and agreement bridge; public preferences/photo writes | Live owner/session/organization authority or authenticated public-listing administrator | PR #543 checks management authority in the original mutation transaction; reads and factual system expiry remain separate | Final release plus affected live scope acceptance |
 | Managed stock create/import/restore/split/cessation | Trusted inventory/billing/domain authority required | No staging or cessation implementation claimed by PR #540 | BL08.6/7/9/10/11 engineering |
+
+### Remaining stock and asynchronous engineering — explicit next slice
+
+This is independent unfinished engineering, not an owner-login blocker. No rollout may be enabled until it is implemented and accepted:
+
+- Provisional create/import must remain durable pending stock, including a setup path before paid enrollment, without conferring management/public rights. The newly guarded normal write APIs alone do not implement that setup exception.
+- A stable governed inventory identity must distinguish managed, pending and ceased stock independently of vacancy/publication. Creating child units must not prematurely replace a valid managed parent or expose pending units.
+- Preview and explicit provider confirmation must promote exactly the intended pending inventory version, with durable operation ownership and retry after ambiguous provider success. Existing quantity commands are a foundation; they do not perform inventory promotion.
+- Restoration/splits must reuse that boundary and the final approved commercial timing. Concurrent or failed operations must leave existing managed stock valid.
+- Cessation must lock and check actual tenancy, invoice/payment/settlement, maintenance and applicable hold obligations before recording actor, reason, scope and database time. Cessation must retain all history; closure/relisting is not cessation.
+- Public/detail/enquiry/activation eligibility, billable inventory and future subscription quantity must all consume the same governed state, including a ceased standalone parent or child unit. No zero quantity subscription is sent.
+- Jobs, provider events, interrupted imports and pending operations need a complete owned retry/reconciliation inventory, crash-before/after-provider-success proof and stuck-operation diagnostics. Preserve factual completion/evidence writes after expiry rather than pretending external actions did not occur.
+- Complete live stale/revoked actor/resource combinations and controlled scope acceptance after the above source work. Existing account-row locking and database-time checks do not by themselves prove every actor/resource race.
+
+### Availability and unsigned-negative evidence mapping
+
+These are existing automated cases reconciled to the handoff; no accepted signing/operations were repeated. Production rendered/readback acceptance remains distinct.
+
+| State/case | Expected outcome | Existing exact source proof | Remaining evidence |
+| --- | --- | --- | --- |
+| Eligible vacant dwelling | Public category/search/detail and enquiry eligibility allowed | `test-public-listings-sqlserver.mjs`; enquiry SQL eligibility | Remaining representative live rendered/refresh case |
+| Whole-property active tenancy or fully rented stock | Hidden/ineligible, including stale direct lookup | Public SQL exact exported predicates; active whole/unit lease cases | Match remaining rendered stale URL and enquiry response |
+| Partially available building | Only genuinely free independent stock permits listing | Public SQL partial-unit case; rental-offer whole/unit hold race | Remaining rendered/category/detail consistency |
+| Reserved/current accepted hold | Hidden while current; different eligible units remain usable | Enquiry SQL reserved case; rental-offer catalog/media hold proof | Live disposable hold/readback only when authorized session exists |
+| Opted out | Hidden even after rented-to-available transition; another organization cannot change opt-out | Public SQL opt-out/isolation cases | Remaining live refresh/direct-URL pairing |
+| Withdrawn media/source or unavailable stock | Old derivative/detail identity stays unavailable | Public SQL media hard-withdrawal and detail predicate | Remaining rendered missing-image/withdrawn state |
+| Unsigned offer expiry / cancelled draft replacement | Expiry releases eligible stock; old replay never restores hold; cancelled unsigned replacement preserves old record | `test-rental-offers-sql.mjs` expiry audit, stale replay, replacement and signed-evidence denial | Complete agreed live unsigned interruption/negative mapping; never alter accepted signed agreement |
 
 ### Handoff task-level dispositions
 
@@ -43,7 +88,7 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | OP02.1 availability/stock | YELLOW | Preserve accepted closure/relisting; finish remaining rented/withdrawn/opted-out/reserved/stale-URL rendered matrix using disposable stock. |
 | OP08.1 actual mailbox receipt | YELLOW | Provider acceptance remains distinct; obtain controlled intended-mailbox receipt correlated with message and time. |
 | OP09.2 expiry/cancellation/negatives | YELLOW | Existing lifecycle rollback/idempotency proof retained; map and complete outstanding unsigned expiry/conflict/retry cases without altering signed records. |
-| OP10.1 usability | YELLOW | Prior accepted renders retained; complete affected desktop/mobile/keyboard interactions once a usable live session exists. |
+| OP10.1 usability | YELLOW | Prior accepted renders retained; complete affected desktop/mobile/keyboard interactions once a usable live session exists; latest browser readback is the ordinary sign-in page. |
 | OP10.3 natural database pause | YELLOW | HTTP ready observed, not prior pause; wait for authorized telemetry confirming a genuine natural pause and measure recovery. |
 | CT03.4 Evia service/package delivery | RED | Earlier 404/501 unexplained; current detailed docs unavailable through research; obtain supported service grant/package delivery without landlord login. |
 | CT03.5 fresh matching audit retention | RED | Missing genuine matching audit remains failed/open; after CT03.4 recover and retain both genuine artifacts with duplicate/interruption proof. |
@@ -56,16 +101,16 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | BL07.3 complimentary expiry | YELLOW | SQL expiry proof retained; complete deployed bounded expiry/readback while preserving paid access. |
 | BL09.3 zero-stock cancellation | YELLOW | PR #536 deployed; finish genuine deployed disposable-stock confirmation after cessation/staging dependencies. |
 | BL08.2 monthly rollout | YELLOW | Monthly guard deployed, flags off; activate only after complete write/stock/cessation dependencies pass. |
-| BL08.3 invoice/payment/adjustment | YELLOW | PR #540 source and focused evidence; finish final SQL/release, remaining direct-path matrix and deployed acceptance. |
-| BL08.4 maintenance/activation/exit | YELLOW | PR #540 merged for maintenance; follow-up activation/exit source and 122 focused tests prepared; finish final SQL/release and enabled-scope stale-authority acceptance. |
-| BL08.5 generic/import bypass | RED | Existing lifecycle guards retained; implement expiry authority at actual generic/repository/import transaction boundary. |
+| BL08.3 invoice/payment/adjustment | YELLOW | PR #540 merged/deployed with final SQL/build proof; remaining affected live role/resource acceptance and rollout dependencies stay open. |
+| BL08.4 maintenance/activation/exit | YELLOW | PRs #540/#541 merged/deployed with full SQL transaction/expiry/no-partial-write proof; finish enabled-scope live and stale actor/resource acceptance after stock dependencies. |
+| BL08.5 generic/import bypass | YELLOW | PR #542 merged/deployed transactional generic/repository/RPC and utility/master guards with atomic import rollback; stock-staging bypass and broader live actor/resource acceptance remain. |
 | BL08.6 staged create/import | RED | Durable staging remains absent; implement pending additions, confirmed billing promotion and recoverable retries. |
 | BL08.7 staged restore/split | RED | Implement shared staging/quantity authority while retaining unresolved commercial timing as draft. |
 | BL08.11 async reconciliation | RED | Inventory transitional jobs/events/import ownership and implement durable idempotent convergence. |
 | BL08.9 audited cessation | RED | Approved obligations-closed rule retained; implement atomic eligibility, persistence and actor/reason audit. |
 | BL08.10 ceased/restored consistency | RED | Integrate managed inventory, public eligibility, retained history and subscription quantity after cessation/staging. |
 | BL08.12 controlled full rollout | RED | Keep disabled until BL08 engineering and complete endpoint/job acceptance pass; then enable one reversible explicit scope. |
-| CM01.3 LK calculation/FX/rounding | YELLOW | USD 5, LKR 25,000 and 2% direction retained; exact excess/FX/date/minor-unit convention remains an owner decision, not an invented default. |
+| CM01.3 LK calculation/FX/rounding | YELLOW | Exact symbolic boundary examples and a reviewable formula/rounding proposal are prepared in the existing commercial record; final FX/basis choice remains held for the owner. |
 | CM01.4 effective price publication | YELLOW | Existing draft/version/preview controls retained; prepare approved effective commercial version and customer treatment before publication. |
 | CM01.5 reactivation terms | YELLOW | Retain no arbitrary fees; specify exact before/after-period-end restoration treatment after business approval. |
 | CM01.6 exceptional bulk rules | YELLOW | Ordinary next-invoice additions retained; establish whether any exceptional threshold is required without inventing one. |
@@ -73,7 +118,7 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | CM02.1 live merchant/payout | RED | Only sandbox connected; hold live setup until intended entity/country/capability/payout evidence exists. |
 | CM02.2 tax responsibilities | YELLOW | No tax or compliance claim inferred from sandbox; obtain actual merchant/registration facts and current jurisdiction-specific review. |
 | CM02.4 entity/privacy/transfers | YELLOW | Existing publication stays accepted; validate deployed providers/locations/roles and approved entity/contact facts before substantive approval. |
-| CM02.5 retention/deletion/requests | YELLOW | Signed-evidence deletion boundary retained; finish verified request/hold/backup workflow using reversible fixtures and approved retention criteria. |
+| CM02.5 retention/deletion/requests | YELLOW | Request receipt/identity/scope/hold/action/response runbook prepared; protected signed artifacts retained; actual controlled request proof and approved backup/retention criteria remain open. |
 | RG01.1 Sri Lanka launch | RED | Consolidate completed applicable exits and explicit owner scope dispositions; no release-complete assertion while engineering remains. |
 | RG01.2 live charging | RED | Remains disabled; prepare exact entity/account/price/scope/verification/rollback activation only after prerequisites. |
 | RG02.1–RG02.4 Brunei | YELLOW — SUBSEQUENT | Preserve BND/regional fixes; perform separate BN acceptance after LK prerequisites, without making BN an automatic LK blocker. |
