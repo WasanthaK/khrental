@@ -1,3 +1,4 @@
+import { withManagementWrite, runManagementQuery, runSingleManagementQuery } from '../managementBilling/store.js';
 import express from 'express';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
@@ -260,7 +261,7 @@ const buildOnboardingProjection = async (tenantId, agreement) => {
   };
 };
 
-const refreshChecklistCompletion = async (tenantId, checklistId, actorUserId) => {
+const refreshChecklistCompletion = async (tenantId, checklistId, actorUserId, transaction) => {
   const summary = await runSingleQuery(
     `SELECT
        COUNT(*) AS total_items,
@@ -269,7 +270,7 @@ const refreshChecklistCompletion = async (tenantId, checklistId, actorUserId) =>
      FROM tenancy_move_in_checklist_items
      WHERE tenant_id = @tenantId
        AND checklist_id = @checklistId`,
-    { tenantId, checklistId }
+    { tenantId, checklistId }, transaction
   );
 
   const requiredItems = Number(summary?.required_items) || 0;
@@ -289,7 +290,7 @@ const refreshChecklistCompletion = async (tenantId, checklistId, actorUserId) =>
       checklistId,
       actorUserId,
       status: isComplete ? 'completed' : 'open'
-    }
+    }, transaction
   );
 };
 
@@ -377,51 +378,53 @@ export const createTenancyOnboardingRouter = () => {
       const previousBillingDay = resolveAgreementBillingDay(agreement);
       const billingDay = normalizeTenancyBillingDay(requestedBillingDay);
 
-      const updated = await runSingleQuery(
-        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
-UPDATE agreements
-         SET terms = JSON_MODIFY(
-               CASE WHEN ISJSON(terms) = 1 THEN terms ELSE N'{}' END,
-               '$.billingDay',
-               @billingDay
-             ),
-             updatedat = SYSUTCDATETIME()
-         OUTPUT INSERTED.id INTO @rental_changed
-         WHERE tenant_id = @tenantId
-           AND id = @agreementId
-           AND renteeid = @renteeId
-           AND status = 'active';
-SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          renteeId: req.user.id,
-          billingDay
-        }
-      );
+      await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
+        const updated = await runSingleQuery(
+          `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
+  UPDATE agreements
+           SET terms = JSON_MODIFY(
+                 CASE WHEN ISJSON(terms) = 1 THEN terms ELSE N'{}' END,
+                 '$.billingDay',
+                 @billingDay
+               ),
+               updatedat = SYSUTCDATETIME()
+           OUTPUT INSERTED.id INTO @rental_changed
+           WHERE tenant_id = @tenantId
+             AND id = @agreementId
+             AND renteeid = @renteeId
+             AND status = 'active';
+  SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
+          {
+            tenantId: req.tenantId,
+            agreementId: agreement.id,
+            renteeId: req.user.id,
+            billingDay
+          }, transaction
+        );
 
-      if (!updated) {
-        throw createRequestError(409, 'The tenancy changed before the billing day could be updated.', 'TENANCY_STATE_CHANGED');
-      }
-
-      await runQuery(
-        `INSERT INTO tenancy_lifecycle_events (
-           tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata
-         ) VALUES (
-           @tenantId, @agreementId, 'billing_day_changed', 'active', 'active', @actorUserId, @metadata
-         )`,
-        {
-          tenantId: req.tenantId,
-          agreementId: agreement.id,
-          actorUserId: req.user.id,
-          metadata: JSON.stringify({
-            propertyId: agreement.propertyid,
-            previousBillingDay,
-            billingDay,
-            source: 'tenant_portal'
-          })
+        if (!updated) {
+          throw createRequestError(409, 'The tenancy changed before the billing day could be updated.', 'TENANCY_STATE_CHANGED');
         }
-      );
+
+        await runQuery(
+          `INSERT INTO tenancy_lifecycle_events (
+             tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata
+           ) VALUES (
+             @tenantId, @agreementId, 'billing_day_changed', 'active', 'active', @actorUserId, @metadata
+           )`,
+          {
+            tenantId: req.tenantId,
+            agreementId: agreement.id,
+            actorUserId: req.user.id,
+            metadata: JSON.stringify({
+              propertyId: agreement.propertyid,
+              previousBillingDay,
+              billingDay,
+              source: 'tenant_portal'
+            })
+          }, transaction
+        );
+      }});
 
       res.json({
         data: {
@@ -477,7 +480,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       }
       // Serialize retries on the existing agreement row. The ledger and audit
       // event commit together; an ambiguous response can be retried safely.
-      const transaction = await runSingleQuery(
+      const transaction = await runSingleManagementQuery(
         `SET NOCOUNT ON; SET XACT_ABORT ON;
          BEGIN TRY
            BEGIN TRANSACTION;
@@ -553,7 +556,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
 
       // Lock the agreement while creating or filling a legacy empty snapshot.
       // Never replace an existing nonempty inspection or partially commit items.
-      await runQuery(
+      await runManagementQuery(
         `SET NOCOUNT ON; SET XACT_ABORT ON;
          BEGIN TRY
            BEGIN TRANSACTION;
@@ -612,35 +615,37 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         throw createRequestError(400, 'status must be pending or completed.', 'INVALID_CHECKLIST_ITEM_STATUS');
       }
 
-      const item = await runSingleQuery(
-        `UPDATE tenancy_move_in_checklist_items
-         SET status = @status,
-             notes = CASE WHEN @notesProvided = 1 THEN @notes ELSE notes END,
-             completed_by = CASE WHEN @status = 'completed' THEN @actorUserId ELSE NULL END,
-             completed_at = CASE WHEN @status = 'completed' THEN SYSUTCDATETIME() ELSE NULL END,
-             updatedat = SYSUTCDATETIME()
-         OUTPUT INSERTED.*
-         WHERE tenant_id = @tenantId
-           AND checklist_id = @checklistId
-           AND id = @itemId
-           AND EXISTS (SELECT 1 FROM agreements WITH (UPDLOCK,HOLDLOCK) WHERE id=@agreementId AND tenant_id=@tenantId AND status NOT IN ('active','closed','cancelled'))`,
-        {
-          tenantId: req.tenantId,
-          checklistId: checklist.id,
-          itemId: req.params.itemId,
-          agreementId: agreement.id,
-          status,
-          actorUserId: req.user.id,
-          notesProvided: Object.prototype.hasOwnProperty.call(req.body || {}, 'notes') ? 1 : 0,
-          notes: req.body?.notes == null ? null : String(req.body.notes)
+      await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
+        const item = await runSingleQuery(
+          `UPDATE tenancy_move_in_checklist_items
+           SET status = @status,
+               notes = CASE WHEN @notesProvided = 1 THEN @notes ELSE notes END,
+               completed_by = CASE WHEN @status = 'completed' THEN @actorUserId ELSE NULL END,
+               completed_at = CASE WHEN @status = 'completed' THEN SYSUTCDATETIME() ELSE NULL END,
+               updatedat = SYSUTCDATETIME()
+           OUTPUT INSERTED.*
+           WHERE tenant_id = @tenantId
+             AND checklist_id = @checklistId
+             AND id = @itemId
+             AND EXISTS (SELECT 1 FROM agreements WITH (UPDLOCK,HOLDLOCK) WHERE id=@agreementId AND tenant_id=@tenantId AND status NOT IN ('active','closed','cancelled'))`,
+          {
+            tenantId: req.tenantId,
+            checklistId: checklist.id,
+            itemId: req.params.itemId,
+            agreementId: agreement.id,
+            status,
+            actorUserId: req.user.id,
+            notesProvided: Object.prototype.hasOwnProperty.call(req.body || {}, 'notes') ? 1 : 0,
+            notes: req.body?.notes == null ? null : String(req.body.notes)
+          }, transaction
+        );
+
+        if (!item) {
+          throw createRequestError(404, 'Checklist item not found.', 'MOVE_IN_CHECKLIST_ITEM_NOT_FOUND');
         }
-      );
 
-      if (!item) {
-        throw createRequestError(404, 'Checklist item not found.', 'MOVE_IN_CHECKLIST_ITEM_NOT_FOUND');
-      }
-
-      await refreshChecklistCompletion(req.tenantId, checklist.id, req.user.id);
+        await refreshChecklistCompletion(req.tenantId, checklist.id, req.user.id, transaction);
+      }});
       res.json({ data: await loadChecklist(req.tenantId, agreement.id), error: null });
     } catch (error) {
       next(error);
@@ -659,7 +664,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       }
 
       const previousSignatureStatus = agreement.signature_status || null;
-      await runQuery(
+      await runManagementQuery(
         `SET XACT_ABORT ON;
          BEGIN TRY
            BEGIN TRANSACTION;
@@ -741,7 +746,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         throw createRequestError(409, 'The selected property or unit already has an active tenancy.', 'OCCUPANCY_CONFLICT');
       }
 
-      await runQuery(
+      await runManagementQuery(
         `SET XACT_ABORT ON;
          BEGIN TRY
            BEGIN TRANSACTION;

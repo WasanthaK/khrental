@@ -1,3 +1,4 @@
+import { assertManagementWrite, withManagementWrite, runSingleManagementQuery } from '../managementBilling/store.js';
 import express from 'express';
 import { retireClosedRentalOffers } from '../enquiries/offerStore.js';
 import { getMssqlPool, sql } from '../mssql/pool.js';
@@ -181,7 +182,7 @@ export const createTenancyExitRouter = () => {
       }
       const effectiveDate = req.body?.effectiveDate || null;
       const noticeDate = req.body?.noticeDate || new Date().toISOString().slice(0, 10);
-      const created = await runSingleQuery(
+      const created = await runSingleManagementQuery(
         `INSERT INTO tenancy_notices (
            tenant_id, agreement_id, notice_type, status, notice_date, effective_date, content, created_by, sent_at
          ) OUTPUT INSERTED.*
@@ -217,7 +218,7 @@ export const createTenancyExitRouter = () => {
       if (String(notice.status).toLowerCase() !== 'sent') throw createRequestError(409, 'This notice has already been processed.', 'NOTICE_ALREADY_PROCESSED');
       const response = String(req.body?.response || '').toLowerCase();
       if (!validateNoticeResponse(notice.notice_type, response)) throw createRequestError(400, 'Invalid response for this notice type.', 'INVALID_NOTICE_RESPONSE');
-      const updated = await runSingleQuery(
+      const updated = await runSingleManagementQuery(
         `UPDATE tenancy_notices
          SET status = @status, responded_by = @respondedBy, responded_at = SYSUTCDATETIME(), response_notes = @notes, updatedat = SYSUTCDATETIME()
          OUTPUT INSERTED.*
@@ -243,7 +244,7 @@ export const createTenancyExitRouter = () => {
       const startDate = req.body?.startDate || req.body?.startdate;
       const endDate = req.body?.endDate || req.body?.enddate;
       if (!startDate || !endDate) throw createRequestError(400, 'startDate and endDate are required.', 'RENEWAL_DATES_REQUIRED');
-      const created = await runSingleQuery(
+      const created = await runSingleManagementQuery(
         `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
 INSERT INTO agreements (
            tenant_id, templateid, renteeid, propertyid, unitid, status,
@@ -303,8 +304,9 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const inspection = await singleTransaction(
           transaction,
           `INSERT INTO tenancy_move_out_inspections (
@@ -349,7 +351,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const deduction = req.body?.proposedDeduction === undefined || req.body?.proposedDeduction === null || req.body?.proposedDeduction === ''
         ? null : Number(req.body.proposedDeduction);
       if (deduction !== null && (!Number.isFinite(deduction) || deduction < 0)) throw createRequestError(400, 'proposedDeduction must be zero or greater.', 'INVALID_DEDUCTION');
-      const updated = await runSingleQuery(
+      const updated = await runSingleManagementQuery(
         `UPDATE tenancy_move_out_inspection_items
          SET condition_status = @conditionStatus, notes = @notes, proposed_deduction = @deduction,
              completed_by = @completedBy, completed_at = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
@@ -388,8 +390,9 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         await queryTransaction(
           transaction,
           `UPDATE tenancy_move_out_inspections
@@ -460,34 +463,37 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       if (!Number.isFinite(amount) || amount < 0) throw createRequestError(400, 'amount must be zero or greater.', 'INVALID_SETTLEMENT_AMOUNT');
       const description = String(req.body?.description || '').trim();
       if (!description) throw createRequestError(400, 'description is required.', 'SETTLEMENT_DESCRIPTION_REQUIRED');
-      let settlement = await runSingleQuery(
-        `SELECT TOP 1 * FROM tenancy_settlements WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
-        { tenantId: req.tenantId, agreementId: agreement.id }
-      );
-      if (!settlement) {
-        settlement = await runSingleQuery(
-          `INSERT INTO tenancy_settlements (tenant_id, agreement_id, created_by)
-           OUTPUT INSERTED.* VALUES (@tenantId, @agreementId, @createdBy)`,
-          { tenantId: req.tenantId, agreementId: agreement.id, createdBy: req.user.id }
+      const item = await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
+        let settlement = await runSingleQuery(
+          `SELECT TOP 1 * FROM tenancy_settlements WITH (UPDLOCK,HOLDLOCK) WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
+          { tenantId: req.tenantId, agreementId: agreement.id }, transaction
         );
-      }
-      if (String(settlement.status).toLowerCase() !== 'draft') throw createRequestError(409, 'Settlement items cannot change after approval.', 'SETTLEMENT_LOCKED');
-      const item = await runSingleQuery(
-        `INSERT INTO tenancy_settlement_items (
-           tenant_id, settlement_id, item_type, description, amount, source_type, source_id, notes
-         ) OUTPUT INSERTED.*
-         VALUES (@tenantId, @settlementId, @itemType, @description, @amount, @sourceType, @sourceId, @notes)`,
-        {
-          tenantId: req.tenantId,
-          settlementId: settlement.id,
-          itemType: req.body?.itemType || 'other',
-          description,
-          amount,
-          sourceType: req.body?.sourceType || null,
-          sourceId: req.body?.sourceId || null,
-          notes: req.body?.notes || null
+        if (!settlement) {
+          settlement = await runSingleQuery(
+            `INSERT INTO tenancy_settlements (tenant_id, agreement_id, created_by)
+             OUTPUT INSERTED.* VALUES (@tenantId, @agreementId, @createdBy)`,
+            { tenantId: req.tenantId, agreementId: agreement.id, createdBy: req.user.id }, transaction
+          );
         }
-      );
+        if (String(settlement.status).toLowerCase() !== 'draft') throw createRequestError(409, 'Settlement items cannot change after approval.', 'SETTLEMENT_LOCKED');
+        const item = await runSingleQuery(
+          `INSERT INTO tenancy_settlement_items (
+             tenant_id, settlement_id, item_type, description, amount, source_type, source_id, notes
+           ) OUTPUT INSERTED.*
+           VALUES (@tenantId, @settlementId, @itemType, @description, @amount, @sourceType, @sourceId, @notes)`,
+          {
+            tenantId: req.tenantId,
+            settlementId: settlement.id,
+            itemType: req.body?.itemType || 'other',
+            description,
+            amount,
+            sourceType: req.body?.sourceType || null,
+            sourceId: req.body?.sourceId || null,
+            notes: req.body?.notes || null
+          }, transaction
+        );
+        return item;
+      }});
       res.status(201).json({ data: item, error: null });
     } catch (error) { next(error); }
   });
@@ -498,7 +504,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       assertAgreementAccess(req, agreement, true);
       const status = String(req.body?.status || '').toLowerCase();
       if (!['approved', 'rejected'].includes(status)) throw createRequestError(400, 'status must be approved or rejected.', 'INVALID_SETTLEMENT_ITEM_STATUS');
-      const item = await runSingleQuery(
+      const item = await runSingleManagementQuery(
         `UPDATE tenancy_settlement_items
          SET status = @status, reviewed_by = @reviewedBy, reviewed_at = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
          OUTPUT INSERTED.*
@@ -524,6 +530,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const settlement = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM tenancy_settlements WITH (UPDLOCK, HOLDLOCK)
@@ -569,7 +576,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       if ((Number(settlement.refund_amount) > 0 || Number(settlement.amount_due) > 0) && !reference) {
         throw createRequestError(400, 'A payment/refund reference is required when settlement money changes hands.', 'SETTLEMENT_REFERENCE_REQUIRED');
       }
-      const updated = await runSingleQuery(
+      const updated = await runSingleManagementQuery(
         `UPDATE tenancy_settlements
          SET status = 'settled', settled_by = @settledBy, settled_at = SYSUTCDATETIME(), settlement_reference = @reference, updatedat = SYSUTCDATETIME()
          OUTPUT INSERTED.*
@@ -597,6 +604,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const closed = await singleTransaction(
           transaction,
           `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);

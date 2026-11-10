@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {getMssqlPool, sql} from '../mssql/pool.js';
+import {runQuery} from '../mssql/query.js';
 import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
 
 // The caller must supply its mutation transaction, never an independent pool
@@ -39,6 +40,14 @@ export const withManagementWrite = async ({tenantId, action}) => {
     throw error;
   }
 };
+
+export const runManagementQuery = (statement, params) => withManagementWrite({
+  tenantId: params.tenantId,
+  action: transaction => runQuery(statement, params, transaction)
+});
+
+export const runSingleManagementQuery = async (statement, params) =>
+  (await runManagementQuery(statement, params))[0] || null;
 
 export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   const query = async (connection, statement, params = {}) => {

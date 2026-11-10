@@ -1,4 +1,87 @@
-# Current R5 prelaunch completion ledger 7 November 2026
+# Current R5 prelaunch completion ledger — 10 November 2026
+
+## Autonomous completion handoff checkpoint — 10 November 2026
+
+Execution follows the owner's 10 November completion handoff. Owner-dependent actions are held while independent engineering proceeds. Accepted signing, controlled rental operations, two sandbox subscriptions and R1/R3/R4 dispositions remain closed within their recorded scope. R2 remains deferred; Brunei remains subsequent. Live charging and management enforcement rollout remain disabled.
+
+[PR #540](https://github.com/WasanthaK/khrental/pull/540) extends transaction-scoped management access to direct rental billing and maintenance commands. Draft edits now audit atomically; reminder timestamps no longer commit before their audit. Existing invoice/payment/maintenance permissions and selected organization context remain mandatory. Delivery-result recording is a continuation of an already authorized external dispatch, not a fresh management command. It must remain possible after expiry so delivery history is truthful. PR #540 merged as `209e4092c44249711c46d03e227a107e4918d1d3` after final-head authorization/build, disposable SQL/browser acceptance, migration, readiness and regression checks passed. Release verification is still pending at this checkpoint; source/CI alone do not close BL08.
+
+Local focused billing/maintenance tests passed **103/103**; production build passed. Local full authorization passed **911/912**: Chromium launch is prohibited by this host's socket restrictions. CI authorization and build passed **912/912** on the first reviewed heads. Final-head disposable SQL passed the direct invoice/payment/adjustment/reminder and maintenance denial cases, paid/grace/complimentary edits, audit rollback, unchanged protected-state snapshots and retained account reads. Initial SQL runs caught a wrong retained-read URL in the new fixture (`/invoices/:id` rather than existing `/invoices/:id/account`); corrected on `be2c74eab7160154de8d50b766e9e9b59c4ee6f3`. No prior assertions or expected event counts were weakened.
+
+Bounded external discovery:
+
+- Only the approved Stripe sandbox `acct_1UTgcdQ4sARuLNQa` is connected (`livemode=false`). A fresh supported-operation search for billing test-clock advancement returned clock **creation only**. No clock, retained subscription, payment method or schedule was mutated. Genuine recurring lifecycle and live merchant evidence remain unavailable through this connection.
+- Evia's current v2 index and authentication overview were inspected on 10 November. The overview documents authorization-code authentication; the index lists API-app/API-key and completed-webhook-package pages, but both detailed pages could not be retrieved by the research tool. This does not establish that service exchange is unsupported or explain the earlier 404/501 responses. No repeated credential/endpoint probes, signing or resend were performed. A working documented service grant or genuine supported package delivery is still required. References: https://docs.sign.enadocapp.com/evia-sign-api/v2 and https://docs.sign.enadocapp.com/evia-sign-api/v2/authorization-and-authentication.
+- Live browser preparation remained visible after one bounded reload. No signed-in session or role authority was established and no credential request was repeated. Independent public HTTP reads returned serving build `5caced59fa6b344ca5b21a91d114203ff9151c90` and `/api/mssql/health` HTTP 200, `connection=ready`. Browser availability is therefore a scoped acceptance limitation, not evidence of a service-wide database outage or a genuine paused-to-ready cycle.
+- No mailbox, approved platform-administrator session, intended live merchant/payout record, final FX convention or substantive legal/privacy approval was obtained. These dependencies do not block independent source work. Test identities/passwords/tokens are excluded from this record.
+
+### Transactional endpoint and job matrix
+
+All entries use server-resolved organization scope; body tenant identifiers or rollout flags do not confer authority. Enabled organization scope remains controlled by server environment. The shared check locks `management_billing_accounts` with `UPDLOCK,HOLDLOCK`, evaluates database UTC time and holds that lock to domain commit. Paid, ending, current grace and valid complimentary states may write; expired/revoked/missing authority returns readable 403, configuration/schema/verification failures return 503. Existing independent role/resource checks still apply.
+
+| Writer / exception | Actor and organization authority | Boundary and evidence | Remaining scope |
+| --- | --- | --- | --- |
+| Monthly manual/scheduled invoice generation | Authorized invoice manager / trusted tenant scheduler | Existing SERIALIZABLE transaction; prior real-SQL expiry, lock, rollback and isolation pass | Controlled rollout waits for complete BL08 dependencies |
+| Invoice draft edit; component add/edit/remove | Invoice manager plus persisted property scope, `req.tenantId` | PR #540 transaction begins before access lock; draft fields and new audit commit together; actual HTTP denial and SQL rollback fixtures | Final-head CI/release and affected live acceptance |
+| Invoice issue, resend, failed-delivery retry, reference supplement | Invoice manager plus property scope | PR #540 guards original SERIALIZABLE command transaction before invoice/reference/delivery-attempt changes | Wider remaining role/concurrency matrix and live results |
+| Rent payment proof, verification, manual payment and receipt effects | Existing renter ownership or payment-manager/property authority | PR #540 guards actual payment/invoice/receipt transaction; these are rental records, separate from SaaS recovery | Remaining renter proof and receipt-specific enabled-scope cases |
+| Adjustment create/void; reminder record/send | Invoice manager plus agreement/invoice property scope | PR #540 guards create/void and dispatch-attempt transaction; reminder timestamp and event share transaction | Final-head proof; reminder result is an authorized continuation |
+| Maintenance create/assign/start/complete/cancel | Renter's active tenancy or manager/assigned-worker authority | PR #540 guards actual lifecycle transaction before domain/event/notification writes | Dedicated live role matrix; activation/exit still separate |
+| Maintenance comments/images | Existing request ownership/worker/resource policy | PR #540 wraps standalone insert in shared guarded transaction | Image URL/access and broader stale-authority enabled-scope cases |
+| Invoice/receipt/history reads; SaaS recovery | Existing authorized tenant/renter/billing authority | No new management-write gate; retained invoice account HTTP read tested | Final deployed role readback |
+| Delivery-result persistence | Previously authorized durable dispatch attempt | Original result/audit path remains writable after expiry; never authorizes a new dispatch | Complete asynchronous reconciliation inventory |
+| Onboarding, activation, notices, inspection, settlement, closure | Existing agreement/resource authority | Follow-up source guards atomic SQL batches and existing transactions; billing-day audit, checklist completion and settlement/first-item persistence now share their mutation transaction | Follow-up full SQL/CI/release and enabled-scope acceptance |
+| Generic platform/MSSQL repositories/imports and other jobs | Actual server tenant context plus existing table/resource policy | Existing lifecycle bypass guards preserved; no claim of complete expiry enforcement | BL08.5/BL08.11 engineering and complete matrix |
+| Managed stock create/import/restore/split/cessation | Trusted inventory/billing/domain authority required | No staging or cessation implementation claimed by PR #540 | BL08.6/7/9/10/11 engineering |
+
+### Handoff task-level dispositions
+
+Statuses below describe the exact handoff acceptance, not merely helper availability. Yellow = implemented or bounded evidence with a stated gap; red = unfinished engineering, failed acceptance or concrete blocker. This table controls over superseded pending wording in older dated checkpoints.
+
+| Task | State | Current evidence and one next action |
+| --- | --- | --- |
+| OP02.1 availability/stock | YELLOW | Preserve accepted closure/relisting; finish remaining rented/withdrawn/opted-out/reserved/stale-URL rendered matrix using disposable stock. |
+| OP08.1 actual mailbox receipt | YELLOW | Provider acceptance remains distinct; obtain controlled intended-mailbox receipt correlated with message and time. |
+| OP09.2 expiry/cancellation/negatives | YELLOW | Existing lifecycle rollback/idempotency proof retained; map and complete outstanding unsigned expiry/conflict/retry cases without altering signed records. |
+| OP10.1 usability | YELLOW | Prior accepted renders retained; complete affected desktop/mobile/keyboard interactions once a usable live session exists. |
+| OP10.3 natural database pause | YELLOW | HTTP ready observed, not prior pause; wait for authorized telemetry confirming a genuine natural pause and measure recovery. |
+| CT03.4 Evia service/package delivery | RED | Earlier 404/501 unexplained; current detailed docs unavailable through research; obtain supported service grant/package delivery without landlord login. |
+| CT03.5 fresh matching audit retention | RED | Missing genuine matching audit remains failed/open; after CT03.4 recover and retain both genuine artifacts with duplicate/interruption proof. |
+| CT04.2 retained role readback | YELLOW | Preserve completed signing; verify renter/admin history and unrelated/revoked denials from persisted authority. |
+| BL04.2 genuine scheduled renewal | YELLOW | Clock advance unavailable; retain quantity-2 subscription and scheduled reduction, then execute a complete supported clock timeline. |
+| BL05.4 failure/recovery in grace | YELLOW | Existing implementation/fixtures retained; produce genuine failed renewal and payment recovery without extending earliest-failure grace. |
+| BL05.5 grace expiry/later recovery | YELLOW | Existing entitlement projection retained; use a dedicated controlled provider timeline and deployed enforcement readback. |
+| BL06.3 event ledger/replay | YELLOW | Synthetic receiver/rollback proof remains separate; correlate genuine recurring events, durable ledger and supported provider redelivery. |
+| BL07.2 platform comp grant/revoke/audit | YELLOW | Technical tests retained; hold privileged live mutation until an authorized platform session exists. |
+| BL07.3 complimentary expiry | YELLOW | SQL expiry proof retained; complete deployed bounded expiry/readback while preserving paid access. |
+| BL09.3 zero-stock cancellation | YELLOW | PR #536 deployed; finish genuine deployed disposable-stock confirmation after cessation/staging dependencies. |
+| BL08.2 monthly rollout | YELLOW | Monthly guard deployed, flags off; activate only after complete write/stock/cessation dependencies pass. |
+| BL08.3 invoice/payment/adjustment | YELLOW | PR #540 source and focused evidence; finish final SQL/release, remaining direct-path matrix and deployed acceptance. |
+| BL08.4 maintenance/activation/exit | YELLOW | PR #540 merged for maintenance; follow-up activation/exit source and 122 focused tests prepared; finish final SQL/release and enabled-scope stale-authority acceptance. |
+| BL08.5 generic/import bypass | RED | Existing lifecycle guards retained; implement expiry authority at actual generic/repository/import transaction boundary. |
+| BL08.6 staged create/import | RED | Durable staging remains absent; implement pending additions, confirmed billing promotion and recoverable retries. |
+| BL08.7 staged restore/split | RED | Implement shared staging/quantity authority while retaining unresolved commercial timing as draft. |
+| BL08.11 async reconciliation | RED | Inventory transitional jobs/events/import ownership and implement durable idempotent convergence. |
+| BL08.9 audited cessation | RED | Approved obligations-closed rule retained; implement atomic eligibility, persistence and actor/reason audit. |
+| BL08.10 ceased/restored consistency | RED | Integrate managed inventory, public eligibility, retained history and subscription quantity after cessation/staging. |
+| BL08.12 controlled full rollout | RED | Keep disabled until BL08 engineering and complete endpoint/job acceptance pass; then enable one reversible explicit scope. |
+| CM01.3 LK calculation/FX/rounding | YELLOW | USD 5, LKR 25,000 and 2% direction retained; exact excess/FX/date/minor-unit convention remains an owner decision, not an invented default. |
+| CM01.4 effective price publication | YELLOW | Existing draft/version/preview controls retained; prepare approved effective commercial version and customer treatment before publication. |
+| CM01.5 reactivation terms | YELLOW | Retain no arbitrary fees; specify exact before/after-period-end restoration treatment after business approval. |
+| CM01.6 exceptional bulk rules | YELLOW | Ordinary next-invoice additions retained; establish whether any exceptional threshold is required without inventing one. |
+| CM01.7 refunds/credits/disclosures | YELLOW | Period-end reduction/cancellation direction retained; reconcile actual provider settings and exact approved refund/credit text. |
+| CM02.1 live merchant/payout | RED | Only sandbox connected; hold live setup until intended entity/country/capability/payout evidence exists. |
+| CM02.2 tax responsibilities | YELLOW | No tax or compliance claim inferred from sandbox; obtain actual merchant/registration facts and current jurisdiction-specific review. |
+| CM02.4 entity/privacy/transfers | YELLOW | Existing publication stays accepted; validate deployed providers/locations/roles and approved entity/contact facts before substantive approval. |
+| CM02.5 retention/deletion/requests | YELLOW | Signed-evidence deletion boundary retained; finish verified request/hold/backup workflow using reversible fixtures and approved retention criteria. |
+| RG01.1 Sri Lanka launch | RED | Consolidate completed applicable exits and explicit owner scope dispositions; no release-complete assertion while engineering remains. |
+| RG01.2 live charging | RED | Remains disabled; prepare exact entity/account/price/scope/verification/rollback activation only after prerequisites. |
+| RG02.1–RG02.4 Brunei | YELLOW — SUBSEQUENT | Preserve BND/regional fixes; perform separate BN acceptance after LK prerequisites, without making BN an automatic LK blocker. |
+| R2.01–R2.04 invoice archive | YELLOW — DEFERRED | Preserve owner deferral and flags; inventory remaining publication/readback/delivery/business obligations without restarting archive engineering. |
+| R3.07 distinct-replica limiter | YELLOW — BEFORE SCALING | Preserve single-replica R3 closure; require distinct-replica proof only before actual authorized scaling. |
+| R3.08 expired/replayed signup tokens | YELLOW | Existing isolated-flow/SQL proof retained; complete fresh supported issuance/HTTP negatives with disposable identities when available. |
+
+No production fixture, subscription, occupied stock, signed artifact or real customer financial record was mutated in this checkpoint. Disposable SQL fixtures belong to the test harness and its container cleanup; final cleanup results must be read from the completed final-head job. No migration, flag enablement, infrastructure scale-up, secret change or live charge is introduced. Rollback for this source slice is the existing application release procedure using prior serving source `5caced59fa6b344ca5b21a91d114203ff9151c90`; keep rollout disabled throughout.
 
 ## Monthly invoice guard release — 10 November 2026
 

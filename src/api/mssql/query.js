@@ -8,16 +8,17 @@ const bindParams = (request, params = {}) => {
   return request;
 };
 
-export const runQuery = async (queryText, params = {}) => {
-  const pool = await getMssqlPool();
-  const request = bindParams(pool.request(), params);
+export const runQuery = async (queryText, params = {}, transaction = null) => {
+  const request = bindParams(transaction
+    ? new sql.Request(transaction)
+    : (await getMssqlPool()).request(), params);
   const result = await request.query(queryText);
 
   return result.recordset || [];
 };
 
-export const runSingleQuery = async (queryText, params = {}) => {
-  const rows = await runQuery(queryText, params);
+export const runSingleQuery = async (queryText, params = {}, transaction = null) => {
+  const rows = await runQuery(queryText, params, transaction);
   return rows[0] || null;
 };
 
