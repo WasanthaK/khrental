@@ -1625,6 +1625,16 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       assert.equal(expiredDeletion.status,403);
       assert.equal((await expiredDeletion.json()).code,'MANAGEMENT_READ_ONLY');
       assert.ok(await first(pool,'SELECT id FROM agreements WHERE id=@id',{id:deletionCandidate.id}));
+      const {updatePreference} = await import('../src/api/publicListings/store.js');
+      const {commitWithheldDerivative} = await import('../src/api/publicListings/processor.js');
+      const {finalizePhotoReview,withdrawPreparedPhoto} = await import('../src/api/publicListings/review.js');
+      const publicArgs = {tenantId:scoped.tenantId,propertyId:scoped.propertyId,actorId:admin.id,mediaId:crypto.randomUUID()};
+      for (const operation of [
+        ()=>updatePreference({...publicArgs,changes:{headline:'Denied listing change'}}),
+        ()=>commitWithheldDerivative(publicArgs),
+        ()=>finalizePhotoReview(publicArgs),
+        ()=>withdrawPreparedPhoto(publicArgs,{env:{PUBLIC_LISTING_MEDIA_REVIEW_ENABLED:'true'}})
+      ]) await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});
       const beforeRepository = await writerSnapshot();
       for (const operation of [
         ()=>repository.updatePropertyById(scoped.propertyId,{status:'rented'},scoped.tenantId),
