@@ -1395,6 +1395,122 @@ async function verify(pool, item) {
   return guid(invoice.id);
 }
 
+async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
+  const {generateMonthlyInvoicesForTenant} = await import('../src/api/platform/monthlyBillingService.js');
+  const {assertManagementWrite} = await import('../src/api/managementBilling/store.js');
+  const {BILLING_ACCOUNT, BILLING_PRICE} = await import('../src/api/managementBilling/contract.js');
+  await pool.request().batch(fs.readFileSync(path.resolve('migrations/20261103_01_management_billing.sql'), 'utf8'));
+  const scoped = await fixture(pool, 'Scoped management expiry proof', 1000, 25);
+  const unscoped = await fixture(pool, 'Unchanged testing organization', 2000, 50);
+  const keys = ['MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED', 'MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS', 'MANAGEMENT_BILLING_SCHEMA_READY'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  let periodIndex = 0;
+  const generate = (item = scoped, source = 'manual') => {
+    const billingPeriod = `${2027 + Math.floor(periodIndex / 12)}-${String(periodIndex++ % 12 + 1).padStart(2, '0')}`;
+    return generateMonthlyInvoicesForTenant({tenantId:item.tenantId, billingPeriod, source,
+      automaticRunDate:source === 'automatic_scheduler' ? new Date(`${billingPeriod}-28T12:00:00Z`) : null});
+  };
+  const snapshot = () => first(pool, `SELECT
+    (SELECT COUNT(*) FROM invoices WHERE tenant_id=@tenantId) AS invoices,
+    (SELECT COUNT(*) FROM invoice_components WHERE tenant_id=@tenantId) AS components,
+    (SELECT COUNT(*) FROM billing_lifecycle_events WHERE tenant_id=@tenantId) AS events,
+    (SELECT invoice_id FROM utility_readings WHERE id=@readingId AND tenant_id=@tenantId) AS reading_invoice,
+    (SELECT billing_status FROM utility_readings WHERE id=@readingId AND tenant_id=@tenantId) AS reading_status`, scoped);
+  const denied = async (label, source = 'manual') => {
+    const before = await snapshot();
+    const result = await generate(scoped, source);
+    assert.equal(result.created.length, 0, label);
+    assert.equal(result.errors.length, 1, label);
+    assert.equal(result.errors[0].code, 'MANAGEMENT_READ_ONLY', label);
+    assert.deepEqual(await snapshot(), before, `${label}: denied generation cannot write invoices, components, utilities or lifecycle events`);
+  };
+  const setState = async statement => {
+    await query(pool, `UPDATE dbo.management_billing_accounts SET
+      subscription_status='active', initial_payment_verified=1, paid_through=DATEADD(DAY,1,SYSUTCDATETIME()),
+      grace_started_at=NULL, cancel_at_period_end=0, risk_hold=0, comp_type=NULL, comp_expires_at=NULL
+      WHERE tenant_id=@tenantId; ${statement}`, scoped);
+  };
+  try {
+    process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED = 'true';
+    process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS = scoped.tenantId;
+    process.env.MANAGEMENT_BILLING_SCHEMA_READY = 'true';
+    await denied('Selected organization without an enrolled billing account');
+    await query(pool, `INSERT INTO dbo.management_billing_accounts
+      (tenant_id,stripe_account_id,stripe_price_id,market,inventory_json)
+      VALUES(@tenantId,@account,@price,'LK','[]')`, {...scoped, account:BILLING_ACCOUNT, price:BILLING_PRICE});
+
+    for (const [label, change] of [
+      ['Initial payment is unverified', "initial_payment_verified=0"],
+      ['Paid-through has expired', "paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME())"],
+      ['Cancellation has completed', "subscription_status='canceled'"],
+      ['Initial failure cannot gain renewal grace', "subscription_status='past_due',initial_payment_verified=0,grace_started_at=SYSUTCDATETIME()"],
+      ['Seven-day grace has expired', "subscription_status='past_due',grace_started_at=DATEADD(DAY,-8,SYSUTCDATETIME())"],
+      ['Fixed complimentary access has expired', "paid_through=NULL,comp_type='fixed',comp_expires_at=DATEADD(SECOND,-1,SYSUTCDATETIME())"],
+      ['Risk hold overrides ongoing complimentary access', "risk_hold=1,comp_type='ongoing'"]
+    ]) {
+      await setState(`UPDATE dbo.management_billing_accounts SET ${change} WHERE tenant_id=@tenantId`);
+      await denied(label, periodIndex % 2 ? 'automatic_scheduler' : 'manual');
+    }
+
+    for (const [label, change] of [
+      ['Paid active subscription', 'cancel_at_period_end=0'],
+      ['Period-end cancellation remains paid until expiry', 'cancel_at_period_end=1'],
+      ['Renewal failure remains within grace', "subscription_status='past_due',grace_started_at=DATEADD(DAY,-1,SYSUTCDATETIME())"],
+      ['Fixed complimentary access is current', "paid_through=NULL,comp_type='fixed',comp_expires_at=DATEADD(DAY,1,SYSUTCDATETIME())"],
+      ['Ongoing complimentary access is current', "paid_through=NULL,comp_type='ongoing'"]
+    ]) {
+      await setState(`UPDATE dbo.management_billing_accounts SET ${change} WHERE tenant_id=@tenantId`);
+      const result = await generate(scoped, periodIndex % 2 ? 'automatic_scheduler' : 'manual');
+      assert.deepEqual(result.errors, [], label);
+      assert.equal(result.created.length, 1, label);
+    }
+
+    // The account row stays locked until the caller's invoice transaction ends.
+    // A real competing UPDATE must time out, then succeed after commit.
+    const holder = new sql.Transaction(pool);
+    await holder.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      await assertManagementWrite({tenantId:scoped.tenantId, transaction:holder});
+      await assert.rejects(query(pool, `SET LOCK_TIMEOUT 200;
+        BEGIN TRY
+          UPDATE dbo.management_billing_accounts SET comp_type=NULL WHERE tenant_id=@tenantId;
+          SET LOCK_TIMEOUT -1;
+        END TRY BEGIN CATCH SET LOCK_TIMEOUT -1; THROW; END CATCH;`, scoped), error => error.number === 1222);
+      await holder.commit();
+    } catch (error) { await holder.rollback().catch(() => {}); throw error; }
+    await query(pool, 'UPDATE dbo.management_billing_accounts SET comp_type=NULL WHERE tenant_id=@tenantId', scoped);
+    await denied('Revoked complimentary access applies to the next job', 'automatic_scheduler');
+
+    // Full generator rollback must release the account lock and preserve state.
+    await setState('');
+    const beforeRollback = await snapshot();
+    await pool.request().batch(`CREATE TRIGGER dbo.monthly_guard_rollback_proof ON dbo.invoice_components AFTER INSERT AS
+      BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE tenant_id='${scoped.tenantId}')
+        THROW 51001,'Disposable monthly management rollback proof',1; END`);
+    try {
+      const failed = await generate();
+      assert.equal(failed.created.length, 0);
+      assert.match(failed.errors[0].error, /Disposable monthly management rollback proof/);
+      assert.deepEqual(await snapshot(), beforeRollback);
+    } finally { await pool.request().batch('DROP TRIGGER dbo.monthly_guard_rollback_proof'); }
+    await query(pool, 'UPDATE dbo.management_billing_accounts SET risk_hold=1 WHERE tenant_id=@tenantId', scoped);
+    await denied('Rolled-back job released its lock');
+
+    const unaffected = await generate(unscoped, 'automatic_scheduler');
+    assert.deepEqual(unaffected.errors, []);
+    assert.equal(unaffected.created.length, 1, 'Existing unselected testing organization is unchanged');
+    const {getInvoiceById} = await import('../src/api/mssql/repositories.js');
+    const retained = await first(pool, 'SELECT TOP 1 id FROM invoices WHERE tenant_id=@tenantId', scoped);
+    assert.ok(await getInvoiceById(retained.id, scoped.tenantId), 'Expiry/risk does not remove existing invoice reads');
+    assert.equal(await getInvoiceById(retained.id, unscoped.tenantId), null, 'Existing tenant isolation is preserved');
+    console.log('PASS: scoped manual/scheduled monthly management expiry, database-clock grace/complimentary authority, revocation lock, full invoice rollback, historical reads and unaffected unselected organization');
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+    }
+  }
+}
+
 // Seed synthetic payment history directly into the disposable fixture only.
 // This proves authenticated account/receipt READ behavior, not payment creation.
 async function seedAccountHistory(pool, item, invoiceId, tag, verifiedAmount, pendingAmount) {
@@ -2213,6 +2329,8 @@ async function main() {
     assert.equal((await query(pool,
       'SELECT id FROM utility_readings WHERE tenant_id = @tenantId AND invoice_id = @invoiceId',
       { tenantId: a.tenantId, invoiceId: invoiceB })).length, 0);
+
+    await verifyMonthlyManagementAccessAgainstDisposableSql(pool);
 
     await verifyManualSigningAgainstDisposableSql(pool, a, b);
     await verifyEviaProcessedDeliveryAgainstDisposableSql(pool, a, b);

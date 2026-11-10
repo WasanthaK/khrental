@@ -2,13 +2,57 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange} from '../src/api/managementBilling/contract.js';
+import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
+import {assertManagementWrite} from '../src/api/managementBilling/store.js';
+import {sql} from '../src/api/mssql/pool.js';
 import {createStripeClient,stripeForm,firstRenewalFailure,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
 
 const tenant='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
+
+test('management write rollout requires explicit server enablement and an exact organization scope',()=>{
+  assert.equal(managementWriteEnforced(tenant,{}),false);
+  assert.equal(managementWriteEnforced(tenant,{MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'false'}),false);
+  const env={MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:` ${tenant.toUpperCase()}, ${other} `};
+  assert.equal(managementWriteEnforced(tenant,env),true);
+  assert.equal(managementWriteEnforced('33333333-3333-4333-8333-333333333333',env),false);
+  assert.throws(()=>managementWriteEnforced('invalid',env),{code:'BILLING_ID_INVALID'});
+  for(const scope of ['', '*', `${tenant},`, `${tenant},invalid`]) {
+    assert.throws(()=>managementWriteEnforced(tenant,{...env,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:scope}),{code:'BILLING_ENFORCEMENT_CONFIGURATION'});
+  }
+  assert.throws(()=>managementWriteEnforced(tenant,{...env,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'TRUE'}),{code:'BILLING_ENFORCEMENT_CONFIGURATION'});
+});
+
+test('selected management writes fail closed without schema readiness or their own SQL transaction',async()=>{
+  const env={MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant};
+  await assert.rejects(assertManagementWrite({tenantId:tenant,env}),{code:'BILLING_ACCESS_UNAVAILABLE'});
+  await assert.rejects(assertManagementWrite({tenantId:tenant,env:{...env,MANAGEMENT_BILLING_SCHEMA_READY:'true'},transaction:{request:()=>{throw Error('pool reads must not be used');}}}),{code:'BILLING_ACCESS_UNAVAILABLE'});
+  await assertManagementWrite({tenantId:tenant,env:{}});
+  await assertManagementWrite({tenantId:other,env});
+});
+
+test('management write expiry uses the locked database timestamp rather than the application clock',async t=>{
+  const env={MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant,MANAGEMENT_BILLING_SCHEMA_READY:'true'};
+  const transaction=new sql.Transaction();
+  let row={stripe_account_id:BILLING_ACCOUNT,subscription_status:'active',initial_payment_verified:true,
+    paid_through:new Date('2026-11-09T00:00:00Z'),entitlement_checked_at:new Date('2026-11-10T00:00:00Z')};
+  t.mock.method(sql.Request.prototype,'query',async function(){
+    assert.equal(this.parent,transaction);
+    assert.equal(this.parameters.tenantId.value,tenant);
+    return {recordset:row?[row]:[]};
+  });
+  const now=t.mock.method(Date,'now',()=>0);
+  await assert.rejects(assertManagementWrite({tenantId:tenant,transaction,env}),{code:'MANAGEMENT_READ_ONLY'});
+  now.mock.mockImplementation(()=>4102444800000);
+  row.paid_through=new Date('2026-11-11T00:00:00Z');
+  await assertManagementWrite({tenantId:tenant,transaction,env});
+  row.entitlement_checked_at=null;
+  await assert.rejects(assertManagementWrite({tenantId:tenant,transaction,env}),{code:'BILLING_ACCESS_UNAVAILABLE'});
+  row=null;
+  await assert.rejects(assertManagementWrite({tenantId:tenant,transaction,env}),{code:'MANAGEMENT_READ_ONLY'});
+});
 const now=Date.parse('2026-11-03T12:00:00Z');
 const rules={market:'LK',billingCurrency:'USD',baseFeeMinor:500,rentCurrency:'LKR',includedRentMinor:null,excessPolicy:'pending',effectiveAt:null,reason:'Threshold awaits an approved market decision.'};
 const account={stripe_customer_id:'cus_org',stripe_subscription_id:'sub_org',stripe_price_id:'price_approved',initial_payment_verified:false};
