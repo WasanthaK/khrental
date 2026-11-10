@@ -1,3 +1,4 @@
+import { assertManagementWrite, withManagementWrite } from '../managementBilling/store.js';
 import express from 'express';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
@@ -292,8 +293,9 @@ export const createMaintenanceLifecycleRouter = () => {
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const created = await singleTransaction(
           transaction,
           `INSERT INTO maintenance_requests (
@@ -385,8 +387,9 @@ export const createMaintenanceLifecycleRouter = () => {
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
           `UPDATE maintenance_requests
@@ -440,8 +443,9 @@ export const createMaintenanceLifecycleRouter = () => {
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
           `UPDATE maintenance_requests
@@ -492,8 +496,9 @@ export const createMaintenanceLifecycleRouter = () => {
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
           `UPDATE maintenance_requests
@@ -554,8 +559,9 @@ export const createMaintenanceLifecycleRouter = () => {
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
-      await transaction.begin();
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
           `UPDATE maintenance_requests
@@ -621,7 +627,7 @@ export const createMaintenanceLifecycleRouter = () => {
         throw createRequestError(400, 'Unsupported maintenance image type.', 'INVALID_MAINTENANCE_IMAGE_TYPE');
       }
       const description = String(req.body?.description || '').trim().slice(0, 1000);
-      const created = await runSingleQuery(
+      const created = await withManagementWrite({tenantId: req.tenantId, action: transaction => singleTransaction(transaction,
         `INSERT INTO maintenance_request_images (
            tenant_id, maintenance_request_id, image_url, image_type, description, uploaded_by
          ) OUTPUT INSERTED.*
@@ -634,7 +640,7 @@ export const createMaintenanceLifecycleRouter = () => {
           description,
           actorUserId: req.user.id
         }
-      );
+      )});
       res.status(201).json({ data: created, error: null });
     } catch (error) {
       next(error);
@@ -652,7 +658,7 @@ export const createMaintenanceLifecycleRouter = () => {
         throw createRequestError(403, 'Tenant comments cannot be marked internal.', 'INTERNAL_COMMENT_FORBIDDEN');
       }
 
-      const created = await runSingleQuery(
+      const created = await withManagementWrite({tenantId: req.tenantId, action: transaction => singleTransaction(transaction,
         `INSERT INTO maintenance_request_comments (
            tenant_id, maintenance_request_id, user_id, comment, is_internal
          ) OUTPUT INSERTED.*
@@ -664,7 +670,7 @@ export const createMaintenanceLifecycleRouter = () => {
           comment,
           isInternal: internalRequested ? 1 : 0
         }
-      );
+      )});
       res.status(201).json({ data: created, error: null });
     } catch (error) {
       next(error);

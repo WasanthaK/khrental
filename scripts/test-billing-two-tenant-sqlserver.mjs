@@ -1458,6 +1458,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     const {createMonthlyBillingRouter} = await import('../src/api/platform/monthlyBillingRouter.js');
     const {createBillingRouter} = await import('../src/api/platform/billingRouter.js');
     const {createBillingAdjustmentsRouter} = await import('../src/api/platform/billingAdjustmentsRouter.js');
+    const {createMaintenanceLifecycleRouter} = await import('../src/api/platform/maintenanceLifecycleRouter.js');
     const authId = crypto.randomUUID();
     const email = `monthly-guard-${crypto.randomBytes(6).toString('hex')}@example.invalid`;
     const admin = await first(pool, `INSERT INTO app_users (tenant_id,name,email,role,user_type,auth_id)
@@ -1474,6 +1475,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     let emails = 0;
     app.use('/api/billing',createBillingRouter({sendInvoiceEmail:async()=>{ emails++; return {provider:'fixture'}; }}));
     app.use('/api/billing',createBillingAdjustmentsRouter());
+    app.use('/api/maintenance-lifecycle',createMaintenanceLifecycleRouter());
     app.use((error,_req,res,_next)=>res.status(error.status || 500).json({error:error.message,code:error.code}));
     const server = await new Promise(resolve=>{const listening=app.listen(0,'127.0.0.1',()=>resolve(listening));});
     try {
@@ -1506,6 +1508,11 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         (SELECT COUNT(*) FROM payments WHERE tenant_id=@tenantId) AS payments,
         (SELECT COUNT(*) FROM payment_receipts WHERE tenant_id=@tenantId) AS receipts,
         (SELECT COUNT(*) FROM tenancy_billing_adjustments WHERE tenant_id=@tenantId) AS adjustments,
+        (SELECT COUNT(*) FROM maintenance_requests WHERE tenant_id=@tenantId) AS maintenance,
+        (SELECT COUNT(*) FROM maintenance_lifecycle_events WHERE tenant_id=@tenantId) AS maintenance_events,
+        (SELECT COUNT(*) FROM maintenance_request_comments WHERE tenant_id=@tenantId) AS maintenance_comments,
+        (SELECT COUNT(*) FROM maintenance_request_images WHERE tenant_id=@tenantId) AS maintenance_images,
+        (SELECT COUNT(*) FROM notifications WHERE tenant_id=@tenantId) AS notifications,
         (SELECT COUNT(*) FROM billing_lifecycle_events WHERE tenant_id=@tenantId) AS events`,
         {tenantId:scoped.tenantId,invoiceId:invoice.id});
       const deniedCommand = async (suffix, method, body) => {
@@ -1531,6 +1538,28 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       await deniedCommand(`${invoicePath}/manual-payment`,'POST',{amount:10,paymentMethod:'cash'});
       await deniedCommand(`${invoicePath}/reminder`,'POST',{});
       await deniedCommand(`${invoicePath}/send-reminder`,'POST',{});
+      const maintenance = await first(pool, `INSERT INTO maintenance_requests(tenant_id,propertyid,title,description,status,assignedto)
+        OUTPUT INSERTED.id VALUES(@tenantId,@propertyId,'Disposable access check','Enforcement fixture','pending',@adminId)`,
+        {...scoped,adminId:admin.id});
+      const maintenanceCommand = async (suffix, body) => fetch(`http://127.0.0.1:${server.address().port}/api/maintenance-lifecycle/${suffix}`,{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+        body:JSON.stringify(body)});
+      for (const [suffix, body, state] of [
+        ['requests',{propertyId:scoped.propertyId,title:'Denied creation',description:'must not persist'},'pending'],
+        [`requests/${maintenance.id}/assign`,{staffUserId:admin.id},'pending'],
+        [`requests/${maintenance.id}/start`,{},'pending'],
+        [`requests/${maintenance.id}/complete`,{completionCost:10},'in_progress'],
+        [`requests/${maintenance.id}/cancel`,{reason:'Disposable denial'},'pending'],
+        [`requests/${maintenance.id}/comments`,{comment:'must not persist'},'pending']
+      ]) {
+        await query(pool,'UPDATE maintenance_requests SET status=@state WHERE id=@id',{id:maintenance.id,state});
+        const before = await writerSnapshot();
+        const response = await maintenanceCommand(suffix,body);
+        const result = await response.json();
+        assert.equal(response.status,403,JSON.stringify({suffix,result}));
+        assert.equal(result.code,'MANAGEMENT_READ_ONLY');
+        assert.deepEqual(await writerSnapshot(),before,'Denied maintenance cannot partially write domain/events/notifications');
+      }
       // Both reads and SaaS payment recovery remain outside these rental guards.
       const history = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/${invoicePath}`,{
         headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});
@@ -1545,6 +1574,8 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         const response = await command(`${invoicePath}/draft`,'PATCH',{notes:'Allowed management edit'});
         assert.equal(response.status,200,JSON.stringify(await response.json()));
         assert.equal((await writerSnapshot()).notes,'Allowed management edit');
+        const commentResponse = await maintenanceCommand(`requests/${maintenance.id}/comments`,{comment:'Allowed management comment'});
+        assert.equal(commentResponse.status,201,JSON.stringify(await commentResponse.json()));
       }
       const beforeRollback = await writerSnapshot();
       await pool.request().batch(`CREATE TRIGGER dbo.direct_guard_rollback_proof ON dbo.billing_lifecycle_events AFTER INSERT AS
