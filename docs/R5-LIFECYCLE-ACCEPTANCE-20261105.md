@@ -1,5 +1,22 @@
 # Current R5 prelaunch completion ledger 7 November 2026
 
+## Zero-stock renewal correction — 10 November 2026
+
+[PR #536](https://github.com/WasanthaK/khrental/pull/536) is merged as `8b67b3ebfc1cdd6647a98b89f2ef2b66bbbefcac`. Zero-stock quantity review now confirms cancellation at renewal, retains the current billed quantity, rejects renewal restoration while stock is empty, and retries ambiguous provider success using the same operation and idempotency key. This is the billing behavior for empty managed inventory; it does not implement the separate management-cessation journey.
+
+Final reviewed head `8e1cd39645898feaf1faaee633985f376f97b30d` passed [909/909 authorization tests and production build](https://github.com/WasanthaK/khrental/actions/runs/42739324416), [disposable SQL Server migrations and billing transactions](https://github.com/WasanthaK/khrental/actions/runs/42739324179), [full browser checks](https://github.com/WasanthaK/khrental/actions/runs/42739324190), and [sandbox readiness](https://github.com/WasanthaK/khrental/actions/runs/42739324188). The SQL fixture removes its own private listing-preference child before deleting its disposable property; production foreign-key protection is unchanged. SQL proves cancellation, retained quantity, rollback/lost-response retry, durable duplicate result and empty-stock renewal denial using explicitly synthetic provider transport. Inspected zero-stock review/ending screenshots at 390px and 1440px match the final-head artifact byte-for-byte. Local focused tests passed 26/26.
+
+[Release 42739654622](https://github.com/WasanthaK/khrental/actions/runs/42739654622) **passed**, with Ready revision **0000475** and exact serving source `8b67b3ebfc1cdd6647a98b89f2ef2b66bbbefcac`. Independent reads of the public `build-info.json` and `/api/mssql/health` matched that SHA and returned `connection=ready`. The merged-source disposable SQL verification [42739654368](https://github.com/WasanthaK/khrental/actions/runs/42739654368) also passed. Marketing is unchanged.
+
+This checkpoint supersedes earlier source-only/CI-pending wording for PR #536. **Signing remains accepted and is not repeated. R5 remains active and incomplete; live charging stays disabled.** No existing provider subscription, occupied property, signed document or production billing record was changed for this acceptance. Genuine deployed zero-stock confirmation is unperformed.
+
+Remaining dependencies and next work:
+
+- BL04/BL05: connected Stripe operation discovery on 10 November still exposes clock creation only, not listing/advancement. Retain the existing clocks and subscriptions; genuine renewal, failed payment, grace expiry and recovery remain open.
+- BL07: actual complimentary grant/revoke/expiry acceptance remains pending for the verified **Platform Administrator** (`wweerakoone@gmail.com`). The previously declined sign-in is not repeated. Organization-owner billing authority is separate.
+- BL08: implement audited obligations-closed cessation, staged managed inventory and transaction-scoped expiry/write authority across direct, generic, import and job paths, plus asynchronous reconciliation. Preserve billing recovery, renter reads and historical documents. The current summary still reports `applicationEnforcementEnabled=false`; do not mark production enforcement complete or activate a blanket restriction for existing test organizations.
+- Missing Evia audit retention remains separately open. Preserve accepted operational evidence. Remaining stock/failure/presentation, commercial/merchant/tax/privacy and Sri Lanka launch exits remain open; Brunei follows Sri Lanka.
+
 ## Sri Lanka handoff execution and owner decisions — 9 November 2026
 
 This checkpoint incorporates the owner's 8 November signing clarification and the Sri Lanka completion handoff. **Signing is completed and accepted; do not repeat signing or reopen the whole journey.** Preserve accepted demo move-in, invoicing/receipts, maintenance, exit/relisting, organization switching and the two existing sandbox subscriptions. Missing Evia audit retention remains a separate open item. R1/R3/R4 owner dispositions and deferred R2 remain unchanged; R5 is active and live charging stays disabled.
