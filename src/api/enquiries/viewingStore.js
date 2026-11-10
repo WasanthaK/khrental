@@ -6,7 +6,7 @@ import {toPublicDTO} from '../publicListings/contract.js';
 
 export const createViewingStore=({poolProvider}={})=>{
   const enquiries=createEnquiryStore(poolProvider?{poolProvider}:{});
-  const scoped=(actor,id,owner,work)=>enquiries.withEnquiry(actor,id,owner,work);
+  const scoped=(actor,id,owner,work,managementWrite=false)=>enquiries.withEnquiry(actor,id,owner,work,false,managementWrite);
   return {
     get:(actor,id,owner=false)=>scoped(actor,id,owner,async query=>viewingReceipt((await query(
       'SELECT * FROM dbo.property_viewings WHERE enquiry_id=@id',{id}))[0])),
@@ -49,6 +49,6 @@ export const createViewingStore=({poolProvider}={})=>{
         (enquiry_id,actor_id,request_id,payload_hash,status,starts_at,ends_at,timezone,instructions,version)
         VALUES(@id,@actorId,@requestId,@payloadHash,@status,@startsAt,@endsAt,@timeZone,@instructions,@version)`,args);
       return viewingReceipt(row);
-    })
+    },true)
   };
 };

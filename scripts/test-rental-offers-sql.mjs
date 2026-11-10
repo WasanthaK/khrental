@@ -13,7 +13,7 @@ import {PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL} from '../src/api/publicListings/media.js';
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 
-export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
+export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner,denyExpired=async()=>{}})=>{
  assert.equal(process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY,'true','Hold predicates must be included in this actual SQL proof');
  await pool.request().batch(fs.readFileSync('migrations/20261029_01_rental_offers_and_holds.sql','utf8'));
  let inspection=await inspectRentalOffers(pool);assert.equal(inspection.satisfied,true,inspection.detail);
@@ -53,6 +53,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  const available=async p=>Boolean((await q(`SELECT p.id ${PUBLIC_LISTING_ELIGIBILITY_SQL} AND pref.public_id=@listingId`,{listingId:p.listingId}))[0]);
  const p=await property(),c=await candidate(p);
  const issue=request('issue',0,true,terms());
+ await denyExpired('owner rental offer issue',()=>store.change(owner,c.id,issue,true));
  const issued=await store.change(owner,c.id,issue,true);assert.equal(issued.offer.status,'offered');
  await assert.rejects(q("UPDATE property_rental_offers SET status='accepted',accepted_at=SYSUTCDATETIME(),consent_version=NULL WHERE enquiry_id=@id",{id:c.id}),e=>e.number===547,'Acceptance cannot omit retained consent evidence, even outside the HTTP contract');
  assert.equal((await store.change(owner,c.id,issue,true)).offer.version,1);
@@ -72,6 +73,7 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner})=>{
  const beforeUsers=(await q('SELECT COUNT(*) AS n FROM app_users'))[0].n;
  const beforeAuth=(await q('SELECT COUNT(*) AS n FROM auth_users'))[0].n;
  const prepare=request('agreement',2,true,{templateId});
+ await denyExpired('owner agreement preparation',()=>store.change(owner,c.id,prepare,true));
  const prepared=await store.change(owner,c.id,prepare,true),agreementId=prepared.offer.agreementId;
  assert.equal(prepared.offer.status,'agreement');assert.ok(agreementId);
  assert.deepEqual(await reservation(agreementId),{valid:true});

@@ -1,7 +1,8 @@
+import { withManagementWrite } from '../managementBilling/store.js';
 import express from 'express';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { isAdminRole } from '../platform/permissionEngine.js';
-import { getMssqlPool, sql } from './pool.js';
+import { sql } from './pool.js';
 import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -169,15 +170,14 @@ const cleanupAgreementStorage = async (agreement, tenantId) => {
   return { deleted, warnings };
 };
 
-const deleteCancelledAgreement = async (agreementId, tenantId) => {
-  const pool = await getMssqlPool();
+const deleteCancelledAgreement = (agreementId, tenantId) => withManagementWrite({tenantId, action: async pool => {
   const lookup = new sql.Request(pool);
   lookup.input('agreementId', sql.UniqueIdentifier, agreementId);
   lookup.input('tenantId', sql.UniqueIdentifier, tenantId);
 
   const agreementResult = await lookup.query(`
     SELECT TOP 1 *
-    FROM dbo.agreements
+    FROM dbo.agreements WITH (UPDLOCK,HOLDLOCK)
     WHERE id = @agreementId
       AND tenant_id = @tenantId
   `);
@@ -236,7 +236,7 @@ const deleteCancelledAgreement = async (agreementId, tenantId) => {
     }
     throw error;
   }
-};
+}});
 
 const ensureAdminUser = (req, res, next) => {
   if (!isAdminRole({ user: req.user, membership: req.membership })) {

@@ -1464,6 +1464,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     const {createPropertyUtilityConfigRouter} = await import('../src/api/platform/propertyUtilityConfigRouter.js');
     const {createInvoiceMasterAdminRouter} = await import('../src/api/platform/invoiceMasterAdminRouter.js');
     const {createMssqlRouter} = await import('../src/api/mssql/router.js');
+    const {createAgreementDeleteRouter} = await import('../src/api/mssql/agreementDeleteRouter.js');
     const {guardBillingPlatformQuery,guardBillingMssqlCompatibility} = await import('../src/api/platform/billingMutationGuard.js');
     const authId = crypto.randomUUID();
     const email = `monthly-guard-${crypto.randomBytes(6).toString('hex')}@example.invalid`;
@@ -1486,6 +1487,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     app.use('/api/utility-reviews',createUtilityReviewRouter());
     app.use('/api/properties',createPropertyUtilityConfigRouter());
     app.use('/api/invoice-master',createInvoiceMasterAdminRouter());
+    app.use('/api/mssql',createAgreementDeleteRouter());
     app.use('/api/mssql',guardBillingMssqlCompatibility,createMssqlRouter());
     app.use((error,_req,res,_next)=>res.status(error.status || 500).json({error:error.message,code:error.code}));
     const server = await new Promise(resolve=>{const listening=app.listen(0,'127.0.0.1',()=>resolve(listening));});
@@ -1615,6 +1617,14 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.deepEqual(await writerSnapshot(),before,'Dedicated utility/master writer cannot bypass expiry');
       }
       const repository = await import('../src/api/mssql/repositories.js');
+      const deletionCandidate = await first(pool,`INSERT agreements(tenant_id,renteeid,propertyid,status)
+        OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,'cancelled')`,scoped);
+      const deleteFixture = () => fetch(`http://127.0.0.1:${server.address().port}/api/mssql/agreements/${deletionCandidate.id}`,{
+        method:'DELETE',headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});
+      const expiredDeletion = await deleteFixture();
+      assert.equal(expiredDeletion.status,403);
+      assert.equal((await expiredDeletion.json()).code,'MANAGEMENT_READ_ONLY');
+      assert.ok(await first(pool,'SELECT id FROM agreements WHERE id=@id',{id:deletionCandidate.id}));
       const beforeRepository = await writerSnapshot();
       for (const operation of [
         ()=>repository.updatePropertyById(scoped.propertyId,{status:'rented'},scoped.tenantId),
@@ -1628,6 +1638,10 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       await setState('');
       // A later failed row must undo the earlier insert/update, not leave a
       // successful-looking prefix of an import behind.
+      const allowedDeletion = await deleteFixture();
+      assert.equal(allowedDeletion.status,200,JSON.stringify(await allowedDeletion.json()));
+      assert.equal(await first(pool,'SELECT id FROM agreements WHERE id=@id',{id:deletionCandidate.id}),null,
+        'Only the dedicated unsigned disposable agreement was removed after renewed management authority');
       const duplicateId = crypto.randomUUID();
       const beforeBulk = await writerSnapshot();
       const failedInsert = await platformCommand({action:'insert',table:'agreement_templates',payload:[

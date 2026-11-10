@@ -38,14 +38,14 @@ export const expireRentalOffers=async(q,propertyId,tenantId)=>{
 };
 export const createOfferStore=({poolProvider}={})=>{
   const enquiries=createEnquiryStore(poolProvider?{poolProvider}:{});
-  const scoped=(actor,id,owner,work)=>enquiries.withEnquiry(actor,id,owner,async(q,e)=>{
+  const scoped=(actor,id,owner,work,managementWrite=false)=>enquiries.withEnquiry(actor,id,owner,async(q,e)=>{
     const parent=(await q(`SELECT p.id,p.country_code,p.status FROM dbo.properties p WITH(UPDLOCK,HOLDLOCK)
       JOIN dbo.tenants t ON t.id=p.tenant_id WHERE p.id=@propertyId AND p.tenant_id=@tenantId
       AND (t.status IS NULL OR t.status='active')`,{propertyId:e.property_id,tenantId:e.tenant_id}))[0];
     if(!parent){throw conflict('RENTAL_PROPERTY_UNAVAILABLE','The property workspace is unavailable.');}
     await expireRentalOffers(q,e.property_id,e.tenant_id);
     return work(q,e,parent);
-  },true);
+  },true,managementWrite);
   const options=async(q,e)=>{
     const units=await q(`SELECT id,unitnumber AS label FROM dbo.property_units
       WHERE propertyid=@propertyId AND tenant_id=@tenantId ORDER BY unitnumber,id`,{propertyId:e.property_id,tenantId:e.tenant_id});
@@ -185,6 +185,6 @@ export const createOfferStore=({poolProvider}={})=>{
       }else{throw conflict('RENTAL_OFFER_CHANGED','This action is unavailable for the current offer.');}
       row=(await current(q,id))[0];await audit(q,row,actor,input,input.action);
       return read(q,e,owner);
-    })
+    },true)
   };
 };
