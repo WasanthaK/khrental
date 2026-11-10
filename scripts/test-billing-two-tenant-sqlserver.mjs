@@ -1561,7 +1561,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.deepEqual(await writerSnapshot(),before,'Denied maintenance cannot partially write domain/events/notifications');
       }
       // Both reads and SaaS payment recovery remain outside these rental guards.
-      const history = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/${invoicePath}`,{
+      const history = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/${invoicePath}/account`,{
         headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});
       assert.equal(history.status,200);
       await query(pool,"UPDATE invoices SET status='draft' WHERE id=@invoiceId",{invoiceId:invoice.id});
