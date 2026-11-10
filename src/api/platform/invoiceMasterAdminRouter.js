@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { createInvoiceDocumentPdfCandidate } from './invoicePdfCandidate.js';
@@ -39,10 +40,11 @@ const txQuery = async(tx,statement,values={}) => {
   return (await r.query(statement)).recordset || [];
 };
 const txFirst=async(tx,statement,values)=> (await txQuery(tx,statement,values))[0] || null;
-const transaction = async fn => {
+const transaction = async (tenantId, fn) => {
   const tx=new sql.Transaction(await getMssqlPool());
   await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   try {
+    await assertManagementWrite({tenantId, transaction: tx});
     const data=await fn(tx);
     await tx.commit();
     return data;
@@ -117,7 +119,7 @@ export const createInvoiceMasterAdminRouter = () => {
     try{
       requireComplete(req.body,['legalName','postalAddress','supportEmail','supportPhone','website']);
       const input=normalizeIssuerProfile(req.body);
-      const data=await transaction(async tx=>{
+      const data=await transaction(req.tenantId, async tx=>{
         const old=await txFirst(tx,
           'SELECT invoice_issuer_profile_json FROM dbo.tenant_settings WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId',
           {tenantId:req.tenantId});
@@ -153,7 +155,7 @@ export const createInvoiceMasterAdminRouter = () => {
       requireComplete(req.body,
         ['beneficiaryName','billingContactName','billingContactEmail','billingContactPhone','parties']);
       const input=normalizePropertyBilling(req.body);
-      const data=await transaction(async tx=>{
+      const data=await transaction(req.tenantId, async tx=>{
         const values={tenantId:req.tenantId,propertyId:req.params.propertyId};
         const row=await txFirst(tx,`SELECT TOP 1 bank_beneficiary_name,billing_contact_name,
           billing_contact_email,billing_contact_phone,invoice_party_overrides_json
@@ -193,7 +195,7 @@ export const createInvoiceMasterAdminRouter = () => {
     try{
       requireComplete(req.body,['beneficiaryName']);
       const input=normalizeUnitBilling(req.body);
-      const data=await transaction(async tx=>{
+      const data=await transaction(req.tenantId, async tx=>{
         const values={tenantId:req.tenantId,propertyId:req.params.propertyId,unitId:req.params.unitId};
         const row=await txFirst(tx,`SELECT TOP 1 bank_beneficiary_name
           FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK)

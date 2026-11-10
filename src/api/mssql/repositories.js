@@ -1,3 +1,4 @@
+import { assertManagementWrite, runManagementQuery } from '../managementBilling/store.js';
 import crypto from 'node:crypto';
 import { paginateQuery, runQuery, runSingleQuery } from './query.js';
 import { getMssqlPool, sql } from './pool.js';
@@ -1401,13 +1402,13 @@ export const updatePropertyById = async (id, payload = {}, tenantId) => {
     assignments.push('updatedat = @updatedat');
   }
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `DECLARE @changed TABLE(id UNIQUEIDENTIFIER);
      UPDATE properties SET ${assignments.join(', ')}
      OUTPUT INSERTED.id INTO @changed
      WHERE id = @id AND tenant_id = @tenantId;
      SELECT p.* FROM properties p JOIN @changed c ON c.id=p.id;`,
-    params
+    params, tenantId
   );
 
   return rows[0] || null;
@@ -1477,7 +1478,7 @@ export const createAgreementTemplate = async (payload = {}, tenantId) => {
     tenant_id = null
   } = scopedPayload;
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `INSERT INTO agreement_templates (
       id,
       tenant_id,
@@ -1508,7 +1509,7 @@ export const createAgreementTemplate = async (payload = {}, tenantId) => {
       version,
       createdat: now,
       updatedat: now
-    }
+    }, tenantId
   );
 
   return rows[0] || null;
@@ -1532,25 +1533,25 @@ export const updateAgreementTemplate = async (id, payload = {}, tenantId) => {
     assignments.push('updatedat = @updatedat');
   }
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `UPDATE agreement_templates
      SET ${assignments.join(', ')}
      OUTPUT INSERTED.*
      WHERE id = @id
        AND tenant_id = @tenantId`,
-    params
+    params, tenantId
   );
 
   return rows[0] || null;
 };
 
 export const deleteAgreementTemplateById = async (id, tenantId) => {
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `DELETE FROM agreement_templates
      OUTPUT DELETED.*
      WHERE id = @id
        AND tenant_id = @tenantId`,
-    { id, tenantId: assertTenantId(tenantId) }
+    { id, tenantId: assertTenantId(tenantId) }, tenantId
   );
 
   return rows[0] || null;
@@ -1691,7 +1692,7 @@ export const createInvoice = async (payload = {}, tenantId) => {
     tenant_id = null
   } = scopedPayload;
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `INSERT INTO invoices (
       id,
       tenant_id,
@@ -1740,7 +1741,7 @@ export const createInvoice = async (payload = {}, tenantId) => {
       notes,
       createdat: now,
       updatedat: now
-    }
+    }, tenantId
   );
 
   return mapInvoiceRow(rows[0] || null);
@@ -1768,13 +1769,13 @@ export const updateInvoice = async (id, payload = {}, tenantId) => {
     assignments.push('updatedat = @updatedat');
   }
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `UPDATE invoices
      SET ${assignments.join(', ')}
      OUTPUT INSERTED.*
      WHERE id = @id
        AND tenant_id = @tenantId`,
-    params
+    params, tenantId
   );
 
   return mapInvoiceRow(rows[0] || null);
@@ -1886,7 +1887,7 @@ export const createAgreement = async (payload, tenantId) => {
     tenant_id = null
   } = scopedPayload;
 
-  const insertedRows = await runQuery(
+  const insertedRows = await runManagementQuery(
     `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
 INSERT INTO agreements (
       tenant_id,
@@ -1991,7 +1992,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       cancellation_reason,
       createdat: now,
       updatedat: now
-    }
+    }, tenantId
   );
 
   return insertedRows[0] || null;
@@ -2017,7 +2018,7 @@ export const updateAgreement = async (id, payload, tenantId) => {
 
   assignments.push('updatedat = @updatedat');
 
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
 UPDATE agreements
      SET ${assignments.join(', ')}
@@ -2027,7 +2028,7 @@ UPDATE agreements
        AND LOWER(LTRIM(RTRIM(COALESCE(status, '')))) NOT IN ('signed', 'completed', 'active')
        AND LOWER(LTRIM(RTRIM(COALESCE(signature_status, '')))) NOT IN ('signed', 'completed', 'signing_complete');
 SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-    params
+    params, tenantId
   );
 
   if (rows[0]) return getAgreementById(rows[0].id, tenantId);
@@ -2041,12 +2042,12 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
 };
 
 export const deleteAgreementById = async (id, tenantId) => {
-  const rows = await runQuery(
+  const rows = await runManagementQuery(
     `DELETE FROM agreements
      OUTPUT DELETED.*
      WHERE id = @id
        AND tenant_id = @tenantId`,
-    { id, tenantId: assertTenantId(tenantId) }
+    { id, tenantId: assertTenantId(tenantId) }, tenantId
   );
 
   return rows[0] || null;
@@ -2056,10 +2057,11 @@ export const markAgreementSigned = async (id, tenantId) => {
   const scopedTenantId = assertTenantId(tenantId);
   const pool = await getMssqlPool();
   const transaction = new sql.Transaction(pool);
-  await transaction.begin();
+  await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   let committed = false;
 
   try {
+    await assertManagementWrite({tenantId: scopedTenantId, transaction});
     // Hold the row lock through the entire signed-state and associated-record
     // transition. Concurrent manual requests or webhook writes must serialize.
     const stateRequest = new sql.Request(transaction);

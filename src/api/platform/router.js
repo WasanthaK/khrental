@@ -1,3 +1,4 @@
+import { withManagementWrite } from '../managementBilling/store.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext, resolvePersonalRentalContext } from '../auth/seekerContext.js';
@@ -73,6 +74,9 @@ const TENANT_SCOPED_TABLES = new Set([
   'tenant_memberships',
   'tenant_settings'
 ]);
+const MANAGEMENT_TABLES = new Set([...TENANT_SCOPED_TABLES].filter(table =>
+  !['app_users','notifications','webhook_events','tenant_memberships','tenant_settings'].includes(table)));
+
 const ALLOWED_RPCS = new Set([
   'get_table_columns',
   'reject_utility_reading',
@@ -520,7 +524,7 @@ const getResourceScopeConstraint = ({ table, resourceScope, params, tenantId }) 
   }
 };
 
-const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId }) => {
+const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId, transaction = null }) => {
   const rows = Array.isArray(payload) ? payload : [payload];
   // Recipient membership applies to EVERY role, including organization admins.
   // A global app_user may belong to another organization but must never
@@ -528,7 +532,7 @@ const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId
   if (table === 'notifications') {
     for (const row of rows) {
       await requireNotificationTenantRecipient({
-        tenantId, userId: row?.user_id, queryOne: runSingleQuery
+        tenantId, userId: row?.user_id, queryOne: (statement, params) => runSingleQuery(statement, params, transaction)
       });
     }
     return;
@@ -549,7 +553,7 @@ const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId
          WHERE tenant_id = @tenantId
            AND renteeid = @userId
            AND propertyid = @propertyId`,
-        { tenantId, userId: resourceScope.userId, propertyId: row.propertyid }
+        { tenantId, userId: resourceScope.userId, propertyId: row.propertyid }, transaction
       );
       if (!agreement) {
         const error = new Error('The selected property is not linked to the current tenant account.');
@@ -566,7 +570,7 @@ const verifyTenantInsertScope = async ({ table, payload, resourceScope, tenantId
              WHERE tenant_id = @tenantId
                AND renteeid = @userId
                AND id = @requestId`,
-            { tenantId, userId: resourceScope.userId, requestId: row.maintenance_request_id }
+            { tenantId, userId: resourceScope.userId, requestId: row.maintenance_request_id }, transaction
           )
         : null;
       if (!request) {
@@ -716,12 +720,12 @@ const executeSelect = async ({ table, select = '*', filters = [], order = [], li
   };
 };
 
-const executeInsert = async ({ table, payload, tenantId = null, resourceScope = null }) => {
+const executeInsert = async ({ table, payload, tenantId = null, transaction = null, resourceScope = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const rows = Array.isArray(getScopedPayload({ table: safeTable, payload, tenantId }))
     ? getScopedPayload({ table: safeTable, payload, tenantId })
     : [getScopedPayload({ table: safeTable, payload, tenantId })];
-  await verifyTenantInsertScope({ table: safeTable, payload: rows, resourceScope, tenantId });
+  await verifyTenantInsertScope({ table: safeTable, payload: rows, resourceScope, tenantId, transaction });
   const inserted = [];
 
   for (const row of rows) {
@@ -748,7 +752,7 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
            INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.id INTO @changed VALUES (${values.join(', ')});
            SELECT p.* FROM ${safeTable} p JOIN @changed c ON c.id=p.id;`
         : `INSERT INTO ${safeTable} (${columns.join(', ')}) OUTPUT INSERTED.* VALUES (${values.join(', ')})`,
-      params
+      params, transaction
     );
     inserted.push(...result.map(mapRow));
   }
@@ -756,7 +760,7 @@ const executeInsert = async ({ table, payload, tenantId = null, resourceScope = 
   return { data: Array.isArray(payload) ? inserted : inserted[0] || null, error: null };
 };
 
-const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) => {
+const executeUpdate = async ({ table, payload, filters = [], tenantId = null, transaction = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const scopedPayload = getScopedPayload({ table: safeTable, payload, tenantId });
   if (safeTable === 'properties' && Object.hasOwn(scopedPayload || {}, 'country_code')) {
@@ -794,7 +798,7 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null }) 
            UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.id INTO @changed ${whereClause};
            SELECT p.* FROM ${safeTable} p JOIN @changed c ON c.id=p.id;`
         : `UPDATE ${safeTable} SET ${assignments.join(', ')} OUTPUT INSERTED.* ${whereClause}`,
-      params
+      params, transaction
     );
   } catch (error) {
     if (!isInvalidUniqueIdentifierError(error)) {
@@ -833,7 +837,7 @@ export const buildPropertyDeleteSql = (whereClause) => `
     THROW;
   END CATCH;`;
 
-const executeDelete = async ({ table, filters = [], tenantId = null }) => {
+const executeDelete = async ({ table, filters = [], tenantId = null, transaction = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const { whereClause, params, postFilters } = buildWhereClause(getScopedFilters({ table: safeTable, filters, tenantId }));
   if (postFilters.length > 0) {
@@ -846,7 +850,7 @@ const executeDelete = async ({ table, filters = [], tenantId = null }) => {
     rows = await runQuery(
       safeTable === 'properties' ? buildPropertyDeleteSql(whereClause)
         : `DELETE FROM ${safeTable} OUTPUT DELETED.* ${whereClause}`,
-      params
+      params, transaction
     );
   } catch (error) {
     if (!isInvalidUniqueIdentifierError(error)) {
@@ -859,7 +863,7 @@ const executeDelete = async ({ table, filters = [], tenantId = null }) => {
   return { data: rows.map(mapRow), error: null };
 };
 
-const executeUpsert = async ({ table, payload, tenantId = null }) => {
+const executeUpsert = async ({ table, payload, tenantId = null, transaction = null }) => {
   const safeTable = ensureIdentifier(table, 'table');
   const scopedPayload = getScopedPayload({ table: safeTable, payload, tenantId });
   const rows = Array.isArray(scopedPayload) ? scopedPayload : [scopedPayload];
@@ -872,7 +876,7 @@ const executeUpsert = async ({ table, payload, tenantId = null }) => {
       let existing = null;
 
       try {
-        existing = await runSingleQuery(`SELECT TOP 1 * FROM ${safeTable} ${whereClause}`, params);
+        existing = await runSingleQuery(`SELECT TOP 1 * FROM ${safeTable} ${whereClause}`, params, transaction);
       } catch (error) {
         if (!isInvalidUniqueIdentifierError(error)) {
           throw error;
@@ -880,20 +884,20 @@ const executeUpsert = async ({ table, payload, tenantId = null }) => {
       }
 
       if (existing) {
-        const updated = await executeUpdate({ table: safeTable, payload: row, filters: [{ column: 'id', operator: 'eq', value: row.id }], tenantId });
+        const updated = await executeUpdate({ table: safeTable, payload: row, filters: [{ column: 'id', operator: 'eq', value: row.id }], tenantId, transaction });
         results.push(...(updated.data || []));
         continue;
       }
     }
 
-    const inserted = await executeInsert({ table: safeTable, payload: row, tenantId });
+    const inserted = await executeInsert({ table: safeTable, payload: row, tenantId, transaction });
     results.push(...(Array.isArray(inserted.data) ? inserted.data : [inserted.data].filter(Boolean)));
   }
 
   return { data: Array.isArray(payload) ? results : results[0] || null, error: null };
 };
 
-const executeRpc = async (name, args = {}, tenantContext = null) => {
+const executeRpc = async (name, args = {}, tenantContext = null, transaction = null) => {
   if (!ALLOWED_RPCS.has(name)) {
     throw new Error(`Unsupported RPC: ${name}`);
   }
@@ -913,7 +917,7 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
       if (!readingId) {throw new Error('reading_id is required');}
       const rows = await runQuery(
         `UPDATE utility_readings SET status = 'rejected', updatedat = @updatedat OUTPUT INSERTED.* WHERE id = @readingId AND tenant_id = @tenantId`,
-        { readingId, tenantId: tenantContext.tenantId, updatedat: new Date().toISOString() }
+        { readingId, tenantId: tenantContext.tenantId, updatedat: new Date().toISOString() }, transaction
       );
       return { data: rows.map(mapRow)[0] || null, error: null };
     }
@@ -926,7 +930,7 @@ const executeRpc = async (name, args = {}, tenantContext = null) => {
         `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
 UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.id INTO @rental_changed WHERE id = @agreementId AND tenant_id = @tenantId;
 SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-        { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }
+        { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }, transaction
       );
       return { data: rows.map(mapRow)[0] || null, error: null };
     }
@@ -1100,22 +1104,25 @@ export const createPlatformRouter = () => {
           });
           break;
         case 'insert':
-          result = await executeInsert({
-            table: authorized.table,
-            payload: authorized.payload,
-            tenantId: req.tenantId,
-            resourceScope: authorized.resourceScope
-          });
-          break;
         case 'update':
-          result = await executeUpdate({ table: authorized.table, payload: authorized.payload, filters: authorized.filters, tenantId: req.tenantId });
-          break;
         case 'delete':
-          result = await executeDelete({ table: authorized.table, filters: authorized.filters, tenantId: req.tenantId });
+        case 'upsert': {
+          const mutate = transaction => {
+            const options = {table: authorized.table, payload: authorized.payload,
+              filters: authorized.filters, tenantId: req.tenantId,
+              resourceScope: authorized.resourceScope, transaction};
+            switch (authorized.action) {
+              case 'insert': return executeInsert(options);
+              case 'update': return executeUpdate(options);
+              case 'delete': return executeDelete(options);
+              case 'upsert': return executeUpsert(options);
+            }
+          };
+          result = MANAGEMENT_TABLES.has(authorized.table)
+            ? await withManagementWrite({tenantId: req.tenantId, action: mutate})
+            : await mutate(null);
           break;
-        case 'upsert':
-          result = await executeUpsert({ table: authorized.table, payload: authorized.payload, tenantId: req.tenantId });
-          break;
+        }
         default:
           throw new Error(`Unsupported action: ${authorized.action}`);
       }
@@ -1165,7 +1172,10 @@ export const createPlatformRouter = () => {
         }
       }
 
-      const result = await executeRpc(authorizedRpc, req.body || {}, req.tenantContext);
+      const mutate = transaction => executeRpc(authorizedRpc, req.body || {}, req.tenantContext, transaction);
+      const result = ['reject_utility_reading','update_agreement_status'].includes(authorizedRpc)
+        ? await withManagementWrite({tenantId: req.tenantId, action: mutate})
+        : await mutate(null);
       res.json({
         ...result,
         meta: {

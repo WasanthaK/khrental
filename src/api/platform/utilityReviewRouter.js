@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import express from 'express';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { getMssqlPool, sql } from '../mssql/pool.js';
@@ -77,6 +78,7 @@ export const createUtilityReviewRouter = () => {
 
       transaction = new sql.Transaction(await getMssqlPool());
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      await assertManagementWrite({tenantId: req.tenantId, transaction});
 
       const [reading] = await query(transaction,
         `SELECT TOP 1 r.id, r.renteeid, r.propertyid, r.utilitytype, r.previousreading,
@@ -167,6 +169,7 @@ export const createUtilityReviewRouter = () => {
 
       transaction = new sql.Transaction(await getMssqlPool());
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+      await assertManagementWrite({tenantId: req.tenantId, transaction});
       const [reading] = await query(transaction,
         `SELECT TOP 1 id, tenant_id, propertyid, status, billing_status, invoice_id,
                 previousreading, currentreading

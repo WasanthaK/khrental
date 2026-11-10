@@ -41,8 +41,8 @@ export const withManagementWrite = async ({tenantId, action}) => {
   }
 };
 
-export const runManagementQuery = (statement, params) => withManagementWrite({
-  tenantId: params.tenantId,
+export const runManagementQuery = (statement, params, tenantId = params.tenantId) => withManagementWrite({
+  tenantId,
   action: transaction => runQuery(statement, params, transaction)
 });
 
