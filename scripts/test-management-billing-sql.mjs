@@ -249,6 +249,9 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   // This proves billing behavior only, not the separate management-cessation control.
   await store.locked(tenantA,async q=>{
     await q('DELETE dbo.property_units WHERE propertyid=@id',{id:propA});
+    // Property insertion creates a private listing preference. Remove this
+    // disposable child before its parent; retain the production FK protection.
+    await q('DELETE dbo.public_listing_preferences WHERE property_id=@id AND tenant_id=@tenantId',{id:propA,tenantId:tenantA});
     await q('DELETE dbo.properties WHERE id=@id',{id:propA});
   });
   const zeroPreview=await service.quantityPreview({tenantId:tenantA,id:crypto.randomUUID(),actorId});
