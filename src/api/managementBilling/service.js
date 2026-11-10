@@ -106,7 +106,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       // These checks occur before a provider write. Do not let a rejected preview or stale form
       // strand a workspace. Ambiguous provider outcomes and resumed commands remain pending.
       const noRemoteChange=new Set(['BILLING_INVENTORY_CHANGED','BILLING_SUBSCRIPTION_EXISTS','BILLING_CUSTOMER_REQUIRED',
-        'BILLING_PORTAL_UNSAFE','BILLING_CANCELLATION_UNAVAILABLE','BILLING_GOOD_STANDING_REQUIRED','BILLING_ZERO_POLICY_PENDING',
+        'BILLING_PORTAL_UNSAFE','BILLING_CANCELLATION_UNAVAILABLE','BILLING_GOOD_STANDING_REQUIRED','BILLING_INVENTORY_EMPTY',
         'BILLING_PREVIEW_REQUIRED','BILLING_PREVIEW_EXPIRED','BILLING_PREVIEW_STALE']);
       if(started.createdNow&&noRemoteChange.has(error.code))await store.locked(tenantId,async q=>{
         await q(`UPDATE dbo.management_billing_commands SET status='failed',result_json=@result,completed_at=SYSUTCDATETIME()
@@ -166,10 +166,14 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     },key);
     return {url:safeUrl(session.url,'billing.stripe.com')};
   }});
-  const cancel=async({tenantId,id,actorId,cancelAtPeriodEnd})=>runCommand({tenantId,id,actorId,kind:'cancellation',payload:{cancelAtPeriodEnd},action:async(q,account,key)=>{
+  const cancelLocked=async(q,account,key,cancelAtPeriodEnd)=>{
+    const tenantId=account.tenant_id;
     account=await reconcileLocked(q,account);
     if(!account.stripe_subscription_id || !['active','past_due'].includes(account.subscription_status))
       throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');
+    if(!cancelAtPeriodEnd && !(await store.inventory(tenantId,q)).length) {
+      throw problem(409,'BILLING_INVENTORY_EMPTY','Add managed dwellings before choosing to renew this subscription.');
+    }
     if(account.stripe_schedule_id){
       if(!cancelAtPeriodEnd) throw problem(409,'BILLING_SCHEDULE_REVIEW','This subscription already has an active renewal schedule.');
       const schedule=await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`);
@@ -182,13 +186,16 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     await stripe.request('POST',`/v1/subscriptions/${account.stripe_subscription_id}`,{cancel_at_period_end:cancelAtPeriodEnd},key);
     const confirmed=await reconcileLocked(q,account);
     if(confirmed.cancel_at_period_end!==cancelAtPeriodEnd) throw problem(502,'BILLING_CANCELLATION_UNCONFIRMED','Stripe has not confirmed the cancellation change.');
+    return confirmed;
+  };
+  const cancel=async({tenantId,id,actorId,cancelAtPeriodEnd})=>runCommand({tenantId,id,actorId,kind:'cancellation',payload:{cancelAtPeriodEnd},action:async(q,account,key)=>{
+    const confirmed=await cancelLocked(q,account,key,cancelAtPeriodEnd);
     return {cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }});
   const quantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
     account=await reconcileLocked(q,account);
     if(entitlement(account).state!=='active') throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');
     const inventory=await store.inventory(tenantId,q);
-    if(!inventory.length) throw problem(409,'BILLING_ZERO_POLICY_PENDING','Zero-dwelling cancellation and reactivation need an approved policy.');
     const prorationDate=Math.floor(Date.now()/1000);
     const target=inventory.length;
     let invoice=null;
@@ -199,7 +206,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     return {previewId:id,inventoryHash:hash(inventory),from:account.quantity,to:target,
       prorationDate,expiresAt:new Date((prorationDate+600)*1000).toISOString(),
       nextInvoiceTotalMinor:invoice?.total ?? null,currency:invoice?.currency || 'usd',
-      timing:target>account.quantity?'prorated_next_invoice':target<account.quantity?'next_renewal':'unchanged'};
+      timing:target===0?'cancel_at_renewal':target>account.quantity?'prorated_next_invoice':target<account.quantity?'next_renewal':'unchanged'};
   }});
   const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
     const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
@@ -210,9 +217,21 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
       throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
     account=await reconcileLocked(q,account);
-    if(entitlement(account).state!=='active' || (account.quantity!==preview.from && !(resuming&&account.quantity===Math.max(preview.from,preview.to))))
+    const cancellationRetry=resuming && preview.to===0 && preview.timing==='cancel_at_renewal'
+      && entitlement(account).state==='ending';
+    if((entitlement(account).state!=='active' && !cancellationRetry) || (account.quantity!==preview.from && !(resuming&&account.quantity===Math.max(preview.from,preview.to))))
       throw problem(409,'BILLING_PREVIEW_STALE','The subscription changed. Request a new preview.');
     const target=inventory.length;
+    if(target===0) {
+      if(preview.to!==0 || preview.timing!=='cancel_at_renewal') {
+        throw problem(409,'BILLING_PREVIEW_STALE','Review the period-end cancellation before continuing.');
+      }
+      const confirmed=await cancelLocked(q,account,`${key}:zero-stock`,true);
+      await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=0 WHERE tenant_id=@tenantId`,
+        {tenantId,inventory:JSON.stringify(inventory)});
+      return {currentQuantity:confirmed.quantity,nextRenewalQuantity:0,timing:'cancel_at_renewal',
+        cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through};
+    }
     const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`);
     const item=subscription.items.data[0];
     if(target<preview.from || account.stripe_schedule_id){

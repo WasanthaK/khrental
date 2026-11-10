@@ -5,6 +5,7 @@ import express from 'express';
 import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange} from '../src/api/managementBilling/contract.js';
 import {createStripeClient,stripeForm,firstRenewalFailure,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
+import {createBillingService} from '../src/api/managementBilling/service.js';
 
 const tenant='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
@@ -15,6 +16,111 @@ const subscription={id:'sub_org',customer:'cus_org',livemode:false,status:'activ
   price:{id:'price_approved',currency:'usd',recurring:{interval:'month',usage_type:'licensed'}}}]} };
 const invoice={id:'in_org',customer:'cus_org',livemode:false,parent:{subscription_details:{subscription:'sub_org'}},currency:'usd',status:'paid',amount_due:1000,amount_paid:1000,amount_remaining:0,
   lines:{data:[{parent:{subscription_item_details:{subscription_item:'si_org',proration:false}},period:{end:now/1000+86400}}]}};
+
+// A transactional in-memory store exercises provider response loss locally.
+// SQL locking, rollback and constraints are covered separately by the disposable SQL suite.
+const zeroStockFixture=()=>{
+  const end=Math.floor(Date.now()/1000)+30*86400;
+  let state={account:{...account,tenant_id:tenant,initial_payment_verified:true,quantity:2},commands:{},inventory:[]};
+  const remote={...structuredClone(subscription),latest_invoice:invoice.id,cancel_at_period_end:false};
+  remote.items.data[0].current_period_end=end;
+  const paid=structuredClone(invoice);paid.lines.data[0].period.end=end;
+  const calls=[];let loseResponse=false;
+  const q=async(statement,params={})=>{
+    if(statement.startsWith('SELECT * FROM dbo.management_billing_commands'))return [state.commands[params.id]];
+    if(statement.startsWith('SELECT result_json')){
+      const saved=state.commands[params.previewId];
+      return saved?.tenant_id===params.tenantId && saved.kind==='quantity_preview' && saved.status==='completed'?[saved]:[];
+    }
+    if(statement.startsWith('UPDATE dbo.management_billing_accounts SET subscription_status')){
+      const {tenantId,...projection}=params;Object.assign(state.account,projection);return [];
+    }
+    if(statement.startsWith('UPDATE dbo.management_billing_accounts SET inventory_json')){
+      state.account.inventory_json=params.inventory;state.account.pending_quantity=0;return [];
+    }
+    if(statement.includes("SET status='failed'")){
+      Object.assign(state.commands[params.id],{status:'failed',result_json:params.result});return [];
+    }
+    throw new Error(`Unhandled fixture query: ${statement}`);
+  };
+  const store={account:async()=>({...state.account}),inventory:async()=>structuredClone(state.inventory),
+    read:async()=>Object.values(state.commands).filter(command=>command.status==='pending'),
+    assertActor:async()=>{},audit:async()=>{},
+    locked:async(_tenant,action)=>{
+      const snapshot=structuredClone(state);
+      try{return await action(q);}catch(error){state=snapshot;throw error;}
+    },
+    beginCommand:async({id,kind,payload,tenantId})=>{
+      const existing=state.commands[id];if(existing)return {...existing,createdNow:false};
+      state.commands[id]={id,tenant_id:tenantId,kind,payload,payload_json:JSON.stringify(payload),status:'pending'};
+      return {...state.commands[id],createdNow:true};
+    },
+    completeCommand:async(_q,id,result)=>Object.assign(state.commands[id],{status:'completed',result_json:JSON.stringify(result)})};
+  const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body,key)=>{
+    calls.push({method,path,body,key});
+    if(method==='GET'&&path===`/v1/subscriptions/${remote.id}`)return structuredClone(remote);
+    if(method==='GET'&&path===`/v1/invoices/${paid.id}`)return structuredClone(paid);
+    if(method==='POST'&&path===`/v1/subscriptions/${remote.id}`){
+      assert.ok(key);assert.deepEqual(Object.keys(body),['cancel_at_period_end']);
+      remote.cancel_at_period_end=body.cancel_at_period_end;
+      if(loseResponse){loseResponse=false;throw Object.assign(new Error('Response lost after provider success'),{code:'STRIPE_UNAVAILABLE',status:503});}
+      return structuredClone(remote);
+    }
+    throw new Error(`Unexpected provider operation: ${method} ${path}`);
+  }};
+  return {service:createBillingService({store,stripe}),calls,remote,state:()=>state,
+    loseNextResponse:()=>{loseResponse=true;},restoreStock:()=>{state.inventory=[{key:'property:restored'}];}};
+};
+
+test('zero-stock preview and confirmation end at renewal without a zero-quantity subscription',async()=>{
+  const f=zeroStockFixture(),actorId=tenant;
+  const preview=await f.service.quantityPreview({tenantId:tenant,id:crypto.randomUUID(),actorId});
+  assert.equal(preview.to,0);assert.equal(preview.timing,'cancel_at_renewal');
+  assert.equal(f.calls.some(c=>c.method==='POST'),false,'Review must not change provider state');
+  const request={tenantId:tenant,id:crypto.randomUUID(),actorId,previewId:preview.previewId};
+  const result=await f.service.quantityApply(request);
+  assert.equal(result.currentQuantity,2);assert.equal(result.nextRenewalQuantity,0);
+  assert.equal(result.cancelAtPeriodEnd,true);assert.equal(f.remote.items.data[0].quantity,2);
+  const writes=f.calls.filter(c=>c.method==='POST');
+  assert.equal(writes.length,1);assert.deepEqual(writes[0].body,{cancel_at_period_end:true});
+  assert.deepEqual(await f.service.quantityApply(request),result);
+  assert.equal(f.calls.filter(c=>c.method==='POST').length,1,'Completed retry reuses its durable result');
+});
+
+test('zero-stock cancellation resumes after lost response and independent ending readback',async()=>{
+  const f=zeroStockFixture(),actorId=tenant;
+  const preview=await f.service.quantityPreview({tenantId:tenant,id:crypto.randomUUID(),actorId});
+  const request={tenantId:tenant,id:crypto.randomUUID(),actorId,previewId:preview.previewId};
+  f.loseNextResponse();
+  await assert.rejects(f.service.quantityApply(request),{code:'STRIPE_UNAVAILABLE'});
+  assert.equal(f.state().commands[request.id].status,'pending');
+  assert.equal(f.remote.cancel_at_period_end,true);
+  await f.service.refresh(tenant);
+  assert.equal(entitlement(f.state().account).state,'ending');
+  const result=await f.service.quantityApply(request);
+  assert.equal(result.cancelAtPeriodEnd,true);assert.equal(f.state().account.pending_quantity,0);
+  assert.equal(new Set(f.calls.filter(c=>c.method==='POST').map(c=>c.key)).size,1,'Ambiguous retries keep the provider idempotency key');
+});
+
+test('restored inventory invalidates a zero-stock preview before provider writes',async()=>{
+  const f=zeroStockFixture(),actorId=tenant;
+  const preview=await f.service.quantityPreview({tenantId:tenant,id:crypto.randomUUID(),actorId});
+  f.restoreStock();
+  await assert.rejects(f.service.quantityApply({tenantId:tenant,id:crypto.randomUUID(),actorId,previewId:preview.previewId}),{code:'BILLING_PREVIEW_EXPIRED'});
+  assert.equal(f.calls.some(c=>c.method==='POST'),false);
+});
+
+test('renewal restoration rejects empty stock and a new risk hold stops cancellation retry',async()=>{
+  const f=zeroStockFixture(),actorId=tenant;
+  await assert.rejects(f.service.cancel({tenantId:tenant,id:crypto.randomUUID(),actorId,cancelAtPeriodEnd:false}),{code:'BILLING_INVENTORY_EMPTY'});
+  assert.equal(f.calls.some(c=>c.method==='POST'),false);
+  const preview=await f.service.quantityPreview({tenantId:tenant,id:crypto.randomUUID(),actorId});
+  const request={tenantId:tenant,id:crypto.randomUUID(),actorId,previewId:preview.previewId};
+  f.loseNextResponse();await assert.rejects(f.service.quantityApply(request),{code:'STRIPE_UNAVAILABLE'});
+  f.state().account.risk_hold=true;
+  await assert.rejects(f.service.quantityApply(request),{code:'BILLING_PREVIEW_STALE'});
+  assert.equal(f.calls.filter(c=>c.method==='POST').length,1,'Risk hold cannot be bypassed by the ending-state retry');
+});
 
 test('pricing drafts preserve unresolved policy and preview uses exact minor units',()=>{
   assert.equal(pricingPreview(parsePricing(rules),12).monthlyBaseMinor,6000);

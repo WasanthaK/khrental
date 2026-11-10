@@ -16,7 +16,10 @@ function Fixture(){
   if(scenario==='cancelled')data.cancelAtPeriodEnd=true;
   if(scenario==='missing-date')data.paidThrough=null;
   if(scenario==='invalid-date')data.paidThrough='invalid';
-  return <ManagementSubscriptionView data={data} notice={notice} onAction={kind=>setNotice(`Fixture action: ${kind}`)} onReload={()=>{}}/>;
+  if(['zero-preview','zero-ending'].includes(scenario))Object.assign(data,{inventoryQuantity:0,inventory:[],pendingQuantity:null});
+  if(scenario==='zero-ending')Object.assign(data,{cancelAtPeriodEnd:true,pendingQuantity:0,entitlement:{state:'ending'}});
+  const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
+  return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} onAction={kind=>setNotice(`Fixture action: ${kind}`)} onReload={()=>{}}/>;
  }
  if(screen==='complimentary')return <><h1 className="mx-auto max-w-6xl p-6 text-3xl font-semibold">Management access</h1><ManagementComplimentaryView
   workspaces={[{id:'fixture',name:'Example test workspace'}]} tenantId="fixture" status={{version:1,mode:null,entitlement:{state:'payment_pending'}}}
