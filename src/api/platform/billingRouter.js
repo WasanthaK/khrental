@@ -34,15 +34,8 @@ const createRequestError = (status, message, code, details = null) => {
   return error;
 };
 
-const bindParams = (request, params = {}) => {
-  Object.entries(params).forEach(([key, value]) => request.input(key, value));
-  return request;
-};
-
 const queryTransaction = async (transaction, queryText, params = {}) => {
-  const request = bindParams(new sql.Request(transaction), params);
-  const result = await request.query(queryText);
-  return result.recordset || [];
+  return runQuery(queryText,params,transaction);
 };
 
 const singleTransaction = async (transaction, queryText, params = {}) => {

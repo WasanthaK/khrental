@@ -104,8 +104,9 @@ export const dwellingInventory = ({tenantId, properties, units}) => {
     const children = units.filter(u => String(u.propertyid).toLowerCase() === String(property.id).toLowerCase());
     if (children.some(u => String(u.tenant_id).toLowerCase() !== tenant))
       throw problem(409, 'BILLING_INVENTORY_SCOPE', 'A dwelling has inconsistent organization ownership.');
+    if(property.management_state==='ceased')continue;
     // Occupancy and public visibility deliberately do not enter this calculation.
-    for (const item of children.length ? children : [property]) {
+    for (const item of children.length ? children.filter(u=>u.management_state!=='ceased') : [property]) {
       const kind = children.length ? 'unit' : 'property';
       const key = `${kind}:${String(item.id).toLowerCase()}`;
       if (seen.has(key)) throw problem(409, 'BILLING_DUPLICATE_DWELLING', 'Duplicate dwelling identity.');
@@ -148,11 +149,31 @@ export const managementWriteEnforced = (tenantId, env = process.env) => {
 };
 
 export const assertInventoryMutation=({tenantId,table,action,env=process.env})=>{
-  if(env.MANAGEMENT_INVENTORY_SCHEMA_READY!=='true'||!['properties','property_units'].includes(table)||!managementWriteEnforced(tenantId,env))return;
+  if((env.MANAGEMENT_INVENTORY_SCHEMA_READY!=='true'&&env.MANAGEMENT_CESSATION_SCHEMA_READY!=='true')||!['properties','property_units'].includes(table)||!managementWriteEnforced(tenantId,env))return;
   if(['insert','upsert'].includes(action))throw problem(409,'BILLING_STOCK_PREPARATION_REQUIRED',
     'Prepare new dwellings in Management subscription, then review and confirm billing before managing them.');
   if(action==='delete')throw problem(409,'BILLING_CESSATION_REQUIRED',
     'Removing managed stock requires the management-cessation checks. Existing records have been retained.');
+};
+
+export const cessationBlockers=({agreements=[],invoices=[],payments=[],settlements=[],deposits=[],maintenance=[],holds=[],pending=[],staged=[],riskHold=false})=>{
+  const blockers=[];
+  const add=(code,message,count)=>{if(count)blockers.push({code,message,count});};
+  add('TENANCY_OPEN','Close or cancel the remaining tenancy/agreement work.',agreements.filter(a=>!['closed','cancelled'].includes(String(a.status||'').toLowerCase())).length);
+  add('FINANCIAL_OPEN','Resolve outstanding invoices, drafts or refund balances.',invoices.filter(i=>{
+    const state=String(i.status||'').toLowerCase();
+    if(state==='cancelled')return Number(i.paid)!==0;
+    return !['issued','overdue','paid'].includes(state)||i.totalamount===null||i.totalamount===undefined||i.outstanding===null||i.outstanding===undefined||!Number.isFinite(Number(i.outstanding))||Number(i.outstanding)!==0;
+  }).length);
+  add('PAYMENT_OPEN','Finish the pending payment reviews.',payments.length);
+  add('SETTLEMENT_OPEN','Finish the remaining settlements.',settlements.length);
+  add('DEPOSIT_OPEN','Resolve the outstanding deposit or refund work.',deposits.length);
+  add('MAINTENANCE_OPEN','Complete or cancel the outstanding maintenance.',maintenance.length);
+  add('RESERVATION_OPEN','Withdraw or resolve the current rental offers and reservations.',holds.length);
+  add('BILLING_OPERATION_OPEN','Resolve the unfinished billing operation first.',pending.length);
+  add('PREPARED_STOCK_OPEN','Confirm or withdraw prepared additions for this property first.',staged.length);
+  add('BILLING_REVIEW_HOLD','Resolve the billing review hold first.',riskHold?1:0);
+  return blockers;
 };
 
 export const complimentaryChange = (input, now = Date.now()) => {

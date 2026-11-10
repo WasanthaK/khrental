@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import {inspectManagementBilling,inspectManagementInventoryStaging} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
@@ -121,13 +121,13 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     }else if(path==='/v1/invoices/create_preview')result={total:1250,currency:'usd'};
     else if(path==='/v1/subscription_schedules'){
       const sub=remote.get(`/v1/subscriptions/${body.from_subscription}`);
-      result={id:'sub_sched_fixture',customer:sub.customer,subscription:sub.id,status:'active',current_phase:{start_date:sub.items.data[0].current_period_start}};
+      result={id:sub.id==='sub_fixtureA'?'sub_sched_fixture':'sub_sched_staged',customer:sub.customer,subscription:sub.id,status:'active',current_phase:{start_date:sub.items.data[0].current_period_start}};
       sub.schedule=result.id;remote.set(`/v1/subscription_schedules/${result.id}`,result);
-    }else if(path==='/v1/subscription_schedules/sub_sched_fixture'){
+    }else if(path.startsWith('/v1/subscription_schedules/')&&!path.endsWith('/release')){
       const schedule=remote.get(path);schedule.phases=body.phases;schedule.end_behavior=body.end_behavior;remote.get(`/v1/subscriptions/${schedule.subscription}`).items.data[0].quantity=body.phases[0].items[0].quantity;
       result=schedule;
-    }else if(path==='/v1/subscription_schedules/sub_sched_fixture/release'){
-      const schedule=remote.get('/v1/subscription_schedules/sub_sched_fixture');schedule.status='released';
+    }else if(path.startsWith('/v1/subscription_schedules/')&&path.endsWith('/release')){
+      const schedule=remote.get(path.slice(0,-8));schedule.status='released';
       remote.get(`/v1/subscriptions/${schedule.subscription}`).schedule=null;result=schedule;
     }else if(path.startsWith('/v1/subscriptions/')){
       const sub=remote.get(path);assert.ok(sub);
@@ -295,10 +295,10 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   await store.locked(tenantB,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId:tenantB,actorId}));
   await assert.rejects(service.checkout({tenantId:tenantB,id:crypto.randomUUID(),actorId,inventoryHash:hash(await store.inventory(tenantB))}),{code:'BILLING_ADMIN_REQUIRED'});
   console.log('PASS: real SQL two-organization billing isolation, ambiguous checkout recovery, first payment, duplicate/out-of-order binding, quantity proration, deferred decrease and schedule cancellation; synthetic Stripe transport');
-  await verifyStagedStock(pool,actorId,stripe,remote,price,invoice);
+  await verifyStagedStock(pool,actorId,stripe,remote,price,invoice,calls);
 };
 
-const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice)=>{
+const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
   const tenantId=crypto.randomUUID(),parent=crypto.randomUUID(),unit1=crypto.randomUUID(),unit2=crypto.randomUUID(),unit3=crypto.randomUUID();
   const store=createBillingStore({getPool:async()=>pool,env:{MANAGEMENT_INVENTORY_SCHEMA_READY:'true'}});
   const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://app.quixo.homes'}});
@@ -372,4 +372,107 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice)=>{
     assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action='inventory.promoted'",{tenantId})).length,2,'Initial and addition promotion each audit once');
   }finally{stripe.request=normal;}
   console.log('PASS: durable pre-enrollment stock, parent/unit identity, atomic and concurrent imports, paid-only exact Checkout promotion, later-stock isolation, provider response loss and promotion audit rollback; synthetic provider');
+  await verifyCessation(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls});
+};
+
+const verifyCessation=async(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls})=>{
+  // Complete production-typed domain prerequisites in this intentionally
+  // smaller disposable migration database; never change a production fixture.
+  await pool.request().batch(`
+    IF COL_LENGTH('dbo.invoices','propertyid') IS NULL ALTER TABLE dbo.invoices ADD propertyid UNIQUEIDENTIFIER NULL;
+    IF COL_LENGTH('dbo.invoices','agreementid') IS NULL ALTER TABLE dbo.invoices ADD agreementid UNIQUEIDENTIFIER NULL;
+    IF COL_LENGTH('dbo.invoices','totalamount') IS NULL ALTER TABLE dbo.invoices ADD totalamount DECIMAL(18,2) NULL;
+    IF COL_LENGTH('dbo.invoices','status') IS NULL ALTER TABLE dbo.invoices ADD status NVARCHAR(50) NULL;
+    IF OBJECT_ID('dbo.payments','U') IS NULL CREATE TABLE dbo.payments(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,invoiceid UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,amount DECIMAL(18,2),status NVARCHAR(50));
+    IF OBJECT_ID('dbo.tenancy_settlements','U') IS NULL CREATE TABLE dbo.tenancy_settlements(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,status NVARCHAR(50));
+    IF OBJECT_ID('dbo.maintenance_requests','U') IS NULL CREATE TABLE dbo.maintenance_requests(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,unitid UNIQUEIDENTIFIER,title NVARCHAR(255) NOT NULL,description NVARCHAR(MAX) NOT NULL,status NVARCHAR(50));
+  `);
+  const migration=fs.readFileSync('migrations/20261110_02_management_cessation.sql','utf8');
+  await pool.request().batch(migration);await pool.request().batch(migration);
+  let inspection=await inspectManagementCessation(pool);assert.equal(inspection.satisfied,true,inspection.detail);
+  await pool.request().query('DISABLE TRIGGER dbo.TR_agreements_management_cessation ON dbo.agreements');
+  assert.equal((await inspectManagementCessation(pool)).satisfied,false);
+  await pool.request().query('ENABLE TRIGGER dbo.TR_agreements_management_cessation ON dbo.agreements');
+  const store=createBillingStore({getPool:async()=>pool,env:{MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true'}});
+  const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://app.quixo.homes'}});
+  const agreementId=crypto.randomUUID(),invoiceId=crypto.randomUUID(),paymentId=crypto.randomUUID(),maintenanceId=crypto.randomUUID();
+  await store.locked(tenantId,async q=>{
+    await q("INSERT INTO dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(@id,@tenantId,@parent,@unit,'draft')",{id:agreementId,tenantId,parent,unit:unit1});
+    await q("INSERT INTO dbo.invoices(id,tenant_id,propertyid,agreementid,totalamount,status) VALUES(@id,@tenantId,@parent,@agreementId,100,'draft')",{id:invoiceId,tenantId,parent,agreementId});
+    await q("INSERT INTO dbo.payments(id,tenant_id,invoiceid,propertyid,amount,status) VALUES(@id,@tenantId,@invoiceId,@parent,100,'pending')",{id:paymentId,tenantId,invoiceId,parent});
+    await q("INSERT INTO dbo.tenancy_settlements(id,tenant_id,agreement_id,status) VALUES(@id,@tenantId,@agreementId,'draft')",{id:crypto.randomUUID(),tenantId,agreementId});
+    await q("INSERT INTO dbo.tenancy_deposit_transactions(id,tenant_id,agreement_id,transaction_type,status,amount) VALUES(@id,@tenantId,@agreementId,'security_deposit','received',100)",{id:crypto.randomUUID(),tenantId,agreementId});
+    await q("INSERT INTO dbo.maintenance_requests(id,tenant_id,propertyid,unitid,title,description,status) VALUES(@id,@tenantId,@parent,@unit,'Fixture maintenance','Disposable cessation proof','pending')",{id:maintenanceId,tenantId,parent,unit:unit1});
+  });
+  const scope={tenantId,actorId,propertyId:parent,unitId:unit1};
+  let preview=await service.cessationPreview(scope);
+  for(const code of ['TENANCY_OPEN','FINANCIAL_OPEN','PAYMENT_OPEN','SETTLEMENT_OPEN','DEPOSIT_OPEN','MAINTENANCE_OPEN'])assert.ok(preview.blockers.some(b=>b.code===code),code);
+  const posts=calls.filter(c=>c.method==='POST').length;
+  await assert.rejects(service.ceaseStock({...scope,id:crypto.randomUUID(),inventoryHash:preview.inventoryHash,reason:'Disposable blocked cessation proof.'}),{code:'BILLING_CESSATION_BLOCKED'});
+  assert.equal(calls.filter(c=>c.method==='POST').length,posts,'Ineligible cessation cannot change the provider');
+  assert.equal((await store.read('SELECT id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId})).length,0);
+  await store.locked(tenantId,async q=>{
+    await q("UPDATE dbo.agreements SET status='closed' WHERE id=@agreementId; UPDATE dbo.invoices SET status='paid' WHERE id=@invoiceId; UPDATE dbo.payments SET status='verified' WHERE id=@paymentId; UPDATE dbo.tenancy_settlements SET status='settled' WHERE agreement_id=@agreementId; UPDATE dbo.maintenance_requests SET status='completed' WHERE id=@maintenanceId",{agreementId,invoiceId,paymentId,maintenanceId});
+  });
+  await assert.rejects(service.cessationPreview({...scope,propertyId:crypto.randomUUID()}),{code:'BILLING_STOCK_NOT_FOUND'});
+  const enquiryId=crypto.randomUUID();
+  await store.locked(tenantId,async q=>{
+    const pref=(await q('SELECT public_id FROM dbo.public_listing_preferences WHERE property_id=@parent AND tenant_id=@tenantId',{parent,tenantId}))[0];
+    await q(`INSERT INTO dbo.property_enquiries(id,listing_public_id,tenant_id,property_id,seeker_id,seeker_name,seeker_email,country_code,listing_title,message,consent_version,request_id,payload_hash)
+      VALUES(@id,@publicId,@tenantId,@parent,@actorId,'Fixture renter','fixture-renter@example.test','LK','Prepared building','Disposable cessation hold proof.','fixture-v1',@requestId,@digest)`,
+    {id:enquiryId,publicId:pref.public_id,tenantId,parent,actorId,requestId:crypto.randomUUID(),digest:'a'.repeat(64)});
+    await q(`INSERT INTO dbo.property_rental_offers(enquiry_id,tenant_id,property_id,unit_id,application_version,status,version,currency,rent,deposit,fees,start_date,end_date,terms,offer_until,hold_until)
+      VALUES(@id,@tenantId,@parent,@unit,1,'offered',1,'LKR',100,0,0,'2027-01-01','2027-12-31','Fixture terms',DATEADD(DAY,1,SYSUTCDATETIME()),DATEADD(DAY,2,SYSUTCDATETIME()))`,{id:enquiryId,tenantId,parent,unit:unit1});
+  });
+  assert.ok((await service.cessationPreview(scope)).blockers.some(b=>b.code==='RESERVATION_OPEN'));
+  await store.locked(tenantId,q=>q("UPDATE dbo.property_rental_offers SET status='withdrawn' WHERE enquiry_id=@id",{id:enquiryId}));
+  preview=await service.cessationPreview(scope);assert.equal(preview.eligible,true);
+  const request={...scope,id:crypto.randomUUID(),inventoryHash:preview.inventoryHash,reason:'End management after all fixture obligations close.'};
+  let enteredResolve,releaseResolve;
+  const entered=new Promise(resolve=>{enteredResolve=resolve;}),release=new Promise(resolve=>{releaseResolve=resolve;});
+  const normal=stripe.request;
+  stripe.request=async(...args)=>{
+    if(args[0]==='POST'&&args[1]==='/v1/subscription_schedules'&&args[2].from_subscription===sub.id){enteredResolve();await release;}
+    return normal(...args);
+  };
+  const ending=service.ceaseStock(request);
+  try{
+    await Promise.race([entered,ending.then(()=>{throw new Error('Cessation did not reach the held provider call');})]);
+    await assert.rejects(pool.request().query(`SET LOCK_TIMEOUT 250; BEGIN TRY
+      INSERT INTO dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(NEWID(),'${tenantId}','${parent}','${unit1}','draft');
+      SET LOCK_TIMEOUT -1; END TRY BEGIN CATCH SET LOCK_TIMEOUT -1; THROW; END CATCH;`),error=>error.number===1222);
+  }finally{releaseResolve();stripe.request=normal;}
+  const result=await ending;
+  assert.equal(result.managementEnded,true);assert.equal(result.nextRenewalQuantity,2);assert.equal(sub.items.data[0].quantity,3);
+  assert.equal((await store.inventory(tenantId)).length,2,'Ceased unit is excluded without falling back to a phantom whole building');
+  const writes=calls.filter(c=>c.method==='POST').length;
+  assert.deepEqual(await service.ceaseStock(request),result);assert.equal(calls.filter(c=>c.method==='POST').length,writes);
+  for(const [statement,number] of [
+    ["INSERT INTO dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(NEWID(),@tenantId,@parent,@unit,'draft')",51070],
+    ["INSERT INTO dbo.maintenance_requests(id,tenant_id,propertyid,unitid,title,description,status) VALUES(NEWID(),@tenantId,@parent,@unit,'Fixture','Fixture','pending')",51071],
+    ["INSERT INTO dbo.invoices(id,tenant_id,propertyid,agreementid,totalamount,status) VALUES(NEWID(),@tenantId,@parent,@agreementId,100,'draft')",51072],
+    ["UPDATE dbo.property_units SET status='available' WHERE id=@unit",51073]
+  ])await assert.rejects(store.locked(tenantId,q=>q(statement,{tenantId,parent,unit:unit1,agreementId})),error=>error.number===number);
+  const parentScope={tenantId,actorId,propertyId:parent,unitId:null};
+  const finalPreview=await service.cessationPreview(parentScope);assert.equal(finalPreview.eligible,true);
+  const finalRequest={...parentScope,id:crypto.randomUUID(),inventoryHash:finalPreview.inventoryHash,reason:'End the final fixture property after obligations close.'};
+  let lost=true;
+  stripe.request=async(...args)=>{
+    const value=await normal(...args);
+    if(args[0]==='POST'&&args[1]===`/v1/subscriptions/${sub.id}`&&args[2].cancel_at_period_end&&lost){lost=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic cessation response loss.');}
+    return value;
+  };
+  try{
+    await assert.rejects(service.ceaseStock(finalRequest),{code:'STRIPE_UNAVAILABLE'});
+    assert.equal((await store.inventory(tenantId)).length,2,'Lost response rolls back local cessation and preserves existing stock');
+    assert.equal(sub.cancel_at_period_end,true);
+    const afterLoss=calls.filter(c=>c.method==='POST').length;
+    const final=await service.ceaseStock(finalRequest);assert.equal(final.managementEnded,true);assert.equal(final.cancelAtPeriodEnd,true);
+    assert.equal(calls.filter(c=>c.method==='POST').length,afterLoss,'Confirmed cancellation retry needs no additional provider write');
+    assert.equal((await store.inventory(tenantId)).length,0);assert.equal((await store.account(tenantId)).pending_quantity,0);
+    assert.equal((await store.read("SELECT id FROM dbo.agreements WHERE id=@agreementId AND status='closed'",{agreementId})).length,1);
+    assert.equal((await store.read("SELECT id FROM dbo.invoices WHERE id=@invoiceId AND status='paid'",{invoiceId})).length,1);
+    assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action='inventory.ceased'",{tenantId})).length,2);
+  }finally{stripe.request=normal;}
+  console.log('PASS: atomic audited cessation, real domain obligation denials, competing obligation lock, future quantity reduction, zero-stock cancellation, immutable history, database bypass denial and response-loss retry; synthetic provider');
 };

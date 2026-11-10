@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {getMssqlPool, sql} from '../mssql/pool.js';
 import {runQuery} from '../mssql/query.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, reason as decisionReason, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
 
 // The caller must supply its mutation transaction, never an independent pool
 // read. Hold the account row through commit so revoke/reconciliation cannot
@@ -51,6 +51,8 @@ export const runSingleManagementQuery = async (statement, params) =>
 
 export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}) => {
   const stagingEnabled=()=>env.MANAGEMENT_INVENTORY_SCHEMA_READY==='true';
+  // Once controls are recorded, keep readiness on across application rollback.
+  const cessationEnabled=()=>env.MANAGEMENT_CESSATION_SCHEMA_READY==='true';
   const query = async (connection, statement, params = {}) => {
     const request = connection instanceof sql.Transaction ? new sql.Request(connection) : connection.request();
     for (const [key,value] of Object.entries(params)) request.input(key,value);
@@ -90,6 +92,11 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     // Deliberately includes malformed cross-tenant child relationships so the contract rejects them.
     const units = await q(`SELECT u.id,u.tenant_id,u.propertyid,u.unitnumber FROM dbo.property_units u
       JOIN dbo.properties p ON p.id=u.propertyid WHERE p.tenant_id=@tenantId`,{tenantId});
+    if(cessationEnabled()){
+      const controls=await q("SELECT property_id,unit_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND state='ceased'",{tenantId});
+      for(const property of properties)if(controls.some(c=>!c.unit_id&&String(c.property_id).toLowerCase()===String(property.id).toLowerCase()))property.management_state='ceased';
+      for(const unit of units)if(controls.some(c=>c.unit_id&&String(c.unit_id).toLowerCase()===String(unit.id).toLowerCase()))unit.management_state='ceased';
+    }
     const staged=includePending?(await pendingStock(tenantId,q)).filter(row=>!stageIds||stageIds.includes(String(row.id).toLowerCase())):[];
     staged.sort((a,b)=>a.kind===b.kind?String(a.id).localeCompare(String(b.id)):a.kind==='property'?-1:1);
     for(const row of staged){
@@ -214,6 +221,75 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     await audit(q,{tenantId,action:'inventory.promoted',resourceId:commandId,current:refs,
       reason:'Prepared stock promoted only after verified billing confirmation.'});
   };
+  const cessationPreviewLocked=async(q,{tenantId,actorId,propertyId,unitId=null,commandId=null})=>{
+    if(!cessationEnabled())throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');
+    await assertActor(q,tenantId,actorId);
+    const params={tenantId,propertyId:identifier(propertyId),unitId:unitId===null?null:identifier(unitId),commandId};
+    const property=(await q('SELECT id,name FROM dbo.properties WITH(UPDLOCK,HOLDLOCK) WHERE id=@propertyId AND tenant_id=@tenantId',params))[0];
+    if(!property)throw problem(404,'BILLING_STOCK_NOT_FOUND','This property was not found in the workspace.');
+    const unit=params.unitId?(await q('SELECT id,unitnumber FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK) WHERE id=@unitId AND propertyid=@propertyId AND tenant_id=@tenantId',params))[0]:null;
+    if(params.unitId&&!unit)throw problem(404,'BILLING_STOCK_NOT_FOUND','This unit was not found in the property.');
+    const existing=(await q(`SELECT * FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND property_id=@propertyId
+      AND (unit_id IS NULL OR unit_id=@unitId)`,params))[0]||null;
+    const items=await inventory(tenantId,q);
+    if(existing)return {propertyId:params.propertyId,unitId:params.unitId,label:unit?`${property.name} · ${unit.unitnumber}`:property.name,
+      alreadyCeased:true,record:existing,inventoryHash:hash(items),eligible:true,blockers:[]};
+    const agreements=await q(`SELECT id,status FROM dbo.agreements WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND propertyid=@propertyId
+      AND (@unitId IS NULL OR unitid IS NULL OR unitid=@unitId)`,params);
+    const invoices=await q(`SELECT i.id,i.status,i.totalamount,
+      COALESCE((SELECT SUM(p.amount) FROM dbo.payments p WHERE p.tenant_id=i.tenant_id AND p.invoiceid=i.id AND p.status='verified'),0) AS paid,
+      i.totalamount-COALESCE((SELECT SUM(p.amount) FROM dbo.payments p WHERE p.tenant_id=i.tenant_id AND p.invoiceid=i.id AND p.status='verified'),0) AS outstanding
+      FROM dbo.invoices i WITH(UPDLOCK,HOLDLOCK) LEFT JOIN dbo.agreements a ON a.id=i.agreementid AND a.tenant_id=i.tenant_id
+      WHERE i.tenant_id=@tenantId AND (i.propertyid=@propertyId OR a.propertyid=@propertyId)
+      AND (@unitId IS NULL OR a.id IS NULL OR a.unitid IS NULL OR a.unitid=@unitId)`,params);
+    const payments=await q(`SELECT p.id FROM dbo.payments p WITH(UPDLOCK,HOLDLOCK)
+      LEFT JOIN dbo.invoices i ON i.id=p.invoiceid AND i.tenant_id=p.tenant_id
+      LEFT JOIN dbo.agreements a ON a.id=i.agreementid AND a.tenant_id=i.tenant_id
+      WHERE p.tenant_id=@tenantId AND (p.propertyid=@propertyId OR i.propertyid=@propertyId OR a.propertyid=@propertyId)
+      AND (@unitId IS NULL OR a.id IS NULL OR a.unitid IS NULL OR a.unitid=@unitId)
+      AND LOWER(COALESCE(p.status,'')) NOT IN('verified','rejected')`,params);
+    const settlements=await q(`SELECT s.id FROM dbo.tenancy_settlements s WITH(UPDLOCK,HOLDLOCK)
+      JOIN dbo.agreements a ON a.id=s.agreement_id AND a.tenant_id=s.tenant_id WHERE s.tenant_id=@tenantId AND a.propertyid=@propertyId
+      AND (@unitId IS NULL OR a.unitid IS NULL OR a.unitid=@unitId) AND LOWER(COALESCE(s.status,'')) NOT IN('settled','voided')`,params);
+    const deposits=await q(`SELECT d.id FROM dbo.tenancy_deposit_transactions d WITH(UPDLOCK,HOLDLOCK)
+      JOIN dbo.agreements a ON a.id=d.agreement_id AND a.tenant_id=d.tenant_id WHERE d.tenant_id=@tenantId AND a.propertyid=@propertyId
+      AND (@unitId IS NULL OR a.unitid IS NULL OR a.unitid=@unitId) AND
+      (LOWER(COALESCE(d.status,'')) NOT IN('received','refunded','rejected','voided') OR (d.status='received' AND d.amount>0 AND
+        NOT EXISTS(SELECT 1 FROM dbo.tenancy_settlements s WHERE s.agreement_id=a.id AND s.tenant_id=a.tenant_id AND s.status='settled')))`,params);
+    const maintenance=await q(`SELECT id FROM dbo.maintenance_requests WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND propertyid=@propertyId
+      AND (@unitId IS NULL OR unitid IS NULL OR unitid=@unitId) AND LOWER(COALESCE(status,'')) NOT IN('completed','cancelled')`,params);
+    const holds=await q(`SELECT h.enquiry_id FROM dbo.property_rental_offers h WITH(UPDLOCK,HOLDLOCK) WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId
+      AND (@unitId IS NULL OR h.unit_id IS NULL OR h.unit_id=@unitId)
+      AND ((h.status='offered' AND h.offer_until>SYSUTCDATETIME()) OR (h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME()))
+      AND NOT EXISTS(SELECT 1 FROM dbo.agreements a WHERE a.id=h.agreement_id AND a.tenant_id=h.tenant_id AND a.status='closed')`,params);
+    const pending=await q(`SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'
+      AND (@commandId IS NULL OR id<>@commandId)`,params);
+    const staged=await q(`SELECT id FROM dbo.management_inventory_staging WHERE tenant_id=@tenantId AND status='pending'
+      AND ((kind='property' AND id=@propertyId) OR (kind='unit' AND TRY_CONVERT(UNIQUEIDENTIFIER,JSON_VALUE(payload_json,'$.propertyid'))=@propertyId))`,params);
+    const current=await account(tenantId,q);
+    const blockers=cessationBlockers({agreements,invoices,payments,settlements,deposits,maintenance,holds,pending,staged,riskHold:Boolean(current?.risk_hold)});
+    return {propertyId:params.propertyId,unitId:params.unitId,label:unit?`${property.name} · ${unit.unitnumber}`:property.name,
+      alreadyCeased:false,inventoryHash:hash(items),eligible:!blockers.length,blockers};
+  };
+  const ceaseStockLocked=async(q,{tenantId,actorId,id,propertyId,unitId=null,inventoryHash,reason})=>{
+    const note=decisionReason(reason);
+    const preview=await cessationPreviewLocked(q,{tenantId,actorId,propertyId,unitId,commandId:id});
+    if(preview.alreadyCeased)return preview;
+    if(preview.inventoryHash!==inventoryHash)throw problem(409,'BILLING_INVENTORY_CHANGED','Managed stock changed. Review ending management again.');
+    if(!preview.eligible)throw problem(409,'BILLING_CESSATION_BLOCKED',preview.blockers.map(b=>b.message).join(' '));
+    // Suppress availability before inserting the durable control. This also
+    // keeps older readers safe on rollback, without using status for billing.
+    const params={tenantId,propertyId:preview.propertyId,unitId:preview.unitId,id:identifier(id),actorId,reason:note};
+    if(params.unitId)await q("UPDATE dbo.property_units SET status='inactive' WHERE id=@unitId AND propertyid=@propertyId AND tenant_id=@tenantId",params);
+    else{
+      await q("UPDATE dbo.properties SET status='inactive' WHERE id=@propertyId AND tenant_id=@tenantId",params);
+      await q("UPDATE dbo.property_units SET status='inactive' WHERE propertyid=@propertyId AND tenant_id=@tenantId AND LOWER(COALESCE(status,''))<>'inactive'",params);
+    }
+    const record=(await q(`INSERT INTO dbo.management_inventory_controls(id,tenant_id,property_id,unit_id,ceased_by,reason)
+      OUTPUT INSERTED.* VALUES(@id,@tenantId,@propertyId,@unitId,@actorId,@reason)`,params))[0];
+    await audit(q,{tenantId,actorId,action:'inventory.ceased',resourceId:id,current:{propertyId:params.propertyId,unitId:params.unitId},reason:note});
+    return {...preview,record};
+  };
   const listPricing = async () => (await read('SELECT * FROM dbo.management_pricing_versions ORDER BY created_at DESC,version DESC'))
     .map(row => ({...row,rules:JSON.parse(row.rules_json),rules_json:undefined}));
   const savePricing = async ({rules,expectedVersion,actorId}) => locked(`pricing:${rules.market}`, async q => {
@@ -262,7 +338,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     if(pending) throw problem(409,'BILLING_COMMAND_PENDING','Retry the unfinished billing operation before starting another.');
     // Commit the provider ownership boundary before any external write. Keep
     // the caller payload hash unchanged so retries use the original binding.
-    const current=['cancellation','quantity_apply'].includes(kind)?await account(tenantId,q):null;
+    const current=['cancellation','quantity_apply','cessation'].includes(kind)?await account(tenantId,q):null;
     const storedPayload=current?{...payload,_subscriptionId:current.stripe_subscription_id}:payload;
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
@@ -297,5 +373,6 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     return complimentaryStatus(tenantId, q);
   });
   return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
-    complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock};
+    complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock,
+    cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
 };

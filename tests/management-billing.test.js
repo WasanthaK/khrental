@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,stagedStock,assertInventoryMutation,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
+import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,stagedStock,assertInventoryMutation,cessationBlockers,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
 import {assertManagementWrite} from '../src/api/managementBilling/store.js';
 import {sql} from '../src/api/mssql/pool.js';
+import {runQuery} from '../src/api/mssql/query.js';
+import {publicationEligibility} from '../src/api/publicListings/eligibility.js';
 import {createStripeClient,stripeForm,firstRenewalFailure,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
@@ -34,6 +36,32 @@ test('controlled stock scope cannot bypass preparation or cessation through gene
   }
   assertInventoryMutation({tenantId:tenant,table:'properties',action:'update',env});
   assertInventoryMutation({tenantId:tenant,table:'invoices',action:'insert',env});
+});
+
+test('cessation eligibility requires closed actual obligations and treats unknown financial data as unresolved',()=>{
+  assert.deepEqual(cessationBlockers({agreements:[{status:'closed'}],invoices:[{status:'paid',totalamount:100,outstanding:0,paid:100}]}),[]);
+  for(const [input,code] of [[{agreements:[{status:'active'}]},'TENANCY_OPEN'],[{invoices:[{status:'paid',totalamount:100,outstanding:1}]},'FINANCIAL_OPEN'],
+    [{invoices:[{status:'paid',totalamount:null,outstanding:null}]},'FINANCIAL_OPEN'],[{invoices:[{status:'draft',totalamount:0,outstanding:0}]},'FINANCIAL_OPEN'],
+    [{invoices:[{status:'cancelled',totalamount:100,paid:10}]},'FINANCIAL_OPEN'],[{payments:[{}]},'PAYMENT_OPEN'],[{settlements:[{}]},'SETTLEMENT_OPEN'],
+    [{deposits:[{}]},'DEPOSIT_OPEN'],[{maintenance:[{}]},'MAINTENANCE_OPEN'],[{holds:[{}]},'RESERVATION_OPEN'],[{pending:[{}]},'BILLING_OPERATION_OPEN'],
+    [{staged:[{}]},'PREPARED_STOCK_OPEN'],[{riskHold:true},'BILLING_REVIEW_HOLD']])assert.ok(cessationBlockers(input).some(b=>b.code===code));
+});
+
+test('ceased units never resurrect a billable parent and governed state suppresses public availability',()=>{
+  const property={id:tenant,tenant_id:tenant,name:'Building',propertytype:'apartment'};
+  const units=[{id:other,tenant_id:tenant,propertyid:tenant,unitnumber:'One',management_state:'ceased',status:'available'}];
+  assert.deepEqual(dwellingInventory({tenantId:tenant,properties:[property],units}),[]);
+  const context={propertyStatus:'available',countryCode:'LK',propertyType:'apartment',units};
+  assert.equal(publicationEligibility(context).eligible,false);
+  assert.equal(publicationEligibility({...context,units:[],managementState:'ceased'}).eligible,false);
+  assert.equal(dwellingInventory({tenantId:tenant,properties:[{...property,management_state:'ceased'}],units:[]}).length,0);
+});
+
+test('SQL cessation race denials become readable conflicts without rewriting unrelated database failures',async t=>{
+  const tx=new sql.Transaction();let number=51070;
+  t.mock.method(sql.Request.prototype,'query',async()=>{throw Object.assign(new Error('SQL guard'),{number});});
+  await assert.rejects(runQuery('INSERT fixture',{},tx),{status:409,code:'MANAGEMENT_CEASED'});
+  number=515;await assert.rejects(runQuery('INSERT fixture',{},tx),error=>error.number===515&&!error.status);
 });
 
 test('management write rollout requires explicit server enablement and an exact organization scope',()=>{

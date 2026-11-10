@@ -9,8 +9,9 @@ const norm=value=>String(value??'').trim().toLowerCase();
 
 export const publicationEligibility=({
   propertyStatus,units=[],activeUnitIds=[],hasActiveWholePropertyAgreement=false,
-  optedOut=false,tenantActive=true,countryCode=null,propertyType=null
+  optedOut=false,tenantActive=true,countryCode=null,propertyType=null,managementState=null
 }={})=>{
+  if(managementState==='ceased')return {eligible:false,reason:'management_ceased'};
   if(!tenantActive)return {eligible:false,reason:'tenant_inactive'};
   if(optedOut)return {eligible:false,reason:'owner_opted_out'};
   const status=norm(propertyStatus);
@@ -21,7 +22,7 @@ export const publicationEligibility=({
   const unitList=Array.isArray(units)?units:[];
   if(unitList.length){
     const occupied=new Set(activeUnitIds.map(String));
-    if(!unitList.some(u=>ELIGIBLE_UNIT_STATES.includes(norm(u.status))&&!occupied.has(String(u.id))))
+    if(!unitList.some(u=>u.management_state!=='ceased'&&ELIGIBLE_UNIT_STATES.includes(norm(u.status))&&!occupied.has(String(u.id))))
       return {eligible:false,reason:'no_available_units'};
   }else if(!AVAILABLE_PARENT_STATES.includes(status)){
     return {eligible:false,reason:'whole_property_rented'};
