@@ -56,6 +56,15 @@ export const createMonthlyBillingRouter = () => {
         authorizeProperty: (propertyId) => requirePropertyScope(req, propertyId)
       });
 
+      const accessFailure = results.errors.find(entry => [
+        'MANAGEMENT_READ_ONLY', 'BILLING_ACCESS_UNAVAILABLE', 'BILLING_ENFORCEMENT_CONFIGURATION'
+      ].includes(entry.code));
+      if (accessFailure && !results.created.length) {
+        return res.status(accessFailure.code === 'MANAGEMENT_READ_ONLY' ? 403 : 503).json({
+          data: results, error: accessFailure.error, code: accessFailure.code
+        });
+      }
+
       res.status(results.errors.length && !results.created.length ? 409 : 200).json({
         data: results,
         error: null

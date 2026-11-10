@@ -1,4 +1,5 @@
 import { getMssqlPool, sql } from '../mssql/pool.js';
+import { assertManagementWrite } from '../managementBilling/store.js';
 import {
   agreementOverlapsBillingPeriod,
   calculateProratedMonthlyRent,
@@ -143,6 +144,8 @@ export const generateMonthlyInvoicesForTenant = async ({
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId, transaction});
+
         const existing = await singleTransaction(
           transaction,
           `SELECT TOP 1 id, status, totalamount

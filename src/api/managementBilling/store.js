@@ -1,6 +1,28 @@
 import crypto from 'node:crypto';
 import {getMssqlPool, sql} from '../mssql/pool.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory, complimentaryChange, entitlement} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
+
+// The caller must supply its mutation transaction, never an independent pool
+// read. Hold the account row through commit so revoke/reconciliation cannot
+// race a previously admitted write. Evaluate expiry using the database clock.
+export const assertManagementWrite = async ({tenantId, transaction, env = process.env}) => {
+  if (!managementWriteEnforced(tenantId, env)) return;
+  if (env.MANAGEMENT_BILLING_SCHEMA_READY !== 'true' || !(transaction instanceof sql.Transaction)) {
+    throw problem(503, 'BILLING_ACCESS_UNAVAILABLE', 'Management access could not be verified. Try again later.');
+  }
+  const request = new sql.Request(transaction);
+  request.input('tenantId', sql.UniqueIdentifier, tenantId);
+  const account = (await request.query(`SELECT *, SYSUTCDATETIME() AS entitlement_checked_at
+    FROM dbo.management_billing_accounts WITH (UPDLOCK, HOLDLOCK)
+    WHERE tenant_id=@tenantId`)).recordset[0];
+  if (account && (account.stripe_account_id !== BILLING_ACCOUNT ||
+      !(account.entitlement_checked_at instanceof Date) || !Number.isFinite(account.entitlement_checked_at.getTime()))) {
+    throw problem(503, 'BILLING_ACCESS_UNAVAILABLE', 'Management access could not be verified. Try again later.');
+  }
+  if (!entitlement(account, account?.entitlement_checked_at.getTime()).management) {
+    throw problem(403, 'MANAGEMENT_READ_ONLY', 'Management is read-only. Ask your organization administrator to review subscription access. Existing records remain available.');
+  }
+};
 
 export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   const query = async (connection, statement, params = {}) => {

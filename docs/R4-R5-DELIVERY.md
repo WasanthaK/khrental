@@ -1,5 +1,13 @@
 # R4 and R5 delivery programme
 
+## Monthly invoice write enforcement preparation — 10 November 2026
+
+The monthly invoice generator now checks management access inside its own SERIALIZABLE transaction, before invoice, component, utility or lifecycle writes. The billing-account row remains locked through commit; expiry is evaluated against the database clock. Manual and automatic scheduler callers share this boundary. Paid active/ending access, current renewal grace and valid complimentary access are admitted; missing/unverified payment, expired access and risk holds deny generation. Existing invoice reads and billing recovery are unchanged.
+
+This is **one bounded BL08 implementation slice**, not full production enforcement or management cessation. Server rollout requires both `MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true` and an explicit comma-separated UUID scope in `MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS`; the default is OFF. Invalid enabled configuration fails closed, and selected organizations require schema readiness and the mutation's SQL transaction. Enrollment, payment and request bodies cannot opt an organization in. **Do not configure these controls until the complete write-path and inventory/cessation acceptance is ready.** This change does not configure production flags or restrict existing testing organizations.
+
+The disposable SQL acceptance includes selected/unselected organizations, manual/scheduler invocation, paid/ending/grace/complimentary states, expiry/risk denial without partial writes, a real competing revocation lock timeout, invoice-write rollback and preserved tenant-scoped historical reads. These are fixtures; genuine renewal and privileged live complimentary acceptance remain separate. Direct/generic/import mutations, audited obligations-closed cessation, staged inventory and asynchronous reconciliation still require implementation. `applicationEnforcementEnabled` remains false. R5 stays active and live charging disabled; accepted signing is preserved.
+
 ## Zero-stock renewal correction — 10 November 2026
 
 [PR #536](https://github.com/WasanthaK/khrental/pull/536) is merged as `8b67b3ebfc1cdd6647a98b89f2ef2b66bbbefcac`. Zero-stock quantity review now confirms cancellation at renewal, retains the current billed quantity, rejects renewal restoration while stock is empty, and retries ambiguous provider success using the same operation and idempotency key. This is the billing behavior for empty managed inventory; it does not implement the separate management-cessation journey.

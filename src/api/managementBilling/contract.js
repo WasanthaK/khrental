@@ -95,6 +95,20 @@ export const entitlement = (account, now = Date.now()) => {
   return {state:account.initial_payment_verified ? 'read_only' : 'payment_pending', management:false, historicalAccess:true};
 };
 
+// Source preparation only: no organization is opted into write enforcement by
+// enrollment, payment or a caller-supplied request field. Full-path acceptance
+// must precede configuring this server-owned rollout scope.
+export const managementWriteEnforced = (tenantId, env = process.env) => {
+  const enabled = env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED;
+  if (enabled === undefined || enabled === 'false') return false;
+  const scope = String(env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS || '').split(',').map(value => value.trim());
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (enabled !== 'true' || scope.some(value => !uuid.test(value))) {
+    throw problem(503, 'BILLING_ENFORCEMENT_CONFIGURATION', 'Management access could not be verified. Try again later.');
+  }
+  return scope.map(value => value.toLowerCase()).includes(identifier(tenantId));
+};
+
 export const complimentaryChange = (input, now = Date.now()) => {
   if (!input || !['fixed', 'ongoing', 'revoke'].includes(input.mode)) {
     throw problem(400, 'BILLING_COMP_INVALID', 'Choose fixed-term, ongoing or revoke complimentary access.');
