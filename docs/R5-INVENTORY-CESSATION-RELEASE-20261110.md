@@ -1,0 +1,13 @@
+# R5 inventory and cessation release — 10 November 2026
+
+PR [#547](https://github.com/WasanthaK/khrental/pull/547) adds durable pending property/unit create/import/withdrawal before enrollment and exact paid-confirmed promotion. Pending stock stays outside operational tables and receives no management/public rights.
+
+PR [#548](https://github.com/WasanthaK/khrental/pull/548), merged as `b3dd9d0304f9f46d5ee2780436466a25ef4090c3`, adds atomic obligations-closed cessation for paid active/ending subscriptions. It retains history, checks actual domain obligations under lock, guards fresh obligations/reactivation in SQL, and applies reductions or final cancellation at renewal. Failed provider/local outcomes roll back domain changes while retaining durable retry ownership. Form draft identity and entered reasons survive loading/failure.
+
+All seven final-head CI workflows passed, including 922/922 authorization tests, disposable billing SQL, migration SQL, renter SQL, protected billing browser, public listings and sandbox readiness. Desktop/mobile ready/blocked cessation and retained-draft retry renders were reviewed. SQL proved obligation denial, competing insertion locking, partial reduction, final cancellation, response-loss rollback/retry and retained history with synthetic provider transport. These fixtures do not certify genuine provider lifecycle or signed-in production acceptance.
+
+[Release 42858116407](https://github.com/WasanthaK/khrental/actions/runs/42858116407) passed at Ready revision **0000483**. Independent public build readback matched the merged SHA at **22:24:29 Asia/Colombo**; SQL health returned HTTP 200 ready at **22:24:33** on 10 November. Merged-source tests/build and both SQL verification workflows also passed.
+
+[Read-only migration plan 42858116430](https://github.com/WasanthaK/khrental/actions/runs/42858116430), attempt 2, passed against that serving source. Both `20261110_01_management_inventory_staging` and `20261110_02_management_cessation` remain **PENDING**. The log confirms: “Plan completed without modifying the database.” No apply dispatch, authenticated production stock/provider command or readiness activation occurred. Full enforcement and live charging remain OFF. Rollback uses preceding verified source `10243081c281b156c25b9463d18ebd8978e290f4` while retaining durable records.
+
+Next independent work: normal property/unit forms and full metadata preservation through staging; restoration/splits; cessation in remaining entitlement states; broader owned reconciliation; complete endpoint/job and stale authority acceptance before a controlled rollout. Signing and prior accepted operational journeys remain closed. R5 and Sri Lanka launch readiness remain incomplete.
