@@ -1459,6 +1459,12 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     const {createBillingRouter} = await import('../src/api/platform/billingRouter.js');
     const {createBillingAdjustmentsRouter} = await import('../src/api/platform/billingAdjustmentsRouter.js');
     const {createMaintenanceLifecycleRouter} = await import('../src/api/platform/maintenanceLifecycleRouter.js');
+    const {createPlatformRouter} = await import('../src/api/platform/router.js');
+    const {createUtilityReviewRouter} = await import('../src/api/platform/utilityReviewRouter.js');
+    const {createPropertyUtilityConfigRouter} = await import('../src/api/platform/propertyUtilityConfigRouter.js');
+    const {createInvoiceMasterAdminRouter} = await import('../src/api/platform/invoiceMasterAdminRouter.js');
+    const {createMssqlRouter} = await import('../src/api/mssql/router.js');
+    const {guardBillingPlatformQuery,guardBillingMssqlCompatibility} = await import('../src/api/platform/billingMutationGuard.js');
     const authId = crypto.randomUUID();
     const email = `monthly-guard-${crypto.randomBytes(6).toString('hex')}@example.invalid`;
     const admin = await first(pool, `INSERT INTO app_users (tenant_id,name,email,role,user_type,auth_id)
@@ -1476,6 +1482,11 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     app.use('/api/billing',createBillingRouter({sendInvoiceEmail:async()=>{ emails++; return {provider:'fixture'}; }}));
     app.use('/api/billing',createBillingAdjustmentsRouter());
     app.use('/api/maintenance-lifecycle',createMaintenanceLifecycleRouter());
+    app.use('/api/platform',guardBillingPlatformQuery,createPlatformRouter());
+    app.use('/api/utility-reviews',createUtilityReviewRouter());
+    app.use('/api/properties',createPropertyUtilityConfigRouter());
+    app.use('/api/invoice-master',createInvoiceMasterAdminRouter());
+    app.use('/api/mssql',guardBillingMssqlCompatibility,createMssqlRouter());
     app.use((error,_req,res,_next)=>res.status(error.status || 500).json({error:error.message,code:error.code}));
     const server = await new Promise(resolve=>{const listening=app.listen(0,'127.0.0.1',()=>resolve(listening));});
     try {
@@ -1513,8 +1524,13 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         (SELECT COUNT(*) FROM maintenance_request_comments WHERE tenant_id=@tenantId) AS maintenance_comments,
         (SELECT COUNT(*) FROM maintenance_request_images WHERE tenant_id=@tenantId) AS maintenance_images,
         (SELECT COUNT(*) FROM notifications WHERE tenant_id=@tenantId) AS notifications,
+        (SELECT name FROM properties WHERE id=@propertyId) AS property_name,
+        (SELECT status FROM properties WHERE id=@propertyId) AS property_status,
+        (SELECT COUNT(*) FROM agreement_templates WHERE tenant_id=@tenantId) AS templates,
+        (SELECT STRING_AGG(name,'|') WITHIN GROUP (ORDER BY id) FROM agreement_templates WHERE tenant_id=@tenantId) AS template_names,
+        (SELECT status FROM utility_readings WHERE id=@readingId) AS reading_status,
         (SELECT COUNT(*) FROM billing_lifecycle_events WHERE tenant_id=@tenantId) AS events`,
-        {tenantId:scoped.tenantId,invoiceId:invoice.id});
+        {...scoped,invoiceId:invoice.id});
       const deniedCommand = async (suffix, method, body) => {
         const before = await writerSnapshot();
         const response = await command(suffix,method,body);
@@ -1560,6 +1576,73 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.equal(result.code,'MANAGEMENT_READ_ONLY');
         assert.deepEqual(await writerSnapshot(),before,'Denied maintenance cannot partially write domain/events/notifications');
       }
+      const templateId = crypto.randomUUID();
+      await query(pool,"INSERT agreement_templates(id,tenant_id,name,language,content,version) VALUES(@id,@tenantId,'Original import template','English','Fixture','1')",{id:templateId,tenantId:scoped.tenantId});
+      const platformCommand = async (body, rpc = null) => fetch(`http://127.0.0.1:${server.address().port}/api/platform/${rpc ? 'rpc/'+rpc : 'query'}`,{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+        body:JSON.stringify({...body,tenantId:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+      const idFilter = [{column:'id',operator:'eq',value:templateId}];
+      for (const body of [
+        {action:'update',table:'properties',filters:[{column:'id',operator:'eq',value:scoped.propertyId}],payload:{name:'Denied renamed property'}},
+        {action:'insert',table:'agreement_templates',payload:[{name:'Denied first'},{name:'Denied second'}]},
+        {action:'update',table:'agreement_templates',filters:idFilter,payload:{name:'Denied change'}},
+        {action:'delete',table:'agreement_templates',filters:idFilter},
+        {action:'upsert',table:'agreement_templates',payload:[{id:templateId,name:'Denied upsert'}]}
+      ]) {
+        const before = await writerSnapshot();
+        const response = await platformCommand(body);
+        const data = await response.json();
+        assert.equal(response.status,403,JSON.stringify({body,data}));
+        assert.equal(data.code,'MANAGEMENT_READ_ONLY');
+        assert.deepEqual(await writerSnapshot(),before,'Generic write/import cannot bypass management expiry');
+      }
+      const rejectedReading = await platformCommand({readingId:scoped.readingId},'reject_utility_reading');
+      assert.equal(rejectedReading.status,403);
+      assert.equal((await rejectedReading.json()).code,'MANAGEMENT_READ_ONLY');
+      for (const [path,method,body] of [
+        [`utility-reviews/readings/${scoped.readingId}/approve`,'POST',{}],
+        [`utility-reviews/readings/${scoped.readingId}/reject`,'POST',{reason:'Denied utility review'}],
+        [`utility-reviews/readings/${scoped.readingId}/value`,'PUT',{previousReading:0,currentReading:1,expectedPreviousReading:null,expectedCurrentReading:null}],
+        [`properties/${scoped.propertyId}/fixed-utilities`,'PUT',{configs:[]}],
+        ['invoice-master/issuer','PUT',{legalName:'Disposable issuer',postalAddress:'Fixture address',supportEmail:'fixture@example.invalid',supportPhone:'',website:''}]
+      ]) {
+        const before = await writerSnapshot();
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/${path}`,{
+          method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},body:JSON.stringify(body)});
+        const data = await response.json();
+        assert.equal(response.status,403,JSON.stringify({path,data}));
+        assert.equal(data.code,'MANAGEMENT_READ_ONLY');
+        assert.deepEqual(await writerSnapshot(),before,'Dedicated utility/master writer cannot bypass expiry');
+      }
+      const repository = await import('../src/api/mssql/repositories.js');
+      const beforeRepository = await writerSnapshot();
+      for (const operation of [
+        ()=>repository.updatePropertyById(scoped.propertyId,{status:'rented'},scoped.tenantId),
+        ()=>repository.createAgreementTemplate({name:'Denied repository template'},scoped.tenantId),
+        ()=>repository.updateAgreementTemplate(templateId,{name:'Denied repository update'},scoped.tenantId),
+        ()=>repository.deleteAgreementTemplateById(templateId,scoped.tenantId),
+        ()=>repository.createInvoice({propertyid:scoped.propertyId,renteeid:scoped.renteeId},scoped.tenantId),
+        ()=>repository.updateInvoice(invoice.id,{notes:'Denied repository invoice'},scoped.tenantId)
+      ]) await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});
+      assert.deepEqual(await writerSnapshot(),beforeRepository,'Direct repository imports cannot bypass expiry');
+      await setState('');
+      // A later failed row must undo the earlier insert/update, not leave a
+      // successful-looking prefix of an import behind.
+      const duplicateId = crypto.randomUUID();
+      const beforeBulk = await writerSnapshot();
+      const failedInsert = await platformCommand({action:'insert',table:'agreement_templates',payload:[
+        {id:duplicateId,name:'First transient row'},{id:duplicateId,name:'Conflicting later row'}]});
+      assert.equal(failedInsert.status,500,JSON.stringify(await failedInsert.json()));
+      assert.deepEqual(await writerSnapshot(),beforeBulk,'Bulk insert rolls back the first row');
+      const failedUpsert = await platformCommand({action:'upsert',table:'agreement_templates',payload:[
+        {id:templateId,name:'Transient updated name'},{id:crypto.randomUUID(),name:'Invalid later row',unknown_import_column:1}]});
+      assert.equal(failedUpsert.status,500,JSON.stringify(await failedUpsert.json()));
+      assert.deepEqual(await writerSnapshot(),beforeBulk,'Bulk upsert rolls back the first update');
+      const paidImport = await platformCommand({action:'insert',table:'agreement_templates',payload:[{name:'Permitted atomic import A'},{name:'Permitted atomic import B'}]});
+      assert.equal(paidImport.status,200,JSON.stringify(await paidImport.json()));
+      assert.equal((await writerSnapshot()).templates,beforeBulk.templates+2);
+      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
+      console.log('PASS: generic/import/RPC and direct repository management expiry, ignored caller overrides, atomic failed bulk insert/upsert and authorized bulk success');
       // Both reads and SaaS payment recovery remain outside these rental guards.
       const history = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/${invoicePath}/account`,{
         headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});

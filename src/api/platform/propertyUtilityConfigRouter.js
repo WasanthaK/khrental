@@ -1,3 +1,4 @@
+import { assertManagementWrite } from '../managementBilling/store.js';
 import express from 'express';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { getMssqlPool, sql } from '../mssql/pool.js';
@@ -122,6 +123,7 @@ export const createPropertyUtilityConfigRouter = () => {
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const deleteRequest = new sql.Request(transaction);
         deleteRequest.input('tenantId', req.tenantId);
         deleteRequest.input('propertyId', property.id);
