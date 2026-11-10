@@ -19,7 +19,7 @@ export const assertBillingAdministrator=req=>{
     throw problem(403,'BILLING_ADMIN_REQUIRED','An active workspace administrator is required.');
 };
 
-export const createManagementBillingRouter=({env=process.env,store=createBillingStore(),stripe=createStripeClient({env}),
+export const createManagementBillingRouter=({env=process.env,store=createBillingStore({env}),stripe=createStripeClient({env}),
   resolveContext=createTenantContextMiddleware({requireUser:true,auditLabel:'management-billing'}),checkPlatformAdmin=isPlatformAdmin}={})=>{
   const router=express.Router();
   const service=createBillingService({store,stripe,env});
@@ -70,6 +70,14 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
     send(res,await store.setComplimentary({tenantId:identifier(req.params.tenantId),actorId:req.user.id,...req.body}));
   }));
   router.get('/status',orgAdmin,wrap(async(req,res)=>send(res,await service.summary(req.tenantId))));
+  router.post('/stock/prepare',orgAdmin,wrap(async(req,res)=>{
+    exact(req.body,['records','reason']);
+    send(res,await store.stageStock({tenantId:req.tenantId,actorId:req.user.id,records:req.body.records,reason:reason(req.body.reason)}));
+  }));
+  router.post('/stock/withdraw',orgAdmin,wrap(async(req,res)=>{
+    exact(req.body,['ids','reason']);
+    send(res,await store.withdrawStock({tenantId:req.tenantId,actorId:req.user.id,ids:req.body.ids,reason:reason(req.body.reason)}));
+  }));
   router.post('/refresh',orgAdmin,wrap(async(req,res)=>{exact(req.body,[]);send(res,await service.refresh(req.tenantId));}));
   const command=(kind,extraKeys,run)=>router.post(`/${kind}`,orgAdmin,wrap(async(req,res)=>{
     exact(req.body,['requestId',...extraKeys]);
@@ -88,7 +96,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   return router;
 };
 
-export const createManagementBillingWebhook=({env=process.env,store=createBillingStore(),stripe=createStripeClient({env})}={})=>{
+export const createManagementBillingWebhook=({env=process.env,store=createBillingStore({env}),stripe=createStripeClient({env})}={})=>{
   const router=express.Router();
   router.post('/',(req,res,next)=>env.MANAGEMENT_BILLING_SCHEMA_READY==='true' && stripe.configured() && env.STRIPE_SANDBOX_WEBHOOK_SECRET?
     next():res.sendStatus(404),express.raw({type:'application/json',limit:'256kb'}),wrap(async(req,res)=>{

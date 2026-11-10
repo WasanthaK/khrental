@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
+import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,stagedStock,assertInventoryMutation,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
 import {assertManagementWrite} from '../src/api/managementBilling/store.js';
 import {sql} from '../src/api/mssql/pool.js';
 import {createStripeClient,stripeForm,firstRenewalFailure,subscriptionProjection} from '../src/api/managementBilling/stripe.js';
@@ -11,6 +11,30 @@ import {createBillingService} from '../src/api/managementBilling/service.js';
 
 const tenant='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
+
+test('prepared stock has immutable validated identities and accepts no billing or tenancy authority',()=>{
+  const record={kind:'property',payload:{id:tenant.toUpperCase(),name:'  Prepared condominium  ',propertytype:'condo',country_code:'LK',rentalvalues:{listingCategory:'residential'}}};
+  const [normalized]=stagedStock([record]);
+  assert.equal(normalized.payload.id,tenant);assert.equal(normalized.payload.name,'Prepared condominium');
+  assert.equal(record.payload.name,'  Prepared condominium  ','Preparing must not mutate the input');
+  assert.equal(dwellingInventory({tenantId:tenant,properties:[{...normalized.payload,tenant_id:tenant}],units:[]}).length,1,'UI condo spelling counts as a residential dwelling');
+  for(const change of [{status:'occupied'},{tenant_id:other},{initial_payment_verified:true},{quantity:0},{id:'invalid'},{propertytype:'land'},{country_code:'US'},{rentalvalues:{listingCategory:'office'}}])
+    assert.throws(()=>stagedStock([{...record,payload:{...record.payload,...change}}]));
+  assert.throws(()=>stagedStock([record,record]),{code:'BILLING_DUPLICATE_DWELLING'});
+  assert.throws(()=>stagedStock([]));assert.throws(()=>stagedStock(Array.from({length:101},()=>record)));
+  assert.throws(()=>stagedStock([{kind:'unit',payload:{id:other,propertyid:tenant,unitnumber:'Unit',bedrooms:1.5}}]));
+});
+
+test('controlled stock scope cannot bypass preparation or cessation through generic bulk mutations',()=>{
+  const env={MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant};
+  for(const table of ['properties','property_units'])for(const action of ['insert','upsert','delete']){
+    assert.throws(()=>assertInventoryMutation({tenantId:tenant,table,action,env}),{code:action==='delete'?'BILLING_CESSATION_REQUIRED':'BILLING_STOCK_PREPARATION_REQUIRED'});
+    assertInventoryMutation({tenantId:other,table,action,env});
+    assertInventoryMutation({tenantId:tenant,table,action,env:{}});
+  }
+  assertInventoryMutation({tenantId:tenant,table:'properties',action:'update',env});
+  assertInventoryMutation({tenantId:tenant,table:'invoices',action:'insert',env});
+});
 
 test('management write rollout requires explicit server enablement and an exact organization scope',()=>{
   assert.equal(managementWriteEnforced(tenant,{}),false);

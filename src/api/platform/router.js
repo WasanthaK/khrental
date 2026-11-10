@@ -1,4 +1,5 @@
 import { withManagementWrite } from '../managementBilling/store.js';
+import { assertInventoryMutation } from '../managementBilling/contract.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
 import { resolveVerifiedSeekerContext, resolvePersonalRentalContext } from '../auth/seekerContext.js';
@@ -1107,6 +1108,7 @@ export const createPlatformRouter = () => {
         case 'update':
         case 'delete':
         case 'upsert': {
+          assertInventoryMutation({tenantId:req.tenantId,table:authorized.table,action:authorized.action});
           const mutate = transaction => {
             const options = {table: authorized.table, payload: authorized.payload,
               filters: authorized.filters, tenantId: req.tenantId,

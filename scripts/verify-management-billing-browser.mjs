@@ -50,7 +50,7 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
     if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
@@ -60,6 +60,16 @@ try{
      assert.match(text,/Historical records and renter access are preserved/);
      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm sandbox cancellation at renewal').click());
      await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: quantity-apply'));
+    }else if(scenario==='staged-stock'){
+     assert.match(await page.$eval('body',el=>el.innerText),/stays private and unavailable for tenancy until billing is confirmed/);
+     assert.match(await page.$eval('body',el=>el.innerText),/Awaiting billing confirmation/);
+     await page.type('input[maxlength="255"]','Second prepared home');
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Prepare dwelling').focus());
+     await page.keyboard.press('Enter');
+     await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: stock/prepare'));
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Withdraw prepared additions').focus());
+     await page.keyboard.press('Enter');
+     await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: stock/withdraw'));
     }else if(scenario==='interrupted-cancellation'){
      assert.match(await page.$eval('body',el=>el.innerText),/This check does not repeat the change/);
      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Check cancellation result').focus());

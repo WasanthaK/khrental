@@ -3,6 +3,25 @@ import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
 const button='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40';
+const PreparedStockForm=({busy,onAction})=>{
+  const [name,setName]=useState(''),[country,setCountry]=useState('LK'),[type,setType]=useState('house');
+  const identity=useRef(null);
+  if(!identity.current)identity.current=crypto.randomUUID();
+  return <form className="space-y-3" onSubmit={async event=>{
+    event.preventDefault();
+    const saved=await onAction('stock/prepare',{records:[{kind:'property',payload:{id:identity.current,name,
+      propertytype:type,country_code:country,rentalvalues:{listingCategory:'residential'}}}],
+      reason:'Organization administrator prepared a dwelling for billing review.'});
+    if(saved===true){setName('');identity.current=crypto.randomUUID();}
+  }}>
+    <div className="grid gap-3 sm:grid-cols-3">
+      <label className="text-sm">Property name<input className="mt-1 w-full rounded-lg border p-2" required maxLength={255} value={name} onChange={e=>setName(e.target.value)}/></label>
+      <label className="text-sm">Country<select className="mt-1 w-full rounded-lg border p-2" value={country} onChange={e=>setCountry(e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei</option></select></label>
+      <label className="text-sm">Property type<select className="mt-1 w-full rounded-lg border p-2" value={type} onChange={e=>setType(e.target.value)}><option value="house">House</option><option value="condo">Condominium</option></select></label>
+    </div>
+    <button className={button} disabled={busy||!name.trim()}>Prepare dwelling</button>
+  </form>;
+};
 export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction})=>{
   const reductionScheduled=Number.isSafeInteger(data?.pendingQuantity)&&data.pendingQuantity>0
     &&data.pendingQuantity<data.billedQuantity&&!data.cancelAtPeriodEnd;
@@ -16,6 +35,15 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
   {notice&&<p role="status" className="rounded-xl bg-slate-100 p-4 text-slate-800">{notice}</p>}
   {loading?<p role="status">Loading subscription…</p>:data&&<>
     <div className="grid gap-4 sm:grid-cols-3">{[['Managed dwellings',data.inventoryQuantity],['Current billed quantity',data.billedQuantity],['Subscription',data.status.replaceAll('_',' ')]].map(([title,value])=><section key={title} className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-sm text-slate-500">{title}</h2><p className="mt-2 text-2xl font-semibold capitalize">{value}</p></section>)}</div>
+    {data.stagingEnabled&&<section aria-labelledby="prepared-stock-title" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+      <h2 id="prepared-stock-title" className="text-xl font-semibold">Prepare additions</h2>
+      <p className="text-sm text-slate-600">Prepare a dwelling before billing is set up. It stays private and unavailable for tenancy until billing is confirmed. No payment or subscription change is made by preparing it.</p>
+      <PreparedStockForm busy={busy} onAction={onAction}/>
+      {data.pendingStock?.length>0&&<div><h3 className="font-semibold">Awaiting billing confirmation</h3><ul className="mt-2 space-y-2 text-sm">{data.pendingStock.map(item=><li key={item.id}>{item.label} · {item.kind==='property'?'Property':'Unit'}</li>)}</ul>
+        <button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('stock/withdraw',{ids:data.pendingStock.map(item=>item.id),reason:'Organization administrator withdrew prepared additions before management activation.'})}>Withdraw prepared additions</button>
+        <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed dwellings. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
+      </div>}
+    </section>}
     {reductionScheduled&&<section aria-labelledby="scheduled-quantity-title" className="rounded-2xl border border-teal-200 bg-teal-50 p-5 text-teal-950">
       <h2 id="scheduled-quantity-title" className="text-xl font-semibold">Scheduled quantity reduction</h2>
       <p className="mt-2">Your billed quantity will change from <strong>{data.billedQuantity}</strong> to <strong>{data.pendingQuantity}</strong> at your next renewal{renewalDate?` on ${renewalDate} (UTC)`:''}.</p>
@@ -71,12 +99,13 @@ export default function ManagementSubscription(){
     let requestId=resumeId || requests.current.get(key);
     if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
     try{
-      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:{...payload,requestId}});
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')?payload:{...payload,requestId}});
       if(context.current!==scope)return;
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
-      if(kind==='quantity-preview')setPreview(result);else{setPreview(null);setNotice('Stripe status updated.');}
+      if(kind==='quantity-preview')setPreview(result);else{setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
       await load();
+      return true;
     }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500)requests.current.delete(key);await load();}}finally{if(context.current===scope)setBusy(false);}
   };
   return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview}} onReload={load} onAction={action}/>;

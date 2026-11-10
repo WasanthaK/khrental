@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {getMssqlPool, sql} from '../mssql/pool.js';
 import {runQuery} from '../mssql/query.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, dwellingInventory, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, reason as decisionReason, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
 
 // The caller must supply its mutation transaction, never an independent pool
 // read. Hold the account row through commit so revoke/reconciliation cannot
@@ -49,7 +49,8 @@ export const runManagementQuery = (statement, params, tenantId = params.tenantId
 export const runSingleManagementQuery = async (statement, params) =>
   (await runManagementQuery(statement, params))[0] || null;
 
-export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
+export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}) => {
+  const stagingEnabled=()=>env.MANAGEMENT_INVENTORY_SCHEMA_READY==='true';
   const query = async (connection, statement, params = {}) => {
     const request = connection instanceof sql.Transaction ? new sql.Request(connection) : connection.request();
     for (const [key,value] of Object.entries(params)) request.input(key,value);
@@ -82,12 +83,136 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     q(`INSERT INTO dbo.management_billing_audit(tenant_id,actor_id,action,resource_id,previous_hash,current_hash,reason)
       VALUES(@tenantId,@actorId,@action,@resourceId,@previous,@current,@reason)`,
     {tenantId,actorId,action,resourceId,previous:previous === null ? null : hash(previous),current:hash(current),reason});
-  const inventory = async (tenantId, q = read) => {
+  const pendingStock=async(tenantId,q=read)=>stagingEnabled()?q(`SELECT * FROM dbo.management_inventory_staging
+    WHERE tenant_id=@tenantId AND status='pending' ORDER BY id`,{tenantId}):[];
+  const inventory = async (tenantId, q = read, {includePending=false,stageIds=null}={}) => {
     const properties = await q('SELECT id,tenant_id,name,propertytype FROM dbo.properties WHERE tenant_id=@tenantId',{tenantId});
     // Deliberately includes malformed cross-tenant child relationships so the contract rejects them.
     const units = await q(`SELECT u.id,u.tenant_id,u.propertyid,u.unitnumber FROM dbo.property_units u
       JOIN dbo.properties p ON p.id=u.propertyid WHERE p.tenant_id=@tenantId`,{tenantId});
-    return dwellingInventory({tenantId,properties,units});
+    const staged=includePending?(await pendingStock(tenantId,q)).filter(row=>!stageIds||stageIds.includes(String(row.id).toLowerCase())):[];
+    staged.sort((a,b)=>a.kind===b.kind?String(a.id).localeCompare(String(b.id)):a.kind==='property'?-1:1);
+    for(const row of staged){
+      const payload=JSON.parse(row.payload_json);
+      if(row.payload_hash!==hash(payload)||String(payload.id).toLowerCase()!==String(row.id).toLowerCase())
+        throw problem(409,'BILLING_STOCK_CHANGED','Prepared stock needs review before continuing.');
+      if(row.kind==='property')properties.push({...payload,tenant_id:tenantId});
+      else{
+        const parent=properties.find(p=>String(p.id).toLowerCase()===payload.propertyid);
+        const stagedParent=staged.some(s=>s.kind==='property'&&String(s.id).toLowerCase()===payload.propertyid);
+        // Split/restoration timing is a separate governed transition. Adding a
+        // child must never silently replace an existing whole managed dwelling.
+        if(!parent||(!stagedParent&&!units.some(u=>String(u.propertyid).toLowerCase()===payload.propertyid)))
+          throw problem(409,'BILLING_STOCK_PARENT','Choose an existing multi-unit property or prepare the new building and its units together.');
+        units.push({...payload,tenant_id:tenantId});
+      }
+    }
+    const items=dwellingInventory({tenantId,properties,units});
+    if(!staged.length)return items;
+    for(const row of staged){
+      const payload=JSON.parse(row.payload_json),propertyId=row.kind==='property'?payload.id:payload.propertyid;
+      if(!items.some(item=>String(item.propertyId).toLowerCase()===propertyId))
+        throw problem(409,'BILLING_STOCK_PARENT','Prepared units must belong to a residential property in this organization.');
+    }
+    const stagedRecords=staged.map(row=>({id:String(row.id).toLowerCase(),hash:row.payload_hash}));
+    return items.map((item,index)=>index===0?{...item,stagedRecords}:item);
+  };
+  const stageStock=({tenantId,actorId,records,reason})=>{
+    if(!stagingEnabled())throw problem(503,'BILLING_STOCK_UNAVAILABLE','Preparing additions is not available yet.');
+    const normalized=stagedStock(records);
+    const note=decisionReason(reason);
+    return locked(tenantId,async q=>{
+      await assertActor(q,tenantId,actorId);
+      const enrolled=await account(tenantId,q);
+      if(enrolled&&normalized.some(r=>r.kind==='property'&&r.payload.country_code!==enrolled.market))
+        throw problem(409,'BILLING_STOCK_MARKET','Prepare stock in the workspace’s enrolled billing market.');
+      if((await q(`SELECT TOP 1 id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'`,{tenantId})).length)
+        throw problem(409,'BILLING_COMMAND_PENDING','Finish the pending billing operation before preparing more stock.');
+      let changed=false;
+      for(const {kind,payload} of normalized){
+        const existing=(await q('SELECT * FROM dbo.management_inventory_staging WHERE id=@id',{id:payload.id}))[0];
+        if(existing){
+          if(String(existing.tenant_id).toLowerCase()!==tenantId.toLowerCase()||existing.kind!==kind||existing.payload_hash!==hash(payload))
+            throw problem(409,'BILLING_STOCK_CONFLICT','This record identifier already belongs to different stock.');
+          if(existing.status==='withdrawn')throw problem(409,'BILLING_STOCK_WITHDRAWN','This prepared record was withdrawn. Prepare a new record to continue.');
+          continue;
+        }
+        if((await q(`SELECT id FROM dbo.properties WHERE id=@id UNION ALL SELECT id FROM dbo.property_units WHERE id=@id`,{id:payload.id})).length)
+          throw problem(409,'BILLING_STOCK_CONFLICT','This property or unit already exists.');
+        await q(`INSERT INTO dbo.management_inventory_staging(id,tenant_id,kind,payload_json,payload_hash,created_by)
+          VALUES(@id,@tenantId,@kind,@payload,@digest,@actorId)`,
+        {id:payload.id,tenantId,kind,payload:JSON.stringify(payload),digest:hash(payload),actorId});
+        changed=true;
+      }
+      if((await pendingStock(tenantId,q)).length>1000)throw problem(409,'BILLING_STOCK_LIMIT','Review the pending additions before preparing more stock.');
+      await inventory(tenantId,q,{includePending:true});
+      if(changed)await audit(q,{tenantId,actorId,action:'inventory.staged',resourceId:normalized[0].payload.id,
+        current:normalized.map(r=>({id:r.payload.id,kind:r.kind,hash:hash(r.payload)})),reason:note});
+      return {prepared:normalized.map(r=>r.payload.id),status:'pending'};
+    });
+  };
+  const withdrawStock=({tenantId,actorId,ids,reason})=>{
+    if(!stagingEnabled())throw problem(503,'BILLING_STOCK_UNAVAILABLE','Preparing additions is not available yet.');
+    if(!Array.isArray(ids)||!ids.length||ids.length>1000)throw problem(400,'BILLING_STOCK_INVALID','Choose the prepared records to withdraw.');
+    const selected=[...new Set(ids.map(identifier))],note=decisionReason(reason);
+    return locked(tenantId,async q=>{
+      await assertActor(q,tenantId,actorId);
+      if((await q(`SELECT TOP 1 id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'`,{tenantId})).length)
+        throw problem(409,'BILLING_COMMAND_PENDING','Finish the pending billing operation before withdrawing prepared stock.');
+      const current=await account(tenantId,q),snapshot=JSON.parse(current?.inventory_json||'[]');
+      const bound=snapshot[0]?.stagedRecords?.some(ref=>selected.includes(ref.id));
+      if(bound&&(await q(`SELECT TOP 1 id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed'`,{tenantId})).length)
+        throw problem(409,'BILLING_STOCK_CHECKOUT_PENDING','Checkout already includes this stock. Resolve that checkout before withdrawing it.');
+      let changed=false;
+      for(const id of selected){
+        const row=(await q('SELECT * FROM dbo.management_inventory_staging WHERE id=@id AND tenant_id=@tenantId',{id,tenantId}))[0];
+        if(!row)throw problem(404,'BILLING_STOCK_NOT_FOUND','Prepared stock was not found in this workspace.');
+        if(row.status==='promoted')throw problem(409,'BILLING_CESSATION_REQUIRED','Managed stock requires management-cessation checks. It has not been removed.');
+        if(row.status==='withdrawn')continue;
+        await q(`UPDATE dbo.management_inventory_staging SET status='withdrawn',withdrawn_at=SYSUTCDATETIME() WHERE id=@id AND tenant_id=@tenantId`,{id,tenantId});
+        changed=true;
+      }
+      const remaining=await inventory(tenantId,q,{includePending:true});
+      if(bound)await q('UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,version=version+1 WHERE tenant_id=@tenantId',
+        {tenantId,inventory:JSON.stringify(remaining)});
+      if(changed)await audit(q,{tenantId,actorId,action:'inventory.withdrawn',resourceId:selected[0],current:{ids:selected},reason:note});
+      return {withdrawn:selected};
+    });
+  };
+  const promoteStock=async(q,{tenantId,snapshot,commandId})=>{
+    const refs=snapshot?.[0]?.stagedRecords;
+    if(!refs?.length)return;
+    if(!stagingEnabled())throw problem(503,'BILLING_STOCK_UNAVAILABLE','Prepared stock confirmation is not available yet.');
+    const command=(await q(`SELECT id FROM dbo.management_billing_commands WHERE id=@commandId AND tenant_id=@tenantId
+      AND kind IN('checkout','quantity_apply') AND status IN('pending','completed')`,{commandId,tenantId}))[0];
+    if(!command)throw problem(409,'BILLING_STOCK_CONFIRMATION','A matching billing confirmation is required.');
+    const current=(await q(`SELECT *,SYSUTCDATETIME() AS checked_at FROM dbo.management_billing_accounts WITH(UPDLOCK,HOLDLOCK)
+      WHERE tenant_id=@tenantId`,{tenantId}))[0];
+    if(!current||current.stripe_account_id!==BILLING_ACCOUNT||!current.initial_payment_verified||
+      !(current.checked_at instanceof Date)||!Number.isFinite(current.checked_at.getTime())||current.subscription_status!=='active'||
+      Date.parse(current.paid_through||'')<=current.checked_at.getTime()||!Number.isFinite(Date.parse(current.paid_through||''))||
+      current.risk_hold||current.quantity<snapshot.length)
+      throw problem(409,'BILLING_STOCK_CONFIRMATION','Paid subscription confirmation is required before stock becomes managed.');
+    const stageIds=refs.map(ref=>ref.id);
+    const expected=await inventory(tenantId,q,{includePending:true,stageIds});
+    if(hash(expected)!==hash(snapshot))throw problem(409,'BILLING_STOCK_CHANGED','Prepared stock changed. Review the billing confirmation before continuing.');
+    const selected=(await pendingStock(tenantId,q)).filter(row=>stageIds.includes(String(row.id).toLowerCase()));
+    // Parent inserts precede child inserts regardless of caller/import ordering.
+    selected.sort((a,b)=>a.kind===b.kind?String(a.id).localeCompare(String(b.id)):a.kind==='property'?-1:1);
+    for(const row of selected){
+      const payload=JSON.parse(row.payload_json);
+      const columns=Object.keys(payload);
+      const params={tenantId,id:row.id,commandId};
+      columns.forEach((key,i)=>{params[`v${i}`]=payload[key]!==null&&typeof payload[key]==='object'?JSON.stringify(payload[key]):payload[key];});
+      // Fields are revalidated even for persisted payloads before constructing SQL.
+      stagedStock([{kind:row.kind,payload}]);
+      await q(`INSERT INTO dbo.${row.kind==='property'?'properties':'property_units'}
+        (tenant_id,status,${columns.map(c=>`[${c}]`).join(',')}) VALUES(@tenantId,'available',${columns.map((_c,i)=>`@v${i}`).join(',')});
+        UPDATE dbo.management_inventory_staging SET status='promoted',promoted_at=SYSUTCDATETIME(),promotion_command_id=@commandId
+        WHERE id=@id AND tenant_id=@tenantId AND status='pending';`,params);
+    }
+    await audit(q,{tenantId,action:'inventory.promoted',resourceId:commandId,current:refs,
+      reason:'Prepared stock promoted only after verified billing confirmation.'});
   };
   const listPricing = async () => (await read('SELECT * FROM dbo.management_pricing_versions ORDER BY created_at DESC,version DESC'))
     .map(row => ({...row,rules:JSON.parse(row.rules_json),rules_json:undefined}));
@@ -106,7 +231,9 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     const tenant = (await q('SELECT id,[plan],status FROM dbo.tenants WHERE id=@tenantId',{tenantId}))[0];
     if (!tenant || tenant.plan !== 'development-testing' || tenant.status !== 'active')
       throw problem(409,'BILLING_SANDBOX_WORKSPACE_REQUIRED','Sandbox billing is limited to an active development-testing workspace.');
-    const items = await inventory(tenantId,q);
+    if((await pendingStock(tenantId,q)).some(row=>row.kind==='property'&&JSON.parse(row.payload_json).country_code!==market))
+      throw problem(409,'BILLING_STOCK_MARKET','The prepared properties must match the selected billing market.');
+    const items = await inventory(tenantId,q,{includePending:true});
     if (!items.length) throw problem(409,'BILLING_INVENTORY_EMPTY','Add residential inventory before enrolling this sandbox workspace.');
     const selected=(await q(`SELECT TOP 1 id,stripe_price_id FROM dbo.management_pricing_versions
       WHERE market=@market AND status='sandbox_published' AND TRY_CONVERT(DATETIMEOFFSET,JSON_VALUE(rules_json,'$.effectiveAt'))<=SYSUTCDATETIME()
@@ -170,5 +297,5 @@ export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
     return complimentaryStatus(tenantId, q);
   });
   return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
-    complimentaryStatus,setComplimentary};
+    complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock};
 };
