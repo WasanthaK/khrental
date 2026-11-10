@@ -24,6 +24,22 @@ export const assertManagementWrite = async ({tenantId, transaction, env = proces
   }
 };
 
+// Use for writers that previously issued standalone SQL statements. The
+// entitlement lock and every domain/audit write share one commit boundary.
+export const withManagementWrite = async ({tenantId, action}) => {
+  const transaction = new sql.Transaction(await getMssqlPool());
+  await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+  try {
+    await assertManagementWrite({tenantId, transaction});
+    const result = await action(transaction);
+    await transaction.commit();
+    return result;
+  } catch (error) {
+    await transaction.rollback().catch(() => {});
+    throw error;
+  }
+};
+
 export const createBillingStore = ({getPool = getMssqlPool} = {}) => {
   const query = async (connection, statement, params = {}) => {
     const request = connection instanceof sql.Transaction ? new sql.Request(connection) : connection.request();

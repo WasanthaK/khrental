@@ -1,3 +1,4 @@
+import { assertManagementWrite, withManagementWrite } from '../managementBilling/store.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { getMssqlPool, sql } from '../mssql/pool.js';
@@ -475,22 +476,29 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const dueDate = req.body?.dueDate === undefined ? invoice.duedate : req.body?.dueDate;
       const notes = req.body?.notes === undefined ? invoice.notes : String(req.body?.notes || '').trim() || null;
 
-      const updated = await runSingleQuery(
-        `UPDATE invoices
-         SET duedate = @dueDate,
-             notes = @notes,
-             updatedat = SYSUTCDATETIME()
-         OUTPUT INSERTED.*
-         WHERE tenant_id = @tenantId AND id = @invoiceId AND status = 'draft'`,
-        {
-          tenantId: req.tenantId,
-          invoiceId: invoice.id,
-          dueDate: dueDate || null,
-          notes
-        }
-      );
+      const updated = await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
+        const updated = await singleTransaction(transaction,
+          `UPDATE invoices
+           SET duedate = @dueDate,
+               notes = @notes,
+               updatedat = SYSUTCDATETIME()
+           OUTPUT INSERTED.*
+           WHERE tenant_id = @tenantId AND id = @invoiceId AND status = 'draft'`,
+          {
+            tenantId: req.tenantId,
+            invoiceId: invoice.id,
+            dueDate: dueDate || null,
+            notes
+          }
+        );
 
-      if (!updated) throw createRequestError(409, 'Invoice changed before the draft could be updated.', 'INVOICE_STATE_CHANGED');
+        if (!updated) throw createRequestError(409, 'Invoice changed before the draft could be updated.', 'INVOICE_STATE_CHANGED');
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId, invoiceId: invoice.id, eventType: 'invoice_draft_updated',
+          fromStatus: 'draft', toStatus: 'draft', actorUserId: req.user.id
+        });
+        return updated;
+      }});
       res.json({ data: updated, error: null });
     } catch (error) {
       next(error);
@@ -525,6 +533,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const lockedInvoice = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
@@ -586,6 +595,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const component = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoice_components WITH (UPDLOCK, HOLDLOCK)
@@ -660,6 +670,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const component = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoice_components WITH (UPDLOCK, HOLDLOCK)
@@ -810,6 +821,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       let issued;
       let paymentReference;
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction: tx});
         const locked = await singleTransaction(tx,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
@@ -883,6 +895,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const tx = new sql.Transaction(await getMssqlPool());
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction: tx});
         await singleTransaction(tx,
           'SELECT TOP 1 id FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
@@ -929,6 +942,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       let targetEmail;
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction: tx});
         const locked = await singleTransaction(tx,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
@@ -1015,6 +1029,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(await getMssqlPool());
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const lockedInvoice = await singleTransaction(transaction,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
@@ -1101,6 +1116,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const lockedInvoice = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
@@ -1207,6 +1223,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const lockedInvoice = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
@@ -1329,6 +1346,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const lockedInvoice = await singleTransaction(
           transaction,
           `SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK)
@@ -1441,15 +1459,16 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       if (String(invoice.status).toLowerCase() === 'paid') {
         throw createRequestError(409, 'A reminder is not required for a paid invoice.', 'INVOICE_ALREADY_PAID');
       }
-      await runQuery(
-        `UPDATE invoices SET reminderdate = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
-         WHERE tenant_id = @tenantId AND id = @invoiceId`,
-        { tenantId: req.tenantId, invoiceId: invoice.id }
-      );
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
       await transaction.begin();
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
+        await queryTransaction(transaction,
+          `UPDATE invoices SET reminderdate = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
+           WHERE tenant_id = @tenantId AND id = @invoiceId`,
+          { tenantId: req.tenantId, invoiceId: invoice.id }
+        );
         await insertLifecycleEvent(transaction, {
           tenantId: req.tenantId,
           invoiceId: invoice.id,

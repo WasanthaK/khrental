@@ -1456,6 +1456,8 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     // Caller flags/body tenant cannot disable the server-owned selected scope.
     const {createAuthRecord, issueAuthSession, createSessionAuthMiddleware} = await import('../src/api/auth/index.js');
     const {createMonthlyBillingRouter} = await import('../src/api/platform/monthlyBillingRouter.js');
+    const {createBillingRouter} = await import('../src/api/platform/billingRouter.js');
+    const {createBillingAdjustmentsRouter} = await import('../src/api/platform/billingAdjustmentsRouter.js');
     const authId = crypto.randomUUID();
     const email = `monthly-guard-${crypto.randomBytes(6).toString('hex')}@example.invalid`;
     const admin = await first(pool, `INSERT INTO app_users (tenant_id,name,email,role,user_type,auth_id)
@@ -1469,6 +1471,9 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     app.use(express.json());
     app.use(createSessionAuthMiddleware());
     app.use('/api/billing',createMonthlyBillingRouter());
+    let emails = 0;
+    app.use('/api/billing',createBillingRouter({sendInvoiceEmail:async()=>{ emails++; return {provider:'fixture'}; }}));
+    app.use('/api/billing',createBillingAdjustmentsRouter());
     app.use((error,_req,res,_next)=>res.status(error.status || 500).json({error:error.message,code:error.code}));
     const server = await new Promise(resolve=>{const listening=app.listen(0,'127.0.0.1',()=>resolve(listening));});
     try {
@@ -1486,7 +1491,71 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       await setState('');
       const allowedResponse = await post();
       assert.equal(allowedResponse.status,200);
-      assert.equal((await allowedResponse.json()).data.created.length,1);
+      const generated = (await allowedResponse.json()).data.created;
+      assert.equal(generated.length,1);
+      const invoice = await first(pool, "SELECT TOP 1 * FROM invoices WHERE tenant_id=@tenantId AND billingperiod='2035-11'", scoped);
+      assert.ok(invoice);
+      const command = async (suffix, method, body) => fetch(`http://127.0.0.1:${server.address().port}/api/billing/${suffix}`,{
+        method, headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+        body:JSON.stringify({...body,tenantId:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+      const invoicePath = `invoices/${invoice.id}`;
+      const writerSnapshot = () => first(pool, `SELECT
+        (SELECT notes FROM invoices WHERE id=@invoiceId) AS notes,
+        (SELECT reminderdate FROM invoices WHERE id=@invoiceId) AS reminderdate,
+        (SELECT COUNT(*) FROM invoice_components WHERE tenant_id=@tenantId) AS components,
+        (SELECT COUNT(*) FROM payments WHERE tenant_id=@tenantId) AS payments,
+        (SELECT COUNT(*) FROM payment_receipts WHERE tenant_id=@tenantId) AS receipts,
+        (SELECT COUNT(*) FROM tenancy_billing_adjustments WHERE tenant_id=@tenantId) AS adjustments,
+        (SELECT COUNT(*) FROM billing_lifecycle_events WHERE tenant_id=@tenantId) AS events`,
+        {tenantId:scoped.tenantId,invoiceId:invoice.id});
+      const deniedCommand = async (suffix, method, body) => {
+        const before = await writerSnapshot();
+        const response = await command(suffix,method,body);
+        const data = await response.json();
+        assert.equal(response.status,403,JSON.stringify({suffix,data}));
+        assert.equal(data.code,'MANAGEMENT_READ_ONLY',suffix);
+        assert.deepEqual(await writerSnapshot(),before,`${suffix} denies without partial business/audit writes`);
+        assert.equal(emails,0,'A denied command cannot dispatch an invoice email');
+      };
+      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
+      await deniedCommand(`${invoicePath}/draft`,'PATCH',{notes:'must not persist'});
+      await deniedCommand(`${invoicePath}/draft/components`,'POST',{componentType:'other',description:'Denied charge',amount:10});
+      const component = await first(pool,'SELECT TOP 1 id FROM invoice_components WHERE invoice_id=@invoiceId',{invoiceId:invoice.id});
+      await deniedCommand(`${invoicePath}/draft/components/${component.id}`,'PATCH',{description:'must not persist',amount:11});
+      await deniedCommand(`${invoicePath}/draft/components/${component.id}`,'DELETE',{});
+      await deniedCommand(`${invoicePath}/issue`,'POST',{});
+      await deniedCommand(`agreements/${scoped.agreementId}/billing-adjustments`,'POST',{
+        billingPeriod:'2035-12',componentType:'other',description:'Denied adjustment',amount:10});
+      await query(pool,"UPDATE invoices SET status='pending' WHERE id=@invoiceId",{invoiceId:invoice.id});
+      await deniedCommand(`${invoicePath}/verify-payment`,'POST',{approved:true});
+      await deniedCommand(`${invoicePath}/manual-payment`,'POST',{amount:10,paymentMethod:'cash'});
+      await deniedCommand(`${invoicePath}/reminder`,'POST',{});
+      await deniedCommand(`${invoicePath}/send-reminder`,'POST',{});
+      // Both reads and SaaS payment recovery remain outside these rental guards.
+      const history = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/${invoicePath}`,{
+        headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});
+      assert.equal(history.status,200);
+      await query(pool,"UPDATE invoices SET status='draft' WHERE id=@invoiceId",{invoiceId:invoice.id});
+      for (const change of [
+        '',
+        "UPDATE dbo.management_billing_accounts SET subscription_status='past_due',grace_started_at=DATEADD(DAY,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId",
+        "UPDATE dbo.management_billing_accounts SET paid_through=NULL,comp_type='fixed',comp_expires_at=DATEADD(DAY,1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId"
+      ]) {
+        await setState(change);
+        const response = await command(`${invoicePath}/draft`,'PATCH',{notes:'Allowed management edit'});
+        assert.equal(response.status,200,JSON.stringify(await response.json()));
+        assert.equal((await writerSnapshot()).notes,'Allowed management edit');
+      }
+      const beforeRollback = await writerSnapshot();
+      await pool.request().batch(`CREATE TRIGGER dbo.direct_guard_rollback_proof ON dbo.billing_lifecycle_events AFTER INSERT AS
+        BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE tenant_id='${scoped.tenantId}' AND event_type='invoice_draft_updated')
+          THROW 51001,'Disposable direct writer rollback proof',1; END`);
+      try {
+        const response = await command(`${invoicePath}/draft`,'PATCH',{notes:'rollback edit'});
+        assert.equal(response.status,500);
+        assert.deepEqual(await writerSnapshot(),beforeRollback,'Audit failure rolls back the draft update');
+      } finally { await pool.request().batch('DROP TRIGGER dbo.direct_guard_rollback_proof'); }
+      console.log('PASS: actual direct invoice/component/issue/payment/adjustment/reminder HTTP denial, ignored override fields, paid/grace/comp edits, audit rollback and retained reads');
     } finally { await new Promise(resolve=>server.close(resolve)); }
 
     for (const [label, change] of [

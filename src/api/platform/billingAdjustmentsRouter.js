@@ -1,3 +1,4 @@
+import { assertManagementWrite, withManagementWrite } from '../managementBilling/store.js';
 import express from 'express';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
@@ -264,6 +265,7 @@ export const createBillingAdjustmentsRouter = () => {
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const existingInvoice = await runSingle(
           transaction,
           `SELECT TOP 1 id
@@ -366,6 +368,7 @@ export const createBillingAdjustmentsRouter = () => {
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
+        await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await runSingle(
           transaction,
           `UPDATE tenancy_billing_adjustments
@@ -471,16 +474,18 @@ export const createBillingAdjustmentsRouter = () => {
         throw createRequestError(409, 'The tenant does not have an email address for payment reminders.', 'RENTEE_EMAIL_REQUIRED');
       }
 
-      await insertLifecycleEvent(pool, {
-        tenantId: req.tenantId,
-        invoiceId: invoice.id,
-        eventType: 'payment_reminder_attempted',
-        actorUserId: req.user.id,
-        metadata: {
-          to: invoice.rentee_email,
-          outstandingBalance
-        }
-      });
+      await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
+        await insertLifecycleEvent(transaction, {
+          tenantId: req.tenantId,
+          invoiceId: invoice.id,
+          eventType: 'payment_reminder_attempted',
+          actorUserId: req.user.id,
+          metadata: {
+            to: invoice.rentee_email,
+            outstandingBalance
+          }
+        });
+      }});
 
       const portalUrl = getBillingReminderPortalUrl();
       const subject = `Quixo.Homes payment reminder - ${invoice.billingperiod || 'invoice'}`;
@@ -518,6 +523,8 @@ export const createBillingAdjustmentsRouter = () => {
           html
         });
 
+        // Complete the durable outcome of the already authorized dispatch even
+        // if management expires while the mail provider is responding.
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
         try {
