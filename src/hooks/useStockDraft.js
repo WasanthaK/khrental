@@ -19,13 +19,13 @@ export const useStockDraft=({kind,parentId='',userId,tenantId,enabled,initialDat
   useEffect(()=>{
     if(enabled&&userId&&tenantId&&!completed.current){try{sessionStorage.setItem(key,JSON.stringify(draft));}catch{/* Submission reports inability to preserve a retry. */}}
   },[draft,enabled,key,userId,tenantId]);
-  const setData=useCallback(update=>setDraft(prev=>({...prev,data:typeof update==='function'?update(prev.data):update})),[]);
-  const setCoordinates=useCallback(update=>setDraft(prev=>({...prev,coordinates:typeof update==='function'?update(prev.coordinates):update})),[]);
+  const setData=useCallback(update=>setDraft(prev=>!live.current||prev.attempt?prev:({...prev,data:typeof update==='function'?update(prev.data):update})),[]);
+  const setCoordinates=useCallback(update=>setDraft(prev=>!live.current||prev.attempt?prev:({...prev,coordinates:typeof update==='function'?update(prev.coordinates):update})),[]);
   const create=async data=>{
     if(busy.current){throw new Error('A save is already in progress.');}
     const headers=buildRequestContextHeaders();
     const token=loadStoredSession()?.access_token;
-    const isCurrent=()=>live.current&&getActiveTenantId()===tenantId&&loadStoredSession()?.access_token===token;
+    const isCurrent=()=>live.current&&getActiveTenantId()===tenantId&&loadStoredSession()?.user?.id===userId&&loadStoredSession()?.access_token===token;
     if(!enabled||!userId||!tenantId||!isCurrent()){throw new Error('Your workspace changed. Reopen the property form to continue.');}
     busy.current=true;
     try{

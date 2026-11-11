@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/pages/PropertyForm.jsx'
       - 'src/components/properties/PropertyUnitForm.jsx'
+      - 'src/components/properties/PropertyMap.jsx'
       - 'src/hooks/useStockDraft.js'
       - 'src/services/platformClient*.js'
       - 'src/components/common/TenantSwitcher.jsx'

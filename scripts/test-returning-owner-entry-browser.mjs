@@ -201,10 +201,13 @@ try{
       await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});
       for(const [selector,value]of [['#name','Prepared complete property'],['#address','Retained fixture address'],['#bank_name','Fixture bank'],['#bank_branch','Fixture branch'],['#bank_account_number','000123'],['#rent','80000'],['#deposit','160000']]){await page.type(selector,value);}
       await page.select('#listingCategory','residential');await page.select('#propertytype','house');
+      await page.type('#lat','0');await page.type('#lng','79.8612');
+      assert.equal(await page.evaluate(()=>document.body.innerText.includes('Get Coordinates from Address')),false,'No simulated geocoding action is offered');
       await page.reload({waitUntil:'networkidle0'});
       assert.equal(await page.$eval('#name',e=>e.value),'Prepared complete property','Unsubmitted details survive reload');
       await page.click('button[type="submit"]');await page.waitForFunction(()=>document.body.innerText.includes('Preparation response was lost'));
       const submitted=preparationRequests.at(-1);
+      assert.equal(submitted.payload.latitude,0);assert.equal(submitted.payload.longitude,79.8612);
       assert.equal(submitted.payload.bank_account_number,'000123');assert.equal(submitted.payload.rentalvalues.rent,80000);
       assert.equal(submitted.payload.availability,'active');assert.equal(Object.hasOwn(submitted.payload,'status'),false);
       await page.reload({waitUntil:'networkidle0'});
@@ -219,6 +222,12 @@ try{
       await page.click('button[type="submit"]');await page.waitForFunction(()=>document.body.innerText.includes('Your workspace changed'));
       assert.equal(preparationRequests.length,beforeWrongWorkspace,'A changed workspace cannot submit the retained request');
       await page.evaluate(id=>localStorage.setItem('khrental.activeTenantId',id),tenantId);
+      const savedSession=await page.evaluate(()=>localStorage.getItem('khrental.local.session'));
+      await page.evaluate(()=>{const session=JSON.parse(localStorage.getItem('khrental.local.session'));session.user.id='88888888-8888-4888-8888-888888888888';localStorage.setItem('khrental.local.session',JSON.stringify(session));});
+      await page.click('button[type="submit"]');await page.waitForFunction(()=>document.body.innerText.includes('Your workspace changed'));
+      assert.equal(preparationRequests.length,beforeWrongWorkspace,'A changed account cannot submit the retained request');
+      await page.evaluate(session=>localStorage.setItem('khrental.local.session',session),savedSession);
+
       await page.focus('button[type="submit"]');await page.keyboard.press('Enter');
       await page.waitForFunction(()=>location.pathname==='/dashboard/subscription');
       assert.deepEqual(preparationRequests.at(-1),submitted);assert.equal(prepared.size,1);

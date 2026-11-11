@@ -81,6 +81,8 @@ const PropertyForm = () => {
   // UI state
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [imagesBusy,setImagesBusy]=useState(false);
+  const imagesBusyRef=useRef(false);
   const [error, setError] = useState(null);
   const [, setUploadedImages] = useState([]);
   const [, setExistingImages] = useState([]);
@@ -380,6 +382,8 @@ const PropertyForm = () => {
 
   // Handle image upload
   const handleImagesChange = async (newImages, imageType = 'exterior') => {
+    if(submitting||stockDraft.pending||imagesBusyRef.current){return;}
+    imagesBusyRef.current=true;setImagesBusy(true);
     try {
       console.log(`Processing ${newImages.length} new property images of type: ${imageType}`);
 
@@ -457,11 +461,13 @@ const PropertyForm = () => {
     } catch (error) {
       console.error('Error uploading property images:', error);
       toast.error(error.message || 'Failed to upload images');
-    }
+    } finally {imagesBusyRef.current=false;setImagesBusy(false);}
   };
 
   // Handle image removal
   const handleRemoveImage = async (index) => {
+    if(submitting||stockDraft.pending||imagesBusyRef.current){return;}
+    imagesBusyRef.current=true;setImagesBusy(true);
     try {
       const imageToRemove = formData.images[index];
       console.log('Removing property image:', imageToRemove);
@@ -526,7 +532,7 @@ const PropertyForm = () => {
     } catch (error) {
       console.error('Error removing property image:', error);
       toast.error(error.message || 'Failed to remove image');
-    }
+    } finally {imagesBusyRef.current=false;setImagesBusy(false);}
   };
 
   // Handle image reorganization
@@ -725,6 +731,7 @@ const PropertyForm = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if(imagesBusyRef.current){return;}
     try {
       setSubmitting(true);
       setError(null);
@@ -848,7 +855,7 @@ const PropertyForm = () => {
 
       {stockDraft.pending && <p role="status" className="mb-4 rounded-lg bg-blue-50 p-4 text-blue-900">Your submitted details are retained. Retry the save to confirm preparation before making changes.</p>}
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-        <fieldset disabled={submitting || stockDraft.pending}>
+        <fieldset disabled={submitting || stockDraft.pending || imagesBusy} className={stockDraft.pending ? "pointer-events-none" : undefined}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div>
@@ -995,9 +1002,6 @@ const PropertyForm = () => {
 
             {formData.propertytype !== PROPERTY_TYPES.APARTMENT && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit Configuration
-                </label>
                 <FormInput
                   label="Unit Configuration"
                   id="unitconfiguration"
@@ -1010,9 +1014,6 @@ const PropertyForm = () => {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Square Feet
-              </label>
               <FormInput
                 label="Square Feet"
                 id="squarefeet"
@@ -1114,9 +1115,6 @@ const PropertyForm = () => {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Year Built
-              </label>
               <FormInput
                 label="Year Built"
                 id="yearbuilt"
@@ -1248,16 +1246,16 @@ const PropertyForm = () => {
             type="button"
             onClick={() => navigate('/dashboard/properties')}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            disabled={submitting}
+            disabled={submitting || imagesBusy}
           >
             Cancel
           </button>
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            disabled={submitting}
+            disabled={submitting || imagesBusy}
           >
-            {submitting ? 'Saving...' : stockDraft.pending ? 'Retry save' : isEditMode ? 'Update Property' : 'Add Property'}
+            {imagesBusy ? 'Updating images...' : submitting ? 'Saving...' : stockDraft.pending ? 'Retry save' : isEditMode ? 'Update Property' : 'Add Property'}
           </button>
         </div>
       </form>
