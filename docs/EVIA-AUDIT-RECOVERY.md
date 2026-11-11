@@ -1,5 +1,11 @@
 # Recover an existing Evia signing audit
 
+## Current recovery disposition — 11 November 2026
+
+PR [#535](https://github.com/WasanthaK/khrental/pull/535) is merged and deployed: completed-document recovery uses Quixo's server-side service integration and does not ask landlords to log in to Evia. Reviewed desktop/mobile errors offer retry. This supersedes the source-validation-pending sentence in the 8 November entry below.
+
+Signing remains completed and accepted. A working supported Evia service exchange or completed-package delivery, fresh matching automatic audit retention and authorized retained-history readback remain open. Earlier 404/501 observations do not establish invalid credentials or a provider outage. Synthetic PDF/SQL success does not certify genuine audit recovery. Do not resend, re-sign, substitute an unrelated audit or request landlord Evia access. The [R5 ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) controls these separate remaining tasks.
+
 ## Evia service ownership correction — 8 November 2026
 
 Evia is Quixo's service integration. Organization users, including landlords, do not need an Evia account to recover completed documents. Earlier sender-login recovery guidance is superseded. The bounded correction routes signed-document and audit recovery through the authenticated Quixo server using its service credentials, ignores caller-supplied provider tokens and removes the customer Evia sign-in action. Application session, organization membership and agreement authorization remain mandatory. Source validation is in progress; deployment and live acceptance are not yet established.
@@ -58,7 +64,7 @@ unauthorized users. Passing fixture tests is not live provider acceptance.
 
 ## Live provider routing investigation — 3 November 2026
 
-**Status: BLOCKED; audit download is not fixed.** User explicitly requested this investigation for replacement agreement D13ECCF2-A82A-41DB-9EB7-3AB968440BB0. The signed PDF remains intact; no resend, re-sign, payment or activation was performed.
+**Status: BLOCKED; audit download is not fixed.** User explicitly requested this investigation for replacement agreement SCOPED_RECORD_ID. The signed PDF remains intact; no resend, re-sign, payment or activation was performed.
 
 ### Reproduced evidence
 
@@ -99,7 +105,7 @@ Existing missing audits cannot be reconstructed from signed PDFs. The already-co
 
 Implemented verified completed-package retrieval using the exact event URL/token, bounded ZIP/PDF/CRC validation, canonical audit filename, and audit-only evidence handling before terminal/duplicate acknowledgement. Verified package or inline-audit re-delivery can retain a missing audit without overwriting signed bytes, timestamps, signatories or agreement state. Existing valid audits skip repeated provider downloads. No schema, provider configuration, signing, payment or activation change.
 
-**Fresh live owner retest: FAIL / OPEN.** After signing in as +514 to JEERY'S PLACE, the agreement list still shows both signatories Signed and the agreement Completed / signed-onboarding-required. View Signing Audit for `D13ECCF2-A82A-41DB-9EB7-3AB968440BB0` returns "Signing audit PDF not found (HTTP 404). It may not have been retained in storage." One built-in recovery attempt then returns "Evia returned a non-JSON HTTP 404 response." No PDF was downloaded, and end-to-end audit acceptance is not complete.
+**Fresh live owner retest: FAIL / OPEN.** After signing in as +514 to the approved test property, the agreement list still shows both signatories Signed and the agreement Completed / signed-onboarding-required. View Signing Audit for `SCOPED_RECORD_ID` returns "Signing audit PDF not found (HTTP 404). It may not have been retained in storage." One built-in recovery attempt then returns "Evia returned a non-JSON HTTP 404 response." No PDF was downloaded, and end-to-end audit acceptance is not complete.
 
 The current receiver supports a verified provider completion-package or audit re-delivery, but no usable re-delivery for this existing request has been observed. The missing historical audit is not recovered by deployment alone. Do not fabricate a webhook, repeat signing, or claim successful download. PDF layout and the wider rental lifecycle remain open. This release and retest supersede older pending-deployment / no-runtime-change statements below without replacing their historical evidence.
 

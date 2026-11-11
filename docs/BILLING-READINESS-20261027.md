@@ -1,10 +1,16 @@
 # Billing readiness checkpoint — 2026-10-27
 
+## Historical checkpoint; current status — 11 November 2026
+
+The connector inventory and next actions below describe **27 October**, not a fresh provider inspection. Later sandbox enrollment, subscription and runtime work are recorded in the [R3/R4 checkpoint](R4-SANDBOX-RUNTIME-ACCEPTANCE-20261104.md), [current plan](EXECUTION-PLAN.md) and [R5 ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md). Preserve the selected sandbox and existing catalog/subscriptions; do not recreate earlier setup from this historical checklist.
+
+The latest [verified source release](R5-INVENTORY-CESSATION-RELEASE-20261110.md) adds staging and bounded cessation; it does not establish genuine recurring lifecycle, live merchant/tax readiness or full enforcement. New readiness migrations remain pending; enforcement and live charging stay OFF. Public registration disposition is governed by the current plan, not the older gating sentence below.
+
 Read-only canonical follow-on while the one-property pilot's human account/recovery and private release configuration dependencies remain open. R1 stays closed; invoice archive R2 and scaling remain deferred. No paid signup, live charging or replica change is authorized by this checkpoint.
 
 ## Controlling billing test-account decision — 2026-10-27
 
-The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
+The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `AUTHORIZED_PROVIDER_OBJECT`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
 
 **Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
 

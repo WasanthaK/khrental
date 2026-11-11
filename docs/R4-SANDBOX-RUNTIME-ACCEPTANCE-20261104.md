@@ -1,5 +1,11 @@
 # R3/R4 current acceptance checkpoint
 
+## Follow-on R5 status — 11 November 2026
+
+This file preserves the R3/R4 closure evidence at its original dates. Current R5 source and acceptance are in the [execution plan](EXECUTION-PLAN.md), [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) and [inventory/cessation release note](R5-INVENTORY-CESSATION-RELEASE-20261110.md). Later sandbox and operational progress does not reopen the owner-closed milestones or certify launch readiness.
+
+Last verified application release is Ready **0000483** with healthy SQL on 10 November. Bound interrupted cancellation recovery, staged inventory and paid active/ending cessation are merged/tested; production staging/cessation migrations remain pending and rollout/live charging remain OFF. Genuine renewal/failure/grace/recovery, complimentary live-role evidence and remaining R5 acceptance stay open. Signing remains accepted; missing fresh matching audit retention is a separate open provider dependency.
+
 ## Owner closure and handoff — 5 November 2026
 
 After reviewing the evidence and unfinished work below, the owner requested closing R3/R4 and moving to R5. **R3 is CLOSED BY OWNER within the accepted single-replica scope; R4 is CLOSED BY OWNER for the deployed sandbox foundation; R5 is ACTIVE.** The [canonical plan](EXECUTION-PLAN.md) and [delivery ledger](R4-R5-DELIVERY.md) control the next work.

@@ -1,5 +1,18 @@
 # KH Rentals Management System
 
+## Current project documentation — 11 November 2026
+
+Quixo Homes uses [quixo.homes](https://quixo.homes) for discovery and [app.quixo.homes](https://app.quixo.homes) for rental management. R5 remains active/incomplete; Sri Lanka readiness precedes Brunei. Signing is accepted. Full enforcement and live charging remain OFF.
+
+- [Canonical execution plan](../docs/EXECUTION-PLAN.md): milestone dispositions and next work.
+- [R4/R5 delivery programme](../docs/R4-R5-DELIVERY.md): delivery scope and dependencies.
+- [R5 task and acceptance ledger](../docs/R5-LIFECYCLE-ACCEPTANCE-20261105.md): exact implementation, CI, release and remaining evidence.
+- [Inventory/cessation release](../docs/R5-INVENTORY-CESSATION-RELEASE-20261110.md): Ready 0000483, 922-test final checks and pending production migrations.
+- [Billing contract](../docs/QUIXO-HOMES-STRIPE-SAAS-BILLING.md) and [commercial readiness](../docs/QUIXO-STRIPE-B02-B03-READINESS.md): approved behavior versus held decisions.
+- [Migration authority](../docs/PRODUCTION-MIGRATION-EXECUTOR.md), [infrastructure handover](../docs/INFRASTRUCTURE-HANDOVER.md) and [Evia audit recovery](../docs/EVIA-AUDIT-RECOVERY.md): operational runbooks and limitations.
+
+Dated material below is supporting technical/history documentation; current acceptance is controlled by the linked plan and ledger.
+
 A comprehensive property management application for KH Rentals that provides digital signature integration, property management, tenant portal features, billing and maintenance tracking.
 
 ## Table of Contents

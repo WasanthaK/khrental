@@ -1,5 +1,18 @@
 # KH Rentals Management System
 
+## Current project documentation — 11 November 2026
+
+Quixo Homes uses [quixo.homes](https://quixo.homes) for discovery and [app.quixo.homes](https://app.quixo.homes) for rental management. R5 remains active/incomplete; Sri Lanka readiness precedes Brunei. Signing is accepted. Full enforcement and live charging remain OFF.
+
+- [Canonical execution plan](docs/EXECUTION-PLAN.md): milestone dispositions and next work.
+- [R4/R5 delivery programme](docs/R4-R5-DELIVERY.md): delivery scope and dependencies.
+- [R5 task and acceptance ledger](docs/R5-LIFECYCLE-ACCEPTANCE-20261105.md): exact implementation, CI, release and remaining evidence.
+- [Inventory/cessation release](docs/R5-INVENTORY-CESSATION-RELEASE-20261110.md): Ready 0000483, 922-test final checks and pending production migrations.
+- [Billing contract](docs/QUIXO-HOMES-STRIPE-SAAS-BILLING.md) and [commercial readiness](docs/QUIXO-STRIPE-B02-B03-READINESS.md): approved behavior versus held decisions.
+- [Migration authority](docs/PRODUCTION-MIGRATION-EXECUTOR.md), [infrastructure handover](docs/INFRASTRUCTURE-HANDOVER.md) and [Evia audit recovery](docs/EVIA-AUDIT-RECOVERY.md): operational runbooks and limitations.
+
+Dated material below is supporting technical/history documentation; current acceptance is controlled by the linked plan and ledger. Public documentation uses role/scoped-record placeholders in place of personal emails and operational record/provider identifiers. Resolve actual values only through authorized configuration and sessions; never paste credentials into documentation.
+
 A comprehensive property management application for KH Rentals with digital signature integration, property management, and tenant portal features.
 
 ## Features
@@ -28,8 +41,8 @@ A comprehensive property management application for KH Rentals with digital sign
 
    Alternatively, manually create a `.env` file based on this template:
    ```
-   VITE_EVIA_SIGN_CLIENT_ID=your_evia_client_id
-   VITE_EVIA_SIGN_CLIENT_SECRET=your_evia_client_secret
+   EVIA_SIGN_CLIENT_ID=your_server_evia_client_id
+   EVIA_SIGN_CLIENT_SECRET=your_server_evia_client_secret
    VITE_API_ENDPOINT=your_api_endpoint
    VITE_WEBHOOK_URL=your_webhook_url
    ```
@@ -91,22 +104,18 @@ npm run build
 
 ## Deployment
 
-The application is configured for deployment to Azure Web App using GitHub Actions. The deployment workflow is defined in `.github/workflows/master_khrental.yml`.
+The application deploys an immutable container to Azure Container Apps through `.github/workflows/deploy-container-apps.yml`. Production verification requires the exact serving source, Ready revision and live SQL health. Marketing hosting and schema application are separate; see the linked runbooks.
 
 ### Environment Variables for Production
 
-Ensure the following environment variables are set in your Azure Web App:
-- `VITE_EVIA_SIGN_CLIENT_ID`
-- `VITE_EVIA_SIGN_CLIENT_SECRET`
-- `VITE_API_ENDPOINT`
-- `VITE_WEBHOOK_URL`
+Use `.env.example` and the existing hosting secret configuration. Keep `EVIA_SIGN_CLIENT_SECRET`, `EVIA_SIGN_API_KEY`, Stripe keys and email credentials server-side; never put secrets in `VITE_` variables or browser runtime configuration. Only public API URLs and approved nonsecret client settings belong in the browser.
 
 ### Deployment Checklist
 
 1. All environment variables are correctly set in Azure
 2. GitHub Actions workflow is properly configured
 3. Deployment artifacts are properly generated
-4. Client-side routing is properly configured in web.config
+4. Container startup, SPA routing, exact build readback and live SQL health pass
 
 ## Recent Updates
 
