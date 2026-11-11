@@ -214,6 +214,52 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
     adminA.token, a.tenantId, { notes: 'must not rewrite signed contract' });
   assert.equal(immutable.status, 409);
   assert.equal(immutable.payload?.code, 'SIGNED_AGREEMENT_IMMUTABLE');
+  // Exercise the generic route with real SQL-backed sessions as well as the
+  // repository compatibility endpoint above. These are disposable contracts.
+  const draftId = crypto.randomUUID();
+  const foreignDraftId = crypto.randomUUID();
+  await q(`INSERT INTO agreements(id,tenant_id,renteeid,propertyid,status,notes)
+    VALUES(@id,@tenantId,@renteeId,@propertyId,'draft','original')`,
+    {id:draftId,tenantId:a.tenantId,renteeId:a.renteeId,propertyId:a.propertyId});
+  await q(`INSERT INTO agreements(id,tenant_id,renteeid,propertyid,status,notes)
+    VALUES(@id,@tenantId,@renteeId,@propertyId,'draft','foreign original')`,
+    {id:foreignDraftId,tenantId:b.tenantId,renteeId:b.renteeId,propertyId:b.propertyId});
+  const generic = (action, payload, id=draftId) => change('POST','/api/platform/query',adminA.token,a.tenantId,
+    {table:'Agreements',action,payload,filters:[{column:'id',operator:'eq',value:id}]});
+  try {
+    for (const payload of [{Status:'active'},{STATUS:'closed'},{Signature_Status:'completed'},
+      {Signed_Document_URL:signedUrl},{Signatories_Status:[{status:'completed'}]}]) {
+      for (const action of ['insert','update','upsert']) {
+        assert.equal((await generic(action,payload)).status,409,action+' cannot forge lifecycle state');
+      }
+      assert.equal((await change('PUT','/api/mssql/agreements/'+draftId,adminA.token,a.tenantId,payload)).status,409);
+    }
+    assert.equal((await generic('update',{status:'draft',Status:'active'})).status,400);
+    assert.equal((await generic('update',{Tenant_ID:b.tenantId,notes:'override'})).status,403);
+    assert.equal((await generic('update',{Notes:'must not change signed'},agreementId)).status,409);
+    const mixed = await generic('upsert', [{id:draftId,notes:'must roll back'}, {id:agreementId,notes:'must deny'}]);
+    assert.equal(mixed.status,409);
+    assert.equal((await q('SELECT notes FROM agreements WHERE id=@id',{id:draftId}))[0].notes,'original');
+    const bulkId = crypto.randomUUID();
+    assert.equal((await generic('insert', [{id:bulkId,status:'draft'}, {Status:'signed'}])).status,409);
+    assert.equal((await q('SELECT id FROM agreements WHERE id=@id',{id:bulkId})).length,0);
+    assert.equal((await generic('delete',undefined,agreementId)).status,409);
+    const rpc = await change('POST','/api/platform/rpc/update_agreement_status',adminA.token,a.tenantId,
+      {agreementId:draftId,status:'active'});
+    assert.equal(rpc.status,409);
+    const signedRpc = await change('POST','/api/platform/rpc/update_agreement_status',adminA.token,a.tenantId,
+      {agreementId,status:'draft'});
+    assert.equal(signedRpc.status,409);
+    const foreign = await generic('update',{Notes:'wrong tenant'},foreignDraftId);
+    assert.equal(foreign.status,200);
+    assert.equal((await q('SELECT notes FROM agreements WHERE id=@id',{id:foreignDraftId}))[0].notes,'foreign original');
+    const allowed = await generic('update',{Status:'draft',Notes:'retained draft wording',Signed_Document_URL:null});
+    assert.equal(allowed.status,200);
+    assert.equal((await q('SELECT notes FROM agreements WHERE id=@id',{id:draftId}))[0].notes,'retained draft wording');
+    console.log('PASS: real-session generic/repository agreement case authority, collision/tenant override denial, signed immutability, RPC denial, atomic bulk rollback and retained draft edits');
+  } finally {
+    await q('DELETE FROM agreements WHERE id IN (@draftId,@foreignDraftId)',{draftId,foreignDraftId});
+  }
   const stillSigned = await hit('/api/mssql/agreements/' + agreementId, adminA.token, a.tenantId);
   assert.equal(stillSigned.status, 200);
   assert.equal(lower(stillSigned.payload.data.signed_document_url), lower(signedUrl));

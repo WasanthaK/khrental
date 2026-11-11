@@ -1,3 +1,4 @@
+import { assertGenericAgreementWriteSafe, assertGenericAgreementRecordMutable } from '../mssql/agreementWritePolicy.js';
 import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRouter.js';
 import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
 import {createCredentialThrottle} from '../auth/credentialThrottle.js';
@@ -785,6 +786,13 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null, tr
     throw new Error('Unsupported update filter.');
   }
 
+  if (safeTable === 'agreements') {
+    // The surrounding management transaction is SERIALIZABLE. Lock the full
+    // authorized target set before any row changes, including bulk/upsert.
+    const current = await runQuery(`SELECT status, signature_status FROM agreements WITH (UPDLOCK,HOLDLOCK) ${whereClause}`, params, transaction);
+    current.forEach(assertGenericAgreementRecordMutable);
+  }
+
   const assignments = entries.map(([key, value], index) => {
     const paramKey = `value${index}`;
     params[paramKey] = normalizeValue(value);
@@ -932,13 +940,10 @@ const executeRpc = async (name, args = {}, tenantContext = null, transaction = n
       const agreementId = args.agreement_id || args.agreementId;
       const status = args.new_status || args.status;
       if (!agreementId || !status) {throw new Error('agreement_id and status are required');}
-      const rows = await runQuery(
-        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
-UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.id INTO @rental_changed WHERE id = @agreementId AND tenant_id = @tenantId;
-SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-        { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }, transaction
-      );
-      return { data: rows.map(mapRow)[0] || null, error: null };
+      assertGenericAgreementWriteSafe({status});
+      const result = await executeUpdate({table:'agreements',payload:{status,updatedat:new Date().toISOString()},
+        filters:[{column:'id',operator:'eq',value:agreementId}],tenantId:tenantContext.tenantId,transaction});
+      return { data: result.data[0] || null, error: null };
     }
     case 'get_rentees_by_property': {
       requireTenantForTable('app_users', tenantContext?.tenantId);
