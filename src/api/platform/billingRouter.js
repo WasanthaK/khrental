@@ -1204,9 +1204,12 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
   router.post('/invoices/:invoiceId/verify-payment', async (req, res, next) => {
     try {
       requirePaymentManage(req);
+      const approved = req.body?.approved;
+      if (typeof approved !== 'boolean') {
+        throw createRequestError(400, 'Choose whether to approve or reject this payment.', 'PAYMENT_DECISION_BOOLEAN_REQUIRED');
+      }
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       requirePropertyScope(req, invoice.propertyid);
-      const approved = Boolean(req.body?.approved);
       const notes = String(req.body?.notes || '').trim();
       if (!approved && !notes) {
         throw createRequestError(400, 'A rejection reason is required.', 'PAYMENT_REJECTION_REASON_REQUIRED');

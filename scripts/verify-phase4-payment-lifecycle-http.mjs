@@ -377,6 +377,23 @@ export async function verifyPhase4PaymentLifecycleHttp({
   assertResponse(await verify(invoiceB, adminA, a.tenantId, true), 404,
     'finance administrator cannot manage foreign invoice');
 
+  const beforeInvalidDecision = assertResponse(await account(invoiceA, tokenA, a.tenantId), 200, 'before invalid decisions');
+  const beforeDecisionEvents = await query(pool,
+    'SELECT * FROM billing_lifecycle_events WHERE tenant_id=@tenantId AND invoice_id=@invoiceId ORDER BY id',
+    {tenantId:a.tenantId,invoiceId:invoiceA});
+  const beforeDecisionMail = invoiceMailbox.attempts.length;
+  for (const invalid of [undefined, null, 'false', 'true', '', 0, 1, [], {}]) {
+    const denied = await verify(invoiceA, adminA, a.tenantId, invalid, 'Synthetic rejection reason');
+    assert.equal(denied.status,400);
+    assert.equal(denied.payload.code,'PAYMENT_DECISION_BOOLEAN_REQUIRED');
+  }
+  assert.deepEqual(assertResponse(await account(invoiceA,tokenA,a.tenantId),200,'after invalid decisions'),beforeInvalidDecision);
+  assert.deepEqual(await query(pool,
+    'SELECT * FROM billing_lifecycle_events WHERE tenant_id=@tenantId AND invoice_id=@invoiceId ORDER BY id',
+    {tenantId:a.tenantId,invoiceId:invoiceA}),beforeDecisionEvents);
+  assert.equal(invoiceMailbox.attempts.length,beforeDecisionMail);
+  console.log('PASS: real-session payment decisions reject coercion without invoice/payment/receipt/ledger/mail changes; boolean rejection and approval continue below');
+
   const rejection = assertResponse(await verify(invoiceA, adminA, a.tenantId, false,
     'Disposable proof not legible'), 200, 'reject proof');
   assert.equal(rejection.payment.status, 'rejected');

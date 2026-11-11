@@ -85,3 +85,10 @@ Browser acceptance ran the built login under production headers, blocked inline 
 Initial browser CI exposed fixture auth-resolution and comments-child request-count assumptions; the fixture was corrected without removing the late-response or abort assertions. Final source policy also grants OIDC to the exact reusable migration-preflight caller jobs, preserving the called workflow's required permissions while keeping ordinary validation unprivileged.
 
 Before the later authorized deployment recorded above, a separate initial read-only check of the then-unchanged deployed runtime observed SQL HTTP 503 and listing HTTP 500 at 04:24 UTC. Independent reads matched the prior serving source at **04:25:39 UTC** and returned SQL HTTP 200 ready at **04:25:44 UTC** (09:55:39/09:55:44 Asia/Colombo). Fresh public read-only/browser checks passed. This records recovery, not its cause, and did not itself establish deployment of this PR. Production environment controls, lint debt and provider-dependent callback transport remain explicitly open.
+
+
+## Payment decision follow-up — prepared 11 November 2026
+
+C11 now requires a JSON boolean for payment approval. Strings (including `"false"`), numbers, arrays, objects, null and omitted values return `PAYMENT_DECISION_BOOLEAN_REQUIRED` before database access. Genuine `false` still requires a rejection reason and uses the existing rejection transaction; genuine `true` retains balance, receipt and ledger checks.
+
+The actual-route regression fails on the old source and passes after the change; **67 focused tests** pass. The real-session disposable SQL/browser fixture additionally compares complete invoice/payment/receipt account projections, lifecycle rows and captured mail attempts before/after invalid inputs, then exercises existing boolean rejection/approval outcomes. That new SQL evidence remains pending CI. No live payment, provider operation, schema change, pricing rule or rollout activation is included. This prepared change is separate from storage and agreement-authority packages and does not close the broader money/settlement findings.
