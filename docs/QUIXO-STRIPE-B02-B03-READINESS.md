@@ -4,7 +4,7 @@
 
 The [release evidence](R5-INVENTORY-CESSATION-RELEASE-20261110.md) now records tested staged additions and paid active/ending obligations-closed cessation, plus bound readback-only cancellation recovery. These source changes implement parts of the approved behavior below; they do not approve new pricing, FX, refunds, tax, privacy or restoration terms. Production readiness migrations remain pending and rollout/live charging stay OFF.
 
-CM01/CM02 decisions below remain held exactly as drafted. Normal property-form integration, restoration/splits, other cessation states, broader reconciliation and controlled live acceptance remain open in the [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md). Preserve genuine provider objects and accepted signing; do not manufacture recurring events or repeat sign-in to resolve owner-only evidence.
+CM01/CM02 decisions below remain held exactly as drafted. Normal property/unit form preparation integration is merged in PR #561 with full-metadata SQL and browser acceptance. Restoration/splits, other cessation states, broader reconciliation and controlled live acceptance remain open in the [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md). Preserve genuine provider objects and accepted signing; do not manufacture recurring events or repeat sign-in to resolve owner-only evidence.
 
 ## Controlling commercial decision pack — 10 November 2026
 
