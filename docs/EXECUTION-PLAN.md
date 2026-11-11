@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## Secondary security implementation — 11 November 2026
+
+The follow-up implements shared production credential quotas, Helmet/CSP, manual main-only production mutations, job-level OIDC, immutable action references, complete test discovery, executable single-config lint, verified dead-package/file removal, one toast provider and cancellation of stale property/maintenance reads. See [security disposition](SECURITY-REVIEW-20261111.md#secondary-implementation--11-november-2026) and [release instructions](cicd-setup.md). Focused local HTTP/contract checks and the production build pass; final expanded CI/browser/SQL evidence is pending. Lint now executes and exposes retained source debt; it is not a pass.
+
+Production deployments now require explicit main-branch workflow dispatch after checks. This source change does not update the serving application automatically. Last independently verified runtime remains `a6e75d538c5180820bda265f88bc2cc8f80f594a`, Ready **0000485** (#552). Owner-side Production reviewer/branch settings cannot be inspected through the connected API; provider-supported callback transport and edge-log exposure remain held. Active Legacy facades are retained. No repeated signing, owner sign-in, migration apply, provider mutation or live charging is performed; full management enforcement and staging/cessation readiness remain OFF.
+
 ## Security review follow-up — 11 November 2026
 
 [PR #551](https://github.com/WasanthaK/khrental/pull/551), merged as `2996a89e02850f40c430a1a17629f3fd54c552a2`, fixes the six priority authority, mail, build-token and stored-HTML findings, plus forged verification metadata and generic membership mutations. All six final-head workflows passed, including **934/934 tests**, real disposable SQL authority/concurrent-quota proof and reviewed desktop/mobile XSS renders. The [review disposition](SECURITY-REVIEW-20261111.md) retains exact evidence, deployment boundaries, the confirmed lint configuration failure and the secondary queue. Genuine privileged live-role acceptance and any necessary historical token rotation remain separate. No launch/billing rollout, migration apply or repeat signing is activated by this patch.

@@ -1,16 +1,10 @@
 name: Deploy Quixo.Homes marketing website
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'marketing/**'
-      - '.github/workflows/deploy-quixo-homes-marketing.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: quixo-homes-marketing
@@ -18,6 +12,9 @@ concurrency:
 
 jobs:
   deploy-marketing:
+    permissions:
+      contents: read
+      id-token: write
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: Production
@@ -27,8 +24,8 @@ jobs:
       AZURE_RESOURCE_GROUP: khrental-prod-rg
       AZURE_MARKETING_APP: quixo-homes-marketing
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - name: Validate marketing assets and destination boundary
@@ -45,7 +42,7 @@ jobs:
           fi
 
       - name: Sign in to Azure with production OIDC
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

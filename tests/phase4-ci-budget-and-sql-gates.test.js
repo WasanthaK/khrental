@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import {discoverTestFiles} from '../scripts/run-tests.mjs';
 
 const src = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const packageJson = JSON.parse(src('../package.json'));
@@ -20,7 +21,8 @@ test('central PR-head authorization suite retains all Evia tests before narrowin
     'tests/evia-storage-retention.test.js',
     'tests/evia-audit-http.test.js'
   ]) {
-    assert.ok(suite.split(' ').includes(file), 'central PR-head gate must still run ' + file);
+    assert.match(suite,/node scripts\/run-tests\.mjs/);
+    assert.ok(discoverTestFiles().includes(file), 'central PR-head gate must still run ' + file);
   }
   assert.match(deploy, /- run: npm run test:authorization/);
   assert.match(deploy, /- run: npm run build/);
@@ -40,11 +42,11 @@ test('Evia-specific workflow paths preserve changes to Evia implementation but a
   assert.doesNotMatch(eviaWebhook, /^\s+- 'src\/api\/platform\/router\.js'$/m);
 });
 
-test('Evia webhook credentials remain production-only, manually dispatchable and deploy-provisioned on real Evia changes', () => {
+test('Evia webhook credential mutation is manual and main-only', () => {
   assert.match(eviaConfigure, /workflow_dispatch:/);
   assert.match(eviaConfigure, /environment: Production/);
-  assert.match(eviaConfigure, /'src\/api\/evia\/\*\*'/);
-  assert.match(eviaConfigure, /'\.github\/workflows\/configure-evia-webhook\.yml'/);
+  assert.doesNotMatch(eviaConfigure, /^ {2}push:/m);
+  assert.match(eviaConfigure, /github\.ref == 'refs\/heads\/main'/);
   assert.doesNotMatch(eviaConfigure, /^\s+- 'server\.js'$/m);
   assert.match(eviaConfigure, /EVIA_WEBHOOK_HMAC_SECRET/);
   assert.match(eviaConfigure, /az containerapp secret set/);
@@ -64,7 +66,7 @@ test('main deployment avoids non-runtime-only commits without weakening PR-head 
   ]) {
     assert.ok(mainPush.includes(ignore), 'avoid main rollout for non-runtime-only paths: ' + ignore);
   }
-  assert.match(deploy, /if: github\.event_name != 'pull_request'/);
+  assert.match(deploy, /if: github\.ref == 'refs\/heads\/main' && github\.event_name == 'workflow_dispatch'/);
   assert.match(deploy, /Latest revision is ready|Public build fingerprint/);
 });
 

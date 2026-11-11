@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { fetchAppUsers } from '../services/appUserService';
 import {
   fetchAgreement,
@@ -306,7 +306,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
         console.warn('Template has no content');
         setTemplateLoadError('Template has no content');
         setTemplateContent('');
-        toast.warning('Selected template has no content');
+        toast('Selected template has no content');
       }
     } catch (err) {
       console.error('Exception loading template:', err);
@@ -322,7 +322,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       console.log('Loading property details for ID:', propertyId);
       const property = await fetchProperty(propertyId);
 
-      if (!property) throw new Error('Property not found');
+      if (!property) {throw new Error('Property not found');}
 
       console.log('Retrieved property data:', property);
       console.log('Property rental values:', property.rentalvalues);
@@ -432,7 +432,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
         ? await fetchProperty(unit.propertyid).catch(() => null)
         : null;
 
-      if (!unit) throw new Error('Unit not found');
+      if (!unit) {throw new Error('Unit not found');}
 
       console.log('Retrieved unit data:', unit);
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createAppUser, fetchAppUser, updateAppUser } from '../../services/appUserService';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 
 const TeamMemberForm = () => {
   const { id } = useParams();

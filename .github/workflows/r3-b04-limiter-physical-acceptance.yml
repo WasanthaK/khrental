@@ -1,11 +1,8 @@
 name: R3 B04 physical Azure SQL limiter acceptance
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/r3-b04-limiter-physical-acceptance.yml']
+  workflow_dispatch:
 permissions:
   contents: read
-  id-token: write
 concurrency:
   group: khrental-r3-physical-sql-limiter
   cancel-in-progress: false
@@ -15,13 +12,16 @@ env:
   SUB: 3d42a180-fda5-4013-afcc-fdba10266f9b
 jobs:
   test:
+    permissions:
+      contents: read
+      id-token: write
     if: github.ref == 'refs/heads/main'
     environment: Production
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - name: Log in with established production OIDC
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

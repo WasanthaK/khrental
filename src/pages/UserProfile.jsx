@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import UserLanguageSelector from '../components/forms/UserLanguageSelector';
 import { saveImage, STORAGE_BUCKETS } from '../services/fileService';
 import { fetchAppUser, updateAppUser } from '../services/appUserService';

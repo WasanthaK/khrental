@@ -1,7 +1,7 @@
 import {sanitizeHtml} from '../utils/sanitizeHtml.js';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { platform as platformClient } from './platformClient';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
 import { alignedTextX, readBlockTextAlignment } from '../utils/documentFormatting';
 import { EVIA_SIGNATURE_ANCHORS } from '../utils/documentUtils';
@@ -33,7 +33,7 @@ const parseHtmlContent = (html) => {
           return;
         }
 
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        if (node.nodeType !== Node.ELEMENT_NODE) {return;}
 
         const tagName = node.tagName.toLowerCase();
         if (tagName === 'br') {
@@ -57,7 +57,7 @@ const parseHtmlContent = (html) => {
 
     // Helper function to recursively process nodes
     const processNode = (node, listLevel = 0, listType = null, listCounter = 0) => {
-      if (!node) return { listCounter };
+      if (!node) {return { listCounter };}
       
       // Skip empty text nodes and comments
       if ((node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) || 
@@ -587,9 +587,9 @@ export const saveMergedDocument = async (content, agreementId) => {
     const fontForRun = (run, fallbackBold = false) => {
       const bold = Boolean(run?.bold || fallbackBold);
       const italic = Boolean(run?.italic);
-      if (bold && italic) return helveticaBoldOblique;
-      if (bold) return helveticaBold;
-      if (italic) return helveticaOblique;
+      if (bold && italic) {return helveticaBoldOblique;}
+      if (bold) {return helveticaBold;}
+      if (italic) {return helveticaOblique;}
       return helveticaFont;
     };
 
@@ -605,7 +605,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       for (const run of (runs || [])) {
         const parts = String(run.text || '').split(/(\n|\s+)/);
         for (const part of parts) {
-          if (!part) continue;
+          if (!part) {continue;}
           tokens.push({ ...run, text: part });
         }
       }
@@ -637,7 +637,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         currentWidth += tokenWidth;
       }
 
-      if (current.length > 0 || lines.length === 0) pushLine();
+      if (current.length > 0 || lines.length === 0) {pushLine();}
 
       for (const line of lines) {
         if (y < margin) {
@@ -741,7 +741,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         y = height - margin;
       }
 
-      if (signatureMarker) y -= 20;
+      if (signatureMarker) {y -= 20;}
       
       if (item.type === 'heading') {
         const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
@@ -928,7 +928,7 @@ export const saveMergedDocument = async (content, agreementId) => {
           y = tableY - 15;
         }
       }
-      if (signatureMarker) y -= signatureSpace;
+      if (signatureMarker) {y -= signatureSpace;}
     });
 
     // Number every page once, after pagination. `page` above is the LAST page.
@@ -1148,7 +1148,7 @@ export const generatePdf = async (formData) => {
 };
 
 function processHtmlContent(content) {
-  if (!content) return [];
+  if (!content) {return [];}
   
   console.log('Processing HTML content for document generation');
   
@@ -1532,11 +1532,11 @@ async function createDocument(html, fileName, agreementId) {
           
         case 'table':
           const rows = piece.rows || [];
-          if (rows.length === 0) break;
+          if (rows.length === 0) {break;}
           
           // Calculate table dimensions
           const numCols = Math.max(...rows.map(row => (row.cells || []).length));
-          if (numCols === 0) break;
+          if (numCols === 0) {break;}
           
           const colWidth = (width - margin * 2) / numCols;
           const rowHeight = 20;

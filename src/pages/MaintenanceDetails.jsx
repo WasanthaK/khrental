@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { checkUserExists } from '../services/platformClient';
 import { getAuthorizedMaintenanceDetail } from '../services/maintenanceDetailReadService';
@@ -25,14 +25,7 @@ import CommentSection from '../components/maintenance/CommentSection';
 import ImageUpload from '../components/common/ImageUpload';
 import MaintenanceImageUpload from '../components/maintenance/MaintenanceImageUpload';
 
-const MaintenanceDetails = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { user, activeTenantId, hasPermission } = useAuth();
-  const mayManageMaintenance = hasPermission(PERMISSIONS.MAINTENANCE_MANAGE);
-  
-  // State
-  const [request, setRequest] = useState({
+const initialMaintenanceRequest = () => ({
     id: '',
     title: '',
     description: '',
@@ -50,7 +43,16 @@ const MaintenanceDetails = () => {
     cancelledat: null,
     propertyid: null,
     renteeid: null
-  });
+});
+
+const MaintenanceDetails = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user, activeTenantId, hasPermission } = useAuth();
+  const mayManageMaintenance = hasPermission(PERMISSIONS.MAINTENANCE_MANAGE);
+
+  // State
+  const [request, setRequest] = useState(initialMaintenanceRequest);
   const [property, setProperty] = useState(null);
   const [rentee, setRentee] = useState(null);
   const [assignedTeamMember, setAssignedTeamMember] = useState(null);
@@ -70,13 +72,22 @@ const MaintenanceDetails = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
   
+  const readScope=useRef({key:null,controller:null});
+
   // Define fetchRequestData as a reusable function at component level
   const fetchRequestData = async () => {
+    const key=`${id}:${activeTenantId}:${user?.id}:${mayManageMaintenance}`;
+    if (readScope.current.key!==key) {return;}
+    readScope.current.controller?.abort();
+    const controller=new AbortController();
+    readScope.current.controller=controller;
+    const current=()=>!controller.signal.aborted && readScope.current.key===key;
     try {
       setLoading(true);
       
       // Tenant/owner/property authorization is enforced by the lifecycle API.
-      const requestData = await getAuthorizedMaintenanceDetail(id);
+      const requestData = await getAuthorizedMaintenanceDetail(id,{signal:controller.signal});
+      if (!current()) {return;}
       setError(null);
 
       // Detailed inspection of request images
@@ -117,16 +128,18 @@ const MaintenanceDetails = () => {
       setAssignedTeamMember(requestData.assigned_staff);
       
     } catch (error) {
+      if (!current()) {return;}
       console.error('Error fetching request data:', error);
       setError('Failed to load maintenance request details: ' + (error.message || 'Unknown error'));
     } finally {
-      setLoading(false);
+      if (current()) {setLoading(false);}
     }
   };
   
   // Initial data fetch with cleanup
   useEffect(() => {
-    let mounted = true;
+    readScope.current.key=`${id}:${activeTenantId}:${user?.id}:${mayManageMaintenance}`;
+    setRequest(initialMaintenanceRequest());setProperty(null);setRentee(null);setAssignedTeamMember(null);setError(null);setLoading(true);
 
     if (!id || id === 'undefined' || !isValidUUID(id)) {
       console.error('Invalid maintenance request ID:', id);
@@ -138,9 +151,10 @@ const MaintenanceDetails = () => {
     fetchRequestData();
 
     return () => {
-      mounted = false;
+      readScope.current.key=null;
+      readScope.current.controller?.abort();
     };
-  }, [id, activeTenantId]);
+  }, [id, activeTenantId, user?.id, mayManageMaintenance]);
   
   // Handle staff assignment
   const handleAssignStaff = async (assignmentData) => {
@@ -297,7 +311,7 @@ const MaintenanceDetails = () => {
   
   // Modify the parseNotes function to better handle JSON format
   const parseNotes = (notes) => {
-    if (!notes) return [];
+    if (!notes) {return [];}
     
     try {
       // Try to parse as JSON
@@ -367,7 +381,7 @@ const MaintenanceDetails = () => {
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
       const type = image.image_type || 'initial';
-      if (!acc[type]) acc[type] = [];
+      if (!acc[type]) {acc[type] = [];}
       acc[type].push(image);
       return acc;
     }, {});

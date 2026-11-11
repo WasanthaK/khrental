@@ -225,9 +225,9 @@ test('simulated invitations never create a token or call the email delivery endp
   assert.match(invitationServiceSource, /const emailResult = await sendInvitationEmail\(\{/);
 });
 
-test('production database migrations auto-plan safely while apply stays isolated, ordered and checksum tracked', () => {
-  assert.match(migrationWorkflowSource, /\n\s+push:/);
-  assert.match(migrationWorkflowSource, /branches: \[main\]/);
+test('production database migrations require manual dispatch while apply stays isolated, ordered and checksum tracked', () => {
+  assert.doesNotMatch(migrationWorkflowSource, /\n\s+push:/);
+  assert.match(migrationWorkflowSource, /github\.ref == 'refs\/heads\/main'/);
   assert.match(migrationWorkflowSource, /workflow_dispatch:/);
   assert.match(migrationWorkflowSource, /MIGRATION_MODE: .*workflow_dispatch.*inputs\.mode.*'plan'/);
   assert.match(migrationWorkflowSource, /Automatic production migration runs are restricted to plan mode/);

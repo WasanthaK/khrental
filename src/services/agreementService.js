@@ -26,7 +26,7 @@
  */
 
 import { platform as platformClient } from './platformClient';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { saveMergedDocument } from './DocumentService';
 import { ensureEviaSignatureAnchors, populateMergeFields } from '../utils/documentUtils';
 import { toDatabaseFormat } from '../utils/dataUtils';
@@ -634,7 +634,7 @@ export const getTemplate = async (templateId) => {
       .eq('id', templateId)
       .single();
 
-    if (error) throw error;
+    if (error) {throw error;}
     return data;
   } catch (error) {
     console.error('Error fetching template:', error);
@@ -647,7 +647,7 @@ export const listTemplates = async ({ language } = {}) => {
     try {
       return await collectAgreementPages((page, pageSize) => {
         const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        if (language) params.set('language', language);
+        if (language) {params.set('language', language);}
         return requestMssqlApi(`/api/mssql/agreement-templates?${params.toString()}`);
       });
     } catch (mssqlError) {
@@ -825,7 +825,7 @@ export const deleteAgreement = async (agreementId) => {
       .select('*')
       .single();
 
-    if (error) throw error;
+    if (error) {throw error;}
     return data;
   } catch (error) {
     console.error('Error deleting agreement:', error);

@@ -41,7 +41,7 @@ Compose runs a production-mode web container: development impersonation is alway
 
 ### 1. Create the Docker env file
 
-Copy `.env.example` to an untracked `.env.docker`. Set `MSSQL_DATABASE`, `MSSQL_USER` and a strong nonempty `MSSQL_PASSWORD` for your local SQL instance. Compose intentionally has no shared SA password fallback. Pass that file with `--env-file` so Compose interpolation and the web container use the same values. Never commit the filled file.
+Copy `.env.example` to an untracked `.env.docker`. Set `MSSQL_DATABASE`, `MSSQL_USER` and a strong nonempty `MSSQL_PASSWORD` for your local SQL instance. Compose intentionally has no shared SA password fallback. Pass that file with `--env-file` so Compose interpolation and the web container use the same values. Never commit the filled file. Because the web container runs in production mode, also set a random server-only `AUTH_THROTTLE_SECRET` of at least 32 bytes (or `PUBLIC_SIGNUP_THROTTLE_SECRET`) and ensure the existing shared rate-limit ledger is available through the governed schema setup. Credential requests fail closed if protection is unavailable.
 
 ### 2. Build and start the containers
 

@@ -348,3 +348,9 @@ After the public registration endpoint acknowledges a request, return the visito
 The owner-approved public signup password minimum is 8 characters, with a 256-character maximum. Use one shared policy for client validation and server redemption, permit spaces, and provide show/hide controls. Reject an invalid password before consuming a verification challenge. Password validation failures must identify the rule; temporary service failures must offer a retry on the current page without clearing the entered password or requiring another email. Never persist or log passwords or verification secrets.
 
 This source change does not establish that the reported production redemption failure is resolved. Live intended-account verification and the agreement-to-tenancy acceptance remain release acceptance requirements under #459.
+
+## Credential abuse protection — 11 November 2026
+
+Legacy `/api/platform/auth/sign-in` and `/api/platform/auth/sign-up` run an 8 KB parser and quota guard before invitation preflight or credential lookup. Router guards retain isolated-mount protection without double-debiting the request. Production limits are per normalized email and authoritative IP over 15 minutes: sign-in 10/email and 120/IP; sign-up 4/email and 20/IP. Responses use generic 429 with Retry-After; missing configuration or shared SQL availability returns 503. Keys are HMAC hashes, separate from public-signup/manual-mail buckets. The existing SQL ledger serializes cross-replica consumption; bounded in-memory counters are development-only.
+
+Use a 32-byte-or-longer server-only `AUTH_THROTTLE_SECRET`, with `PUBLIC_SIGNUP_THROTTLE_SECRET` fallback. Raw forwarding headers do not establish an address. Retain the proven Azure ingress resolver only when its managed contract is explicitly configured; otherwise use the socket address. No production migration apply, new signup enablement or authentication bypass is introduced.

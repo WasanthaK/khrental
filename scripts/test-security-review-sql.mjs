@@ -9,7 +9,7 @@ import {createSqlPublicSignupLimiter} from '../src/api/auth/publicSignupSqlLimit
 export const verifySecurityReviewSql = async pool => {
   assert.equal(pool.config.server,'127.0.0.1');
   const query=async(statement,params={})=>{
-    const request=pool.request();for(const [k,v] of Object.entries(params))request.input(k,v);
+    const request=pool.request();for(const [k,v] of Object.entries(params)){request.input(k,v);}
     return (await request.query(statement)).recordset||[];
   };
   const one=async(statement,params)=>(await query(statement,params))[0]||null;
@@ -17,7 +17,8 @@ export const verifySecurityReviewSql = async pool => {
   const id=crypto.randomUUID(),authId=crypto.randomUUID(),authRow=crypto.randomUUID(),challenge=crypto.randomUUID();
   const email=`security-${crypto.randomBytes(8).toString('hex')}@example.invalid`;
   const key=crypto.randomBytes(32).toString('hex');
-  const params={id,authId,authRow,email,challenge,key,tokenHash:crypto.randomBytes(32).toString('hex')};
+  const credentialKey=crypto.createHash('sha256').update('credential-fixture'+key).digest('hex');
+  const params={id,authId,authRow,email,challenge,key,credentialKey,tokenHash:crypto.randomBytes(32).toString('hex')};
   const user={id,auth_id:authId,email};
   const check=()=>isPlatformAdmin(user,{query:one,env:{PLATFORM_BOOTSTRAP_OWNER_EMAIL:email}});
   try{
@@ -46,9 +47,11 @@ export const verifySecurityReviewSql = async pool => {
     const results=await Promise.all(Array.from({length:12},()=>limiter.consume({scope:'manual-email-user',key,max:5,windowSeconds:60})));
     assert.equal(results.filter(Boolean).length,5,'Shared SQL quota admits exactly five concurrent sends across callers');
     assert.equal(await limiter.consume({scope:'manual-email-user',key,max:5,windowSeconds:60}),false);
+    const credentialResults=await Promise.all(Array.from({length:16},()=>limiter.consume({scope:'credential-signin-email',key:credentialKey,max:10,windowSeconds:900})));
+    assert.equal(credentialResults.filter(Boolean).length,10,'Shared SQL admits exactly ten concurrent credential attempts');
     console.log('PASS: real SQL verified platform authority, historical/forged email denial, revoked bootstrap denial and atomic concurrent manual-email quota; synthetic mailbox proof');
   }finally{
-    await query(`DELETE FROM dbo.public_signup_rate_limits WHERE bucket_hash=@key;
+    await query(`DELETE FROM dbo.public_signup_rate_limits WHERE bucket_hash IN (@key,@credentialKey);
       DELETE FROM dbo.public_signup_challenges WHERE id=@challenge;
       DELETE FROM dbo.platform_admins WHERE app_user_id=@id;
       DELETE FROM dbo.auth_users WHERE id=@authRow;

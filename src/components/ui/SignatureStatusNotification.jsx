@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { FiFileText, FiUserCheck, FiCheck, FiAlertTriangle } from 'react-icons/fi';
 
 /**
@@ -63,7 +63,7 @@ const SignatureStatusNotification = ({ status, prevStatus, requestId }) => {
         </div>,
         {
           position: "top-right",
-          autoClose: 5000,
+          duration: 5000,
           hideProgressBar: false,
           closeOnClick: true,
           pauseOnHover: true,

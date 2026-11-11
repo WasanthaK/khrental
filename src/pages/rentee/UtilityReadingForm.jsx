@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { getMyTenancySummary, platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { useAuth } from '../../hooks/useAuth';

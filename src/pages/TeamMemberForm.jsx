@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createTeamMember, fetchTeamMember, updateTeamMember } from '../services/teamMemberService';
 import { inviteUser } from '../services/invitationService';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 
 const TeamMemberForm = () => {
   const { id } = useParams();
@@ -38,7 +38,7 @@ const TeamMemberForm = () => {
   const [skillInput, setSkillInput] = useState('');
 
   useEffect(() => {
-    if (!isEditMode) return;
+    if (!isEditMode) {return;}
 
     const load = async () => {
       try {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { formatCurrency } from '../../utils/helpers';
@@ -38,7 +38,7 @@ const UtilityHistory = () => {
           .limit(1)
           .maybeSingle();
 
-        if (propertyError) throw propertyError;
+        if (propertyError) {throw propertyError;}
         setProperty(propertyData || null);
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -81,7 +81,7 @@ const UtilityHistory = () => {
         .eq('utilitytype', filter.utilityType)
         .order('readingdate', { ascending: false });
 
-      if (error) throw error;
+      if (error) {throw error;}
       setReadings(data || []);
     } catch (error) {
       console.error('Error fetching readings:', error);

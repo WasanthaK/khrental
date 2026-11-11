@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { closeMssqlPool, createMssqlRouter, getMssqlConfigStatus } from './src/api/mssql/index.js';
 import { runQuery, runSingleQuery } from './src/api/mssql/query.js';
+import {createCredentialThrottle} from './src/api/auth/credentialThrottle.js';
 import { createPlatformRouter } from './src/api/platform/router.js';
 import { createPropertyAssignmentsRouter } from './src/api/platform/propertyAssignmentsRouter.js';
 import { createTenancyOnboardingRouter } from './src/api/platform/tenancyOnboardingRouter.js';
@@ -40,6 +41,7 @@ import { createEviaAuditRecoveryRouter } from './src/api/evia/auditRecoveryRoute
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
 import {createManualEmailGuards} from './src/api/email/manualEmailPolicy.js';
 import {publicApiError} from './src/api/httpErrors.js';
+import {createSecurityHeaders} from './src/api/securityHeaders.js';
 import { createManagementBillingRouter, createManagementBillingWebhook } from './src/api/managementBilling/router.js';
 
 dotenv.config();
@@ -54,12 +56,13 @@ const getDefaultEmailSender = () => ({
 async function createServer() {
   const app = express();
   const isProduction = process.env.NODE_ENV === 'production';
+  app.use(createSecurityHeaders({production:isProduction}));
   const allowedOrigins = String(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean);
 
   const getPasswordResetBaseUrl = () => {
     const configured = process.env.PASSWORD_RESET_BASE_URL || process.env.PUBLIC_APP_URL || process.env.VITE_APP_BASE_URL || '';
-    if (configured) return configured.replace(/\/$/, '');
-    if (!isProduction) return 'http://localhost:5174';
+    if (configured) {return configured.replace(/\/$/, '');}
+    if (!isProduction) {return 'http://localhost:5174';}
     const error = new Error('PASSWORD_RESET_BASE_URL is required in production.');
     error.status = 503;
     error.code = 'PASSWORD_RESET_BASE_URL_REQUIRED';
@@ -100,6 +103,12 @@ async function createServer() {
   // Absent its one-time environment secret this route always responds 404.
   app.post('/api/internal/r3-ingress-peer', (req, res) => observeR3IngressPeer(req, res));
   app.use(['/api/property-enquiries','/api/owner-enquiries'], express.json({limit:'8kb'}));
+  app.use(['/api/platform/auth/sign-in','/api/platform/auth/sign-up'],express.json({limit:'8kb'}));
+  // Run before invitation preflight and session/tenant lookup. Router guards
+  // remain for isolated mounts; a private request marker prevents double debit.
+  const credentialThrottle=createCredentialThrottle();
+  app.post('/api/platform/auth/sign-in',credentialThrottle('signin'));
+  app.post('/api/platform/auth/sign-up',credentialThrottle('signup'));
   app.use(express.json({
     limit: '10mb',
     verify: (req, _res, buffer) => {

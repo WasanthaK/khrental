@@ -225,7 +225,7 @@ The application is configured for deployment to Azure Web App:
 Ensure these variables are configured in production:
 - `VITE_API_ENDPOINT`
 - `VITE_EVIA_SIGN_CLIENT_ID`
-- `VITE_EVIA_SIGN_CLIENT_SECRET`
+- `EVIA_SIGN_CLIENT_SECRET` (server-only; never use a `VITE_` secret)
 - `VITE_API_ENDPOINT`
 - `VITE_WEBHOOK_URL`
 

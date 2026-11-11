@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fetchAppUsers, linkAppUser, mapAppUserToTeamMember } from '../services/appUserService';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 
 const AuthUserLinking = () => {
   const [loading, setLoading] = useState(false);

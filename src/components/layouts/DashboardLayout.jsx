@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronDownIcon, ChevronUpIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import usePlatformAdminStatus from '../../hooks/usePlatformAdminStatus';
 import { getPortalLabel } from '../../utils/accessPolicy.js';

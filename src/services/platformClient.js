@@ -17,6 +17,7 @@ const readApiError = async (response) => {
 
 const scopedRequest = async (basePath, path = '', options = {}) => {
   const response = await fetch(`${getApiBaseUrl()}${basePath}${path}`, {
+    signal:options.signal,
     method: options.method || 'GET',
     headers: {
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -48,9 +49,9 @@ const propertyRequest = (path = '', options = {}) => (
   scopedRequest('/api/properties', path, options)
 );
 
-export const getPropertyFixedUtilities = async (propertyId) => {
+export const getPropertyFixedUtilities = async (propertyId, {signal}={}) => {
   try {
-    const payload = await propertyRequest(`/${encodeURIComponent(propertyId)}/fixed-utilities`);
+    const payload = await propertyRequest(`/${encodeURIComponent(propertyId)}/fixed-utilities`,{signal});
     return { data: payload?.data || { configs: [] }, error: null };
   } catch (error) {
     return { data: null, error };
@@ -72,9 +73,9 @@ export const savePropertyFixedUtilities = async (propertyId, configs = []) => {
 export const listPropertyAssignments = async ({ staffUserId, propertyId, status } = {}) => {
   try {
     const params = new URLSearchParams();
-    if (staffUserId) params.set('staffUserId', staffUserId);
-    if (propertyId) params.set('propertyId', propertyId);
-    if (status) params.set('status', status);
+    if (staffUserId) {params.set('staffUserId', staffUserId);}
+    if (propertyId) {params.set('propertyId', propertyId);}
+    if (status) {params.set('status', status);}
     const query = params.toString();
     const payload = await propertyAssignmentRequest(query ? `?${query}` : '');
     return { data: payload?.data || [], error: null };
@@ -395,8 +396,8 @@ export const recordInvoiceReminder = async (invoiceId) => {
 export const getMonthlyBillingContext = async ({ propertyId, billingPeriod } = {}) => {
   try {
     const params = new URLSearchParams();
-    if (propertyId) params.set('propertyId', propertyId);
-    if (billingPeriod) params.set('billingPeriod', billingPeriod);
+    if (propertyId) {params.set('propertyId', propertyId);}
+    if (billingPeriod) {params.set('billingPeriod', billingPeriod);}
     const payload = await billingRequest(`/monthly-billing-context?${params.toString()}`);
     return { data: payload?.data || { tenancies: [], adjustments: [], schemaAvailable: false }, error: null };
   } catch (error) {

@@ -20,7 +20,7 @@ import React from 'react';
  * @returns {Promise<Object>} - Object containing categories of merge field data
  */
 export const getMergeDataForAgreement = async (agreementId) => {
-  if (!agreementId) return null;
+  if (!agreementId) {return null;}
   
   try {
     // Fetch agreement data with all related entities
@@ -34,13 +34,13 @@ export const getMergeDataForAgreement = async (agreementId) => {
     
     // Format dates for display
     const formatDate = (dateString) => {
-      if (!dateString) return '';
+      if (!dateString) {return '';}
       return new Date(dateString).toLocaleDateString();
     };
     
     // Format currency values
     const formatCurrency = (value) => {
-      if (!value && value !== 0) return '';
+      if (!value && value !== 0) {return '';}
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD'
@@ -136,9 +136,7 @@ const defaultMergeFields = {
 };
 
 const MenuBar = ({ editor, agreementId }) => {
-  if (!editor) {
-    return null;
-  }
+
 
   // Add state to control color picker visibility
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -210,6 +208,10 @@ const MenuBar = ({ editor, agreementId }) => {
     };
   }, [showColorPicker, showMergeFields]);
 
+  if (!editor) {
+    return null;
+  }
+
   // Handler for color button click
   const handleColorClick = (e, color) => {
     e.preventDefault();
@@ -244,7 +246,7 @@ const MenuBar = ({ editor, agreementId }) => {
   
   // Insert merge field into editor
   const insertMergeField = (category, fieldName) => {
-    if (!editor) return;
+    if (!editor) {return;}
     
     // Get the field value from mergeData
     const fieldValue = mergeData[category][fieldName];

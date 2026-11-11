@@ -6,6 +6,7 @@ import useInvitationStatus from '../../hooks/useInvitationStatus';
 import { formatDate } from '../../utils/helpers';
 
 const TeamMemberCard = ({ member, onStatusChange }) => {
+  const invitationStatus = useInvitationStatus(member?.id);
   if (!member || !member.id) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
@@ -15,7 +16,6 @@ const TeamMemberCard = ({ member, onStatusChange }) => {
   }
 
   const { id, name, role, contactDetails = {}, assignedTasks = [], active } = member;
-  const invitationStatus = useInvitationStatus(id);
   const status = invitationStatus.status;
   const statusLoading = invitationStatus.loading;
   const statusError = invitationStatus.error;

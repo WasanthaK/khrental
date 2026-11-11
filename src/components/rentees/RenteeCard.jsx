@@ -5,6 +5,13 @@ import InviteUserButton from '../common/InviteUserButton';
 import useInvitationStatus from '../../hooks/useInvitationStatus';
 
 const RenteeCard = ({ rentee, onStatusChange }) => {
+  const {
+    status,
+    details: invitationDetails,
+    loading: statusLoading,
+    error: statusError,
+    refresh: refreshStatus
+  } = useInvitationStatus(rentee?.id);
   if (!rentee || !rentee.id) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
@@ -22,13 +29,7 @@ const RenteeCard = ({ rentee, onStatusChange }) => {
     registrationDate
   } = rentee;
 
-  const {
-    status,
-    details: invitationDetails,
-    loading: statusLoading,
-    error: statusError,
-    refresh: refreshStatus
-  } = useInvitationStatus(id);
+
 
   const handleInviteSuccess = async () => {
     try {
