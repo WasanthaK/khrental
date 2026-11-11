@@ -40,6 +40,9 @@ jobs:
           esac
           if [ "$MODE" != rollback ]; then [[ "$EXPECTED_BUILD" =~ ^[0-9a-f]{40}$ ]]; fi
   schema:
+    permissions:
+      contents: read
+      id-token: write
     needs: validate
     if: github.ref == 'refs/heads/main' && inputs.mode != 'rollback'
     uses: ./.github/workflows/verify-production-db-migration-executor.yml

@@ -12,7 +12,7 @@ test('all workflow action references are immutable and Azure OIDC is job-scoped'
     }
     const [head,...body]=source.split('jobs:\n');assert.doesNotMatch(head,/id-token:\s*write/,'No workflow-wide OIDC in '+name);
     for(const job of body.join('jobs:\n').split(/(?=^ {2}[\w-]+:\s*$)/m)){
-      if(job.includes('uses: azure/login@')){assert.match(job,/ {4}permissions:\n(?: {6}[^\n]+\n)* {6}id-token: write/,'Only the Azure job requests OIDC in '+name);}
+      if(job.includes('uses: azure/login@')||job.includes('uses: ./.github/workflows/verify-production-db-migration-executor.yml')){assert.match(job,/ {4}permissions:\n(?: {6}[^\n]+\n)* {6}id-token: write/,'Only the Azure job requests OIDC in '+name);}
       if(job.includes('    environment: Production')){assert.match(job,/^ {4}if: .*github\.ref == 'refs\/heads\/main'/m,'Production job is main-only in '+name);}
     }
   }
