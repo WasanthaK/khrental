@@ -276,7 +276,12 @@ export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
     return current;
   }
 
-  await updateAppUser(appUserId, updates);
+  if (String(current.tenant_id || '').toLowerCase() !== String(tenantId).toLowerCase()) {
+    throw Object.assign(new Error('This shared account profile must be updated in its original workspace.'), {
+      status: 409, code: 'SHARED_PROFILE_EDIT_FORBIDDEN'
+    });
+  }
+  await updateAppUser(appUserId, { ...updates, tenant_id: tenantId });
   return getTenantRenteeById(tenantId, appUserId);
 };
 
@@ -380,13 +385,8 @@ export const createOrAttachTenantRentee = async (tenantId, payload = {}) => {
     // gains another organization membership.
     await seedLegacyDefaultMembership(user, tenantId);
 
-    // Attach must behave like the business-level create operation. Apply the
-    // submitted renter profile to the reused global identity only after role
-    // compatibility has been proven for this organization.
-    const profileUpdates = buildProfileUpdates({ ...payload, email });
-    if (Object.keys(profileUpdates).length > 0) {
-      user = await updateAppUser(user.id, profileUpdates);
-    }
+    // Attaching an existing global identity grants organization membership;
+    // it is never authority to replace that person's shared profile.
   }
 
   if (membership) {

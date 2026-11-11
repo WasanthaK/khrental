@@ -120,6 +120,7 @@ const main = async () => {
     fixturePool = await connect({ ...connection, database: databaseName, timeout: 10000 });
     await fixturePool.request().batch(freshSchemaSql);
     await fixturePool.request().batch(associationMigrationSql);
+    await fixturePool.request().batch(fs.readFileSync(path.resolve('migrations/20260916_02_add_staff_permission_bundles.sql'), 'utf8'));
 
     const defaultTenant = await queryOne(
       fixturePool,
@@ -201,6 +202,25 @@ const main = async () => {
     const reloaded = await getTenantRenteeById(tenantId, created.data.id);
     assert.equal(reloaded.name, 'Phase 1 Renter Edited');
     assertAssociation(reloaded.associated_properties, propertyB, unitB);
+
+    // A second organization attaches the identity, never its submitted profile.
+    const attached = await createOrAttachTenantRentee(otherTenantId, {
+      email: renterEmail, name: 'Untrusted Replacement',
+      contact_details: { email: renterEmail, phone: '+19999999999' },
+      associated_properties: [{ propertyId: otherProperty, unitId: null }]
+    });
+    assert.equal(attached.attached, true);
+    assert.equal(attached.data.id, created.data.id);
+    assert.equal(attached.data.name, reloaded.name);
+    assert.equal(attached.data.contact_details.phone, '+10000000000');
+    assertAssociation(attached.data.associated_properties, propertyB, unitB);
+    await assert.rejects(updateTenantRentee(otherTenantId, created.data.id, {
+      name: 'Untrusted Edit', email: 'replacement@example.invalid'
+    }), error => error.status === 409 && error.code === 'SHARED_PROFILE_EDIT_FORBIDDEN');
+    const preserved = await getTenantRenteeById(tenantId, created.data.id);
+    assert.equal(preserved.name, reloaded.name);
+    assert.equal(preserved.email, renterEmail);
+    assertAssociation(preserved.associated_properties, propertyB, unitB);
 
     // Add Tenant must not double as an edit operation for an existing renter in
     // the same organization. Reusing the email must fail before shared profile
@@ -314,6 +334,31 @@ const main = async () => {
     assert.equal(conflictState.associated_properties, null);
     assert.equal(String(conflictState.membership_role).toLowerCase(), 'staff');
     assert.equal(Number(conflictState.identity_count), 1, 'role conflict must not create a duplicate global identity');
+
+    const { createOrAttachTenantTeamMember, updateTenantTeamMember,
+      getTenantTeamMemberById } = await import('../src/api/mssql/teamMemberRepository.js');
+    const staffEmail = `shared-staff-${Date.now()}@example.invalid`;
+    const staff = await createOrAttachTenantTeamMember(tenantId, {
+      name: 'Original Staff', email: staffEmail, permission_bundle: 'maintenance'
+    });
+    const sharedStaff = await createOrAttachTenantTeamMember(otherTenantId, {
+      name: 'Untrusted Staff Replacement', email: staffEmail, permission_bundle: 'read_only'
+    });
+    assert.equal(sharedStaff.data.id, staff.data.id);
+    assert.equal(sharedStaff.data.name, 'Original Staff');
+    await assert.rejects(updateTenantTeamMember(otherTenantId, staff.data.id, {
+      name: 'Untrusted Staff Edit', permission_bundle: 'finance'
+    }), error => error.status === 409 && error.code === 'SHARED_PROFILE_EDIT_FORBIDDEN');
+    assert.equal((await getTenantTeamMemberById(otherTenantId, staff.data.id)).permission_bundle, 'read_only');
+    const membershipEdit = await updateTenantTeamMember(otherTenantId, staff.data.id, {
+      name: sharedStaff.data.name, email: sharedStaff.data.email,
+      contact_details: sharedStaff.data.contact_details, permission_bundle: 'finance'
+    });
+    assert.equal(membershipEdit.permission_bundle, 'finance');
+    const originalStaff = await getTenantTeamMemberById(tenantId, staff.data.id);
+    assert.equal(originalStaff.name, 'Original Staff');
+    assert.equal(originalStaff.permission_bundle, 'maintenance');
+    console.log('PASS: renter/staff attachment preserves global identity; cross-organization edits fail without side effects; staff membership-only full-form edits remain supported.');
 
     console.log('PASS: Phase 1 renter workflow persisted structured associations across create/edit/reconnect, rejected duplicate same-organization renter creates without profile mutation, rejected invalid associations without data loss, scoped deactivate/reactivate to membership, blocked platform-admin creation, and rejected same-organization role conflicts without profile mutation.');
   } finally {

@@ -96,25 +96,18 @@ test('rejects unknown roles and staff bundles', () => {
   );
 });
 
-test('attaching an existing global renter identity applies the submitted profile before membership projection', () => {
-  assert.match(renteeRepositorySource, /const profileUpdates = buildProfileUpdates\(\{ \.\.\.payload, email \}\);/);
-  assert.match(renteeRepositorySource, /user = await updateAppUser\(user\.id, profileUpdates\);/);
-});
-
-test('same-organization renter role conflicts are rejected before shared profile mutation', () => {
-  const createStart = renteeRepositorySource.indexOf('export const createOrAttachTenantRentee');
-  const createSource = renteeRepositorySource.slice(createStart);
-  const membershipLookup = createSource.indexOf('let membership = user ? await getTenantMembership');
-  const conflict = createSource.indexOf("RENTEE_MEMBERSHIP_ROLE_CONFLICT");
-  const profileWrite = createSource.indexOf('user = await updateAppUser(user.id, profileUpdates)');
-  assert.ok(createStart >= 0 && membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
-});
-
-test('same-organization team role conflicts are rejected before shared profile mutation', () => {
-  const membershipLookup = teamMemberRepositorySource.indexOf('let membership = user ? await getTenantMembership');
-  const conflict = teamMemberRepositorySource.indexOf("TEAM_MEMBERSHIP_ROLE_CONFLICT");
-  const profileWrite = teamMemberRepositorySource.indexOf('user = await updateAppUser(user.id, updates)');
-  assert.ok(membershipLookup >= 0 && conflict > membershipLookup && profileWrite > conflict);
+test('attachment preserves existing global profiles and rejects role conflicts before creation', () => {
+  for (const [source, entry, code] of [
+    [renteeRepositorySource, 'export const createOrAttachTenantRentee', 'RENTEE_MEMBERSHIP_ROLE_CONFLICT'],
+    [teamMemberRepositorySource, 'export const createOrAttachTenantTeamMember', 'TEAM_MEMBERSHIP_ROLE_CONFLICT']
+  ]) {
+    const createSource = source.slice(source.indexOf(entry)).split('export const updateTenant')[0];
+    assert.doesNotMatch(createSource, /await updateAppUser/);
+    const membershipLookup = createSource.indexOf('let membership = user ? await getTenantMembership');
+    const conflict = createSource.indexOf(code);
+    const identityCreate = createSource.indexOf('await createAppUser');
+    assert.ok(membershipLookup >= 0 && conflict > membershipLookup && identityCreate > conflict);
+  }
 });
 
 test('renter create service returns the created renter record instead of the create metadata envelope', () => {
@@ -222,7 +215,8 @@ test('simulated invitations never create a token or call the email delivery endp
   assert.doesNotMatch(simulationBlock, /createSecureInvitation/);
   assert.doesNotMatch(simulationBlock, /sendInvitationEmail/);
   assert.match(invitationServiceSource, /const inviteData = await createSecureInvitation\(userDetails\);/);
-  assert.match(invitationServiceSource, /const emailResult = await sendInvitationEmail\(\{/);
+  assert.match(invitationServiceSource, /const emailResult = inviteData\?\.delivery/);
+  assert.doesNotMatch(invitationServiceSource, /sendInvitationEmail|inviteData\?\.invitation\?\.token/);
 });
 
 test('production database migrations require manual dispatch while apply stays isolated, ordered and checksum tracked', () => {
