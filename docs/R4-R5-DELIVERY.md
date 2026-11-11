@@ -2,7 +2,7 @@
 
 ## Documentation reconciliation — 11 November 2026
 
-Latest verified application runtime: **0000486**, source `751a99d92e847df097b39919d6aa8f0fe8e9b150`, [manual release #1520](https://github.com/WasanthaK/khrental/actions/runs/42962949282). All 1,166 tests/build passed. Source, SQL recovery, headers and empty-credential denial were independently checked; see the [release evidence](SECURITY-REVIEW-20261111.md#verified-secondary-production-release--11-november-2026). Security hardening is deployed; it does not close R5 or enable enforcement, pending schema readiness or live charging.
+Latest verified application runtime: [manual release #1538](https://github.com/WasanthaK/khrental/actions/runs/43045282585) passed at Ready revision **0000487**, serving `673f975394cdbfe85e3ca27f94a78e0c92ffb0f2`. The release reran strict lint with zero errors/warnings, **1,178/1,178 tests** and the production build. Independent public build readback matched at **15:15:36 UTC** on 11 November; SQL health returned **HTTP 200 ready at 15:15:40 UTC**. See the [release evidence](SECURITY-REVIEW-20261111.md#lint-and-review-follow-up-release--11-november-2026). Security follow-ups #555–#558 and lint cleanup #559 are deployed; they do not close R5 or enable enforcement, pending schema readiness or live charging.
 
 The [canonical current status](EXECUTION-PLAN.md#canonical-current-status--11-november-2026) controls milestone dispositions, runtime and next work. Current implementation and acceptance are recorded in the [execution plan](EXECUTION-PLAN.md), [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) and [verified release note](R5-INVENTORY-CESSATION-RELEASE-20261110.md). Dated entries below retain historical evidence; they do not override this checkpoint.
 
