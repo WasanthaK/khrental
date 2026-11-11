@@ -31,9 +31,9 @@ const AuthProvider = ({ children }) => {
 
   // Use refs to track initialization state
   const initialized = useRef(false);
-  const platformClient = getPlatformClient();
+  // Bind this provider's subscriptions to one client for its mounted lifetime.
+  const [platformClient] = useState(getPlatformClient);
 
-  // Effect for development bypass
   const normalizeTenantState = useCallback((userRecord, tenantContext = null) => {
     // A verified list of choices is not an active membership. Keep every
     // cached tenant/role out until the user explicitly selects and reloads it.
@@ -344,7 +344,7 @@ const AuthProvider = ({ children }) => {
       subscription.unsubscribe();
       initialized.current=false;
     };
-  }, [fetchUserProfile, platformClient?.auth]); // Empty dependency array - run only once
+  }, [fetchUserProfile, platformClient?.auth]);
 
   // Login function
   const login = async (email, password) => {
