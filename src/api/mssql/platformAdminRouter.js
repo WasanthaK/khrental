@@ -1,6 +1,6 @@
 import express from 'express';
 import { createTenantContextMiddleware } from '../tenant/context.js';
-import { createUserInvitation } from '../auth/invitations.js';
+import { createInvitationDelivery } from '../auth/invitations.js';
 import { runSingleQuery } from './query.js';
 import {
   createAppUser,
@@ -30,6 +30,7 @@ const asyncHandler = (handler) => async (req, res, next) => {
   try {
     await handler(req, res, next);
   } catch (error) {
+    if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
     next(error);
   }
 };
@@ -117,7 +118,7 @@ const requireAdministratorMembershipTarget = asyncHandler(async (req, res, next)
   next();
 });
 
-export const createPlatformAdminRouter = () => {
+export const createPlatformAdminRouter = ({sendInvitation=createInvitationDelivery()}={}) => {
   const router = express.Router();
 
   // Unlike the container-level /api/health endpoint, this executes a real SQL
@@ -302,7 +303,7 @@ export const createPlatformAdminRouter = () => {
       return;
     }
 
-    const invitation = await createUserInvitation({
+    const invitation = await sendInvitation({
       tenantId,
       appUserId: req.params.appUserId,
       createdBy: req.user?.id || null
@@ -312,9 +313,9 @@ export const createPlatformAdminRouter = () => {
       data: {
         user: invitation.target,
         invitation: {
-          token: invitation.token,
           expiresAt: invitation.expiresAt
-        }
+        },
+        delivery: invitation.delivery
       }
     });
   }));

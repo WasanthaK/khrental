@@ -1953,7 +1953,7 @@ async function verifyCrossTenantInvitationRecoveryAgainstDisposableSql(pool, a, 
 
 // Route-level invitation acceptance with real bearer sessions and the same
 // disposable SQL Server as billing. No provider email or live identity calls.
-async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createAuthRecord, issueAuthSession }) {
+async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createAuthRecord, issueAuthSession, invitationMailbox }) {
   const rows = async (statement, inputs = {}) => {
     const request = pool.request();
     Object.entries(inputs).forEach(([name, value]) => request.input(name, value));
@@ -2003,14 +2003,52 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   assert.equal((await rows('SELECT id FROM user_invitations WHERE app_user_id = @userId',
     { userId: foreign.userId })).length, 0);
 
+  const attached = check(await call('/api/mssql/rentees', {
+    method: 'POST', token: adminToken, tenantId: a.tenantId,
+    body: { email: foreign.email, name: 'Unauthorized replacement', contact_details: { email: 'attacker@example.invalid' } }
+  }), 200);
+  assert.equal(guid(attached.id), foreign.userId);
+  assert.equal(attached.name, 'Invitation Acceptance');
+  check(await call('/api/mssql/rentees/' + foreign.userId, {
+    method: 'PUT', token: adminToken, tenantId: a.tenantId,
+    body: { name: 'Unauthorized edit', email: 'attacker@example.invalid' }
+  }), 409, 'SHARED_PROFILE_EDIT_FORBIDDEN');
+  const intact = await one('SELECT name,email,tenant_id,auth_id FROM app_users WHERE id=@id', { id: foreign.userId });
+  assert.equal(intact.name, 'Invitation Acceptance');
+  assert.equal(intact.email, foreign.email);
+  assert.equal(guid(intact.tenant_id), b.tenantId);
+  assert.equal(intact.auth_id, null);
+  const recipientOnly = check(await issue(adminToken, a.tenantId, foreign.userId), 201);
+  const recipientToken = invitationMailbox.tokenFor(foreign.email);
+  assert.ok(recipientToken);
+  assert.ok(!JSON.stringify(recipientOnly).includes(recipientToken));
+  const recipientClaim = check(await call(path + '/redeem', {
+    method: 'POST', body: { token: recipientToken, password: 'Recipient-' + crypto.randomBytes(20).toString('base64url') + '!' }
+  }), 201);
+  for (const tenantId of [a.tenantId, b.tenantId]) {
+    check(await call('/api/platform/auth/context', { token: recipientClaim.session.access_token, tenantId }), 200);
+  }
+  console.log('PASS: real-session cross-organization attachment preserves identity, denies profile overwrite, delivers only to recipient, and preserves both organization selections after recipient claim');
+
+  invitationMailbox.failNext=true;
+  check(await issue(adminToken,a.tenantId,invited.userId),503,'INVITATION_DELIVERY_UNCONFIRMED');
+  const failedToken=invitationMailbox.tokenFor(invited.email);
+  assert.ok(failedToken);
+  const failedState=await one('SELECT revoked_at FROM user_invitations WHERE token_hash=@hash',
+    {hash:crypto.createHash('sha256').update(failedToken).digest('hex')});
+  assert.ok(failedState.revoked_at,'Failed/uncertain delivery must revoke its pending claim');
   const firstInvite = check(await issue(adminToken, a.tenantId, invited.userId), 201);
-  assert.ok(firstInvite.invitation?.token);
-  const firstToken = firstInvite.invitation.token;
+  assert.equal(firstInvite.invitation?.token,undefined);
+  assert.equal(firstInvite.delivery.accepted,true);
+  const firstToken = invitationMailbox.tokenFor(invited.email);
+  assert.ok(firstToken);
+  assert.ok(!JSON.stringify(firstInvite).includes(firstToken),'Inviter must never receive a claim capability');
   const validate = token => call(path + '/validate?token=' + encodeURIComponent(token));
   assert.equal(check(await validate(firstToken), 200).valid, true);
 
   const renewed = check(await issue(adminToken, a.tenantId, invited.userId), 201);
-  const activeToken = renewed.invitation.token;
+  assert.equal(renewed.invitation?.token,undefined);
+  const activeToken = invitationMailbox.tokenFor(invited.email);
   assert.notEqual(firstToken, activeToken);
   check(await validate(firstToken), 400, 'INVITATION_NOT_USABLE');
   check(await call(path + '/redeem', {
@@ -2069,14 +2107,15 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   // invitation service and never printed by this acceptance harness.
   const pendingA = await createTarget(a.tenantId);
   const pendingB = await createTarget(b.tenantId);
-  const inviteA = check(await issue(adminToken, a.tenantId, pendingA.userId), 201);
+  check(await issue(adminToken, a.tenantId, pendingA.userId), 201);
   const { createUserInvitation } = await import('../src/api/auth/invitations.js');
   const inviteB = await createUserInvitation({
     tenantId: b.tenantId, appUserId: pendingB.userId
   });
   return {
-    a: { ...pendingA, token: inviteA.invitation.token },
+    a: { ...pendingA, token: invitationMailbox.tokenFor(pendingA.email) },
     b: { ...pendingB, token: inviteB.token },
+    sender: { token: adminToken, authId: adminAuthId, email: admin.email, tenantId: a.tenantId },
     revokedToken: firstToken
   };
 }
@@ -2657,7 +2696,24 @@ async function main() {
       sendEmail: resetMailbox.sendEmail,
       getBaseUrl: resetMailbox.getBaseUrl
     }));
-    app.use('/api/platform/auth', createInvitationRouter());
+    const {createInvitationDelivery} = await import('../src/api/auth/invitations.js');
+    const invitationMailbox = {
+      messages:[], failNext:false,
+      tokenFor(email) {
+        const message=this.messages.filter(item=>item.to===email).at(-1);
+        const link=message?.text.match(/http[^\s]+\/accept-invite\?token=[^\s]+/)?.[0];
+        return link ? new URL(link).searchParams.get('token') : null;
+      },
+      async sendEmail(message) {
+        this.messages.push(message);
+        if(this.failNext) {this.failNext=false;throw new Error('Synthetic delivery failure');}
+        return {success:true,providerStatus:202,provider:'captured-fixture'};
+      }
+    };
+    app.use('/api/platform/auth', createInvitationRouter({sendInvitation:createInvitationDelivery({
+      sendEmail:invitationMailbox.sendEmail.bind(invitationMailbox),quota:async()=>{},
+      env:{PASSWORD_RESET_BASE_URL:'http://localhost:5174'}
+    })}));
     app.use('/api/platform', createPlatformRouter());
     const invoiceMailbox = {
       accepted: [], attempts: [], rejectNext: false, unknownNext: false,
@@ -2685,6 +2741,9 @@ async function main() {
     app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
     app.use('/api/notifications', createNotificationSelfRouter());
     app.use('/api/utility-reviews', createUtilityReviewRouter());
+    const { createRenteeRouter } = await import('../src/api/mssql/renteeRouter.js');
+    const renteeRouter = createRenteeRouter();
+    app.use('/api/mssql', (req, res, next) => req.path.startsWith('/rentees') ? renteeRouter(req, res, next) : next());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
@@ -2726,7 +2785,7 @@ async function main() {
       return { status: response.status, payload: await response.json() };
     };
     const pendingInvitationBrowser = await verifyInvitationLifecycleHttp({
-      pool, a, b, tokenA, call, createAuthRecord, issueAuthSession
+      pool, a, b, tokenA, call, createAuthRecord, issueAuthSession, invitationMailbox
     });
     const { verifyUtilityReviewTransitions } =
       await import('./verify-utility-review-transitions.mjs');
@@ -2735,7 +2794,7 @@ async function main() {
     });
     const { verifyPhase4InvitationBrowser } = await import('./verify-phase4-invitation-browser.mjs');
     await verifyPhase4InvitationBrowser({
-      browser, origin, pool, a, b, call, pending: pendingInvitationBrowser
+      browser, origin, pool, a, b, call, pending: pendingInvitationBrowser, invitationMailbox
     });
     await verifyPhase4PasswordRecoveryBrowser({
       browser, origin, pool, a, b, call, createAuthRecord, issueAuthSession,

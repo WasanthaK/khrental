@@ -9,7 +9,7 @@ import {
   verifyPasswordCredential
 } from './index.js';
 import {
-  createUserInvitation,
+  createInvitationDelivery,
   redeemUserInvitation,
   validateUserInvitation
 } from './invitations.js';
@@ -48,7 +48,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-export const createInvitationRouter = () => {
+export const createInvitationRouter = ({sendInvitation=createInvitationDelivery()}={}) => {
   const router = express.Router();
   const requireAdminTenant = createTenantContextMiddleware({
     requireUser: true,
@@ -86,6 +86,7 @@ export const createInvitationRouter = () => {
         code: 'INVITATION_REQUIRED'
       });
     } catch (error) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       next(error);
     }
   });
@@ -110,7 +111,7 @@ export const createInvitationRouter = () => {
         return;
       }
 
-      const invitation = await createUserInvitation({
+      const invitation = await sendInvitation({
         tenantId: req.tenantId,
         appUserId: target.id,
         createdBy: req.user?.id || null
@@ -126,12 +127,13 @@ export const createInvitationRouter = () => {
             user_type: invitation.target.userType
           },
           invitation: {
-            token: invitation.token,
             expiresAt: invitation.expiresAt
-          }
+          },
+          delivery: invitation.delivery
         }
       });
     } catch (error) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       next(error);
     }
   });
@@ -139,7 +141,7 @@ export const createInvitationRouter = () => {
   router.post('/invitations', requireAdminTenant, requireAdmin, async (req, res, next) => {
     try {
       const appUserId = req.body?.appUserId || req.body?.app_user_id;
-      const invitation = await createUserInvitation({
+      const invitation = await sendInvitation({
         tenantId: req.tenantId,
         appUserId,
         createdBy: req.user?.id || null
@@ -148,13 +150,14 @@ export const createInvitationRouter = () => {
       res.status(201).json({
         data: {
           invitation: {
-            token: invitation.token,
             expiresAt: invitation.expiresAt
           },
-          user: invitation.target
+          user: invitation.target,
+          delivery: invitation.delivery
         }
       });
     } catch (error) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       next(error);
     }
   });
@@ -173,6 +176,7 @@ export const createInvitationRouter = () => {
 
       res.json({ data: result });
     } catch (error) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       next(error);
     }
   });
@@ -221,6 +225,7 @@ export const createInvitationRouter = () => {
         }
       });
     } catch (error) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       next(error);
     }
   });

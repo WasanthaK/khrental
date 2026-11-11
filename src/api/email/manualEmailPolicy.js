@@ -34,22 +34,28 @@ export const createManualEmailGuards = ({
       throw failure(403,'EMAIL_ADMIN_REQUIRED','Workspace administrator access is required to send email.');
     }
     validateManualEmail(req.body);
+    await consumeEmailQuota({actorId:req.user.id,tenantId:req.tenantId,limiter,secret});
+    next();
+  } catch(error) {if (error.retryAfter) {res.set('Retry-After',String(error.retryAfter));} next(error);}
+}];
+
+// Invitation delivery shares the same durable actor/workspace limits as the
+// existing mail endpoint; moving delivery server-side cannot bypass its quota.
+export const consumeEmailQuota = async ({actorId,tenantId,
+  limiter=createSqlPublicSignupLimiter(),secret=process.env.PUBLIC_SIGNUP_THROTTLE_SECRET || ''}) => {
     if (Buffer.byteLength(secret)<32 || limiter?.durable!==true) {
       throw failure(503,'EMAIL_LIMITER_UNAVAILABLE','Email sending is temporarily unavailable.');
     }
     for (const [scope,identifier,max,windowSeconds] of [
-      ['manual-email-user',String(req.user.id),5,60],
-      ['manual-email-tenant',String(req.tenantId),50,3600]
+      ['manual-email-user',String(actorId),5,60],
+      ['manual-email-tenant',String(tenantId),50,3600]
     ]) {
       const key=createHmac('sha256',secret).update(`quixo-manual-email-v1\0${scope}\0${identifier}`).digest('hex');
       let allowed;
       try { allowed=await limiter.consume({scope,key,max,windowSeconds}); }
       catch { throw failure(503,'EMAIL_LIMITER_UNAVAILABLE','Email sending is temporarily unavailable.'); }
       if (allowed!==true) {
-        res.set('Retry-After',String(windowSeconds));
-        throw failure(429,'EMAIL_RATE_LIMITED','Email sending limit reached. Please try again later.');
+        throw Object.assign(failure(429,'EMAIL_RATE_LIMITED','Email sending limit reached. Please try again later.'),{retryAfter:windowSeconds});
       }
     }
-    next();
-  } catch(error) {next(error);}
-}];
+};

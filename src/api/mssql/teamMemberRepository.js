@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { runQuery, runSingleQuery } from './query.js';
 import { createAppUser, findAppUserByEmail, updateAppUser } from './repositories.js';
 import {
@@ -144,7 +145,7 @@ export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 }
 
 export const getTenantTeamMemberById = async (tenantId, appUserId) => {
   const rows = await listTenantTeamMembers(tenantId, { pageSize: 500 });
-  return rows.find((row) => String(row.id) === String(appUserId)) || null;
+  return rows.find((row) => String(row.id).toLowerCase() === String(appUserId).toLowerCase()) || null;
 };
 
 const buildProfileUpdates = (payload = {}) => {
@@ -189,15 +190,10 @@ export const createOrAttachTenantTeamMember = async (tenantId, payload = {}) => 
       user_type: 'staff'
     });
     created = true;
-  } else {
-    const updates = buildProfileUpdates({ ...payload, email });
-    if (Object.keys(updates).length > 0) {
-      user = await updateAppUser(user.id, updates);
-    }
   }
 
-  if (membership) {
 
+  if (membership) {
     membership = await updateCanonicalTenantMembership(tenantId, membership.id, {
       role: 'staff',
       permission_bundle: bundle,
@@ -226,9 +222,17 @@ export const updateTenantTeamMember = async (tenantId, appUserId, payload = {}) 
   const current = await getTenantTeamMemberById(tenantId, appUserId);
   if (!current) return null;
 
-  const updates = buildProfileUpdates(payload);
+  // Full forms can repeat unchanged profile fields while changing only the
+  // organization membership. Never write even those fields across workspaces.
+  const updates = Object.fromEntries(Object.entries(buildProfileUpdates(payload))
+    .filter(([key, value]) => !isDeepStrictEqual(value, current[key])));
   if (Object.keys(updates).length > 0) {
-    await updateAppUser(appUserId, updates);
+    if (String(current.tenant_id || '').toLowerCase() !== String(tenantId).toLowerCase()) {
+      throw Object.assign(new Error('This shared account profile must be updated in its original workspace.'), {
+        status: 409, code: 'SHARED_PROFILE_EDIT_FORBIDDEN'
+      });
+    }
+    await updateAppUser(appUserId, { ...updates, tenant_id: tenantId });
   }
 
   const membership = await getTenantMembership(tenantId, appUserId);

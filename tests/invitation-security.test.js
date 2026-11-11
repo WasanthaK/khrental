@@ -105,7 +105,8 @@ test('shared invitation service uses explicit KH Rentals APIs without compatibil
   assert.doesNotMatch(invitationServiceSource, /isMssqlApiEnabled/);
   assert.doesNotMatch(invitationServiceSource, /appUserService/);
   assert.doesNotMatch(invitationServiceSource, /directEmailService/);
-  assert.match(invitationServiceSource, /invitationEmailService/);
+  assert.doesNotMatch(invitationServiceSource, /invitationEmailService|invitation\?\.token|accept-invite\?token/);
+  assert.match(invitationServiceSource, /inviteData\?\.delivery/);
   assert.match(invitationServiceSource, /invitationStatusService/);
   assert.match(invitationServiceSource, /\/api\/platform\/auth\/invite/);
   assert.match(invitationServiceSource, /\/api\/mssql\/app-users\/\$\{encodeURIComponent\(userId\)\}/);

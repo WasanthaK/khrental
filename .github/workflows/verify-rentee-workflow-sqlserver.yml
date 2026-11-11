@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'src/api/mssql/renteeRepository.js'
+      - 'src/api/mssql/teamMemberRepository.js'
+      - 'src/api/mssql/membershipAdminRepository.js'
+      - 'migrations/20260916_02_add_staff_permission_bundles.sql'
       - 'src/api/mssql/repositories.js'
       - 'src/api/mssql/query.js'
       - 'src/api/mssql/pool.js'
@@ -17,6 +20,9 @@ on:
     branches: [main]
     paths:
       - 'src/api/mssql/renteeRepository.js'
+      - 'src/api/mssql/teamMemberRepository.js'
+      - 'src/api/mssql/membershipAdminRepository.js'
+      - 'migrations/20260916_02_add_staff_permission_bundles.sql'
       - 'src/api/mssql/repositories.js'
       - 'src/api/mssql/query.js'
       - 'src/api/mssql/pool.js'

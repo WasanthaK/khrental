@@ -189,6 +189,14 @@ The invitation token remains the authority for invitation redemption. An existin
 
 ---
 
+## Invitation issuance and shared profiles
+
+Invitation redemption capabilities remain server-internal until sent to the persisted target email. Organization and platform-administrator issuance responses contain delivery acceptance and expiry, never the token or redemption URL. The browser cannot choose the sender, recipient, message or link origin. Production links use the configured canonical application origin, `https://app.quixo.homes`; no request header or client redirect controls it.
+
+Issuance uses the existing durable actor/workspace email quotas. Provider acceptance requires HTTP 202; it is not evidence of inbox receipt. Failed or uncertain delivery attempts revoke that newly issued token and return a retryable error. A resend still invalidates earlier links. Internal test fixtures may capture recipient mail; they must not recover tokens from inviter HTTP responses.
+
+Attaching an existing global identity creates an organization membership without changing its shared name, email, contact or property fields. Profile edits require the original workspace and a tenant-scoped database write. A foreign workspace may update its own staff membership, including when a full form repeats unchanged profile fields; attempted profile changes fail before membership mutation. This preserves multi-organization membership and switching without granting global-profile ownership to each inviter.
+
 ## Invitation redemption transaction
 
 Redemption must preserve the following ordering:

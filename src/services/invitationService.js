@@ -2,13 +2,10 @@
  * Unified invitation service.
  *
  * Invitation authority is always created by the KH Rentals server. The browser
- * only requests a single-use invitation token and then delivers the resulting
- * setup link through the observable server email endpoint.
+ * requests recipient-bound delivery and never receives the setup capability.
  */
 
-import { sendInvitationEmail } from './invitationEmailService';
 import { checkCanonicalInvitationStatus } from './invitationStatusService';
-import { getAppBaseUrl } from '../utils/env';
 import { requestMssqlApi } from './mssqlApiClient';
 
 const INVITATION_LOG_FIELDS = new Set([
@@ -83,37 +80,10 @@ export const inviteUser = async (userDetails, simulated = false) => {
     });
 
     const inviteData = await createSecureInvitation(userDetails);
-    const token = inviteData?.invitation?.token;
     const expiresAt = inviteData?.invitation?.expiresAt;
-
-    if (!token) {
-      throw new Error('The server did not return a secure invitation token.');
-    }
-
-    const inviteLink = `${getAppBaseUrl()}/accept-invite?token=${encodeURIComponent(token)}`;
-
-    logInvitationDebug(requestId, 'Secure invitation created; delivering email', {
-      expiresAt: expiresAt || null
-    });
-
-    const emailResult = await sendInvitationEmail({
-      to: userDetails.email,
-      subject: 'Your Invitation to KH Rentals',
-      html: getInvitationEmailTemplate(
-        userDetails.name || inviteData?.user?.name,
-        inviteLink,
-        inviteData?.user?.role || userDetails.role,
-        expiresAt
-      )
-    });
-
-    if (!emailResult?.success) {
-      return {
-        success: false,
-        emailSent: false,
-        error: 'A secure invitation was created, but the invitation email could not be sent.',
-        debug: { emailError: emailResult?.message || null }
-      };
+    const emailResult = inviteData?.delivery;
+    if (emailResult?.accepted !== true) {
+      throw new Error('Invitation email delivery could not be confirmed. Please try again.');
     }
 
     logInvitationDebug(requestId, 'Invitation email accepted for delivery', {
@@ -192,33 +162,3 @@ export const checkInvitationStatus = async (userId) => {
     hasAuthId: Boolean(statusData.auth_id)
   };
 };
-
-function getInvitationEmailTemplate(name, inviteLink, role, expiresAt = null) {
-  const normalizedRole = String(role || '').trim().toLowerCase();
-  const userTypeLabel = normalizedRole === 'rentee' || normalizedRole === 'tenant' ? 'Tenant' : 'Team Member';
-  const expiryText = expiresAt
-    ? `This invitation link expires on ${new Date(expiresAt).toLocaleString()}.`
-    : 'This invitation link expires after 24 hours.';
-
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="color: #4a90e2;">Welcome to KH Rentals</h1>
-      </div>
-      <p>Hello ${name || 'there'},</p>
-      <p>You have been invited to join KH Rentals as a ${userTypeLabel}. Please use the secure link below to set up your account.</p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a clicktracking=off href="${inviteLink}" style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
-          Set Up Your Account
-        </a>
-      </div>
-      <p>If the button does not work, copy and paste the link from this email into your browser.</p>
-      <p>${expiryText}</p>
-      <p>For security, the link can be used only once. If a new invitation is sent, earlier links stop working.</p>
-      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #777; font-size: 12px;">
-        <p>If you did not expect this invitation, you can safely ignore this email.</p>
-        <p>© ${new Date().getFullYear()} KH Rentals. All rights reserved.</p>
-      </div>
-    </div>
-  `;
-}

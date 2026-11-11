@@ -1,3 +1,5 @@
+import { sendViaSendGrid } from '../email/sendGridDelivery.js';
+import { consumeEmailQuota } from '../email/manualEmailPolicy.js';
 import crypto from 'node:crypto';
 import { getMssqlPool, sql } from '../mssql/pool.js';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
@@ -525,3 +527,47 @@ export const redeemUserInvitation = async ({ token, password }) => {
 };
 
 export const publicSignupRequiresInvitation = (existingAppUser) => Boolean(existingAppUser);
+
+
+export const revokeUndeliveredInvitation = async token => runQuery(`
+  UPDATE dbo.user_invitations SET revoked_at=SYSUTCDATETIME(),updatedat=SYSUTCDATETIME()
+  WHERE token_hash=@tokenHash AND accepted_at IS NULL AND revoked_at IS NULL`,
+  {tokenHash:hashInvitationToken(token)});
+
+// Raw account-claim capabilities are internal: only the persisted recipient
+// receives a link, through the server's configured mail transport.
+export const createInvitationDelivery = ({
+  issue=createUserInvitation, revoke=revokeUndeliveredInvitation, quota=consumeEmailQuota,
+  env=process.env,
+  sendEmail=message=>sendViaSendGrid({
+    apiKey:env.TWILIO_SENDGRID_API_KEY || env.SENDGRID_API_KEY || '',
+    sender:{email:env.EMAIL_FROM || env.DEFAULT_FROM_EMAIL || env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
+      name:env.EMAIL_FROM_NAME || env.DEFAULT_FROM_NAME || env.VITE_EMAIL_FROM_NAME || 'Quixo.Homes'},
+    ...message, disableTracking:true
+  })
+}={}) => async ({tenantId,appUserId,createdBy}) => {
+  const configured=env.PASSWORD_RESET_BASE_URL || env.PUBLIC_APP_URL || env.VITE_APP_BASE_URL
+    || (env.NODE_ENV !== 'production' ? 'http://localhost:5174' : '');
+  let base;
+  try { base=new URL(configured); } catch { throw createInvitationError(503,'Invitation delivery is temporarily unavailable.','INVITATION_DELIVERY_UNAVAILABLE'); }
+  if (base.username || base.password || base.search || base.hash || base.pathname !== '/'
+      || (env.NODE_ENV === 'production' ? base.origin !== 'https://app.quixo.homes'
+        : !['http:','https:'].includes(base.protocol))) {
+    throw createInvitationError(503,'Invitation delivery is temporarily unavailable.','INVITATION_DELIVERY_UNAVAILABLE');
+  }
+  await quota({actorId:createdBy,tenantId});
+  const invitation=await issue({tenantId,appUserId,createdBy});
+  try {
+    const link=base.origin+'/accept-invite?token='+encodeURIComponent(invitation.token);
+    const text=`You have been invited to Quixo.Homes. Use this link to set up your account: ${link}\n\nThis single-use link expires at ${new Date(invitation.expiresAt).toISOString()}. A new invitation replaces earlier links. If you did not expect this invitation, you can ignore this email.`;
+    const result=await sendEmail({to:invitation.target.email,subject:'Your Quixo.Homes invitation',text});
+    if (result?.success !== true || result?.providerStatus !== 202 || result?.simulated === true) {
+      throw new Error('Invitation acceptance was not confirmed.');
+    }
+    return {target:invitation.target,expiresAt:invitation.expiresAt,
+      delivery:{accepted:true,provider:result.provider,providerMessageId:result.providerMessageId || null}};
+  } catch {
+    await revoke(invitation.token).catch(()=>{});
+    throw createInvitationError(503,'The invitation email could not be confirmed. Please try again.','INVITATION_DELIVERY_UNCONFIRMED');
+  }
+};
