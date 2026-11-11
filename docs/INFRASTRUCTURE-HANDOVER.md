@@ -1,5 +1,11 @@
 # KH Rentals infrastructure ownership and access handover
 
+## Runtime reconciliation — 11 November 2026
+
+The original October infrastructure inventory below is dated evidence, not a current runtime fingerprint. Last independently verified runtime is Ready **0000483**, source `b3dd9d0304f9f46d5ee2780436466a25ef4090c3`, from [release 42858116407](https://github.com/WasanthaK/khrental/actions/runs/42858116407) on 10 November; public source and SQL health matched. No new replica, cloud grant or provider setting is selected by this documentation update.
+
+The [migration executor runbook](PRODUCTION-MIGRATION-EXECUTOR.md) records the successful read-only plan with staging/cessation migrations still pending. Source rollback retains durable commands/audits/inventory. The [execution plan](EXECUTION-PLAN.md) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) now control active R5 work and Sri Lanka launch prerequisites. Historical ownership/recovery and privacy gaps below stay open unless explicitly resolved by recorded evidence; a healthy runtime does not resolve account custody. Enforcement and live charging remain OFF.
+
 Updated 2026-10-27. This is the operational handover for the existing deployment,
 not an instruction to recreate infrastructure. Never put passwords, API tokens,
 secret values, session cookies or recovery codes in this repository or workflow logs.
@@ -18,12 +24,12 @@ A source runbook, a green object-operation test or a missing password does not
 prove ownership or prove that public access is disabled. Public-listing activation
 must retain that gap explicitly until resolved.
 
-Business sponsor: Wasantha Weerakoone. This is not proof that a particular
+Business sponsor: the project owner. This is not proof that a particular
 Cloudflare login, mailbox or Cloudflare account is owned by that identity.
 
 ## Cloudflare sign-in method — owner report, 2026-10-27
 
-Wasantha Weerakoone confirmed: “Cloudflare is using my GitHub account.”
+the project owner confirmed: “Cloudflare is using my GitHub account.”
 Use **Continue with GitHub** on the Cloudflare login page with the owner's
 linked GitHub identity. A separate Cloudflare password is not the documented
 sign-in route. The exact linked GitHub identity has not yet been independently
@@ -39,7 +45,7 @@ Never record GitHub passwords, tokens, recovery codes or session cookies here.
 
 | Resource | Established reference | Provisioning/configuration authority | Evidence and limitation |
 | --- | --- | --- | --- |
-| Azure subscription | `3d42a180-fda5-4013-afcc-fdba10266f9b` | Existing Azure account/Entra administration | Referenced by current production workflows; not a new role-assignment audit |
+| Azure subscription | `SCOPED_RECORD_ID` | Existing Azure account/Entra administration | Referenced by current production workflows; not a new role-assignment audit |
 | Azure app | `khrental-prod-rg / khrental-app`, southeastasia | `scripts/bootstrap-azure.sh`; deployment workflow | Release recovery verification #40523009356 passed; serving build `f631e7902a4fdae736a47ed6207271c503d81db9`, healthy Ready revision 0000390, one replica |
 | GitHub deployment identity | Bootstrap names `khrental-github-deploy`; Production OIDC trust | Azure workload federation with repository Production environment | Workflow uses AZURE_CLIENT_ID/AZURE_TENANT_ID; do not infer Cloudflare authority from Azure OIDC |
 | Azure SQL | `khrentals.database.windows.net / khrentalsdb` | Existing governed migration runner and isolated `khrental-db-migrator` job | Runtime MSSQL health passed; migration authority remains governed separately |

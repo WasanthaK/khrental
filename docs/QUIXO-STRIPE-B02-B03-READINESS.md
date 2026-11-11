@@ -1,5 +1,11 @@
 # Quixo.Homes Stripe B02/B03 — merchant readiness and dwelling policy
 
+## Implementation reconciliation — 11 November 2026
+
+The [release evidence](R5-INVENTORY-CESSATION-RELEASE-20261110.md) now records tested staged additions and paid active/ending obligations-closed cessation, plus bound readback-only cancellation recovery. These source changes implement parts of the approved behavior below; they do not approve new pricing, FX, refunds, tax, privacy or restoration terms. Production readiness migrations remain pending and rollout/live charging stay OFF.
+
+CM01/CM02 decisions below remain held exactly as drafted. Normal property-form integration, restoration/splits, other cessation states, broader reconciliation and controlled live acceptance remain open in the [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md). Preserve genuine provider objects and accepted signing; do not manufacture recurring events or repeat sign-in to resolve owner-only evidence.
+
 ## Controlling commercial decision pack — 10 November 2026
 
 The 9 November owner decisions and 10 November completion handoff supersede older open questions below about post-expiry management writes, cessation eligibility and the last dwelling. This section prepares exact reviewable choices without publishing a price, changing provider settings or requesting repeated owner input while the owner is away.
@@ -47,7 +53,7 @@ Draft customer wording for already approved behavior: **“Your changes will be 
 
 ### CM02 readiness facts and owner-only evidence held
 
-Fresh 10 November connector inventory exposes only the approved Quixo Homes sandbox, `acct_1UTgcdQ4sARuLNQa`, with `livemode=false`. Therefore no current live collection/payout/merchant eligibility, actual bank destination, live tax registration or accepted Managed Payments terms is established here. Earlier account properties and fee/tax research below are dated historical observations, not a current live determination. No live account, bank detail, tax toggle, price, subscription or charge was created or edited.
+Fresh 10 November connector inventory exposes only the approved Quixo Homes sandbox, `AUTHORIZED_PROVIDER_OBJECT`, with `livemode=false`. Therefore no current live collection/payout/merchant eligibility, actual bank destination, live tax registration or accepted Managed Payments terms is established here. Earlier account properties and fee/tax research below are dated historical observations, not a current live determination. No live account, bank detail, tax toggle, price, subscription or charge was created or edited.
 
 | Item | Exact evidence still needed | Prepared implementation/review boundary |
 | --- | --- | --- |
@@ -71,7 +77,7 @@ This runbook is preparation, not an invented received request, completed deletio
 
 ## Controlling billing test-account decision — 2026-10-27
 
-The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
+The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `AUTHORIZED_PROVIDER_OBJECT`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
 
 **Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
 

@@ -1,5 +1,13 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Implementation and commercial boundary — 11 November 2026
+
+The [verified inventory/cessation release](R5-INVENTORY-CESSATION-RELEASE-20261110.md) and [current task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) supersede older implementation-pending wording below. PR #545 provides bound cancellation readback recovery; PR #547 provides private durable preparation and exact paid-confirmed promotion; PR #548 provides atomic obligations-closed cessation for paid active/ending subscriptions with retained history and renewal-only reductions/final cancellation. Full normal-form integration, restoration/splits, other cessation states and broader reconciliation remain open.
+
+These are deployed, default-off source preparations. Both new migrations remain pending under the last read-only production plan; inventory/cessation readiness flags, controlled enforcement and live charging remain OFF. All seven final cessation checks passed, including 922 tests and SQL/browser fixtures; genuine enabled-scope live acceptance is distinct.
+
+No commercial decision changes in this documentation update. Retain monthly/no-trial, ordinary additions on the next invoice, renewal reductions, seven-day grace and authorized history/recovery. The [commercial decision pack](QUIXO-STRIPE-B02-B03-READINESS.md) retains unapproved FX/rounding, restoration timing, exceptional bulk, refund, merchant/tax/privacy choices as drafts. Older dated entries are evidence at their recorded time, not current rollout authority.
+
 ## Monthly invoice guard release — 10 November 2026
 
 [PR #538](https://github.com/WasanthaK/khrental/pull/538) is merged as `5caced59fa6b344ca5b21a91d114203ff9151c90`. [Release 42753074986](https://github.com/WasanthaK/khrental/actions/runs/42753074986) **passed**, with Ready revision **0000476**. Independent public build readback matched `5caced59fa6b344ca5b21a91d114203ff9151c90`. The first live SQL-health read returned HTTP 503 during rollout; a subsequent independent read returned `connection=ready`, and the deployment verifier also passed live SQL connectivity. This records recovery, not an established cause of the initial unavailable response.
@@ -31,7 +39,7 @@ This checkpoint supersedes earlier source-only/CI-pending wording for PR #536. *
 Remaining dependencies and next work:
 
 - BL04/BL05: connected Stripe operation discovery on 10 November still exposes clock creation only, not listing/advancement. Retain the existing clocks and subscriptions; genuine renewal, failed payment, grace expiry and recovery remain open.
-- BL07: actual complimentary grant/revoke/expiry acceptance remains pending for the verified **Platform Administrator** (`wweerakoone@gmail.com`). The previously declined sign-in is not repeated. Organization-owner billing authority is separate.
+- BL07: actual complimentary grant/revoke/expiry acceptance remains pending for the verified **Platform Administrator** (`AUTHORIZED_ACCOUNT`). The previously declined sign-in is not repeated. Organization-owner billing authority is separate.
 - BL08: implement audited obligations-closed cessation, staged managed inventory and transaction-scoped expiry/write authority across direct, generic, import and job paths, plus asynchronous reconciliation. Preserve billing recovery, renter reads and historical documents. The current summary still reports `applicationEnforcementEnabled=false`; do not mark production enforcement complete or activate a blanket restriction for existing test organizations.
 - Missing Evia audit retention remains separately open. Preserve accepted operational evidence. Remaining stock/failure/presentation, commercial/merchant/tax/privacy and Sri Lanka launch exits remain open; Brunei follows Sri Lanka.
 
@@ -97,7 +105,7 @@ Changing a setting must not silently reprice existing subscriptions or rewrite h
 
 ## Controlling billing test-account decision — 2026-10-27
 
-The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `acct_1UTgcdQ4sARuLNQa`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
+The owner explicitly confirmed the currently connected **Quixo Homes sandbox**, `AUTHORIZED_PROVIDER_OBJECT`, as the **canonical billing integration test account**. Fresh connector inventory confirms that exact account with `livemode=false`.
 
 **Account selection is CLOSED.** This supersedes the earlier intended-sandbox selection and the account-selection blocker recorded in issue #375 and historical checkpoints. Earlier account IDs and objects remain historical evidence only; do not provision or use them for new canonical B05 work. No relationship between the old accounts is asserted or required to proceed with this newly selected sandbox.
 

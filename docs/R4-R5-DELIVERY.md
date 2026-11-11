@@ -1,5 +1,15 @@
 # R4 and R5 delivery programme
 
+## Documentation reconciliation — 11 November 2026
+
+Current implementation and acceptance are recorded in the [execution plan](EXECUTION-PLAN.md), [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) and [verified release note](R5-INVENTORY-CESSATION-RELEASE-20261110.md). Dated entries below retain historical evidence; they do not override this checkpoint.
+
+PRs [#545](https://github.com/WasanthaK/khrental/pull/545), [#547](https://github.com/WasanthaK/khrental/pull/547) and [#548](https://github.com/WasanthaK/khrental/pull/548) are merged: bound readback-only interrupted cancellation recovery, durable staged inventory with exact paid-confirmed promotion, and audited obligations-closed cessation for paid active/ending subscriptions. Final cessation CI passed all seven workflows, including 922/922 tests and real disposable SQL/browser acceptance. This is tested implementation, not full live acceptance.
+
+Last independently verified runtime: **0000483**, source `b3dd9d0304f9f46d5ee2780436466a25ef4090c3`, release [42858116407](https://github.com/WasanthaK/khrental/actions/runs/42858116407), on 10 November. Build matched at **22:24:29 Asia/Colombo** and SQL health returned HTTP 200 ready at **22:24:33**. Read-only migration plan [42858116430](https://github.com/WasanthaK/khrental/actions/runs/42858116430), attempt 2, passed with both new migrations **PENDING** and no database modification. The inventory/cessation readiness flags and full enforcement rollout remain OFF; live charging remains disabled.
+
+Next independent work: preserve all property/unit form metadata through staging, implement restoration/splits and remaining cessation entitlement states, then complete owned asynchronous reconciliation and the controlled endpoint/job/authority matrix. Genuine recurring provider lifecycle, privileged live complimentary checks, Evia matching audit retention, actual inbox receipt, paused-database recovery and commercial/merchant/tax/privacy exits remain separate open dependencies. Accepted signing and prior operational journeys are not repeated. R1/R3/R4 retain their owner-approved scope, R2 remains deferred, R5 remains active/incomplete, and Sri Lanka readiness precedes Brunei.
+
 ## Autonomous handoff execution — 10 November 2026
 
 The remaining management-write preparation is delivered in merged PRs [#540](https://github.com/WasanthaK/khrental/pull/540), [#541](https://github.com/WasanthaK/khrental/pull/541), [#542](https://github.com/WasanthaK/khrental/pull/542) and [#543](https://github.com/WasanthaK/khrental/pull/543). They guard direct rental billing/maintenance, onboarding/activation/exit, generic business APIs/repositories/imports/RPCs, utilities/invoice master, owner enquiry/offer commands and public listing/photo mutations within SQL transactions. Failed bulk inserts/upserts roll back earlier rows; cancelled-agreement eligibility/dependencies are now locked with deletion. Existing history, SaaS recovery and factual service outcomes retain their authority.
@@ -41,7 +51,7 @@ This checkpoint supersedes earlier source-only/CI-pending wording for PR #536. *
 Remaining dependencies and next work:
 
 - BL04/BL05: connected Stripe operation discovery on 10 November still exposes clock creation only, not listing/advancement. Retain the existing clocks and subscriptions; genuine renewal, failed payment, grace expiry and recovery remain open.
-- BL07: actual complimentary grant/revoke/expiry acceptance remains pending for the verified **Platform Administrator** (`wweerakoone@gmail.com`). The previously declined sign-in is not repeated. Organization-owner billing authority is separate.
+- BL07: actual complimentary grant/revoke/expiry acceptance remains pending for the verified **Platform Administrator** (`AUTHORIZED_ACCOUNT`). The previously declined sign-in is not repeated. Organization-owner billing authority is separate.
 - BL08: implement audited obligations-closed cessation, staged managed inventory and transaction-scoped expiry/write authority across direct, generic, import and job paths, plus asynchronous reconciliation. Preserve billing recovery, renter reads and historical documents. The current summary still reports `applicationEnforcementEnabled=false`; do not mark production enforcement complete or activate a blanket restriction for existing test organizations.
 - Missing Evia audit retention remains separately open. Preserve accepted operational evidence. Remaining stock/failure/presentation, commercial/merchant/tax/privacy and Sri Lanka launch exits remain open; Brunei follows Sri Lanka.
 
@@ -156,9 +166,9 @@ R1 remains owner-closed with its recorded narrow waivers. R2 invoice immutabilit
 
 ## Current sandbox bindings
 
-- Account: `acct_1UTgcdQ4sARuLNQa`, `livemode=false`. Account selection is closed.
-- Approved baseline product: `prod_VUjs23Auy0fWYE`; price: `price_1UTkOuQ4sARuLNQaJnbZ03Hs`, USD 5 monthly licensed quantity, no trial.
-- Portal: `bpc_1UTku3Q4sARuLNQanUojlMVj`, payment methods/customer details/invoice history; direct subscription changes, cancellation and pause disabled.
+- Account: `AUTHORIZED_PROVIDER_OBJECT`, `livemode=false`. Account selection is closed.
+- Approved baseline product: `AUTHORIZED_PROVIDER_OBJECT`; price: `AUTHORIZED_PROVIDER_OBJECT`, USD 5 monthly licensed quantity, no trial.
+- Portal: `AUTHORIZED_PROVIDER_OBJECT`, payment methods/customer details/invoice history; direct subscription changes, cancellation and pause disabled.
 - Current receiver configuration/activation and 5 November enrollment evidence are recorded in the closure checkpoint. The older zero-webhook snapshot is superseded by the registered, activated receiver. Merchant/tax readiness is not established by sandbox configuration.
 - Reuse the selected baseline and restricted portal; do not duplicate catalogue objects.
 
