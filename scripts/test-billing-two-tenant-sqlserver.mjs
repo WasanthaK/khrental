@@ -2003,6 +2003,33 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   assert.equal((await rows('SELECT id FROM user_invitations WHERE app_user_id = @userId',
     { userId: foreign.userId })).length, 0);
 
+  const attached = check(await call('/api/mssql/rentees', {
+    method: 'POST', token: adminToken, tenantId: a.tenantId,
+    body: { email: foreign.email, name: 'Unauthorized replacement', contact_details: { email: 'attacker@example.invalid' } }
+  }), 200);
+  assert.equal(guid(attached.id), foreign.userId);
+  assert.equal(attached.name, 'Invitation Acceptance');
+  check(await call('/api/mssql/rentees/' + foreign.userId, {
+    method: 'PUT', token: adminToken, tenantId: a.tenantId,
+    body: { name: 'Unauthorized edit', email: 'attacker@example.invalid' }
+  }), 409, 'SHARED_PROFILE_EDIT_FORBIDDEN');
+  const intact = await one('SELECT name,email,tenant_id,auth_id FROM app_users WHERE id=@id', { id: foreign.userId });
+  assert.equal(intact.name, 'Invitation Acceptance');
+  assert.equal(intact.email, foreign.email);
+  assert.equal(guid(intact.tenant_id), b.tenantId);
+  assert.equal(intact.auth_id, null);
+  const recipientOnly = check(await issue(adminToken, a.tenantId, foreign.userId), 201);
+  const recipientToken = invitationMailbox.tokenFor(foreign.email);
+  assert.ok(recipientToken);
+  assert.ok(!JSON.stringify(recipientOnly).includes(recipientToken));
+  const recipientClaim = check(await call(path + '/redeem', {
+    method: 'POST', body: { token: recipientToken, password: 'Recipient-' + crypto.randomBytes(20).toString('base64url') + '!' }
+  }), 201);
+  for (const tenantId of [a.tenantId, b.tenantId]) {
+    check(await call('/api/platform/auth/context', { token: recipientClaim.session.access_token, tenantId }), 200);
+  }
+  console.log('PASS: real-session cross-organization attachment preserves identity, denies profile overwrite, delivers only to recipient, and preserves both organization selections after recipient claim');
+
   invitationMailbox.failNext=true;
   check(await issue(adminToken,a.tenantId,invited.userId),503,'INVITATION_DELIVERY_UNCONFIRMED');
   const failedToken=invitationMailbox.tokenFor(invited.email);
@@ -2714,6 +2741,9 @@ async function main() {
     app.use('/api/maintenance-lifecycle', createMaintenanceLifecycleRouter());
     app.use('/api/notifications', createNotificationSelfRouter());
     app.use('/api/utility-reviews', createUtilityReviewRouter());
+    const { createRenteeRouter } = await import('../src/api/mssql/renteeRouter.js');
+    const renteeRouter = createRenteeRouter();
+    app.use('/api/mssql', (req, res, next) => req.path.startsWith('/rentees') ? renteeRouter(req, res, next) : next());
     app.use('/api/mssql', guardBillingMssqlCompatibility, createMssqlRouter());
     // Serve the real React application through Vite middleware on the same
     // loopback origin as the fixture API; no dev-bypass headers or production.
