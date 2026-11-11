@@ -33,6 +33,7 @@ import { createEnquiriesRouter } from './src/api/enquiries/router.js';
 import { observeR3IngressPeer } from './src/api/auth/r3IngressPeerProbe.js';
 import { createInvitationRouter } from './src/api/auth/invitationRouter.js';
 import { createPasswordResetRouter } from './src/api/auth/passwordResetRouter.js';
+import { blockStorageStaticFallback } from './src/api/storage/index.js';
 import { createAuthenticatedTenantStorageRouter } from './src/api/storage/authenticatedTenantRoute.js';
 import { createEviaCallbackToken, createEviaWebhookRouter } from './src/api/evia/webhook.js';
 import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
@@ -460,6 +461,7 @@ async function createServer() {
   app.post('/api/platform/query', guardTenancyClosureQuery);
   app.use('/api/platform', createPlatformRouter());
   app.use('/storage', createAuthenticatedTenantStorageRouter());
+  app.use(blockStorageStaticFallback);
 
   if (isProduction) {
     const publicPath = path.resolve(process.cwd(), 'public');

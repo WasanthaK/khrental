@@ -1,12 +1,13 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { denyPaymentProofMutation } from '../platform/paymentProofAccess.js';
 import { assertEviaEvidenceDeletionAllowed } from './eviaEvidenceRetention.js';
-import { assertGenericInvoiceArchiveMutationAllowed, assertGenericInvoiceArchiveBucketDeleteAllowed } from './invoiceArchiveStoragePolicy.js';
+import { assertGenericInvoiceArchiveMutationAllowed, assertGenericInvoiceArchiveBucketDeleteAllowed, assertGenericInvoiceArchiveDeletionAllowed } from './invoiceArchiveStoragePolicy.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'public', 'storage');
 const validateAuditCreate = (bucket, relativePath, body) => {
-  const safePath = normalizeStoragePath(relativePath);
+  const safePath = requireCanonicalStoragePath(relativePath);
   if (bucket !== 'documents' || !/^tenants\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/agreements\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/signed\/audit_trail\.pdf$/i.test(safePath)
       || !Buffer.isBuffer(body) || body.length < 5 || body.length > 50 * 1024 * 1024 || body.subarray(0, 5).toString() !== '%PDF-') {
     throw Object.assign(new Error('Audit creation requires a scoped historic audit PDF.'), { status: 400, code: 'INVALID_EVIA_AUDIT_WRITE' });
@@ -32,14 +33,49 @@ export const normalizeStoragePath = (value = '') => {
   return parts.join('/');
 };
 
-const ensureBucketName = (bucket) => {
-  const value = String(bucket || '').trim();
+export const ensureBucketName = (bucket) => {
+  const value = typeof bucket === 'string' ? bucket : '';
   if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(value)) {
-    const error = new Error(`Invalid bucket: ${value}`);
+    const error = new Error('Invalid storage bucket.');
+    error.code = 'INVALID_STORAGE_BUCKET';
     error.status = 400;
     throw error;
   }
   return value;
+};
+
+// Request/driver identities must never change after an authorization decision.
+// Keep the legacy normalizer for callers preparing paths, but reject aliases at
+// the security boundary instead of silently mapping them to another object.
+export const requireCanonicalStoragePath = (value = '') => {
+  if (typeof value !== 'string' || value !== normalizeStoragePath(value)) {
+    throw Object.assign(new Error('Invalid storage path.'), { status: 400, code: 'INVALID_STORAGE_PATH' });
+  }
+  return value;
+};
+
+export const assertStorageObjectDeletionAllowed = (bucket, paths) => {
+  ensureBucketName(bucket);
+  if (!Array.isArray(paths)) { throw Object.assign(new Error('Storage paths must be an array.'), { status: 400, code: 'INVALID_STORAGE_PATH' }); }
+  paths.forEach(requireCanonicalStoragePath);
+  assertEviaEvidenceDeletionAllowed(bucket, paths);
+  denyPaymentProofMutation(bucket, paths);
+  paths.forEach(item => assertGenericInvoiceArchiveDeletionAllowed(bucket, item));
+  if (paths.some(item => !item || /^tenants(?:\/[^/]+)?$/.test(item))) {
+    throw Object.assign(new Error('Recursive tenant storage deletion is not authorized.'), { status: 403, code: 'STORAGE_ROOT_DELETE_FORBIDDEN' });
+  }
+};
+
+// Mounted after authenticated delivery and before BOTH public/dist static
+// roots (and development middleware). Static serving decodes and normalizes
+// URLs independently of Express route matching, so it cannot be a fallback
+// authority for tenant storage, including encoded or repeated-slash prefixes.
+export const blockStorageStaticFallback = (req, res, next) => {
+  let pathname;
+  try { pathname = path.posix.normalize(decodeURIComponent(req.path).replace(/\\/g, '/')); }
+  catch { res.sendStatus(400); return; }
+  if (/^\/storage(?:\/|$)/i.test(pathname)) { res.sendStatus(404); return; }
+  next();
 };
 
 // Quixo.Homes public-listing derivatives are kept outside the web static root.
@@ -50,7 +86,7 @@ const guidFragment=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 const validGuidPart=value=>typeof value==='string' && guidFragment.exec(value)?.[0]===value;
 export const resolveLocalStoragePath=(bucket,relativePath='')=>{
   const safeBucket=ensureBucketName(bucket);
-  const safePath=normalizeStoragePath(relativePath);
+  const safePath=requireCanonicalStoragePath(relativePath);
   const chunks=safePath.split('/').filter(Boolean);
   if(safeBucket==='media' && chunks[0]===PUBLIC_MEDIA_PREFIX){
     const approved=chunks.length===1 ||
@@ -99,8 +135,10 @@ class LocalStorageDriver {
   }
 
   async deleteBucket(bucket) {
+    ensureBucketName(bucket);
     assertGenericInvoiceArchiveBucketDeleteAllowed(bucket);
     assertEviaEvidenceDeletionAllowed(bucket);
+    denyPaymentProofMutation(bucket, ['']);
     await fs.rm(path.join(STORAGE_ROOT, ensureBucketName(bucket)), { recursive: true, force: true });
   }
 
@@ -112,7 +150,7 @@ class LocalStorageDriver {
 
   async upload(bucket, relativePath, body, _contentType, {createOnly=false}={}) {
     const safeBucket = ensureBucketName(bucket);
-    const safePath = normalizeStoragePath(relativePath);
+    const safePath = requireCanonicalStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(safeBucket, safePath);
     const targetPath = resolveLocalStoragePath(safeBucket,safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
@@ -133,16 +171,15 @@ class LocalStorageDriver {
   }
 
   async deleteObjects(bucket, paths = []) {
-    assertEviaEvidenceDeletionAllowed(bucket, paths);
+    assertStorageObjectDeletionAllowed(bucket, paths);
     const safeBucket = ensureBucketName(bucket);
-    const safePaths = paths.map(normalizeStoragePath);
-    safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed(safeBucket, item));
+    const safePaths = paths.map(requireCanonicalStoragePath);
     await Promise.all(safePaths.map((item) => fs.rm(resolveLocalStoragePath(safeBucket,item), { force: true, recursive: true })));
     return safePaths.map((name) => ({ name }));
   }
 
   async getObject(bucket, relativePath) {
-    const safePath = normalizeStoragePath(relativePath);
+    const safePath = requireCanonicalStoragePath(relativePath);
     if (!safePath) {
       const error = new Error('Stored object path is required.');
       error.status = 404;
@@ -187,7 +224,7 @@ export class R2StorageDriver {
     if (!this.logicalBuckets.includes(safeBucket)) {
       throw new Error(`Unknown logical storage bucket: ${safeBucket}`);
     }
-    const safePath = normalizeStoragePath(relativePath);
+    const safePath = requireCanonicalStoragePath(relativePath);
     return safePath ? `${safeBucket}/${safePath}` : `${safeBucket}/`;
   }
 
@@ -271,8 +308,10 @@ export class R2StorageDriver {
   }
 
   async deleteBucket(bucket) {
+    ensureBucketName(bucket);
     assertGenericInvoiceArchiveBucketDeleteAllowed(bucket);
     assertEviaEvidenceDeletionAllowed(bucket);
+    denyPaymentProofMutation(bucket, ['']);
     const prefix = this.objectKey(bucket);
     const keys = await this.listAllKeys(prefix);
     await Promise.all(keys.map((key) => this.request('DELETE', key)));
@@ -308,7 +347,8 @@ export class R2StorageDriver {
   }
 
   async upload(bucket, relativePath, body, contentType = 'application/octet-stream', {createOnly=false}={}) {
-    const safePath = normalizeStoragePath(relativePath);
+    ensureBucketName(bucket);
+    const safePath = requireCanonicalStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(bucket, safePath);
     try {
       await this.request('PUT', this.objectKey(bucket, safePath), {body,headers:{'content-type':contentType,...(createOnly?{'if-none-match':'*'}:{})}});
@@ -320,9 +360,8 @@ export class R2StorageDriver {
   }
 
   async deleteObjects(bucket, paths = []) {
-    assertEviaEvidenceDeletionAllowed(bucket, paths);
-    const safePaths = paths.map(normalizeStoragePath);
-    safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed(bucket, item));
+    assertStorageObjectDeletionAllowed(bucket, paths);
+    const safePaths = paths.map(requireCanonicalStoragePath);
     await Promise.all(safePaths.map((item) => this.request('DELETE', this.objectKey(bucket, item))));
     return safePaths.map((name) => ({ name }));
   }
@@ -341,7 +380,7 @@ export class R2StorageDriver {
   // Candidate-only, conditional-create archive writer. No production route
   // calls this yet. R2 evaluates If-None-Match:* atomically for PutObject.
   async createIssuedInvoiceIfAbsent(bucket, relativePath, body) {
-    const safePath = normalizeStoragePath(relativePath);
+    const safePath = requireCanonicalStoragePath(relativePath);
     const match = /^tenants\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/invoices\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/issued\/sha256-([0-9a-f]{64})\.pdf$/.exec(safePath);
     if (bucket !== 'invoices' || !match || !Buffer.isBuffer(body) ||
       body.length < 100 || body.length > 5 * 1024 * 1024 ||
@@ -403,8 +442,8 @@ export const storageDeliveryContent = object => {
 
 export const createStorageDeliveryHandler = () => async (req, res, next) => {
   try {
-    const bucket = req.params.bucket;
-    const objectPath = normalizeStoragePath(req.params[0] || req.path || '');
+    const bucket = ensureBucketName(req.storageIdentity?.bucket || req.params.bucket);
+    const objectPath = requireCanonicalStoragePath(req.storageIdentity?.path ?? String(req.params[0] || req.path || '').replace(/^\//, ''));
     if (!objectPath) {
       res.status(404).json({ error: 'Stored object not found.' });
       return;
