@@ -1,47 +1,12 @@
 import { getPlatformClient } from './platformClient';
-import { STORAGE_BUCKETS, BUCKET_FOLDERS } from './fileService';
-import {
-  createStorageBucket,
-  listStorageBuckets,
-  listTenantFiles,
-  uploadTenantFile
-} from './storageApiService';
+import {listStorageBuckets} from './storageApiService';
 
 const platformClient = getPlatformClient();
 
 let storageInitialized = false;
 
-const ensureBucket = async (bucketName) => {
-  const buckets = await listStorageBuckets();
-  const bucket = buckets.find((entry) => entry.name === bucketName || entry.id === bucketName);
-
-  if (bucket) {
-    return true;
-  }
-
-  await createStorageBucket(bucketName);
-  return true;
-};
-
-const ensureFolder = async (bucketName, folderPath) => {
-  const files = await listTenantFiles({
-    bucket: bucketName,
-    path: folderPath
-  });
-
-  if (Array.isArray(files) && files.length > 0) {
-    return;
-  }
-
-  await uploadTenantFile({
-    bucket: bucketName,
-    path: `${folderPath}/.keep`,
-    file: new Blob([''], { type: 'text/plain' })
-  });
-};
-
 /**
- * Initialize the logical storage structure exposed by the KH Rentals storage
+ * Check the storage availability exposed by the KH Rentals storage
  * API. Production objects live in Cloudflare R2; local development may use the
  * local storage driver. Authorization and tenant scoping are enforced by the
  * application API, not by database/storage-provider row-level-security rules.
@@ -61,21 +26,10 @@ export const initializeStorage = async () => {
       };
     }
 
-    for (const bucketName of Object.values(STORAGE_BUCKETS)) {
-      await ensureBucket(bucketName);
-
-      const folderPaths = BUCKET_FOLDERS[bucketName]
-        ? Object.values(BUCKET_FOLDERS[bucketName])
-        : [];
-
-      for (const folderPath of folderPaths) {
-        try {
-          await ensureFolder(bucketName, folderPath);
-        } catch (folderError) {
-          console.warn(`Unable to initialize storage folder ${bucketName}/${folderPath}:`, folderError);
-        }
-      }
-    }
+    // Opening the app is a read, not global bucket administration. Logical
+    // folders are created by authorized uploads; no .keep writes are needed.
+    // Provisioning remains an explicit platform-admin operation.
+    await listStorageBuckets();
 
     storageInitialized = true;
     return { success: true, skipped: false };

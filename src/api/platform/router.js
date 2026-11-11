@@ -1357,7 +1357,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
         req.query.bucket,
         policy.path,
         req.body,
-        req.headers['content-type'] || 'application/octet-stream',
+        policy.contentType || req.headers['content-type'] || 'application/octet-stream',
         {createOnly:policy.createOnly}
       );
       res.status(201).json({ data });

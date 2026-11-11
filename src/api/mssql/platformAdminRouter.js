@@ -40,7 +40,7 @@ export const isPlatformAdmin = async (user, { query = runSingleQuery, env = proc
     CASE WHEN EXISTS(SELECT 1 FROM dbo.public_signup_challenges c
       WHERE c.email_normalized=LOWER(auth.email) AND c.sent_at IS NOT NULL
       AND c.consumed_at IS NOT NULL AND c.revoked_at IS NULL
-      AND c.consumed_at>=DATEADD(second,-1,auth.createdat)) THEN 1 ELSE 0 END AS email_proof
+      AND c.consumed_at>=CAST(auth.createdat AS DATETIME2(3))) THEN 1 ELSE 0 END AS email_proof
     FROM dbo.auth_users auth JOIN dbo.app_users au
       ON au.id=auth.app_user_id AND au.auth_id=auth.auth_id
       AND LOWER(au.email)=LOWER(auth.email)

@@ -175,13 +175,11 @@ test('Evia diagnostic tools use tenant storage API without changing signature in
 });
 
 
-test('app storage initialization uses explicit storage APIs while preserving auth gating', () => {
+test('app storage initialization checks availability without global provisioning or object writes', () => {
   assert.doesNotMatch(appInitServiceSource, /platformClient\.storage/);
   assert.match(appInitServiceSource, /platformClient\.auth\.getSession/);
   assert.match(appInitServiceSource, /listStorageBuckets/);
-  assert.match(appInitServiceSource, /createStorageBucket/);
-  assert.match(appInitServiceSource, /listTenantFiles/);
-  assert.match(appInitServiceSource, /uploadTenantFile/);
+  assert.doesNotMatch(appInitServiceSource, /createStorageBucket|uploadTenantFile|ensureFolder/);
 });
 
 

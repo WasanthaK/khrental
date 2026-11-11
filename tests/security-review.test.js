@@ -63,6 +63,8 @@ test('storage HTTP guards deny renter/staff/tenant-admin bucket mutations before
     assert.equal(calls.length,0);
     const own=await fetch(origin+'/storage/upload?bucket=images&path=maintenance/photo.jpg',{method:'POST',headers:{'content-type':'image/jpeg'},body:image});
     assert.equal(own.status,201);assert.equal(calls[0].path,'tenants/tenant-a/maintenance/actor/photo.jpg');assert.equal(calls[0].options.createOnly,true);
+    const spoofedMime=await fetch(origin+'/storage/upload?bucket=images&path=maintenance/polyglot.html',{method:'POST',headers:{'content-type':'text/html'},body:Buffer.concat([image,Buffer.from('<script>window.attackCount++</script>')])});
+    assert.equal(spoofedMime.status,201);assert.equal(calls.at(-1).type,'image/jpeg','Client MIME must not turn evidence bytes into executable HTML');
     const svg=await fetch(origin+'/storage/upload?bucket=images&path=maintenance/photo.svg',{method:'POST',headers:{'content-type':'image/svg+xml'},body:'<svg onload="alert(1)"/>'});assert.equal(svg.status,403);
   });
 });
