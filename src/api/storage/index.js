@@ -110,13 +110,17 @@ class LocalStorageDriver {
     return Promise.all(entries.map((entry) => mapLocalEntry(targetPath, entry)));
   }
 
-  async upload(bucket, relativePath, body) {
+  async upload(bucket, relativePath, body, _contentType, {createOnly=false}={}) {
     const safeBucket = ensureBucketName(bucket);
     const safePath = normalizeStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(safeBucket, safePath);
     const targetPath = resolveLocalStoragePath(safeBucket,safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(targetPath, body);
+    try { await fs.writeFile(targetPath, body, createOnly ? {flag:'wx'} : {}); }
+    catch(error) {
+      if (error.code==='EEXIST') throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      throw error;
+    }
     return { path: safePath, fullPath: `${safeBucket}/${safePath}` };
   }
 
@@ -303,10 +307,15 @@ export class R2StorageDriver {
     return [...folders, ...files];
   }
 
-  async upload(bucket, relativePath, body, contentType = 'application/octet-stream') {
+  async upload(bucket, relativePath, body, contentType = 'application/octet-stream', {createOnly=false}={}) {
     const safePath = normalizeStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(bucket, safePath);
-    await this.request('PUT', this.objectKey(bucket, safePath), { body, headers: { 'content-type': contentType } });
+    try {
+      await this.request('PUT', this.objectKey(bucket, safePath), {body,headers:{'content-type':contentType,...(createOnly?{'if-none-match':'*'}:{})}});
+    } catch(error) {
+      if (error.status===412) throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      throw error;
+    }
     return { path: safePath, fullPath: `${ensureBucketName(bucket)}/${safePath}` };
   }
 
@@ -377,6 +386,21 @@ export const getStorageDriver = () => {
   return storageDriver;
 };
 
+export const storageDeliveryContent = object => {
+  let type=String(object.contentType||'application/octet-stream').split(';')[0].trim().toLowerCase();
+  // The local driver has no MIME metadata. Preserve raster/PDF viewing using
+  // bytes, never a caller-controlled suffix or an HTML sniffing fallback.
+  if (type==='application/octet-stream' && Buffer.isBuffer(object.body)) {
+    const b=object.body;
+    if (b.toString('ascii',0,5)==='%PDF-') type='application/pdf';
+    else if (b[0]===0xff && b[1]===0xd8 && b[2]===0xff) type='image/jpeg';
+    else if (b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) type='image/png';
+    else if (['GIF87a','GIF89a'].includes(b.toString('ascii',0,6))) type='image/gif';
+    else if (b.toString('ascii',0,4)==='RIFF' && b.toString('ascii',8,12)==='WEBP') type='image/webp';
+  }
+  return {type,inline:['image/jpeg','image/png','image/gif','image/webp','application/pdf'].includes(type)};
+};
+
 export const createStorageDeliveryHandler = () => async (req, res, next) => {
   try {
     const bucket = req.params.bucket;
@@ -386,7 +410,13 @@ export const createStorageDeliveryHandler = () => async (req, res, next) => {
       return;
     }
     const object = await getStorageDriver().getObject(bucket, objectPath);
-    res.setHeader('Content-Type', object.contentType);
+    const content=storageDeliveryContent(object);
+    res.setHeader('Content-Type', content.type);
+    res.setHeader('X-Content-Type-Options','nosniff');
+    if (!content.inline) {
+      res.setHeader('Content-Disposition','attachment');
+      res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'");
+    }
     if (object.etag) {
       res.setHeader('ETag', object.etag);
     }

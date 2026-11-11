@@ -25,6 +25,12 @@ on:
       - 'src/utils/documentUtils.js'
       - 'scripts/test-r5-layout-browser.mjs'
       - 'tests/fixtures/management-billing/**'
+      - 'tests/fixtures/security/**'
+      - 'src/utils/sanitizeHtml.js'
+      - 'src/components/agreements/**'
+      - 'src/components/common/RichTextEditor.jsx'
+      - 'src/pages/AgreementDetails.jsx'
+      - 'src/pages/AgreementTemplateForm.jsx'
       - 'scripts/verify-management-billing-browser.mjs'
       - '.github/workflows/test-browser-protected-billing.yml'
   workflow_dispatch:

@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../../utils/sanitizeHtml.js';
 import { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -629,7 +630,7 @@ const RichTextEditor = ({
       TableHeader,
       TableCell,
     ],
-    content: initialContent,
+    content: sanitizeHtml(initialContent),
     editable: !readonly,
     onUpdate: ({ editor }) => {
       if (onChange && !isUpdatingContent.current) {
@@ -655,7 +656,7 @@ const RichTextEditor = ({
       const selection = editor.state.selection;
       
       // Update content
-      editor.commands.setContent(initialContent);
+      editor.commands.setContent(sanitizeHtml(initialContent));
       
       // If we had a valid selection, try to restore cursor position
       if (selection && !selection.empty) {

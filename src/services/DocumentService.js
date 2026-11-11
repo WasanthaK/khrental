@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../utils/sanitizeHtml.js';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { platform as platformClient } from './platformClient';
 import { toast } from 'react-toastify';
@@ -12,18 +13,14 @@ import { buildStorageUrl, downloadTenantFile, listTenantFiles, uploadTenantFile 
  * @returns {Array} - Array of structured content objects
  */
 const parseHtmlContent = (html) => {
-  // Clean up the HTML
-  const cleanHtml = html
-    .replace(/<style[^>]*>.*?<\/style>/gs, '')
-    .replace(/<script[^>]*>.*?<\/script>/gs, '');
+  const cleanHtml = sanitizeHtml(html);
   
   // Create an array to store content pieces in the order they appear
   const contentPieces = [];
   
   try {
     // Attempt DOM-based parsing first
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = cleanHtml;
+    const tempDiv = new DOMParser().parseFromString(cleanHtml, 'text/html').body;
     
     const extractInlineRuns = (element, inherited = {}) => {
       const runs = [];

@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
+      - 'scripts/test-security-review-sql.mjs'
+      - 'src/api/email/manualEmailPolicy.js'
+      - 'src/api/mssql/platformAdminRouter.js'
+      - 'src/api/storage/mutationPolicy.js'
       - 'scripts/test-r5-onboarding-sqlserver.mjs'
       - 'src/api/platform/tenancyOnboardingRouter.js'
       - 'src/api/platform/tenancyActivation.js'

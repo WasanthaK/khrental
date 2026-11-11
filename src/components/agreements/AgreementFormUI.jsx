@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../../utils/sanitizeHtml.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Row, Col, Card, Spinner } from 'react-bootstrap';
 import { useAgreementForm } from '../../hooks/useAgreementForm';
@@ -309,7 +310,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
             <hr />
             <div 
               className="agreement-preview" 
-              dangerouslySetInnerHTML={{ __html: processedContent }} 
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(processedContent) }}
             />
           </div>
         </div>
@@ -384,4 +385,4 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
   );
 };
 
-export default AgreementFormUI; 
+export default AgreementFormUI;

@@ -88,6 +88,10 @@ If you receive a "SendGrid API key found in commit" error when trying to commit,
 
 For email delivery, keep `TWILIO_SENDGRID_API_KEY` or `SENDGRID_API_KEY` on the server only. Do not expose them through any `VITE_` variable.
 
+## Security regression checks
+
+Run `npm run test:security` for the priority security fixes and `npm run test:authorization` for the retained full gate. See the [security review disposition](docs/SECURITY-REVIEW-20261111.md) for exact proof and open secondary items. Browser/SQL CI remains required; local Chrome absence is not a pass. Never place an Evia token or secret in `VITE_` settings; the build rejects those settings. Optional platform bootstrap is server-configured, OFF by default and requires independent verified email evidence.
+
 ## Development
 
 Start the development server:

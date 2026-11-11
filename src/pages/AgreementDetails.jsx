@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../utils/sanitizeHtml.js';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { formatDate } from '../utils/helpers';
@@ -466,11 +467,11 @@ const AgreementDetails = () => {
             ) : (
               <div className="prose max-w-none">
                 {agreement.processedcontent ? (
-                  <div dangerouslySetInnerHTML={{ __html: agreement.processedcontent }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(agreement.processedcontent) }} />
                 ) : agreement.content ? (
-                  <div dangerouslySetInnerHTML={{ __html: agreement.content }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(agreement.content) }} />
                 ) : agreement.templatecontent ? (
-                  <div dangerouslySetInnerHTML={{ __html: agreement.templatecontent }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(agreement.templatecontent) }} />
                 ) : (
                   <p className="text-gray-500">No document or content available</p>
                 )}

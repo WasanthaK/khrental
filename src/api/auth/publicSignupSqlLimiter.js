@@ -4,7 +4,7 @@
 import { getMssqlPool, sql } from '../mssql/pool.js';
 
 const HASH = /^[a-f0-9]{64}$/;
-const SCOPES = new Set(['challenge-ip', 'challenge-email', 'redeem-ip']);
+const SCOPES = new Set(['challenge-ip', 'challenge-email', 'redeem-ip', 'manual-email-user', 'manual-email-tenant']);
 
 // Keep diagnostic categories fixed and non-sensitive: never propagate SQL
 // statements, keys, identifiers, connection details or driver messages.

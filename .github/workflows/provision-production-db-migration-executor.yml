@@ -29,9 +29,11 @@ jobs:
     steps:
       - name: Validate explicit provisioning confirmation
         shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.confirmation }}" != "PROVISION-MIGRATION-EXECUTOR" ]; then
+          if [ "$CONFIRMATION" != "PROVISION-MIGRATION-EXECUTOR" ]; then
             echo "Provisioning requires confirmation text PROVISION-MIGRATION-EXECUTOR." >&2
             exit 1
           fi

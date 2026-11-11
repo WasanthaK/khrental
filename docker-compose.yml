@@ -22,7 +22,7 @@ services:
       VITE_API_ENDPOINT: ${WEB_PUBLIC_URL:-http://localhost:5174}
       VITE_APP_BASE_URL: ${WEB_PUBLIC_URL:-http://localhost:5174}
       VITE_USE_MSSQL_API: "true"
-      VITE_ENABLE_DEV_BYPASS: ${VITE_ENABLE_DEV_BYPASS:-true}
+      VITE_ENABLE_DEV_BYPASS: ${VITE_ENABLE_DEV_BYPASS:-false}
     depends_on:
       - mssql
     volumes:
@@ -39,7 +39,7 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      SA_PASSWORD: ${MSSQL_PASSWORD:-ChangeMe123!}
+      SA_PASSWORD: ${MSSQL_PASSWORD:?Set MSSQL_PASSWORD to a strong local SQL password}
     ports:
       - "${MSSQL_HOST_PORT:-1433}:1433"
     volumes:

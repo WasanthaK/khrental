@@ -122,14 +122,16 @@ test('all generic business and storage endpoints require tenant context', () => 
     "post('/query'",
     "post('/rpc/:name'",
     "get('/storage/buckets'",
-    "post('/storage/buckets'",
-    "delete('/storage/buckets/:bucket'",
     "get('/storage/list'",
     "post('/storage/upload'",
     "delete('/storage/objects'"
   ]) {
     assert.ok(platformSource.includes(`router.${route}, requireBusinessTenant`), `Missing tenant scope for ${route}`);
   }
+  // Whole buckets span tenants. Even a tenant admin must pass the separate
+  // platform registry/verified-identity guard; ordinary tenant scope is weaker.
+  assert.match(platformSource, /router\.post\('\/storage\/buckets', requireAuthenticated, requireBucketAdmin,/);
+  assert.match(platformSource, /router\.delete\('\/storage\/buckets\/:bucket', requireAuthenticated, requireBucketAdmin,/);
   assert.match(platformSource, /router\.post\('\/auth\/invite', requireAuthenticated, requireAdmin, requireBusinessTenant,/);
 });
 

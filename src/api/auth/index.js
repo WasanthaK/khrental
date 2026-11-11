@@ -3,6 +3,18 @@ import { promisify } from 'node:util';
 import { runQuery, runSingleQuery } from '../mssql/query.js';
 
 const scrypt = promisify(crypto.scrypt);
+// Browser profile edits must not manufacture server-owned email, invitation,
+// onboarding or authorization evidence in auth metadata.
+export const sanitizeClientAuthMetadata = metadata => {
+  if (metadata === undefined) return undefined;
+  if (!metadata || typeof metadata!=='object' || Array.isArray(metadata)
+      || Object.keys(metadata).some(key=>!['name','force_password_change'].includes(key))
+      || (metadata.name!==undefined && (typeof metadata.name!=='string' || metadata.name.length>200))
+      || (metadata.force_password_change!==undefined && metadata.force_password_change!==false)) {
+    throw Object.assign(new Error('This account field can only be changed through its verified workflow.'),{status:403,code:'AUTH_METADATA_PROTECTED'});
+  }
+  return {...metadata};
+};
 const SESSION_TTL_DAYS = Math.max(Number(process.env.AUTH_SESSION_TTL_DAYS) || 30, 1);
 const PASSWORD_KEY_LENGTH = 64;
 let schemaPromise = null;

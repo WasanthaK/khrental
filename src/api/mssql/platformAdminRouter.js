@@ -14,10 +14,17 @@ import {
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
 
-export const PLATFORM_BOOTSTRAP_OWNER_EMAIL = 'wweerakoone@gmail.com';
-
-export const isBootstrapPlatformOwner = (user) =>
-  normalizeEmail(user?.email) === PLATFORM_BOOTSTRAP_OWNER_EMAIL;
+// Bootstrap is an explicit server configuration, never a personal address in
+// source. Verification comes only from the persisted, identity-bound auth row.
+export const isBootstrapPlatformOwner = (user, record, env = process.env) => {
+  const configured = normalizeEmail(env.PLATFORM_BOOTSTRAP_OWNER_EMAIL);
+  return Boolean(configured && user?.id && user?.auth_id
+    && normalizeEmail(user.email) === configured
+    && normalizeEmail(record?.email) === configured
+    && String(record?.app_user_id).toLowerCase() === String(user.id).toLowerCase()
+    && String(record?.auth_id).toLowerCase() === String(user.auth_id).toLowerCase()
+    && record?.verified === true);
+};
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -27,33 +34,35 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-export const isPlatformAdmin = async (user) => {
-  if (!user?.id) {
-    return false;
-  }
-
-  // The platform-owner migration bootstraps this same identity. Keep that owner
-  // recoverable while production schema migration execution is unavailable so
-  // a missing registry table/row cannot lock the platform owner out entirely.
-  const isBootstrapOwner = isBootstrapPlatformOwner(user);
-
-  const tableState = await runSingleQuery(
+export const isPlatformAdmin = async (user, { query = runSingleQuery, env = process.env } = {}) => {
+  if (!user?.id || !user?.auth_id) return false;
+  const record = await query(`SELECT auth.app_user_id,auth.auth_id,auth.email,auth.metadata,
+    CASE WHEN EXISTS(SELECT 1 FROM dbo.public_signup_challenges c
+      WHERE c.email_normalized=LOWER(auth.email) AND c.sent_at IS NOT NULL
+      AND c.consumed_at IS NOT NULL AND c.revoked_at IS NULL
+      AND c.consumed_at>=CAST(auth.createdat AS DATETIME2(3))) THEN 1 ELSE 0 END AS email_proof
+    FROM dbo.auth_users auth JOIN dbo.app_users au
+      ON au.id=auth.app_user_id AND au.auth_id=auth.auth_id
+      AND LOWER(au.email)=LOWER(auth.email)
+    WHERE au.id=@appUserId AND au.auth_id=@authId AND au.status='active'`,
+  {appUserId:user.id,authId:user.auth_id});
+  let metadata;
+  try { metadata = typeof record?.metadata === 'string' ? JSON.parse(record.metadata) : record?.metadata; }
+  catch { return false; }
+  // This also contains the historical email-seeded registry migration on a
+  // fresh/restored database: an unverified email claim grants no platform role.
+  if (metadata?.global_email_verified !== true || Number(record?.email_proof)!==1) return false;
+  const verified = {...record,verified:true};
+  const tableState = await query(
     `SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NULL THEN 0 ELSE 1 END AS exists_value`
   );
-
-  if (!tableState?.exists_value) {
-    return isBootstrapOwner;
-  }
-
-  const row = await runSingleQuery(
-    `SELECT TOP 1 id
-     FROM dbo.platform_admins
-     WHERE app_user_id = @appUserId
-       AND LOWER(COALESCE(status, 'active')) = 'active'`,
-    { appUserId: user.id }
-  );
-
-  return Boolean(row?.id) || isBootstrapOwner;
+  if (!tableState?.exists_value) return isBootstrapPlatformOwner(user, verified, env);
+  const row = await query(`SELECT TOP 1 id FROM dbo.platform_admins
+    WHERE app_user_id=@appUserId AND LOWER(COALESCE(status,'active'))='active'`, {appUserId:user.id});
+  // A disabled registry entry must not be bypassed by the fallback.
+  if (row?.id) return true;
+  const existing = await query('SELECT TOP 1 id FROM dbo.platform_admins WHERE app_user_id=@appUserId', {appUserId:user.id});
+  return !existing?.id && isBootstrapPlatformOwner(user, verified, env);
 };
 
 const requireResolvedUser = createTenantContextMiddleware({
