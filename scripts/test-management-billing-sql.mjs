@@ -331,7 +331,7 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
   const unit=id=>({kind:'unit',payload:{id,propertyid:parent,unitnumber:id.slice(0,8),availability:'reserved',...unitMetadata}});
   const stage={tenantId,actorId,records:[unit(unit1),property,unit(unit2)],reason:'Disposable staged stock acceptance only.'};
   for(const image_url of [`/storage/images/tenants/${actorId}/properties/foreign.png`,'https://untrusted.invalid/photo.png']){
-    await assert.rejects(store.stageStock({...stage,records:[{...property,payload:{...property.payload,images:[{image_url}]}}]}),{code:'BILLING_STOCK_IMAGE'});
+    assert.throws(()=>store.stageStock({...stage,records:[{...property,payload:{...property.payload,images:[{image_url}]}}]}),{code:'BILLING_STOCK_IMAGE'});
   }
   const receipts=await Promise.all([store.stageStock(stage),store.stageStock(stage)]);
   assert.deepEqual(receipts[0],receipts[1]);
