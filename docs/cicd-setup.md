@@ -27,3 +27,5 @@ Production sign-in/sign-up throttling requires the existing shared `dbo.public_s
 No schema apply is part of a normal application release. Existing migration plan/apply authority, explicit confirmation and checksum checks remain separate.
 
 Historical domain/DNS, production audit/diagnostic and production migration plan/apply workflows are also manual-only. This prevents edits to pinned actions from replaying old operator tasks or waiting for an undeployed source SHA. Production migration apply retains its separate explicit confirmation and privileged executor checks; disposable migration CI remains automatic.
+
+Reusable migration-preflight caller jobs also declare their own job-level `id-token: write`. GitHub cannot elevate permissions inside a called workflow; retaining that exact caller grant avoids breaking manual release preflights. See [GitHub reusable-workflow permissions](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).

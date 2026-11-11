@@ -137,7 +137,7 @@ The workflow publishes `ghcr.io/wasanthak/khrental`. Make that GHCR package publ
 
 ## 6. Domain and verification
 
-After the first healthy deployment, add `khrentals.kubeira.com` as the Container App custom domain, create the requested DNS records, and bind the managed certificate.
+The existing application origin is `https://app.quixo.homes`. Preserve its working managed domain/certificate and the separate `quixo.homes` marketing site. Do not recreate historical domain bindings or run the DNS workflows merely because this guide changed; use the infrastructure handover and explicit manual operator workflows for a verified change.
 
 Verify:
 
