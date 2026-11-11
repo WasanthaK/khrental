@@ -2088,6 +2088,7 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   return {
     a: { ...pendingA, token: invitationMailbox.tokenFor(pendingA.email) },
     b: { ...pendingB, token: inviteB.token },
+    sender: { token: adminToken, authId: adminAuthId, email: admin.email, tenantId: a.tenantId },
     revokedToken: firstToken
   };
 }
@@ -2763,7 +2764,7 @@ async function main() {
     });
     const { verifyPhase4InvitationBrowser } = await import('./verify-phase4-invitation-browser.mjs');
     await verifyPhase4InvitationBrowser({
-      browser, origin, pool, a, b, call, pending: pendingInvitationBrowser
+      browser, origin, pool, a, b, call, pending: pendingInvitationBrowser, invitationMailbox
     });
     await verifyPhase4PasswordRecoveryBrowser({
       browser, origin, pool, a, b, call, createAuthRecord, issueAuthSession,

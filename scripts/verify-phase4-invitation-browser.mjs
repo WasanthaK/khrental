@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 
 // Actual React Accept Invite acceptance against the same disposable MSSQL
 // database and authenticated Express routers as Phase 4's HTTP coverage.
 // Fresh isolated browser contexts emulate two separate customers.
-export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, b, call, pending }) {
+export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, b, call, pending, invitationMailbox }) {
   const lower = value => String(value || '').toLowerCase();
   const one = async (statement, params = {}) => {
     const request = pool.request();
@@ -55,6 +56,35 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
     } finally { await close(view); }
   };
 
+  // Execute the actual sender service in a browser with a real SQL-backed
+  // admin session. Transport alone is substituted; tokens stay in recipient mail.
+  const senderContext = await browser.createBrowserContext();
+  try {
+    const page = await senderContext.newPage();
+    await page.evaluateOnNewDocument(sender => {
+      localStorage.setItem('khrental.activeTenantId', sender.tenantId);
+      localStorage.setItem('khrental.local.session', JSON.stringify({
+        access_token: sender.token, user: { id: sender.authId, email: sender.email, role: 'admin' }
+      }));
+    }, pending.sender);
+    await page.goto(origin + '/accept-invite', { waitUntil: 'domcontentloaded' });
+    const send = () => page.evaluate(async target => {
+      const { inviteUser } = await import('/src/services/invitationService.js');
+      return inviteUser({ id: target.userId, email: target.email });
+    }, { userId: pending.a.userId, email: pending.a.email });
+    invitationMailbox.failNext = true;
+    const rejected = await send();
+    assert.equal(rejected.success, false);
+    assert.equal(rejected.emailSent, false);
+    const accepted = await send();
+    assert.equal(accepted.success, true);
+    assert.equal(accepted.emailSent, true);
+    pending.a.token = invitationMailbox.tokenFor(pending.a.email);
+    assert.ok(pending.a.token);
+    assert.ok(!JSON.stringify(accepted).includes(pending.a.token));
+  } finally { await senderContext.close(); }
+  fs.mkdirSync('billing-sql-proof', { recursive: true });
+
   // A revoked token must be rejected by the actual routed UI before account
   // setup, without creating an auth identity.
   await verifyUnusable(pending.revokedToken);
@@ -72,6 +102,14 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
       const emailReadOnly = await page.$eval('#email',
         input => input.disabled && input.readOnly);
       assert.equal(emailReadOnly, true, 'invited identity cannot change bound email');
+
+      for (const width of [390, 1440]) {
+        await page.setViewport({ width, height: 900 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false,
+          'invitation setup must fit the mobile and desktop viewport');
+        // Only synthetic disposable identities appear; URL/token is not captured.
+        await page.screenshot({ path: `billing-sql-proof/invitation-setup-${expectedTenant === a.tenantId ? 'a' : 'b'}-${width}.png`, fullPage: true });
+      }
 
       const password = 'Acceptance-' + crypto.randomBytes(16).toString('base64url') + '!';
       await page.type('#password', password);
@@ -134,5 +172,6 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
     assert.equal(login.status, 200, 'browser-created password must work for subsequent sign-in');
     assert.equal(lower(login.payload?.data?.user?.id), lower(value.authId));
   }
+  console.log('PASS: real sender service handles failed and accepted recipient-only delivery');
   console.log('PASS: two real Accept Invite React browser account setups, single-use and revoked-token screens, session persistence, stale session isolation and foreign-tenant denial');
 }

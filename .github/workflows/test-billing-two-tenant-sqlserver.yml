@@ -8,6 +8,7 @@ on:
       - 'scripts/test-security-review-sql.mjs'
       - 'src/api/email/manualEmailPolicy.js'
       - 'src/api/auth/invitations.js'
+      - 'scripts/verify-phase4-invitation-browser.mjs'
       - 'src/api/auth/invitationRouter.js'
       - 'src/services/invitationService.js'
       - 'src/services/tenantAdminService.js'
