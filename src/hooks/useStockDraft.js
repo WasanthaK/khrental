@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {insertData,prepareStock} from '../services/platformClient';
+import {insertData,prepareStock} from '../services/platformClient.js';
 import {buildRequestContextHeaders,getActiveTenantId,loadStoredSession} from '../services/requestContext.js';
 
 // Tab-local editing aid. Once submitted, the server's pending stock is durable.

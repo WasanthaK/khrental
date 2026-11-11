@@ -214,12 +214,17 @@ try{
         await page.setViewport({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
         await page.screenshot({path:`enquiry-browser-proof/prepared-property-retry-${width}.png`,fullPage:true});
       }
+      const beforeWrongWorkspace=preparationRequests.length;
+      await page.evaluate(()=>localStorage.setItem('khrental.activeTenantId','77777777-7777-4777-8777-777777777777'));
+      await page.click('button[type="submit"]');await page.waitForFunction(()=>document.body.innerText.includes('Your workspace changed'));
+      assert.equal(preparationRequests.length,beforeWrongWorkspace,'A changed workspace cannot submit the retained request');
+      await page.evaluate(id=>localStorage.setItem('khrental.activeTenantId',id),tenantId);
       await page.focus('button[type="submit"]');await page.keyboard.press('Enter');
       await page.waitForFunction(()=>location.pathname==='/dashboard/subscription');
       assert.deepEqual(preparationRequests.at(-1),submitted);assert.equal(prepared.size,1);
       await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});
       assert.equal(await page.$eval('#name',e=>e.value),'','Successful preparation clears the editing draft');
-      propertyWrites.at(-1).propertytype='apartment';
+      propertyWrites.push({name:'Existing fixture building',address:'Existing fixture address',country_code:'BN',propertytype:'apartment',status:'available',rentalvalues:{listingCategory:'residential',rent:100000,deposit:200000}});
       const editPath='/dashboard/properties/55555555-5555-4555-8555-555555555555/edit';
       const openUnit=async()=>{await page.goto(origin+editPath,{waitUntil:'networkidle0'});await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Add Unit'));await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Add Unit').click());await page.waitForSelector('#unitnumber');};
       await openUnit();
