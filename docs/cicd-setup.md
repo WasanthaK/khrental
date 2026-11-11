@@ -4,9 +4,9 @@ The maintained application workflow is `.github/workflows/deploy-container-apps.
 
 ## Verification
 
-Pull requests run `npm ci`, syntax checks, `npm test` (also exposed as `npm run test:authorization`) and the production build. The test runner recursively discovers `tests/**/*.test.{js,mjs,cjs}`; it does not execute operator scripts under `scripts/`. Relevant changes also require the disposable SQL Server, browser and Evia contract workflows. Browser cases require the Chrome supplied by Puppeteer in CI.
+Pull requests run `npm ci`, syntax checks, strict `npm run lint`, `npm test` (also exposed as `npm run test:authorization`) and the production build. The test runner recursively discovers `tests/**/*.test.{js,mjs,cjs}`; it does not execute operator scripts under `scripts/`. Relevant changes also require the disposable SQL Server, browser and Evia contract workflows. Browser cases require the Chrome supplied by Puppeteer in CI.
 
-`npm run lint` uses `eslint.config.js` and explicit development dependencies. It currently reports existing source debt; a successful build or test run does not establish a lint pass. Do not remove rules or exclusions to manufacture a green result. See the [security disposition](SECURITY-REVIEW-20261111.md) for the current result.
+`npm run lint` uses `eslint.config.js` and explicit development dependencies, rejects unused suppression comments and allows zero warnings. PR #559 cleared the existing debt; lint is now a mandatory deployment verification step before tests/build. React dependency checks remain enabled. Narrow control-character regex exceptions preserve input validation, and underscore-prefixed unused parameters retain compatibility signatures and Express error-handler arity. Do not weaken rules or blanket-ignore source to manufacture a green result. See the [security disposition](SECURITY-REVIEW-20261111.md) for the evidence.
 
 ## Production release
 
