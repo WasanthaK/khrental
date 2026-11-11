@@ -1,5 +1,14 @@
 # Current R5 prelaunch completion ledger — 11 November 2026
 
+## Property and unit preparation integration — source checkpoint, 11 November 2026
+
+BL08.6 now has a prepared implementation connecting the actual property and unit forms to the existing server-required staging flow. It retains bank details, rental values, terms, descriptions, dimensions, utility rates, amenities/checklists, private tenant-owned images (including GIF), coordinates and non-occupied availability through exact paid confirmation. Default-off generic creation retains its existing three-category behavior. No readiness flag or migration is changed.
+
+Account/workspace/parent-scoped tab drafts preserve entered details. A potentially committed preparation freezes its exact payload and UUID for retries and reloads; confirmed preparation continues to subscription review without inserting a fake managed property/unit into the UI. The server remains the durable authority after preparation. Drafts before submission are tab-local, not cross-device autosave. Existing-first-unit splits remain explicitly rejected until the separate atomic split path is implemented.
+
+Local strict lint, 36 focused billing tests and production build pass. Full local suite: 1,177 pass, two existing browser tests cannot launch Chrome on this host. Expanded actual-form browser and disposable SQL promotion checks are prepared for CI; browser/UI and real SQL acceptance are **pending**, not established by the local source checks. BL08.6 and R5 remain incomplete until those checks and remaining import/inventory paths are accepted. No production release is claimed by this source checkpoint.
+
+
 Documentation reconciled **11 November 2026**. The latest verified implementation/release checkpoints below supersede older pending statements; dated historical evidence and owner milestone dispositions are retained. No rollout, pricing or production mutation is authorized by this documentation update.
 
 ## Current programme and runtime checkpoint — 11 November 2026

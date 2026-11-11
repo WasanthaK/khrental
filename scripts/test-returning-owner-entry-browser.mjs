@@ -25,7 +25,7 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
   if(!importer?.includes('/src/')){return;}
   if(/\/(?:hooks\/useAuth\.jsx|pages\/Login\.jsx|pages\/OwnerSetup\.jsx|components\/auth\/VerifiedSeekerBoundary\.jsx)$/.test(importer)&&/\/services\/platformClient(?:\.js)?$/.test(source)){return new URL('../src/services/platformClientCore.js',import.meta.url).pathname;}
   if(importer.endsWith('/routes.jsx')&&/\/components\/layouts\//.test(source)){return '\0returning-layout.jsx';}
-  if(importer.endsWith('/routes.jsx')&&/\/pages\/(?:PropertyList|Dashboard|rentee\/RenteePortal)$/.test(source)){return '\0returning-destination.jsx';}
+  if(importer.endsWith('/routes.jsx')&&/\/pages\/(?:PropertyList|Dashboard|ManagementSubscription|rentee\/RenteePortal)$/.test(source)){return '\0returning-destination.jsx';}
 },async load(id){
   if(id==='\0returning-entry.jsx'){return transformWithEsbuild(entry,'returning-entry.jsx',{loader:'jsx',jsx:'automatic'});}
   if(id==='\0returning-layout.jsx'){return `import React from 'react';import {Outlet} from 'react-router-dom';export default ()=>React.createElement(Outlet);`;}
@@ -33,6 +33,8 @@ const plugin={name:'returning-owner-proof',enforce:'pre',resolveId(source,import
 }};
 let vite,server,browser,seekerChecks=0,ownerWrites=0;
 const propertyWrites=[];
+let preparationRequired=false;
+const prepared=new Map(),preparationRequests=[];
 let contextUnavailable=false,progressSaves=0;
 const byToken=req=>cases.find(x=>'fixture-'+x.id===String(req.get('authorization')||'').replace(/^Bearer /,''));
 const progressById=new Map(cases.filter(x=>x.email==='new-owner@example.test').map(x=>[x.id,{name:'',country:'BN',requestId:'44444444-4444-4444-8444-444444444444'}]));
@@ -65,8 +67,19 @@ try{
     if(x?.member){return res.status(403).json({error:'Fixture denies business accounts in seeker API'});}
     res.json({data:{verified:true,eligible:true,userType:'seeker',tenantId:null}});
   });
+  app.post('/api/management-billing/stock/prepare',(req,res)=>{
+    assert.ok(byToken(req));assert.equal(req.get('x-tenant-id'),tenantId);
+    const record=req.body.records[0];preparationRequests.push(record);
+    if(!prepared.has(record.payload.id)){
+      prepared.set(record.payload.id,record);
+      return res.status(503).json({error:'Preparation response was lost. Retry to confirm.',code:'FIXTURE_RESPONSE_LOST'});
+    }
+    assert.deepEqual(record,prepared.get(record.payload.id),'Retry must retain exact identity and metadata');
+    res.json({data:{prepared:[record.payload.id],status:'pending'}});
+  });
   app.post('/api/platform/query',(req,res)=>{
     if(req.body.action==='select'){return res.json({data:req.body.table==='properties'?[{...propertyWrites.at(-1),id:'55555555-5555-4555-8555-555555555555'}]:[]});}
+    if(preparationRequired&&['properties','property_units'].includes(req.body.table)&&req.body.action==='insert'){return res.status(409).json({error:'Review subscription before management.',code:'BILLING_STOCK_PREPARATION_REQUIRED'});}
     if(req.body.table!=='properties'||!['insert','update'].includes(req.body.action)){return res.sendStatus(400);}
     const payload=req.body.payload;
     assert.ok(['residential','retail','office'].includes(payload.rentalvalues.listingCategory));
@@ -182,6 +195,51 @@ try{
         assert.equal(propertyWrites.at(-1).rentalvalues.listingCategory,category);
 
       }
+    }
+    if(x.email==='owner-a@example.test'){
+      preparationRequired=true;
+      await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});
+      for(const [selector,value]of [['#name','Prepared complete property'],['#address','Retained fixture address'],['#bank_name','Fixture bank'],['#bank_branch','Fixture branch'],['#bank_account_number','000123'],['#rent','80000'],['#deposit','160000']]){await page.type(selector,value);}
+      await page.select('#listingCategory','residential');await page.select('#propertytype','house');
+      await page.reload({waitUntil:'networkidle0'});
+      assert.equal(await page.$eval('#name',e=>e.value),'Prepared complete property','Unsubmitted details survive reload');
+      await page.click('button[type="submit"]');await page.waitForFunction(()=>document.body.innerText.includes('Preparation response was lost'));
+      const submitted=preparationRequests.at(-1);
+      assert.equal(submitted.payload.bank_account_number,'000123');assert.equal(submitted.payload.rentalvalues.rent,80000);
+      assert.equal(submitted.payload.availability,'active');assert.equal(Object.hasOwn(submitted.payload,'status'),false);
+      await page.reload({waitUntil:'networkidle0'});
+      assert.equal(await page.$eval('#name',e=>e.value),'Prepared complete property');
+      assert.equal(await page.$eval('#name',e=>e.matches(':disabled')),true,'Uncertain submitted data cannot be changed under the same identity');
+      for(const width of [1440,390]){
+        await page.setViewport({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        await page.screenshot({path:`enquiry-browser-proof/prepared-property-retry-${width}.png`,fullPage:true});
+      }
+      await page.focus('button[type="submit"]');await page.keyboard.press('Enter');
+      await page.waitForFunction(()=>location.pathname==='/dashboard/subscription');
+      assert.deepEqual(preparationRequests.at(-1),submitted);assert.equal(prepared.size,1);
+      await page.goto(origin+'/dashboard/properties/new?country=BN',{waitUntil:'networkidle0'});
+      assert.equal(await page.$eval('#name',e=>e.value),'','Successful preparation clears the editing draft');
+      propertyWrites.at(-1).propertytype='apartment';
+      const editPath='/dashboard/properties/55555555-5555-4555-8555-555555555555/edit';
+      const openUnit=async()=>{await page.goto(origin+editPath,{waitUntil:'networkidle0'});await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Add Unit'));await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Add Unit').click());await page.waitForSelector('#unitnumber');};
+      await openUnit();
+      const unitForm=await page.$('#unitnumber');
+      await unitForm.type('Prepared Unit One');
+      for(const [name,value]of [['bank_name','Unit bank'],['bank_branch','Unit branch'],['bank_account_number','000456'],['rentalvalues_rent','30000'],['floor','Ground']]){
+        await page.type(`form:has(#unitnumber) [name="${name}"]`,value);
+      }
+      await page.select('form:has(#unitnumber) select[name="status"]','reserved');
+      await page.click('form:has(#unitnumber) button[type="submit"]');
+      await page.waitForFunction(()=>document.body.innerText.includes('Preparation response was lost'));
+      const unitRequest=preparationRequests.at(-1);assert.equal(unitRequest.kind,'unit');assert.equal(unitRequest.payload.bank_account_number,'000456');
+      assert.equal(unitRequest.payload.availability,'reserved');assert.equal(unitRequest.payload.propertyid,'55555555-5555-4555-8555-555555555555');
+      await openUnit();assert.equal(await page.$eval('#unitnumber',e=>e.value),'Prepared Unit One');
+      for(const width of [1440,390]){await page.setViewport({width,height:900});await page.screenshot({path:`enquiry-browser-proof/prepared-unit-retry-${width}.png`,fullPage:true});}
+      await page.focus('form:has(#unitnumber) button[type="submit"]');await page.keyboard.press('Enter');
+      await page.waitForFunction(()=>location.pathname==='/dashboard/subscription');
+      assert.deepEqual(preparationRequests.at(-1),unitRequest);assert.equal(prepared.size,2);
+      preparationRequired=false;
+      console.log('PASS: actual property/unit forms retain metadata and tab drafts, resume exact ambiguous requests after reload, preserve parent identity and continue to subscription review; captured server transport');
     }
     if(x.member==='admin'){
       await page.goto(origin+'/owner-start?country=BN',{waitUntil:'networkidle0'});

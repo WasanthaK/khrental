@@ -310,9 +310,29 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
     await q(`INSERT INTO dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')`,{tenantId,slug:`staged-${tenantId}`});
     await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role) VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
   });
-  const property={kind:'property',payload:{id:parent,name:'Prepared building',propertytype:'apartment',country_code:'LK',rentalvalues:{listingCategory:'residential'}}};
-  const unit=id=>({kind:'unit',payload:{id,propertyid:parent,unitnumber:id.slice(0,8)}});
+  const metadata={address:'Fixture address',description:'Retained prepared description',unitconfiguration:'Two units',
+    bank_name:'Fixture Bank',bank_branch:'Fixture Branch',bank_account_number:'000123',
+    checklistitems:['Keys'],terms:{notice:'One month'},images:[{image_url:`/storage/images/tenants/${tenantId}/properties/front.gif`,image_type:'exterior',order:0}],
+    availablefrom:'2026-12-01T00:00:00.000Z',squarefeet:950.5,yearbuilt:2020,amenities:['Parking'],
+    electricity_rate:32.5,water_rate:15,latitude:6.9271,longitude:79.8612};
+  const columnTypes={address:'NVARCHAR(MAX)',description:'NVARCHAR(MAX)',unitconfiguration:'NVARCHAR(255)',
+    bank_name:'NVARCHAR(255)',bank_branch:'NVARCHAR(255)',bank_account_number:'NVARCHAR(255)',
+    checklistitems:'NVARCHAR(MAX)',terms:'NVARCHAR(MAX)',images:'NVARCHAR(MAX)',availablefrom:'DATETIMEOFFSET',
+    squarefeet:'DECIMAL(18,2)',yearbuilt:'INT',amenities:'NVARCHAR(MAX)',electricity_rate:'DECIMAL(18,4)',water_rate:'DECIMAL(18,4)',
+    latitude:'DECIMAL(10,7)',longitude:'DECIMAL(10,7)'};
+  for(const [column,type] of Object.entries(columnTypes)){
+    await pool.request().batch(`IF COL_LENGTH('dbo.properties','${column}') IS NULL ALTER TABLE dbo.properties ADD [${column}] ${type} NULL;`);
+  }
+  const property={kind:'property',payload:{id:parent,name:'Prepared building',propertytype:'apartment',country_code:'LK',rentalvalues:{listingCategory:'residential',rent:80000,deposit:160000},availability:'maintenance',...metadata}};
+  const unitMetadata={bank_name:'Unit bank',bank_branch:'Unit branch',bank_account_number:'000456',terms:{notice:'One month'},rentalvalues:{rent:30000,deposit:60000},floor:'Ground',bedrooms:2,bathrooms:1,squarefeet:500.5,description:'Prepared unit'};
+  for(const [column,type] of Object.entries({...columnTypes,rentalvalues:'NVARCHAR(MAX)',floor:'NVARCHAR(100)',bedrooms:'INT',bathrooms:'INT'}).filter(([column])=>Object.hasOwn(unitMetadata,column))){
+    await pool.request().batch(`IF COL_LENGTH('dbo.property_units','${column}') IS NULL ALTER TABLE dbo.property_units ADD [${column}] ${type} NULL;`);
+  }
+  const unit=id=>({kind:'unit',payload:{id,propertyid:parent,unitnumber:id.slice(0,8),availability:'reserved',...unitMetadata}});
   const stage={tenantId,actorId,records:[unit(unit1),property,unit(unit2)],reason:'Disposable staged stock acceptance only.'};
+  for(const image_url of [`/storage/images/tenants/${actorId}/properties/foreign.png`,'https://untrusted.invalid/photo.png']){
+    await assert.rejects(store.stageStock({...stage,records:[{...property,payload:{...property.payload,images:[{image_url}]}}]}),{code:'BILLING_STOCK_IMAGE'});
+  }
   const receipts=await Promise.all([store.stageStock(stage),store.stageStock(stage)]);
   assert.deepEqual(receipts[0],receipts[1]);
   assert.equal(await store.account(tenantId),null,'Preparing stock needs no billing account or paid entitlement');
@@ -349,6 +369,16 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
   await assert.rejects(store.withdrawStock({...withdrawal,ids:[parent]}),{code:'BILLING_CESSATION_REQUIRED'});
   assert.equal((await store.inventory(tenantId)).length,2,'Verified initial payment promotes exactly the reviewed checkout version');
   assert.equal((await store.pendingStock(tenantId)).length,1,'Later prepared stock stays pending');
+  const promoted=(await store.read('SELECT * FROM dbo.properties WHERE id=@parent AND tenant_id=@tenantId',{parent,tenantId}))[0];
+  assert.equal(promoted.status,'maintenance','Preparation preserves availability without asserting occupancy');
+  for(const [key,value] of Object.entries(metadata)){
+    const actual=promoted[key] instanceof Date?promoted[key].toISOString():typeof value==='object'?JSON.parse(promoted[key]):promoted[key];
+    assert.deepEqual(actual,value,`Promoted metadata: ${key}`);
+  }
+  assert.deepEqual(JSON.parse(promoted.rentalvalues),property.payload.rentalvalues);
+  const promotedUnit=(await store.read('SELECT * FROM dbo.property_units WHERE id=@id AND tenant_id=@tenantId',{id:unit1,tenantId}))[0];
+  assert.equal(promotedUnit.status,'reserved');
+  for(const [key,value] of Object.entries(unitMetadata)){assert.deepEqual(typeof value==='object'?JSON.parse(promotedUnit[key]):promotedUnit[key],value,`Promoted unit metadata: ${key}`);}
   const preview=await service.quantityPreview({tenantId,id:crypto.randomUUID(),actorId});assert.equal(preview.to,3);
   const request={tenantId,id:crypto.randomUUID(),actorId,previewId:preview.previewId};
   const normal=stripe.request;let lost=true;

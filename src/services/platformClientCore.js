@@ -243,6 +243,7 @@ class QueryBuilder {
     const payload = await apiRequest('/api/platform/query', {
       method: 'POST',
       signal:this.signal,
+      headers:this.requestHeaders,
       body: {
         action: this.action,
         table: this.table,
@@ -615,10 +616,12 @@ const formatTableData=(table,data)=>{
   return cleanDataForDatabase(formatted);
 };
 
-export const insertData = async (table, data) => {
+export const insertData = async (table, data, {headers}={}) => {
   const dbData = formatTableData(table,data);
   const now = new Date().toISOString();
-  return platformClient.from(table).insert({ ...dbData, createdat: dbData.createdat || now, updatedat: dbData.updatedat || now }).select('*');
+  const query=platformClient.from(table).insert({ ...dbData, createdat: dbData.createdat || now, updatedat: dbData.updatedat || now }).select('*');
+  query.requestHeaders=headers;
+  return query;
 };
 
 export const updateData = async (table, id, data) => {

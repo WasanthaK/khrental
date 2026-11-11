@@ -3,6 +3,10 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'src/pages/PropertyForm.jsx'
+      - 'src/components/properties/PropertyUnitForm.jsx'
+      - 'src/hooks/useStockDraft.js'
+      - 'src/services/platformClient*.js'
       - 'src/components/common/TenantSwitcher.jsx'
       - 'scripts/test-tenant-switch-browser.mjs'
       - 'src/api/enquiries/**'

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { insertData, updateData } from '../../services/platformClient';
+import {useNavigate} from 'react-router-dom';
+import {useStockDraft} from '../../hooks/useStockDraft.js';
+import { updateData } from '../../services/platformClient';
 import FormInput from '../ui/FormInput';
 import FormTextarea from '../ui/FormTextarea';
 import UnitInvoiceBilling from './UnitInvoiceBilling';
@@ -14,7 +16,8 @@ const PropertyUnitForm = ({
   onCancel 
 }) => {
   const isEditMode = !!unit;
-  const { user, membership } = useAuth();
+  const { user, membership, activeTenantId } = useAuth();
+  const navigate=useNavigate();
   const canEditInvoiceMaster = isInvoiceMasterUiEnabled && hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
   
   // Initial form data
@@ -33,7 +36,8 @@ const PropertyUnitForm = ({
   };
   
   // Form state
-  const [formData, setFormData] = useState(initialFormData);
+  const stockDraft=useStockDraft({kind:'unit',parentId:propertyId,userId:user?.id,tenantId:activeTenantId,enabled:!isEditMode,initialData:initialFormData});
+  const {data:formData,setData:setFormData}=stockDraft;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   
@@ -97,7 +101,9 @@ const PropertyUnitForm = ({
       if (isEditMode) {
         result = await updateData('property_units', unit.id, processedData);
       } else {
-        result = await insertData('property_units', processedData);
+        result = await stockDraft.create(processedData);
+        if(result.stale){return;}
+        if(result.prepared){navigate('/dashboard/subscription');return;}
       }
       
       if (result.error) {
@@ -130,7 +136,9 @@ const PropertyUnitForm = ({
         </div>
       )}
       
+      {stockDraft.pending && <p role="status" className="mb-4 rounded-lg bg-blue-50 p-4 text-blue-900">Your submitted unit details are retained. Retry the save to confirm preparation before making changes.</p>}
       <form onSubmit={handleSubmit}>
+        <fieldset disabled={submitting || stockDraft.pending}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormInput
             label="Unit Number"
@@ -266,6 +274,7 @@ const PropertyUnitForm = ({
           rows={3}
         />
         
+        </fieldset>
         <div className="mt-6 flex justify-end space-x-3">
           <button
             type="button"
@@ -280,7 +289,7 @@ const PropertyUnitForm = ({
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             disabled={submitting}
           >
-            {submitting ? 'Saving...' : isEditMode ? 'Update Unit' : 'Add Unit'}
+            {submitting ? 'Saving...' : stockDraft.pending ? 'Retry save' : isEditMode ? 'Update Unit' : 'Add Unit'}
           </button>
         </div>
       </form>
@@ -289,4 +298,8 @@ const PropertyUnitForm = ({
   );
 };
 
-export default PropertyUnitForm; 
+const ScopedPropertyUnitForm=props=>{
+  const {user,activeTenantId}=useAuth();
+  return <PropertyUnitForm key={`${user?.id}:${activeTenantId}:${props.propertyId}:${props.unit?.id||'new'}`} {...props} />;
+};
+export default ScopedPropertyUnitForm;

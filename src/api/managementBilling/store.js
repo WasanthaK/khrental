@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {resolveRegisteredPhoto,trustedPhotoOrigins} from '../publicListings/sourceImages.js';
 import {getMssqlPool, sql} from '../mssql/pool.js';
 import {runQuery} from '../mssql/query.js';
 import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
@@ -50,6 +51,14 @@ export const runSingleManagementQuery = async (statement, params) =>
   (await runManagementQuery(statement, params))[0] || null;
 
 export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}) => {
+  const validateImages=(records,tenantId)=>{
+    for(const {payload} of records){
+      for(let index=0;index<(payload.images?.length||0);index++){
+        try{resolveRegisteredPhoto(payload.images,index,tenantId,{allowedOrigins:trustedPhotoOrigins(env),allowPrivateGif:true});}
+        catch{throw problem(400,'BILLING_STOCK_IMAGE','Property images must belong to this workspace’s private property storage.');}
+      }
+    }
+  };
   const stagingEnabled=()=>env.MANAGEMENT_INVENTORY_SCHEMA_READY==='true';
   // Once controls are recorded, keep readiness on across application rollback.
   const cessationEnabled=()=>env.MANAGEMENT_CESSATION_SCHEMA_READY==='true';
@@ -127,6 +136,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
   const stageStock=({tenantId,actorId,records,reason})=>{
     if(!stagingEnabled()){throw problem(503,'BILLING_STOCK_UNAVAILABLE','Preparing additions is not available yet.');}
     const normalized=stagedStock(records);
+    validateImages(normalized,tenantId);
     const note=decisionReason(reason);
     return locked(tenantId,async q=>{
       await assertActor(q,tenantId,actorId);
@@ -208,13 +218,14 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     selected.sort((a,b)=>a.kind===b.kind?String(a.id).localeCompare(String(b.id)):a.kind==='property'?-1:1);
     for(const row of selected){
       const payload=JSON.parse(row.payload_json);
-      const columns=Object.keys(payload);
-      const params={tenantId,id:row.id,commandId};
+      // Availability is preparation metadata, never a caller-selected SQL column.
+      const columns=Object.keys(payload).filter(key=>key!=='availability');
+      const params={tenantId,id:row.id,commandId,availability:payload.availability||'available'};
       columns.forEach((key,i)=>{params[`v${i}`]=payload[key]!==null&&typeof payload[key]==='object'?JSON.stringify(payload[key]):payload[key];});
       // Fields are revalidated even for persisted payloads before constructing SQL.
-      stagedStock([{kind:row.kind,payload}]);
+      validateImages(stagedStock([{kind:row.kind,payload}]),tenantId);
       await q(`INSERT INTO dbo.${row.kind==='property'?'properties':'property_units'}
-        (tenant_id,status,${columns.map(c=>`[${c}]`).join(',')}) VALUES(@tenantId,'available',${columns.map((_c,i)=>`@v${i}`).join(',')});
+        (tenant_id,status,${columns.map(c=>`[${c}]`).join(',')}) VALUES(@tenantId,@availability,${columns.map((_c,i)=>`@v${i}`).join(',')});
         UPDATE dbo.management_inventory_staging SET status='promoted',promoted_at=SYSUTCDATETIME(),promotion_command_id=@commandId
         WHERE id=@id AND tenant_id=@tenantId AND status='pending';`,params);
     }

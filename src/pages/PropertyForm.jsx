@@ -1,9 +1,10 @@
+import {useStockDraft} from '../hooks/useStockDraft.js';
 import { LISTING_CATEGORIES, normalizeListingCategory } from '../utils/listingCategories.js';
 import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
+import { fetchData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
 import { saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import '../utils/helpers';
 import { PROPERTY_TYPES, PROPERTY_COUNTRIES, normalizePropertyCountry } from '../utils/constants';
@@ -72,8 +73,9 @@ const PropertyForm = () => {
   // Initial form data
 
   // Form state
-  const [formData, setFormData] = useState(() => createInitialPropertyData(isEditMode?null:requestedCountry));
-  const [propertyCoordinates, setPropertyCoordinates] = useState(null);
+  const stockDraft=useStockDraft({kind:'property',userId:user?.id,tenantId:activeTenantId,enabled:!isEditMode,
+    initialData:createInitialPropertyData(isEditMode?null:requestedCountry)});
+  const {data:formData,setData:setFormData,coordinates:propertyCoordinates,setCoordinates:setPropertyCoordinates}=stockDraft;
   const [fixedUtilities, setFixedUtilities] = useState([]);
 
   // UI state
@@ -89,8 +91,7 @@ const PropertyForm = () => {
   useEffect(() => {
     const controller=new AbortController();
     if (!isEditMode) {
-      setFormData(createInitialPropertyData(requestedCountry));
-      setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);setPropertyCoordinates(null);
+      setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);
       setLoading(false);setError(null);
       return () => controller.abort();
     }
@@ -208,7 +209,7 @@ const PropertyForm = () => {
 
     fetchPropertyData();
     return () => controller.abort();
-  }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status]);
+  }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status, setFormData, setPropertyCoordinates]);
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -776,7 +777,13 @@ const PropertyForm = () => {
         result = await updateData('properties', id, propertyData);
       } else {
         // Create new property
-        result = await insertData('properties', propertyData);
+        result = await stockDraft.create(propertyData);
+        if(result.stale){return;}
+        if(result.prepared){
+          toast.success('Property details saved. Review your subscription to start management.');
+          navigate('/dashboard/subscription');
+          return;
+        }
       }
 
       if (result.error) {
@@ -839,7 +846,9 @@ const PropertyForm = () => {
         </div>
       )}
 
+      {stockDraft.pending && <p role="status" className="mb-4 rounded-lg bg-blue-50 p-4 text-blue-900">Your submitted details are retained. Retry the save to confirm preparation before making changes.</p>}
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
+        <fieldset disabled={submitting || stockDraft.pending}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div>
@@ -1233,6 +1242,7 @@ const PropertyForm = () => {
         </div>
 
         {/* Form Actions */}
+        </fieldset>
         <div className="mt-8 flex justify-end space-x-3">
           <button
             type="button"
@@ -1247,7 +1257,7 @@ const PropertyForm = () => {
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             disabled={submitting}
           >
-            {submitting ? 'Saving...' : isEditMode ? 'Update Property' : 'Add Property'}
+            {submitting ? 'Saving...' : stockDraft.pending ? 'Retry save' : isEditMode ? 'Update Property' : 'Add Property'}
           </button>
         </div>
       </form>
@@ -1261,4 +1271,8 @@ const PropertyForm = () => {
   );
 };
 
-export default PropertyForm;
+const ScopedPropertyForm=()=>{
+  const {user,activeTenantId}=useAuth();const {id}=useParams();
+  return <PropertyForm key={`${user?.id}:${activeTenantId}:${id||'new'}`} />;
+};
+export default ScopedPropertyForm;
