@@ -1,6 +1,8 @@
+import { normalizeAgreementPayload } from '../mssql/agreementWritePolicy.js';
+
 const containsClosedAgreementStatus = (payload) => {
   const rows = Array.isArray(payload) ? payload : [payload];
-  return rows.some((row) => String(row?.status || '').trim().toLowerCase() === 'closed');
+  return rows.some((row) => String(normalizeAgreementPayload(row || {}).status || '').trim().toLowerCase() === 'closed');
 };
 
 /**
