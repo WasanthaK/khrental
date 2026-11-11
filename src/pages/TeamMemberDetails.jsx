@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchData } from '../services/platformClient';
 import { deleteTeamMember } from '../services/teamService';
 import { fetchAppUser, mapAppUserToTeamMember } from '../services/appUserService';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import TaskAssignment from '../components/team/TaskAssignment';
 import PerformanceMetrics from '../components/team/PerformanceMetrics';
 import PropertyAccessPanel from '../components/team/PropertyAccessPanel';

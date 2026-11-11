@@ -9,7 +9,7 @@ KH Rentals can run within the free allowances of Azure Container Apps, Azure SQL
 - One Azure Container App running the repository Docker image on port `5174`
 - One Azure SQL Database for application data, auth users, and bearer sessions
 - One private Cloudflare R2 bucket; the app maps logical buckets such as `images` and `documents` to prefixes
-- GitHub Actions builds, verifies, publishes to GHCR, and updates the Container App
+- GitHub Actions verifies PRs/pushes; explicit main-branch dispatch publishes to GHCR and updates the Container App
 
 The container is stateless when `STORAGE_DRIVER=r2`. Run a single replica until that setting and the MSSQL auth migration are verified.
 
@@ -137,7 +137,7 @@ The workflow publishes `ghcr.io/wasanthak/khrental`. Make that GHCR package publ
 
 ## 6. Domain and verification
 
-After the first healthy deployment, add `khrentals.kubeira.com` as the Container App custom domain, create the requested DNS records, and bind the managed certificate.
+The existing application origin is `https://app.quixo.homes`. Preserve its working managed domain/certificate and the separate `quixo.homes` marketing site. Do not recreate historical domain bindings or run the DNS workflows merely because this guide changed; use the infrastructure handover and explicit manual operator workflows for a verified change.
 
 Verify:
 
@@ -148,3 +148,9 @@ Verify:
 5. Upload, list, open, and delete work for one file in R2.
 6. A second tenant cannot address the first tenant's storage prefix.
 7. Container restart does not lose the session or uploaded object.
+
+## Security and release update — 11 November 2026
+
+Follow [CI and production release](cicd-setup.md) for the current manual release, job-scoped OIDC, immutable actions and environment controls. The application and marketing workflows no longer deploy from a push. Required Production reviewers and deployment branch protection require owner-side configuration/readback and remain unverified here.
+
+Production credential endpoints require the existing shared SQL rate-limit ledger and a server-only HMAC key of at least 32 bytes. Set `AUTH_THROTTLE_SECRET`, or retain the already-provisioned `PUBLIC_SIGNUP_THROTTLE_SECRET` fallback. Unavailable protection returns 503 instead of using replica-local counters. Do not apply migrations or change ingress trust merely to make a release check pass.

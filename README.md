@@ -90,7 +90,7 @@ For email delivery, keep `TWILIO_SENDGRID_API_KEY` or `SENDGRID_API_KEY` on the 
 
 ## Security regression checks
 
-Run `npm run test:security` for the priority security fixes and `npm run test:authorization` for the retained full gate. See the [security review disposition](docs/SECURITY-REVIEW-20261111.md) for exact proof and open secondary items. Browser/SQL CI remains required; local Chrome absence is not a pass. Never place an Evia token or secret in `VITE_` settings; the build rejects those settings. Optional platform bootstrap is server-configured, OFF by default and requires independent verified email evidence.
+Run `npm run test:security` for the priority security fixes and `npm test` (or `npm run test:authorization`) for the automatically discovered full gate. See the [security review disposition](docs/SECURITY-REVIEW-20261111.md) for exact proof, secondary fixes and remaining dependencies. Browser/SQL CI remains required; local Chrome absence is not a pass. Never place an Evia token or secret in `VITE_` settings; the build rejects those settings. Optional platform bootstrap is server-configured, OFF by default and requires independent verified email evidence.
 
 ## Development
 
@@ -165,3 +165,5 @@ MIT
 ## Free-cloud production deployment
 
 For the stateless Azure Container Apps + Azure SQL + Cloudflare R2 architecture, including GitHub OIDC deployment and migration steps, see [Free-cloud deployment](docs/free-cloud-deployment.md).
+
+Production deployment now requires an explicit main-branch workflow dispatch after verification; pushes run checks only. Follow [CI and production release](docs/cicd-setup.md). Production credential throttling uses the existing shared SQL ledger and a server-only 32-byte-or-longer `AUTH_THROTTLE_SECRET` (or existing `PUBLIC_SIGNUP_THROTTLE_SECRET`), failing closed if unavailable. `npm run lint` now executes correctly with one flat config; existing reported source debt remains a separate failing check.

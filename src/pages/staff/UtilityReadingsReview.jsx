@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { transitionUtilityReading } from '../../services/utilityReviewClient';
@@ -79,7 +79,7 @@ const UtilityReadingsReview = () => {
 
   const handleReject = async (reading) => {
     const reason = window.prompt('Reason for rejecting this utility reading:');
-    if (reason === null) return;
+    if (reason === null) {return;}
     if (!reason.trim()) {
       toast.error('Rejection reason is required');
       setNotice({ kind: 'error', text: 'Rejection reason is required.' });

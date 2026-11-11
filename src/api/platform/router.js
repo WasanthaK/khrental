@@ -1,5 +1,6 @@
 import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRouter.js';
 import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
+import {createCredentialThrottle} from '../auth/credentialThrottle.js';
 import { withManagementWrite } from '../managementBilling/store.js';
 import { assertInventoryMutation } from '../managementBilling/contract.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
@@ -1007,6 +1008,7 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
 
 export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,checkPlatformAdmin=defaultPlatformAdmin}={}) => {
   const router = express.Router();
+  const credentialThrottle=createCredentialThrottle();
   const requireAuthenticated = createTenantContextMiddleware({ requireUser: true });
   // Global seeker identities may authenticate without belonging to any business.
   // Generic business queries, RPCs and tenant storage must never inherit access
@@ -1022,7 +1024,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   const requireBucketAdmin = async(req,res,next) => {
     try {
-      if (!(await checkPlatformAdmin(req.user))) return res.status(403).json({error:'Platform administrator access is required for bucket administration.',code:'PLATFORM_ADMIN_REQUIRED'});
+      if (!(await checkPlatformAdmin(req.user))) {return res.status(403).json({error:'Platform administrator access is required for bucket administration.',code:'PLATFORM_ADMIN_REQUIRED'});}
       next();
     } catch(error) {next(error);}
   };
@@ -1210,7 +1212,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
     }
   });
 
-  router.post('/auth/sign-up', async (req, res, next) => {
+  router.post('/auth/sign-up', credentialThrottle('signup'), async (req, res, next) => {
     try {
       const { email, password, metadata = {} } = req.body || {};
       const safeMetadata = {
@@ -1232,7 +1234,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
     }
   });
 
-  router.post('/auth/sign-in', async (req, res, next) => {
+  router.post('/auth/sign-in', credentialThrottle('signin'), async (req, res, next) => {
     try {
       const { email, password } = req.body || {};
       let record = await findAuthRecordByEmail(email);

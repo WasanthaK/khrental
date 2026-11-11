@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchData, deleteData, updateData, platform as platformClient } from '../../services/platformClient';
 import { formatDate } from '../../utils/helpers';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Spinner from '../../components/common/Spinner';
 import InvitationStatus from '../../components/InvitationStatus';

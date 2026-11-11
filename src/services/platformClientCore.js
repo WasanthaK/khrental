@@ -82,7 +82,7 @@ const persistSession = (session, event = 'SIGNED_IN') => {
 // Another tab's sign-out/account switch must invalidate in-memory identity too.
 if (isBrowser && window.addEventListener) {
   window.addEventListener('storage', (event) => {
-    if (event.key !== 'khrental.local.session' && event.key !== null) return;
+    if (event.key !== 'khrental.local.session' && event.key !== null) {return;}
     currentSession = loadStoredSession();
     notifyAuthListeners(currentSession ? 'SIGNED_IN' : 'SIGNED_OUT', currentSession);
   });
@@ -163,6 +163,7 @@ class QueryBuilder {
     this.allowEmpty = false;
     this.countOption = null;
     this.head = false;
+    this.signal = undefined;
   }
 
   select(columns = '*', options = {}) {
@@ -241,6 +242,7 @@ class QueryBuilder {
   async execute() {
     const payload = await apiRequest('/api/platform/query', {
       method: 'POST',
+      signal:this.signal,
       body: {
         action: this.action,
         table: this.table,
@@ -518,6 +520,7 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
     }
 
     let queryBuilder = platformClient.from(table);
+    queryBuilder.signal = query.signal;
 
     if (query.select) {
       queryBuilder = queryBuilder.select(query.select, { count: query.count ? 'exact' : undefined, head: query.head });
@@ -568,7 +571,7 @@ export const fetchData = async (tableOrOptions, columns = null, filters = null) 
 };
 
 export const toDatabaseFormat = (data) => {
-  if (!data) return data;
+  if (!data) {return data;}
   const formatted = {};
 
   Object.entries(data).forEach(([key, value]) => {

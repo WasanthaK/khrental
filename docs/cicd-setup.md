@@ -1,105 +1,31 @@
-# CI/CD Setup Guide
+# CI and production release
 
-This guide explains how to set up continuous integration and deployment for the KH Rentals application.
+The maintained application workflow is `.github/workflows/deploy-container-apps.yml`. Do not create a parallel deployment workflow or use the old App Service publish-profile example.
 
-## Prerequisites
+## Verification
 
-- GitHub repository for your code
-- Web hosting environment (Azure App Service, Netlify, Vercel, etc.)
-- SQL Server / MSSQL connectivity details for the target environment
+Pull requests run `npm ci`, syntax checks, `npm test` (also exposed as `npm run test:authorization`) and the production build. The test runner recursively discovers `tests/**/*.test.{js,mjs,cjs}`; it does not execute operator scripts under `scripts/`. Relevant changes also require the disposable SQL Server, browser and Evia contract workflows. Browser cases require the Chrome supplied by Puppeteer in CI.
 
-## Setting Up Main Application Deployment
+`npm run lint` uses `eslint.config.js` and explicit development dependencies. It currently reports existing source debt; a successful build or test run does not establish a lint pass. Do not remove rules or exclusions to manufacture a green result. See the [security disposition](SECURITY-REVIEW-20261111.md) for the current result.
 
-### 1. Configure Environment Variables
+## Production release
 
-In your hosting platform:
+A push verifies source; it does not deploy it. After the reviewed commit and required checks are on `main`, explicitly run **Build and deploy KH Rentals container** using **Run workflow → main**. The production job requires `workflow_dispatch`, `refs/heads/main` and the `Production` environment. The marketing deployment, webhook configuration, membership backfill and historical R3 operator jobs are also manual and main-only. Production operations are serialized without cancellation; superseded PR verification can still cancel.
 
-1. Add all required environment variables:
-  - `VITE_API_ENDPOINT`
-   - `VITE_SENDGRID_API_KEY` (if using SendGrid)
-   - `VITE_EMAIL_FROM`
-   - `VITE_EMAIL_FROM_NAME`
-   - `VITE_APP_BASE_URL`
-   - Any other custom env variables your application uses
+Every external action is pinned to an upstream commit SHA. Azure OIDC is granted only to the jobs using Azure login; verification has no identity-token or package-write grant. The deployment job alone can publish the GHCR image. Retain the version comment when reviewing future SHA updates.
 
-2. If using Azure:
-   - Go to App Service → Configuration → Application Settings
-   - Add each variable and click "Save" (which will restart the app)
+Configure required reviewers and a `main`-only deployment branch rule in the repository's **Production environment**. Source guards are implemented; the connected API cannot inspect or configure these environment settings, so their existence is unverified. Do not claim an environment approval was obtained from a passing source test.
 
-### 2. Set Up GitHub Actions Workflow
+Release acceptance must record the immutable serving build SHA, Ready revision, bounded independent `/build-info.json` and trimmed `/api/mssql/health` results. A merged PR is not runtime evidence. Do not repeatedly sign accepted agreements or activate management enforcement/live charging as part of security acceptance.
 
-1. Create a `.github/workflows/deploy.yml` file:
+## Server configuration
 
-```yaml
-name: Deploy Application
+Use the existing Production OIDC federation and environment secrets described in [free-cloud deployment](free-cloud-deployment.md). SendGrid, Evia bearer tokens/client secrets, R2 credentials and HMAC keys stay server-side. Never add them to a `VITE_` variable or build argument.
 
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+Production sign-in/sign-up throttling requires the existing shared `dbo.public_signup_rate_limits` table and a server-only `AUTH_THROTTLE_SECRET` of at least 32 bytes; the already-configured `PUBLIC_SIGNUP_THROTTLE_SECRET` is an accepted fallback. An unavailable table, key or quota store denies credential attempts with 503. No process-local production fallback is allowed. The Azure trusted-ingress contract must be proved before configuring `PUBLIC_SIGNUP_INGRESS_MODE=azure-container-apps-http`; otherwise the socket address is authoritative. Do not trust arbitrary forwarding headers.
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Build
-      run: npm run build
-      env:
-        VITE_API_ENDPOINT: ${{ secrets.VITE_API_ENDPOINT }}
-        # Add other build-time env variables here
-        
-    - name: Deploy to hosting
-      uses: azure/webapps-deploy@v2  # Example for Azure
-      with:
-        app-name: 'your-app-name'
-        publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
-        package: './dist'  # Your build output folder
-```
+No schema apply is part of a normal application release. Existing migration plan/apply authority, explicit confirmation and checksum checks remain separate.
 
-### 3. Add GitHub Secrets
+Historical domain/DNS, production audit/diagnostic and production migration plan/apply workflows are also manual-only. This prevents edits to pinned actions from replaying old operator tasks or waiting for an undeployed source SHA. Production migration apply retains its separate explicit confirmation and privileged executor checks; disposable migration CI remains automatic.
 
-1. Go to your GitHub repository
-2. Navigate to Settings → Secrets → Actions
-3. Add the following secrets:
-  - `VITE_API_ENDPOINT`: Your deployed API base URL
-   - `AZURE_PUBLISH_PROFILE`: Your Azure publish profile (if using Azure)
-   - Any other secrets needed for deployment
-
-## Troubleshooting
-
-If you encounter deployment issues:
-
-1. Check GitHub Actions workflow logs for errors
-2. Verify all environment variables are set correctly
-3. Make sure builds complete successfully before deployment
-4. Check the application logs on your hosting platform
-
-## Manual Deployment
-
-For manual deployment:
-
-1. Build your application locally:
-   ```
-   npm run build
-   ```
-
-2. Upload the contents of the `dist` folder to your web server
-3. Configure the server to serve your application correctly
-
-## Additional Resources
-
-- [GitHub Actions documentation](https://docs.github.com/actions)
-- [Vite deployment guide](https://vitejs.dev/guide/static-deploy.html)
-- [Azure App Service documentation](https://learn.microsoft.com/azure/app-service/) 
+Reusable migration-preflight caller jobs also declare their own job-level `id-token: write`. GitHub cannot elevate permissions inside a called workflow; retaining that exact caller grant avoids breaking manual release preflights. See [GitHub reusable-workflow permissions](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).

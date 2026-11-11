@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { getEviaAgreementCallbackUrl, getSignatureStatus, sendDocumentForSignature } from '../../services/eviaSignService';
 import { STATUS } from '../../contexts/AgreementFormContext';
@@ -143,9 +143,9 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
         if (updatedAgreement.signature_status === 'completed') {
           toast.success('Agreement has been fully signed!');
         } else if (updatedAgreement.signature_status === 'in_progress') {
-          toast.info('A signatory has completed their signature');
+          toast('A signatory has completed their signature');
         } else if (updatedAgreement.signature_status === 'pending') {
-          toast.info('Signature request has been received');
+          toast('Signature request has been received');
         }
       }
       

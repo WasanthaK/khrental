@@ -14,12 +14,14 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 concurrency:
   group: khrental-production
   cancel-in-progress: false
 jobs:
   release:
+    permissions:
+      contents: read
+      id-token: write
     if: github.ref == 'refs/heads/main'
     environment: Production
     runs-on: ubuntu-latest
@@ -40,12 +42,12 @@ jobs:
           test "$(jq -r .buildSha <<<"$build")" = "$EXPECTED_BUILD"
           health=$(curl -fsS --retry 5 --retry-delay 3 --max-time 20 https://app.quixo.homes/api/mssql/health)
           test "$(jq -r .ok <<<"$health")" = true
-      - uses: azure/login@v2
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - name: Enable eligible inventory and authenticated property controls

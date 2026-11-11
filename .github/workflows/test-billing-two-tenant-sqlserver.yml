@@ -7,6 +7,8 @@ on:
       - 'scripts/test-billing-two-tenant-sqlserver.mjs'
       - 'scripts/test-security-review-sql.mjs'
       - 'src/api/email/manualEmailPolicy.js'
+      - 'src/api/auth/credentialThrottle.js'
+      - 'src/api/auth/publicSignupSqlLimiter.js'
       - 'src/api/mssql/platformAdminRouter.js'
       - 'src/api/storage/mutationPolicy.js'
       - 'scripts/test-r5-onboarding-sqlserver.mjs'
@@ -91,8 +93,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -102,7 +104,7 @@ jobs:
         run: npm run test:billing:sqlserver
       - name: Move-in, deposit, activation and exit acceptance
         run: node scripts/test-r5-onboarding-sqlserver.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: maintenance-manager-browser-proof

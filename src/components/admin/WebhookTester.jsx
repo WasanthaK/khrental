@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 
 const WebhookTester = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -24,7 +24,7 @@ const WebhookTester = () => {
         return;
       }
 
-      toast.info('Starting webhook monitoring...');
+      toast('Starting webhook monitoring...');
       setIsPulling(true);
       
       // Clear existing interval if any
@@ -64,7 +64,7 @@ const WebhookTester = () => {
       clearInterval(intervalId);
       setIntervalId(null);
       setIsPulling(false);
-      toast.info('Webhook monitoring stopped');
+      toast('Webhook monitoring stopped');
     }
   };
 

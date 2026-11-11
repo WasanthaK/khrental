@@ -5,9 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
-    # PR-head verification still runs for every PR. Avoid an Azure rollout
-    # after a push containing only docs, tests or CI workflow changes.
-    # Any application/runtime change in the same push still deploys.
+    # Push and PR events verify only. Production deployment requires an
+    # explicit main-branch workflow_dispatch and the Production environment.
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -34,8 +33,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
 
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('khrental-pr-{0}', github.event.pull_request.number) || 'khrental-production' }}
@@ -52,8 +49,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -63,28 +60,32 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
     environment: Production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Resolve image name
         id: image
         shell: bash
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and push container
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           push: true
@@ -97,14 +98,14 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Sign in to Azure with OIDC
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Configure Evia Sign OAuth
-        uses: azure/cli@v2
+        uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
         env:
           EVIA_CLIENT_ID: ${{ secrets.EVIA_SIGN_CLIENT_ID || secrets.VITE_EVIA_SIGN_CLIENT_ID || secrets.CLIENT_ID || secrets.CLIENTID }}
           EVIA_CLIENT_SECRET: ${{ secrets.EVIA_SIGN_CLIENT_SECRET || secrets.VITE_EVIA_SIGN_CLIENT_SECRET || secrets.CLIENT_SECRET || secrets.CLIENTSECRET || secrets.SECRET }}
@@ -148,7 +149,7 @@ jobs:
               --output none
 
       - name: Configure server-side email delivery
-        uses: azure/cli@v2
+        uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
         env:
           SENDGRID_API_KEY: ${{ secrets.TWILIO_SENDGRID_API_KEY || secrets.SENDGRID_API_KEY }}
           EMAIL_FROM: contact@quixo.online
@@ -189,7 +190,7 @@ jobs:
               --output none
 
       - name: Set up Node for R2 validation
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -213,7 +214,7 @@ jobs:
           node scripts/validate-r2-connection.mjs
 
       - name: Configure durable R2 storage
-        uses: azure/cli@v2
+        uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
           R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
@@ -244,7 +245,7 @@ jobs:
               --output none
 
       - name: Deploy immutable image to the serving revision
-        uses: azure/cli@v2
+        uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
         with:
           inlineScript: |
             set -euo pipefail
@@ -270,7 +271,7 @@ jobs:
 
       - name: Verify latest revision readiness and public browser build
         timeout-minutes: 20
-        uses: azure/cli@v2
+        uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
         with:
           inlineScript: |
             set -euo pipefail

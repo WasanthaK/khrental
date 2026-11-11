@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { platform as platformClient } from '../../services/platformClient';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { uploadTenantFile } from '../../services/storageApiService';
 
 const SignatureTestingTools = () => {

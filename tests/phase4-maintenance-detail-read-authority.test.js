@@ -10,12 +10,12 @@ const reader = read('../src/services/maintenanceDetailReadService.js');
 
 test('both routed maintenance detail screens use one authorized lifecycle reader', () => {
   for (const page of [staff, renter]) {
-    assert.match(page, /getAuthorizedMaintenanceDetail\(id\)/);
+    assert.match(page, /getAuthorizedMaintenanceDetail\(id(?:,\{signal:controller\.signal\})?\)/);
     assert.doesNotMatch(page, /from\('maintenance_requests'\)/);
   }
   assert.doesNotMatch(staff, /from\('maintenance_request_images'\)/);
-  assert.match(reader, /getMaintenanceLifecycleRequest\(requestId\)/);
-  assert.match(reader, /if \(error\) throw error/);
+  assert.match(reader, /getMaintenanceLifecycleRequest\(requestId,\{signal\}\)/);
+  assert.match(reader, /if \(error\) \{throw error;\}/);
   assert.doesNotMatch(reader, /platformClient|fetchData|\.from\(/);
 });
 

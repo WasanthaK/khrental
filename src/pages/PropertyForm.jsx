@@ -28,25 +28,10 @@ import { isInvoiceMasterUiEnabled } from '../utils/invoiceMasterRollout.js';
 import { useAuth } from '../hooks/useAuth';
 import { hasPermission, PERMISSIONS } from '../utils/accessPolicy.js';
 
-const PropertyForm = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const isEditMode = !!id;
-  const requestedCountry=new URLSearchParams(useLocation().search).get('country');
-  const { user, membership } = useAuth();
-  const canEditInvoiceMaster = isInvoiceMasterUiEnabled && hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
-  
-  // DND sensors setup - moved outside of render loop
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor)
-  );
-  
-  // Initial form data
-  const initialFormData = {
+const createInitialPropertyData = requestedCountry => ({
     name: '',
     address: '',
-    country_code: !isEditMode&&['LK','BN'].includes(requestedCountry)?requestedCountry:'',
+    country_code: ['LK','BN'].includes(requestedCountry)?requestedCountry:'',
     bank_name: '',
     bank_branch: '',
     bank_account_number: '',
@@ -68,10 +53,26 @@ const PropertyForm = () => {
     amenities: [],
     electricity_rate: '',
     water_rate: '',
-  };
+  });
+
+const PropertyForm = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isEditMode = !!id;
+  const requestedCountry=new URLSearchParams(useLocation().search).get('country');
+  const { user, membership, activeTenantId } = useAuth();
+  const canEditInvoiceMaster = isInvoiceMasterUiEnabled && hasPermission({ user, membership }, PERMISSIONS.TENANT_SETTINGS_MANAGE);
+
+  // DND sensors setup - moved outside of render loop
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  // Initial form data
   
   // Form state
-  const [formData, setFormData] = useState(initialFormData);
+  const [formData, setFormData] = useState(() => createInitialPropertyData(isEditMode?null:requestedCountry));
   const [propertyCoordinates, setPropertyCoordinates] = useState(null);
   const [fixedUtilities, setFixedUtilities] = useState([]);
   
@@ -86,19 +87,31 @@ const PropertyForm = () => {
   
   // Fetch property data if in edit mode
   useEffect(() => {
+    const controller=new AbortController();
+    if (!isEditMode) {
+      setFormData(createInitialPropertyData(requestedCountry));
+      setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);setPropertyCoordinates(null);
+      setLoading(false);setError(null);
+      return () => controller.abort();
+    }
+    setFormData(createInitialPropertyData(null));
+    setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);setPropertyCoordinates(null);setError(null);
     const fetchPropertyData = async () => {
       if (isEditMode) {
         try {
           setLoading(true);
           const { data, error } = await fetchData({
             table: 'properties',
+            signal:controller.signal,
             filters: [{ column: 'id', operator: 'eq', value: id }],
           });
           
+          if (controller.signal.aborted) {return;}
           if (error) {
             throw error;
           }
           
+          if (!Array.isArray(data) || data.length===0) {throw new Error('This property is not available in the selected workspace.');}
           if (data && data.length > 0) {
             const property = fromDatabaseFormat(data[0]);
             
@@ -143,7 +156,8 @@ const PropertyForm = () => {
               water_rate: property.water_rate || '',
             });
 
-            const fixedUtilityResult = await getPropertyFixedUtilities(id);
+            const fixedUtilityResult = await getPropertyFixedUtilities(id,{signal:controller.signal});
+            if (controller.signal.aborted) {return;}
             if (fixedUtilityResult.error) {
               console.warn('Could not load property fixed utilities:', fixedUtilityResult.error.message);
               setFixedUtilities([]);
@@ -180,21 +194,21 @@ const PropertyForm = () => {
             }
             
             // Set existing images if any
-            if (images.length > 0) {
-              setExistingImages(images);
-            }
+            setExistingImages(images);
           }
         } catch (error) {
+          if (controller.signal.aborted) {return;}
           console.error('Error fetching property:', error);
           setError(error.message);
         } finally {
-          setLoading(false);
+          if (!controller.signal.aborted) {setLoading(false);}
         }
       }
     };
     
     fetchPropertyData();
-  }, [id, isEditMode]);
+    return () => controller.abort();
+  }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status]);
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -331,7 +345,7 @@ const PropertyForm = () => {
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
       const type = image.image_type || 'exterior';
-      if (!acc[type]) acc[type] = [];
+      if (!acc[type]) {acc[type] = [];}
       acc[type].push(image);
       return acc;
     }, {});
@@ -1175,7 +1189,7 @@ const PropertyForm = () => {
                       {category.images.map((image, index) => {
                         const imageUrl = typeof image === 'string' ? image : image.image_url;
                         const imageIndex = formData.images.findIndex(img => {
-                          if (typeof img === 'string') return img === imageUrl;
+                          if (typeof img === 'string') {return img === imageUrl;}
                           return img.image_url === imageUrl;
                         });
                         

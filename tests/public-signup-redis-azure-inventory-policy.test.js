@@ -10,7 +10,7 @@ test('Azure Redis inventory uses only existing production OIDC and read-only com
   assert.match(source, /name: Audit B04 Azure Redis availability \(read-only\)/);
   assert.match(source, /workflow_dispatch:/);
   assert.match(source, /environment: Production/);
-  assert.match(source, /uses: azure\/login@v2/);
+  assert.match(source, /uses: azure\/login@[a-f0-9]{40} # v2/);
   assert.match(source, /az redisenterprise list --resource-group/);
   assert.match(source, /az redis list --resource-group/);
   assert.match(source, /az containerapp show --name/);

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { platform as platformClient } from '../services/platformClient';
 import { formatDate, formatAgreementRent } from '../utils/helpers';
 import { getPrimaryPropertyImageUrl, propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import InvitationStatusBadge from '../components/common/InvitationStatusBadge';
 import useInvitationStatus from '../hooks/useInvitationStatus';
 import InviteUserButton from '../components/common/InviteUserButton';
@@ -21,7 +21,7 @@ const IdCopyDisplay = ({ url }) => {
     setImageFailed(false);
   }, [url]);
 
-  if (!url) return <span>Not uploaded</span>;
+  if (!url) {return <span>Not uploaded</span>;}
 
   const isPdf = /\\.pdf(?:$|[?#])/i.test(String(url));
   const linkLabel = isPdf ? 'View ID Copy PDF' : 'Open ID Copy';

@@ -48,7 +48,7 @@ test('runtime script never prints driver errors and runs only the approved aggre
 
 test('Azure audit uses Production OIDC with immutable serving SHA and read-only script', () => {
   assert.match(workflow, /environment: Production/);
-  assert.match(workflow, /azure\/login@v2/);
+  assert.match(workflow, /azure\/login@[a-f0-9]{40} # v2/);
   assert.match(workflow, /\.buildSha == \$sha/);
   assert.match(workflow, /api\/mssql\/health/);
   assert.match(workflow, /scripts\/audit-identity-memberships-readonly\.mjs/);

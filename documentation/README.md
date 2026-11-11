@@ -214,20 +214,9 @@ The application uses the application database with the following main tables:
    
 ## Deployment
 
-The application is configured for deployment to Azure Web App:
+The maintained runtime is Azure Container Apps with MSSQL and private R2 storage. The previous App Service/Web.config instructions are retired. Pull requests and pushes verify source; production release requires an explicit main-branch workflow dispatch and the Production environment. Follow [CI and production release](../docs/cicd-setup.md) and [free-cloud deployment](../docs/free-cloud-deployment.md).
 
-### Azure Configuration
-- Environment variables must be set in Azure App Settings
-- Web.config is configured for client-side routing
-- Azure deployment is handled via GitHub Actions
-
-### Environment Variables
-Ensure these variables are configured in production:
-- `VITE_API_ENDPOINT`
-- `VITE_EVIA_SIGN_CLIENT_ID`
-- `VITE_EVIA_SIGN_CLIENT_SECRET`
-- `VITE_API_ENDPOINT`
-- `VITE_WEBHOOK_URL`
+Public configuration may include `VITE_API_ENDPOINT` (same-origin by default), the supported public Evia client ID and application base URL. Evia client secrets/API keys/tokens, webhook HMAC, email keys, R2 credentials and auth quota secrets remain server-only. Do not add them to `VITE_` settings. Use the root `.env.example` and the [security review disposition](../docs/SECURITY-REVIEW-20261111.md) for current settings and evidence.
 
 ## Troubleshooting
 

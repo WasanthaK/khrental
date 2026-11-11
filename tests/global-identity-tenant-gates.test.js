@@ -138,6 +138,6 @@ test('all generic business and storage endpoints require tenant context', () => 
 test('public credential and authenticated account-context routes remain independent of tenant membership', () => {
   assert.match(platformSource, /router\.get\('\/auth\/context', createTenantContextMiddleware\(\{ requireUser: true \}\)/);
   assert.match(platformSource, /router\.post\('\/auth\/update-user', requireAuthenticated,/);
-  assert.match(platformSource, /router\.post\('\/auth\/sign-up', async/);
-  assert.match(platformSource, /router\.post\('\/auth\/sign-in', async/);
+  assert.match(platformSource, /router\.post\('\/auth\/sign-up', credentialThrottle\('signup'\), async/);
+  assert.match(platformSource, /router\.post\('\/auth\/sign-in', credentialThrottle\('signin'\), async/);
 });

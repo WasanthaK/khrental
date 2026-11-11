@@ -4,7 +4,8 @@
 import { getMssqlPool, sql } from '../mssql/pool.js';
 
 const HASH = /^[a-f0-9]{64}$/;
-const SCOPES = new Set(['challenge-ip', 'challenge-email', 'redeem-ip', 'manual-email-user', 'manual-email-tenant']);
+const SCOPES = new Set(['challenge-ip', 'challenge-email', 'redeem-ip', 'manual-email-user', 'manual-email-tenant',
+  'credential-signin-ip','credential-signin-email','credential-signup-ip','credential-signup-email']);
 
 // Keep diagnostic categories fixed and non-sensitive: never propagate SQL
 // statements, keys, identifiers, connection details or driver messages.
@@ -13,10 +14,10 @@ const diagnosticCategory = error => {
   const number = Number(error?.number ?? error?.originalError?.number ??
     error?.originalError?.info?.number);
 
-  if (number === 1205) return 'DEADLOCK';
-  if (number === 1222) return 'LOCK_TIMEOUT';
-  if ([40501, 10928, 10929, 49918, 49919, 49920].includes(number)) return 'SQL_THROTTLED';
-  if (code === 'ETIMEOUT') return 'TIMEOUT';
+  if (number === 1205) {return 'DEADLOCK';}
+  if (number === 1222) {return 'LOCK_TIMEOUT';}
+  if ([40501, 10928, 10929, 49918, 49919, 49920].includes(number)) {return 'SQL_THROTTLED';}
+  if (code === 'ETIMEOUT') {return 'TIMEOUT';}
   if (['ECONNCLOSED', 'ESOCKET', 'ELOGIN', 'EINSTLOOKUP', 'ENOCONN'].includes(code)) {
     return 'CONNECTION';
   }
@@ -29,7 +30,7 @@ const unavailable = (diagnostic = 'UNCLASSIFIED') => Object.assign(
 );
 
 export const createSqlPublicSignupLimiter = ({ getPool = getMssqlPool } = {}) => {
-  if (typeof getPool !== 'function') throw unavailable();
+  if (typeof getPool !== 'function') {throw unavailable();}
   return Object.freeze({
     durable: true,
     provider: 'azure-sql-serializable',
@@ -92,7 +93,7 @@ export const createSqlPublicSignupLimiter = ({ getPool = getMssqlPool } = {}) =>
             SELECT @allowed AS allowed;
           `);
         const allowed = response.recordset?.[0]?.allowed;
-        if (allowed !== 0 && allowed !== 1) throw unavailable();
+        if (allowed !== 0 && allowed !== 1) {throw unavailable();}
         await transaction.commit();
         active = false;
         return allowed === 1;

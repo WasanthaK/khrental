@@ -5,6 +5,14 @@ on:
     branches: [main]
     paths:
       - 'scripts/test-browser-billing-unauthenticated.mjs'
+      - 'scripts/test-secondary-loaders-browser.mjs'
+      - 'src/api/securityHeaders.js'
+      - 'src/pages/PropertyForm.jsx'
+      - 'src/pages/MaintenanceDetails.jsx'
+      - 'src/services/platformClientCore.js'
+      - 'src/services/platformClient.js'
+      - 'src/services/maintenanceDetailReadService.js'
+      - 'src/services/maintenanceLifecycleClient.js'
       - 'src/routes.jsx'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
@@ -43,14 +51,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: npm run test:browser:billing-unauthenticated
+      - name: Property and maintenance route/workspace cancellation
+        run: node scripts/test-secondary-loaders-browser.mjs
       - name: Management subscription, pricing and complimentary access screens
         env:
           BILLING_SCREENSHOT_DIR: management-billing-screens
@@ -59,13 +69,13 @@ jobs:
         run: node scripts/test-r5-layout-browser.mjs
       - name: Renter detail agreement currency and protected property photographs
         run: node scripts/test-rentee-details-browser.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: r5-contract-onboarding-proof
           path: r5-browser-proof/
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: management-billing-screens

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWebhook } from '../../contexts/WebhookContext';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 
 const WebhookEvents = () => {
   const { webhookEvents, isLoading, error, loadWebhookEvents, clearWebhookEvents } = useWebhook();
@@ -32,7 +32,7 @@ const WebhookEvents = () => {
 
   const handleRefresh = () => {
     loadWebhookEvents();
-    toast.info('Webhook events refreshed');
+    toast('Webhook events refreshed');
   };
 
   // Filter events by type

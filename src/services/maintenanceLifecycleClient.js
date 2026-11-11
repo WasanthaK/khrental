@@ -4,14 +4,15 @@ import { buildRequestContextHeaders } from './requestContext';
 const readApiError = async (response) => {
   const payload = await response.json().catch(() => null);
   const error = new Error(payload?.error || payload?.message || `Request failed with status ${response.status}`);
-  if (payload?.code) error.code = payload.code;
-  if (payload?.details) error.details = payload.details;
+  if (payload?.code) {error.code = payload.code;}
+  if (payload?.details) {error.details = payload.details;}
   error.status = response.status;
   return error;
 };
 
 const request = async (path = '', options = {}) => {
   const response = await fetch(`${getApiBaseUrl()}/api/maintenance-lifecycle${path}`, {
+    signal:options.signal,
     method: options.method || 'GET',
     headers: {
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -20,7 +21,7 @@ const request = async (path = '', options = {}) => {
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {})
   });
 
-  if (!response.ok) throw await readApiError(response);
+  if (!response.ok) {throw await readApiError(response);}
   return response.json();
 };
 
@@ -40,8 +41,8 @@ export const createMaintenanceLifecycleRequest = (input = {}) => result(() => re
   body: input
 }));
 
-export const getMaintenanceLifecycleRequest = (requestId) => result(() => request(
-  `/requests/${encodeURIComponent(requestId)}`
+export const getMaintenanceLifecycleRequest = (requestId, {signal}={}) => result(() => request(
+  `/requests/${encodeURIComponent(requestId)}`,{signal}
 ));
 
 export const listEligibleMaintenanceAssignees = (requestId) => result(() => request(

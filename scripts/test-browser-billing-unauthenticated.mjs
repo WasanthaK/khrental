@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
-import { preview } from 'vite';
+import express from 'express';
+import {createServer} from 'node:http';
+import {resolve} from 'node:path';
+import {createSecurityHeaders} from '../src/api/securityHeaders.js';
 import { assertEviaEvidenceDeletionAllowed } from '../src/api/storage/eviaEvidenceRetention.js';
 
 // Check server-side Evia evidence protection alongside the browser smoke.
@@ -9,10 +12,12 @@ assert.throws(() => assertEviaEvidenceDeletionAllowed('documents'), { code: 'EVI
 // Browser security-boundary smoke only: isolated built frontend, no credentials,
 // no production URL, and no development authentication bypass.
 delete process.env.VITE_ENABLE_DEV_BYPASS;
-const app = await preview({
-  preview: { host: '127.0.0.1', port: 0, strictPort: false }
-});
-const server = app.httpServer;
+const app = express();
+app.use(createSecurityHeaders({production:true}));
+app.use(express.static(resolve('dist')));
+app.get('/{*path}',(_req,res)=>res.sendFile(resolve('dist/index.html')));
+const server = createServer(app);
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const port = server.address().port;
 let browser;
 
@@ -44,7 +49,7 @@ try {
     if (url.pathname === '/api/mssql/health') {
       return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, connection: 'ready' }) });
     }
-    if (url.origin === 'http://127.0.0.1:' + port || url.protocol === 'data:') return request.continue();
+    if (url.origin === 'http://127.0.0.1:' + port || url.protocol === 'data:') {return request.continue();}
     return request.abort();
   });
   await page.setViewport({ width: 1280, height: 800 });
@@ -61,8 +66,15 @@ try {
   ]) {
     await visit(page, route);
   }
-  console.log('PASS: built frontend blocks anonymous invoice and utility browser navigation');
+  const inlineBlocked=await page.evaluate(async()=>{
+    window.inlineSecurityProbe=0;
+    const script=document.createElement('script');script.textContent='window.inlineSecurityProbe=1';document.body.appendChild(script);
+    await new Promise(resolve=>setTimeout(resolve,50));return window.inlineSecurityProbe===0;
+  });
+  assert.equal(inlineBlocked,true,'Production CSP must block injected inline script');
+  assert.match(await page.evaluate(()=>document.body.innerText),/sign in|log in/i,'Built login must render under production CSP');
+  console.log('PASS: production-header built frontend loads login, blocks anonymous billing navigation and rejects inline script');
 } finally {
-  if (browser) await browser.close();
+  if (browser) {await browser.close();}
   await new Promise(resolve => server.close(resolve));
 }
