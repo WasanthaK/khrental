@@ -1,9 +1,10 @@
+import {useStockDraft} from '../hooks/useStockDraft.js';
 import { LISTING_CATEGORIES, normalizeListingCategory } from '../utils/listingCategories.js';
 import { propertyImageDisplayUrl } from '../utils/propertyDetailFields.js';
 import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
+import { fetchData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
 import { saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 import '../utils/helpers';
 import { PROPERTY_TYPES, PROPERTY_COUNTRIES, normalizePropertyCountry } from '../utils/constants';
@@ -72,13 +73,16 @@ const PropertyForm = () => {
   // Initial form data
 
   // Form state
-  const [formData, setFormData] = useState(() => createInitialPropertyData(isEditMode?null:requestedCountry));
-  const [propertyCoordinates, setPropertyCoordinates] = useState(null);
+  const stockDraft=useStockDraft({kind:'property',userId:user?.id,tenantId:activeTenantId,enabled:!isEditMode,
+    initialData:createInitialPropertyData(isEditMode?null:requestedCountry)});
+  const {data:formData,setData:setFormData,coordinates:propertyCoordinates,setCoordinates:setPropertyCoordinates}=stockDraft;
   const [fixedUtilities, setFixedUtilities] = useState([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [imagesBusy,setImagesBusy]=useState(false);
+  const imagesBusyRef=useRef(false);
   const [error, setError] = useState(null);
   const [, setUploadedImages] = useState([]);
   const [, setExistingImages] = useState([]);
@@ -89,8 +93,7 @@ const PropertyForm = () => {
   useEffect(() => {
     const controller=new AbortController();
     if (!isEditMode) {
-      setFormData(createInitialPropertyData(requestedCountry));
-      setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);setPropertyCoordinates(null);
+      setExistingImages([]);setUploadedImages([]);setImagesToDelete([]);setFixedUtilities([]);
       setLoading(false);setError(null);
       return () => controller.abort();
     }
@@ -208,7 +211,7 @@ const PropertyForm = () => {
 
     fetchPropertyData();
     return () => controller.abort();
-  }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status]);
+  }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status, setFormData, setPropertyCoordinates]);
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -379,6 +382,8 @@ const PropertyForm = () => {
 
   // Handle image upload
   const handleImagesChange = async (newImages, imageType = 'exterior') => {
+    if(submitting||stockDraft.pending||imagesBusyRef.current){return;}
+    imagesBusyRef.current=true;setImagesBusy(true);
     try {
       console.log(`Processing ${newImages.length} new property images of type: ${imageType}`);
 
@@ -456,11 +461,13 @@ const PropertyForm = () => {
     } catch (error) {
       console.error('Error uploading property images:', error);
       toast.error(error.message || 'Failed to upload images');
-    }
+    } finally {imagesBusyRef.current=false;setImagesBusy(false);}
   };
 
   // Handle image removal
   const handleRemoveImage = async (index) => {
+    if(submitting||stockDraft.pending||imagesBusyRef.current){return;}
+    imagesBusyRef.current=true;setImagesBusy(true);
     try {
       const imageToRemove = formData.images[index];
       console.log('Removing property image:', imageToRemove);
@@ -525,7 +532,7 @@ const PropertyForm = () => {
     } catch (error) {
       console.error('Error removing property image:', error);
       toast.error(error.message || 'Failed to remove image');
-    }
+    } finally {imagesBusyRef.current=false;setImagesBusy(false);}
   };
 
   // Handle image reorganization
@@ -724,6 +731,7 @@ const PropertyForm = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if(imagesBusyRef.current){return;}
     try {
       setSubmitting(true);
       setError(null);
@@ -776,7 +784,13 @@ const PropertyForm = () => {
         result = await updateData('properties', id, propertyData);
       } else {
         // Create new property
-        result = await insertData('properties', propertyData);
+        result = await stockDraft.create(propertyData);
+        if(result.stale){return;}
+        if(result.prepared){
+          toast.success('Property details saved. Review your subscription to start management.');
+          navigate('/dashboard/subscription');
+          return;
+        }
       }
 
       if (result.error) {
@@ -839,7 +853,9 @@ const PropertyForm = () => {
         </div>
       )}
 
+      {stockDraft.pending && <p role="status" className="mb-4 rounded-lg bg-blue-50 p-4 text-blue-900">Your submitted details are retained. Retry the save to confirm preparation before making changes.</p>}
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
+        <fieldset disabled={submitting || stockDraft.pending || imagesBusy} className={stockDraft.pending ? "pointer-events-none" : undefined}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div>
@@ -986,9 +1002,6 @@ const PropertyForm = () => {
 
             {formData.propertytype !== PROPERTY_TYPES.APARTMENT && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit Configuration
-                </label>
                 <FormInput
                   label="Unit Configuration"
                   id="unitconfiguration"
@@ -1001,9 +1014,6 @@ const PropertyForm = () => {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Square Feet
-              </label>
               <FormInput
                 label="Square Feet"
                 id="squarefeet"
@@ -1105,9 +1115,6 @@ const PropertyForm = () => {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Year Built
-              </label>
               <FormInput
                 label="Year Built"
                 id="yearbuilt"
@@ -1233,21 +1240,22 @@ const PropertyForm = () => {
         </div>
 
         {/* Form Actions */}
+        </fieldset>
         <div className="mt-8 flex justify-end space-x-3">
           <button
             type="button"
             onClick={() => navigate('/dashboard/properties')}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            disabled={submitting}
+            disabled={submitting || imagesBusy}
           >
             Cancel
           </button>
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            disabled={submitting}
+            disabled={submitting || imagesBusy}
           >
-            {submitting ? 'Saving...' : isEditMode ? 'Update Property' : 'Add Property'}
+            {imagesBusy ? 'Updating images...' : submitting ? 'Saving...' : stockDraft.pending ? 'Retry save' : isEditMode ? 'Update Property' : 'Add Property'}
           </button>
         </div>
       </form>
@@ -1261,4 +1269,8 @@ const PropertyForm = () => {
   );
 };
 
-export default PropertyForm;
+const ScopedPropertyForm=()=>{
+  const {user,activeTenantId}=useAuth();const {id}=useParams();
+  return <PropertyForm key={`${user?.id}:${activeTenantId}:${id||'new'}`} />;
+};
+export default ScopedPropertyForm;

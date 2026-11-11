@@ -32,6 +32,13 @@ test('local public derivatives never map beneath express static public root',()=
   ]){assert.throws(()=>resolveLocalStoragePath('media',p));}
 });
 
+test('private preparation may retain tenant GIFs without enabling public GIF conversion',()=>{
+  const gif=safeUrl.replace(filename,'retained.gif');
+  assert.throws(()=>resolveRegisteredPhoto([gif],0,tenant));
+  assert.deepEqual(resolveRegisteredPhoto([gif],0,tenant,{allowPrivateGif:true}),{bucket:'images',path:`tenants/${tenant}/properties/retained.gif`});
+  assert.throws(()=>resolveRegisteredPhoto([gif.replace(tenant,actor)],0,tenant,{allowPrivateGif:true}));
+});
+
 test('only explicitly configured HTTPS app origins can supply registered photos',()=>{
   const configured=trustedPhotoOrigins({
     PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:'https://khrental-app.example.azurecontainerapps.io,https://app.quixo.homes'

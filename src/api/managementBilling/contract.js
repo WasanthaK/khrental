@@ -65,8 +65,11 @@ export const stagedStock = input => {
   return input.map(record=>{
     if(!record||!['property','unit'].includes(record.kind)||Object.keys(record).some(k=>!['kind','payload'].includes(k)))
       {throw problem(400,'BILLING_STOCK_INVALID','Choose a property or unit to prepare.');}
-    const fields=record.kind==='property'?['id','name','address','description','propertytype','country_code','rentalvalues']:
-      ['id','propertyid','unitnumber','description','rentalvalues','bedrooms','bathrooms','squarefeet','floor'];
+    const shared=['bank_name','bank_branch','bank_account_number','terms','availability'];
+    const fields=record.kind==='property'?['id','name','address','description','propertytype','country_code','rentalvalues',
+      'unitconfiguration','checklistitems','images','availablefrom','squarefeet','yearbuilt','amenities',
+      'electricity_rate','water_rate','latitude','longitude',...shared]:
+      ['id','propertyid','unitnumber','description','rentalvalues','bedrooms','bathrooms','squarefeet','floor',...shared];
     const source=record.payload;
     if(!source||typeof source!=='object'||Array.isArray(source)||Object.keys(source).some(k=>!fields.includes(k)))
       {throw problem(400,'BILLING_STOCK_FIELDS','Submit property details without management, organization or billing fields.');}
@@ -89,8 +92,49 @@ export const stagedStock = input => {
         (!Number.isFinite(payload[field])||payload[field]<0||(['bedrooms','bathrooms'].includes(field)&&!Number.isSafeInteger(payload[field]))))
         {throw problem(400,'BILLING_STOCK_INVALID','Room counts and floor area must be valid non-negative numbers.');}}
     }
+    if(typeof payload.floor==='string'&&payload.floor.length>100){throw problem(400,'BILLING_STOCK_INVALID','Floor must be at most 100 characters.');}
     for(const field of ['address','description','floor']){if(payload[field]!==undefined&&payload[field]!==null&&typeof payload[field]!=='string')
       {throw problem(400,'BILLING_STOCK_INVALID','Use text for property descriptions and addresses.');}}
+    for(const field of ['bank_name','bank_branch','bank_account_number','unitconfiguration']){
+      if(payload[field]!==undefined&&payload[field]!==null&&(typeof payload[field]!=='string'||payload[field].length>255))
+        {throw problem(400,'BILLING_STOCK_INVALID','Bank details and unit configuration must be text of at most 255 characters.');}
+    }
+    if(payload.availability!==undefined&&!['active','available','reserved','maintenance','inactive'].includes(payload.availability))
+      {throw problem(400,'BILLING_STOCK_INVALID','Choose an initial availability without creating a tenancy.');}
+    for(const field of ['squarefeet','electricity_rate','water_rate','latitude','longitude','yearbuilt']){
+      const value=payload[field];
+      if(value===undefined||value===null){continue;}
+      const max=field==='latitude'?90:field==='longitude'?180:field==='yearbuilt'?9999:100000000;
+      const min=['latitude','longitude'].includes(field)?-max:0;
+      if(typeof value!=='number'||!Number.isFinite(value)||value<min||value>max||(field==='yearbuilt'&&!Number.isSafeInteger(value)))
+        {throw problem(400,'BILLING_STOCK_INVALID','Use valid property measurements, coordinates and utility rates.');}
+    }
+    if((payload.latitude==null)!==(payload.longitude==null))
+      {throw problem(400,'BILLING_STOCK_INVALID','Include both latitude and longitude.');}
+    if(payload.availablefrom!==undefined&&payload.availablefrom!==null&&
+      (typeof payload.availablefrom!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(payload.availablefrom)||
+       !Number.isFinite(Date.parse(payload.availablefrom))||new Date(payload.availablefrom).toISOString().replace('.000Z','Z')!==payload.availablefrom.replace('.000Z','Z')))
+      {throw problem(400,'BILLING_STOCK_INVALID','Use a valid UTC availability date.');}
+    for(const field of ['amenities','checklistitems']){
+      if(payload[field]!==undefined&&(!Array.isArray(payload[field])||payload[field].length>100||
+        payload[field].some(value=>typeof value!=='string'||value.length>1000)))
+        {throw problem(400,'BILLING_STOCK_INVALID','Amenities and checklist items must be lists of text.');}
+    }
+    if(payload.terms!==undefined&&(!payload.terms||typeof payload.terms!=='object'||Array.isArray(payload.terms)))
+      {throw problem(400,'BILLING_STOCK_INVALID','Property terms must be an object.');}
+    if(payload.rentalvalues!==undefined){
+      if(!payload.rentalvalues||typeof payload.rentalvalues!=='object'||Array.isArray(payload.rentalvalues))
+        {throw problem(400,'BILLING_STOCK_INVALID','Rental values must be an object.');}
+      for(const field of ['rent','deposit']){
+        const value=payload.rentalvalues[field];
+        if(value!==undefined&&(typeof value!=='number'||!Number.isFinite(value)||value<0||value>100000000))
+          {throw problem(400,'BILLING_STOCK_INVALID','Rent and deposit must be valid non-negative amounts.');}
+      }
+    }
+    if(payload.images!==undefined&&(!Array.isArray(payload.images)||payload.images.length>50||payload.images.some(image=>
+      typeof image!=='string'&&(!image||typeof image!=='object'||Array.isArray(image)||typeof image.image_url!=='string'||
+      Object.keys(image).some(key=>!['image_url','image_type','uploaded_at','order','is_profile'].includes(key))))))
+      {throw problem(400,'BILLING_STOCK_INVALID','Use registered property images and their display metadata.');}
     if(JSON.stringify(payload).length>32000){throw problem(400,'BILLING_STOCK_INVALID','This property record is too large.');}
     return {kind:record.kind,payload};
   });

@@ -22,7 +22,7 @@ export const trustedPhotoOrigins=env=>{
 };
 
 export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
-  allowedOrigins=['https://app.quixo.homes']
+  allowedOrigins=['https://app.quixo.homes'], allowPrivateGif=false
 }={})=>{
   if(!isId(tenantId)){throw new Error('Invalid tenant identity.');}
   if(!Number.isInteger(index)||index<0||index>49){throw new Error('Invalid property photo selection.');}
@@ -43,7 +43,7 @@ export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
   const parts=url.pathname.split('/').filter(Boolean);
   if(parts.length!==6||parts[0]!=='storage'||parts[1]!=='images'||
      parts[2]!=='tenants'||parts[3].toLowerCase()!==tenantId.toLowerCase()||
-     parts[4]!=='properties'||!FILE_NAME.test(parts[5])||!SUPPORTED_EXT.test(parts[5])||
+     parts[4]!=='properties'||!FILE_NAME.test(parts[5])||!(SUPPORTED_EXT.test(parts[5])||(allowPrivateGif&&/\.gif$/i.test(parts[5])))||
      parts[5]==='.'||parts[5]==='..')
     {throw new Error('Property photo must belong to this tenant and property storage folder.');}
   // SQL GUID identity is case-insensitive; R2 object keys are not. After

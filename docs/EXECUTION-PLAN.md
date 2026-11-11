@@ -18,7 +18,7 @@ This is the controlling programme summary. It supersedes older dated â€œcurrentâ
 
 **Next independent engineering, in order:**
 
-1. Integrate normal property/unit forms and imports with governed staging, retaining all entered metadata, stable identities and retry/redirect drafts.
+1. Complete release acceptance for [PR #561](https://github.com/WasanthaK/khrental/pull/561): normal property/unit forms now use governed preparation with complete metadata and scoped exact retry drafts. Browser and SQL source acceptance is recorded in the R5 ledger; final mobile refinement/release is pending. Existing atomic staged batch imports retain their authority. Production readiness and controlled live acceptance remain separate.
 2. Complete restoration, parent/unit splits and remaining cessation entitlement states using the same locked inventory/quantity authority.
 3. Complete owned asynchronous recovery/reconciliation and the endpoint/job, stale actor/resource and remaining stock/failure/usability acceptance matrix.
 4. Only after those dependencies pass, apply separately governed readiness changes and accept one explicit reversible rollout scope. This documentation update does not authorize apply or activation.

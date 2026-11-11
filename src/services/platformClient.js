@@ -33,6 +33,10 @@ const scopedRequest = async (basePath, path = '', options = {}) => {
   return response.json();
 };
 
+export const prepareStock=(records,{headers}={})=>scopedRequest('/api/management-billing/stock/prepare','',{
+  method:'POST',headers,body:{records,reason:'Property manager submitted details for subscription review.'}
+});
+
 const propertyAssignmentRequest = (path = '', options = {}) => (
   scopedRequest('/api/property-assignments', path, options)
 );

@@ -27,6 +27,24 @@ test('prepared stock has immutable validated identities and accepts no billing o
   assert.throws(()=>stagedStock([{kind:'unit',payload:{id:other,propertyid:tenant,unitnumber:'Unit',bedrooms:1.5}}]));
 });
 
+test('prepared property metadata survives validation without accepting invalid or tenancy state',()=>{
+  const payload={id:tenant,name:'Full home',propertytype:'house',country_code:'LK',address:'Fixture address',
+    rentalvalues:{listingCategory:'residential',rent:80000,deposit:160000},description:'Fixture home',
+    bank_name:'Fixture Bank',bank_branch:'Fixture Branch',bank_account_number:'000123',unitconfiguration:'Two bedrooms',
+    checklistitems:['Keys','Meter'],terms:{notice:'One month'},images:[{image_url:`/storage/images/tenants/${tenant}/properties/front.gif`,image_type:'exterior',order:0}],
+    availability:'maintenance',availablefrom:'2026-12-01T00:00:00.000Z',squarefeet:950.5,yearbuilt:2020,
+    amenities:['Parking'],electricity_rate:32.5,water_rate:15,latitude:6.9271,longitude:79.8612};
+  assert.deepEqual(stagedStock([{kind:'property',payload}])[0].payload,payload);
+  for(const change of [{availability:'occupied'},{availability:'rented'},{latitude:91},{longitude:null},{yearbuilt:1.5},
+    {availablefrom:'2026-02-30T00:00:00Z'},{bank_name:'x'.repeat(256)},{electricity_rate:-1},{images:[{image_url:'x',tenant_id:other}]},
+    {amenities:{}},{terms:[]},{rentalvalues:{listingCategory:'residential',rent:'100'}}]){
+    assert.throws(()=>stagedStock([{kind:'property',payload:{...payload,...change}}]));
+  }
+  const unit={id:other,propertyid:tenant,unitnumber:'One',bank_name:'Fixture Bank',bank_branch:'Branch',bank_account_number:'000123',
+    rentalvalues:{rent:100,deposit:200},terms:{notice:'One month'},availability:'reserved',bedrooms:2,bathrooms:1,squarefeet:500.5,floor:'Ground'};
+  assert.deepEqual(stagedStock([{kind:'unit',payload:unit}])[0].payload,unit);
+});
+
 test('controlled stock scope cannot bypass preparation or cessation through generic bulk mutations',()=>{
   const env={MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant};
   for(const table of ['properties','property_units']){for(const action of ['insert','upsert','delete']){
