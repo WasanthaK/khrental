@@ -11,7 +11,7 @@ const reject = message => {
   throw error;
 };
 export const normalizeInvoiceLogo = value => {
-  if (value === undefined || value === null || value === '') return '';
+  if (value === undefined || value === null || value === '') {return '';}
   if (typeof value !== 'string' || !value.startsWith('data:image/png;base64,')) {
     reject('Invoice logo must be an uploaded PNG image.');
   }
@@ -21,7 +21,7 @@ export const normalizeInvoiceLogo = value => {
     reject('Invoice logo has invalid PNG bytes or exceeds 128 KB.');
   }
   const bytes = Buffer.from(encoded, 'base64');
-  if (bytes.length > MAX_BYTES) reject('Invoice logo exceeds 128 KB.');
+  if (bytes.length > MAX_BYTES) {reject('Invoice logo exceeds 128 KB.');}
   if (bytes.length < 45 ||
       bytes.toString('base64') !== encoded ||
       !bytes.subarray(0, 8).equals(SIGNATURE) ||

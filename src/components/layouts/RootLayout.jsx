@@ -26,7 +26,7 @@ const RootLayout = () => {
   // Credential bootstrap/recovery routes are deliberately isolated from
   // storage, tenant, navigation and authenticated onboarding initialization.
   useEffect(() => {
-    if (isAuthFlowIsolated || loading) return;
+    if (isAuthFlowIsolated || loading) {return;}
 
     const initialize = async () => {
       try {

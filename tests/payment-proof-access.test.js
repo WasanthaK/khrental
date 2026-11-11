@@ -17,7 +17,7 @@ test('submission path must be exactly same invoice and same tenant', () => {
     '/storage/images/' + path, 'https://evil.invalid' + url,
     '/storage/invoices/' + path.replace(A,C),
     '/storage/invoices/' + path.replace(B,C), url + '?x=1'
-  ]) assert.throws(() => parseSubmittedPaymentProof(bad,A,B), { code: 'PAYMENT_PROOF_PATH_INVALID' });
+  ]) {assert.throws(() => parseSubmittedPaymentProof(bad,A,B), { code: 'PAYMENT_PROOF_PATH_INVALID' });}
   assert.equal(parsePaymentProofPath('invoices',path).applies,true);
 });
 test('only valid uploaded image/PDF bytes may substantiate pending payment', async () => {

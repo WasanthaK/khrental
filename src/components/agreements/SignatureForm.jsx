@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { 
+import {
   getAuthorizationUrl,
-  handleAuthCallback as eviaAuthCallback 
+  handleAuthCallback as eviaAuthCallback
 } from '../../services/eviaSignService';
 import { platform as platformClient } from '../../services/platformClient';
 import Button from '../ui/Button';
@@ -13,11 +13,11 @@ import { prepareRentalAgreementSignatories } from '../../utils/rentalAgreementSi
 
 const AUTH_STORAGE_KEY = 'eviaSignAuth';
 
-const SignatureForm = ({ 
-  agreement = {}, 
-  onSuccess = () => {}, 
-  onCancel = () => {}, 
-  currentUser = {} 
+const SignatureForm = ({
+  agreement = {},
+  onSuccess = () => {},
+  onCancel = () => {},
+  currentUser = {}
 }) => {
   // Debug logging at component mount
   console.log('SignatureForm MOUNTED with props:', {
@@ -35,14 +35,14 @@ const SignatureForm = ({
       onCancel();
       return;
     }
-    
+
     if (!currentUser?.id) {
       console.error('SignatureForm: No currentUser provided');
       toast.error('Missing user data');
       onCancel();
       return;
     }
-  }, [agreement, currentUser]);
+  }, [agreement, currentUser, onCancel]);
 
   const [title, setTitle] = useState(() => {
     const propertyName = agreement?.property?.name || 'Property';
@@ -98,7 +98,7 @@ const SignatureForm = ({
         if (!session) {
           console.error('No auth session found');
           setError('Please log in to continue');
-          
+
           // Only redirect if we're not in the middle of Evia Sign auth
           const isEviaAuthInProgress = sessionStorage.getItem('eviaAuthInProgress');
           if (!isEviaAuthInProgress) {
@@ -123,7 +123,7 @@ const SignatureForm = ({
       if (event === 'SIGNED_OUT') {
         setError('Please log in to continue');
         setPlatformSession(null);
-        
+
         // Only redirect if we're not in the middle of Evia Sign auth
         const isEviaAuthInProgress = sessionStorage.getItem('eviaAuthInProgress');
         if (!isEviaAuthInProgress) {
@@ -146,7 +146,7 @@ const SignatureForm = ({
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
-    
+
     if (code && state) {
       // Verify state to prevent CSRF
       const savedState = localStorage.getItem('eviaSignAuthState');
@@ -161,7 +161,7 @@ const SignatureForm = ({
           setIsEviaAuthenticated(true);
           setEviaUserEmail(result.userEmail);
           setError('');
-          
+
           // Restore form state if needed
           const savedState = JSON.parse(sessionStorage.getItem('signatureFormState') || '{}');
           if (savedState.title) {
@@ -173,10 +173,10 @@ const SignatureForm = ({
           if (savedState.signatories) {
             setSignatories(savedState.signatories);
           }
-          
+
           // Clean up storage
           sessionStorage.removeItem('signatureFormState');
-          
+
           // Remove the code and state from URL
           const newUrl = window.location.pathname;
           window.history.replaceState({}, '', newUrl);
@@ -207,8 +207,8 @@ const SignatureForm = ({
 
   // Load tenant data when component mounts
   useEffect(() => {
-    console.log('Agreement data received:', agreement);
-    
+    console.log('Agreement tenant reference received:', agreement?.renteeid);
+
     const fetchTenantData = async () => {
       if (!agreement?.renteeid) {
         console.error('No tenant ID provided in agreement');
@@ -218,9 +218,9 @@ const SignatureForm = ({
       try {
         // Fetch the tenant details
         const renteeData = await fetchAppUser(agreement.renteeid);
-        
+
         console.log('Fetched tenant data:', renteeData);
-        
+
         if (!renteeData) {
           console.error('No tenant data found');
           toast.error('Tenant data not found');
@@ -259,7 +259,7 @@ const SignatureForm = ({
     try {
       setLoading(true);
       setError('');
-      
+
       console.log('Starting Evia Sign authentication process...');
 
       // Validate agreement object
@@ -317,7 +317,7 @@ const SignatureForm = ({
       }
 
       console.log('Authentication popup window opened successfully');
-      
+
       // Check current localStorage state
       const currentAuthState = localStorage.getItem(AUTH_STORAGE_KEY);
       console.log('Current auth state:', currentAuthState ? 'Present (token exists)' : 'Not present');
@@ -326,7 +326,7 @@ const SignatureForm = ({
       const messageHandler = (event) => {
         // Log incoming messages for debugging
         console.log('Received message from popup:', event.data);
-        
+
         if (!event?.data?.type) {
           console.warn('Received invalid message:', event);
           return;
@@ -339,7 +339,7 @@ const SignatureForm = ({
           setEviaUserEmail(event.data.data?.userEmail || null);
           setError('');
           setLoading(false);
-          
+
           // Clean up
           window.removeEventListener('message', messageHandler);
           try {
@@ -347,7 +347,7 @@ const SignatureForm = ({
           } catch (storageError) {
             console.error('Error removing auth progress flag:', storageError);
           }
-          
+
           // Alert user for confirmation
           toast.success('Authentication successful! You can now send the document for signature.');
         } else if (event.data.type === 'EVIA_AUTH_ERROR') {
@@ -356,7 +356,7 @@ const SignatureForm = ({
           setIsEviaAuthenticated(false);
           setEviaUserEmail(null);
           setLoading(false);
-          
+
           // Clean up
           window.removeEventListener('message', messageHandler);
           try {
@@ -364,7 +364,7 @@ const SignatureForm = ({
           } catch (storageError) {
             console.error('Error removing auth progress flag:', storageError);
           }
-          
+
           // Alert user for confirmation
           toast.error('Authentication failed: ' + (event.data.error || 'Unknown error'));
         }
@@ -401,8 +401,8 @@ const SignatureForm = ({
   // Function to add a signatory
   const addSignatory = () => {
     setSignatories([
-      ...signatories, 
-      { 
+      ...signatories,
+      {
         name: '', 
         email: '', 
         identifier: `signatory-${signatories.length + 1}`, 
@@ -413,7 +413,7 @@ const SignatureForm = ({
 
   // Function to remove a signatory
   const removeSignatory = (index) => {
-    if (index < 2) return;
+    if (index < 2) {return;}
     setSignatories(signatories.filter((_, i) => i !== index));
   };
 
@@ -472,7 +472,7 @@ const SignatureForm = ({
         tokenExpiry: storedAuth.expiresAt ? new Date(storedAuth.expiresAt).toLocaleString() : 'none',
         isValid: storedAuth.expiresAt && storedAuth.expiresAt > Date.now()
       });
-      
+
       if (!storedAuth.authToken || !storedAuth.expiresAt || storedAuth.expiresAt <= Date.now()) {
         console.error('Evia Sign auth token missing or expired');
         setError('Please authenticate with Evia Sign before sending for signature');
@@ -506,7 +506,7 @@ const SignatureForm = ({
         console.error('No onSuccess handler provided');
         setError('Configuration error: No onSuccess handler provided');
       }
-      
+
       console.log('Form submission completed successfully');
     } catch (err) {
       console.error('Error submitting form:', err);
@@ -539,7 +539,7 @@ const SignatureForm = ({
           Preview agreement
         </Button>
         {showDocument && <AgreementDocument documentUrl={agreement.documenturl} onClose={() => setShowDocument(false)} />}
-        
+
         {/* Authentication Status Section */}
         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -570,7 +570,7 @@ const SignatureForm = ({
             </Button>
           </div>
         </div>
-        
+
         {error && (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
             {error}
@@ -624,7 +624,7 @@ const SignatureForm = ({
                     </button>
                   )}
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label htmlFor={`signing-review-${index}-name`} className="block text-sm font-medium mb-1">Name</label>
@@ -637,7 +637,7 @@ const SignatureForm = ({
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor={`signing-review-${index}-email`} className="block text-sm font-medium mb-1">Email</label>
                     <input
@@ -649,7 +649,7 @@ const SignatureForm = ({
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor={`signing-review-${index}-identifier`} className="block text-sm font-medium mb-1">Identifier</label>
                     <input
@@ -661,7 +661,7 @@ const SignatureForm = ({
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor={`signing-review-${index}-textMarker`} className="block text-sm font-medium mb-1">Text Marker</label>
                     <input
@@ -740,4 +740,4 @@ SignatureForm.propTypes = {
   onCancel: PropTypes.func
 };
 
-export default SignatureForm; 
+export default SignatureForm;

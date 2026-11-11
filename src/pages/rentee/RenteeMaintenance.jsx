@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useState, useEffect } from 'react';
+import 'react-router-dom';
 import { listAuthorizedMaintenanceRequests } from '../../services/maintenanceListReadService';
 import { useAuth } from '../../hooks/useAuth';
 import { MAINTENANCE_STATUS } from '../../utils/constants';
@@ -12,17 +12,19 @@ import MaintenanceRequestForm from '../../components/maintenance/MaintenanceRequ
 
 const RenteeMaintenance = () => {
   const { userData, activeTenantId } = useAuth();
-  const navigate = useNavigate();
-  
+  useNavigate();
+
   // State
   const [maintenanceRequests, setMaintenanceRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
-  
+
   // Function to fetch maintenance requests
-  const fetchMaintenanceRequests = async () => {
+
+  // Fetch maintenance requests when component mounts or user data changes
+  const fetchMaintenanceRequests = useCallback(async () => {
     try {
       if (!userData?.id) {
         console.error('No user ID available');
@@ -32,7 +34,7 @@ const RenteeMaintenance = () => {
 
       setLoading(true);
       setError(null);
-      
+
       const appUserId = userData?.profileId || userData?.appUserId || null;
       if (!appUserId) {
         if (userData?.isDevelopmentBypass) {
@@ -54,24 +56,23 @@ const RenteeMaintenance = () => {
     } finally {
       setLoading(false);
     }
-  };
-  
-  // Fetch maintenance requests when component mounts or user data changes
+  }, [userData?.appUserId, userData?.id, userData?.isDevelopmentBypass, userData?.profileId]);
+
   useEffect(() => {
     if (userData?.id) {
       setShowForm(false);
       setError(null);
       fetchMaintenanceRequests();
     }
-  }, [userData?.id, userData?.profileId, activeTenantId]);
-  
+  }, [userData?.id, userData?.profileId, activeTenantId, fetchMaintenanceRequests]);
+
   // Handle form submission success
   const handleSubmitSuccess = () => {
     setShowForm(false);
     fetchMaintenanceRequests();
     toast.success('Maintenance request submitted successfully');
   };
-  
+
   // Filter maintenance requests
   const filteredRequests = maintenanceRequests.filter(request => {
     return statusFilter === 'all' || request.status === statusFilter;
@@ -88,7 +89,7 @@ const RenteeMaintenance = () => {
           {showForm ? 'Cancel' : 'New Request'}
         </button>
       </div>
-      
+
       {/* Error message */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
@@ -96,7 +97,7 @@ const RenteeMaintenance = () => {
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
-      
+
       {/* New Request Form */}
       {showForm && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -107,7 +108,7 @@ const RenteeMaintenance = () => {
           />
         </div>
       )}
-      
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
         <div className="flex items-center">
@@ -146,14 +147,14 @@ const RenteeMaintenance = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Loading state */}
       {loading && (
         <div className="flex justify-center items-center h-32">
           <div className="text-lg text-gray-600">Loading maintenance requests...</div>
         </div>
       )}
-      
+
       {/* Maintenance Requests List */}
       {!loading && (
         <div className="space-y-4">
@@ -176,4 +177,4 @@ const RenteeMaintenance = () => {
   );
 };
 
-export default RenteeMaintenance; 
+export default RenteeMaintenance;

@@ -15,7 +15,9 @@ export default function OwnerSetup(){
   const currentIdentity=useRef(identity);currentIdentity.current=identity;
   const selected=new URLSearchParams(useLocation().search);
   const createAnotherWorkspace=selected.get('newWorkspace')==='1';
-  const [country,setCountry]=useState(selected.get('country')==='BN'?'BN':'LK');
+  const selectedCountry=selected.get('country')==='BN'?'BN':'LK';
+  const hydratedDraftKey=useRef(null);
+  const [country,setCountry]=useState(selectedCountry);
   const [name,setName]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -28,20 +30,22 @@ export default function OwnerSetup(){
   useEffect(()=>{
     if(contextUnavailable){return;}
     if(existingProperties&&!createAnotherWorkspace){
-      setCountry(selected.get('country')==='BN'?'BN':'LK');setDraftIdentity(null);return;
+      hydratedDraftKey.current=null;setCountry(selectedCountry);setDraftIdentity(null);return;
     }
+    if(hydratedDraftKey.current===draftKey){return;}
+    hydratedDraftKey.current=draftKey;
     let draft=!createAnotherWorkspace?user?.ownerOnboarding:null;
     try{if(!draft){draft=identity?JSON.parse(sessionStorage.getItem(draftKey)):null;}}catch{/* Draft storage is optional. */}
     const valid=draft&&typeof draft.name==='string'&&draft.name.length<=200&&['LK','BN'].includes(draft.country)&&
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft.requestId||'');
-    setName(valid?draft.name:'');setCountry(valid?draft.country:(selected.get('country')==='BN'?'BN':'LK'));
+    setName(valid?draft.name:'');setCountry(valid?draft.country:selectedCountry);
     setError('');setBusy(false);setNeedsVerification(false);setVerificationMessage('');setSaveMessage('');
     setRequestId(valid?draft.requestId:crypto.randomUUID());setDraftIdentity(identity);
-  },[identity,createAnotherWorkspace,contextUnavailable,existingProperties]);
+  },[identity, createAnotherWorkspace, contextUnavailable, existingProperties, draftKey, user?.ownerOnboarding, selectedCountry]);
   useEffect(()=>{
     if(!identity||draftIdentity!==identity){return;}
     try{sessionStorage.setItem(draftKey,JSON.stringify({name,country,requestId}));}catch{/* Keep the current form usable without storage. */}
-  },[identity,draftIdentity,name,country,requestId]);
+  },[identity, draftIdentity, name, country, requestId, draftKey]);
   useEffect(()=>{
     if(contextUnavailable||!identity||draftIdentity!==identity||loading||busy||!isAuthenticated||(existingProperties&&!createAnotherWorkspace)){return;}
     setSaveMessage('Saving setup…');

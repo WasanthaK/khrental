@@ -28,7 +28,7 @@ const StaffAssignment = ({
         setLoading(true);
         
         const { data, error: listError } = await listEligibleMaintenanceAssignees(requestId);
-        if (listError) throw listError;
+        if (listError) {throw listError;}
         if (!Array.isArray(data) || data.some(row => !row?.id || !row?.name)) {
           throw new Error('Invalid eligible maintenance staff response.');
         }

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { platform as platformClient } from '../../services/platformClient';
 
 const Dashboard = () => {
-  const [userCounts, setUserCounts] = useState({});
-  const [invoiceCounts, setInvoiceCounts] = useState({});
+  const [, setUserCounts] = useState({});
+  const [, setInvoiceCounts] = useState({});
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -47,4 +47,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

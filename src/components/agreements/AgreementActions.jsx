@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { getEviaAgreementCallbackUrl, getSignatureStatus, sendDocumentForSignature } from '../../services/eviaSignService';
@@ -53,14 +53,14 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
   const [error, setError] = useState(null);
   const [signatureStatus, setSignatureStatus] = useState(null);
   const [prevSignatureStatus, setPrevSignatureStatus] = useState(null);
-  const [showSignatureForm, setShowSignatureForm] = useState(false);
-  const [signatureData, setSignatureData] = useState(null);
+
+  const [signatureData] = useState(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [lastChecked, setLastChecked] = useState(null);
-  
+
   // Track if we've already sent for signature
   const hasSentForSignature = !!agreement.eviasignreference;
-  
+
   // Track if we should show the send button - only in review status
   const showSendButton = agreement.status === 'review' && agreement.documenturl;
   const isSignatureComplete = ['signed', 'completed', 'active', 'closed'].includes(String(agreement.status || '').toLowerCase())
@@ -71,144 +71,12 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
     agreement.signature_pdf_url
   ].find((value) => String(value || '').includes('/storage/')) || null;
   const viewDocumentUrl = isSignatureComplete ? retainedSignedDocumentUrl : agreement.documenturl;
-  
+
   // Track if we should disable the send button
-  const disableSendButton = loading || hasSentForSignature || 
+  const disableSendButton = loading || hasSentForSignature ||
     agreement.status === STATUS.SIGNED || agreement.status === STATUS.PENDING_SIGNATURE;
 
-  useEffect(() => {
-    // Check signature status when component mounts or reference changes
-    if (signatureManagementEnabled && agreement.eviasignreference) {
-      checkSignatureStatus();
-    }
-  }, [agreement.eviasignreference, signatureManagementEnabled]);
-  
-  // Set up automatic status checking every 2 minutes if we have a reference
-  useEffect(() => {
-    let intervalId = null;
-    
-    // We'll use polling as a fallback if we have a reference and status isn't completed
-    if (signatureManagementEnabled && agreement.eviasignreference && 
-        (agreement.status !== STATUS.SIGNED && 
-         signatureStatus !== 'completed')) {
-      
-      // Check every 2 minutes
-      intervalId = setInterval(() => {
-        console.log('Polling signature status...');
-        checkSignatureStatus();
-      }, 120000); // 2 minutes
-      
-      console.log('Set up polling for signature status updates');
-    }
-    
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [agreement.eviasignreference, agreement.status, signatureStatus, signatureManagementEnabled]);
-  
-  // Update previous status when current status changes
-  useEffect(() => {
-    if (signatureStatus && signatureStatus !== prevSignatureStatus) {
-      setPrevSignatureStatus(signatureStatus);
-    }
-  }, [signatureStatus]);
-
-  // Add real-time subscription to agreement updates
-  useEffect(() => {
-    if (!agreement?.id) {
-      return;
-    }
-
-    if (isMssqlApiEnabled()) {
-      return undefined;
-    }
-    
-    const handleAgreementUpdate = (payload) => {
-      console.log('Real-time agreement update received:', payload);
-      const updatedAgreement = payload.new;
-      
-      if (!updatedAgreement) {
-        return;
-      }
-      
-      // Update local status
-      if (updatedAgreement.signature_status !== signatureStatus) {
-        setPrevSignatureStatus(signatureStatus);
-        setSignatureStatus(updatedAgreement.signature_status);
-        setLastChecked(new Date().toISOString());
-        
-        // Show appropriate notification based on status
-        if (updatedAgreement.signature_status === 'completed') {
-          toast.success('Agreement has been fully signed!');
-        } else if (updatedAgreement.signature_status === 'in_progress') {
-          toast('A signatory has completed their signature');
-        } else if (updatedAgreement.signature_status === 'pending') {
-          toast('Signature request has been received');
-        }
-      }
-      
-      // Call parent handler if agreement status changed
-      if (onStatusChange && updatedAgreement.status !== agreement.status) {
-        onStatusChange(updatedAgreement.status);
-      }
-    };
-    
-    // Subscribe to agreement changes
-    const agreementSubscription = platformClient
-      .channel(`agreement_${agreement.id}`)
-      .on('postgres_changes', { 
-        event: 'UPDATE',
-        schema: 'public', 
-        table: 'agreements',
-        filter: `id=eq.${agreement.id}`
-      }, handleAgreementUpdate)
-      .subscribe();
-    
-    console.log(`Subscribed to real-time updates for agreement ${agreement.id}`);
-    
-    // Cleanup
-    return () => {
-      if (agreementSubscription) {
-        platformClient.removeChannel(agreementSubscription);
-        console.log(`Unsubscribed from real-time updates for agreement ${agreement.id}`);
-      }
-    };
-  }, [agreement?.id, onStatusChange]);
-
-  const refreshSignatureStatus = async () => {
-    if (!agreement.eviasignreference) {
-      return;
-    }
-    
-    try {
-      setIsCheckingStatus(true);
-      const result = await getSignatureStatus(agreement.eviasignreference);
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to get signature status');
-      }
-      
-      setSignatureStatus(result.status);
-      setLastChecked(new Date().toISOString());
-      
-      // If status is completed but DB doesn't reflect it, update accordingly
-      if (result.status === 'completed' && agreement.status !== STATUS.SIGNED) {
-        await checkSignatureStatus(); // Observation only: the webhook owns canonical updates
-      }
-      
-      toast.success('Signature status refreshed');
-    } catch (error) {
-      console.error('Error refreshing signature status:', error);
-      setError(error.message);
-      toast.error('Failed to refresh signature status');
-    } finally {
-      setIsCheckingStatus(false);
-    }
-  };
-
-  const checkSignatureStatus = async () => {
+  const checkSignatureStatus = useCallback(async () => {
     if (!agreement.eviasignreference) {
       return;
     }
@@ -216,11 +84,11 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
     try {
       setIsCheckingStatus(true);
       const result = await getSignatureStatus(agreement.eviasignreference);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to get signature status');
       }
-      
+
       setSignatureStatus(result.status);
       setLastChecked(new Date().toISOString());
 
@@ -244,7 +112,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
           polledSignatories: summarizePolledSignatories(result.signatories)
         });
       }
-      
+
       // Evia polling is advisory only. A browser-observed "completed" status
       // cannot write signatures, overwrite a retained PDF or change the
       // canonical agreement. Verified webhooks and server-side archival own
@@ -265,6 +133,138 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
     } finally {
       setIsCheckingStatus(false);
     }
+  }, [agreement?.eviasignreference, agreement?.id, agreement?.signatories_status, agreement?.signature_status, agreement?.status, retainedSignedDocumentUrl]);
+
+  useEffect(() => {
+    // Check signature status when component mounts or reference changes
+    if (signatureManagementEnabled && agreement.eviasignreference) {
+      checkSignatureStatus();
+    }
+  }, [agreement?.eviasignreference, checkSignatureStatus, signatureManagementEnabled]);
+
+  // Set up automatic status checking every 2 minutes if we have a reference
+  useEffect(() => {
+    let intervalId = null;
+
+    // We'll use polling as a fallback if we have a reference and status isn't completed
+    if (signatureManagementEnabled && agreement.eviasignreference &&
+        (agreement.status !== STATUS.SIGNED &&
+         signatureStatus !== 'completed')) {
+
+      // Check every 2 minutes
+      intervalId = setInterval(() => {
+        console.log('Polling signature status...');
+        checkSignatureStatus();
+      }, 120000); // 2 minutes
+
+      console.log('Set up polling for signature status updates');
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [agreement?.eviasignreference, agreement?.status, signatureStatus, signatureManagementEnabled, checkSignatureStatus]);
+
+  // Update previous status when current status changes
+  useEffect(() => {
+    if (signatureStatus && signatureStatus !== prevSignatureStatus) {
+      setPrevSignatureStatus(signatureStatus);
+    }
+  }, [prevSignatureStatus, signatureStatus]);
+
+  // Add real-time subscription to agreement updates
+  useEffect(() => {
+    if (!agreement?.id) {
+      return;
+    }
+
+    if (isMssqlApiEnabled()) {
+      return undefined;
+    }
+
+    const handleAgreementUpdate = (payload) => {
+      console.log('Real-time agreement update received:', payload);
+      const updatedAgreement = payload.new;
+
+      if (!updatedAgreement) {
+        return;
+      }
+
+      // Update local status
+      if (updatedAgreement.signature_status !== signatureStatus) {
+        setPrevSignatureStatus(signatureStatus);
+        setSignatureStatus(updatedAgreement.signature_status);
+        setLastChecked(new Date().toISOString());
+
+        // Show appropriate notification based on status
+        if (updatedAgreement.signature_status === 'completed') {
+          toast.success('Agreement has been fully signed!');
+        } else if (updatedAgreement.signature_status === 'in_progress') {
+          toast('A signatory has completed their signature');
+        } else if (updatedAgreement.signature_status === 'pending') {
+          toast('Signature request has been received');
+        }
+      }
+
+      // Call parent handler if agreement status changed
+      if (onStatusChange && updatedAgreement.status !== agreement.status) {
+        onStatusChange(updatedAgreement.status);
+      }
+    };
+
+    // Subscribe to agreement changes
+    const agreementSubscription = platformClient
+      .channel(`agreement_${agreement.id}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE',
+        schema: 'public', 
+        table: 'agreements',
+        filter: `id=eq.${agreement.id}`
+      }, handleAgreementUpdate)
+      .subscribe();
+
+    console.log(`Subscribed to real-time updates for agreement ${agreement.id}`);
+
+    // Cleanup
+    return () => {
+      if (agreementSubscription) {
+        platformClient.removeChannel(agreementSubscription);
+        console.log(`Unsubscribed from real-time updates for agreement ${agreement.id}`);
+      }
+    };
+  }, [agreement?.id, agreement?.status, onStatusChange, signatureStatus]);
+
+  const refreshSignatureStatus = async () => {
+    if (!agreement.eviasignreference) {
+      return;
+    }
+
+    try {
+      setIsCheckingStatus(true);
+      const result = await getSignatureStatus(agreement.eviasignreference);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get signature status');
+      }
+
+      setSignatureStatus(result.status);
+      setLastChecked(new Date().toISOString());
+
+      // If status is completed but DB doesn't reflect it, update accordingly
+      if (result.status === 'completed' && agreement.status !== STATUS.SIGNED) {
+        await checkSignatureStatus(); // Observation only: the webhook owns canonical updates
+      }
+
+      toast.success('Signature status refreshed');
+    } catch (error) {
+      console.error('Error refreshing signature status:', error);
+      setError(error.message);
+      toast.error('Failed to refresh signature status');
+    } finally {
+      setIsCheckingStatus(false);
+    }
   };
 
   const handleSendForSignature = async () => {
@@ -282,7 +282,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
       let webhookUrl = null;
       const isProduction = window.location.hostname !== 'localhost' && 
                          window.location.hostname !== '127.0.0.1';
-                         
+
       if (isProduction) {
         webhookUrl = await getEviaAgreementCallbackUrl(agreement.id);
         console.log('Using secure agreement-bound Evia webhook URL');
@@ -346,10 +346,10 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
         onStatusChange(STATUS.PENDING_SIGNATURE);
       }
       toast.success('Document sent for signature');
-      
+
       setSignatureStatus('pending');
       setLastChecked(sentAt);
-      
+
       console.log('Signature request created with ID:', result.requestId);
       console.log('Status updates will be received via webhook at:', webhookUrl);
 
@@ -376,17 +376,17 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
   const handleResetSignatureStatus = async () => {
     try {
       setLoading(true);
-      
+
       await updateAgreementData(agreement.id, {
         status: STATUS.REVIEW,
         eviasignreference: null,
         updatedat: new Date().toISOString()
       });
-      
+
       // Clear local status state
       setSignatureStatus(null);
       setPrevSignatureStatus(null);
-      
+
       // Notify parent component of status change
       if (onStatusChange) {
         onStatusChange(STATUS.REVIEW);
@@ -406,10 +406,10 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
     if (!eviaStatus) {
       return null;
     }
-    
+
     // Convert to string to ensure safe comparison
     const statusStr = String(eviaStatus);
-    
+
     switch (statusStr) {
       case 'pending':
       case 'pending_signature':
@@ -452,7 +452,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
             Send for Signature
           </Button>
         )}
-        
+
         {/* Check Status Button - only shown when there's a signature in progress */}
         {signatureManagementEnabled && agreement.eviasignreference && (
           <Button
@@ -479,20 +479,20 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
               Last checked: {lastChecked ? new Date(lastChecked).toLocaleString() : 'Never'}
             </div>
           </div>
-          
+
           <div className="mt-3">
             <SignatureStatusTracker status={mapStatusForTracker(signatureStatus)} />
           </div>
-          
+
           {signatureStatus !== prevSignatureStatus && (
             <div className="mt-3">
-              <SignatureStatusNotification 
-                prevStatus={prevSignatureStatus} 
-                currentStatus={signatureStatus} 
+              <SignatureStatusNotification
+                prevStatus={prevSignatureStatus}
+                currentStatus={signatureStatus}
               />
             </div>
           )}
-          
+
           {signatureData && (
             <div className="mt-4">
               <SignatureProcessDetails data={signatureData} />
@@ -500,7 +500,7 @@ const AgreementActions = ({ agreement, onStatusChange, signatureManagementEnable
           )}
         </div>
       )}
-      
+
       {/* Dev Tools - only show in development mode or for admin roles */}
       {signatureManagementEnabled && (process.env.NODE_ENV === 'development' || agreement.status === 'pending_signature') && 
         agreement.eviasignreference && (

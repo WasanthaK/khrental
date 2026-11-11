@@ -38,7 +38,7 @@ const supply = ({
   };
   const fetchImpl = async (url, options) => {
     captures.push({ url, options });
-    if (throws) throw new Error('network offline');
+    if (throws) {throw new Error('network offline');}
     return {
       ok: httpStatus >= 200 && httpStatus < 300,
       json: async () => payload
@@ -130,12 +130,12 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
   assert.match(routes, /<VerifiedSeekerBoundary redirectOnly \/>/);
   assert.match(routes, /getDefaultLandingPath\(/);
   assert.match(routes, /defaultPath === '\/unauthorized'/);
-  assert.match(boundary, /if \(!enabled\) return <Navigate to="\/unauthorized" replace \/>/);
+  assert.match(boundary, /if \(!enabled\) \{return <Navigate to="\/unauthorized" replace \/>/);
   assert.match(boundary, /personal\?fetchPersonalRentalBrowserContext:fetchVerifiedSeekerBrowserContext/);
   assert.match(boundary, /status\.key !== key/);
-  assert.match(boundary, /if \(!status\.eligible\) return <Navigate to="\/unauthorized" replace \/>/);
+  assert.match(boundary, /if \(!status\.eligible\) \{return <Navigate to="\/unauthorized" replace \/>/);
   assert.match(boundary, /isVerifiedTenantlessSeeker\(profile\)/);
-  assert.match(boundary, /if \(redirectOnly\) return <Navigate to=\{enquiryReturnPath\(location.search\) \|\| getOwnerContinuationPath\(\{user,membership\}\) \|\| '\/seeker'\} replace \/>/);
+  assert.match(boundary, /if \(redirectOnly\) \{return <Navigate to=\{enquiryReturnPath\(location.search\) \|\| getOwnerContinuationPath\(\{user,membership\}\) \|\| '\/seeker'\} replace \/>/);
   assert.match(login, /if \(proof\.verified && proof\.eligible\)/);
   assert.match(login, /navigate\(enquiryReturnPath\(location.search\) \|\| '\/seeker', \{ replace: true \}\)/);
   // The real hook returns { data }, not an in-scope data variable in Login.
@@ -156,7 +156,6 @@ test('legacy tenant landing stays unchanged and seeker route is double flagged',
     { loader: 'jsx', jsx: 'automatic' });
   assert.match(jsx.code, /VerifiedSeekerBoundary/);
 });
-
 
 test('explicit personal search requires distinct actor proof and never sends a tenant selection',async()=>{
   const current=supply({payload:{data:{verified:true,eligible:true,userType:'rental',tenantId:null}}});

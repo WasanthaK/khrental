@@ -17,6 +17,7 @@ export const parseOfferAction=(body,owner=false)=>{
         (body.unitId!==null&&!isUuid(body.unitId))||![body.rent,body.deposit,body.fees].every(money)||Number(body.rent)<=0||
         !date(body.startDate)||!date(body.endDate)||body.endDate<=body.startDate||
         !instant(body.offerUntil)||!instant(body.holdUntil)||body.holdUntil<=body.offerUntil||
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
         typeof body.terms!=='string'||!body.terms.trim()||body.terms.length>8000||/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(body.terms)){throw invalid();}
     Object.assign(out,{applicationVersion:body.applicationVersion,unitId:body.unitId?.toLowerCase()||null,
       rent:Number(body.rent).toFixed(2),deposit:Number(body.deposit).toFixed(2),fees:Number(body.fees).toFixed(2),
@@ -40,14 +41,14 @@ export const assertOfferVersion=(row,input)=>{
 // A replacement preserves history and must never overlap a provider signing
 // request, any recorded signature, or an activated tenancy.
 export const canReplaceRentalDraft = (agreement) => {
-  if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') return false;
+  if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') {return false;}
   if (agreement.eviasignreference || agreement.signature_request_id || agreement.signature_sent_at || agreement.signeddate || agreement.signature_completed_at || agreement.activated_at
-      || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) return false;
-  if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) return false;
+      || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) {return false;}
+  if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) {return false;}
   let roster = agreement.signatories_status;
   if (typeof roster === 'string') {
     try { roster = JSON.parse(roster); } catch { return false; }
   }
-  if (roster && (!Array.isArray(roster) || roster.some(s => !['pending', ''].includes(String(s?.status || '').toLowerCase()) || s?.signedAt || s?.signed_at))) return false;
+  if (roster && (!Array.isArray(roster) || roster.some(s => !['pending', ''].includes(String(s?.status || '').toLowerCase()) || s?.signedAt || s?.signed_at))) {return false;}
   return true;
 };

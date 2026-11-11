@@ -29,7 +29,7 @@ function harness({ mssql = true, apiError = null, legacyError = null } = {}) {
     () => mssql,
     async (route, options) => {
       calls.push({ route, options });
-      if (apiError) throw apiError;
+      if (apiError) {throw apiError;}
       return result;
     },
     { from: table => { generic.push(['from', table]); return query; } },

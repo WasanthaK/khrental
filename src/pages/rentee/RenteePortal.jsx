@@ -101,7 +101,7 @@ const RenteePortal = () => {
     };
 
     fetchRenteeData();
-  }, [user?.id, user?.profileId, activeTenantId]);
+  }, [user?.id, user?.profileId, activeTenantId, user]);
 
   if (loading) {
     return (

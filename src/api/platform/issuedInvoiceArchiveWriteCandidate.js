@@ -122,17 +122,13 @@ export const publishIssuedInvoiceArchiveCandidate = async ({
   // HOLDLOCK on the same tenant/invoice and evidence that the committed issue
   // snapshot hash matches; one archive row per invoice. No UPDATE or DELETE.
   let committed;
-  try {
+
     committed = await archiveLedger.commitIfAbsent({
       ...expected,
       issuedSnapshotJson: JSON.stringify(normalized),
       actorUserId:actorId
     });
-  } catch (error) {
-    // Cannot infer success from timeout/network error. A later guarded retry
-    // may reconcile; do NOT delete the object or send an email here.
-    throw error;
-  }
+
   if (!committed || !['inserted','existing'].includes(committed.outcome)) {
     fail('INVOICE_ARCHIVE_COMMIT_UNCONFIRMED',
       'Archive ledger did not return a confirmed insert or existing record.');

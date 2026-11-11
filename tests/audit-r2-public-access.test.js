@@ -9,7 +9,7 @@ const simulate=({managed=false,domains=[],extra}={})=>{
   const calls=[];
   return {calls,fetchImpl:async(url,options)=>{
     calls.push({url,options});
-    if(url.endsWith('/managed'))return response({enabled:managed,domain:'must-not-be-logged.r2.dev'});
+    if(url.endsWith('/managed')){return response({enabled:managed,domain:'must-not-be-logged.r2.dev'});}
     return {status:200,json:async()=>({success:true,result:{domains},...extra})};
   }};
 };
@@ -29,7 +29,7 @@ test('private bucket requires both managed and custom public access disabled',as
   }
   const output=JSON.stringify(result);
   for(const secret of [env.R2_ACCOUNT_ID,env.R2_BUCKET,env.CLOUDFLARE_R2_AUDIT_TOKEN,
-    'must-not-be-logged.r2.dev','must-not-be-logged.example'])assert.ok(!output.includes(secret));
+    'must-not-be-logged.r2.dev','must-not-be-logged.example']){assert.ok(!output.includes(secret));}
 });
 test('managed and custom public access independently fail the audit',async()=>{
   for(const config of [{managed:true,domains:[]},{managed:false,domains:[{enabled:true}]}]){

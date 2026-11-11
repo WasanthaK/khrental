@@ -14,11 +14,11 @@ const reject = (message, code = 'INVOICE_ARCHIVE_INVALID') => {
   throw error;
 };
 const id = (value, label) => {
-  if (typeof value !== 'string' || !UUID.test(value)) reject('Invalid ' + label);
+  if (typeof value !== 'string' || !UUID.test(value)) {reject('Invalid ' + label);}
   return value.toLowerCase();
 };
 const hash = (value, label) => {
-  if (typeof value !== 'string' || !HASH.test(value)) reject('Invalid ' + label);
+  if (typeof value !== 'string' || !HASH.test(value)) {reject('Invalid ' + label);}
   return value;
 };
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -67,7 +67,7 @@ export const readRetainedInvoiceArchiveCandidate = async ({
   archive, tenantId, invoiceId, getObject
 }) => {
   if (!archive || typeof archive !== 'object' || Array.isArray(archive) ||
-      typeof getObject !== 'function') reject('Archive manifest and reader required.');
+      typeof getObject !== 'function') {reject('Archive manifest and reader required.');}
   const targetTenantId = id(tenantId, 'request tenant ID');
   const targetInvoiceId = id(invoiceId, 'request invoice ID');
   const archivedTenantId = id(archive.tenantId, 'archive tenant ID');
@@ -81,11 +81,11 @@ export const readRetainedInvoiceArchiveCandidate = async ({
   if (archive.version !== 1 || archive.bucket !== 'invoices' ||
       archive.state !== 'committed' ||
       !Number.isInteger(archive.byteLength) || archive.byteLength < 100 ||
-      archive.byteLength > MAX_PDF_BYTES) reject('Invoice archive is not committed and valid.');
+      archive.byteLength > MAX_PDF_BYTES) {reject('Invoice archive is not committed and valid.');}
   const canonicalPath = issuedInvoiceArchivePath({
     tenantId: archivedTenantId, invoiceId: archivedInvoiceId, pdfSha256
   });
-  if (archive.path !== canonicalPath) reject('Invoice archive path is not canonical.');
+  if (archive.path !== canonicalPath) {reject('Invoice archive path is not canonical.');}
 
   // Caller is responsible for authorization to read this invoice and fetching
   // its authoritative ledger row; this is a second fail-closed data boundary.

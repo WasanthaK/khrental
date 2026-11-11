@@ -22,16 +22,16 @@ const RENTEE_PROFILE_FIELDS = new Set([
 ]);
 
 const normalizeAssociations = (value) => {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {return [];}
   const seen = new Set();
 
   return value.reduce((associations, association) => {
     const propertyId = String(association?.propertyId || association?.property_id || '').trim();
     const unitId = String(association?.unitId || association?.unit_id || '').trim() || null;
-    if (!propertyId) return associations;
+    if (!propertyId) {return associations;}
 
     const key = `${propertyId}:${unitId || ''}`;
-    if (seen.has(key)) return associations;
+    if (seen.has(key)) {return associations;}
     seen.add(key);
     associations.push({ propertyId, unitId });
     return associations;

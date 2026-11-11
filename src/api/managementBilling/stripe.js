@@ -1,10 +1,10 @@
 import {BILLING_ACCOUNT, problem} from './contract.js';
 
 const flatten = (value, prefix, output) => {
-  if (value === undefined || value === null) return;
-  if (Array.isArray(value)) value.forEach((item,index)=>flatten(item,`${prefix}[${index}]`,output));
-  else if (typeof value === 'object') Object.entries(value).forEach(([key,item])=>flatten(item,prefix?`${prefix}[${key}]`:key,output));
-  else output.append(prefix,String(value));
+  if (value === undefined || value === null) {return;}
+  if (Array.isArray(value)) {value.forEach((item,index)=>flatten(item,`${prefix}[${index}]`,output));}
+  else if (typeof value === 'object') {Object.entries(value).forEach(([key,item])=>flatten(item,prefix?`${prefix}[${key}]`:key,output));}
+  else {output.append(prefix,String(value));}
 };
 export const stripeForm = value => {const result=new URLSearchParams();flatten(value,'',result);return result;};
 
@@ -13,9 +13,9 @@ export const createStripeClient = ({env=process.env,fetchImpl=globalThis.fetch}=
   const configured=()=>env.MANAGEMENT_BILLING_SANDBOX_ENABLED==='true' && /^(sk|rk)_test_/.test(key) &&
     env.STRIPE_SANDBOX_ACCOUNT_ID===BILLING_ACCOUNT;
   const request=async(method,path,body={},idempotencyKey)=>{
-    if(!configured()) throw problem(503,'BILLING_NOT_CONFIGURED','Sandbox billing is not configured.');
-    if(!/^\/v1\/[a-zA-Z0-9_/]+$/.test(path)) throw problem(500,'BILLING_API_PATH_INVALID','Invalid billing API operation.');
-    if(method!=='GET'&&!idempotencyKey) throw problem(500,'BILLING_IDEMPOTENCY_REQUIRED','Billing writes require an operation identifier.');
+    if(!configured()) {throw problem(503,'BILLING_NOT_CONFIGURED','Sandbox billing is not configured.');}
+    if(!/^\/v1\/[a-zA-Z0-9_/]+$/.test(path)) {throw problem(500,'BILLING_API_PATH_INVALID','Invalid billing API operation.');}
+    if(method!=='GET'&&!idempotencyKey) {throw problem(500,'BILLING_IDEMPOTENCY_REQUIRED','Billing writes require an operation identifier.');}
     const form=stripeForm(body);
     let response;
     try {
@@ -26,14 +26,14 @@ export const createStripeClient = ({env=process.env,fetchImpl=globalThis.fetch}=
       });
     } catch {throw problem(503,'STRIPE_UNAVAILABLE','Stripe did not confirm this operation. Retry the same request.');}
     const data=await response.json().catch(()=>null);
-    if(!response.ok || !data) throw problem(response.status===429?503:502,'STRIPE_REQUEST_FAILED',
-      'Stripe could not complete this operation. Retry the same request or review the billing configuration.');
-    if(data.livemode===true) throw problem(502,'STRIPE_MODE_MISMATCH','Live Stripe objects are not accepted by sandbox billing.');
+    if(!response.ok || !data) {throw problem(response.status===429?503:502,'STRIPE_REQUEST_FAILED',
+      'Stripe could not complete this operation. Retry the same request or review the billing configuration.');}
+    if(data.livemode===true) {throw problem(502,'STRIPE_MODE_MISMATCH','Live Stripe objects are not accepted by sandbox billing.');}
     return data;
   };
   const assertAccount=async()=>{
     const account=await request('GET','/v1/account');
-    if(account.id!==BILLING_ACCOUNT) throw problem(503,'STRIPE_ACCOUNT_MISMATCH','The configured Stripe key belongs to a different account.');
+    if(account.id!==BILLING_ACCOUNT) {throw problem(503,'STRIPE_ACCOUNT_MISMATCH','The configured Stripe key belongs to a different account.');}
     return account;
   };
   return {request,assertAccount,configured};
@@ -95,7 +95,7 @@ export const subscriptionProjection = ({subscription,invoice,account,firstFailur
       subscription.livemode!==false || items.length!==1 || objectId(item?.price)!==account.stripe_price_id ||
       item.price?.recurring?.interval!=='month' || item.price?.recurring?.usage_type!=='licensed' ||
       !Number.isSafeInteger(item.quantity) || item.quantity<1 || subscription.trial_end || subscription.trial_start)
-    throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription ownership, price or billing terms need reconciliation.');
+    {throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription ownership, price or billing terms need reconciliation.');}
   const periodEnd=item.current_period_end || subscription.current_period_end;
   const invoiceMatches=invoice && invoice.livemode===false && objectId(invoice.customer)===account.stripe_customer_id &&
     invoiceSubscription(invoice)===subscription.id && invoice.currency===item.price.currency;

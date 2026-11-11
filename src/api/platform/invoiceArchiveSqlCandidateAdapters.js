@@ -10,17 +10,17 @@ const error = (code,message) => {const e = new Error(message);e.code=code;throw 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH = /^[0-9a-f]{64}$/;
 const guid = v => {
-  if(typeof v!=='string'||!GUID.test(v)) error('INVOICE_ARCHIVE_SCOPE_DENIED','Invalid archive identity.');
+  if(typeof v!=='string'||!GUID.test(v)) {error('INVOICE_ARCHIVE_SCOPE_DENIED','Invalid archive identity.');}
   return v.toLowerCase();
 };
 const ids = v => ({tenantId:guid(v.tenantId),invoiceId:guid(v.invoiceId)});
 const snapshotEvidence = metadata => {
   try {
     const event=typeof metadata==='string'?JSON.parse(metadata):metadata;
-    if (!event || !HASH.test(event.documentSnapshotSha256||''))return null;
+    if (!event || !HASH.test(event.documentSnapshotSha256||'')){return null;}
     const snap=normalizeInvoiceDocumentSnapshot(event.documentSnapshot);
     const hash=sha256(JSON.stringify(snap));
-    if(hash!==event.documentSnapshotSha256)return null;
+    if(hash!==event.documentSnapshotSha256){return null;}
     return {snapshot:snap,snapshotSha256:hash};
   } catch{return null;}
 };
@@ -38,14 +38,14 @@ export const createInvoiceArchiveSqlCandidateAdapters = ({pool,sql}) => {
       'SELECT TOP 1 id,tenant_id,status FROM dbo.invoices '+
       (locked?'WITH (UPDLOCK,HOLDLOCK) ':'')+
       'WHERE tenant_id=@tenantId AND id=@invoiceId',scope);
-    if(!inv || !inv.status || String(inv.status).toLowerCase()==='draft')return null;
+    if(!inv || !inv.status || String(inv.status).toLowerCase()==='draft'){return null;}
     const ev=await one(db,
       "SELECT TOP 1 metadata FROM dbo.billing_lifecycle_events WHERE tenant_id=@tenantId "+
       "AND invoice_id=@invoiceId AND event_type='invoice_issued' "+
       'ORDER BY createdat DESC,id DESC',scope);
     const found=snapshotEvidence(ev?.metadata);
     if(!found || guid(found.snapshot.tenantId)!==scope.tenantId ||
-        guid(found.snapshot.invoiceId)!==scope.invoiceId)return null;
+        guid(found.snapshot.invoiceId)!==scope.invoiceId){return null;}
     return {...scope,issued:true,snapshotSha256:found.snapshotSha256,snapshot:found.snapshot};
   };
   const stored=async (db,scope,locked=false)=>{
@@ -54,7 +54,7 @@ export const createInvoiceArchiveSqlCandidateAdapters = ({pool,sql}) => {
       'object_path,byte_length,issued_snapshot_json FROM dbo.invoice_pdf_archives '+
       (locked?'WITH (UPDLOCK,HOLDLOCK) ':'')+
       'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId',scope);
-    if(!row)return null;
+    if(!row){return null;}
     return {
       tenantId:guid(row.tenant_id),invoiceId:guid(row.invoice_id),
       version:row.archive_version,bucket:'invoices',path:row.object_path,

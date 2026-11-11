@@ -2,21 +2,21 @@
 // Keep this a pure, tenant-agnostic display normalization: authorization and
 // property ownership remain with the existing server-scoped directory API.
 const parseJson = (value, fallback) => {
-  if (value === null || value === undefined || value === '') return fallback;
-  if (typeof value !== 'string') return value;
+  if (value === null || value === undefined || value === '') {return fallback;}
+  if (typeof value !== 'string') {return value;}
   try { return JSON.parse(value); } catch { return fallback; }
 };
 
 const checklistText = value => {
-  if (typeof value === 'string') return value.trim();
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  if (typeof value === 'string') {return value.trim();}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {return '';}
   const label = value.label ?? value.text ?? value.name ?? value.description ?? value.title;
   return typeof label === 'string' ? label.trim() : '';
 };
 
 export const getPrimaryPropertyImageUrl = images => {
   const parsed = parseJson(images, []);
-  if (!Array.isArray(parsed)) return '';
+  if (!Array.isArray(parsed)) {return '';}
   return parsed.map((image, index) => ({
     url: typeof image === 'string' ? image : image?.image_url,
     order: Number.isFinite(Number(image?.order)) ? Number(image.order) : index
@@ -35,10 +35,10 @@ export const normalizePropertyCoordinates = (input, latitude, longitude) => {
   const latRaw = value.lat ?? value.latitude ?? latitude;
   const lngRaw = value.lng ?? value.longitude ?? longitude;
   if (latRaw === null || latRaw === undefined || latRaw === '' ||
-      lngRaw === null || lngRaw === undefined || lngRaw === '') return null;
+      lngRaw === null || lngRaw === undefined || lngRaw === '') {return null;}
   const lat = Number(latRaw), lng = Number(lngRaw);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
-      lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+      lat < -90 || lat > 90 || lng < -180 || lng > 180) {return null;}
   return { lat, lng };
 };
 
@@ -70,8 +70,8 @@ export const propertyImageDisplayUrl = (input, { tenantId, appOrigin } = {}) => 
 // Preserve persisted values; this maps the legacy vocabulary for display only.
 export const getPropertyAvailability = status => {
   const normalized = String(status || '').trim().toLowerCase();
-  if (['active', 'available'].includes(normalized)) return { value: 'available', label: 'Available' };
-  if (['rented', 'occupied'].includes(normalized)) return { value: 'rented', label: 'Rented' };
+  if (['active', 'available'].includes(normalized)) {return { value: 'available', label: 'Available' };}
+  if (['rented', 'occupied'].includes(normalized)) {return { value: 'rented', label: 'Rented' };}
   const labels = { reserved: 'Reserved', maintenance: 'Under Maintenance', inactive: 'Inactive' };
   return { value: normalized, label: labels[normalized] || 'Unknown' };
 };
@@ -79,12 +79,12 @@ export const getPropertyAvailability = status => {
 // An active agreement is the current relationship even if its contractual end
 // date has passed: occupancy ends only when the exit workflow closes it.
 export const getCurrentPropertyRentees = (agreements, propertyId) => {
-  if (!propertyId) return [];
+  if (!propertyId) {return [];}
   const sameId = (a, b) => Boolean(a && b) && String(a).toLowerCase() === String(b).toLowerCase();
   const renters = new Map();
   for (const agreement of Array.isArray(agreements) ? agreements : []) {
     if (String(agreement?.status || '').toLowerCase() !== 'active'
-        || !sameId(agreement.propertyid, propertyId) || !agreement.renteeid) continue;
+        || !sameId(agreement.propertyid, propertyId) || !agreement.renteeid) {continue;}
     const renter = agreement.rentee;
     if (renter && sameId(renter.id, agreement.renteeid)) {
       renters.set(String(renter.id).toLowerCase(), renter);

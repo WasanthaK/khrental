@@ -38,7 +38,7 @@ const setup=async()=>{
   const store={
     createIfAbsent:async(b,p,data)=>{
       created++;
-      if(stored)return 'exists';
+      if(stored){return 'exists';}
       stored=Buffer.from(data);
       return 'created';
     },

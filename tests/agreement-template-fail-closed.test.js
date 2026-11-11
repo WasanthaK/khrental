@@ -51,7 +51,7 @@ function harness({ mssqlEnabled = true, result = { id: 'template-1' }, apiError 
   };
   const requestMssqlApi = async (path, options) => {
     apiCalls.push({ path, options });
-    if (apiError) throw apiError;
+    if (apiError) {throw apiError;}
     if (path.startsWith('/api/mssql/agreement-templates?')) {
       const params = new URL('https://example.invalid' + path).searchParams;
       const page = Number(params.get('page'));

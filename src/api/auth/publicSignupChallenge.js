@@ -20,8 +20,8 @@ export const hashPublicSignupChallengeToken = token => {
 };
 
 export const verifyPublicSignupChallengeTokenHash = (token, tokenHash) => {
-  if (typeof tokenHash !== 'string' || !HASH_PATTERN.test(tokenHash)) return false;
-  if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return false;
+  if (typeof tokenHash !== 'string' || !HASH_PATTERN.test(tokenHash)) {return false;}
+  if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) {return false;}
   const actual = Buffer.from(hashPublicSignupChallengeToken(token), 'hex');
   return timingSafeEqual(actual, Buffer.from(tokenHash, 'hex'));
 };

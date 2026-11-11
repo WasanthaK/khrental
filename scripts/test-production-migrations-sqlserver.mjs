@@ -111,7 +111,7 @@ const waitForSqlServer = async (connection) => {
       return;
     } catch (error) {
       lastError = error;
-      if (attempt < 45) await sleep(2000);
+      if (attempt < 45) {await sleep(2000);}
     }
   }
   throw new Error(`Disposable SQL Server did not become ready: ${lastError?.message || 'unknown error'}`);
@@ -120,7 +120,7 @@ const waitForSqlServer = async (connection) => {
 const parsePublishedPort = (value) => {
   const line = String(value || '').split(/\r?\n/).find(Boolean) || '';
   const match = line.match(/:(\d+)$/);
-  if (!match) throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);
+  if (!match) {throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);}
   return Number(match[1]);
 };
 
@@ -828,7 +828,6 @@ const main = async () => {
       assert.equal(replay.state,'already_committed');
       assert.equal(replay.archive.path,first.archive.path);
 
-
       // Real SQL Server + temporary disk end-to-end proof for the same helper
       // that prepares both first customer email and staff-controlled resends.
       // The archive has already committed; a resend must read it with ZERO
@@ -979,7 +978,6 @@ const main = async () => {
       await fs.promises.rm(proofDirectory,{recursive:true,force:true});
     }
 
-
     const countrySql=fs.readFileSync(path.resolve('migrations/20261026_02_property_iso_country.sql'),'utf8');
     const beforeCountry=(await testPool.request().query('SELECT COUNT(*) AS n FROM dbo.properties')).recordset[0].n;
     await testPool.request().batch(countrySql);
@@ -1071,10 +1069,9 @@ const main = async () => {
     console.log('PASS: governed offer/hold migration double apply, exact enabled trigger proof and drift denial');
     await verifyManagementBilling(testPool);
 
-
   } finally {
     if (testPool) {
-      try { await testPool.close(); } catch {}
+      try { await testPool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
 
     if (containerStarted) {
@@ -1096,9 +1093,9 @@ const main = async () => {
         // The disposable container is removed below even if database cleanup cannot run.
       } finally {
         if (masterPool) {
-          try { await masterPool.close(); } catch {}
+          try { await masterPool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
         }
-        try { runDocker(['rm', '-f', containerName]); } catch {}
+        try { runDocker(['rm', '-f', containerName]); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
       }
     }
   }

@@ -30,18 +30,18 @@ export async function verifyPilot({mode,expected,fetcher=fetch}){
       headers:{Origin:requestOrigin},signal:AbortSignal.timeout(15000)
     });
     check(response.status===status,'Unexpected endpoint status');
-    if(cache)check(/\bno-store\b/i.test(response.headers.get('cache-control')||''),'Missing no-store');
+    if(cache){check(/\bno-store\b/i.test(response.headers.get('cache-control')||''),'Missing no-store');}
     check(!response.headers.get('set-cookie'),'Unexpected anonymous cookie');
     check(!response.headers.get('access-control-allow-credentials'),'Unexpected credentialed CORS');
     if(cors){
       check(response.headers.get('access-control-allow-origin')===requestOrigin,'Missing allowed CORS');
       check(/\borigin\b/i.test(response.headers.get('vary')||''),'Missing CORS Vary');
     }
-    if(requestOrigin==='https://untrusted.invalid')check(!response.headers.get('access-control-allow-origin'),'Untrusted CORS');
+    if(requestOrigin==='https://untrusted.invalid'){check(!response.headers.get('access-control-allow-origin'),'Untrusted CORS');}
     return binary?response:status===200?response.json():null;
   };
   if(mode==='disabled'){
-    for(const country of ['LK','BN'])await request('/api/public-listings?country='+country,{status:404,cache:false});
+    for(const country of ['LK','BN']){await request('/api/public-listings?country='+country,{status:404,cache:false});}
     return;
   }
   const {photo,mediaId}=validateExpected(expected);
@@ -74,7 +74,7 @@ export async function verifyPilot({mode,expected,fetcher=fetch}){
   while(offset+8<=bytes.length){
     const kind=bytes.toString('ascii',offset,offset+4),length=bytes.readUInt32LE(offset+4);
     check(!['EXIF','XMP ','ICCP','ANIM','ANMF'].includes(kind),'Prohibited media metadata');
-    if(['VP8 ','VP8L'].includes(kind))hasImage=true;
+    if(['VP8 ','VP8L'].includes(kind)){hasImage=true;}
     offset+=8+length+(length%2);check(offset<=bytes.length,'Invalid WebP chunk');
   }
   check(offset===bytes.length&&hasImage,'Missing WebP image');

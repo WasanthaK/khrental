@@ -29,7 +29,7 @@ export const stageEviaDocumentsForFencedLease = async ({
   const options = { tenantId, agreementId, archiveAttemptId };
   if (Array.isArray(documents) && documents.length > 0) {
     const result = await inlineStore({ ...options, documents });
-    if (result?.signedDocumentUrl) return result;
+    if (result?.signedDocumentUrl) {return result;}
   }
   // Preserve the existing inline-first, authenticated API-retrieval fallback.
   return retrieve({ ...retrievalOptions, ...options, requestId });
@@ -68,7 +68,7 @@ export const runDormantEviaFencedArchive = async ({
     }
     return { status: 'complete', signedDocumentUrl: claim.url };
   }
-  if (claim?.status === 'busy') return { status: 'busy', retryable: true };
+  if (claim?.status === 'busy') {return { status: 'busy', retryable: true };}
   if (claim?.status !== 'acquired' || typeof claim.attemptId !== 'string') {
     throw archiveError('EVIA_ARCHIVE_LEASE_CLAIM_INVALID', 'Archive lease returned no owner token.');
   }
@@ -82,7 +82,7 @@ export const runDormantEviaFencedArchive = async ({
   let pendingHeartbeat = Promise.resolve();
 
   const schedule = () => {
-    if (!staging || heartbeatFailure) return;
+    if (!staging || heartbeatFailure) {return;}
     timer = setTimeout(() => {
       pendingHeartbeat = Promise.resolve()
         .then(() => renew(owner))
@@ -104,7 +104,7 @@ export const runDormantEviaFencedArchive = async ({
     });
     // Never publish a URL after background renewal failed, even if upload
     // continued after cancellation was requested.
-    if (heartbeatFailure) throw heartbeatFailure;
+    if (heartbeatFailure) {throw heartbeatFailure;}
     if (!staged?.signedDocumentUrl) {
       throw archiveError('EVIA_ARCHIVE_SIGNED_PDF_REQUIRED',
         'Evia staging returned no locally retained signed agreement.', 502);
@@ -113,9 +113,9 @@ export const runDormantEviaFencedArchive = async ({
     // Stop heartbeat before finalization and drain any in-flight renewal so
     // the final SQL transaction is not racing a background lease mutation.
     staging = false;
-    if (timer) clearTimeout(timer);
+    if (timer) {clearTimeout(timer);}
     await pendingHeartbeat;
-    if (heartbeatFailure) throw heartbeatFailure;
+    if (heartbeatFailure) {throw heartbeatFailure;}
 
     // Mandatory post-storage fencing check covers long uploads, worker
     // pauses, late takeover and any expiry not caught by heartbeat.
@@ -133,7 +133,7 @@ export const runDormantEviaFencedArchive = async ({
     return published;
   } finally {
     staging = false;
-    if (timer) clearTimeout(timer);
+    if (timer) {clearTimeout(timer);}
     await pendingHeartbeat;
   }
 };

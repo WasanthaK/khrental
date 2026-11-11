@@ -256,8 +256,7 @@ test('successful signup and expected invalid challenges do not emit unavailable 
   assert.deepEqual(logged, []);
 });
 
-
-test('password-policy rejection is actionable and reveals no private failure details',async t=>{
+test('password-policy rejection is actionable and reveals no private failure details',async _t=>{
   const {adapters}=createHarness();
   adapters.redeem=async()=>{throw Object.assign(new Error('private token and password'),{code:'SIGNUP_PASSWORD_INVALID'});};
   await withHttp(createPublicSignupRouter(adapters),async post=>{
@@ -267,7 +266,6 @@ test('password-policy rejection is actionable and reveals no private failure det
     assert.doesNotMatch(JSON.stringify(body),/private token|short/);
   });
 });
-
 
 test('redemption response uses persisted SQL identity casing consistently with its issued session',async()=>{
   const {adapters}=createHarness();

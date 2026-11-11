@@ -35,8 +35,8 @@ test('card to details destination is registered, while matched-render errors are
 
 test('property availability treats activation and closure vocabulary consistently', async () => {
   const { getPropertyAvailability } = await import('../src/utils/propertyDetailFields.js');
-  for (const status of ['rented','occupied','RENTED']) assert.deepEqual(getPropertyAvailability(status),{value:'rented',label:'Rented'});
-  for (const status of ['active','available']) assert.deepEqual(getPropertyAvailability(status),{value:'available',label:'Available'});
+  for (const status of ['rented','occupied','RENTED']) {assert.deepEqual(getPropertyAvailability(status),{value:'rented',label:'Rented'});}
+  for (const status of ['active','available']) {assert.deepEqual(getPropertyAvailability(status),{value:'available',label:'Available'});}
   assert.equal(getPropertyAvailability('reserved').value,'reserved');
   assert.equal(getPropertyAvailability(null).label,'Unknown');
 });

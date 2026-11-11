@@ -24,7 +24,7 @@ export const loadApprovedBillingAdjustments = async (transaction, {
   agreementId,
   billingPeriod
 }) => {
-  if (!await hasBillingAdjustmentsTable(transaction)) return [];
+  if (!await hasBillingAdjustmentsTable(transaction)) {return [];}
 
   return queryTransaction(
     transaction,
@@ -46,7 +46,7 @@ export const attachBillingAdjustmentsToInvoice = async (transaction, {
   billingPeriod,
   invoiceId
 }) => {
-  if (!await hasBillingAdjustmentsTable(transaction)) return;
+  if (!await hasBillingAdjustmentsTable(transaction)) {return;}
 
   await queryTransaction(
     transaction,

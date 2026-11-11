@@ -25,7 +25,7 @@ const authHookSource = readFileSync(new URL('../src/hooks/useAuth.jsx', import.m
 
 test('multi-membership renter profile is derived only from authenticated server context', () => {
   const beginning = authHookSource.indexOf('const mergeTenantContext =');
-  const ending = authHookSource.indexOf('// Effect for development bypass', beginning);
+  const ending = authHookSource.indexOf('const fetchUserProfile =', beginning);
   assert.ok(beginning > 0 && ending > beginning);
   const merge = authHookSource.slice(beginning, ending);
   assert.match(merge, /platformClient\.auth\.getTenantContext\(\)/);
@@ -210,7 +210,7 @@ test('invitation card uses the mounted toast system and canonical action labels'
 });
 
 test('simulated invitations never create a token or call the email delivery endpoint', () => {
-  const simulationBlock = invitationServiceSource.match(/if \(simulated\) \{[\s\S]*?\n    \}/)?.[0] || '';
+  const simulationBlock = invitationServiceSource.match(/if \(simulated\) \{[\s\S]*?\n {4}\}/)?.[0] || '';
   assert.match(simulationBlock, /Invitation simulation completed without delivery/);
   assert.doesNotMatch(simulationBlock, /createSecureInvitation/);
   assert.doesNotMatch(simulationBlock, /sendInvitationEmail/);
@@ -311,7 +311,6 @@ test('legacy app_users database setup compatibility utility stays removed', () =
   );
 });
 
-
 test('legacy database migration compatibility utility stays removed', () => {
   assert.equal(
     existsSync(new URL('../src/utils/dbMigration.js', import.meta.url)),
@@ -319,14 +318,12 @@ test('legacy database migration compatibility utility stays removed', () => {
   );
 });
 
-
 test('legacy generic data fetcher compatibility utility stays removed', () => {
   assert.equal(
     existsSync(new URL('../src/utils/dataFetcher.js', import.meta.url)),
     false
   );
 });
-
 
 test('database utils SQL RPC compatibility surface stays removed', () => {
   const source = readFileSync(new URL('../src/utils/databaseUtils.js', import.meta.url), 'utf8');

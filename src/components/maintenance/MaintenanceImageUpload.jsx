@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { saveImage, STORAGE_BUCKETS } from '../../services/fileService';
+import { saveImage } from '../../services/fileService';
 import { toast } from 'react-hot-toast';
 
 /**
  * Specialized image upload component for maintenance requests
  * that allows selecting the image type (stage of maintenance)
  */
-const MaintenanceImageUpload = ({ 
-  onImagesChange, 
+const MaintenanceImageUpload = ({
+  onImagesChange,
   maxImages = 5, 
-  initialImages = [], 
+  initialImages = [],
   imageType = 'initial',
   disabled = false
 }) => {
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedImageType, setSelectedImageType] = useState(imageType);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // Initialize with any initial images
   useEffect(() => {
     if (initialImages && initialImages.length > 0) {
@@ -24,45 +24,45 @@ const MaintenanceImageUpload = ({
       setSelectedImages(initialImages);
     }
   }, [initialImages]);
-  
+
   // Handle file input change
   const handleFileChange = async (event) => {
-    if (disabled) return;
-    
+    if (disabled) {return;}
+
     const files = Array.from(event.target.files);
-    if (!files || files.length === 0) return;
-    
+    if (!files || files.length === 0) {return;}
+
     if (selectedImages.length + files.length > maxImages) {
       toast.error(`You can only upload a maximum of ${maxImages} images.`);
       return;
     }
-    
+
     setIsUploading(true);
-    
+
     // Track upload results
     let successCount = 0;
     let failureCount = 0;
     const newImages = [];
-    
+
     // Process each file sequentially to avoid overwhelming the server
     for (const file of files) {
       try {
         console.log('Uploading image:', file.name);
-        
+
         // Use the saveImage function which handles validation and compression
         const result = await saveImage(file, {
           folder: 'maintenance',
           compress: true,
           maxSize: 10 * 1024 * 1024 // 10MB
         });
-        
+
         if (!result.success) {
           console.error(`Failed to upload image ${file.name}:`, result.error);
           toast.error(`Failed to upload ${file.name}: ${result.error}`);
           failureCount++;
           continue;
         }
-        
+
         // Add to successful uploads
         const newImage = {
           url: result.url,
@@ -71,7 +71,7 @@ const MaintenanceImageUpload = ({
           size: file.size,
           previewUrl: URL.createObjectURL(file)
         };
-        
+
         newImages.push(newImage);
         successCount++;
       } catch (error) {
@@ -80,55 +80,55 @@ const MaintenanceImageUpload = ({
         failureCount++;
       }
     }
-    
+
     // Only update state if we have successful uploads
     if (newImages.length > 0) {
       const updatedImages = [...selectedImages, ...newImages];
       setSelectedImages(updatedImages);
-      
+
       // Call the parent's onChange handler
       if (onImagesChange) {
         onImagesChange(updatedImages);
       }
-      
+
       toast.success(`Successfully uploaded ${successCount} image(s)`);
     }
-    
+
     if (failureCount > 0) {
       toast.error(`Failed to upload ${failureCount} image(s)`);
     }
-    
+
     setIsUploading(false);
-    
+
     // Clear the file input
     event.target.value = '';
   };
-  
+
   // Handle removing an image
   const handleRemoveImage = (index) => {
-    if (disabled) return;
-    
+    if (disabled) {return;}
+
     const newImages = [...selectedImages];
-    
+
     // Release object URL if it exists
     if (newImages[index].previewUrl) {
       URL.revokeObjectURL(newImages[index].previewUrl);
     }
-    
+
     newImages.splice(index, 1);
     setSelectedImages(newImages);
-    
+
     // Call the parent's onChange handler
     if (onImagesChange) {
       onImagesChange(newImages);
     }
   };
-  
+
   // Get preview URL for an image (either from server or local preview)
   const getImagePreviewUrl = (image) => {
-    if (image.previewUrl) return image.previewUrl;
-    if (image.url) return image.url;
-    if (typeof image === 'string') return image;
+    if (image.previewUrl) {return image.previewUrl;}
+    if (image.url) {return image.url;}
+    if (typeof image === 'string') {return image;}
     return '';
   };
 
@@ -152,7 +152,7 @@ const MaintenanceImageUpload = ({
           <option value="additional">Additional</option>
         </select>
       </div>
-      
+
       {/* Image previews */}
       {selectedImages.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -184,7 +184,7 @@ const MaintenanceImageUpload = ({
           ))}
         </div>
       )}
-      
+
       {/* Upload button */}
       {selectedImages.length < maxImages && !disabled && (
         <div className="mt-2">
@@ -221,4 +221,4 @@ const MaintenanceImageUpload = ({
   );
 };
 
-export default MaintenanceImageUpload; 
+export default MaintenanceImageUpload;

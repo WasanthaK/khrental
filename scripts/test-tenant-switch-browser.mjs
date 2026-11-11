@@ -24,12 +24,12 @@ switchTenant:async id=>{const mode=new URLSearchParams(location.search).get('mod
 if(mode==='mismatch')return {data:{tenantContextVerified:true,membership:active}};
 if(mode==='unverified')return {data:{tenantContextVerified:false,membership:memberships.find(m=>m.tenant_id===id)}};
 localStorage.setItem('tenant',id);state=id;update(id);return {data:{role:'authenticated',tenantContextVerified:true,membership:memberships.find(m=>m.tenant_id===id)}};}};}`;
-const plugin={name:'tenant-switch-fixture',enforce:'pre',resolveId(source,importer){
-  if(source==='virtual:switch')return '\0switch-entry.jsx';
-  if(source.endsWith('/hooks/useAuth')||source.endsWith('/hooks/useAuth.jsx'))return '\0switch-auth.jsx';
+const plugin={name:'tenant-switch-fixture',enforce:'pre',resolveId(source,_importer){
+  if(source==='virtual:switch'){return '\0switch-entry.jsx';}
+  if(source.endsWith('/hooks/useAuth')||source.endsWith('/hooks/useAuth.jsx')){return '\0switch-auth.jsx';}
 },async load(id){
-  if(id==='\0switch-entry.jsx')return transformWithEsbuild(entry,'switch-entry.jsx',{loader:'jsx',jsx:'automatic'});
-  if(id==='\0switch-auth.jsx')return transformWithEsbuild(auth,'switch-auth.jsx',{loader:'jsx',jsx:'automatic'});
+  if(id==='\0switch-entry.jsx'){return transformWithEsbuild(entry,'switch-entry.jsx',{loader:'jsx',jsx:'automatic'});}
+  if(id==='\0switch-auth.jsx'){return transformWithEsbuild(auth,'switch-auth.jsx',{loader:'jsx',jsx:'automatic'});}
 }};
 let vite,server,browser;
 try{
@@ -63,4 +63,4 @@ try{
     await context.close();
     console.log('TENANT_SWITCH_BROWSER=PASS viewport='+width+' admin_to_renter renter_to_admin reload failure mismatch unverified');
   }
-}finally{await browser?.close();await vite?.close();if(server)await new Promise(r=>server.close(r));}
+}finally{await browser?.close();await vite?.close();if(server){await new Promise(r=>server.close(r));}}

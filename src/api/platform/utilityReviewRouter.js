@@ -89,7 +89,7 @@ export const createUtilityReviewRouter = () => {
          WHERE r.tenant_id = @tenantId AND r.id = @readingId`,
         { tenantId: req.tenantId, readingId }
       );
-      if (!reading) throw requestError(404, 'READING_NOT_FOUND', 'Utility reading not found.');
+      if (!reading) {throw requestError(404, 'READING_NOT_FOUND', 'Utility reading not found.');}
       if (!isAdminRole({ user: req.user, membership: req.membership })) {
         const assigned = new Set((req.membership?.assignedPropertyIds || []).map(String));
         if (!assigned.has(String(reading.propertyid))) {
@@ -135,7 +135,7 @@ export const createUtilityReviewRouter = () => {
         );
         result = updated;
       }
-      if (!result) throw requestError(409, 'READING_CONCURRENTLY_CHANGED', 'Utility reading changed during review.');
+      if (!result) {throw requestError(409, 'READING_CONCURRENTLY_CHANGED', 'Utility reading changed during review.');}
       await transaction.commit();
       transaction = null;
       return res.json({ data: result, error: null });
@@ -177,7 +177,7 @@ export const createUtilityReviewRouter = () => {
          WHERE tenant_id = @tenantId AND id = @readingId`,
         { tenantId: req.tenantId, readingId }
       );
-      if (!reading) throw requestError(404, 'READING_NOT_FOUND', 'Utility reading not found.');
+      if (!reading) {throw requestError(404, 'READING_NOT_FOUND', 'Utility reading not found.');}
       if (!isAdminRole({ user: req.user, membership: req.membership })) {
         const assigned = new Set((req.membership?.assignedPropertyIds || []).map(String));
         if (!assigned.has(String(reading.propertyid))) {
@@ -206,7 +206,7 @@ export const createUtilityReviewRouter = () => {
            AND (billing_status IS NULL OR billing_status = 'pending')`,
         { tenantId: req.tenantId, readingId, ...values }
       );
-      if (!updated) throw requestError(409, 'READING_CONCURRENTLY_CHANGED', 'Utility reading changed during editing.');
+      if (!updated) {throw requestError(409, 'READING_CONCURRENTLY_CHANGED', 'Utility reading changed during editing.');}
       await transaction.commit();
       transaction = null;
       return res.json({ data: updated, error: null });

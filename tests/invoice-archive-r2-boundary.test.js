@@ -55,7 +55,7 @@ test('R2 archive creates only canonical content-addressed PDFs with atomic preco
     driver=new R2StorageDriver();
   } finally {
     for(const [k,v] of Object.entries(previous)){
-      if(v===undefined)delete process.env[k];else process.env[k]=v;
+      if(v===undefined){delete process.env[k];}else {process.env[k]=v;}
     }
   }
   const calls=[];

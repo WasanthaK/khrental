@@ -35,7 +35,7 @@ export const createRedisPublicSignupLimiter = ({ redis } = {}) => {
   // An injected Redis client does not imply live infrastructure exists.
   // Binding this adapter in production requires a separately authorized
   // shared Redis deployment, TLS/auth, lifecycle health checks and failover.
-  if (!redis || typeof redis.eval !== 'function') throw unavailable();
+  if (!redis || typeof redis.eval !== 'function') {throw unavailable();}
 
   return Object.freeze({
     durable: true,
@@ -48,14 +48,14 @@ export const createRedisPublicSignupLimiter = ({ redis } = {}) => {
           windowSeconds < 1 || windowSeconds > 86400) {
         throw unavailable();
       }
-      if (redis.isReady !== true) throw unavailable();
+      if (redis.isReady !== true) {throw unavailable();}
       try {
         const result = await redis.eval(PUBLIC_SIGNUP_REDIS_LIMIT_SCRIPT, {
           keys: [PREFIX + scope + ':' + key],
           arguments: [String(max), String(windowSeconds)]
         });
-        if (result === 1 || result === 1n) return true;
-        if (result === 0 || result === 0n) return false;
+        if (result === 1 || result === 1n) {return true;}
+        if (result === 0 || result === 0n) {return false;}
         // Corrupt counter, missing TTL or unsupported provider replies fail
         // closed. Never assume unknown Redis responses mean quota allowed.
         throw unavailable();

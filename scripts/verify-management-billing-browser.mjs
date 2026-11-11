@@ -12,7 +12,7 @@ try{
  await vite.listen();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;
  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox']});
  fs.mkdirSync(output,{recursive:true});
- for(const screen of ['pricing','subscription','complimentary'])for(const width of [390,1440]){
+ for(const screen of ['pricing','subscription','complimentary']){for(const width of [390,1440]){
   const page=await browser.newPage();const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.setViewport({width,height:1050});await page.setRequestInterception(true);
@@ -42,8 +42,8 @@ try{
      assert.match(text,/from 2 to 1 at your next renewal/);
      assert.match(text,/current period remains billed for 2 dwellings/);
      assert.match(text,/No current-period refund/);
-     if(scenario==='pending')assert.match(text,/6 December 2026 \(UTC\)/);
-     else assert.match(text,/renewal date is not available yet/);
+     if(scenario==='pending'){assert.match(text,/6 December 2026 \(UTC\)/);}
+     else {assert.match(text,/renewal date is not available yet/);}
      await page.reload({waitUntil:'networkidle2'});
      assert.ok(await page.$('#scheduled-quantity-title'),'Pending reduction survives reload');
     }
@@ -76,7 +76,7 @@ try{
       await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm management cessation').focus());
       await page.keyboard.press('Enter');
       await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: stock/cessation'));
-     }else assert.match(await page.$eval('body',el=>el.innerText),/Close or cancel the remaining tenancy/);
+     }else {assert.match(await page.$eval('body',el=>el.innerText),/Close or cancel the remaining tenancy/);}
     }else if(scenario==='staged-stock'){
      assert.match(await page.$eval('body',el=>el.innerText),/stays private and unavailable for tenancy until billing is confirmed/);
      assert.match(await page.$eval('body',el=>el.innerText),/Awaiting billing confirmation/);
@@ -111,8 +111,8 @@ try{
   assert.deepEqual(errors,[]);
   await page.screenshot({path:path.join(output,`${screen}-${width}.png`),fullPage:true});
   await page.close();console.log(`PASS: rendered ${screen} at ${width}px, no page error or viewport overflow`);
- }
- for(const screen of ['document','editor'])for(const width of [390,1440]){
+ }}
+ for(const screen of ['document','editor']){for(const width of [390,1440]){
   const page=await browser.newPage();await page.setViewport({width,height:1000});
   await page.setRequestInterception(true);
   page.on('request',r=>new URL(r.url()).hostname==='127.0.0.1'?r.continue():r.abort());
@@ -132,7 +132,7 @@ try{
     '<form id=location><input name=href value=javascript:alert(1)></form>'];
    for(const attack of attacks){
     const box=document.createElement('div');box.innerHTML=sanitizeHtml(attack);document.body.append(box);
-    if(box.querySelector('script,iframe,svg,math,form,input')||[...box.querySelectorAll('*')].some(el=>[...el.attributes].some(a=>/^on/i.test(a.name)||/javascript:/i.test(a.value))))return false;
+    if(box.querySelector('script,iframe,svg,math,form,input')||[...box.querySelectorAll('*')].some(el=>[...el.attributes].some(a=>/^on/i.test(a.name)||/javascript:/i.test(a.value)))){return false;}
     box.remove();
    }return true;
   });assert.equal(cases,true,'Encoded, namespaced, mutation and clobbering payloads are removed');
@@ -141,5 +141,5 @@ try{
   assert.equal(await page.evaluate(()=>window.attackCount),0,'Updated editor and document content remains sanitized');
   await page.screenshot({path:path.join(output,`security-${screen}-${width}.png`),fullPage:true});
   await page.close();console.log(`PASS: actual ${screen} initial/update HTML, stored/encoded/mutation XSS denials and preserved formatting at ${width}px`);
- }
+ }}
 }finally{await browser?.close();await vite.close();}

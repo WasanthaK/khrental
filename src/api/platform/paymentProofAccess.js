@@ -10,7 +10,7 @@ export const parsePaymentProofPath = (bucket, source) => {
   const path = String(source || '').replace(/^\/+/, '').replace(/\\/g, '/');
   const applies = ['invoices', 'images'].includes(String(bucket || '').toLowerCase())
     && /(?:^|\/)payment[_-]proofs(?:\/|$)/i.test(path);
-  if (!applies) return { applies: false };
+  if (!applies) {return { applies: false };}
   const newMatch = String(bucket).toLowerCase() === 'invoices' ? newKey.exec(path) : null;
   const legacy = !newMatch && String(bucket).toLowerCase() === 'invoices' ? oldKey.exec(path) : null;
   const m = newMatch || legacy;
@@ -47,7 +47,7 @@ export const verifyStoredPaymentProof = async ({ proofUrl, tenantId, invoiceId, 
   const valid = type === 'pdf' ? b.subarray(0,5).toString('ascii') === '%PDF-'
     : type === 'png' ? b.length >= 8 && b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
     : (type === 'jpg' || type === 'jpeg') && b[0] === 255 && b[1] === 216 && b[2] === 255;
-  if (!valid) throw err(409, 'PAYMENT_PROOF_INVALID_BYTES', 'Payment proof is not a valid image or PDF.');
+  if (!valid) {throw err(409, 'PAYMENT_PROOF_INVALID_BYTES', 'Payment proof is not a valid image or PDF.');}
   return parsed;
 };
 
@@ -55,18 +55,18 @@ export const authorizePaymentProofAccess = async ({
   bucket, path, tenantId, user, membership, operation = 'read', loadInvoice
 }) => {
   const p = parsePaymentProofPath(bucket, path);
-  if (!p.applies) return { applies: false, allowed: true };
+  if (!p.applies) {return { applies: false, allowed: true };}
   const denied = { applies: true, allowed: false };
   if (!p.valid || !eq(p.tenantId, tenantId) || !user?.id || !membership
       || !eq(membership.tenant_id || membership.tenantId, tenantId)
-      || String(membership.status || '').toLowerCase() !== 'active') return denied;
-  if (operation === 'delete' || (operation === 'upload' && p.legacy)) return denied;
+      || String(membership.status || '').toLowerCase() !== 'active') {return denied;}
+  if (operation === 'delete' || (operation === 'upload' && p.legacy)) {return denied;}
   const invoice = await loadInvoice({ tenantId, invoiceId: p.invoiceId });
-  if (!invoice || !eq(invoice.id, p.invoiceId) || !eq(invoice.tenant_id, tenantId)) return denied;
+  if (!invoice || !eq(invoice.id, p.invoiceId) || !eq(invoice.tenant_id, tenantId)) {return denied;}
   if (isTenantRole({ user, membership })) {
     return { applies: true, allowed: eq(invoice.renteeid, user.id) };
   }
-  if (operation === 'upload') return denied;
+  if (operation === 'upload') {return denied;}
   return {
     applies: true,
     allowed: hasPermission({ user, membership }, PERMISSIONS.PAYMENTS_MANAGE)

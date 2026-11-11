@@ -11,12 +11,12 @@ export const publicMediaEnabled=env=>
   String(env?.PUBLIC_LISTING_IMAGE_PROCESSOR_READY||'').toLowerCase()==='true';
 
 export const mediaObjectPath=(listingId,mediaId)=>{
-  if(!isId(listingId)||!isId(mediaId))throw new Error('Invalid opaque public image identifier.');
+  if(!isId(listingId)||!isId(mediaId)){throw new Error('Invalid opaque public image identifier.');}
   return 'public-listings/'+String(listingId).toLowerCase()+'/'+String(mediaId).toLowerCase()+'.webp';
 };
 
 export const mediaRelativeUrl=({listingId,mediaId,country})=>{
-  if(country!=='LK'&&country!=='BN')throw new Error('Missing market for public media.');
+  if(country!=='LK'&&country!=='BN'){throw new Error('Missing market for public media.');}
   return '/api/public-listings/'+encodeURIComponent(listingId)+'/media/'+
     encodeURIComponent(mediaId)+'?country='+country;
 };
@@ -28,27 +28,27 @@ export const publicMediaDTO=(r,country)=>({
 
 export const verifySafeWebp=(bytes,expected)=>{
   if(!Buffer.isBuffer(bytes)||bytes.length<20||bytes.length>2097152)
-    throw new Error('Public media file is missing or outside safe size.');
+    {throw new Error('Public media file is missing or outside safe size.');}
   if(bytes.toString('ascii',0,4)!=='RIFF'||bytes.toString('ascii',8,12)!=='WEBP'
     ||bytes.readUInt32LE(4)+8!==bytes.length)
-    throw new Error('Invalid processed WebP container.');
+    {throw new Error('Invalid processed WebP container.');}
   let offset=12,hasImage=false;
   while(offset+8<=bytes.length){
     const kind=bytes.toString('ascii',offset,offset+4);
     const length=bytes.readUInt32LE(offset+4);
     const next=offset+8+length+(length%2);
-    if(next>bytes.length)throw new Error('Invalid WebP chunk length.');
+    if(next>bytes.length){throw new Error('Invalid WebP chunk length.');}
     if(['EXIF','XMP ','ICCP','ANIM','ANMF'].includes(kind))
-      throw new Error('Public derivative contains prohibited metadata or animation.');
-    if(['VP8 ','VP8L'].includes(kind))hasImage=true;
+      {throw new Error('Public derivative contains prohibited metadata or animation.');}
+    if(['VP8 ','VP8L'].includes(kind)){hasImage=true;}
     offset=next;
   }
-  if(offset!==bytes.length||!hasImage)throw new Error('Invalid or missing WebP picture.');
+  if(offset!==bytes.length||!hasImage){throw new Error('Invalid or missing WebP picture.');}
   if(expected?.imageBytes!==undefined && Number(expected.imageBytes)!==bytes.length)
-    throw new Error('Public image content length changed.');
+    {throw new Error('Public image content length changed.');}
   const hash=crypto.createHash('sha256').update(bytes).digest('hex');
   if(expected?.derivativeSha256 && hash!==String(expected.derivativeSha256).toLowerCase())
-    throw new Error('Public derivative hash mismatch.');
+    {throw new Error('Public derivative hash mismatch.');}
   return {body:bytes,contentType:'image/webp'};
 };
 
@@ -73,7 +73,7 @@ export const findReadyPublicMedia=({listingId,mediaId,country})=>
 
 export const listReadyPublicMedia=async(publicIds=[])=>{
   const ids=[...new Set(publicIds.map(String))].filter(isId).slice(0,50);
-  if(!ids.length)return [];
+  if(!ids.length){return [];}
   // JSON array is a single bound parameter. Recheck exact property eligibility.
   return runQuery(`
     SELECT TOP(150)

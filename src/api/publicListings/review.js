@@ -11,7 +11,7 @@ const problem=(status,code,message)=>Object.assign(new Error(message),{status,co
 export const photoReviewEnabled=env=>String(env?.PUBLIC_LISTING_MEDIA_REVIEW_ENABLED||'').toLowerCase()==='true';
 const requireIds=({tenantId,propertyId,actorId,mediaId})=>{
   if(![tenantId,propertyId,actorId,mediaId].every(isId))
-    throw problem(400,'INVALID_PUBLIC_PHOTO_REVIEW','Invalid property or image identifier.');
+    {throw problem(400,'INVALID_PUBLIC_PHOTO_REVIEW','Invalid property or image identifier.');}
 };
 const begin=async()=>{
   const tx=new sql.Transaction(await getMssqlPool());
@@ -20,7 +20,7 @@ const begin=async()=>{
 };
 const readWithin=async(tx,sqlText,params={})=>{
   const request=new sql.Request(tx);
-  for(const [name,value] of Object.entries(params))request.input(name,value);
+  for(const [name,value] of Object.entries(params)){request.input(name,value);}
   return (await request.query(sqlText)).recordset||[];
 };
 export const REVIEW_SOURCE_SQL=`
@@ -57,21 +57,21 @@ export const finalizePhotoReview=async(args,{txFactory=begin}={})=>{
   try{
     await assertManagementWrite({tenantId:args.tenantId,transaction:tx});
     const current=(await readWithin(tx,REVIEW_LOCKED_SQL,args))[0];
-    if(!current)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');
+    if(!current){throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');}
     if(String(current.listingPublicId).toLowerCase()!==String(args.listingPublicId).toLowerCase() ||
       String(current.sourceImages||'')!==String(args.sourceImages||'') ||
       String(current.sourceSha256).toLowerCase()!==args.sourceSha256 ||
       String(current.derivativeSha256).toLowerCase()!==args.derivativeSha256)
-      throw problem(409,'PHOTO_REVIEW_STALE','The registered property photograph changed during review.');
+      {throw problem(409,'PHOTO_REVIEW_STALE','The registered property photograph changed during review.');}
     if(current.mediaStatus!== 'withheld')
-      throw problem(409,'PHOTO_REVIEW_STATE_CHANGED','Only withheld images may be approved.');
+      {throw problem(409,'PHOTO_REVIEW_STATE_CHANGED','Only withheld images may be approved.');}
     const updated=await readWithin(tx,`
  UPDATE dbo.public_listing_media SET rights_confirmed=1,privacy_reviewed=1,
    media_status=N'ready',withdrawn_at=NULL
  OUTPUT INSERTED.media_id
  WHERE listing_public_id=@listingPublicId AND media_id=@mediaId AND media_status=N'withheld'
    AND source_sha256=@sourceSha256 AND derivative_sha256=@derivativeSha256`,args);
-    if(updated.length!==1)throw problem(409,'PHOTO_REVIEW_CONFLICT','Photo approval state changed.');
+    if(updated.length!==1){throw problem(409,'PHOTO_REVIEW_CONFLICT','Photo approval state changed.');}
     await readWithin(tx,`
  INSERT INTO dbo.public_listing_media_reviews
    (media_id,listing_public_id,actor_user_id,decision,rights_attested,privacy_attested,derivative_sha256)
@@ -88,21 +88,21 @@ export const reviewPreparedPhoto=async({
   finalize=finalizePhotoReview
 }={})=>{
   if(!photoReviewEnabled(env))
-    throw problem(404,'PHOTO_REVIEW_DISABLED','Public photo reviews are not enabled.');
+    {throw problem(404,'PHOTO_REVIEW_DISABLED','Public photo reviews are not enabled.');}
   requireIds({tenantId,propertyId,actorId,mediaId});
   if(confirmRights!==true||confirmPrivacy!==true)
-    throw problem(400,'PHOTO_REVIEW_ATTESTATION_REQUIRED','Confirm publication rights and personal-information privacy review.');
+    {throw problem(400,'PHOTO_REVIEW_ATTESTATION_REQUIRED','Confirm publication rights and personal-information privacy review.');}
   const identity={tenantId,propertyId,actorId,mediaId};
   const source=await load(identity);
-  if(!source)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');
+  if(!source){throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo review is not authorized.');}
   if(source.mediaStatus!=='withheld')
-    throw problem(409,'PHOTO_REVIEW_STATE_CHANGED','Only withheld images may be approved.');
+    {throw problem(409,'PHOTO_REVIEW_STATE_CHANGED','Only withheld images may be approved.');}
   const image=resolveRegisteredPhoto(source.sourceImages,Number(source.imageIndex),tenantId,{
     allowedOrigins:trustedPhotoOrigins(env)
   });
   const original=await storage.getObject(image.bucket,image.path);
   if(!Buffer.isBuffer(original?.body)||sha(original.body)!==String(source.sourceSha256).toLowerCase())
-    throw problem(409,'PHOTO_REVIEW_SOURCE_CHANGED','The registered source photo no longer matches.');
+    {throw problem(409,'PHOTO_REVIEW_SOURCE_CHANGED','The registered source photo no longer matches.');}
   const path=mediaObjectPath(source.listingPublicId,mediaId);
   const derivative=await storage.getObject('media',path);
   verifySafeWebp(derivative?.body,{imageBytes:source.imageBytes,derivativeSha256:source.derivativeSha256});
@@ -118,7 +118,7 @@ export const reviewPreparedPhoto=async({
 export const withdrawPreparedPhoto=async({
   tenantId,propertyId,actorId,mediaId
 },{env=process.env,storage=getStorageDriver(),txFactory=begin}={})=>{
-  if(!photoReviewEnabled(env))throw problem(404,'PHOTO_REVIEW_DISABLED','Public photo reviews are not enabled.');
+  if(!photoReviewEnabled(env)){throw problem(404,'PHOTO_REVIEW_DISABLED','Public photo reviews are not enabled.');}
   requireIds({tenantId,propertyId,actorId,mediaId});
   const tx=await txFactory();
   let publicId;
@@ -126,8 +126,8 @@ export const withdrawPreparedPhoto=async({
     await assertManagementWrite({tenantId,transaction:tx});
     const args={tenantId,propertyId,actorId,mediaId};
     const row=(await readWithin(tx,REVIEW_LOCKED_SQL,args))[0];
-    if(!row)throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo access denied.');
-    if(row.mediaStatus==='withdrawn')throw problem(409,'PHOTO_ALREADY_WITHDRAWN','This photograph has already been withdrawn.');
+    if(!row){throw problem(403,'PHOTO_REVIEW_ACCESS_DENIED','Property/photo access denied.');}
+    if(row.mediaStatus==='withdrawn'){throw problem(409,'PHOTO_ALREADY_WITHDRAWN','This photograph has already been withdrawn.');}
     publicId=row.listingPublicId;
     const writeArgs={...args,listingPublicId:publicId,derivativeSha256:row.derivativeSha256};
     const result=await readWithin(tx,`
@@ -136,7 +136,7 @@ export const withdrawPreparedPhoto=async({
       OUTPUT INSERTED.media_id
       WHERE media_id=@mediaId AND listing_public_id=@listingPublicId
         AND media_status IN(N'withheld',N'ready')`,writeArgs);
-    if(result.length!==1)throw problem(409,'PHOTO_REVIEW_CONFLICT','Photo withdrawal conflicted.');
+    if(result.length!==1){throw problem(409,'PHOTO_REVIEW_CONFLICT','Photo withdrawal conflicted.');}
     await readWithin(tx,`
       INSERT INTO dbo.public_listing_media_reviews
         (media_id,listing_public_id,actor_user_id,decision,rights_attested,privacy_attested,derivative_sha256)

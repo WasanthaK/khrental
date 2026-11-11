@@ -7,7 +7,7 @@
  * rejected: Agreement was rejected by a signatory
  * expired: Agreement has reached its end date
  * cancelled: Agreement was manually cancelled
- * 
+ *
  * Signature Status Flow:
  * ---------------------
  * send_for_signature: Document sent to signatories
@@ -16,7 +16,7 @@
  * signed_by_tenant: Tenant has signed
  * signing_complete: All required signatories have signed
  * rejected: A signatory has rejected the agreement
- * 
+ *
  * Evia Sign Event Mapping:
  * -----------------------
  * EventId 1 (SignRequestReceived): status -> pending_activation, signature_status -> send_for_signature
@@ -252,7 +252,7 @@ export const listPropertyUnits = async (propertyId) => {
  */
 export const saveAgreement = async (agreement) => {
   console.log('Saving agreement:', { agreementId: agreement.id, status: agreement.status });
-  
+
   try {
     const isNewAgreement = !agreement?.id;
 
@@ -261,16 +261,16 @@ export const saveAgreement = async (agreement) => {
       ...agreement,
       updated_at: new Date()
     };
-    
+
     // Generate UUID for new agreements
     if (!agreementData.id) {
       agreementData.id = crypto.randomUUID();
       console.log('Generated new agreement ID:', agreementData.id);
     }
-    
+
     // Extract the content of the agreement template if available
     let templateContent = null;
-    
+
     // If there is a template ID, get the template content
     if (agreement.templateid) {
       const template = await getTemplate(agreement.templateid);
@@ -279,7 +279,7 @@ export const saveAgreement = async (agreement) => {
         templateContent = template.content;
       }
     }
-    
+
     // If status is being set to review but we don't have a document URL,
     // temporarily set it back to draft to avoid constraint violation
     if (agreementData.status === 'review' && !agreementData.documenturl) {
@@ -287,13 +287,14 @@ export const saveAgreement = async (agreement) => {
       agreementData.status = 'draft';
       agreementData.needs_document_generation = true;
     }
-    
+
     // Remove the deleted fields from the data
     if (agreement.deletefields && agreement.deletefields.length > 0) {
-      const { deletefields, ...dataToSave } = agreementData;
+      const dataToSave = { ...agreementData };
+      delete dataToSave.deletefields;
       agreementData = dataToSave;
     }
-    
+
     // Convert any client-side property names to match database column names
     agreementData = toDatabaseFormat(agreementData);
 
@@ -305,7 +306,7 @@ export const saveAgreement = async (agreement) => {
       rentamount: agreementData.rentamount ?? toNullableNumber(derivedTerms.monthlyRent),
       depositamount: agreementData.depositamount ?? toNullableNumber(derivedTerms.depositAmount)
     };
-    
+
     // Filter out properties that don't exist in the database schema
     const validColumns = [
       'id', 'templateid', 'renteeid', 'propertyid', 'unitid', 'status',
@@ -356,7 +357,7 @@ export const saveAgreement = async (agreement) => {
           console.error('Error fetching unit rental values:', error);
           return null;
         });
-          
+
         if (unitData?.rentalvalues) {
           unitRentalValues = {
             monthlyRent: unitData.rentalvalues.rent || unitData.rentalvalues.monthlyRent,
@@ -384,7 +385,7 @@ export const saveAgreement = async (agreement) => {
     }
 
     console.log('Saving agreement with filtered data:', filteredData);
-    
+
     let savedAgreement = null;
 
     if (isNewAgreement) {
@@ -416,27 +417,27 @@ export const saveAgreement = async (agreement) => {
     } else {
       savedAgreement = await updateAgreementData(agreementData.id, filteredData);
     }
-    
+
     console.log('Agreement saved successfully:', savedAgreement.id);
-    
+
     // If needs_document_generation is true, generate the document and update to review status
     if (savedAgreement.needs_document_generation && templateContent) {
       try {
         console.log('Generating document for review status...');
-        
+
         // Get merge data for the agreement
         const mergeData = await getMergeDataForAgreement(savedAgreement);
-        
+
         // Merge the template content with the data
         console.log('Populating merge fields in template...');
         const populatedContent = await populateMergeFields(templateContent, mergeData);
         const mergedContent = ensureEviaSignatureAnchors(populatedContent);
         console.log('Merged content length:', mergedContent.length);
-        
+
         // Save the merged document
         console.log('Saving the merged document...');
         const documentUrl = await saveMergedDocument(mergedContent, savedAgreement);
-        
+
         // Update the agreement with the document URL and review status
         console.log('Updating agreement with document URL and review status...');
         const updatedAgreement = await updateAgreementData(savedAgreement.id, {
@@ -445,7 +446,7 @@ export const saveAgreement = async (agreement) => {
           needs_document_generation: false,
           updatedat: new Date().toISOString()
         });
-        
+
         // Return the updated agreement with the document URL
         return updatedAgreement;
       } catch (docError) {
@@ -455,7 +456,7 @@ export const saveAgreement = async (agreement) => {
         return savedAgreement;
       }
     }
-    
+
     // Return the saved agreement
     return savedAgreement;
   } catch (error) {
@@ -490,28 +491,28 @@ async function getMergeDataForAgreement(agreement) {
 
   try {
     console.log('getMergeDataForAgreement - input agreement:', { 
-      id: agreement.id, 
+      id: agreement.id,
       propertyid: agreement.propertyid,
       unitid: agreement.unitid,
       hasRenteeid: !!agreement.renteeid,
       hasTerms: !!agreement.terms
     });
-    
+
     // Fetch property details with units
     if (agreement.propertyid) {
       try {
         const propertyData = await fetchProperty(agreement.propertyid);
         mergeData.property = propertyData;
         console.log('Property data fetched successfully:', { 
-          name: propertyData.name, 
+          name: propertyData.name,
           propertytype: propertyData.propertytype,
           hasUnits: !!propertyData.property_units && propertyData.property_units.length > 0 
         });
-        
+
         // For non-apartment properties, set unit to empty object with empty strings instead of null
         if (propertyData.propertytype !== 'apartment') {
           console.log('Non-apartment property detected, setting unit data to empty object');
-          mergeData.unit = { 
+          mergeData.unit = {
             id: '',
             name: '',
             description: '',
@@ -523,12 +524,12 @@ async function getMergeDataForAgreement(agreement) {
         console.error('Error fetching property data:', propertyError);
       }
     }
-    
+
     // Fetch unit details if available
     if (agreement.unitid) {
       try {
         const unitData = await fetchPropertyUnit(agreement.unitid);
-      
+
         if (unitData) {
         console.log('Unit data fetched successfully:', {
           id: unitData.id,
@@ -536,19 +537,19 @@ async function getMergeDataForAgreement(agreement) {
           hasRentalValues: !!unitData.rentalvalues,
           rentalvalues: unitData.rentalvalues
         });
-        
+
         mergeData.unit = unitData;
         // Update terms with unit rental values if available
         if (unitData.rentalvalues) {
           const monthlyRent = unitData.rentalvalues.rent || unitData.rentalvalues.monthlyRent || 0;
           const depositAmount = unitData.rentalvalues.deposit || unitData.rentalvalues.depositAmount || monthlyRent || 0;
-          
+
           mergeData.terms = {
             ...mergeData.terms,
             monthlyRent: `Rs. ${parseFloat(monthlyRent).toLocaleString('si-LK')}`,
             depositAmount: `Rs. ${parseFloat(depositAmount).toLocaleString('si-LK')}`
           };
-          
+
           console.log('Updated terms with unit rental values:', {
             monthlyRent: mergeData.terms.monthlyRent,
             depositAmount: mergeData.terms.depositAmount
@@ -563,7 +564,7 @@ async function getMergeDataForAgreement(agreement) {
     } else {
       console.log('No unit ID provided in agreement');
     }
-    
+
     // Fetch rentee details
     if (agreement.renteeid) {
       try {
@@ -572,7 +573,7 @@ async function getMergeDataForAgreement(agreement) {
         console.error('Error fetching rentee data:', renteeError);
       }
     }
-    
+
     // If we still don't have rental values, try to get them from the agreement terms
     // Always format the values, even if they're zero
     if (!mergeData.terms.monthlyRent || mergeData.terms.monthlyRent === 'Rs. 0') {
@@ -581,14 +582,14 @@ async function getMergeDataForAgreement(agreement) {
         : 0;
       mergeData.terms.monthlyRent = `Rs. ${parseFloat(monthlyRentValue).toLocaleString('si-LK')}`;
     }
-    
+
     if (!mergeData.terms.depositAmount || mergeData.terms.depositAmount === 'Rs. 0') {
       const depositValue = agreement.terms?.depositAmount !== undefined && agreement.terms?.depositAmount !== null
         ? agreement.terms.depositAmount
         : 0;
       mergeData.terms.depositAmount = `Rs. ${parseFloat(depositValue).toLocaleString('si-LK')}`;
     }
-    
+
     console.log('Final merge data prepared:', {
       hasProperty: !!mergeData.property,
       propertyType: mergeData.property?.propertytype,
@@ -600,7 +601,7 @@ async function getMergeDataForAgreement(agreement) {
         depositAmount: mergeData.terms.depositAmount
       }
     });
-    
+
     return mergeData;
   } catch (error) {
     console.error('Error preparing merge data:', error);
@@ -772,24 +773,24 @@ export const deleteTemplate = async (templateId) => {
  */
 export const cancelAgreement = async (agreementId, cancelReason = '') => {
   console.log('Cancelling agreement:', agreementId);
-  
+
   try {
     const existingAgreement = await fetchAgreement(agreementId);
 
     if (!existingAgreement) {
       throw new Error('Agreement not found');
     }
-    
+
     // Prepare update data
     const updateData = {
       status: 'cancelled',
       cancellation_reason: cancelReason,
       updatedat: new Date().toISOString(),
-      notes: cancelReason ? 
+      notes: cancelReason ?
         `${existingAgreement.notes || ''}\n\nCancellation reason (${new Date().toLocaleDateString()}): ${cancelReason}` : 
         existingAgreement.notes
     };
-    
+
     const updatedAgreement = await updateAgreementData(agreementId, updateData);
 
     // A cancelled draft does not own occupancy. Active tenancies release stock

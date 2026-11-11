@@ -14,7 +14,7 @@ test('credential bootstrap and recovery routes are explicitly isolated from the 
   }
   assert.match(rootLayoutSource, /isAuthFlowIsolatedPath\(location\.pathname\)/);
   assert.match(rootLayoutSource, /if \(isAuthFlowIsolated\) \{\s*return <Outlet \/>;\s*\}/);
-  assert.match(rootLayoutSource, /if \(isAuthFlowIsolated \|\| loading\) return;/);
+  assert.match(rootLayoutSource, /if \(isAuthFlowIsolated \|\| loading\) \{return;\}/);
   assert.match(requestContextSource, /'\/seeker-sign-up', '\/verify-email'/);
 });
 

@@ -43,12 +43,12 @@ const RenteeList = () => {
       rentee.contactDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rentee.contactDetails?.phone?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (filter === 'all') return matchesSearch;
-    if (filter === 'verified' && rentee.idCopyURL) return matchesSearch;
-    if (filter === 'unverified' && !rentee.idCopyURL) return matchesSearch;
-    if (filter === 'invited' && rentee.invited && !rentee.authId) return matchesSearch;
-    if (filter === 'registered' && rentee.authId) return matchesSearch;
-    if (filter === 'not_invited' && !rentee.invited) return matchesSearch;
+    if (filter === 'all') {return matchesSearch;}
+    if (filter === 'verified' && rentee.idCopyURL) {return matchesSearch;}
+    if (filter === 'unverified' && !rentee.idCopyURL) {return matchesSearch;}
+    if (filter === 'invited' && rentee.invited && !rentee.authId) {return matchesSearch;}
+    if (filter === 'registered' && rentee.authId) {return matchesSearch;}
+    if (filter === 'not_invited' && !rentee.invited) {return matchesSearch;}
 
     return false;
   });

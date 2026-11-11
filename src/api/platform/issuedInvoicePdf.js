@@ -16,7 +16,7 @@ const money = (amount, { allowNegative = false } = {}) => {
 };
 
 const displayDate = value => {
-  if (!value) return 'Not specified';
+  if (!value) {return 'Not specified';}
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Not specified' : date.toISOString().slice(0, 10);
 };
@@ -34,7 +34,7 @@ export const normalizeIssuedInvoicePdf = ({ invoice, components, paymentInstruct
     amount: money(c.amount, { allowNegative: String(c.component_type || '').toLowerCase() === 'adjustment' })
   }));
   const total = Number(invoice.totalamount);
-  if (!Number.isFinite(total) || total <= 0) throw new Error('Issued invoice total is invalid.');
+  if (!Number.isFinite(total) || total <= 0) {throw new Error('Issued invoice total is invalid.');}
   const sum = components.reduce((acc, row) => acc + Math.round(Number(row.amount) * 100), 0);
   if (!Number.isFinite(sum) || Math.abs(sum - Math.round(total * 100)) > 1) {
     throw new Error('Invoice components do not reconcile with the issued total.');
@@ -73,7 +73,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     const border = rgb(0.84, 0.88, 0.92);
     const light = rgb(0.95, 0.97, 0.99);
     const cream = rgb(1.0, 0.97, 0.88);
-    const white = rgb(1, 1, 1);
+    rgb(1, 1, 1);
     const red = rgb(0.72, 0.15, 0.23);
     let page, y;
 
@@ -82,13 +82,13 @@ export const createIssuedInvoicePdfAttachment = async args => {
       const size = opts.size || 10, font = opts.font || regular, minX = opts.minX || L;
       const valueText = ascii(value, 350);
       let actualSize = size;
-      while (actualSize > 7 && measure(valueText, font, actualSize) > xRight - minX) actualSize -= 0.5;
+      while (actualSize > 7 && measure(valueText, font, actualSize) > xRight - minX) {actualSize -= 0.5;}
       page.drawText(valueText, { x: Math.max(minX, xRight - measure(valueText, font, actualSize)),
         y: baseline, size: actualSize, font, color: opts.color || navy });
     };
     const wrap = (value, maxWidth, font = regular, size = 10) => {
       const words = ascii(value, 450).split(/\s+/).filter(Boolean);
-      if (!words.length) return ['-'];
+      if (!words.length) {return ['-'];}
       const lines = [];
       let current = '';
       for (const word of words) {
@@ -97,18 +97,18 @@ export const createIssuedInvoicePdfAttachment = async args => {
         for (const char of word) {
           if (part && measure(part + char, font, size) > maxWidth) {
             segments.push(part); part = char;
-          } else part += char;
+          } else {part += char;}
         }
-        if (part) segments.push(part);
+        if (part) {segments.push(part);}
         for (const segment of segments) {
           const next = current ? current + ' ' + segment : segment;
           if (current && measure(next, font, size) > maxWidth) {
             lines.push(current);
             current = segment;
-          } else current = next;
+          } else {current = next;}
         }
       }
-      if (current) lines.push(current);
+      if (current) {lines.push(current);}
       return lines;
     };
     const drawLines = (lines, x, top, options = {}) => {
@@ -146,9 +146,9 @@ export const createIssuedInvoicePdfAttachment = async args => {
       }
     };
     const ensure = (height, tableContinuation = false) => {
-      if (y - height >= BOTTOM) return;
+      if (y - height >= BOTTOM) {return;}
       beginPage(true);
-      if (tableContinuation) tableHeader();
+      if (tableContinuation) {tableHeader();}
     };
 
     beginPage();
@@ -186,19 +186,19 @@ export const createIssuedInvoicePdfAttachment = async args => {
 
     page.drawText('ITEMIZED CHARGES',{x:L,y,font:bold,size:12,color:navy});
     y-=17;rule(y);y-=12;
-    function tableHeader(){
+    const tableHeader = () => {
       page.drawRectangle({x:L,y:y-30,width:R-L,height:30,color:light});
       page.drawText('DESCRIPTION',{x:L+12,y:y-20,font:bold,size:9,color:navy});
       rightText('AMOUNT (LKR)',R-12,y-20,{font:bold,size:9,color:navy,minX:L+310});
       y-=30;
-    }
+    };
     tableHeader();
     const descriptionWidth=R-L-163;
     model.lines.forEach((item,index)=>{
       const description=wrap(item.description,descriptionWidth,regular,10);
       const h=Math.max(37,17 + description.length*14);
       ensure(h+3,true);
-      if(index%2===1)page.drawRectangle({x:L,y:y-h,width:R-L,height:h,color:light});
+      if(index%2===1){page.drawRectangle({x:L,y:y-h,width:R-L,height:h,color:light});}
       drawLines(description,L+12,y-22,{size:10,leading:14,color:navy});
       rightText(item.amount,R-12,y-22,{font:bold,size:10,minX:L+descriptionWidth+15});
       page.drawLine({start:{x:L,y:y-h},end:{x:R,y:y-h},color:border,thickness:0.5});

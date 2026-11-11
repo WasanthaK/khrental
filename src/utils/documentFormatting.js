@@ -4,10 +4,10 @@ export const normalizeTextAlignment = (value) => {
 };
 
 export const readBlockTextAlignment = (element) => {
-  if (!element) return 'left';
+  if (!element) {return 'left';}
 
   const inline = element.style?.textAlign;
-  if (inline) return normalizeTextAlignment(inline);
+  if (inline) {return normalizeTextAlignment(inline);}
 
   const attr = typeof element.getAttribute === 'function' ? element.getAttribute('align') : null;
   return normalizeTextAlignment(attr);

@@ -15,8 +15,8 @@ export const updateTaskAssignment = async (id, assignmentData = {}) => {
       .eq('id', id)
       .single();
 
-    if (currentError) throw currentError;
-    if (!currentAssignment) throw new Error('Task assignment not found');
+    if (currentError) {throw currentError;}
+    if (!currentAssignment) {throw new Error('Task assignment not found');}
 
     const dbData = toDatabaseFormat(assignmentData);
     dbData.updatedat = new Date().toISOString();
@@ -34,8 +34,8 @@ export const updateTaskAssignment = async (id, assignmentData = {}) => {
         .eq('id', currentAssignment.relatedentityid)
         .single();
 
-      if (maintenanceReadError) throw maintenanceReadError;
-      if (!maintenanceRequest) throw new Error('Linked maintenance request not found');
+      if (maintenanceReadError) {throw maintenanceReadError;}
+      if (!maintenanceRequest) {throw new Error('Linked maintenance request not found');}
 
       if (!canCompleteTaskForMaintenanceStatus(maintenanceRequest.status)) {
         throw new Error(`Linked maintenance request must be in progress before the task can be completed. Current status: ${maintenanceRequest.status || 'unknown'}.`);
@@ -58,7 +58,7 @@ export const updateTaskAssignment = async (id, assignmentData = {}) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {throw error;}
 
     return {
       success: true,

@@ -23,5 +23,5 @@ test('invoice calendar dates agree with the PDF across browser timezones', () =>
 });
 
 test('missing or invalid invoice dates do not invent a billing date', () => {
-  for (const value of [null, undefined, '', 'invalid']) assert.equal(formatInvoiceDate(value), '');
+  for (const value of [null, undefined, '', 'invalid']) {assert.equal(formatInvoiceDate(value), '');}
 });

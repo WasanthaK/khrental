@@ -19,14 +19,14 @@ const modules = {
   requestContext: `export const buildRequestContextHeaders=()=>({'x-fixture-context':'selected-workspace'});`
 };
 const plugin = { name: 'agreement-identity-proof', enforce: 'pre', resolveId(source, importer) {
-  if (source === 'virtual:proof') return '\0proof.jsx';
-  if (source.startsWith('\0')) return source;
-  if (!importer?.includes('/src/')) return;
+  if (source === 'virtual:proof') {return '\0proof.jsx';}
+  if (source.startsWith('\0')) {return source;}
+  if (!importer?.includes('/src/')) {return;}
   const name = source.split('/').at(-1).replace(/\.js$/, '');
-  if (modules[name]) return '\0fixture-' + name;
+  if (modules[name]) {return '\0fixture-' + name;}
 }, async load(id) {
-  if (id === '\0proof.jsx') return transformWithEsbuild(entry, 'proof.jsx', { loader: 'jsx', jsx: 'automatic' });
-  if (id.startsWith('\0fixture-')) return modules[id.slice(9)];
+  if (id === '\0proof.jsx') {return transformWithEsbuild(entry, 'proof.jsx', { loader: 'jsx', jsx: 'automatic' });}
+  if (id.startsWith('\0fixture-')) {return modules[id.slice(9)];}
 }};
 let vite, server, browser, saved;
 const delayedTemplates=[];
@@ -58,7 +58,7 @@ try {
   });
   app.post('/api/prepare', (req, res) => {
     counts.generated++;
-    if (counts.generated === 1) return res.status(503).json({ error: 'Preparation temporarily unavailable' });
+    if (counts.generated === 1) {return res.status(503).json({ error: 'Preparation temporarily unavailable' });}
     saved = { ...saved, documenturl: `http://${req.headers.host}/storage/files/agreements/fixture.pdf`, status: req.body.finalStatus };
     res.json(saved);
   });
@@ -154,9 +154,9 @@ try {
     await page.click('[aria-label="Close document viewer"]');
     await page.waitForSelector('iframe', { hidden: true });
     await page.waitForFunction(() => !document.body.innerText.includes('Agreement saved and prepared.'));
-    await page.evaluate(() => { const panel = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (panel) panel.scrollTop = 0; });
+    await page.evaluate(() => { const panel = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (panel) {panel.scrollTop = 0;} });
     await page.screenshot({ path: `enquiry-browser-proof/agreement-review-${width}.png`, fullPage: true });
-    await page.evaluate(() => { const modal = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (modal) modal.scrollTop = modal.scrollHeight; });
+    await page.evaluate(() => { const modal = [...document.querySelectorAll('div')].find(element => element.className.includes('max-h-[90dvh]')); if (modal) {modal.scrollTop = modal.scrollHeight;} });
     await page.screenshot({ path: `enquiry-browser-proof/agreement-review-actions-${width}.png`, fullPage: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal overflow');
     await page.evaluate(() => {

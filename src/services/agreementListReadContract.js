@@ -28,7 +28,7 @@ export const collectAgreementPages = async (loadPage, { pageSize = 500, maxPages
       seen.add(row.id.toLowerCase());
       agreements.push(row);
     }
-    if (rows.length < pageSize) return agreements;
+    if (rows.length < pageSize) {return agreements;}
   }
   const error = new Error('Agreement list exceeded the supported pagination limit.');
   error.code = 'AGREEMENT_LIST_PAGINATION_LIMIT';

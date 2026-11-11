@@ -27,14 +27,14 @@ test('R3 independent OIDC acceptance requires exactly Azure-managed HTTPS HTTP i
     'build-info.json',
     'R3_ACA_MANAGED_HTTP_INGRESS_TOPOLOGY=PASS',
     'R3_ACA_MANAGED_INGRESS_ASSERTED_READY_DISABLED=PASS'
-  ]) assert.ok(job.includes(field), field);
+  ]) {assert.ok(job.includes(field), field);}
   for (const f of [
     'PUBLIC_SIGNUP_ENABLED=false',
     'PUBLIC_SIGNUP_PILOT_APPROVED=false',
     'PUBLIC_SEEKER_CONTEXT_ENABLED=false',
     'VITE_PUBLIC_SIGNUP_UI_ENABLED=false',
     'VITE_PUBLIC_SEEKER_LANDING_ENABLED=false'
-  ]) assert.ok(job.includes(f), f);
+  ]) {assert.ok(job.includes(f), f);}
   assert.match(job, /PUBLIC_SIGNUP_INGRESS_MODE=azure-container-apps-http/);
   assert.doesNotMatch(job, /az sql db update|az containerapp scale|--min-replicas|GRANT DELETE|trust proxy=true/);
 });

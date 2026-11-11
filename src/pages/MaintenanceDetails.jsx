@@ -1,18 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { checkUserExists } from '../services/platformClient';
 import { getAuthorizedMaintenanceDetail } from '../services/maintenanceDetailReadService';
-import { 
-  updateMaintenanceRequest, 
-  assignMaintenanceRequest, 
-  startMaintenanceWork, 
-  completeMaintenanceRequest, 
-  cancelMaintenanceRequest,
-  addMaintenanceComment,
-  addMaintenanceRequestImage
-} from '../services/maintenanceService';
+import { assignMaintenanceRequest, startMaintenanceWork, completeMaintenanceRequest, cancelMaintenanceRequest, addMaintenanceComment, addMaintenanceRequestImage } from '../services/maintenanceService';
 import { formatDate } from '../utils/helpers';
-import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, MAINTENANCE_TYPES } from '../utils/constants';
+import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
 import { useAuth } from '../hooks/useAuth';
 import { PERMISSIONS } from '../utils/accessPolicy';
 import { isValidUUID } from '../utils/validators';
@@ -22,7 +14,7 @@ import { toast } from 'react-hot-toast';
 import StatusTracker from '../components/maintenance/StatusTracker';
 import StaffAssignment from '../components/maintenance/StaffAssignment';
 import CommentSection from '../components/maintenance/CommentSection';
-import ImageUpload from '../components/common/ImageUpload';
+import '../components/common/ImageUpload';
 import MaintenanceImageUpload from '../components/maintenance/MaintenanceImageUpload';
 
 const initialMaintenanceRequest = () => ({
@@ -59,23 +51,23 @@ const MaintenanceDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // UI state
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
   const [completionImages, setCompletionImages] = useState([]);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [imageCollection, setImageCollection] = useState({ images: [], title: '' });
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
-  
+
   const readScope=useRef({key:null,controller:null});
 
   // Define fetchRequestData as a reusable function at component level
-  const fetchRequestData = async () => {
+
+  // Initial data fetch with cleanup
+  const fetchRequestData = useCallback(async () => {
     const key=`${id}:${activeTenantId}:${user?.id}:${mayManageMaintenance}`;
     if (readScope.current.key!==key) {return;}
     readScope.current.controller?.abort();
@@ -84,7 +76,7 @@ const MaintenanceDetails = () => {
     const current=()=>!controller.signal.aborted && readScope.current.key===key;
     try {
       setLoading(true);
-      
+
       // Tenant/owner/property authorization is enforced by the lifecycle API.
       const requestData = await getAuthorizedMaintenanceDetail(id,{signal:controller.signal});
       if (!current()) {return;}
@@ -106,7 +98,7 @@ const MaintenanceDetails = () => {
       } else {
         console.log('No images found for this maintenance request');
       }
-      
+
       // Only log in development
       if (process.env.NODE_ENV === 'development') {
         console.log('Maintenance request data:', {
@@ -118,15 +110,15 @@ const MaintenanceDetails = () => {
           images: requestData.maintenance_request_images?.length || 0
         });
       }
-      
+
       // Set the request data
       setRequest(requestData);
-      
+
       // Set related data
       setProperty(requestData.property);
       setRentee(requestData.rentee);
       setAssignedTeamMember(requestData.assigned_staff);
-      
+
     } catch (error) {
       if (!current()) {return;}
       console.error('Error fetching request data:', error);
@@ -134,11 +126,11 @@ const MaintenanceDetails = () => {
     } finally {
       if (current()) {setLoading(false);}
     }
-  };
-  
-  // Initial data fetch with cleanup
+  }, [activeTenantId, id, mayManageMaintenance, user?.id]);
+
   useEffect(() => {
-    readScope.current.key=`${id}:${activeTenantId}:${user?.id}:${mayManageMaintenance}`;
+    const scope = readScope.current;
+    scope.key=`${id}:${activeTenantId}:${user?.id}:${mayManageMaintenance}`;
     setRequest(initialMaintenanceRequest());setProperty(null);setRentee(null);setAssignedTeamMember(null);setError(null);setLoading(true);
 
     if (!id || id === 'undefined' || !isValidUUID(id)) {
@@ -151,31 +143,31 @@ const MaintenanceDetails = () => {
     fetchRequestData();
 
     return () => {
-      readScope.current.key=null;
-      readScope.current.controller?.abort();
+      scope.key=null;
+      scope.controller?.abort();
     };
-  }, [id, activeTenantId, user?.id, mayManageMaintenance]);
-  
+  }, [id, activeTenantId, user?.id, mayManageMaintenance, fetchRequestData]);
+
   // Handle staff assignment
   const handleAssignStaff = async (assignmentData) => {
     try {
       setActionLoading(true);
       setError(null);
-      
+
       console.log("Assigning staff with data:", assignmentData);
-      
+
       // Validate staffId
       if (!assignmentData?.staffId || !isValidUUID(assignmentData.staffId)) {
         throw new Error('Invalid staff member selected. Please try again.');
       }
-      
+
       const result = await assignMaintenanceRequest(id, assignmentData);
       console.log("Assignment result:", result);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to assign staff');
       }
-      
+
       // Refresh all data after successful assignment
       await fetchRequestData();
     } catch (error) {
@@ -186,19 +178,19 @@ const MaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle start work
   const handleStartWork = async () => {
     try {
       setActionLoading(true);
       setError(null);
-      
+
       const result = await startMaintenanceWork(id);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to start work');
       }
-      
+
       // Refresh all data
       await fetchRequestData();
     } catch (error) {
@@ -208,18 +200,18 @@ const MaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle complete request
   const handleCompleteRequest = async () => {
     if (!completionNotes.trim()) {
       toast.error('Please provide completion notes');
       return;
     }
-    
+
     try {
       setActionLoading(true);
       setError(null);
-      
+
       // Create completion data object with notes and any uploaded images
       const completionData = {
         notes: completionNotes,
@@ -229,22 +221,22 @@ const MaintenanceDetails = () => {
         })),
         userId: user?.id
       };
-      
+
       console.log('Completing request with data:', completionData);
-      
+
       const result = await completeMaintenanceRequest(id, completionData);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to complete request');
       }
-      
+
       setShowCompleteDialog(false);
       setCompletionNotes('');
       setCompletionImages([]);
-      
+
       // Refresh all data
       await fetchRequestData();
-      
+
       toast.success('Maintenance request has been completed successfully');
     } catch (error) {
       console.error('Error completing request:', error.message);
@@ -254,25 +246,25 @@ const MaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle cancel request
   const handleCancelRequest = async () => {
     try {
       setActionLoading(true);
       setError(null);
-      
+
       if (!cancellationReason.trim()) {
         throw new Error('Please provide a reason for cancellation');
       }
-      
+
       console.log('Cancelling request with reason:', cancellationReason);
-      
+
       const result = await cancelMaintenanceRequest(id, cancellationReason);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to cancel request');
       }
-      
+
       // Refresh all data
       await fetchRequestData();
       setShowCancelDialog(false);
@@ -285,16 +277,16 @@ const MaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle add comment
   const handleAddComment = async (commentData) => {
     try {
       const result = await addMaintenanceComment(id, commentData);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to add comment');
       }
-      
+
       // Refresh all data instead of just updating the request
       await fetchRequestData();
       return true;
@@ -303,16 +295,13 @@ const MaintenanceDetails = () => {
       throw error;
     }
   };
-  
+
   // Handle completion images change
-  const handleCompletionImagesChange = (images) => {
-    setCompletionImages(images);
-  };
-  
+
   // Modify the parseNotes function to better handle JSON format
   const parseNotes = (notes) => {
     if (!notes) {return [];}
-    
+
     try {
       // Try to parse as JSON
       const parsedNotes = JSON.parse(notes);
@@ -337,21 +326,21 @@ const MaintenanceDetails = () => {
       console.log("Failed to parse notes as JSON:", e);
       return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
     }
-    
+
     // Fallback
     return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
   };
-  
+
   // Update the organizeImagesByStage function to be more forgiving with data
   const organizeImagesByStage = (images) => {
     // Debug output to check what we're receiving
     console.log('Images received for organization:', images);
-    
+
     if (!images || images.length === 0) {
       console.log('No images found to organize');
       return [];
     }
-    
+
     // Clone the images array and ensure each image has all required properties
     const sortedImages = [...images].map(img => ({
       ...img,
@@ -359,24 +348,24 @@ const MaintenanceDetails = () => {
       image_type: img.image_type || 'initial',
       uploaded_at: img.uploaded_at || new Date().toISOString()
     }));
-    
+
     // Filter out any images with empty URLs
     const validImages = sortedImages.filter(img => !!img.image_url);
-    
+
     if (validImages.length < sortedImages.length) {
       console.log(`Filtered out ${sortedImages.length - validImages.length} images with empty URLs`);
     }
-    
+
     // Sort images by uploaded_at date
     validImages.sort((a, b) => {
       const dateA = new Date(a.uploaded_at || 0);
       const dateB = new Date(b.uploaded_at || 0);
       return dateA - dateB;
     });
-    
+
     // Debug output for sorted images
     console.log('Images after sorting:', validImages);
-    
+
     // Group images by type
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
@@ -385,10 +374,10 @@ const MaintenanceDetails = () => {
       acc[type].push(image);
       return acc;
     }, {});
-    
+
     // Debug output for grouped images
     console.log('Images after grouping by type:', groupedImages);
-    
+
     // Define stage order and labels
     const stageOrder = ['initial', 'additional', 'progress', 'completion'];
     const stageLabels = {
@@ -397,7 +386,7 @@ const MaintenanceDetails = () => {
       'progress': 'Work in Progress Images',
       'completion': 'Completion Images'
     };
-    
+
     // Create the final structure
     const organizedImages = stageOrder
       .filter(stage => groupedImages[stage] && groupedImages[stage].length > 0)
@@ -406,13 +395,13 @@ const MaintenanceDetails = () => {
         label: stageLabels[stage],
         images: groupedImages[stage]
       }));
-    
+
     // Debug output for final organized structure
     console.log('Final organized images by stage:', organizedImages);
-    
+
     return organizedImages;
   };
-  
+
   // Get priority label
   const getPriorityLabel = (priority) => {
     switch (priority) {
@@ -428,7 +417,7 @@ const MaintenanceDetails = () => {
         return 'Unknown';
     }
   };
-  
+
   // Get priority color
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -444,19 +433,19 @@ const MaintenanceDetails = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
-  
+
   // Check if user can perform actions
   const canPerformActions = () => {
     return user && (user.role === 'admin' || user.role === 'staff' || user.role === 'maintenance');
   };
-  
+
   // Add this function before the return statement
   const handleAddMultipleImages = async (files) => {
     try {
       setActionLoading(true);
       let errorCount = 0;
       let successCount = 0;
-      
+
       // First check if we have a valid user ID
       let validUserId = null;
       if (user?.id) {
@@ -469,7 +458,7 @@ const MaintenanceDetails = () => {
           console.warn('Could not validate user ID - will upload without attribution');
         }
       }
-      
+
       // Process files one by one
       for (const file of files) {
         try {
@@ -480,7 +469,7 @@ const MaintenanceDetails = () => {
             description: '',
             userId: validUserId // Only pass the user ID if we've verified it exists
           });
-          
+
           if (result.success) {
             successCount++;
           } else {
@@ -492,14 +481,14 @@ const MaintenanceDetails = () => {
           console.error('Error adding image:', err);
         }
       }
-      
+
       // Refresh data to show updated images
       await fetchRequestData();
-      
+
       if (successCount > 0) {
         toast.success(`Successfully added ${successCount} image${successCount !== 1 ? 's' : ''}`);
       }
-      
+
       if (errorCount > 0) {
         toast.error(`Failed to add ${errorCount} image${errorCount !== 1 ? 's' : ''}`);
       }
@@ -510,7 +499,7 @@ const MaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Render loading state
   if (loading) {
     return (
@@ -519,7 +508,7 @@ const MaintenanceDetails = () => {
       </div>
     );
   }
-  
+
   // Render error state
   if (error) {
     return (
@@ -537,7 +526,7 @@ const MaintenanceDetails = () => {
       </div>
     );
   }
-  
+
   // Render if request not found
   if (!request) {
     return (
@@ -553,7 +542,7 @@ const MaintenanceDetails = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -566,7 +555,7 @@ const MaintenanceDetails = () => {
           >
             Back to Maintenance Requests
           </button>
-          
+
           {canPerformActions() && request.status !== MAINTENANCE_STATUS.COMPLETED && request.status !== MAINTENANCE_STATUS.CANCELLED && (
             <Link
               to={`/dashboard/maintenance/${id}/edit`}
@@ -577,7 +566,7 @@ const MaintenanceDetails = () => {
           )}
         </div>
       </div>
-      
+
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Request Details */}
@@ -599,12 +588,12 @@ const MaintenanceDetails = () => {
                   </span>
                 </div>
               </div>
-              
+
               <div className="mb-6">
                 <h3 className="text-md font-medium mb-2">Description</h3>
                 <p className="text-gray-700 whitespace-pre-wrap">{request.description}</p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                   <h3 className="text-md font-medium mb-2">Property</h3>
@@ -613,7 +602,7 @@ const MaintenanceDetails = () => {
                     <p className="text-gray-600 text-sm">{property.address}</p>
                   )}
                 </div>
-                
+
                 <div>
                   <h3 className="text-md font-medium mb-2">{rentee ? 'Reported by' : 'Request source'}</h3>
                   <p className="text-gray-700">{rentee?.name || (rentee ? 'Resident' : 'Property management')}</p>
@@ -632,13 +621,13 @@ const MaintenanceDetails = () => {
                   <p className="text-gray-700">{request.assignedat ? formatDate(request.assignedat) : 'Not scheduled'}</p>
                 </div>
               </div>
-              
+
               {/* Sequential Image Gallery */}
               {(() => {
                 // Debug section to help troubleshoot
                 console.log('Maintenance request data for images:', request);
                 console.log('Maintenance request images:', request.maintenance_request_images);
-                
+
                 // Add a placeholder if no images
                 if (!request.maintenance_request_images || request.maintenance_request_images.length === 0) {
                   console.log('No maintenance request images found');
@@ -648,7 +637,7 @@ const MaintenanceDetails = () => {
                         <h3 className="text-lg font-medium">Maintenance Request Images</h3>
                         <p className="text-sm text-gray-500 mt-1">No images available for this maintenance request</p>
                       </div>
-                      
+
                       <div className="px-6 py-4 text-center text-gray-500">
                         <div className="mb-4">
                           <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -658,7 +647,7 @@ const MaintenanceDetails = () => {
                         <p>No images have been uploaded for this maintenance request.</p>
                         {canPerformActions() && (
                           <p className="mt-2">
-                            <label 
+                            <label
                               htmlFor="add-images-input"
                               className="text-blue-500 hover:text-blue-700 font-medium cursor-pointer"
                             >
@@ -679,17 +668,17 @@ const MaintenanceDetails = () => {
                     </div>
                   );
                 }
-                
+
                 // Handle empty or invalid images array
                 if (!Array.isArray(request.maintenance_request_images)) {
                   console.error('Maintenance request images is not an array:', request.maintenance_request_images);
                   return <div className="bg-red-100 p-4 rounded-md mb-6">Error: Could not process maintenance request images</div>;
                 }
-                
+
                 // Process the organized images
                 const organizedImages = organizeImagesByStage(request.maintenance_request_images);
                 console.log('Organized images result:', organizedImages);
-                
+
                 return (
                   <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
                     <div className="px-6 py-4 border-b">
@@ -724,7 +713,7 @@ const MaintenanceDetails = () => {
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="px-6 py-4">
                       {organizedImages.length > 0 ? (
                         organizedImages.map((stage, stageIndex) => (
@@ -737,7 +726,7 @@ const MaintenanceDetails = () => {
                               }`}></div>
                               <h4 className="text-md font-medium">{stage.label} ({stage.images.length})</h4>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                               {stage.images.map((image, imageIndex) => (
                                 <div key={`${stage.stage}-${imageIndex}`} className="relative group">
@@ -781,7 +770,7 @@ const MaintenanceDetails = () => {
                   </div>
                 );
               })()}
-              
+
               {/* Completion Notes */}
               {request.status === MAINTENANCE_STATUS.COMPLETED && request.notes && (
                 <div className="mb-6">
@@ -791,7 +780,7 @@ const MaintenanceDetails = () => {
                       try {
                         // Try to parse the notes as JSON
                         const notesData = JSON.parse(request.notes);
-                        
+
                         if (Array.isArray(notesData)) {
                           return notesData.map((note, index) => (
                             <div key={index} className="mb-3 last:mb-0">
@@ -822,7 +811,7 @@ const MaintenanceDetails = () => {
                             </div>
                           );
                         }
-                        
+
                         // Fallback to plain text if JSON parsing didn't yield expected results
                         return <p className="text-gray-700 whitespace-pre-wrap">{request.notes}</p>;
                       } catch (e) {
@@ -833,7 +822,7 @@ const MaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {/* Completion Images */}
               {request.status === MAINTENANCE_STATUS.COMPLETED && request.maintenance_request_images && request.maintenance_request_images.length > 0 && (
                 <div className="bg-white rounded-lg shadow p-6">
@@ -855,7 +844,7 @@ const MaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {/* Cancellation Reason */}
               {request.status === MAINTENANCE_STATUS.CANCELLED && request.cancellationreason && (
                 <div className="mb-6">
@@ -863,7 +852,7 @@ const MaintenanceDetails = () => {
                   <p className="text-gray-700">{request.cancellationreason}</p>
                 </div>
               )}
-              
+
               {/* Action Buttons */}
               {canPerformActions() && (
                 <div className="mt-6 flex flex-wrap gap-3">
@@ -877,7 +866,7 @@ const MaintenanceDetails = () => {
                       Assign Staff
                     </button>
                   )}
-                  
+
                   {/* Start Work Button */}
                   {request.status === MAINTENANCE_STATUS.PENDING && request.assignedto && (
                     <button
@@ -888,7 +877,7 @@ const MaintenanceDetails = () => {
                       {actionLoading ? 'Starting...' : 'Start Work'}
                     </button>
                   )}
-                  
+
                   {/* Complete Button */}
                   {request.status === MAINTENANCE_STATUS.IN_PROGRESS && (
                     <button
@@ -899,7 +888,7 @@ const MaintenanceDetails = () => {
                       {actionLoading ? 'Completing...' : 'Mark as Completed'}
                     </button>
                   )}
-                  
+
                   {/* Cancel Button */}
                   {(request.status === MAINTENANCE_STATUS.PENDING || request.status === MAINTENANCE_STATUS.IN_PROGRESS) && (
                     <button
@@ -914,7 +903,7 @@ const MaintenanceDetails = () => {
               )}
             </div>
           </div>
-          
+
           {/* Comments Section */}
           <CommentSection
             comments={parseNotes(request.notes)}
@@ -923,15 +912,15 @@ const MaintenanceDetails = () => {
             userName={user?.name || 'Guest'}
           />
         </div>
-        
+
         {/* Right Column - Status and Assignment */}
         <div className="space-y-6">
           {/* Status Tracker */}
-          <StatusTracker 
-            request={request} 
+          <StatusTracker
+            request={request}
             assignedTeamMember={assignedTeamMember}
           />
-          
+
           {/* Staff Assignment */}
           {mayManageMaintenance && (request.status === MAINTENANCE_STATUS.PENDING || request.status === MAINTENANCE_STATUS.IN_PROGRESS) && (
             <div id="staffAssignment">
@@ -952,14 +941,14 @@ const MaintenanceDetails = () => {
           )}
         </div>
       </div>
-      
+
       {/* Cancel Dialog */}
       {showCancelDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-semibold mb-4">Cancel Maintenance Request</h2>
             <p className="mb-4">Are you sure you want to cancel this maintenance request? This action cannot be undone.</p>
-            
+
             <div className="mb-4">
               <label htmlFor="cancellationReason" className="block text-sm font-medium text-gray-700 mb-1">
                 Reason for Cancellation <span className="text-red-500">*</span>
@@ -974,7 +963,7 @@ const MaintenanceDetails = () => {
                 required
               ></textarea>
             </div>
-            
+
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowCancelDialog(false)}
@@ -994,14 +983,14 @@ const MaintenanceDetails = () => {
           </div>
         </div>
       )}
-      
+
       {/* Complete Dialog */}
       {showCompleteDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
             <h2 className="text-xl font-semibold mb-4">Complete Maintenance Request</h2>
             <p className="mb-4">Please provide details about the completion of this maintenance request.</p>
-            
+
             <div className="mb-4">
               <label htmlFor="completionNotes" className="block text-sm font-medium text-gray-700 mb-1">
                 Completion Notes <span className="text-red-500">*</span>
@@ -1016,7 +1005,7 @@ const MaintenanceDetails = () => {
                 required
               ></textarea>
             </div>
-            
+
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Completion Images
@@ -1028,7 +1017,7 @@ const MaintenanceDetails = () => {
                 imageType="completion"
               />
             </div>
-            
+
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowCompleteDialog(false)}
@@ -1048,15 +1037,15 @@ const MaintenanceDetails = () => {
           </div>
         </div>
       )}
-      
+
       {/* Image Modal */}
       {showImageModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
           onClick={() => setShowImageModal(false)}
         >
           <div className="max-w-4xl max-h-screen p-2" onClick={e => e.stopPropagation()}>
-            <button 
+            <button
               className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-lg z-10"
               onClick={() => setShowImageModal(false)}
             >
@@ -1064,8 +1053,8 @@ const MaintenanceDetails = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <img 
-              src={selectedImage} 
+            <img
+              src={selectedImage}
               alt="Full size preview" 
               className="max-w-full max-h-screen object-contain"
             />
@@ -1076,4 +1065,4 @@ const MaintenanceDetails = () => {
   );
 };
 
-export default MaintenanceDetails; 
+export default MaintenanceDetails;

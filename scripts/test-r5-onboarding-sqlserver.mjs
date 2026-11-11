@@ -17,7 +17,7 @@ try {
   const config={server:'127.0.0.1',port,user:'sa',password,options:{encrypt:false,trustServerCertificate:true},requestTimeout:60000};
   for(let i=0;i<45;i++) {
     try {pool=await new sql.ConnectionPool(config).connect();break;}
-    catch(error) {if(i===44)throw error;await new Promise(r=>setTimeout(r,2000));}
+    catch(error) {if(i===44){throw error;}await new Promise(r=>setTimeout(r,2000));}
   }
   await pool.request().query('CREATE DATABASE r5proof'); await pool.close();
   pool=await new sql.ConnectionPool({...config,database:'r5proof'}).connect();
@@ -32,7 +32,7 @@ try {
   const {listTenantRentees}=await import('../src/api/mssql/renteeRepository.js');
   ({closeMssqlPool}=await import('../src/api/mssql/pool.js'));
   await ensureAuthSchema();
-  const q=async(text,params={})=>{const r=pool.request();for(const [k,v] of Object.entries(params))r.input(k,v);return (await r.query(text)).recordset||[];};
+  const q=async(text,params={})=>{const r=pool.request();for(const [k,v] of Object.entries(params)){r.input(k,v);}return (await r.query(text)).recordset||[];};
   const one=async(...args)=>(await q(...args))[0];
   const fixture=async label=>{
     const t=await one("INSERT tenants(name,slug,status) OUTPUT INSERTED.id VALUES(@label,@label,'active')",{label});
@@ -81,7 +81,7 @@ try {
 
   const app=express();app.use(express.json());app.use('/api',createSessionAuthMiddleware());app.use('/api/tenancies',createTenancyOnboardingRouter());
   app.use('/api/tenancy-exit',createTenancyExitRouter());
-  app.use((err,req,res,next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
+  app.use((err,req,res,_next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin=`http://127.0.0.1:${server.address().port}`;
   const call=async(suffix,body,who=a.owner,tenantId=a.tenantId,method=body?'POST':'GET')=>{
@@ -116,7 +116,7 @@ try {
   await pool.request().batch('DROP TRIGGER dbo.r5_deposit_rollback');
   assert.equal((await call('/onboarding')).json.data.deposit.transactions.length,1);
   await denyExpired('move-in checklist item',()=>call(`/checklist/items/${checklist.items[0].id}`,{status:'completed'},a.owner,a.tenantId,'PATCH'));
-  for(const item of checklist.items) assert.equal((await call(`/checklist/items/${item.id}`,{status:'completed'},a.owner,a.tenantId,'PATCH')).status,200);
+  for(const item of checklist.items) {assert.equal((await call(`/checklist/items/${item.id}`,{status:'completed'},a.owner,a.tenantId,'PATCH')).status,200);}
   projection=(await call('/onboarding')).json.data;assert.equal(projection.readiness.canActivate,true);
   await denyExpired('tenancy activation',()=>call('/activate',{}));
   const activations=await Promise.all([call('/activate',{}),call('/activate',{})]);assert.deepEqual(activations.map(x=>x.status),[200,200]);
@@ -192,5 +192,5 @@ try {
   console.log('R5_EXIT_SQL=PASS notice_ack isolation inspection settlement refund_reference closure_race stock_release history renter_readback');
   console.log('R5_ONBOARDING_SQL=PASS empty_denial repair concurrency deposits replay conflict rollback isolation activation readback retained_inspection renter_access');
 } finally {
-  await new Promise(r=>server?server.close(r):r());await closeMssqlPool?.();await pool?.close();if(started)docker(['rm','-f',name]);
+  await new Promise(r=>server?server.close(r):r());await closeMssqlPool?.();await pool?.close();if(started){docker(['rm','-f',name]);}
 }

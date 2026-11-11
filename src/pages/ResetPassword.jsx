@@ -37,7 +37,7 @@ const ResetPassword = () => {
         if (!response.ok || payload?.data?.valid !== true) {
           throw new Error('This password reset link is invalid, expired or already used. Request a new link.');
         }
-        if (!cancelled) setLinkStatus('valid');
+        if (!cancelled) {setLinkStatus('valid');}
       } catch (_error) {
         if (!cancelled) {
           setLinkStatus('invalid');
@@ -78,7 +78,7 @@ const ResetPassword = () => {
 
   const handleSetNewPassword = async (e) => {
     e.preventDefault();
-    if (linkStatus !== 'valid') return;
+    if (linkStatus !== 'valid') {return;}
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');

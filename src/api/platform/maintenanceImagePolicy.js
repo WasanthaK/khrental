@@ -10,14 +10,14 @@ export const sameMaintenanceIdentifier = (left, right) => (
   && String(left).trim().toLowerCase() === String(right).trim().toLowerCase()
 );
 
-export const authorizeMaintenanceImageAttachment = ({ user, membership, request, isTenant, canManage, canUpdateAssigned, hasPropertyScope }) => {
+export const authorizeMaintenanceImageAttachment = ({ user, request, isTenant, canManage, canUpdateAssigned, hasPropertyScope }) => {
   const actor = String(user?.id || '').trim();
   if (!actor || !request || !['pending', 'in_progress'].includes(String(request.status || '').toLowerCase())) {
     return false;
   }
 
-  if (isTenant) return sameMaintenanceIdentifier(request.renteeid, actor);
-  if (canManage && hasPropertyScope) return true;
+  if (isTenant) {return sameMaintenanceIdentifier(request.renteeid, actor);}
+  if (canManage && hasPropertyScope) {return true;}
   return Boolean(canUpdateAssigned && sameMaintenanceIdentifier(request.assignedto, actor));
 };
 
@@ -31,18 +31,18 @@ export const normalizeMaintenanceImageUrl = ({ value, tenantId, requestHost }) =
   const tenant = String(tenantId || '').toLowerCase();
   const host = String(requestHost || '').toLowerCase();
 
-  if (!raw || !tenant || !host || raw.startsWith('//')) return null;
+  if (!raw || !tenant || !host || raw.startsWith('//')) {return null;}
   let url;
   try { url = new URL(raw, 'https://local.invalid'); } catch { return null; }
-  if (url.username || url.password || url.search || url.hash) return null;
-  if (!['http:', 'https:'].includes(url.protocol)) return null;
-  if (url.host !== 'local.invalid' && url.host.toLowerCase() !== host) return null;
+  if (url.username || url.password || url.search || url.hash) {return null;}
+  if (!['http:', 'https:'].includes(url.protocol)) {return null;}
+  if (url.host !== 'local.invalid' && url.host.toLowerCase() !== host) {return null;}
 
   const path = url.pathname;
   const prefix = `/storage/images/tenants/${tenant}/maintenance/`;
-  if (!path.toLowerCase().startsWith(prefix)) return null;
+  if (!path.toLowerCase().startsWith(prefix)) {return null;}
   const tail = path.slice(prefix.length);
   // Canonical saveImage() uploads one generated filename into maintenance/.
-  if (!tail || tail.includes('/') || /%(?:2f|5c|2e|00)/i.test(tail) || tail === '.' || tail === '..') return null;
+  if (!tail || tail.includes('/') || /%(?:2f|5c|2e|00)/i.test(tail) || tail === '.' || tail === '..') {return null;}
   return raw;
 };

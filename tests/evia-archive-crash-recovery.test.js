@@ -15,8 +15,8 @@ test('interrupted upload pair cannot publish; restarted worker takes over after 
   let owner, current, published, attempts = [], audits = [], finalized = 0;
   const objects = new Map();
   const acquire = async () => {
-    if (published) return { status: 'complete', url: published.signedDocumentUrl };
-    if (current?.active) return { status: 'busy', retryable: true };
+    if (published) {return { status: 'complete', url: published.signedDocumentUrl };}
+    if (current?.active) {return { status: 'busy', retryable: true };}
     owner = randomUUID();
     current = { attemptId: owner, active: true };
     attempts.push(owner);

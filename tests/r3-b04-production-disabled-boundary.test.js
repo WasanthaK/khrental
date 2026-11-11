@@ -10,7 +10,7 @@ test('R3 public signed-out acceptance is default OFF, no request body or custome
     'PUBLIC_SIGNUP_ENABLED', 'PUBLIC_SIGNUP_PILOT_APPROVED',
     'PUBLIC_SEEKER_CONTEXT_ENABLED', 'VITE_PUBLIC_SIGNUP_UI_ENABLED',
     'VITE_PUBLIC_SEEKER_LANDING_ENABLED'
-  ]) assert.ok(workflow.includes('field("'+flag+'") == "false"'), flag);
+  ]) {assert.ok(workflow.includes('field("'+flag+'") == "false"'), flag);}
   assert.match(workflow, /PUBLIC_SIGNUP_DISABLED/);
   assert.match(workflow, /AUTH_CONTEXT_REQUIRED/);
   assert.match(workflow, /api\/public-signup\/\$endpoint/);

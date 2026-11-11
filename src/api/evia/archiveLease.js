@@ -149,7 +149,7 @@ export const validateEviaStagedArchiveUrl = ({
 
 export const acquireEviaArchiveLease = async (identity) =>
   withLeaseTransaction(identity, async ({ transaction, agreement, lease, tenantId, requestId, agreementId }) => {
-    if (signedLocalUrl(agreement)) return { status: 'complete', url: signedLocalUrl(agreement) };
+    if (signedLocalUrl(agreement)) {return { status: 'complete', url: signedLocalUrl(agreement) };}
     assertCanComplete(agreement);
     if (lease && !lease.processed && leaseAgeValid(lease)) {
       return { status: 'busy', retryable: true };
@@ -395,7 +395,7 @@ export const acknowledgePublishedEviaArchiveDelivery = async ({
     throw err('EVIA_ARCHIVE_PUBLICATION_NOT_PROVEN',
       'A completed, retained, lease-finalized Evia archive is required.');
   }
-  if (event.processed) return { status: 'already_processed', signedDocumentUrl: signedLocalUrl(agreement) };
+  if (event.processed) {return { status: 'already_processed', signedDocumentUrl: signedLocalUrl(agreement) };}
   await markCompletedDeliveryInTransaction({
     transaction, tenantId, requestId, deliveryEventId: verifiedDeliveryEventId
   });

@@ -36,7 +36,7 @@ const BillingAdjustmentsPanel = ({ propertyIds = [], billingPeriod }) => {
     try {
       const results = await Promise.all(propertyIds.map(async (propertyId) => {
         const { data, error: requestError } = await getMonthlyBillingContext({ propertyId, billingPeriod });
-        if (requestError) throw requestError;
+        if (requestError) {throw requestError;}
         return data;
       }));
       setContexts(results.filter(Boolean));
@@ -80,7 +80,7 @@ const BillingAdjustmentsPanel = ({ propertyIds = [], billingPeriod }) => {
         amount: Number(form.amount),
         description: form.description.trim()
       });
-      if (requestError) throw requestError;
+      if (requestError) {throw requestError;}
       setForm((current) => ({ ...current, amount: '', description: '' }));
       await load();
     } catch (saveError) {
@@ -92,13 +92,13 @@ const BillingAdjustmentsPanel = ({ propertyIds = [], billingPeriod }) => {
 
   const handleVoid = async (adjustment) => {
     const reason = window.prompt('Reason for voiding this charge:');
-    if (!reason?.trim()) return;
+    if (!reason?.trim()) {return;}
 
     setSaving(true);
     setError(null);
     try {
       const { error: requestError } = await voidBillingAdjustment(adjustment.id, reason.trim());
-      if (requestError) throw requestError;
+      if (requestError) {throw requestError;}
       await load();
     } catch (voidError) {
       setError(voidError.message || 'Failed to void the tenancy charge.');
@@ -107,7 +107,7 @@ const BillingAdjustmentsPanel = ({ propertyIds = [], billingPeriod }) => {
     }
   };
 
-  if (propertyIds.length === 0 || !billingPeriod) return null;
+  if (propertyIds.length === 0 || !billingPeriod) {return null;}
 
   return (
     <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4">

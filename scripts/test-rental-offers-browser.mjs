@@ -18,15 +18,15 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
  const call=async({path,method='GET',body})=>{const r=await fetch('/api/owner-enquiries'+path,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const p=await r.json();if(!r.ok)throw Object.assign(new Error(p.error),{code:p.code});return p.data;};
  createRoot(document.getElementById('root')).render(<BrowserRouter>{location.pathname==='/owner'?<div className="max-w-3xl m-auto p-5"><PropertyOffer enquiry={enquiry} owner call={call}/></div>:<RentalJourney/>}</BrowserRouter>);`;
 const plugin={name:'rental-offer-fixture',enforce:'pre',resolveId(source,importer){
- if(source.startsWith('\0rental-'))return source;
- if(source==='virtual:rental-proof')return '\0rental-proof.jsx';
- if(!importer?.includes('/src/'))return;
- if(source.endsWith('/hooks/useAuth'))return '\0rental-auth';
- if(source.endsWith('/services/platformClient'))return '\0rental-platform';
+ if(source.startsWith('\0rental-')){return source;}
+ if(source==='virtual:rental-proof'){return '\0rental-proof.jsx';}
+ if(!importer?.includes('/src/')){return;}
+ if(source.endsWith('/hooks/useAuth')){return '\0rental-auth';}
+ if(source.endsWith('/services/platformClient')){return '\0rental-platform';}
 },async load(id){
- if(id==='\0rental-proof.jsx')return transformWithEsbuild(entry,'rental-proof.jsx',{loader:'jsx',jsx:'automatic'});
- if(id==='\0rental-auth')return `export const useAuth=()=>({user:{id:'synthetic-verified-identity'},isAuthenticated:true,loading:false});`;
- if(id==='\0rental-platform')return `export const getPlatformClient=()=>({auth:{getSession:async()=>({data:{session:{access_token:'synthetic-only'}}})}});`;
+ if(id==='\0rental-proof.jsx'){return transformWithEsbuild(entry,'rental-proof.jsx',{loader:'jsx',jsx:'automatic'});}
+ if(id==='\0rental-auth'){return `export const useAuth=()=>({user:{id:'synthetic-verified-identity'},isAuthenticated:true,loading:false});`;}
+ if(id==='\0rental-platform'){return `export const getPlatformClient=()=>({auth:{getSession:async()=>({data:{session:{access_token:'synthetic-only'}}})}});`;}
 }};
 let vite,server,browser,page;
 const snapshot=()=>({offer,actionsEnabled:open,applicationAccepted:true,applicationVersion:1,units:[],templates:[{id:templateId,name:'Synthetic template',version:1}],canReplaceAgreement:cancelled,agreement:offer?.agreementId?{id:agreementId,status:cancelled?'cancelled':'draft',signatureStatus:null}:null});
@@ -54,13 +54,13 @@ try{
   }catch(error){res.status(409).json({error:error.message});}
  });
  app.use(vite.middlewares);app.use(async(req,res,next)=>{
-  if(req.method!=='GET')return next();res.type('html').send(await vite.transformIndexHtml(req.originalUrl,'<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body><div id="root"></div><script type="module" src="/@vite/client"></script><script type="module">import "virtual:rental-proof";</script></body></html>'));
+  if(req.method!=='GET'){return next();}res.type('html').send(await vite.transformIndexHtml(req.originalUrl,'<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body><div id="root"></div><script type="module" src="/@vite/client"></script><script type="module">import "virtual:rental-proof";</script></body></html>'));
  });
  server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
  browser=await puppeteer.launch({headless:true,protocolTimeout:20000,args:['--no-sandbox','--disable-dev-shm-usage']});
  page=await browser.newPage();page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort());
- const click=async text=>{await page.evaluate(text=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()===text);if(!b)throw new Error('Missing button '+text);b.click();},text);};
+ const click=async text=>{await page.evaluate(text=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()===text);if(!b){throw new Error('Missing button '+text);}b.click();},text);};
  const fill=async(selector,value)=>page.$eval(selector,(e,value)=>{if(['date','datetime-local'].includes(e.type)){e.value=value;}else{Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);}e.dispatchEvent(new Event('input',{bubbles:true}));},value);
  await page.setViewport({width:1280,height:1000});await page.goto(origin+'/owner',{waitUntil:'networkidle0'});
  await page.waitForSelector('[id$="-rent"]');

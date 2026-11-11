@@ -43,5 +43,5 @@ test('account visibility, protected document read, issuance and delivery all sha
     router.slice(router.indexOf("router.get('/invoices/:invoiceId/issued-document'"),router.indexOf("router.patch('/invoices/:invoiceId/draft'")),
     router.slice(router.indexOf('const deliverIssuedInvoice ='),router.indexOf("router.post('/invoices/:invoiceId/issue'")),
     router.slice(router.indexOf("router.post('/invoices/:invoiceId/issue'"),router.indexOf("router.post('/invoices/:invoiceId/retry-delivery'"))
-  ]) assert.match(section,/isImmutableInvoiceArchiveEnabledForTenant\(req\.tenantId\)/);
+  ]) {assert.match(section,/isImmutableInvoiceArchiveEnabledForTenant\(req\.tenantId\)/);}
 });

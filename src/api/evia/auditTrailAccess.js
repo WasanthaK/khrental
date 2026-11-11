@@ -9,7 +9,7 @@ const fencedAuditPattern = new RegExp(
 );
 
 export const parseFencedEviaAuditTrailPath = (bucket, path) => {
-  if (String(bucket || '').toLowerCase() !== 'documents') return null;
+  if (String(bucket || '').toLowerCase() !== 'documents') {return null;}
   const match = fencedAuditPattern.exec(String(path || '').replace(/^[/]+/, ''));
   return match ? {
     tenantId: match[1], agreementId: match[2],
@@ -22,20 +22,20 @@ export const authorizeFencedEviaAuditTrailRead = async ({
   bucket, path, tenantId, user, membership, loadPublishedArchive
 }) => {
   const target = parseFencedEviaAuditTrailPath(bucket, path);
-  if (!target) return { applies: false, allowed: true };
+  if (!target) {return { applies: false, allowed: true };}
   const deny = reason => ({ applies: true, allowed: false, reason });
   if (!tenantId || target.tenantId.toLowerCase() !== String(tenantId).toLowerCase()
       || !user?.id || !isAdminRole({ user, membership })
       || !hasPermission({ user, membership }, PERMISSIONS.AGREEMENTS_MANAGE)) {
     return deny('not_authorized');
   }
-  if (typeof loadPublishedArchive !== 'function') return deny('publication_unavailable');
+  if (typeof loadPublishedArchive !== 'function') {return deny('publication_unavailable');}
   const published = await loadPublishedArchive(target);
   if (!published || String(published.tenant_id || '').toLowerCase() !== target.tenantId.toLowerCase()
       || String(published.id || '').toLowerCase() !== target.agreementId.toLowerCase()
       || !['signed', 'completed', 'active', 'closed'].includes(String(published.status || '').toLowerCase())
       || String(published.signature_status || '').toLowerCase() !== 'completed'
-      || !published.lease_processed) return deny('publication_unavailable');
+      || !published.lease_processed) {return deny('publication_unavailable');}
   let proof;
   try { proof = JSON.parse(published.lease_raw_data || '{}'); }
   catch { return deny('publication_unavailable'); }
@@ -59,7 +59,7 @@ const historicAuditPattern = new RegExp(
 );
 
 export const parseHistoricEviaAuditTrailPath = (bucket, path) => {
-  if (String(bucket || '').toLowerCase() !== 'documents') return null;
+  if (String(bucket || '').toLowerCase() !== 'documents') {return null;}
   const match = historicAuditPattern.exec(String(path || '').replace(/^[/]+/, ''));
   return match ? { tenantId: match[1], agreementId: match[2] } : null;
 };
@@ -68,7 +68,7 @@ export const authorizeHistoricEviaAuditTrailRead = async ({
   bucket, path, tenantId, user, membership, loadHistoricAgreement
 }) => {
   const target = parseHistoricEviaAuditTrailPath(bucket, path);
-  if (!target) return { applies: false, allowed: true };
+  if (!target) {return { applies: false, allowed: true };}
   const deny = reason => ({ applies: true, allowed: false, reason });
   if (!tenantId || String(tenantId).toLowerCase() !== target.tenantId.toLowerCase()
       || !user?.id || !isAdminRole({ user, membership })
@@ -78,7 +78,7 @@ export const authorizeHistoricEviaAuditTrailRead = async ({
         !== target.tenantId.toLowerCase()) {
     return deny('not_authorized');
   }
-  if (typeof loadHistoricAgreement !== 'function') return deny('agreement_unavailable');
+  if (typeof loadHistoricAgreement !== 'function') {return deny('agreement_unavailable');}
   const agreement = await loadHistoricAgreement(target);
   if (!agreement
       || String(agreement.id || '').toLowerCase() !== target.agreementId.toLowerCase()

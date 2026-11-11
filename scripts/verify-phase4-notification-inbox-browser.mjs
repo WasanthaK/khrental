@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 
-const lower = x => String(x || '').toLowerCase();
-
 /**
  * Use the actual routed renter/staff React inbox with SQL-backed bearer
  * sessions. All fixtures are disposable, with no outbound email or SMS.

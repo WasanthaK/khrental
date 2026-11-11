@@ -11,7 +11,7 @@ const usePlatformAdminStatus = () => {
     let cancelled = false;
 
     const load = async () => {
-      if (!user) {
+      if (!user?.id) {
         setIsPlatformAdmin(false);
         setLoading(false);
         return;

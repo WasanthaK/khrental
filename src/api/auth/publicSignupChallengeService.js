@@ -12,18 +12,19 @@ const fail = (code) => Object.assign(new Error('Signup verification is not avail
 
 const bind = (tx, values) => {
   const q = new sql.Request(tx);
-  for (const [key, value] of Object.entries(values)) q.input(key, value);
+  for (const [key, value] of Object.entries(values)) {q.input(key, value);}
   return q;
 };
 
 export const normalizePublicSignupDetails = ({ email, name, enquiry,ownerCountry } = {}) => {
-  if (typeof email !== 'string' || typeof name !== 'string') return null;
+  if (typeof email !== 'string' || typeof name !== 'string') {return null;}
   const normalized = email.trim().toLowerCase();
   const displayName = name.trim();
   if (normalized.length < 6 || normalized.length > 320 ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ||
       displayName.length < 1 || displayName.length > 255 ||
-      /[\x00-\x1f\x7f]/.test(displayName)) return null;
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
+      /[\x00-\x1f\x7f]/.test(displayName)) {return null;}
   const intent=enquiry===undefined?null:parseEnquiryIntent(enquiry);
   if(enquiry!==undefined&&!intent){return null;}
   if(ownerCountry!==undefined&&(!['LK','BN'].includes(ownerCountry)||enquiry!==undefined)){return null;}
@@ -35,7 +36,7 @@ export const normalizePublicSignupDetails = ({ email, name, enquiry,ownerCountry
 // Null means an existing identity, invalid details or an issuance cooldown.
 export const beginPublicSignupChallenge = async ({ email, name } = {}) => {
   const normalized = normalizePublicSignupDetails({ email, name });
-  if (!normalized) return null;
+  if (!normalized) {return null;}
   const { token, tokenHash } = createPublicSignupChallengeToken();
   await ensureAuthSchema();
   const pool = await getMssqlPool();
@@ -90,7 +91,7 @@ export const beginPublicSignupChallenge = async ({ email, name } = {}) => {
         DATEADD(minute, 30, SYSUTCDATETIME()))
     `);
     const row = created.recordset?.[0];
-    if (!row?.id) throw fail('SIGNUP_CHALLENGE_CREATE_FAILED');
+    if (!row?.id) {throw fail('SIGNUP_CHALLENGE_CREATE_FAILED');}
     await tx.commit();
     begun = false;
     return {

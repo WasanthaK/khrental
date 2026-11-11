@@ -28,7 +28,7 @@ test('outage stops after three probes and manual retry can recover', async () =>
   let calls = 0, available = false;
   const states = [];
   const ready = createDatabaseReadiness({
-    probe: async () => { calls++; if (!available) throw new Error('network'); return true; },
+    probe: async () => { calls++; if (!available) {throw new Error('network');} return true; },
     delay: async () => {}, notify: state => states.push(state)
   });
   await assert.rejects(ready(), /Please try again/);

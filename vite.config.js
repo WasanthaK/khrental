@@ -5,7 +5,7 @@ import path from 'path';
 // Log environment variables only once during development
 let hasLoggedEnv = false;
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   // Load environment variables from .env file
   const env = loadEnv(mode, process.cwd(), '');
   // Vite exposes VITE_* by default even without an explicit define entry.
@@ -99,7 +99,7 @@ export default defineConfig(({ command, mode }) => {
             console.warn(`Blocked direct access to source file: ${req.url}`);
             console.warn(`Request details: method=${req.method}, headers=${JSON.stringify(req.headers)}`);
             console.warn(`Referrer: ${req.headers.referer || 'unknown'}`);
-            
+
             // Send detailed error response instead of redirect
             res.writeHead(404, { 'Content-Type': 'text/html' });
             res.end(`
@@ -125,4 +125,4 @@ export default defineConfig(({ command, mode }) => {
       ]
     },
   };
-}); 
+});

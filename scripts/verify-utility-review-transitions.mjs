@@ -195,7 +195,7 @@ export const verifyUtilityReviewTransitions = async ({
       const clicked = await page.evaluate(label => {
         const button = [...document.querySelectorAll('button')]
           .find(b => b.textContent.trim() === label && !b.disabled);
-        if (!button) return false;
+        if (!button) {return false;}
         button.click();
         return true;
       }, label);

@@ -15,7 +15,7 @@ test('generic document deletion cannot remove staged Evia archives or recursive 
     `tenants/${tenant}/agreements/${agreement}`, root,
     root + '/staged', root + '/staged/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     root + '/staged/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/audit_trail.pdf'
-  ]) checkDenied(() => assertEviaEvidenceDeletionAllowed('documents', [path]));
+  ]) {checkDenied(() => assertEviaEvidenceDeletionAllowed('documents', [path]));}
 });
 
 test('document bucket purge and empty object deletion are denied', () => {
@@ -41,8 +41,8 @@ test('generic uploads cannot replace stable or staged signed agreement evidence'
     root, root + '/Signed.pdf', root + '/audit_trail.pdf',
     root + '/staged', root + '/staged/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/Signed.pdf',
     root.replace('/signed', '/signed\\staged\\aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\\audit_trail.pdf')
-  ]) assert.throws(() => assertEviaGenericDocumentUploadAllowed('documents', location),
-    { status: 403, code: 'EVIA_EVIDENCE_UPLOAD_DENIED' });
+  ]) {assert.throws(() => assertEviaGenericDocumentUploadAllowed('documents', location),
+    { status: 403, code: 'EVIA_EVIDENCE_UPLOAD_DENIED' });}
 });
 
 test('generic uploads outside signing evidence retain existing behavior', () => {

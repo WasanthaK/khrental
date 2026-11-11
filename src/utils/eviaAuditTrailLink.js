@@ -12,18 +12,18 @@ const signedDocumentPattern = new RegExp(
 export const getEviaAuditTrailUrl = ({
   signedDocumentUrl, agreementId, tenantId, origin
 } = {}) => {
-  if (!signedDocumentUrl || !agreementId || !tenantId || !origin) return null;
+  if (!signedDocumentUrl || !agreementId || !tenantId || !origin) {return null;}
   let source;
   try {
     source = new URL(signedDocumentUrl, origin);
-    if (source.origin !== new URL(origin).origin || source.search || source.hash) return null;
+    if (source.origin !== new URL(origin).origin || source.search || source.hash) {return null;}
   } catch {
     return null;
   }
   const match = signedDocumentPattern.exec(source.pathname);
   if (!match || match[1].toLowerCase() !== String(tenantId).toLowerCase()
     || match[2].toLowerCase() !== String(agreementId).toLowerCase()
-    || match[4].toLowerCase() === 'audit_trail.pdf') return null;
+    || match[4].toLowerCase() === 'audit_trail.pdf') {return null;}
   const slash = source.pathname.lastIndexOf('/');
   return source.pathname.slice(0, slash + 1) + 'audit_trail.pdf';
 };

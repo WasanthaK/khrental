@@ -156,7 +156,7 @@ const inspectRenterAssociations = async (pool) => {
 
 const assertSatisfied = async (inspection, message) => {
   const state = await inspection;
-  if (!state.satisfied) throw new Error(`${message} (${state.detail})`);
+  if (!state.satisfied) {throw new Error(`${message} (${state.detail})`);}
 };
 
 const inspectInvoicePaymentReferences = async pool => {
@@ -544,14 +544,14 @@ const parseArgs = () => {
 };
 
 const getSelectedMigrations = (through) => {
-  if (through === 'all') return MIGRATIONS;
+  if (through === 'all') {return MIGRATIONS;}
   const targetIndex = MIGRATIONS.findIndex((migration) => migration.id === through);
   return MIGRATIONS.slice(0, targetIndex + 1);
 };
 
 const requiredEnv = (name) => {
   const value = String(process.env[name] || '').trim();
-  if (!value) throw new Error(`${name} is required.`);
+  if (!value) {throw new Error(`${name} is required.`);}
   return value;
 };
 
@@ -636,7 +636,7 @@ const ensureLedger = async (pool) => {
 };
 
 const loadApplied = async (pool, hasLedger) => {
-  if (!hasLedger) return new Map();
+  if (!hasLedger) {return new Map();}
   const result = await pool.request().query(`
     SELECT migration_id, checksum, applied_at, applied_by, source_sha
     FROM ${LEDGER_TABLE}
@@ -723,7 +723,7 @@ const main = async () => {
     const applied = await loadApplied(pool, hasLedger);
     const planned = selected.map((migration) => {
       const filePath = path.resolve(process.cwd(), migration.file);
-      if (!fs.existsSync(filePath)) throw new Error(`Migration file not found: ${migration.file}`);
+      if (!fs.existsSync(filePath)) {throw new Error(`Migration file not found: ${migration.file}`);}
       const checksum = checksumFile(filePath);
       const appliedRow = applied.get(migration.id) || null;
       verifyMigrationChecksum(migration, appliedRow, checksum);
@@ -747,7 +747,7 @@ const main = async () => {
         const ledgerState = item.appliedRow ? 'LEDGERED' : 'MISSING_LEDGER';
         const schemaState = inspection.satisfied ? 'SCHEMA_OK' : 'SCHEMA_MISMATCH';
         console.log(`VERIFY  ${item.migration.id}  ${ledgerState}  ${schemaState}  ${inspection.detail}`);
-        if (!item.appliedRow || !inspection.satisfied) problems += 1;
+        if (!item.appliedRow || !inspection.satisfied) {problems += 1;}
       }
 
       if (problems) {
@@ -775,8 +775,8 @@ const main = async () => {
         const state = item.appliedRow
           ? 'LEDGERED'
           : inspection.satisfied ? 'SATISFIED_UNTRACKED' : 'PENDING';
-        if (state === 'PENDING') pending += 1;
-        if (state === 'SATISFIED_UNTRACKED') satisfiedUntracked += 1;
+        if (state === 'PENDING') {pending += 1;}
+        if (state === 'SATISFIED_UNTRACKED') {satisfiedUntracked += 1;}
         console.log(`PREFLIGHT  ${item.migration.id}  ${state}  ${inspection.detail}`);
       }
       console.log(`Read-only executor preflight passed for ${planned.length} managed migrations; pending=${pending}; satisfied_untracked=${satisfiedUntracked}; executor grants and applied checksums checked. No database changes made.`);

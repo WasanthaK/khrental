@@ -35,7 +35,7 @@ const connect=async(dbname='master',port)=>new sql.ConnectionPool({
   options:{encrypt:false,trustServerCertificate:true},pool:{min:0,max:5}
 }).connect();
 let pool,master,port,created=false;
-const withInputs=(values={})=>{const req=pool.request();for(const [k,v] of Object.entries(values))req.input(k,v);return req;};
+const withInputs=(values={})=>{const req=pool.request();for(const [k,v] of Object.entries(values)){req.input(k,v);}return req;};
 const query=(statement,inputs={})=>withInputs(inputs).query(statement);
 const rows=async(country)=>(
   await query(`SELECT TOP(50) ${PUBLIC_LISTING_SELECT_SQL}
@@ -126,7 +126,7 @@ try{
       CASE WHEN OBJECT_ID('dbo.trg_public_listing_media_source_changed','TR') IS NULL THEN 0 ELSE 1 END AS source_change_trigger
   `);
   const m=schema.recordset[0];
-  for(const [k,v] of Object.entries(m))assert.equal(v,1,'SQL migration component '+k);
+  for(const [k,v] of Object.entries(m)){assert.equal(v,1,'SQL migration component '+k);}
   // Rows registered after migration must get the default preference automatically.
   await query('INSERT INTO dbo.tenants(id,status) VALUES (@b,N\'active\')',{b:B});
   const property=async(n,tenant,status='available',type='house')=>query(`
@@ -151,7 +151,7 @@ try{
   const setCountry=async(n,country)=>query(`
     UPDATE dbo.properties SET country_code=@country WHERE id=@pid;
     UPDATE dbo.public_listing_preferences SET location_label=N'General district' WHERE property_id=@pid`,{pid:id(n),country});
-  for(const n of [1,3,4,6,7,8])await setCountry(n,'LK');
+  for(const n of [1,3,4,6,7,8]){await setCountry(n,'LK');}
   await setCountry(2,'BN');
   await query('UPDATE dbo.public_listing_preferences SET opted_out=1 WHERE property_id=@pid',{pid:id(4)});
   await query('INSERT dbo.property_units(id,tenant_id,propertyid,status) VALUES (@u1,@tenant,@property,N\'occupied\'),(@u2,@tenant,@property,N\'available\')',
@@ -163,7 +163,7 @@ try{
   assert.equal((await preview(A,1))[0].public_id.toLowerCase(),publicOf(1));
   assert.equal((await preview(B,1)).length,0,'foreign tenant cannot preview source property');
   assert.equal((await preview(A,8)).length,0,'publicly eligible foreign property stays private to its owner preview');
-  for(const n of [3,4,5,6,9,99])assert.equal((await preview(A,n)).length,0,'ineligible/missing property '+n);
+  for(const n of [3,4,5,6,9,99]){assert.equal((await preview(A,n)).length,0,'ineligible/missing property '+n);}
   assert.equal((await preview(A,7)).length,1,'partially available building retains existing unit policy');
 
   // Public derivative manifest starts empty even though properties and source images exist.
@@ -373,7 +373,7 @@ try{
   console.log('PROPERTY_DELETE_SQL=PASS unused_listing atomic_cleanup cross_tenant_denial repeated_delete history_rollback media_retention');
   console.log('PUBLIC_LISTING_DISPOSABLE_SQL=PASS schema=double-applied; tenants=2; properties=9; legacy-backfill; media-withdrawal; media-review-audit; membership-revocation; optout; lease; vacancy; country; redaction');
 }finally{
-  if(pool)await pool.close().catch(()=>{});
-  if(master)await master.close().catch(()=>{});
-  if(created)docker(['rm','-f',container]);
+  if(pool){await pool.close().catch(()=>{});}
+  if(master){await master.close().catch(()=>{});}
+  if(created){docker(['rm','-f',container]);}
 }

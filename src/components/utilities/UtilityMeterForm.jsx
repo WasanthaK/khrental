@@ -17,7 +17,7 @@ import {
   Snackbar
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { FiDroplet, FiZap, FiCalendar, FiUpload, FiSave } from 'react-icons/fi';
+import { FiDroplet, FiZap, FiCalendar, FiSave } from 'react-icons/fi';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import ImageUploader from '../common/ImageUploader';
@@ -25,7 +25,7 @@ import { uploadTenantFile } from '../../services/storageApiService';
 
 /**
  * Reusable component for submitting utility meter readings
- * @param {object} props 
+ * @param {object} props
  * @param {string} props.propertyId - ID of the property (required)
  * @param {string} props.unitId - ID of the unit (optional, only for apartments)
  * @param {string} props.renteeId - ID of the rentee (required)
@@ -41,15 +41,15 @@ const UtilityMeterForm = ({
   onCancel,
   previousReadings
 }) => {
-  const theme = useTheme();
-  
+  useTheme();
+
   const [formData, setFormData] = useState({
     utilityType: '',
     currentReading: '',
     readingDate: new Date().toISOString().split('T')[0],
     photoUrl: null
   });
-  
+
   const [previousReading, setPreviousReading] = useState(null);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,28 +60,28 @@ const UtilityMeterForm = ({
     message: '',
     severity: 'info'
   });
-  
+
   useEffect(() => {
     // Reset previous reading when utility type changes
     if (formData.utilityType && previousReadings) {
       const lastReading = previousReadings.find(
         reading => reading.utilitytype === formData.utilityType
       );
-      
+
       setPreviousReading(lastReading || null);
     } else {
       setPreviousReading(null);
     }
   }, [formData.utilityType, previousReadings]);
-  
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
-    
+
     // Clear error for this field if it exists
     if (errors[name]) {
       setErrors(prev => ({
@@ -90,20 +90,20 @@ const UtilityMeterForm = ({
       }));
     }
   };
-  
+
   const handleImageUpload = async (file) => {
     if (!file) {
       return;
     }
-    
+
     setIsUploading(true);
-    
+
     try {
       // Generate a unique file name
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `utility_readings/${fileName}`;
-      
+
       const uploadedPhoto = await uploadTenantFile({
         bucket: 'media',
         path: filePath,
@@ -113,12 +113,12 @@ const UtilityMeterForm = ({
       if (!uploadedPhoto?.url) {
         throw new Error('Failed to get storage URL for utility meter photo');
       }
-      
+
       setFormData(prev => ({
         ...prev,
         photoUrl: uploadedPhoto.url
       }));
-      
+
       setIsUploading(false);
       setUploadProgress(0);
     } catch (error) {
@@ -128,14 +128,14 @@ const UtilityMeterForm = ({
       setUploadProgress(0);
     }
   };
-  
+
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.utilityType) {
       newErrors.utilityType = 'Utility type is required';
     }
-    
+
     if (!formData.currentReading) {
       newErrors.currentReading = 'Current reading is required';
     } else if (isNaN(formData.currentReading) || parseFloat(formData.currentReading) <= 0) {
@@ -143,26 +143,26 @@ const UtilityMeterForm = ({
     } else if (previousReading && parseFloat(formData.currentReading) < parseFloat(previousReading.currentreading)) {
       newErrors.currentReading = 'Current reading cannot be less than the previous reading';
     }
-    
+
     if (!formData.readingDate) {
       newErrors.readingDate = 'Reading date is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate form before submission
     if (!validateForm()) {
       showAlert('Please fix the errors before submitting', 'error');
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
       // Prepare data for submission
       const readingData = {
@@ -176,25 +176,25 @@ const UtilityMeterForm = ({
         photourl: formData.photoUrl,
         status: 'pending'
       };
-      
+
       // Submit reading data
       const { data, error } = await platformClient
         .from('utility_readings')
         .insert(readingData)
         .select()
         .single();
-      
+
       if (error) {
         throw error;
       }
-      
+
       showAlert('Reading submitted successfully', 'success');
-      
+
       // Call callback function if provided
       if (onSubmitSuccess) {
         onSubmitSuccess(data);
       }
-      
+
       // Reset form
       setFormData({
         utilityType: '',
@@ -209,7 +209,7 @@ const UtilityMeterForm = ({
       setIsSubmitting(false);
     }
   };
-  
+
   const showAlert = (message, severity = 'info') => {
     setAlert({
       open: true,
@@ -217,14 +217,14 @@ const UtilityMeterForm = ({
       severity
     });
   };
-  
+
   const handleAlertClose = () => {
     setAlert(prev => ({
       ...prev,
       open: false
     }));
   };
-  
+
   const getUtilityIcon = (type) => {
     if (type === UTILITY_TYPES.ELECTRICITY) {
       return <FiZap />;
@@ -233,18 +233,18 @@ const UtilityMeterForm = ({
     }
     return null;
   };
-  
+
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
       <Typography variant="h5" gutterBottom>
         Submit Utility Reading
       </Typography>
-      
+
       <form onSubmit={handleSubmit}>
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 6 }}>
-            <FormControl 
-              fullWidth 
+            <FormControl
+              fullWidth
               error={!!errors.utilityType}
               variant="outlined"
             >
@@ -271,7 +271,7 @@ const UtilityMeterForm = ({
               {errors.utilityType && <FormHelperText>{errors.utilityType}</FormHelperText>}
             </FormControl>
           </Grid>
-          
+
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
@@ -295,7 +295,7 @@ const UtilityMeterForm = ({
               disabled={isSubmitting}
             />
           </Grid>
-          
+
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
@@ -315,7 +315,7 @@ const UtilityMeterForm = ({
               helperText={errors.currentReading}
               disabled={isSubmitting}
             />
-            
+
             {previousReading && (
               <FormHelperText>
                 Previous reading: {previousReading.currentreading} {' '}
@@ -325,12 +325,12 @@ const UtilityMeterForm = ({
               </FormHelperText>
             )}
           </Grid>
-          
+
           <Grid size={{ xs: 12 }}>
             <Typography variant="subtitle1" gutterBottom>
               Upload Meter Reading Photo
             </Typography>
-            
+
             <ImageUploader
               currentImage={formData.photoUrl}
               onImageSelected={handleImageUpload}
@@ -338,12 +338,12 @@ const UtilityMeterForm = ({
               uploadProgress={uploadProgress}
               isUploading={isUploading}
             />
-            
+
             {errors.photoUrl && (
               <FormHelperText error>{errors.photoUrl}</FormHelperText>
             )}
           </Grid>
-          
+
           <Grid size={{ xs: 12 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
               <Button
@@ -353,7 +353,7 @@ const UtilityMeterForm = ({
               >
                 Cancel
               </Button>
-              
+
               <Button
                 type="submit"
                 variant="contained"
@@ -367,7 +367,7 @@ const UtilityMeterForm = ({
           </Grid>
         </Grid>
       </form>
-      
+
       <Snackbar
         open={alert.open}
         autoHideDuration={6000}
@@ -382,4 +382,4 @@ const UtilityMeterForm = ({
   );
 };
 
-export default UtilityMeterForm; 
+export default UtilityMeterForm;

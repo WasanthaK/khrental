@@ -39,7 +39,7 @@ function fixture({ mssql = true, apiError = null, apiResult = undefined, legacyE
     () => mssql,
     async (path, options) => {
       apiCalls.push({ path, options });
-      if (apiError) throw apiError;
+      if (apiError) {throw apiError;}
       return apiResult === undefined ? row : apiResult;
     },
     { from: table => { genericCalls.push(['from', table]); return genericQuery; } },

@@ -6,7 +6,7 @@ const scrypt = promisify(crypto.scrypt);
 // Browser profile edits must not manufacture server-owned email, invitation,
 // onboarding or authorization evidence in auth metadata.
 export const sanitizeClientAuthMetadata = metadata => {
-  if (metadata === undefined) return undefined;
+  if (metadata === undefined) {return undefined;}
   if (!metadata || typeof metadata!=='object' || Array.isArray(metadata)
       || Object.keys(metadata).some(key=>!['name','force_password_change'].includes(key))
       || (metadata.name!==undefined && (typeof metadata.name!=='string' || metadata.name.length>200))

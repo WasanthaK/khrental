@@ -66,7 +66,7 @@ test('redemption is isolated in the dedicated default-off signup route, never le
 
 test('owner-selected eight-character policy accepts 8 and 11 and uses the normal credential verifier',async()=>{
   assert.equal(isValidPublicSignupPassword('x'.repeat(7)),false);
-  for(const length of [8,11,12,256])assert.equal(isValidPublicSignupPassword('x'.repeat(length)),true);
+  for(const length of [8,11,12,256]){assert.equal(isValidPublicSignupPassword('x'.repeat(length)),true);}
   assert.equal(isValidPublicSignupPassword('x'.repeat(257)),false);
   const credential=await createPasswordCredential('Bird8!xx');
   assert.equal(await verifyPasswordCredential(credential,'Bird8!xx'),true);

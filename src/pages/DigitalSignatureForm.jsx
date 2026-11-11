@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  sendDocumentForSignature, 
-  getSignatureStatus, 
-  downloadSignedDocument, 
-  getAuthorizationUrl 
-} from '../services/eviaSignService';
+import { sendDocumentForSignature, getAuthorizationUrl } from '../services/eviaSignService';
 import Button from '../components/ui/Button';
 
 // Use the same storage key as the service
-const STORAGE_KEY = 'eviaSignRequests';
+
 const AUTH_STORAGE_KEY = 'eviaSignAuth';
 
 const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
@@ -17,8 +12,8 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
   const [message, setMessage] = useState(initialData?.message || 'Please sign this rental agreement');
   const [signatories, setSignatories] = useState(initialData?.signatories || []);
   const [textMarkers, setTextMarkers] = useState(initialData?.textMarkers || []);
-  const [requestId, setRequestId] = useState('');
-  const [requestStatus, setRequestStatus] = useState(null);
+  const [, setRequestId] = useState('');
+  const [, setRequestStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -70,7 +65,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
     const updatedSignatories = [...signatories];
     updatedSignatories[index] = { ...updatedSignatories[index], [field]: value };
     setSignatories(updatedSignatories);
-    
+
     if (field === 'identifier') {
       const updatedMarkers = [...textMarkers];
       if (updatedMarkers[index]) {
@@ -91,7 +86,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
   const removeSignatory = (index) => {
     const updatedSignatories = signatories.filter((_, i) => i !== index);
     setSignatories(updatedSignatories);
-    
+
     const updatedMarkers = textMarkers.filter((_, i) => i !== index);
     setTextMarkers(updatedMarkers);
   };
@@ -125,23 +120,23 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
       // Check for empty fields in signatories and text markers
       const hasEmptySignatoryFields = signatories.some(s => !s.name || !s.email || !s.identifier);
       const hasEmptyMarkerFields = textMarkers.some(m => !m.text || !m.identifier);
-      
+
       if (hasEmptySignatoryFields) {
         setError('Please fill in all signatory fields');
         setLoading(false);
         return;
       }
-      
+
       if (hasEmptyMarkerFields) {
         setError('Please fill in all text marker fields');
         setLoading(false);
         return;
       }
-      
+
       // Ensure that identifiers match between signatories and markers
       const signatoryIds = signatories.map(s => s.identifier);
       const markerIds = textMarkers.map(m => m.identifier);
-      
+
       const mismatchedIds = signatoryIds.filter(id => !markerIds.includes(id));
       if (mismatchedIds.length > 0) {
         setError(`Signatory identifiers don't match text markers: ${mismatchedIds.join(', ')}`);
@@ -159,7 +154,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
       };
 
       const result = await sendDocumentForSignature(params);
-      
+
       if (result.success) {
         setRequestId(result.requestId);
         setRequestStatus(result.status);
@@ -177,7 +172,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <h1 className="text-2xl font-bold mb-6">Digital Signature Request</h1>
-      
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
@@ -188,10 +183,10 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
         <div className="mb-8 p-6 bg-white rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
           <p className="mb-4">You need to authenticate with Evia Sign before sending documents for signature.</p>
-          
+
           <div className="mb-4">
             <div className="flex space-x-2">
-              <Button 
+              <Button
                 onClick={handleAuth}
                 variant="primary"
               >
@@ -205,7 +200,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
       {isAuthenticated && (
         <div className="mb-8 p-6 bg-white rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Signature Request Details</h2>
-          
+
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Document</label>
             {documentUrl ? (
@@ -220,7 +215,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
                 </Button>
               </div>
             ) : (
-              <input 
+              <input
                 type="file" 
                 accept=".pdf,.doc,.docx"
                 onChange={handleFileUpload}
@@ -231,7 +226,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-            <input 
+            <input
               type="text" 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -242,7 +237,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-            <input 
+            <input
               type="text" 
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -254,31 +249,31 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
               <h3 className="text-lg font-medium">Signatories</h3>
-              <Button 
-                onClick={addSignatory} 
+              <Button
+                onClick={addSignatory}
                 variant="primary" 
                 size="sm"
               >
                 Add Signatory
               </Button>
             </div>
-            
+
             {signatories.map((signatory, index) => (
               <div key={index} className="p-3 border rounded mb-3 bg-gray-50">
                 <div className="flex justify-between mb-2">
                   <h4 className="text-md font-medium">Signatory #{index + 1}</h4>
-                  <button 
+                  <button
                     onClick={() => removeSignatory(index)}
                     className="text-red-500 hover:text-red-700"
                   >
                     Remove
                   </button>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-3 mb-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input 
+                    <input
                       type="text" 
                       value={signatory.name}
                       onChange={(e) => updateSignatory(index, 'name', e.target.value)}
@@ -288,7 +283,7 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input 
+                    <input
                       type="email" 
                       value={signatory.email}
                       onChange={(e) => updateSignatory(index, 'email', e.target.value)}
@@ -297,10 +292,10 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="mb-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Identifier (e.g., landlord, tenant)</label>
-                  <input 
+                  <input
                     type="text" 
                     value={signatory.identifier}
                     onChange={(e) => updateSignatory(index, 'identifier', e.target.value)}
@@ -308,10 +303,10 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
                     placeholder="Identifier"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Text Marker (e.g., "for Landlord:")</label>
-                  <input 
+                  <input
                     type="text" 
                     value={textMarkers[index]?.text || ''}
                     onChange={(e) => updateTextMarker(index, e.target.value)}
@@ -325,13 +320,13 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button 
+            <Button
               onClick={onCancel}
               variant="secondary"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleSendForSignature}
               variant="primary"
               disabled={loading}
@@ -345,4 +340,4 @@ const DigitalSignatureForm = ({ initialData, onComplete, onCancel }) => {
   );
 };
 
-export default DigitalSignatureForm; 
+export default DigitalSignatureForm;

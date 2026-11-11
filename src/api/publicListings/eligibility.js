@@ -11,25 +11,25 @@ export const publicationEligibility=({
   propertyStatus,units=[],activeUnitIds=[],hasActiveWholePropertyAgreement=false,
   optedOut=false,tenantActive=true,countryCode=null,propertyType=null,managementState=null
 }={})=>{
-  if(managementState==='ceased')return {eligible:false,reason:'management_ceased'};
-  if(!tenantActive)return {eligible:false,reason:'tenant_inactive'};
-  if(optedOut)return {eligible:false,reason:'owner_opted_out'};
+  if(managementState==='ceased'){return {eligible:false,reason:'management_ceased'};}
+  if(!tenantActive){return {eligible:false,reason:'tenant_inactive'};}
+  if(optedOut){return {eligible:false,reason:'owner_opted_out'};}
   const status=norm(propertyStatus);
-  if(SUPPRESSED_PARENT_STATES.includes(status))return {eligible:false,reason:'property_unavailable'};
-  if(hasActiveWholePropertyAgreement)return {eligible:false,reason:'whole_property_rented'};
+  if(SUPPRESSED_PARENT_STATES.includes(status)){return {eligible:false,reason:'property_unavailable'};}
+  if(hasActiveWholePropertyAgreement){return {eligible:false,reason:'whole_property_rented'};}
   if(!AVAILABLE_PARENT_STATES.includes(status)&&status!=='rented')
-    return {eligible:false,reason:'property_status_unknown'};
+    {return {eligible:false,reason:'property_status_unknown'};}
   const unitList=Array.isArray(units)?units:[];
   if(unitList.length){
     const occupied=new Set(activeUnitIds.map(String));
     if(!unitList.some(u=>u.management_state!=='ceased'&&ELIGIBLE_UNIT_STATES.includes(norm(u.status))&&!occupied.has(String(u.id))))
-      return {eligible:false,reason:'no_available_units'};
+      {return {eligible:false,reason:'no_available_units'};}
   }else if(!AVAILABLE_PARENT_STATES.includes(status)){
     return {eligible:false,reason:'whole_property_rented'};
   }
   const country=String(countryCode||'').toUpperCase();
   if(!Object.hasOwn(PUBLIC_MARKETS,country))
-    return {eligible:false,reason:'public_country_missing'};
+    {return {eligible:false,reason:'public_country_missing'};}
   return {eligible:true,reason:'available_for_rent',country,category:PUBLIC_TYPES[norm(propertyType)]||'other'};
 };
 

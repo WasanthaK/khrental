@@ -6,8 +6,8 @@ export default function UnitInvoiceBilling({propertyId,unitId}){
   useEffect(()=>{
     let active=true;
     getUnitInvoiceBilling(propertyId,unitId).then(({data,error})=>{
-      if(!active)return;
-      if(error)setError(error.message);else setName(data?.beneficiaryName||'');
+      if(!active){return;}
+      if(error){setError(error.message);}else {setName(data?.beneficiaryName||'');}
       setLoading(false);
     });
     return ()=>{active=false;};
@@ -15,7 +15,7 @@ export default function UnitInvoiceBilling({propertyId,unitId}){
   const save=async e=>{
     e.preventDefault();setError('');setNotice('');setSaving(true);
     const result=await saveUnitInvoiceBilling(propertyId,unitId,{beneficiaryName:name});
-    if(result.error)setError(result.error.message);
+    if(result.error){setError(result.error.message);}
     else {setName(result.data?.beneficiaryName||'');setNotice('Unit beneficiary saved for future billing.');}
     setSaving(false);
   };

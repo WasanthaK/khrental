@@ -51,7 +51,7 @@ const TenancyOnboarding = () => {
   }, [load]);
 
   const handleResendInvitation = async () => {
-    if (!data?.rentee?.id) return;
+    if (!data?.rentee?.id) {return;}
     setWorking(true);
     const result = await resendInvitation(data.rentee.id, false);
     if (result.success) {
@@ -85,7 +85,7 @@ const TenancyOnboarding = () => {
       'Confirm that the landlord and tenant have manually signed this contract outside Evia. This will satisfy the agreement-signature requirement for tenancy activation.'
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {return;}
 
     setWorking(true);
     const result = await recordManualAgreementSignature(id);

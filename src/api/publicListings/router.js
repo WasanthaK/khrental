@@ -29,7 +29,7 @@ export const createPublicListingsRouter=({
   const allowedInPilot=id=>!pilotConfigured||String(id||'').toLowerCase()===pilotId;
   router.use((req,res,next)=>{
     if(!['GET','HEAD'].includes(req.method)||!PUBLIC_LISTING_ENABLED(env)||
-      (pilotConfigured&&!isId(pilotId)))return hidden(res);
+      (pilotConfigured&&!isId(pilotId))){return hidden(res);}
     const origin=req.get('origin');
     if(origin&&publicOrigins.has(origin)){
       res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');
@@ -38,17 +38,17 @@ export const createPublicListingsRouter=({
     next();
   });
   const attachPublicImages=async items=>{
-    if(!media.publicMediaEnabled(env)||!items.length)return items;
+    if(!media.publicMediaEnabled(env)||!items.length){return items;}
     const ids=new Set(items.map(item=>String(item.id).toLowerCase()));
     const rows=await listMedia(items.map(item=>item.id));
     const groups=new Map();
     for(const r of rows){
       const id=String(r.listingPublicId||'').toLowerCase();
-      if(!ids.has(id)||!isId(r.mediaId))continue;
+      if(!ids.has(id)||!isId(r.mediaId)){continue;}
       const group=groups.get(id)||[];
-      if(group.length>=6)continue;
+      if(group.length>=6){continue;}
       const item=items.find(x=>String(x.id).toLowerCase()===id);
-      if(!item)continue;
+      if(!item){continue;}
       group.push(media.publicMediaDTO(r,item.country));
       groups.set(id,group);
     }
@@ -56,8 +56,8 @@ export const createPublicListingsRouter=({
   };
   router.get('/',asyncRoute(async(req,res)=>{
     const country=parseCountry(req.query?.country);
-    if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});
-    if(!await rateLimit(country))return res.status(429).json({code:'PUBLIC_RATE_LIMIT',error:'Please try again later.'});
+    if(!country){return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});}
+    if(!await rateLimit(country)){return res.status(429).json({code:'PUBLIC_RATE_LIMIT',error:'Please try again later.'});}
     const rows=await list(country);
     // Defense in depth: a storage/query regression must never mix markets.
     const data=rows.map(toPublicDTO).filter(item=>item&&item.country===country&&allowedInPilot(item.id));
@@ -66,14 +66,14 @@ export const createPublicListingsRouter=({
   router.get('/:publicId/media/:mediaId',asyncRoute(async(req,res)=>{
     // Separate release gate: even an enabled public listing feed returns NO photos
     // until trusted metadata stripping, rights review and public storage are attested.
-    if(!media.publicMediaEnabled(env))return hidden(res);
+    if(!media.publicMediaEnabled(env)){return hidden(res);}
     const country=parseCountry(req.query?.country);
-    if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED'});
+    if(!country){return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED'});}
     const {publicId,mediaId}=req.params;
-    if(!isId(publicId)||!isId(mediaId)||!allowedInPilot(publicId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
-    if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
+    if(!isId(publicId)||!isId(mediaId)||!allowedInPilot(publicId)){return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});}
+    if(!await rateLimit('DETAIL')){return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});}
     const meta=await findMedia({listingId:publicId,mediaId,country});
-    if(!meta)return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(!meta){return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});}
     let bytes;
     try{bytes=await readDerivative({listingId:publicId,mediaId,meta});}
     catch(error){
@@ -107,12 +107,12 @@ export const createPublicListingsRouter=({
   }));
   router.get('/:publicId',asyncRoute(async(req,res)=>{
     const country=parseCountry(req.query?.country);
-    if(!country)return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});
-    if(!isId(req.params.publicId)||!allowedInPilot(req.params.publicId))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
-    if(!await rateLimit('DETAIL'))return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});
+    if(!country){return res.status(400).json({code:'PUBLIC_COUNTRY_REQUIRED',error:'Choose LK or BN.'});}
+    if(!isId(req.params.publicId)||!allowedInPilot(req.params.publicId)){return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});}
+    if(!await rateLimit('DETAIL')){return res.status(429).json({code:'PUBLIC_RATE_LIMIT'});}
     const item=toPublicDTO(await find(req.params.publicId));
     // A direct link cannot bypass the selected country even if an ID is known.
-    if(!item||item.country!==country||!allowedInPilot(item.id))return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});
+    if(!item||item.country!==country||!allowedInPilot(item.id)){return res.status(404).json({code:'PUBLIC_LISTING_NOT_FOUND'});}
     const [enriched]=await attachPublicImages([item]);
     res.json({data:enriched});
   }));
@@ -145,7 +145,7 @@ export const createPublicListingPreferencesRouter=({
     next();
   });
   const validId=(req,res)=>{
-    if(isId(req.params.propertyId))return true;
+    if(isId(req.params.propertyId)){return true;}
     res.status(404).json({code:'PROPERTY_NOT_FOUND'});return false;
   };
   router.get('/market-readiness',asyncRoute(async(req,res)=>{
@@ -156,9 +156,9 @@ export const createPublicListingPreferencesRouter=({
     res.json({data});
   }));
   router.get('/:propertyId',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
+    if(!validId(req,res)){return;}
     const pref=await get(req.tenantId,req.params.propertyId);
-    if(!pref)return res.status(404).json({code:'PROPERTY_NOT_FOUND'});
+    if(!pref){return res.status(404).json({code:'PROPERTY_NOT_FOUND'});}
     res.json({data:{
       publicId:pref.public_id,countryCode:pref.country_code,
       optedOut:Boolean(pref.opted_out),headline:pref.public_headline,locationLabel:pref.location_label
@@ -166,24 +166,24 @@ export const createPublicListingPreferencesRouter=({
   }));
   // Read-only private release preview; does not enable anonymous publication.
   router.get('/:propertyId/pilot-preview',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
+    if(!validId(req,res)){return;}
     const pref=await get(req.tenantId,req.params.propertyId);
-    if(!pref||!isId(pref.public_id))return res.status(404).json({code:'PROPERTY_NOT_FOUND'});
+    if(!pref||!isId(pref.public_id)){return res.status(404).json({code:'PROPERTY_NOT_FOUND'});}
     const item=toPublicDTO(await preview(req.tenantId,req.params.propertyId));
     const matches=item&&item.id.toLowerCase()===String(pref.public_id).toLowerCase()
       &&item.country===pref.country_code;
-    if(item&&!matches)return res.status(409).json({code:'PUBLIC_PREVIEW_MISMATCH'});
+    if(item&&!matches){return res.status(409).json({code:'PUBLIC_PREVIEW_MISMATCH'});}
     res.json({data:{publicId:String(pref.public_id),eligible:Boolean(matches),
       publicPreview:matches?item:null}});
   }));
   router.get('/:propertyId/media',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
+    if(!validId(req,res)){return;}
     res.json({data:await adminPhotos({tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id},{env})});
   }));
   router.get('/:propertyId/media/:mediaId/preview',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
-    if(!photoReviewEnabled(env))return hidden(res);
-    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(!validId(req,res)){return;}
+    if(!photoReviewEnabled(env)){return hidden(res);}
+    if(!isId(req.params.mediaId)){return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});}
     const photo=await previewPhoto({tenantId:req.tenantId,propertyId:req.params.propertyId,
       actorId:req.user.id,mediaId:req.params.mediaId},{env});
     res.set('Cache-Control','private, no-store, max-age=0');
@@ -192,14 +192,14 @@ export const createPublicListingPreferencesRouter=({
     res.type('image/webp').send(photo.body);
   }));
   router.post('/:propertyId/media/prepare',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
-    if(!imagePreparationEnabled(env))return hidden(res);
+    if(!validId(req,res)){return;}
+    if(!imagePreparationEnabled(env)){return hidden(res);}
     const input=req.body;
     if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['imageIndex','altText'].includes(k)))
-      return res.status(400).json({code:'UNAPPROVED_IMAGE_FIELD'});
+      {return res.status(400).json({code:'UNAPPROVED_IMAGE_FIELD'});}
     if(!Number.isInteger(input.imageIndex)||input.imageIndex<0||input.imageIndex>49||
        typeof input.altText!=='string'||!input.altText.trim())
-      return res.status(400).json({code:'INVALID_IMAGE_SELECTION'});
+      {return res.status(400).json({code:'INVALID_IMAGE_SELECTION'});}
     const result=await prepareImage({
       tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
       imageIndex:input.imageIndex,altText:input.altText
@@ -207,14 +207,14 @@ export const createPublicListingPreferencesRouter=({
     return res.status(202).json({data:result});
   }));
   router.post('/:propertyId/media/:mediaId/review',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
-    if(!photoReviewEnabled(env))return hidden(res);
-    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(!validId(req,res)){return;}
+    if(!photoReviewEnabled(env)){return hidden(res);}
+    if(!isId(req.params.mediaId)){return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});}
     const body=req.body;
     if(!body||typeof body!=='object'||Array.isArray(body)||
        Object.keys(body).some(key=>!['confirmRights','confirmPrivacy'].includes(key))||
        body.confirmRights!==true||body.confirmPrivacy!==true)
-      return res.status(400).json({code:'PHOTO_REVIEW_ATTESTATION_REQUIRED'});
+      {return res.status(400).json({code:'PHOTO_REVIEW_ATTESTATION_REQUIRED'});}
     const result=await reviewImage({
       tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
       mediaId:req.params.mediaId,confirmRights:true,confirmPrivacy:true
@@ -222,11 +222,11 @@ export const createPublicListingPreferencesRouter=({
     res.json({data:result});
   }));
   router.post('/:propertyId/media/:mediaId/withdraw',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
-    if(!photoReviewEnabled(env))return hidden(res);
-    if(!isId(req.params.mediaId))return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});
+    if(!validId(req,res)){return;}
+    if(!photoReviewEnabled(env)){return hidden(res);}
+    if(!isId(req.params.mediaId)){return res.status(404).json({code:'PUBLIC_IMAGE_NOT_FOUND'});}
     if(req.body && (typeof req.body!=='object'||Array.isArray(req.body)||Object.keys(req.body).length))
-      return res.status(400).json({code:'UNAPPROVED_PHOTO_WITHDRAW_FIELD'});
+      {return res.status(400).json({code:'UNAPPROVED_PHOTO_WITHDRAW_FIELD'});}
     const result=await withdrawImage({
       tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,
       mediaId:req.params.mediaId
@@ -234,7 +234,7 @@ export const createPublicListingPreferencesRouter=({
     res.json({data:result});
   }));
   router.patch('/:propertyId',asyncRoute(async(req,res)=>{
-    if(!validId(req,res))return;
+    if(!validId(req,res)){return;}
     const changes=parsePreferenceInput(req.body);
     const value=await put({
       tenantId:req.tenantId,propertyId:req.params.propertyId,actorId:req.user.id,changes

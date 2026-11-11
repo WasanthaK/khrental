@@ -29,13 +29,13 @@ const ImageUploader = ({
   }, [currentImage]);
 
   const handleSelectFile = () => {
-    if (disabled || isUploading) return;
+    if (disabled || isUploading) {return;}
     fileInputRef.current?.click();
   };
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {return;}
 
     // Preview the image locally
     const reader = new FileReader();

@@ -4,8 +4,8 @@
  * @returns {boolean} - Whether the value appears to be a valid UUID
  */
 export const isValidUUID = (value) => {
-  if (!value) return false;
-  if (value === 'undefined' || value === 'null') return false;
+  if (!value) {return false;}
+  if (value === 'undefined' || value === 'null') {return false;}
   
   // Regex for UUID format validation
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

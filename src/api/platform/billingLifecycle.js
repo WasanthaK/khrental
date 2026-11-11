@@ -20,8 +20,8 @@ const toAmount = (value) => {
 };
 
 export const parseAgreementTerms = (terms) => {
-  if (!terms) return {};
-  if (typeof terms === 'object') return terms;
+  if (!terms) {return {};}
+  if (typeof terms === 'object') {return terms;}
 
   try {
     const parsed = JSON.parse(String(terms));
@@ -33,7 +33,7 @@ export const parseAgreementTerms = (terms) => {
 
 export const resolveAgreementMonthlyRent = (agreement = {}) => {
   const persistedRent = toAmount(agreement.rentamount);
-  if (persistedRent > 0) return persistedRent;
+  if (persistedRent > 0) {return persistedRent;}
 
   const terms = parseAgreementTerms(agreement.terms);
   const contractualRent = toAmount(terms.monthlyRent ?? terms.monthlyrent);
@@ -69,7 +69,7 @@ export const resolveAgreementBillingDay = (agreement = {}) => {
 
 const utcDayStart = (value) => {
   const date = toDate(value);
-  if (!date) return null;
+  if (!date) {return null;}
   return new Date(Date.UTC(
     date.getUTCFullYear(),
     date.getUTCMonth(),
@@ -130,7 +130,7 @@ export const calculateProratedMonthlyRent = ({
 };
 
 const toDate = (value) => {
-  if (!value) return null;
+  if (!value) {return null;}
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -146,9 +146,9 @@ export const agreementOverlapsBillingPeriod = ({
   const billingStart = toDate(periodStart);
   const billingEnd = toDate(periodEnd);
 
-  if (!billingStart || !billingEnd || billingEnd <= billingStart) return false;
-  if (start && start >= billingEnd) return false;
-  if (end && end < billingStart) return false;
+  if (!billingStart || !billingEnd || billingEnd <= billingStart) {return false;}
+  if (start && start >= billingEnd) {return false;}
+  if (end && end < billingStart) {return false;}
   return true;
 };
 
@@ -168,10 +168,10 @@ export const calculateOutstandingBalance = (invoiceAmount, payments = []) => {
 
 export const getInvoiceStatusAfterVerification = ({ invoiceAmount, payments = [], now = new Date(), dueDate = null }) => {
   const outstanding = calculateOutstandingBalance(invoiceAmount, payments);
-  if (outstanding <= 0) return INVOICE_STATUS.PAID;
+  if (outstanding <= 0) {return INVOICE_STATUS.PAID;}
 
   const hasPending = payments.some((payment) => String(payment?.status || '').toLowerCase() === PAYMENT_STATUS.PENDING);
-  if (hasPending) return INVOICE_STATUS.VERIFICATION_PENDING;
+  if (hasPending) {return INVOICE_STATUS.VERIFICATION_PENDING;}
 
   if (dueDate) {
     const parsedDueDate = new Date(dueDate);
@@ -184,7 +184,7 @@ export const getInvoiceStatusAfterVerification = ({ invoiceAmount, payments = []
 };
 
 export const canSubmitPaymentProof = ({ invoiceStatus, outstandingBalance, hasPendingPayment }) => {
-  if (hasPendingPayment) return false;
-  if (toAmount(outstandingBalance) <= 0) return false;
+  if (hasPendingPayment) {return false;}
+  if (toAmount(outstandingBalance) <= 0) {return false;}
   return ![INVOICE_STATUS.DRAFT, INVOICE_STATUS.PAID].includes(String(invoiceStatus || '').toLowerCase());
 };

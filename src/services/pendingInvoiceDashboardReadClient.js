@@ -46,7 +46,7 @@ export const listPendingInvoiceReadingPage = (page, pageSize) => {
 };
 
 export const listPendingInvoiceProperties = (propertyIds) => {
-  if (!Array.isArray(propertyIds) || propertyIds.length === 0) return Promise.resolve([]);
+  if (!Array.isArray(propertyIds) || propertyIds.length === 0) {return Promise.resolve([]);}
   return readRows({
     table: 'properties',
     select: 'id, name, address',

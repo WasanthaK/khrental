@@ -97,12 +97,7 @@ const INVOICE_UPDATABLE_FIELDS = [
   'updatedat'
 ];
 const INVOICE_JSON_FIELDS = new Set(['components']);
-const TENANT_MUTABLE_FIELDS = [
-  'name',
-  'slug',
-  'status',
-  'plan'
-];
+
 const TENANT_SETTINGS_MUTABLE_FIELDS = [
   'branding_json',
   'email_json',
@@ -111,11 +106,6 @@ const TENANT_SETTINGS_MUTABLE_FIELDS = [
   'feature_flags_json'
 ];
 const TENANT_SETTINGS_JSON_FIELDS = new Set(TENANT_SETTINGS_MUTABLE_FIELDS);
-const TENANT_MEMBERSHIP_MUTABLE_FIELDS = [
-  'role',
-  'status',
-  'is_default'
-];
 
 const parseJsonValue = (value) => {
   if (typeof value !== 'string') {
@@ -1607,7 +1597,7 @@ export const listInvoices = async ({
   }
 
   if (Array.isArray(status)) {
-    if (status.length === 0) return [];
+    if (status.length === 0) {return [];}
     const values = [...new Set(status.map(value => String(value)))];
     values.forEach((value, index) => {
       params['status' + index] = value;
@@ -2033,7 +2023,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     params, tenantId
   );
 
-  if (rows[0]) return getAgreementById(rows[0].id, tenantId);
+  if (rows[0]) {return getAgreementById(rows[0].id, tenantId);}
   const existing = await getAgreementById(id, tenantId);
   if (existing) {
     throw Object.assign(new Error('Signed agreements cannot be changed through generic updates.'), {

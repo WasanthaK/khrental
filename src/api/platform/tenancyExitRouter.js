@@ -12,7 +12,7 @@ const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
   error.status = status;
   error.code = code;
-  if (details) error.details = details;
+  if (details) {error.details = details;}
   return error;
 };
 
@@ -37,7 +37,7 @@ const requireAgreementManage = (req) => {
 };
 
 const hasPropertyScope = (req, propertyId) => {
-  if (isAdminRole({ user: req.user, membership: req.membership })) return true;
+  if (isAdminRole({ user: req.user, membership: req.membership })) {return true;}
   return (req.membership?.assignedPropertyIds || []).some((id) => String(id) === String(propertyId));
 };
 
@@ -53,7 +53,7 @@ const loadAgreement = async (tenantId, agreementId) => {
      WHERE a.tenant_id = @tenantId AND a.id = @agreementId`,
     { tenantId, agreementId }
   );
-  if (!agreement) throw createRequestError(404, 'Agreement not found.', 'AGREEMENT_NOT_FOUND');
+  if (!agreement) {throw createRequestError(404, 'Agreement not found.', 'AGREEMENT_NOT_FOUND');}
   return agreement;
 };
 
@@ -64,16 +64,16 @@ const assertAgreementAccess = (req, agreement, manage = false) => {
     }
     return;
   }
-  if (manage) requireAgreementManage(req);
-  else authorizePermission({ user: req.user, membership: req.membership }, PERMISSIONS.AGREEMENTS_READ);
+  if (manage) {requireAgreementManage(req);}
+  else {authorizePermission({ user: req.user, membership: req.membership }, PERMISSIONS.AGREEMENTS_READ);}
   if (!hasPropertyScope(req, agreement.propertyid)) {
     throw createRequestError(403, 'This tenancy property is outside the current staff scope.', 'RESOURCE_ACCESS_DENIED');
   }
 };
 
 const parseChecklistItems = (value) => {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
+  if (Array.isArray(value)) {return value;}
+  if (!value) {return [];}
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : [];
@@ -213,11 +213,11 @@ export const createTenancyExitRouter = () => {
          WHERE n.tenant_id = @tenantId AND n.id = @noticeId`,
         { tenantId: req.tenantId, noticeId: req.params.noticeId }
       );
-      if (!notice) throw createRequestError(404, 'Notice not found.', 'NOTICE_NOT_FOUND');
-      if (String(notice.renteeid) !== String(req.user.id)) throw createRequestError(403, 'This notice does not belong to the current tenant.', 'RESOURCE_ACCESS_DENIED');
-      if (String(notice.status).toLowerCase() !== 'sent') throw createRequestError(409, 'This notice has already been processed.', 'NOTICE_ALREADY_PROCESSED');
+      if (!notice) {throw createRequestError(404, 'Notice not found.', 'NOTICE_NOT_FOUND');}
+      if (String(notice.renteeid) !== String(req.user.id)) {throw createRequestError(403, 'This notice does not belong to the current tenant.', 'RESOURCE_ACCESS_DENIED');}
+      if (String(notice.status).toLowerCase() !== 'sent') {throw createRequestError(409, 'This notice has already been processed.', 'NOTICE_ALREADY_PROCESSED');}
       const response = String(req.body?.response || '').toLowerCase();
-      if (!validateNoticeResponse(notice.notice_type, response)) throw createRequestError(400, 'Invalid response for this notice type.', 'INVALID_NOTICE_RESPONSE');
+      if (!validateNoticeResponse(notice.notice_type, response)) {throw createRequestError(400, 'Invalid response for this notice type.', 'INVALID_NOTICE_RESPONSE');}
       const updated = await runSingleManagementQuery(
         `UPDATE tenancy_notices
          SET status = @status, responded_by = @respondedBy, responded_at = SYSUTCDATETIME(), response_notes = @notes, updatedat = SYSUTCDATETIME()
@@ -240,10 +240,10 @@ export const createTenancyExitRouter = () => {
          ORDER BY responded_at DESC`,
         { tenantId: req.tenantId, agreementId: agreement.id }
       );
-      if (!accepted) throw createRequestError(409, 'An accepted renewal offer is required before creating the renewal agreement.', 'RENEWAL_NOT_ACCEPTED');
+      if (!accepted) {throw createRequestError(409, 'An accepted renewal offer is required before creating the renewal agreement.', 'RENEWAL_NOT_ACCEPTED');}
       const startDate = req.body?.startDate || req.body?.startdate;
       const endDate = req.body?.endDate || req.body?.enddate;
-      if (!startDate || !endDate) throw createRequestError(400, 'startDate and endDate are required.', 'RENEWAL_DATES_REQUIRED');
+      if (!startDate || !endDate) {throw createRequestError(400, 'startDate and endDate are required.', 'RENEWAL_DATES_REQUIRED');}
       const created = await runSingleManagementQuery(
         `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
 INSERT INTO agreements (
@@ -300,7 +300,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
          ORDER BY mi.item_order`,
         { tenantId: req.tenantId, agreementId: agreement.id }
       )).map((row) => row.label);
-      if (!labels.length) labels = parseChecklistItems(agreement.checklistitems).map((item) => typeof item === 'string' ? item : item?.label || item?.name).filter(Boolean);
+      if (!labels.length) {labels = parseChecklistItems(agreement.checklistitems).map((item) => typeof item === 'string' ? item : item?.label || item?.name).filter(Boolean);}
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -350,7 +350,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       }
       const deduction = req.body?.proposedDeduction === undefined || req.body?.proposedDeduction === null || req.body?.proposedDeduction === ''
         ? null : Number(req.body.proposedDeduction);
-      if (deduction !== null && (!Number.isFinite(deduction) || deduction < 0)) throw createRequestError(400, 'proposedDeduction must be zero or greater.', 'INVALID_DEDUCTION');
+      if (deduction !== null && (!Number.isFinite(deduction) || deduction < 0)) {throw createRequestError(400, 'proposedDeduction must be zero or greater.', 'INVALID_DEDUCTION');}
       const updated = await runSingleManagementQuery(
         `UPDATE tenancy_move_out_inspection_items
          SET condition_status = @conditionStatus, notes = @notes, proposed_deduction = @deduction,
@@ -368,7 +368,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
           completedBy: req.user.id
         }
       );
-      if (!updated) throw createRequestError(404, 'Open inspection item not found.', 'INSPECTION_ITEM_NOT_FOUND');
+      if (!updated) {throw createRequestError(404, 'Open inspection item not found.', 'INSPECTION_ITEM_NOT_FOUND');}
       res.json({ data: updated, error: null });
     } catch (error) { next(error); }
   });
@@ -381,12 +381,12 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         `SELECT TOP 1 * FROM tenancy_move_out_inspections WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
         { tenantId: req.tenantId, agreementId: agreement.id }
       );
-      if (!inspection) throw createRequestError(409, 'Move-out inspection has not been initialized.', 'MOVE_OUT_INSPECTION_REQUIRED');
+      if (!inspection) {throw createRequestError(409, 'Move-out inspection has not been initialized.', 'MOVE_OUT_INSPECTION_REQUIRED');}
       const pending = await runSingleQuery(
         `SELECT TOP 1 id FROM tenancy_move_out_inspection_items WHERE tenant_id = @tenantId AND inspection_id = @inspectionId AND condition_status = 'pending'`,
         { tenantId: req.tenantId, inspectionId: inspection.id }
       );
-      if (pending) throw createRequestError(409, 'All move-out inspection items must be reviewed.', 'MOVE_OUT_INSPECTION_INCOMPLETE');
+      if (pending) {throw createRequestError(409, 'All move-out inspection items must be reviewed.', 'MOVE_OUT_INSPECTION_INCOMPLETE');}
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -460,9 +460,9 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const agreement = await loadAgreement(req.tenantId, req.params.agreementId);
       assertAgreementAccess(req, agreement, true);
       const amount = Number(req.body?.amount);
-      if (!Number.isFinite(amount) || amount < 0) throw createRequestError(400, 'amount must be zero or greater.', 'INVALID_SETTLEMENT_AMOUNT');
+      if (!Number.isFinite(amount) || amount < 0) {throw createRequestError(400, 'amount must be zero or greater.', 'INVALID_SETTLEMENT_AMOUNT');}
       const description = String(req.body?.description || '').trim();
-      if (!description) throw createRequestError(400, 'description is required.', 'SETTLEMENT_DESCRIPTION_REQUIRED');
+      if (!description) {throw createRequestError(400, 'description is required.', 'SETTLEMENT_DESCRIPTION_REQUIRED');}
       const item = await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
         let settlement = await runSingleQuery(
           `SELECT TOP 1 * FROM tenancy_settlements WITH (UPDLOCK,HOLDLOCK) WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
@@ -475,7 +475,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
             { tenantId: req.tenantId, agreementId: agreement.id, createdBy: req.user.id }, transaction
           );
         }
-        if (String(settlement.status).toLowerCase() !== 'draft') throw createRequestError(409, 'Settlement items cannot change after approval.', 'SETTLEMENT_LOCKED');
+        if (String(settlement.status).toLowerCase() !== 'draft') {throw createRequestError(409, 'Settlement items cannot change after approval.', 'SETTLEMENT_LOCKED');}
         const item = await runSingleQuery(
           `INSERT INTO tenancy_settlement_items (
              tenant_id, settlement_id, item_type, description, amount, source_type, source_id, notes
@@ -503,7 +503,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
       const agreement = await loadAgreement(req.tenantId, req.params.agreementId);
       assertAgreementAccess(req, agreement, true);
       const status = String(req.body?.status || '').toLowerCase();
-      if (!['approved', 'rejected'].includes(status)) throw createRequestError(400, 'status must be approved or rejected.', 'INVALID_SETTLEMENT_ITEM_STATUS');
+      if (!['approved', 'rejected'].includes(status)) {throw createRequestError(400, 'status must be approved or rejected.', 'INVALID_SETTLEMENT_ITEM_STATUS');}
       const item = await runSingleManagementQuery(
         `UPDATE tenancy_settlement_items
          SET status = @status, reviewed_by = @reviewedBy, reviewed_at = SYSUTCDATETIME(), updatedat = SYSUTCDATETIME()
@@ -512,7 +512,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
            AND settlement_id IN (SELECT id FROM tenancy_settlements WHERE tenant_id = @tenantId AND agreement_id = @agreementId AND status = 'draft')`,
         { tenantId: req.tenantId, agreementId: agreement.id, itemId: req.params.itemId, status, reviewedBy: req.user.id }
       );
-      if (!item) throw createRequestError(404, 'Draft settlement item not found.', 'SETTLEMENT_ITEM_NOT_FOUND');
+      if (!item) {throw createRequestError(404, 'Draft settlement item not found.', 'SETTLEMENT_ITEM_NOT_FOUND');}
       res.json({ data: item, error: null });
     } catch (error) { next(error); }
   });
@@ -525,7 +525,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         `SELECT TOP 1 status FROM tenancy_move_out_inspections WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
         { tenantId: req.tenantId, agreementId: agreement.id }
       );
-      if (String(inspection?.status || '').toLowerCase() !== 'completed') throw createRequestError(409, 'Complete the move-out inspection before approving settlement.', 'MOVE_OUT_INSPECTION_INCOMPLETE');
+      if (String(inspection?.status || '').toLowerCase() !== 'completed') {throw createRequestError(409, 'Complete the move-out inspection before approving settlement.', 'MOVE_OUT_INSPECTION_INCOMPLETE');}
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -537,14 +537,14 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
            WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
           { tenantId: req.tenantId, agreementId: agreement.id }
         );
-        if (!settlement) throw createRequestError(409, 'Settlement has not been initialized.', 'SETTLEMENT_REQUIRED');
-        if (String(settlement.status).toLowerCase() !== 'draft') throw createRequestError(409, 'Settlement is no longer a draft.', 'SETTLEMENT_LOCKED');
+        if (!settlement) {throw createRequestError(409, 'Settlement has not been initialized.', 'SETTLEMENT_REQUIRED');}
+        if (String(settlement.status).toLowerCase() !== 'draft') {throw createRequestError(409, 'Settlement is no longer a draft.', 'SETTLEMENT_LOCKED');}
         const proposed = await singleTransaction(
           transaction,
           `SELECT TOP 1 id FROM tenancy_settlement_items WHERE tenant_id = @tenantId AND settlement_id = @settlementId AND status = 'proposed'`,
           { tenantId: req.tenantId, settlementId: settlement.id }
         );
-        if (proposed) throw createRequestError(409, 'Review every proposed settlement item before approval.', 'SETTLEMENT_ITEMS_PENDING');
+        if (proposed) {throw createRequestError(409, 'Review every proposed settlement item before approval.', 'SETTLEMENT_ITEMS_PENDING');}
         const calculation = await recalculateSettlement(transaction, req.tenantId, agreement.id, settlement.id);
         const updated = await singleTransaction(
           transaction,
@@ -571,7 +571,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
         `SELECT TOP 1 * FROM tenancy_settlements WHERE tenant_id = @tenantId AND agreement_id = @agreementId`,
         { tenantId: req.tenantId, agreementId: agreement.id }
       );
-      if (!settlement || String(settlement.status).toLowerCase() !== 'approved') throw createRequestError(409, 'An approved settlement is required.', 'SETTLEMENT_NOT_APPROVED');
+      if (!settlement || String(settlement.status).toLowerCase() !== 'approved') {throw createRequestError(409, 'An approved settlement is required.', 'SETTLEMENT_NOT_APPROVED');}
       const reference = String(req.body?.reference || '').trim();
       if ((Number(settlement.refund_amount) > 0 || Number(settlement.amount_due) > 0) && !reference) {
         throw createRequestError(400, 'A payment/refund reference is required when settlement money changes hands.', 'SETTLEMENT_REFERENCE_REQUIRED');
@@ -591,7 +591,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     try {
       const agreement = await loadAgreement(req.tenantId, req.params.agreementId);
       assertAgreementAccess(req, agreement, true);
-      if (String(agreement.status).toLowerCase() !== 'active') throw createRequestError(409, 'Only an active tenancy can be closed.', 'ACTIVE_TENANCY_REQUIRED');
+      if (String(agreement.status).toLowerCase() !== 'active') {throw createRequestError(409, 'Only an active tenancy can be closed.', 'ACTIVE_TENANCY_REQUIRED');}
       const [inspection, settlement] = await Promise.all([
         runSingleQuery(`SELECT TOP 1 status FROM tenancy_move_out_inspections WHERE tenant_id = @tenantId AND agreement_id = @agreementId`, { tenantId: req.tenantId, agreementId: agreement.id }),
         runSingleQuery(`SELECT TOP 1 status FROM tenancy_settlements WHERE tenant_id = @tenantId AND agreement_id = @agreementId`, { tenantId: req.tenantId, agreementId: agreement.id })
@@ -616,7 +616,7 @@ UPDATE agreements
 SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
           { tenantId: req.tenantId, agreementId: agreement.id, endDate: effectiveEndDate, closedBy: req.user.id, reason: req.body?.reason || 'tenancy_closed' }
         );
-        if (!closed) throw createRequestError(409, 'Tenancy status changed before closure.', 'TENANCY_STATE_CONFLICT');
+        if (!closed) {throw createRequestError(409, 'Tenancy status changed before closure.', 'TENANCY_STATE_CONFLICT');}
         if (process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY === 'true') {
           await retireClosedRentalOffers((statement, params) => queryTransaction(transaction, statement, params), {
             tenantId: req.tenantId, propertyId: agreement.propertyid,

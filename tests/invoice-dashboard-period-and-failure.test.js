@@ -26,7 +26,7 @@ test('invoice summary filters include every millisecond of the last local calend
 test('invoice dashboard does not show old financial totals after selection, filter, or read failures', () => {
   assert.match(dashboard, /summaryRequestId = useRef\(0\)/);
   assert.match(dashboard, /\+\+summaryRequestId\.current/);
-  assert.match(dashboard, /if \(requestId !== summaryRequestId\.current\) return;/);
+  assert.match(dashboard, /if \(requestId !== summaryRequestId\.current\) \{return;\}/);
   assert.match(dashboard, /setInvoiceSummary\(\{\}\)/);
   assert.match(dashboard, /setSummaryAvailable\(false\)/);
   assert.match(dashboard, /setSummaryAvailable\(true\)/);

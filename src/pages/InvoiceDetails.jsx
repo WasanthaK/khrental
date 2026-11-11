@@ -47,8 +47,8 @@ const InvoiceDetails = () => {
       setLoading(true);
       setError(null);
       const { data, error: accountError } = await getInvoiceAccount(id);
-      if (accountError) throw accountError;
-      if (!data?.invoice) throw new Error('Invoice not found');
+      if (accountError) {throw accountError;}
+      if (!data?.invoice) {throw new Error('Invoice not found');}
       setAccount(data);
     } catch (accountError) {
       setError(accountError.message || 'Failed to load invoice account.');
@@ -112,7 +112,7 @@ const InvoiceDetails = () => {
           : new Date().toISOString(),
         notes: manualPayment.notes || null
       });
-      if (!result.success) throw new Error(result.error || 'Failed to record payment');
+      if (!result.success) {throw new Error(result.error || 'Failed to record payment');}
       setShowManualPayment(false);
       setNotice(`Payment of ${formatCurrency(amount)} recorded and receipt created.`);
       await loadAccount();
@@ -127,7 +127,7 @@ const InvoiceDetails = () => {
     try {
       setWorking(true); setError(null); setNotice(null);
       const result = await retryInvoiceDelivery(id);
-      if (result.error) throw result.error;
+      if (result.error) {throw result.error;}
       setNotice(result.data?.delivery?.status === 'accepted'
         ? 'Invoice email accepted by the provider.'
         : 'Invoice remains issued. Delivery was not confirmed; review the delivery status.');
@@ -139,13 +139,13 @@ const InvoiceDetails = () => {
   };
 
   const handleResendIssuedInvoice = async () => {
-    if (!invoice || isDraft || working) return;
-    if (!window.confirm('Resend the existing invoice to its registered tenant email? No invoice values or payments will change.')) return;
+    if (!invoice || isDraft || working) {return;}
+    if (!window.confirm('Resend the existing invoice to its registered tenant email? No invoice values or payments will change.')) {return;}
     const resendRequestId = crypto.randomUUID();
     try {
       setWorking(true); setError(null); setNotice(null);
       const result = await resendIssuedInvoice(id, resendRequestId);
-      if (result.error) throw result.error;
+      if (result.error) {throw result.error;}
       setNotice(result.data?.delivery?.status === 'accepted'
         ? 'Existing invoice email accepted by the provider. No invoice values changed.'
         : 'Resend outcome is not confirmed. Check delivery status before attempting again.');
@@ -158,11 +158,11 @@ const InvoiceDetails = () => {
 
 
   const handleAssignLegacyReference = async () => {
-    if (!canSupplementLegacyReference || working) return;
+    if (!canSupplementLegacyReference || working) {return;}
     const input = window.prompt(
       'Reason for assigning a reference to this historical invoice (10–500 characters):'
     );
-    if (input === null) return;
+    if (input === null) {return;}
     const reason = input.trim();
     if (reason.length < 10 || reason.length > 500) {
       setError('Provide a reason between 10 and 500 characters.');
@@ -171,13 +171,13 @@ const InvoiceDetails = () => {
     if (!window.confirm(
       'Assign the next 8-digit payment reference using today’s tenant billing date? ' +
       'The original invoice, payments and issued bank details will not change. No email will be sent.'
-    )) return;
+    )) {return;}
     try {
       setWorking(true);
       setError(null);
       setNotice(null);
       const result = await assignLegacyInvoicePaymentReference(id, reason);
-      if (result.error) throw result.error;
+      if (result.error) {throw result.error;}
       setNotice(`Payment reference #${result.data.payment_reference} assigned and audited. No email was sent.`);
       await loadAccount();
     } catch (err) {
@@ -194,7 +194,7 @@ const InvoiceDetails = () => {
       setError(null);
       setNotice(null);
       const result = await sendPaymentReminder(id);
-      if (!result.success) throw new Error(result.error || 'Failed to send payment reminder');
+      if (!result.success) {throw new Error(result.error || 'Failed to send payment reminder');}
       const recipient = result.data?.to ? ` to ${result.data.to}` : '';
       setNotice(`Payment reminder email sent${recipient}.`);
       await loadAccount();
@@ -207,11 +207,11 @@ const InvoiceDetails = () => {
 
 
   const handleDownloadIssuedPdf = async () => {
-    if (!account?.issuedDocument?.available || !invoice || working) return;
+    if (!account?.issuedDocument?.available || !invoice || working) {return;}
     try {
       setWorking(true); setError(null);
       const result = await getIssuedInvoicePdf(id);
-      if (result.error) throw result.error;
+      if (result.error) {throw result.error;}
       const pdf = result.data;
       if (pdf?.type !== 'application/pdf' || !pdf?.immutable ||
           typeof pdf.content !== 'string') {
@@ -239,7 +239,7 @@ const InvoiceDetails = () => {
   };
 
   const handleDownloadInvoice = () => {
-    if (!invoice) return;
+    if (!invoice) {return;}
 
     try {
       const componentLines = components.length > 0
@@ -307,7 +307,7 @@ const InvoiceDetails = () => {
     );
   }
 
-  if (!invoice) return null;
+  if (!invoice) {return null;}
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">

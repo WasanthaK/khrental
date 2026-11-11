@@ -22,7 +22,7 @@ test('R3 no-spend, default-off pilot does not enable public signup or change SQL
     'PUBLIC_SEEKER_CONTEXT_ENABLED=false',
     'VITE_PUBLIC_SIGNUP_UI_ENABLED=false',
     'VITE_PUBLIC_SEEKER_LANDING_ENABLED=false'
-  ]) assert.ok(file.includes(flag));
+  ]) {assert.ok(file.includes(flag));}
   assert.match(file, /R3_EXACT_INGRESS_PEERS_CONFIGURED_AND_READY=PASS/);
   assert.match(file, /R3_TEMPORARY_PROBE_SECRET_REMOVED=PASS/);
   assert.doesNotMatch(file, /az sql db update|az containerapp scale|--min-replicas|--max-replicas|--scale-rule|GRANT DELETE/);

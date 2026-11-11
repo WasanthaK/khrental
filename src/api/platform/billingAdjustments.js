@@ -23,7 +23,7 @@ export const normalizeBillingAdjustmentAmount = (value) => {
 export const isBillingAdjustmentAmountAllowed = (componentType, value) => {
   const type = normalizeBillingAdjustmentType(componentType);
   const amount = normalizeBillingAdjustmentAmount(value);
-  if (!Number.isFinite(amount)) return false;
-  if (type === 'adjustment') return amount !== 0;
+  if (!Number.isFinite(amount)) {return false;}
+  if (type === 'adjustment') {return amount !== 0;}
   return ['arrears', 'tax', 'other'].includes(type) && amount > 0;
 };

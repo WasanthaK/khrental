@@ -22,7 +22,7 @@ const fetchCompleteRequest = async (requestId) => {
   // Reuse the authorized lifecycle projection for follow-up notifications and
   // page updates. A denied/failed read must never retry via generic queries.
   const { data, error } = await getMaintenanceLifecycleRequest(requestId);
-  if (error) throw error;
+  if (error) {throw error;}
   return mapMaintenanceLifecycleProjection(data);
 };
 
@@ -31,21 +31,21 @@ const uploadLifecycleImages = async (requestId, images = [], imageType = 'additi
   for (const image of Array.isArray(images) ? images : []) {
     try {
       let imageUrl = null;
-      if (typeof image === 'string') imageUrl = image;
-      else if (image?.url) imageUrl = image.url;
+      if (typeof image === 'string') {imageUrl = image;}
+      else if (image?.url) {imageUrl = image.url;}
       else if (image?.file || (typeof File !== 'undefined' && image instanceof File)) {
         const result = await saveImage(image.file || image, { folder: 'maintenance' });
-        if (result?.success && result.url) imageUrl = result.url;
+        if (result?.success && result.url) {imageUrl = result.url;}
       }
-      if (!imageUrl) continue;
+      if (!imageUrl) {continue;}
 
       const { error } = await attachMaintenanceLifecycleImage(requestId, {
         imageUrl,
         imageType,
         description: image?.description || ''
       });
-      if (!error) uploaded.push(imageUrl);
-      else console.error('Maintenance image metadata attachment rejected:', error);
+      if (!error) {uploaded.push(imageUrl);}
+      else {console.error('Maintenance image metadata attachment rejected:', error);}
     } catch (error) {
       console.error('Error uploading maintenance lifecycle image:', error);
     }
@@ -76,7 +76,7 @@ const mapLifecycleComment = (comment = {}) => ({
 export const getMaintenanceComments = async (requestId) => {
   try {
     const { data, error } = await getMaintenanceLifecycleRequest(requestId);
-    if (error) throw error;
+    if (error) {throw error;}
     return {
       success: true,
       data: (data?.comments || []).map(mapLifecycleComment),
@@ -91,13 +91,13 @@ export const getMaintenanceComments = async (requestId) => {
 export const addMaintenanceComment = async (requestId, commentData = {}) => {
   try {
     const comment = String(commentData.content || commentData.comment || '').trim();
-    if (!comment) return { success: false, error: 'Comment is required' };
+    if (!comment) {return { success: false, error: 'Comment is required' };}
 
     const { data, error } = await addMaintenanceLifecycleComment(requestId, {
       comment,
       isInternal: Boolean(commentData.isInternal)
     });
-    if (error) throw error;
+    if (error) {throw error;}
 
     return { success: true, data: mapLifecycleComment(data), error: null };
   } catch (error) {
@@ -120,7 +120,7 @@ export const createMaintenanceRequest = async (input = {}) => {
       requestType: input.requesttype || 'other',
       notes: input.notes || null
     });
-    if (error) throw error;
+    if (error) {throw error;}
 
     await uploadLifecycleImages(data.id, input.images, 'initial');
     const completeRequest = await fetchCompleteRequest(data.id);
@@ -142,7 +142,7 @@ export const assignMaintenanceRequest = async (id, assignmentData = {}) => {
       staffUserId: assignmentData.staffId,
       scheduledAt: assignmentData.scheduledDate || null
     });
-    if (error) throw error;
+    if (error) {throw error;}
 
     await uploadLifecycleImages(id, assignmentData.assignmentImages, 'additional');
     const completeRequest = await fetchCompleteRequest(id);
@@ -157,7 +157,7 @@ export const assignMaintenanceRequest = async (id, assignmentData = {}) => {
 export const startMaintenanceWork = async (id) => {
   try {
     const { data, error } = await startMaintenanceLifecycleRequest(id);
-    if (error) throw error;
+    if (error) {throw error;}
     const completeRequest = await fetchCompleteRequest(id).catch(() => data);
     await bestEffortNotify(notifyRenteeAboutWorkStarted, completeRequest || data);
     return { success: true, data: completeRequest || data };
@@ -169,14 +169,14 @@ export const startMaintenanceWork = async (id) => {
 
 export const completeMaintenanceRequest = async (id, completionData = {}) => {
   try {
-    if (!id) return { success: false, error: 'Request ID is required' };
+    if (!id) {return { success: false, error: 'Request ID is required' };}
 
     const uploadedImages = await uploadLifecycleImages(id, completionData.images, 'completion');
     const { data, error } = await completeMaintenanceLifecycleRequest(id, {
       notes: completionData.notes || null,
       ...(completionData.completionCost !== undefined ? { completionCost: completionData.completionCost } : {})
     });
-    if (error) throw error;
+    if (error) {throw error;}
 
     const completeRequest = await fetchCompleteRequest(id).catch(() => data);
     await bestEffortNotify(notifyRenteeAboutCompletion, completeRequest || data);
@@ -193,7 +193,7 @@ export const completeMaintenanceRequest = async (id, completionData = {}) => {
 export const cancelMaintenanceRequest = async (id, reason) => {
   try {
     const { data, error } = await cancelMaintenanceLifecycleRequest(id, reason);
-    if (error) throw error;
+    if (error) {throw error;}
     const completeRequest = await fetchCompleteRequest(id).catch(() => data);
     await bestEffortNotify(notifyAboutCancellation, completeRequest || data);
     return { success: true, data: completeRequest || data };
@@ -206,18 +206,18 @@ export const cancelMaintenanceRequest = async (id, reason) => {
 export const updateMaintenanceStatus = async (id, status, additionalData = {}) => {
   if (status === 'in_progress') {
     const result = await startMaintenanceWork(id);
-    if (!result.success) throw new Error(result.error);
+    if (!result.success) {throw new Error(result.error);}
     return result.data;
   }
   if (status === 'completed') {
     const result = await completeMaintenanceRequest(id, additionalData);
-    if (!result.success) throw new Error(result.error);
+    if (!result.success) {throw new Error(result.error);}
     return result.data;
   }
   if (status === 'cancelled') {
     const reason = additionalData.cancellationreason || additionalData.reason;
     const result = await cancelMaintenanceRequest(id, reason);
-    if (!result.success) throw new Error(result.error);
+    if (!result.success) {throw new Error(result.error);}
     return result.data;
   }
   throw new Error(`Unsupported maintenance lifecycle status: ${status}`);

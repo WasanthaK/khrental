@@ -10,6 +10,8 @@ export default [
     languageOptions:{ecmaVersion:'latest',sourceType:'module',globals:{...globals.es2021,...globals.node,...globals.browser},parserOptions:{ecmaFeatures:{jsx:true}}},
     plugins:{react,'react-hooks':reactHooks},
     rules:{...js.configs.recommended.rules,...reactHooks.configs.recommended.rules,
+      // Underscore arguments retain public compatibility signatures and Express error-handler arity.
+      'no-unused-vars':['error',{argsIgnorePattern:'^_'}],
       'react/jsx-uses-react':'error','react/jsx-uses-vars':'error','curly':['error','all']}
   },
   {files:['**/*.cjs'],languageOptions:{sourceType:'commonjs'}}

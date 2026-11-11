@@ -55,8 +55,8 @@ const buildInvoiceQuery = (options = {}) => {
     query.set('pageSize', options.pageSize);
   }
 
-  if (options.sortBy) query.set('sortBy', options.sortBy);
-  if (options.sortOrder) query.set('sortOrder', options.sortOrder);
+  if (options.sortBy) {query.set('sortBy', options.sortBy);}
+  if (options.sortOrder) {query.set('sortOrder', options.sortOrder);}
 
   return query.toString();
 };
@@ -360,12 +360,12 @@ export async function getInvoiceSummaryByProperty(propertyIds, options = {}) {
             page,
             pageSize
           });
-          if (error) throw error;
+          if (error) {throw error;}
           if (!Array.isArray(data)) {
             throw new Error('Invoice list returned an invalid response.');
           }
           invoices.push(...data);
-          if (data.length < pageSize) break;
+          if (data.length < pageSize) {break;}
           page += 1;
           if (page > 1000) {
             throw new Error('Invoice summary exceeded the supported pagination limit.');
@@ -423,7 +423,7 @@ export async function getPropertiesWithPendingReadings() {
     for (let page = 0; page < 1000; page += 1) {
       const data = await listPendingInvoiceReadingPage(page, pageSize);
       propertiesData.push(...data);
-      if (data.length < pageSize) break;
+      if (data.length < pageSize) {break;}
       if (page === 999) {
         throw new Error('Pending utility readings exceeded the supported pagination limit.');
       }
@@ -434,7 +434,7 @@ export async function getPropertiesWithPendingReadings() {
     }
 
     const propertyIds = [...new Set(propertiesData.map(reading => reading.propertyid).filter(Boolean))];
-    if (propertyIds.length === 0) return { data: [], error: null };
+    if (propertyIds.length === 0) {return { data: [], error: null };}
     
     // Get property details
     const properties = await listPendingInvoiceProperties(propertyIds);

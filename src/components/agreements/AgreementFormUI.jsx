@@ -1,27 +1,12 @@
 import {sanitizeHtml} from '../../utils/sanitizeHtml.js';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Form, Button, Row, Col, Card, Spinner } from 'react-bootstrap';
 import { useAgreementForm } from '../../hooks/useAgreementForm';
 import { AGREEMENT_STATUS } from '../../constants/agreementStatus';
 import { templateField } from '../../utils/documentUtils';
 
 const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) => {
-  const {
-    formData,
-    loading,
-    templates,
-    properties,
-    propertyUnits,
-    rentees,
-    templateContent,
-    processedContent,
-    documentReady,
-    documentError,
-    handleInputChange,
-    handlePropertyChange,
-    handleTemplateChange,
-    isAgreementEditable
-  } = useAgreementForm(initialData);
+  const { formData, loading, templates, properties, propertyUnits, rentees, processedContent, documentReady, documentError, handleInputChange, handlePropertyChange, handleTemplateChange, isAgreementEditable } = useAgreementForm(initialData);
 
   const editable = isAgreementEditable();
   const [submitting, setSubmitting] = useState(false);
@@ -133,8 +118,8 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
                 </Form.Control.Feedback>
                 {formData.propertyType !== 'apartment' && (
                   <Form.Text className="text-muted">
-                    Unit selection not applicable for this property type. Any unit-related merge fields in the template 
-                    {/* 
+                    Unit selection not applicable for this property type. Any unit-related merge fields in the template
+                    {/*
                       IMPORTANT: Curly braces in JSX are evaluated as JavaScript expressions.
                       When we need to display literal curly braces like template markers {{field}},
                       we must wrap them in quotes and put them inside a JavaScript expression: {"{{field}}"}
@@ -308,7 +293,7 @@ const AgreementFormUI = ({ initialData, onSubmit, onCancel, readOnly = false }) 
           <div className="card-body">
             <h4>Preview</h4>
             <hr />
-            <div 
+            <div
               className="agreement-preview" 
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(processedContent) }}
             />

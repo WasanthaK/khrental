@@ -43,7 +43,7 @@ const waitForSqlServer = async (connection) => {
       return;
     } catch (error) {
       lastError = error;
-      if (attempt < 45) await sleep(2000);
+      if (attempt < 45) {await sleep(2000);}
     }
   }
   throw new Error(`Disposable SQL Server did not become ready: ${lastError?.message || 'unknown error'}`);
@@ -52,13 +52,13 @@ const waitForSqlServer = async (connection) => {
 const parsePublishedPort = (value) => {
   const line = String(value || '').split(/\r?\n/).find(Boolean) || '';
   const match = line.match(/:(\d+)$/);
-  if (!match) throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);
+  if (!match) {throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);}
   return Number(match[1]);
 };
 
 const queryOne = async (pool, queryText, inputs = {}) => {
   const request = pool.request();
-  for (const [name, value] of Object.entries(inputs)) request.input(name, value);
+  for (const [name, value] of Object.entries(inputs)) {request.input(name, value);}
   const result = await request.query(queryText);
   return result.recordset?.[0] || null;
 };
@@ -363,16 +363,16 @@ const main = async () => {
     console.log('PASS: Phase 1 renter workflow persisted structured associations across create/edit/reconnect, rejected duplicate same-organization renter creates without profile mutation, rejected invalid associations without data loss, scoped deactivate/reactivate to membership, blocked platform-admin creation, and rejected same-organization role conflicts without profile mutation.');
   } finally {
     if (closeMssqlPool) {
-      try { await closeMssqlPool(); } catch {}
+      try { await closeMssqlPool(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (fixturePool) {
-      try { await fixturePool.close(); } catch {}
+      try { await fixturePool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (masterPool) {
-      try { await masterPool.close(); } catch {}
+      try { await masterPool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (containerStarted) {
-      try { runDocker(['rm', '-f', containerName]); } catch {}
+      try { runDocker(['rm', '-f', containerName]); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
   }
 };

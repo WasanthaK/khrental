@@ -4,10 +4,10 @@ import { getActiveTenantId } from '../services/requestContext.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { fetchData, insertData, updateData, getPropertyFixedUtilities, savePropertyFixedUtilities } from '../services/platformClient';
-import { saveFile, saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
-import { generateTempId } from '../utils/helpers';
+import { saveImage, deleteFile, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
+import '../utils/helpers';
 import { PROPERTY_TYPES, PROPERTY_COUNTRIES, normalizePropertyCountry } from '../utils/constants';
-import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
+import { fromDatabaseFormat } from '../utils/databaseUtils';
 import { toast } from 'react-hot-toast';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -18,7 +18,7 @@ import FormInput from '../components/ui/FormInput';
 import FormTextarea from '../components/ui/FormTextarea';
 import ImageUpload from '../components/common/ImageUpload';
 import DynamicList from '../components/ui/DynamicList';
-import KeyValuePairs from '../components/ui/KeyValuePairs';
+import '../components/ui/KeyValuePairs';
 import PropertyAmenities from '../components/properties/PropertyAmenities';
 import PropertyAvailability from '../components/properties/PropertyAvailability';
 import PropertyMap from '../components/properties/PropertyMap';
@@ -70,21 +70,21 @@ const PropertyForm = () => {
   );
 
   // Initial form data
-  
+
   // Form state
   const [formData, setFormData] = useState(() => createInitialPropertyData(isEditMode?null:requestedCountry));
   const [propertyCoordinates, setPropertyCoordinates] = useState(null);
   const [fixedUtilities, setFixedUtilities] = useState([]);
-  
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [uploadedImages, setUploadedImages] = useState([]);
-  const [existingImages, setExistingImages] = useState([]);
-  const [imagesToDelete, setImagesToDelete] = useState([]);
-  const [profileImageIndex, setProfileImageIndex] = useState(0); // Track which image is the profile picture
-  
+  const [, setUploadedImages] = useState([]);
+  const [, setExistingImages] = useState([]);
+  const [, setImagesToDelete] = useState([]);
+   // Track which image is the profile picture
+
   // Fetch property data if in edit mode
   useEffect(() => {
     const controller=new AbortController();
@@ -105,34 +105,34 @@ const PropertyForm = () => {
             signal:controller.signal,
             filters: [{ column: 'id', operator: 'eq', value: id }],
           });
-          
+
           if (controller.signal.aborted) {return;}
           if (error) {
             throw error;
           }
-          
+
           if (!Array.isArray(data) || data.length===0) {throw new Error('This property is not available in the selected workspace.');}
           if (data && data.length > 0) {
             const property = fromDatabaseFormat(data[0]);
-            
+
             // Ensure rentalvalues is properly structured
             const rentalvalues = typeof property.rentalvalues === 'string' 
               ? JSON.parse(property.rentalvalues)
               : property.rentalvalues || { rent: '', deposit: '' };
-            
+
             // Ensure arrays are properly initialized
-            const checklistitems = Array.isArray(property.checklistitems) 
-              ? property.checklistitems 
+            const checklistitems = Array.isArray(property.checklistitems)
+              ? property.checklistitems
               : [];
-            
+
             const amenities = Array.isArray(property.amenities)
               ? property.amenities
               : [];
-            
+
             const images = Array.isArray(property.images)
               ? property.images
               : [];
-            
+
             setFormData({
               name: property.name || '',
               address: property.address || '',
@@ -192,7 +192,7 @@ const PropertyForm = () => {
             } else {
               setPropertyCoordinates(null);
             }
-            
+
             // Set existing images if any
             setExistingImages(images);
           }
@@ -205,11 +205,11 @@ const PropertyForm = () => {
         }
       }
     };
-    
+
     fetchPropertyData();
     return () => controller.abort();
   }, [id, isEditMode, activeTenantId, requestedCountry, user?.id, membership?.status]);
-  
+
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -218,7 +218,7 @@ const PropertyForm = () => {
       [name]: value
     }));
   };
-  
+
   // Handle rental values changes
   const handleRentalValueChange = (e) => {
     const { name, value } = e.target;
@@ -230,7 +230,7 @@ const PropertyForm = () => {
       },
     }));
   };
-  
+
   const addFixedUtility = () => {
     setFixedUtilities((current) => [...current, { utilityType: '', fixedAmount: '' }]);
   };
@@ -252,7 +252,7 @@ const PropertyForm = () => {
       status,
     }));
   };
-  
+
   // Handle available from date change
   const handleAvailableFromChange = (date) => {
     setFormData(prev => ({
@@ -260,7 +260,7 @@ const PropertyForm = () => {
       availablefrom: date,
     }));
   };
-  
+
   // Handle property type change
   const handlePropertyTypeChange = (e) => {
     const { value } = e.target;
@@ -269,7 +269,7 @@ const PropertyForm = () => {
       propertytype: value,
     }));
   };
-  
+
   // Handle amenities change
   const handleAmenitiesChange = (amenities) => {
     setFormData(prev => ({
@@ -281,7 +281,7 @@ const PropertyForm = () => {
   const handleCoordinatesChange = (nextCoordinates) => {
     setPropertyCoordinates(nextCoordinates);
   };
-  
+
   // Handle checklist items change
   const handleChecklistItemsChange = (checklistitems) => {
     setFormData(prev => ({
@@ -289,17 +289,17 @@ const PropertyForm = () => {
       checklistitems,
     }));
   };
-  
+
   // Organize images by category
   const organizeImagesByCategory = (images) => {
     // Debug output to check what we're receiving
     console.log('Property images received for organization:', images);
-    
+
     if (!images || images.length === 0) {
       console.log('No property images found to organize');
       return [];
     }
-    
+
     // Clone the images array and ensure each image has all required properties
     const sortedImages = [...images].map((img, index) => {
       // Handle both string URLs and object format
@@ -311,7 +311,7 @@ const PropertyForm = () => {
           order: index // Add order value
         };
       }
-      
+
       return {
         ...img,
         image_url: img.image_url || img, // Handle both formats
@@ -320,27 +320,27 @@ const PropertyForm = () => {
         order: img.order !== undefined ? img.order : index // Preserve or add order value
       };
     });
-    
+
     // Filter out any images with empty URLs
     const validImages = sortedImages.filter(img => {
       const url = typeof img === 'string' ? img : img.image_url;
       return !!url;
     });
-    
+
     if (validImages.length < sortedImages.length) {
       console.log(`Filtered out ${sortedImages.length - validImages.length} images with empty URLs`);
     }
-    
+
     // Sort images by uploaded_at date
     validImages.sort((a, b) => {
       const dateA = new Date(a.uploaded_at || 0);
       const dateB = new Date(b.uploaded_at || 0);
       return dateA - dateB;
     });
-    
+
     // Debug output for sorted images
     console.log('Property images after sorting:', validImages);
-    
+
     // Group images by type
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
@@ -349,10 +349,10 @@ const PropertyForm = () => {
       acc[type].push(image);
       return acc;
     }, {});
-    
+
     // Debug output for grouped images
     console.log('Property images after grouping by type:', groupedImages);
-    
+
     // Define category order and labels
     const categoryOrder = ['exterior', 'interior', 'floorplan', 'other'];
     const categoryLabels = {
@@ -361,7 +361,7 @@ const PropertyForm = () => {
       'floorplan': 'Floor Plans',
       'other': 'Other Images'
     };
-    
+
     // Create the final structure
     const organizedImages = categoryOrder
       .filter(category => groupedImages[category] && groupedImages[category].length > 0)
@@ -370,10 +370,10 @@ const PropertyForm = () => {
         label: categoryLabels[category],
         images: groupedImages[category]
       }));
-    
+
     // Debug output for final organized structure
     console.log('Final organized property images by category:', organizedImages);
-    
+
     return organizedImages;
   };
 
@@ -381,7 +381,7 @@ const PropertyForm = () => {
   const handleImagesChange = async (newImages, imageType = 'exterior') => {
     try {
       console.log(`Processing ${newImages.length} new property images of type: ${imageType}`);
-      
+
       const uploadPromises = newImages.map(async (file) => {
         // If it's already a URL string, return it as is with type
         if (typeof file === 'string') {
@@ -393,7 +393,7 @@ const PropertyForm = () => {
             order: 9999 // Will be updated after all images are processed
           };
         }
-        
+
         // If it's a File object or has a name property, upload it
         if (file instanceof File || file.name) {
           console.log(`Uploading new ${imageType} image:`, file.name);
@@ -415,37 +415,37 @@ const PropertyForm = () => {
             order: 9999 // Will be updated after all images are processed
           };
         }
-        
+
         console.error('Invalid file object:', file);
         throw new Error('Invalid file object: must be a File or URL string');
       });
 
       const uploadedImages = await Promise.all(uploadPromises);
       console.log('All property images processed successfully:', uploadedImages);
-      
+
       // Update form data with new image objects
       setFormData(prev => {
         // Convert existing images to object format if they're just strings
-        const convertedExistingImages = (prev.images || []).map((img, index) => 
+        const convertedExistingImages = (prev.images || []).map((img, index) =>
           typeof img === 'string' 
             ? { image_url: img, image_type: 'exterior', uploaded_at: new Date().toISOString(), order: index }
             : { ...img, order: img.order !== undefined ? img.order : index }
         );
-        
+
         // Assign order values to new images, continuing from the highest existing order
         const highestOrder = convertedExistingImages.length > 0 
           ? Math.max(...convertedExistingImages.map(img => img.order || 0))
           : -1;
-        
+
         const newImagesWithOrder = uploadedImages.map((img, idx) => ({
           ...img,
           order: highestOrder + idx + 1
         }));
-        
+
         // Combine and sort all images by order
         const allImages = [...convertedExistingImages, ...newImagesWithOrder]
           .sort((a, b) => (a.order || 0) - (b.order || 0));
-        
+
         return {
           ...prev,
           images: allImages
@@ -458,18 +458,18 @@ const PropertyForm = () => {
       toast.error(error.message || 'Failed to upload images');
     }
   };
-  
+
   // Handle image removal
   const handleRemoveImage = async (index) => {
     try {
       const imageToRemove = formData.images[index];
       console.log('Removing property image:', imageToRemove);
-      
+
       // Get the image URL (handle both string and object formats)
       const imageUrl = typeof imageToRemove === 'string' 
-        ? imageToRemove 
+        ? imageToRemove
         : imageToRemove.image_url;
-      
+
       if (imageUrl) {
         const legacyMarker = '/storage/v1/object/public/';
         let bucket = '';
@@ -527,47 +527,47 @@ const PropertyForm = () => {
       toast.error(error.message || 'Failed to remove image');
     }
   };
-  
+
   // Handle image reorganization
   const handleReorderImages = (event) => {
     const { active, over } = event;
-    
+
     if (active.id !== over.id) {
       setFormData(prev => {
         const oldIndex = parseInt(active.id);
         const newIndex = parseInt(over.id);
-        
+
         // Create a deep copy of the previous images array
-        const newImages = [...prev.images].map(img => 
+        const newImages = [...prev.images].map(img =>
           typeof img === 'string' ? img : {...img}
         );
-        
+
         // Perform the array move operation
         const reorderedImages = arrayMove(newImages, oldIndex, newIndex);
-        
+
         // Update order values after reordering
         reorderedImages.forEach((img, idx) => {
           if (typeof img !== 'string') {
             img.order = idx;
           }
         });
-        
+
         // Return updated form data
         return {
           ...prev,
           images: reorderedImages
         };
       });
-      
+
       toast.success('Image order updated');
     }
   };
-  
+
   // Move an image to a different category
   const handleChangeImageCategory = (imageIndex, newCategory) => {
     setFormData(prev => {
       const updatedImages = [...prev.images];
-      
+
       // If the image is a string, convert it to an object
       if (typeof updatedImages[imageIndex] === 'string') {
         updatedImages[imageIndex] = {
@@ -585,35 +585,35 @@ const PropertyForm = () => {
           order: updatedImages[imageIndex].order !== undefined ? updatedImages[imageIndex].order : imageIndex
         };
       }
-      
+
       // Re-sort images by their order value
       const sortedImages = [...updatedImages].sort((a, b) => {
         const orderA = typeof a === 'string' ? 9999 : (a.order || 9999);
         const orderB = typeof b === 'string' ? 9999 : (b.order || 9999);
         return orderA - orderB;
       });
-      
+
       return {
         ...prev,
         images: sortedImages
       };
     });
-    
+
     toast.success(`Image moved to ${newCategory} category`);
   };
-  
+
   // Sortable Image Component
   const SortableImage = ({ image, index, onRemove, isEditMode }) => {
     const [showCategoryMenu, setShowCategoryMenu] = useState(false);
     const menuRef = useRef(null);
     const imageUrl = typeof image === 'string' ? image : image.image_url;
     const imageType = typeof image === 'string' ? 'exterior' : (image.image_type || 'exterior');
-    
+
     // Extract useSortable hook - ensure it's called unconditionally
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ 
-      id: index.toString() 
+    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+      id: index.toString()
     });
-    
+
     // Close menu when clicking outside
     useEffect(() => {
       const handleClickOutside = (event) => {
@@ -621,32 +621,32 @@ const PropertyForm = () => {
           setShowCategoryMenu(false);
         }
       };
-      
+
       if (showCategoryMenu) {
         document.addEventListener('mousedown', handleClickOutside);
       }
-      
+
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }, [showCategoryMenu]);
-    
+
     const style = {
       transform: CSS.Transform.toString(transform),
       transition,
     };
-    
+
     const categoryOptions = [
       { value: 'exterior', label: 'Exterior' },
       { value: 'interior', label: 'Interior' },
       { value: 'floorplan', label: 'Floor Plan' },
       { value: 'other', label: 'Other' }
     ];
-    
+
     return (
-      <div 
-        ref={setNodeRef} 
-        style={style} 
+      <div
+        ref={setNodeRef}
+        style={style}
         className="relative group aspect-square overflow-hidden rounded-lg border border-gray-200"
       >
         <img
@@ -656,8 +656,8 @@ const PropertyForm = () => {
         />
         {isEditMode && (
           <>
-            <div 
-              {...attributes} 
+            <div
+              {...attributes}
               {...listeners}
               className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 cursor-move flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >
@@ -667,7 +667,7 @@ const PropertyForm = () => {
                 </svg>
               </div>
             </div>
-            
+
             {/* Delete button */}
             <button
               type="button"
@@ -678,7 +678,7 @@ const PropertyForm = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
+
             {/* Category button */}
             <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" ref={menuRef}>
               <button
@@ -690,7 +690,7 @@ const PropertyForm = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
                 </svg>
               </button>
-              
+
               {showCategoryMenu && (
                 <div className="absolute bottom-8 right-0 bg-white rounded-md shadow-lg p-2 z-10 w-40">
                   <p className="text-xs font-medium text-gray-500 mb-1 px-2">Move to category:</p>
@@ -720,7 +720,7 @@ const PropertyForm = () => {
       </div>
     );
   };
-  
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -810,7 +810,7 @@ const PropertyForm = () => {
       setSubmitting(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -818,13 +818,13 @@ const PropertyForm = () => {
       </div>
     );
   }
-  
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-6">
         {isEditMode ? 'Edit Property' : 'Add New Property'}
       </h1>
-      
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">Error!</strong>
@@ -838,13 +838,13 @@ const PropertyForm = () => {
           )}
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div>
             <h2 className="text-lg font-medium mb-4">Basic Information</h2>
-            
+
             <FormInput
               label="Property Name"
               id="name"
@@ -854,7 +854,7 @@ const PropertyForm = () => {
               placeholder="e.g., KRE Athurugiriya"
               required
             />
-            
+
             <FormInput
               label="Address"
               id="address"
@@ -880,7 +880,7 @@ const PropertyForm = () => {
             {/* Banking Details Section */}
             <div className="mt-6">
               <h3 className="text-md font-medium mb-4">Banking Details</h3>
-              
+
               <FormInput
                 label="Bank Name"
                 id="bank_name"
@@ -890,7 +890,7 @@ const PropertyForm = () => {
                 placeholder="e.g., Commercial Bank"
                 required
               />
-              
+
               <FormInput
                 label="Bank Branch"
                 id="bank_branch"
@@ -900,7 +900,7 @@ const PropertyForm = () => {
                 placeholder="e.g., Athurugiriya"
                 required
               />
-              
+
               <FormInput
                 label="Account Number"
                 id="bank_account_number"
@@ -911,7 +911,7 @@ const PropertyForm = () => {
                 required
               />
             </div>
-            
+
             <div className="mb-4">
               <label htmlFor="listingCategory" className="block text-sm font-medium text-gray-700 mb-1">Website category *</label>
               <select id="listingCategory" name="listingCategory" value={formData.rentalvalues.listingCategory||''}
@@ -942,7 +942,7 @@ const PropertyForm = () => {
                 <option value={PROPERTY_TYPES.LAND}>Land</option>
               </select>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormInput
                 label="Monthly Rent"
@@ -954,7 +954,7 @@ const PropertyForm = () => {
                 placeholder="0.00"
                 required
               />
-              
+
               <FormInput
                 label="Security Deposit"
                 id="deposit"
@@ -966,7 +966,7 @@ const PropertyForm = () => {
                 required
               />
             </div>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Property Availability
@@ -979,11 +979,11 @@ const PropertyForm = () => {
               />
             </div>
           </div>
-          
+
           {/* Additional Information */}
           <div>
             <h2 className="text-lg font-medium mb-4">Additional Information</h2>
-            
+
             {formData.propertytype !== PROPERTY_TYPES.APARTMENT && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -999,7 +999,7 @@ const PropertyForm = () => {
                 />
               </div>
             )}
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Square Feet
@@ -1014,7 +1014,7 @@ const PropertyForm = () => {
                 placeholder="e.g., 1200"
               />
             </div>
-            
+
             {/* Utility Rates */}
             <div className="mb-4">
               <h3 className="text-md font-medium text-gray-700 mb-3">Utility Rates</h3>
@@ -1029,7 +1029,7 @@ const PropertyForm = () => {
                   onChange={handleInputChange}
                   placeholder="e.g., 32.50"
                 />
-                
+
                 <FormInput
                   label="Water Rate (per unit)"
                   id="water_rate"
@@ -1103,7 +1103,7 @@ const PropertyForm = () => {
                 </div>
               </div>
             )}
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Year Built
@@ -1118,7 +1118,7 @@ const PropertyForm = () => {
                 placeholder="e.g., 2020"
               />
             </div>
-            
+
             {/* Checklist Items */}
             <div className="mt-6">
               <h2 className="text-lg font-medium mb-4">Checklist Items</h2>
@@ -1132,7 +1132,7 @@ const PropertyForm = () => {
                 placeholder="Add new checklist item (e.g., 'Check plumbing')"
               />
             </div>
-            
+
             {/* Amenities */}
             <div className="mt-6">
               <h2 className="text-lg font-medium mb-4">Amenities</h2>
@@ -1143,11 +1143,11 @@ const PropertyForm = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Description */}
         <div className="mt-6">
           <h2 className="text-lg font-medium mb-4">Description</h2>
-          
+
           <FormTextarea
             label="Property Description"
             id="description"
@@ -1158,7 +1158,7 @@ const PropertyForm = () => {
             rows={4}
           />
         </div>
-        
+
         {/* Images */}
         <div className="mb-6">
           <h3 className="text-lg font-medium mb-2">Property Images</h3>
@@ -1181,18 +1181,18 @@ const PropertyForm = () => {
                   collisionDetection={closestCenter}
                   onDragEnd={handleReorderImages}
                 >
-                  <SortableContext 
-                    items={category.images.map((_, index) => index.toString())} 
+                  <SortableContext
+                    items={category.images.map((_, index) => index.toString())}
                     strategy={rectSortingStrategy}
                   >
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {category.images.map((image, index) => {
+                      {category.images.map((image, _index) => {
                         const imageUrl = typeof image === 'string' ? image : image.image_url;
                         const imageIndex = formData.images.findIndex(img => {
                           if (typeof img === 'string') {return img === imageUrl;}
                           return img.image_url === imageUrl;
                         });
-                        
+
                         return (
                           <SortableImage
                             key={imageIndex}
@@ -1209,10 +1209,10 @@ const PropertyForm = () => {
               </div>
             ))}
           </div>
-          
+
           <div className="mb-4">
             <h4 className="text-md font-medium mb-2">Upload Images</h4>
-            <ImageUpload 
+            <ImageUpload
               onImagesChange={handleImagesChange}
               maxImages={20}
               initialImages={[]}
@@ -1220,18 +1220,18 @@ const PropertyForm = () => {
             />
           </div>
         </div>
-        
+
         {/* Location */}
         <div className="mt-6">
           <h2 className="text-lg font-medium mb-4">Property Location</h2>
-          
+
           <PropertyMap
             address={formData.address}
             coordinates={propertyCoordinates}
             onCoordinatesChange={handleCoordinatesChange}
           />
         </div>
-        
+
         {/* Form Actions */}
         <div className="mt-8 flex justify-end space-x-3">
           <button
@@ -1251,7 +1251,7 @@ const PropertyForm = () => {
           </button>
         </div>
       </form>
-      
+
       {isEditMode && canEditInvoiceMaster && <PropertyInvoiceBilling propertyId={id} />}
       {/* Property Units Section (only for apartment type properties) */}
       {isEditMode && formData.propertytype === PROPERTY_TYPES.APARTMENT && (

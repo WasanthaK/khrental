@@ -37,7 +37,7 @@ export const transitionUtilityReading = async (readingId, transition, { reason }
 export const editPendingUtilityReading = async (readingId, {
   previousReading, currentReading, expectedPreviousReading, expectedCurrentReading
 }) => {
-  if (!readingId) throw new Error('Reading ID is required.');
+  if (!readingId) {throw new Error('Reading ID is required.');}
   const response = await fetch(
     `${getApiBaseUrl()}/api/utility-reviews/readings/${encodeURIComponent(readingId)}/value`,
     {

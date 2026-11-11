@@ -7,7 +7,7 @@ test('available registered rentals appear by default',()=>{
  assert.equal(publicationEligibility({propertyStatus:'active',countryCode:'LK',propertyType:'house'}).eligible,true);
 });
 test('reserved, rented, or opted-out properties are excluded',()=>{
- for(const status of ['reserved','rented','maintenance'])assert.equal(publicationEligibility({propertyStatus:status,countryCode:'LK',propertyType:'house'}).eligible,false);
+ for(const status of ['reserved','rented','maintenance']){assert.equal(publicationEligibility({propertyStatus:status,countryCode:'LK',propertyType:'house'}).eligible,false);}
  assert.equal(publicationEligibility({propertyStatus:'available',countryCode:'LK',propertyType:'house',optedOut:true}).eligible,false);
 });
 test('a vacant unit can keep a partly rented apartment property visible',()=>{

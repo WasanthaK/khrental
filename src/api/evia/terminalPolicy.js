@@ -14,7 +14,7 @@ export const isEviaTerminalAgreement = agreement =>
 export const evaluateEviaTerminalDelivery = ({
   agreement = {}, nextState = null, hasRetainedSignedDocument = false
 } = {}) => {
-  if (!isEviaTerminalAgreement(agreement)) return { action: 'process' };
+  if (!isEviaTerminalAgreement(agreement)) {return { action: 'process' };}
   // Repair a completed signature's missing locally archived PDF. Preserve
   // immutable signed timestamps; the SQL update still validates live state.
   if (normalized(agreement.status) === 'signed'

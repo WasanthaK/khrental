@@ -19,7 +19,7 @@ const run = async () => {
       CASE WHEN OBJECT_ID(N'dbo.public_signup_rate_limits', N'U') IS NOT NULL THEN 1 ELSE 0 END AS table_exists;
   `);
   const row = result.recordset?.[0];
-  if (!row || row.table_exists !== 1) throw Error('R3_READONLY_BLOCKED: signup rate limit table missing or invisible');
+  if (!row || row.table_exists !== 1) {throw Error('R3_READONLY_BLOCKED: signup rate limit table missing or invisible');}
   const bit = v => v === 1 ? 'yes' : v === 0 ? 'no' : 'unknown';
   console.log('R3_SQL_PERMISSION_READONLY table=present select=' +
     bit(row.can_select) + ' insert=' + bit(row.can_insert) +

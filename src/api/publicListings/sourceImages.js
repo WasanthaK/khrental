@@ -11,12 +11,12 @@ const FILE_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/;
 export const trustedPhotoOrigins=env=>{
   const raw=String(env?.PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS||'').trim();
   const candidates=['https://app.quixo.homes',...raw.split(',').map(x=>x.trim()).filter(Boolean)];
-  if(candidates.length>8)throw new Error('Too many trusted application origins.');
+  if(candidates.length>8){throw new Error('Too many trusted application origins.');}
   return [...new Set(candidates.map(value=>{
     const url=new URL(value);
     if(url.protocol!=='https:'||url.host.includes('*')||url.username||url.password||url.search||url.hash||
        (url.pathname!=='/'&&url.pathname!==''))
-      throw new Error('Only exact HTTPS application origins are supported.');
+      {throw new Error('Only exact HTTPS application origins are supported.');}
     return url.origin;
   }))];
 };
@@ -24,38 +24,39 @@ export const trustedPhotoOrigins=env=>{
 export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
   allowedOrigins=['https://app.quixo.homes']
 }={})=>{
-  if(!isId(tenantId))throw new Error('Invalid tenant identity.');
-  if(!Number.isInteger(index)||index<0||index>49)throw new Error('Invalid property photo selection.');
+  if(!isId(tenantId)){throw new Error('Invalid tenant identity.');}
+  if(!Number.isInteger(index)||index<0||index>49){throw new Error('Invalid property photo selection.');}
   const parsed=typeof rawImages==='string'?JSON.parse(rawImages):rawImages;
-  if(!Array.isArray(parsed)||!parsed.length||parsed.length>50)throw new Error('No valid registered property photos.');
+  if(!Array.isArray(parsed)||!parsed.length||parsed.length>50){throw new Error('No valid registered property photos.');}
   const item=parsed[index];
   const value=typeof item==='string'?item:item?.image_url;
-  if(typeof value!=='string'||value.length>1600)throw new Error('Unsupported property photo reference.');
+  if(typeof value!=='string'||value.length>1600){throw new Error('Unsupported property photo reference.');}
   let url;
   try{url=new URL(value,'https://app.quixo.homes');}
   catch{throw new Error('Invalid property photo reference.');}
   const origins=new Set(allowedOrigins.map(x=>new URL(x).origin));
   if(!origins.has(url.origin)||url.search||url.hash||url.username||url.password)
-    throw new Error('Unapproved image origin or link parameters.');
+    {throw new Error('Unapproved image origin or link parameters.');}
   // Reject encoded separators/traversal, double-encoded paths and legacy public buckets.
   if(url.pathname.includes('%')||url.pathname.includes('\\'))
-    throw new Error('Encoded property image paths are not permitted.');
+    {throw new Error('Encoded property image paths are not permitted.');}
   const parts=url.pathname.split('/').filter(Boolean);
   if(parts.length!==6||parts[0]!=='storage'||parts[1]!=='images'||
      parts[2]!=='tenants'||parts[3].toLowerCase()!==tenantId.toLowerCase()||
      parts[4]!=='properties'||!FILE_NAME.test(parts[5])||!SUPPORTED_EXT.test(parts[5])||
      parts[5]==='.'||parts[5]==='..')
-    throw new Error('Property photo must belong to this tenant and property storage folder.');
+    {throw new Error('Property photo must belong to this tenant and property storage folder.');}
   // SQL GUID identity is case-insensitive; R2 object keys are not. After
   // checking ownership above, retain the registered folder's exact spelling.
   return {bucket:'images',path:'tenants/'+parts[3]+'/properties/'+parts[5]};
 };
 
 export const sanitizePhotoAlt=value=>{
-  if(typeof value!=='string')throw new Error('Photo description must be text.');
+  if(typeof value!=='string'){throw new Error('Photo description must be text.');}
   const alt=value.trim();
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   if(!alt||alt.length>180||/[<>\x00-\x1f]/.test(alt))
-    throw new Error('Invalid public photo description.');
+    {throw new Error('Invalid public photo description.');}
   return alt;
 };
 

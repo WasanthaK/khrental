@@ -78,8 +78,8 @@ export async function createAndSendV2SignatureRequest({
   accessToken,
   fetchImpl = fetch
 }) {
-  if (!documentToken) throw new Error('Evia document token is required.');
-  if (!accessToken) throw new Error('Evia access token is required.');
+  if (!documentToken) {throw new Error('Evia document token is required.');}
+  if (!accessToken) {throw new Error('Evia access token is required.');}
   if (!Array.isArray(signatories) || signatories.length === 0) {
     throw new Error('At least one Evia signatory is required.');
   }
@@ -105,7 +105,7 @@ export async function createAndSendV2SignatureRequest({
   });
   const created = await parseJsonResponse(createResponse, 'Evia V2 request creation');
   const requestId = created.requestId || created.RequestId;
-  if (!requestId) throw new Error('Evia V2 request creation returned no requestId.');
+  if (!requestId) {throw new Error('Evia V2 request creation returned no requestId.');}
   console.info('[EviaDiag] v2_create_request_ok', {
     requestId: shortId(requestId),
     responseKeys: Object.keys(created || {})
@@ -123,7 +123,7 @@ export async function createAndSendV2SignatureRequest({
     );
     const added = await parseJsonResponse(signatoryResponse, 'Evia V2 signatory creation');
     const signatoryId = added.signatoryId || added.SignatoryId;
-    if (!signatoryId) throw new Error('Evia V2 signatory creation returned no signatoryId.');
+    if (!signatoryId) {throw new Error('Evia V2 signatory creation returned no signatoryId.');}
     console.info('[EviaDiag] v2_signatory_created', {
       requestId: shortId(requestId),
       signatoryIndex: index,

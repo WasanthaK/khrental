@@ -160,7 +160,7 @@ export const createOfferStore=({poolProvider}={})=>{
         const membership=(await q('SELECT id,role,status FROM dbo.tenant_memberships WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND app_user_id=@seekerId',{tenantId:e.tenant_id,seekerId:e.seeker_id}))[0];
         if(membership&&(membership.status!=='active'||!['rentee','tenant'].includes(membership.role))){throw conflict('RENTAL_MEMBERSHIP_CONFLICT','Existing account access requires an authorised review.');}
         const previousLink = replacing ? (await q('SELECT accepted_version FROM dbo.rental_offer_agreement_links WHERE agreement_id=@id AND enquiry_id=@enquiryId', {id:previous.id,enquiryId:id}))[0] : null;
-        if (replacing && !previousLink) throw conflict('RENTAL_AGREEMENT_LINK_MISSING','The cancelled agreement needs review before replacement.');
+        if (replacing && !previousLink) {throw conflict('RENTAL_AGREEMENT_LINK_MISSING','The cancelled agreement needs review before replacement.');}
         const acceptedVersion = previousLink?.accepted_version || old.version;
         const agreementId=randomUUID();
         const terms=JSON.stringify({monthlyRent:Number(old.rent),depositAmount:Number(old.deposit),feesAmount:Number(old.fees),

@@ -18,7 +18,7 @@ try{
     await page.setRequestInterception(true);
     const rejects=[];
     const catalogObservations=[];
-    const catalogPath='/api/public-listings?country=LK';
+
     page.on('response',response=>{
       const url=new URL(response.url());
       if(url.origin===app&&url.pathname==='/api/public-listings'){

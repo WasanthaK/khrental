@@ -27,7 +27,7 @@ export const formatDateTime = (dateString) => {
 
 // Currency formatting
 export const formatCurrency = (amount, currency) => {
-  if (currency === undefined && (amount === undefined || amount === null)) return 'LKR 0.00';
+  if (currency === undefined && (amount === undefined || amount === null)) {return 'LKR 0.00';}
   const value = amount === undefined || amount === null ? 0 : Number(amount);
   const code = currency === undefined ? 'LKR'
     : typeof currency === 'string' && /^[A-Z]{3}$/.test(currency) ? currency : null;

@@ -13,10 +13,10 @@ import {
 
 const problem = (status, code, message) => Object.assign(new Error(message),{status,code});
 const parse = value => {
-  if(value == null || value === '') return null;
+  if(value == null || value === '') {return null;}
   try {
     const parsed=typeof value === 'string'?JSON.parse(value):value;
-    if(!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Invalid JSON object');
+    if(!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {throw new Error('Invalid JSON object');}
     return parsed;
   } catch {
     throw problem(409,'INVALID_INVOICE_PROFILE','Stored invoice profile requires administrator repair.');
@@ -26,13 +26,13 @@ const nullable = value => String(value || '').trim() || null;
 const requireComplete = (body, keys) => {
   if(!body || typeof body !== 'object' || Array.isArray(body) ||
     keys.some(k=>!Object.prototype.hasOwnProperty.call(body,k)))
-    throw problem(400,'INVOICE_PROFILE_INCOMPLETE','Load and submit the complete invoice profile.');
+    {throw problem(400,'INVOICE_PROFILE_INCOMPLETE','Load and submit the complete invoice profile.');}
 };
 const assertAdmin = req => {
   if(req.user?.is_dev_bypass || !req.user?.id ||
       !isAdminRole({user:req.user,membership:req.membership}) ||
       !hasActiveTenantMembership({membership:req.membership,tenantId:req.tenantId}))
-    throw problem(403,'INVOICE_MASTER_ADMIN_REQUIRED','An active organization administrator is required.');
+    {throw problem(403,'INVOICE_MASTER_ADMIN_REQUIRED','An active organization administrator is required.');}
 };
 const txQuery = async(tx,statement,values={}) => {
   const r=new sql.Request(tx);
@@ -53,7 +53,7 @@ const transaction = async (tenantId, fn) => {
 const hash = record => crypto.createHash('sha256').update(JSON.stringify(record ?? null)).digest('hex');
 const recordAudit = async(tx,req,kind,id,previous,current) => {
   const fields=editableFieldsChanged(previous||{},current);
-  if(!fields.length) return false;
+  if(!fields.length) {return false;}
   await txQuery(tx,`INSERT INTO dbo.invoice_master_data_audit
     (tenant_id,actor_user_id,resource_kind,resource_id,changed_fields_json,previous_hash,current_hash)
     VALUES(@tenantId,@actorId,@kind,@id,@fields,@previous,@current)`,{
@@ -126,12 +126,12 @@ export const createInvoiceMasterAdminRouter = () => {
         const previous=parse(old?.invoice_issuer_profile_json);
         const fields=editableFieldsChanged(previous||{},input);
         if(fields.length){
-          if(old) await txQuery(tx,
+          if(old) {await txQuery(tx,
             'UPDATE dbo.tenant_settings SET invoice_issuer_profile_json=@value WHERE tenant_id=@tenantId',
-            {tenantId:req.tenantId,value:JSON.stringify(input)});
-          else await txQuery(tx,
+            {tenantId:req.tenantId,value:JSON.stringify(input)});}
+          else {await txQuery(tx,
             'INSERT INTO dbo.tenant_settings(tenant_id,invoice_issuer_profile_json) VALUES(@tenantId,@value)',
-            {tenantId:req.tenantId,value:JSON.stringify(input)});
+            {tenantId:req.tenantId,value:JSON.stringify(input)});}
           await recordAudit(tx,req,'issuer',null,previous,input);
         }
         return input;
@@ -146,7 +146,7 @@ export const createInvoiceMasterAdminRouter = () => {
         billing_contact_email,billing_contact_phone,invoice_party_overrides_json
         FROM dbo.properties WHERE tenant_id=@tenantId AND id=@propertyId`,
         {tenantId:req.tenantId,propertyId:req.params.propertyId});
-      if(!row)throw problem(404,'PROPERTY_NOT_FOUND','Property not found in this organization.');
+      if(!row){throw problem(404,'PROPERTY_NOT_FOUND','Property not found in this organization.');}
       respond(res,normalProperty(row));
     }catch(e){next(e);}
   });
@@ -161,7 +161,7 @@ export const createInvoiceMasterAdminRouter = () => {
           billing_contact_email,billing_contact_phone,invoice_party_overrides_json
           FROM dbo.properties WITH(UPDLOCK,HOLDLOCK)
           WHERE tenant_id=@tenantId AND id=@propertyId`,values);
-        if(!row)throw problem(404,'PROPERTY_NOT_FOUND','Property not found in this organization.');
+        if(!row){throw problem(404,'PROPERTY_NOT_FOUND','Property not found in this organization.');}
         const previous=normalProperty(row);
         if(editableFieldsChanged(previous,input).length){
           await txQuery(tx,`UPDATE dbo.properties SET bank_beneficiary_name=@beneficiary,
@@ -187,7 +187,7 @@ export const createInvoiceMasterAdminRouter = () => {
       const row=await runSingleQuery(`SELECT TOP 1 bank_beneficiary_name FROM dbo.property_units
         WHERE tenant_id=@tenantId AND propertyid=@propertyId AND id=@unitId`,
         {tenantId:req.tenantId,propertyId:req.params.propertyId,unitId:req.params.unitId});
-      if(!row)throw problem(404,'UNIT_NOT_FOUND','Unit not found in this property.');
+      if(!row){throw problem(404,'UNIT_NOT_FOUND','Unit not found in this property.');}
       respond(res,{beneficiaryName:row.bank_beneficiary_name||''});
     }catch(e){next(e);}
   });
@@ -200,7 +200,7 @@ export const createInvoiceMasterAdminRouter = () => {
         const row=await txFirst(tx,`SELECT TOP 1 bank_beneficiary_name
           FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK)
           WHERE tenant_id=@tenantId AND propertyid=@propertyId AND id=@unitId`,values);
-        if(!row)throw problem(404,'UNIT_NOT_FOUND','Unit not found in this property.');
+        if(!row){throw problem(404,'UNIT_NOT_FOUND','Unit not found in this property.');}
         const previous={beneficiaryName:row.bank_beneficiary_name||''};
         if(editableFieldsChanged(previous,input).length){
           await txQuery(tx,`UPDATE dbo.property_units SET

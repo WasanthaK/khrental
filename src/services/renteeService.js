@@ -2,7 +2,7 @@ import { requestMssqlApi } from './mssqlApiClient';
 import { inviteUser } from './invitationService';
 
 export const getRentee = async (id) => {
-  if (!id) throw new Error('Renter ID is required.');
+  if (!id) {throw new Error('Renter ID is required.');}
   return requestMssqlApi(`/api/mssql/rentees/${encodeURIComponent(id)}`);
 };
 
@@ -16,7 +16,7 @@ export const createRentee = async (payload) => {
 };
 
 export const updateRentee = async (id, payload) => {
-  if (!id) throw new Error('Renter ID is required.');
+  if (!id) {throw new Error('Renter ID is required.');}
   return requestMssqlApi(`/api/mssql/rentees/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: payload
@@ -24,7 +24,7 @@ export const updateRentee = async (id, payload) => {
 };
 
 export const setRenteeMembershipStatus = async (id, status) => {
-  if (!id) throw new Error('Renter ID is required.');
+  if (!id) {throw new Error('Renter ID is required.');}
   if (!['active', 'inactive'].includes(String(status || '').toLowerCase())) {
     throw new Error('Renter status must be active or inactive.');
   }

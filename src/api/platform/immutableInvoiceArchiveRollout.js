@@ -7,10 +7,10 @@ const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
 export const isImmutableInvoiceArchiveEnabledForTenant = (tenantId, env = process.env) => {
   if (env?.INVOICE_IMMUTABLE_ARCHIVE_ENABLED !== 'true'
-      || typeof tenantId !== 'string' || !UUID.test(tenantId)) return false;
+      || typeof tenantId !== 'string' || !UUID.test(tenantId)) {return false;}
   const raw = String(env?.INVOICE_IMMUTABLE_ARCHIVE_CANARY_TENANTS || '');
-  if (!raw.trim()) return false;
+  if (!raw.trim()) {return false;}
   const allowedTenants = raw.split(',').map(value => value.trim());
-  if (allowedTenants.some(value => !UUID.test(value))) return false;
+  if (allowedTenants.some(value => !UUID.test(value))) {return false;}
   return allowedTenants.some(value => value.toLowerCase() === tenantId.toLowerCase());
 };

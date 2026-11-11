@@ -52,6 +52,104 @@ function PropertyProvider({ children }) {
   const isTenantPortal = getEffectivePortalType({ user, membership }) === PORTAL_TYPES.TENANT;
 
   // Load properties on mount
+  const loadProperties = useCallback(async () => {
+    try {
+      if (!isAuthenticated || !hasTenantAccess) {
+        setProperties([]);
+        return [];
+      }
+
+      const properties = await listTenantProperties();
+      setProperties(properties);
+      return properties;
+    } catch (err) {
+      console.error('Error loading properties:', err);
+      setError(err);
+      throw err;
+    }
+  }, [hasTenantAccess, isAuthenticated]);
+
+  const loadUserAccessibleProperties = useCallback(async () => {
+    try {
+      if (!isAuthenticated || !hasTenantAccess) {
+        setAccessiblePropertyIds([]);
+        return [];
+      }
+
+      const allProperties = await listTenantProperties();
+      const propertyIds = allProperties.map((property) => property.id);
+      setAccessiblePropertyIds(propertyIds);
+      return propertyIds;
+    } catch (err) {
+      console.error('Error loading user property access:', err);
+
+      // Default to empty array on error.
+      setAccessiblePropertyIds([]);
+
+      // Don't propagate the error so the initialization can complete.
+      return [];
+    }
+  }, [hasTenantAccess, isAuthenticated]);
+
+  const loadRecentPropertiesFromStorage = useCallback(() => {
+    try {
+      const storedProperties = localStorage.getItem('recentProperties');
+      if (storedProperties) {
+        const parsed = JSON.parse(storedProperties);
+        setRecentProperties(parsed);
+        return parsed;
+      }
+      return [];
+    } catch (err) {
+      console.error('Error loading recent properties from storage:', err);
+      return [];
+    }
+  }, []);
+
+  const initializeContext = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load everything in parallel for performance
+      const results = await Promise.allSettled([
+        loadProperties(),
+        loadUserAccessibleProperties(),
+        loadRecentPropertiesFromStorage()
+      ]);
+
+      // Check if any critical operations failed
+      const criticalErrors = results
+        .filter((result, index) => index < 2 && result.status === 'rejected')
+        .map(result => result.reason);
+
+      if (criticalErrors.length > 0) {
+        console.error('Critical errors during PropertyContext initialization:', criticalErrors);
+        setError(new Error('Failed to initialize property data'));
+
+        // Retry logic for critical failures
+        if (retryCount.current < 3) {
+          retryCount.current += 1;
+          setTimeout(() => {
+            initializeContext();
+          }, RETRY_DELAY);
+          return;
+        } else {
+          toast.error('Could not load property data after multiple attempts');
+        }
+      } else {
+        // If we loaded properties but had non-critical errors, we're still ready
+        setIsReady(true);
+      }
+    } catch (err) {
+      console.error('Error in context initialization:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+      setInitialized(true);
+    }
+  }, [loadProperties, loadRecentPropertiesFromStorage, loadUserAccessibleProperties]);
+
   useEffect(() => {
     if (authLoading) {
       return;
@@ -74,109 +172,15 @@ function PropertyProvider({ children }) {
       initAttempted.current = true;
       initializeContext();
     }
-  }, [authLoading, isAuthenticated, hasTenantAccess, isTenantPortal]);
+  }, [authLoading, isAuthenticated, hasTenantAccess, isTenantPortal, initializeContext]);
 
   // Main initialization function with retry logic
-  const initializeContext = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Load everything in parallel for performance
-      const results = await Promise.allSettled([
-        loadProperties(),
-        loadUserAccessibleProperties(),
-        loadRecentPropertiesFromStorage()
-      ]);
-      
-      // Check if any critical operations failed
-      const criticalErrors = results
-        .filter((result, index) => index < 2 && result.status === 'rejected')
-        .map(result => result.reason);
-      
-      if (criticalErrors.length > 0) {
-        console.error('Critical errors during PropertyContext initialization:', criticalErrors);
-        setError(new Error('Failed to initialize property data'));
-        
-        // Retry logic for critical failures
-        if (retryCount.current < 3) {
-          retryCount.current += 1;
-          setTimeout(() => {
-            initializeContext();
-          }, RETRY_DELAY);
-          return;
-        } else {
-          toast.error('Could not load property data after multiple attempts');
-        }
-      } else {
-        // If we loaded properties but had non-critical errors, we're still ready
-        setIsReady(true);
-      }
-    } catch (err) {
-      console.error('Error in context initialization:', err);
-      setError(err);
-    } finally {
-      setLoading(false);
-      setInitialized(true);
-    }
-  };
 
   // Load properties from the explicit tenant property directory.
-  const loadProperties = async () => {
-    try {
-      if (!isAuthenticated || !hasTenantAccess) {
-        setProperties([]);
-        return [];
-      }
-
-      const properties = await listTenantProperties();
-      setProperties(properties);
-      return properties;
-    } catch (err) {
-      console.error('Error loading properties:', err);
-      setError(err);
-      throw err;
-    }
-  };
 
   // Load user's accessible properties from the same tenant-scoped directory.
-  const loadUserAccessibleProperties = async () => {
-    try {
-      if (!isAuthenticated || !hasTenantAccess) {
-        setAccessiblePropertyIds([]);
-        return [];
-      }
-
-      const allProperties = await listTenantProperties();
-      const propertyIds = allProperties.map((property) => property.id);
-      setAccessiblePropertyIds(propertyIds);
-      return propertyIds;
-    } catch (err) {
-      console.error('Error loading user property access:', err);
-
-      // Default to empty array on error.
-      setAccessiblePropertyIds([]);
-
-      // Don't propagate the error so the initialization can complete.
-      return [];
-    }
-  };
 
   // Load recent properties from localStorage
-  const loadRecentPropertiesFromStorage = () => {
-    try {
-      const storedProperties = localStorage.getItem('recentProperties');
-      if (storedProperties) {
-        const parsed = JSON.parse(storedProperties);
-        setRecentProperties(parsed);
-        return parsed;
-      }
-      return [];
-    } catch (err) {
-      console.error('Error loading recent properties from storage:', err);
-      return [];
-    }
-  };
 
   // Save recent properties to localStorage
   const saveRecentPropertiesToStorage = (properties) => {
@@ -191,7 +195,7 @@ function PropertyProvider({ children }) {
   const addToRecentProperties = useCallback((propertyId) => {
     // Get the full property object
     const property = properties.find(p => p.id === propertyId);
-    
+
     if (!property) {
       return;
     }
@@ -199,13 +203,13 @@ function PropertyProvider({ children }) {
     setRecentProperties(prevRecent => {
       // Filter out if already exists
       const filtered = prevRecent.filter(p => p.id !== propertyId);
-      
+
       // Add to beginning of array
       const updated = [property, ...filtered].slice(0, MAX_RECENT_PROPERTIES);
-      
+
       // Save to storage
       saveRecentPropertiesToStorage(updated);
-      
+
       return updated;
     });
   }, [properties]);
@@ -216,13 +220,13 @@ function PropertyProvider({ children }) {
     if (!initialized || loading) {
       return true;
     }
-    
+
     // If no accessible properties loaded or error occurred, assume access
     // This prevents blocking UI in case of errors
     if (accessiblePropertyIds.length === 0) {
       return true;
     }
-    
+
     return accessiblePropertyIds.includes(propertyId);
   }, [accessiblePropertyIds, initialized, loading]);
 
@@ -282,10 +286,10 @@ function PropertyProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadProperties, loadUserAccessibleProperties]);
 
   // Get selected property objects
-  const selectedProperties = properties.filter(property => 
+  const selectedProperties = properties.filter(property =>
     selectedPropertyIds.includes(property.id)
   );
 
@@ -317,4 +321,4 @@ function PropertyProvider({ children }) {
 }
 
 // Only export the Provider component as default, not the context itself
-export default PropertyProvider; 
+export default PropertyProvider;

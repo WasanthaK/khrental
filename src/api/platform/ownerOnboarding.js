@@ -15,6 +15,7 @@ const boundIdentity=req=>{
 // A resumable draft is a navigation preference, never organization authority.
 export const parseOwnerProgress=body=>{
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['name','country','requestId'].includes(k))||
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
     typeof body.name!=='string'||body.name.length>200||/[\x00-\x1f\x7f]/.test(body.name)||
     !['LK','BN'].includes(body.country)||!uuid.test(body.requestId||'')){
     throw failure(400,'OWNER_PROGRESS_INVALID','Enter your workspace details and choose a country.');
@@ -69,6 +70,7 @@ export const getOwnerOnboardingContext=async({record,user,tenantContext,query=ru
 };
 export const parseOwnerSetup=body=>{
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['name','country','requestId'].includes(k))||
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
     typeof body.name!=='string'||!body.name.trim()||body.name.trim().length>200||/[\x00-\x1f\x7f]/.test(body.name)||
     !['LK','BN'].includes(body.country)||typeof body.requestId!=='string'||!uuid.test(body.requestId)){
     throw failure(400,'OWNER_SETUP_INVALID','Enter a workspace name and choose a country.');

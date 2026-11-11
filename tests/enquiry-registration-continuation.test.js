@@ -98,6 +98,6 @@ test('enquiry summary accepts only approved public media for the selected proper
 test('enquiry rent is formatted from the approved public market currency without inventing a price',()=>{
   assert.match(publicListingRent({country:'LK',currency:'LKR',monthlyRent:100000}),/LKR.*100,000/);
   assert.match(publicListingRent({country:'BN',currency:'BND',monthlyRent:1200}),/BND.*1,200/);
-  for(const monthlyRent of [null,0,-1,Infinity,NaN,'100000'])assert.equal(publicListingRent({country:'LK',currency:'LKR',monthlyRent}),null);
+  for(const monthlyRent of [null,0,-1,Infinity,NaN,'100000']){assert.equal(publicListingRent({country:'LK',currency:'LKR',monthlyRent}),null);}
   assert.equal(publicListingRent({country:'LK',currency:'USD',monthlyRent:100}),null);
 });

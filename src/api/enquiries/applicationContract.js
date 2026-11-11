@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {isUuid,enquiryError} from './contract.js';
 const fail=()=>enquiryError(400,'INVALID_APPLICATION','Supply the current application version, requested details and explicit sharing consent.');
 const safeText=(value,required=false)=>typeof value==='string'&&value.trim().length<=2000&&
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   (!required||value.trim().length>0)&&!/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(value);
 export const parseApplicationAction=(body,owner=false)=>{
   const submit=body?.action==='submit';
@@ -21,7 +22,7 @@ export const parseApplicationAction=(body,owner=false)=>{
   }else if(owner){
     if(!safeText(body.note,true)){throw fail();}result.note=body.note.trim();
   }
-  const {requestId,...content}=result;
+  const content={...result};delete content.requestId;
   return {...result,payloadHash:createHash('sha256').update(JSON.stringify([owner,content])).digest('hex')};
 };
 export const applicationReceipt=row=>row?{

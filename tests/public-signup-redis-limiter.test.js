@@ -42,7 +42,7 @@ const fakeRedis = () => {
       seen.push({ key, limit, duration });
       const old = counters.get(key);
       const active = old && old.expiresAt > now ? old : null;
-      if (active && active.count >= limit) return 0;
+      if (active && active.count >= limit) {return 0;}
       const count = active ? active.count + 1 : 1;
       counters.set(key, { count, expiresAt: active ? active.expiresAt : now + duration });
       return 1;

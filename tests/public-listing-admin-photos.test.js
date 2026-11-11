@@ -21,7 +21,7 @@ const serve=async(options,route,identity=admin)=>{
   const app=express();
   app.use((req,res,next)=>{Object.assign(req,identity);next();});
   app.use('/prefs',createPublicListingPreferencesRouter({context:(req,res,next)=>next(),...options}));
-  app.use((e,req,res,next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
+  app.use((e,req,res,_next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
   const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   try{
     const res=await fetch('http://127.0.0.1:'+server.address().port+'/prefs/'+property+route);
@@ -53,7 +53,7 @@ test('disabled, withdrawn, foreign or revoked access never reads preview bytes',
   const read=async()=>{reads++;return {body:photo};};
   await assert.rejects(previewAdminPhoto(args,{env:{},load:async()=>meta,read}),{status:404});
   for(const record of [null,{...meta,mediaStatus:'withdrawn'}])
-    await assert.rejects(previewAdminPhoto(args,{env:flags,load:async()=>record,read}),{status:404});
+    {await assert.rejects(previewAdminPhoto(args,{env:flags,load:async()=>record,read}),{status:404});}
   assert.equal(reads,0);
 });
 test('preview fails if membership, source, derivative or state changes during storage read',async()=>{
@@ -74,7 +74,7 @@ test('admin photo GET routes deny anonymous, staff, revoked and wrong-tenant con
   for(const identity of [{}, {...admin,membership:{...admin.membership,status:'inactive'}},
     {...admin,membership:{...admin.membership,tenant_id:listing}},
     {...admin,user:{id:actor,role:'staff'},membership:{...admin.membership,role:'staff'}}]){
-    for(const path of ['/media','/media/'+mediaId+'/preview'])assert.equal((await serve(options,path,identity)).status,403);
+    for(const path of ['/media','/media/'+mediaId+'/preview']){assert.equal((await serve(options,path,identity)).status,403);}
   }
   assert.equal((await serve({...options,env:{}},'/media')).status,404);
   assert.equal((await serve({...options,env:{PUBLIC_LISTING_MANAGEMENT_ENABLED:'true'}},'/media/'+mediaId+'/preview')).status,404);

@@ -14,14 +14,14 @@ import { buildStorageUrl, downloadTenantFile, listTenantFiles, uploadTenantFile 
  */
 const parseHtmlContent = (html) => {
   const cleanHtml = sanitizeHtml(html);
-  
+
   // Create an array to store content pieces in the order they appear
   const contentPieces = [];
-  
+
   try {
     // Attempt DOM-based parsing first
     const tempDiv = new DOMParser().parseFromString(cleanHtml, 'text/html').body;
-    
+
     const extractInlineRuns = (element, inherited = {}) => {
       const runs = [];
 
@@ -58,13 +58,13 @@ const parseHtmlContent = (html) => {
     // Helper function to recursively process nodes
     const processNode = (node, listLevel = 0, listType = null, listCounter = 0) => {
       if (!node) {return { listCounter };}
-      
+
       // Skip empty text nodes and comments
-      if ((node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) || 
+      if ((node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) ||
           node.nodeType === Node.COMMENT_NODE) {
         return { listCounter };
       }
-      
+
       if (node.nodeType === Node.TEXT_NODE) {
         // Process text nodes that have content
         const text = node.textContent.trim();
@@ -76,7 +76,7 @@ const parseHtmlContent = (html) => {
         }
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         const tagName = node.tagName.toLowerCase();
-        
+
         // Handle headings
         if (tagName.match(/^h[1-6]$/)) {
           const level = parseInt(tagName.replace('h', ''));
@@ -124,30 +124,30 @@ const parseHtmlContent = (html) => {
             prefix = `${listCounter}. `;
             listCounter++;
           }
-          
+
           contentPieces.push({
             type: 'list-item',
             text: node.textContent.trim(),
             level: listLevel,
             prefix: prefix
           });
-          
+
           return { listCounter };
         }
         // Handle tables
         else if (tagName === 'table') {
           const rows = [];
           const trElements = node.querySelectorAll('tr');
-          
+
           trElements.forEach(tr => {
             const cells = [];
             const cellElements = tr.querySelectorAll('th, td');
-            
+
             cellElements.forEach(cell => {
               // Extract formatting information
               const isBold = cell.querySelector('strong, b') !== null;
               const isItalic = cell.querySelector('i, em') !== null;
-              
+
               cells.push({
                 text: cell.textContent.trim(),
                 isHeader: cell.tagName.toLowerCase() === 'th',
@@ -155,12 +155,12 @@ const parseHtmlContent = (html) => {
                 isItalic: isItalic
               });
             });
-            
+
             if (cells.length > 0) {
               rows.push(cells);
             }
           });
-          
+
           if (rows.length > 0) {
             contentPieces.push({
               type: 'table',
@@ -175,30 +175,30 @@ const parseHtmlContent = (html) => {
           }
         }
       }
-      
+
       return { listCounter };
     };
-    
+
     // Process DOM tree
     processNode(tempDiv);
-    
+
   } catch (error) {
     // If DOM processing fails (e.g., server-side), fall back to regex
     console.warn('DOM processing failed, falling back to regex parsing:', error);
-    
+
     // Extract headings
     const headingMatches = cleanHtml.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [];
     headingMatches.forEach(match => {
       const headingText = match.replace(/<\/?[^>]+(>|$)/g, '').trim();
       const level = parseInt(match.match(/<h([1-6])/i)[1]);
-      
+
       contentPieces.push({
         type: 'heading',
         text: headingText,
         level: level
       });
     });
-    
+
     // Extract unordered lists
     const ulRegex = /<ul[^>]*>([\s\S]*?)<\/ul>/gi;
     let ulMatch;
@@ -206,7 +206,7 @@ const parseHtmlContent = (html) => {
       const listHtml = ulMatch[1];
       const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
       let liMatch;
-      
+
       while ((liMatch = liRegex.exec(listHtml)) !== null) {
         const itemText = liMatch[1]
           .replace(/<\/?[^>]+(>|$)/g, ' ')
@@ -216,7 +216,7 @@ const parseHtmlContent = (html) => {
           .replace(/&gt;/g, '>')
           .replace(/\s+/g, ' ')
           .trim();
-        
+
         contentPieces.push({
           type: 'list-item',
           text: itemText,
@@ -225,7 +225,7 @@ const parseHtmlContent = (html) => {
         });
       }
     }
-    
+
     // Extract ordered lists
     const olRegex = /<ol[^>]*>([\s\S]*?)<\/ol>/gi;
     let olMatch;
@@ -234,7 +234,7 @@ const parseHtmlContent = (html) => {
       const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
       let liMatch;
       let counter = 1;
-      
+
       while ((liMatch = liRegex.exec(listHtml)) !== null) {
         const itemText = liMatch[1]
           .replace(/<\/?[^>]+(>|$)/g, ' ')
@@ -244,42 +244,42 @@ const parseHtmlContent = (html) => {
           .replace(/&gt;/g, '>')
           .replace(/\s+/g, ' ')
           .trim();
-        
+
         contentPieces.push({
           type: 'list-item',
           text: itemText,
           level: 1,
           prefix: `${counter}. `
         });
-        
+
         counter++;
       }
     }
-    
+
     // Extract tables
     const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
     let tableMatch;
     while ((tableMatch = tableRegex.exec(cleanHtml)) !== null) {
       const tableHtml = tableMatch[0];
       const rows = [];
-      
+
       // Extract rows
       const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
       let rowMatch;
       while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
         const cells = [];
-        
+
         // Extract cells (both th and td)
         const cellRegex = /<(th|td)[^>]*>([\s\S]*?)<\/(th|td)>/gi;
         let cellMatch;
         while ((cellMatch = cellRegex.exec(rowMatch[0])) !== null) {
           const isHeader = cellMatch[1].toLowerCase() === 'th';
           const cellHtml = cellMatch[2];
-          
+
           // Check for formatting
           const isBold = /<(strong|b)[^>]*>/.test(cellHtml);
           const isItalic = /<(em|i)[^>]*>/.test(cellHtml);
-          
+
           const cellText = cellHtml
             .replace(/<\/?[^>]+(>|$)/g, ' ')
             .replace(/&nbsp;/g, ' ')
@@ -288,7 +288,7 @@ const parseHtmlContent = (html) => {
             .replace(/&gt;/g, '>')
             .replace(/\s+/g, ' ')
             .trim();
-          
+
           cells.push({
             text: cellText,
             isHeader,
@@ -296,12 +296,12 @@ const parseHtmlContent = (html) => {
             isItalic
           });
         }
-        
+
         if (cells.length > 0) {
           rows.push(cells);
         }
       }
-      
+
       if (rows.length > 0) {
         contentPieces.push({
           type: 'table',
@@ -309,16 +309,16 @@ const parseHtmlContent = (html) => {
         });
       }
     }
-    
+
     // Extract paragraphs
     const paragraphMatches = cleanHtml.match(/<p[^>]*>(.*?)<\/p>/gi) || [];
     paragraphMatches.forEach(match => {
       const paragraphHtml = match.substring(match.indexOf('>') + 1, match.lastIndexOf('<'));
-      
+
       // Check for formatting
       const isBold = /<(strong|b)[^>]*>/.test(paragraphHtml);
       const isItalic = /<(em|i)[^>]*>/.test(paragraphHtml);
-      
+
       const paragraphText = paragraphHtml
         .replace(/<\/?[^>]+(>|$)/g, ' ')
         .replace(/&nbsp;/g, ' ')
@@ -327,7 +327,7 @@ const parseHtmlContent = (html) => {
         .replace(/&gt;/g, '>')
         .replace(/\s+/g, ' ')
         .trim();
-      
+
       if (paragraphText.length > 0) {
         contentPieces.push({
           type: 'paragraph',
@@ -338,7 +338,7 @@ const parseHtmlContent = (html) => {
       }
     });
   }
-  
+
   // If we have no content, extract plain text as a fallback
   if (contentPieces.length === 0) {
     const allText = cleanHtml
@@ -349,7 +349,7 @@ const parseHtmlContent = (html) => {
       .replace(/&gt;/g, '>')
       .replace(/\s+/g, ' ')
       .trim();
-    
+
     if (allText.length > 0) {
       contentPieces.push({
         type: 'paragraph',
@@ -357,7 +357,7 @@ const parseHtmlContent = (html) => {
       });
     }
   }
-  
+
   return contentPieces;
 };
 
@@ -370,11 +370,11 @@ const parseHtmlContent = (html) => {
 export const saveMergedDocument = async (content, agreementId) => {
   try {
     console.log('Saving merged document for agreement:', agreementId);
-    
+
     if (!content) {
       throw new Error('Document content is empty');
     }
-    
+
     // Check if content is actually HTML and not a URL
     const isHtmlContent = content && (
       content.trim().startsWith('<') || 
@@ -384,7 +384,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       content.includes('<div') ||
       content.includes('<p')
     );
-    
+
     if (!isHtmlContent) {
       console.log('Content appears to be a URL, not HTML content');
       // If it's already a URL, just return it
@@ -393,9 +393,9 @@ export const saveMergedDocument = async (content, agreementId) => {
       }
       throw new Error('Invalid content format - not HTML and not a URL');
     }
-    
+
     console.log('Converting content to PDF format...');
-    
+
     // Get agreement data to ensure we have all required merge fields
     const { data: agreement, error: agreementError } = await platformClient
       .from('agreements')
@@ -407,7 +407,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       `)
       .eq('id', agreementId)
       .single();
-      
+
     if (agreementError) {
       console.warn('Could not fetch agreement data for merge fields:', agreementError);
     } else {
@@ -420,30 +420,30 @@ export const saveMergedDocument = async (content, agreementId) => {
         hasRentalValues: agreement.unit?.rentalvalues ? 'Yes' : 'No'
       });
     }
-    
+
     // Parse HTML content
     const parsedContent = parseHtmlContent(content);
-    
+
     // Create a new PDF document
     const pdfDoc = await PDFDocument.create();
-    
+
     // Embed standard fonts
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
     const helveticaBoldOblique = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
-    
+
     // Add a page
     let page = pdfDoc.addPage([612, 792]); // US Letter size
     const { width, height } = page.getSize();
     const margin = 50;
-    
+
     // Starting position for content
     let y = height - margin;
     const lineHeight = 14;
     const paragraphSpacing = 10;
     const headingSpacing = 20;
-    
+
     // Add title
     page.drawText('Rental Agreement', {
       x: width / 2 - 80, // Center approximation
@@ -452,7 +452,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       font: helveticaBold
     });
     y -= 30;
-    
+
     // Add agreement ID
     page.drawText(`Agreement ID: ${agreementId}`, {
       x: margin,
@@ -461,7 +461,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       font: helveticaBold
     });
     y -= lineHeight + 5;
-    
+
     // Add timestamp
     page.drawText(`Generated: ${new Date().toLocaleString()}`, {
       x: margin,
@@ -470,13 +470,13 @@ export const saveMergedDocument = async (content, agreementId) => {
       font: helveticaFont
     });
     y -= lineHeight + 10;
-    
+
     // Extract important agreement details if available
     if (agreement) {
       // Add essential agreement info box
       const infoBoxY = y;
       const infoBoxHeight = 100;
-      
+
       // Draw info box border
       page.drawRectangle({
         x: margin,
@@ -486,7 +486,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         borderColor: rgb(0.8, 0.8, 0.8),
         borderWidth: 1
       });
-      
+
       // Property & Unit info
       page.drawText('Property:', {
         x: margin + 10,
@@ -494,19 +494,19 @@ export const saveMergedDocument = async (content, agreementId) => {
         size: 10,
         font: helveticaBold
       });
-      
+
       const propertyName = String(agreement.property?.name || 'N/A');
       const unitName = String(agreement.unit?.unitnumber || agreement.unit?.name || '');
-      
+
       const propertyText = unitName ? `${propertyName}, Unit ${unitName}` : propertyName;
-      
+
       page.drawText(propertyText, {
         x: margin + 120,
         y: infoBoxY - 20,
         size: 10,
         font: helveticaFont
       });
-      
+
       // Tenant info
       page.drawText('Tenant:', {
         x: margin + 10,
@@ -514,14 +514,14 @@ export const saveMergedDocument = async (content, agreementId) => {
         size: 10,
         font: helveticaBold
       });
-      
+
       page.drawText(String(agreement.rentee?.name || 'N/A'), {
         x: margin + 120,
         y: infoBoxY - 40,
         size: 10,
         font: helveticaFont
       });
-      
+
       // Date range
       page.drawText('Period:', {
         x: margin + 10,
@@ -529,17 +529,17 @@ export const saveMergedDocument = async (content, agreementId) => {
         size: 10,
         font: helveticaBold
       });
-      
+
       const startDate = agreement.startdate ? new Date(agreement.startdate).toLocaleDateString() : 'N/A';
       const endDate = agreement.enddate ? new Date(agreement.enddate).toLocaleDateString() : 'N/A';
-      
+
       page.drawText(`${startDate} to ${endDate}`, {
         x: margin + 120,
         y: infoBoxY - 60,
         size: 10,
         font: helveticaFont
       });
-      
+
       // Monthly Rent and Security Deposit - highlight these as they were missing
       page.drawText('Monthly Rent:', {
         x: margin + 10,
@@ -547,10 +547,10 @@ export const saveMergedDocument = async (content, agreementId) => {
         size: 10,
         font: helveticaBold
       });
-      
+
       // Ensure monthlyRent is a string
       const monthlyRent = String(agreement.terms?.monthlyRent || 'Not specified');
-      
+
       page.drawText(monthlyRent, {
         x: margin + 120,
         y: infoBoxY - 80,
@@ -558,7 +558,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         font: helveticaBold,
         color: rgb(0.2, 0.2, 0.8) // Blue for emphasis
       });
-      
+
       // Security deposit on same line, but right side
       page.drawText('Security Deposit:', {
         x: width - margin - 200,
@@ -566,10 +566,10 @@ export const saveMergedDocument = async (content, agreementId) => {
         size: 10,
         font: helveticaBold
       });
-      
+
       // Ensure securityDeposit is a string
       const securityDeposit = String(agreement.terms?.depositAmount || 'Not specified');
-      
+
       page.drawText(securityDeposit, {
         x: width - margin - 90,
         y: infoBoxY - 80,
@@ -577,13 +577,13 @@ export const saveMergedDocument = async (content, agreementId) => {
         font: helveticaBold,
         color: rgb(0.2, 0.2, 0.8) // Blue for emphasis
       });
-      
+
       // Update y position after info box
       y = infoBoxY - infoBoxHeight - 20;
     } else {
       y -= headingSpacing;
     }
-    
+
     const fontForRun = (run, fallbackBold = false) => {
       const bold = Boolean(run?.bold || fallbackBold);
       const italic = Boolean(run?.italic);
@@ -691,26 +691,26 @@ export const saveMergedDocument = async (content, agreementId) => {
           font
         });
       };
-      
+
       // Ensure text is a string
       const textStr = String(text || '');
       const words = textStr.split(' ');
-      
+
       let currentLine = '';
-      
+
       words.forEach(word => {
         const potentialLine = currentLine ? `${currentLine} ${word}` : word;
         const potentialWidth = font.widthOfTextAtSize(potentialLine, fontSize);
-        
+
         if (potentialWidth <= maxWidth) {
           currentLine = potentialLine;
         } else {
           // Draw current line and start a new one
           drawLine(currentLine);
-          
+
           y -= lineHeight;
           currentLine = word;
-          
+
           // Add a new page if we're near the bottom
           if (y < margin) {
             page = pdfDoc.addPage([612, 792]);
@@ -718,15 +718,15 @@ export const saveMergedDocument = async (content, agreementId) => {
           }
         }
       });
-      
+
       // Draw remaining text
       if (currentLine) {
         drawLine(currentLine);
-        
+
         y -= isHeading ? (lineHeight + headingSpacing) : (lineHeight + paragraphSpacing);
       }
     };
-    
+
     // Evia locates the signature at the marker. Keep its space in the source
     // document; ordinary paragraph spacing is not enough for the provider stamp.
     const isSignatureMarker = (item) => Object.values(EVIA_SIGNATURE_ANCHORS)
@@ -742,7 +742,7 @@ export const saveMergedDocument = async (content, agreementId) => {
       }
 
       if (signatureMarker) {y -= 20;}
-      
+
       if (item.type === 'heading') {
         const fontSize = item.level === 1 ? 18 : (item.level === 2 ? 16 : 14);
         if (Array.isArray(item.runs) && item.runs.length > 0) {
@@ -769,7 +769,7 @@ export const saveMergedDocument = async (content, agreementId) => {
         // Calculate indentation based on list level
         const indentation = margin + (item.level * 20);
         const fontSize = 12;
-        
+
         // Draw the bullet or number prefix - ensure it's a string
         page.drawText(String(item.prefix || '• '), {
           x: indentation - 15,
@@ -777,7 +777,7 @@ export const saveMergedDocument = async (content, agreementId) => {
           size: fontSize,
           font: helveticaBold
         });
-        
+
         // Add the list item text with proper wrapping
         const maxWidth = width - (indentation + 20) - margin;
         // Ensure text is a string
@@ -785,11 +785,11 @@ export const saveMergedDocument = async (content, agreementId) => {
         const words = itemText.split(' ');
         let currentLine = '';
         let firstLine = true;
-        
+
         words.forEach(word => {
           const potentialLine = currentLine ? `${currentLine} ${word}` : word;
           const potentialWidth = helveticaFont.widthOfTextAtSize(potentialLine, fontSize);
-          
+
           if (potentialWidth <= maxWidth) {
             currentLine = potentialLine;
           } else {
@@ -800,11 +800,11 @@ export const saveMergedDocument = async (content, agreementId) => {
               size: fontSize,
               font: helveticaFont
             });
-            
+
             y -= lineHeight;
             currentLine = word;
             firstLine = false;
-            
+
             // Add a new page if we're near the bottom
             if (y < margin) {
               page = pdfDoc.addPage([612, 792]);
@@ -812,7 +812,7 @@ export const saveMergedDocument = async (content, agreementId) => {
             }
           }
         });
-        
+
         // Draw remaining text
         if (currentLine) {
           page.drawText(currentLine, {
@@ -821,7 +821,7 @@ export const saveMergedDocument = async (content, agreementId) => {
             size: fontSize,
             font: helveticaFont
           });
-          
+
           y -= lineHeight + (paragraphSpacing / 2); // less spacing for list items
         }
       } else if (item.type === 'table') {
@@ -831,21 +831,21 @@ export const saveMergedDocument = async (content, agreementId) => {
           // Calculate column widths based on the number of columns
           const numCols = Math.max(...tableRows.map(row => row.length));
           const colWidth = (width - margin * 2) / numCols;
-          
+
           // Calculate table height and check if it fits
           const rowHeight = lineHeight * 2;
           const tableHeight = tableRows.length * rowHeight;
-          
+
           if (y - tableHeight < margin) {
             // Table won't fit, create a new page
             page = pdfDoc.addPage([612, 792]);
             y = height - margin;
           }
-          
+
           // Starting position for the table
           const tableX = margin;
           let tableY = y;
-          
+
           // Draw table borders - outer rectangle
           page.drawRectangle({
             x: tableX,
@@ -856,12 +856,12 @@ export const saveMergedDocument = async (content, agreementId) => {
             borderWidth: 1,
             opacity: 0.8
           });
-          
+
           // Draw each row
           for (let i = 0; i < tableRows.length; i++) {
             const row = tableRows[i];
             const isHeader = i === 0 && row.some(cell => cell.isHeader);
-            
+
             // Draw row background for headers
             if (isHeader) {
               page.drawRectangle({
@@ -872,7 +872,7 @@ export const saveMergedDocument = async (content, agreementId) => {
                 color: rgb(0.9, 0.9, 0.9)
               });
             }
-            
+
             // Draw row separator
             if (i > 0) {
               page.drawLine({
@@ -883,14 +883,14 @@ export const saveMergedDocument = async (content, agreementId) => {
                 opacity: 0.5
               });
             }
-            
+
             // Process cells
             let cellX = tableX;
             for (let j = 0; j < row.length; j++) {
               const cell = row[j];
               const font = cell.isBold ? helveticaBold : helveticaFont;
               const fontSize = 10;
-              
+
               // Draw cell separator (except for first column)
               if (j > 0) {
                 page.drawLine({
@@ -901,14 +901,14 @@ export const saveMergedDocument = async (content, agreementId) => {
                   opacity: 0.5
                 });
               }
-              
+
               // Calculate text that fits in cell
               const cellText = cell.text || '';
               const maxChars = Math.floor(colWidth / (fontSize * 0.6));
-              const displayText = cellText.length > maxChars 
+              const displayText = cellText.length > maxChars
                 ? cellText.substring(0, maxChars - 3) + '...' 
                 : cellText;
-              
+
               // Draw cell text
               page.drawText(displayText, {
                 x: cellX + 5,
@@ -916,14 +916,14 @@ export const saveMergedDocument = async (content, agreementId) => {
                 size: fontSize,
                 font: font
               });
-              
+
               cellX += colWidth;
             }
-            
+
             // Move to next row
             tableY -= rowHeight;
           }
-          
+
           // Update y position to after the table
           y = tableY - 15;
         }
@@ -944,20 +944,20 @@ export const saveMergedDocument = async (content, agreementId) => {
           font: helveticaFont
         });
     }
-    
+
     // Save the PDF to bytes
     const pdfBytes = await pdfDoc.save();
-    
+
     // Convert to a blob for upload
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-    
+
     // Define the file path in storage
     const fileName = `final_agreement_${Date.now()}.pdf`;
     const agreementFolder = `agreements/${agreementId}`;
     const filePath = `${agreementFolder}/${fileName}`;
-    
+
     console.log('Uploading PDF to storage path:', filePath);
-    
+
     try {
       const uploaded = await uploadTenantFile({
         bucket: STORAGE_BUCKETS.FILES,
@@ -991,15 +991,15 @@ export const saveMergedDocument = async (content, agreementId) => {
 export const convertDocxToPdf = async (agreementId) => {
   try {
     console.log('Converting DOCX to PDF for agreement:', agreementId);
-    
+
     if (!agreementId) {
       throw new Error('Agreement ID is required for PDF conversion');
     }
-    
+
     // Define the path to the DOCX file in storage
     const docxPath = `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}/final_agreement.docx`;
     console.log('Downloading DOCX from storage path:', docxPath);
-    
+
     // List files in directory to debug any issues
     try {
       const fileData = await listTenantFiles({
@@ -1016,49 +1016,49 @@ export const convertDocxToPdf = async (agreementId) => {
       bucket: STORAGE_BUCKETS.FILES,
       path: docxPath
     });
-    
+
     // Validate the downloaded data
     if (!docxData || docxData.size === 0) {
       console.error('Downloaded DOCX file is empty or null');
       throw new Error('DOCX file is empty or could not be downloaded');
     }
-    
+
     console.log('DOCX file downloaded successfully, size:', docxData.size);
-    
+
     // Create a new PDF document
     // Note: In a browser environment, full DOCX to PDF conversion is limited
     // This creates a simple PDF with basic information
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([600, 800]);
-    
+
     // Add title to the PDF
     page.drawText('Rental Agreement', {
       x: 50,
       y: 750,
       size: 24
     });
-    
+
     // Add agreement ID to the PDF
     page.drawText(`Agreement ID: ${agreementId}`, {
       x: 50,
       y: 720,
       size: 12
     });
-    
+
     // Add timestamp
     page.drawText(`Generated: ${new Date().toLocaleString()}`, {
       x: 50,
       y: 690,
       size: 10
     });
-    
+
     // Add note about document
     page.drawText('The complete agreement is available in DOCX format.', {
       x: 50,
       y: 660,
       size: 12
     });
-    
+
     // Add a tenant-scoped link to the original DOCX
     const docxUrl = buildStorageUrl(STORAGE_BUCKETS.FILES, docxPath);
 
@@ -1076,15 +1076,15 @@ export const convertDocxToPdf = async (agreementId) => {
         color: rgb(0, 0, 1) // Blue text for the link
       });
     }
-    
+
     // Save the PDF to bytes
     const pdfBytes = await pdfDoc.save();
-    
+
     // Convert to a blob for upload
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-    
+
     console.log('PDF generated successfully');
-    
+
     // Return the PDF blob
     return pdfBlob;
   } catch (error) {
@@ -1103,32 +1103,32 @@ export const convertDocxToPdf = async (agreementId) => {
 export const generatePdf = async (formData) => {
   try {
     console.log('Generating PDF for agreement:', formData.id || 'new agreement');
-    
+
     if (!formData || !formData.content) {
       console.warn('Agreement content is missing, attempting to use processed content');
     }
-    
+
     // First save the document as DOCX
     const content = formData.content || 'Agreement content not available';
     const agreementId = formData.id || `temp_${Date.now()}`;
-    
+
     // Save the content as DOCX
     const docxUrl = await saveMergedDocument(content, agreementId);
-    
+
     if (!docxUrl) {
       throw new Error('Failed to save document as DOCX');
     }
-    
+
     // Convert DOCX to PDF
     const pdfBlob = await convertDocxToPdf(agreementId);
-    
+
     if (!pdfBlob) {
       throw new Error('Failed to convert document to PDF');
     }
-    
+
     // Define the PDF file path in storage
     const pdfPath = `${BUCKET_FOLDERS[STORAGE_BUCKETS.FILES].AGREEMENTS}/${agreementId}/final_agreement.pdf`;
-    
+
     // Upload PDF through the explicit tenant-scoped storage API
     const uploadedPdf = await uploadTenantFile({
       bucket: STORAGE_BUCKETS.FILES,
@@ -1138,7 +1138,7 @@ export const generatePdf = async (formData) => {
     const storedPdfPath = uploadedPdf?.path || pdfPath;
     const pdfUrl = uploadedPdf?.url || buildStorageUrl(STORAGE_BUCKETS.FILES, storedPdfPath);
     console.log('PDF generated and uploaded successfully:', pdfUrl);
-    
+
     return pdfUrl;
   } catch (error) {
     console.error('Error generating PDF:', error);
@@ -1149,20 +1149,20 @@ export const generatePdf = async (formData) => {
 
 function processHtmlContent(content) {
   if (!content) {return [];}
-  
+
   console.log('Processing HTML content for document generation');
-  
+
   const contentPieces = [];
   let remainingContent = content;
-  
+
   // Process tables first to avoid interference with other elements
-  const tableParts = remainingContent.match(/\<table[^>]*>([\s\S]*?)<\/table>/gi);
+  const tableParts = remainingContent.match(/<table[^>]*>([\s\S]*?)<\/table>/gi);
   if (tableParts && tableParts.length > 0) {
     for (let i = 0; i < tableParts.length; i++) {
       const tablePart = tableParts[i];
       // Remove the table from the content to process other elements
       remainingContent = remainingContent.replace(tablePart, '{{TABLE_PLACEHOLDER_' + i + '}}');
-      
+
       // Extract rows
       const rows = [];
       const rowMatch = tablePart.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
@@ -1175,11 +1175,11 @@ function processHtmlContent(content) {
             for (const cell of cellMatch) {
               // Clean cell content of HTML tags but preserve formatting
               let cellContent = cell.replace(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/i, '$1');
-              
+
               // Convert basic HTML formatting to DOCX formatting
               const isBold = /<strong>|<b>/i.test(cellContent);
               const isItalic = /<em>|<i>/i.test(cellContent);
-              
+
               // Clean all HTML tags
               cellContent = cellContent.replace(/<[^>]*>/g, '');
               // Decode HTML entities
@@ -1189,7 +1189,7 @@ function processHtmlContent(content) {
                                       .replace(/&gt;/g, '>')
                                       .replace(/&quot;/g, '"')
                                       .replace(/&#39;/g, "'");
-              
+
               cells.push({
                 text: cellContent.trim(),
                 bold: isBold,
@@ -1206,14 +1206,14 @@ function processHtmlContent(content) {
       });
     }
   }
-  
+
   // Process headings
-  const headingMatches = remainingContent.match(/\<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi);
+  const headingMatches = remainingContent.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi);
   if (headingMatches) {
     for (const match of headingMatches) {
-      const level = parseInt(match.match(/\<h([1-6])/i)[1], 10);
+      const level = parseInt(match.match(/<h([1-6])/i)[1], 10);
       let text = match.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/i, '$1');
-      
+
       // Clean HTML tags
       text = text.replace(/<[^>]*>/g, '');
       // Decode HTML entities
@@ -1223,7 +1223,7 @@ function processHtmlContent(content) {
                 .replace(/&gt;/g, '>')
                 .replace(/&quot;/g, '"')
                 .replace(/&#39;/g, "'");
-      
+
       contentPieces.push({
         type: 'heading',
         text: text.trim(),
@@ -1232,17 +1232,17 @@ function processHtmlContent(content) {
       remainingContent = remainingContent.replace(match, '');
     }
   }
-  
+
   // Process paragraphs
-  const paragraphMatches = remainingContent.match(/\<p[^>]*>(.*?)<\/p>/gi);
+  const paragraphMatches = remainingContent.match(/<p[^>]*>(.*?)<\/p>/gi);
   if (paragraphMatches) {
     for (const match of paragraphMatches) {
       let text = match.replace(/<p[^>]*>(.*?)<\/p>/i, '$1');
-      
+
       // Extract formatting
       const isBold = /<strong>|<b>/i.test(text);
       const isItalic = /<em>|<i>/i.test(text);
-      
+
       // Clean HTML tags
       text = text.replace(/<[^>]*>/g, '');
       // Decode HTML entities
@@ -1252,14 +1252,14 @@ function processHtmlContent(content) {
                 .replace(/&gt;/g, '>')
                 .replace(/&quot;/g, '"')
                 .replace(/&#39;/g, "'");
-      
+
       // Check if this is a table placeholder
       const tablePlaceholder = text.match(/{{TABLE_PLACEHOLDER_(\d+)}}/);
       if (tablePlaceholder) {
         // Table already processed, skip
         continue;
       }
-      
+
       contentPieces.push({
         type: 'paragraph',
         text: text.trim(),
@@ -1269,13 +1269,13 @@ function processHtmlContent(content) {
       remainingContent = remainingContent.replace(match, '');
     }
   }
-  
+
   // Process lists
   const listTypes = [
-    { type: 'unordered', regex: /\<ul[^>]*>([\s\S]*?)<\/ul>/gi },
-    { type: 'ordered', regex: /\<ol[^>]*>([\s\S]*?)<\/ol>/gi }
+    { type: 'unordered', regex: /<ul[^>]*>([\s\S]*?)<\/ul>/gi },
+    { type: 'ordered', regex: /<ol[^>]*>([\s\S]*?)<\/ol>/gi }
   ];
-  
+
   for (const listType of listTypes) {
     const listMatches = remainingContent.match(listType.regex);
     if (listMatches) {
@@ -1285,11 +1285,11 @@ function processHtmlContent(content) {
           const items = [];
           for (const itemMatch of itemMatches) {
             let text = itemMatch.replace(/<li[^>]*>([\s\S]*?)<\/li>/i, '$1');
-            
+
             // Extract formatting
             const isBold = /<strong>|<b>/i.test(text);
             const isItalic = /<em>|<i>/i.test(text);
-            
+
             // Clean HTML tags
             text = text.replace(/<[^>]*>/g, '');
             // Decode HTML entities
@@ -1299,14 +1299,14 @@ function processHtmlContent(content) {
                       .replace(/&gt;/g, '>')
                       .replace(/&quot;/g, '"')
                       .replace(/&#39;/g, "'");
-            
+
             items.push({
               text: text.trim(),
               bold: isBold,
               italic: isItalic
             });
           }
-          
+
           contentPieces.push({
             type: listType.type + 'List',
             items
@@ -1316,7 +1316,7 @@ function processHtmlContent(content) {
       }
     }
   }
-  
+
   // If there's still remaining content after processing all known elements,
   // add it as a simple paragraph (after cleaning)
   if (remainingContent.trim() !== '') {
@@ -1329,7 +1329,7 @@ function processHtmlContent(content) {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .trim();
-    
+
     if (cleanedText !== '') {
       contentPieces.push({
         type: 'paragraph',
@@ -1337,7 +1337,7 @@ function processHtmlContent(content) {
       });
     }
   }
-  
+
   console.log(`Processed ${contentPieces.length} content pieces for document`);
   return contentPieces;
 }
@@ -1352,29 +1352,29 @@ function processHtmlContent(content) {
 async function createDocument(html, fileName, agreementId) {
   try {
     console.log(`Creating document for agreement ${agreementId}`);
-    
+
     // Process the HTML content into structured format
     const processedContent = processHtmlContent(html);
-    
+
     // Create a new PDF document
     const pdfDoc = await PDFDocument.create();
-    
+
     // Embed standard fonts
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-    
+
     // Add a page
     let page = pdfDoc.addPage([612, 792]); // US Letter size
     const { width, height } = page.getSize();
     const margin = 50;
-    
+
     // Starting position for content
     let y = height - margin;
     const lineHeight = 14;
     const paragraphSpacing = 10;
     const headingSpacing = 20;
-    
+
     // Add title
     page.drawText(fileName || 'Agreement Document', {
       x: width / 2 - 100,
@@ -1383,7 +1383,7 @@ async function createDocument(html, fileName, agreementId) {
       font: helveticaBold
     });
     y -= 40;
-    
+
     // Add timestamp
     page.drawText(`Generated: ${new Date().toLocaleString()}`, {
       x: margin,
@@ -1392,7 +1392,7 @@ async function createDocument(html, fileName, agreementId) {
       font: helveticaFont
     });
     y -= lineHeight + 20;
-    
+
     // Process content
     for (const piece of processedContent) {
       // Add a new page if we're near the bottom
@@ -1400,36 +1400,39 @@ async function createDocument(html, fileName, agreementId) {
         page = pdfDoc.addPage([612, 792]);
         y = height - margin;
       }
-      
+
       switch (piece.type) {
         case 'heading':
-          const headingText = piece.text || '';
+          {
+const headingText = piece.text || '';
           const headingSize = piece.level === 1 ? 18 : (piece.level === 2 ? 16 : 14);
-          
+
           page.drawText(headingText, {
             x: margin,
             y: y,
             size: headingSize,
             font: helveticaBold
           });
-          
+
           y -= headingSize + headingSpacing;
           break;
-          
+}
+
         case 'paragraph':
-          const paragraphText = piece.text || '';
+          {
+const paragraphText = piece.text || '';
           const font = piece.bold ? helveticaBold : (piece.italic ? helveticaOblique : helveticaFont);
           const fontSize = 12;
-          
+
           // Simple word wrapping
           const words = paragraphText.split(' ');
           let line = '';
           const maxWidth = width - (margin * 2);
-          
+
           for (const word of words) {
             const testLine = line ? line + ' ' + word : word;
             const lineWidth = font.widthOfTextAtSize(testLine, fontSize);
-            
+
             if (lineWidth > maxWidth) {
               page.drawText(line, {
                 x: margin,
@@ -1437,10 +1440,10 @@ async function createDocument(html, fileName, agreementId) {
                 size: fontSize,
                 font: font
               });
-              
+
               line = word;
               y -= lineHeight;
-              
+
               // Add a new page if needed
               if (y < margin) {
                 page = pdfDoc.addPage([612, 792]);
@@ -1450,7 +1453,7 @@ async function createDocument(html, fileName, agreementId) {
               line = testLine;
             }
           }
-          
+
           // Draw remaining text
           if (line) {
             page.drawText(line, {
@@ -1462,18 +1465,20 @@ async function createDocument(html, fileName, agreementId) {
             y -= lineHeight + paragraphSpacing;
           }
           break;
-          
+}
+
         case 'unorderedList':
         case 'orderedList':
-          const items = piece.items || [];
+          {
+const items = piece.items || [];
           const isOrdered = piece.type === 'orderedList';
-          
+
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
             const itemText = item.text || '';
             const itemFont = item.bold ? helveticaBold : (item.italic ? helveticaOblique : helveticaFont);
             const bulletOrNumber = isOrdered ? `${i + 1}. ` : '• ';
-            
+
             // Draw bullet or number
             page.drawText(bulletOrNumber, {
               x: margin,
@@ -1481,20 +1486,20 @@ async function createDocument(html, fileName, agreementId) {
               size: 12,
               font: helveticaBold
             });
-            
+
             // Calculate width of the bullet/number for text indentation
             const bulletWidth = helveticaBold.widthOfTextAtSize(bulletOrNumber, 12);
-            
+
             // Simple word wrapping for list item text
             const words = itemText.split(' ');
             let line = '';
             const maxWidth = width - (margin * 2 + bulletWidth + 5);
             let firstLine = true;
-            
+
             for (const word of words) {
               const testLine = line ? line + ' ' + word : word;
               const lineWidth = itemFont.widthOfTextAtSize(testLine, 12);
-              
+
               if (lineWidth > maxWidth) {
                 page.drawText(line, {
                   x: firstLine ? margin + bulletWidth + 5 : margin + bulletWidth + 15,
@@ -1502,11 +1507,11 @@ async function createDocument(html, fileName, agreementId) {
                   size: 12,
                   font: itemFont
                 });
-                
+
                 line = word;
                 y -= lineHeight;
                 firstLine = false;
-                
+
                 // Add a new page if needed
                 if (y < margin) {
                   page = pdfDoc.addPage([612, 792]);
@@ -1516,7 +1521,7 @@ async function createDocument(html, fileName, agreementId) {
                 line = testLine;
               }
             }
-            
+
             // Draw remaining text
             if (line) {
               page.drawText(line, {
@@ -1529,29 +1534,31 @@ async function createDocument(html, fileName, agreementId) {
             }
           }
           break;
-          
+}
+
         case 'table':
-          const rows = piece.rows || [];
+          {
+const rows = piece.rows || [];
           if (rows.length === 0) {break;}
-          
+
           // Calculate table dimensions
           const numCols = Math.max(...rows.map(row => (row.cells || []).length));
           if (numCols === 0) {break;}
-          
+
           const colWidth = (width - margin * 2) / numCols;
           const rowHeight = 20;
           const tableHeight = rows.length * rowHeight;
-          
+
           // Check if table fits on current page
           if (y - tableHeight < margin) {
             page = pdfDoc.addPage([612, 792]);
             y = height - margin;
           }
-          
+
           // Draw table
           const tableX = margin;
           let tableY = y;
-          
+
           // Draw table border
           page.drawRectangle({
             x: tableX,
@@ -1561,12 +1568,12 @@ async function createDocument(html, fileName, agreementId) {
             borderColor: rgb(0, 0, 0),
             borderWidth: 1
           });
-          
+
           // Draw rows
           for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const cells = row.cells || [];
-            
+
             // Draw row divider if not first row
             if (i > 0) {
               page.drawLine({
@@ -1576,13 +1583,13 @@ async function createDocument(html, fileName, agreementId) {
                 color: rgb(0, 0, 0)
               });
             }
-            
+
             // Draw cells
             for (let j = 0; j < numCols && j < cells.length; j++) {
               const cell = cells[j];
               const cellText = cell.text || '';
               const cellFont = cell.bold ? helveticaBold : (cell.italic ? helveticaOblique : helveticaFont);
-              
+
               // Draw column divider if not first column
               if (j > 0) {
                 page.drawLine({
@@ -1592,7 +1599,7 @@ async function createDocument(html, fileName, agreementId) {
                   color: rgb(0, 0, 0)
                 });
               }
-              
+
               // Draw cell text (truncate if needed)
               const fontSize = 10;
               const maxWidth = colWidth - 6;
@@ -1600,7 +1607,7 @@ async function createDocument(html, fileName, agreementId) {
               const displayText = textWidth > maxWidth
                 ? cellText.substring(0, Math.floor(cellText.length * (maxWidth / textWidth) - 3)) + '...'
                 : cellText;
-              
+
               page.drawText(displayText, {
                 x: tableX + j * colWidth + 3,
                 y: tableY - i * rowHeight - rowHeight/2 + fontSize/2,
@@ -1609,17 +1616,18 @@ async function createDocument(html, fileName, agreementId) {
               });
             }
           }
-          
+
           y = tableY - tableHeight - 10;
           break;
+}
       }
     }
-    
+
     // Add page numbers
     for (let i = 0; i < pdfDoc.getPageCount(); i++) {
       const page = pdfDoc.getPage(i);
       const { width } = page.getSize();
-      
+
       page.drawText(`Page ${i + 1} of ${pdfDoc.getPageCount()}`, {
         x: width / 2 - 40,
         y: 30,
@@ -1627,17 +1635,17 @@ async function createDocument(html, fileName, agreementId) {
         font: helveticaFont
       });
     }
-    
+
     // Save the PDF to bytes
     const pdfBytes = await pdfDoc.save();
-    
+
     // Convert to a blob for upload
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-    
+
     // Generate a unique file name with timestamp
     const timestamp = new Date().getTime();
     const filePath = `agreements/${agreementId}/${fileName.replace(/\s+/g, '_')}_${timestamp}.pdf`;
-    
+
     // Upload the file through the explicit tenant-scoped storage API
     try {
       const uploadedDocument = await uploadTenantFile({
@@ -1669,24 +1677,6 @@ async function createDocument(html, fileName, agreementId) {
 }
 
 // Map Evia status to our status format
-const mapStatusForTracker = (eviaStatus) => {
-  if (!eviaStatus) {
-    return null;
-  }
-  
-  switch (String(eviaStatus)) {
-    case 'pending':
-    case 'pending_signature':
-      return 'pending_signature';
-    case 'in_progress':
-    case 'partially_signed':
-      return 'partially_signed';
-    case 'completed':
-      return 'signed';
-    default:
-      return String(eviaStatus);
-  }
-};
 
 export {
   processHtmlContent,

@@ -86,7 +86,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         code: 'INVITATION_REQUIRED'
       });
     } catch (error) {
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+      if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
       next(error);
     }
   });
@@ -133,7 +133,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         }
       });
     } catch (error) {
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+      if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
       next(error);
     }
   });
@@ -157,7 +157,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         }
       });
     } catch (error) {
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+      if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
       next(error);
     }
   });
@@ -176,7 +176,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
 
       res.json({ data: result });
     } catch (error) {
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+      if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
       next(error);
     }
   });
@@ -225,7 +225,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         }
       });
     } catch (error) {
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+      if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
       next(error);
     }
   });

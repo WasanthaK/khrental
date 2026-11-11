@@ -25,7 +25,7 @@ export const createEnquiryStore = ({poolProvider=getMssqlPool}={}) => {
       throw err;
     }
   };
-  const requireActor = async (query,actor,owner=false,journey=false) => {
+  const requireActor = async (query,actor,owner=false,_journey=false) => {
     // Recheck live session, reciprocal global identity and authority inside the
     // serialized write/read. Headers, browser roles and middleware snapshots cannot grant access.
     const rows = await query(`SELECT TOP(1) au.id,au.name,au.email

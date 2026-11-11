@@ -100,7 +100,7 @@ test('browser selection state clears cached authority until server-confirmed org
   const auth=readFileSync(new URL('../src/hooks/useAuth.jsx',import.meta.url),'utf8');
   const start=auth.indexOf('  const normalizeTenantState =');
   const end=auth.indexOf('\n  const mergeTenantContext',start);
-  const normalize=new Function(auth.slice(start,end)+';return normalizeTenantState;')();
+  const normalize=new Function('useCallback',auth.slice(start,end)+';return normalizeTenantState;')(callback=>callback);
   const choices=[{tenant_id:'a',role:'admin',status:'active'},{tenant_id:'b',role:'rentee',status:'active'}];
   const result=normalize({role:'authenticated',tenant_id:'old',tenantId:'old',membership:choices[0]},
     {resolution:'selection-required',memberships:choices});

@@ -16,7 +16,7 @@ const describeNotification = (message, portal) => {
   const match = /^Maintenance (request_created|request_assigned|work_started|work_completed|request_cancelled): request ([0-9a-f-]{36})$/i.exec(
     String(message || '')
   );
-  if (!match) return { title: 'Notification', detail: String(message || ''), requestId: null, link: null };
+  if (!match) {return { title: 'Notification', detail: String(message || ''), requestId: null, link: null };}
   const requestId = match[2].toLowerCase();
   return {
     title: MAINTENANCE_EVENT_LABELS[match[1].toLowerCase()] || 'Maintenance update',
@@ -44,19 +44,19 @@ const Notifications = ({ portal = 'dashboard' }) => {
     setError('');
     try {
       const response = await getUserNotifications();
-      if (current !== requestSerial.current) return;
+      if (current !== requestSerial.current) {return;}
       if (!response.success || !Array.isArray(response.data)) {
         throw new Error(response.error || 'Unable to load notifications.');
       }
       setItems(response.data);
     } catch (cause) {
-      if (current !== requestSerial.current) return;
+      if (current !== requestSerial.current) {return;}
       setItems([]);
       setError(cause.message || 'Unable to load notifications.');
     } finally {
-      if (current === requestSerial.current) setLoading(false);
+      if (current === requestSerial.current) {setLoading(false);}
     }
-  }, [activeTenantId]);
+  }, []);
 
   useEffect(() => {
     // Clear the previous organization's list immediately on a tenant switch.
@@ -64,10 +64,10 @@ const Notifications = ({ portal = 'dashboard' }) => {
     setMarkingId(null);
     refresh();
     return () => { requestSerial.current += 1; };
-  }, [refresh]);
+  }, [refresh, activeTenantId]);
 
   const markRead = async notification => {
-    if (!notification?.id || markingId) return;
+    if (!notification?.id || markingId) {return;}
     const current = requestSerial.current;
     setMarkingId(notification.id);
     setError('');
@@ -76,7 +76,7 @@ const Notifications = ({ portal = 'dashboard' }) => {
       if (!response.success || !response.data?.[0]?.id) {
         throw new Error(response.error || 'Unable to mark the notification as read.');
       }
-      if (current !== requestSerial.current) return;
+      if (current !== requestSerial.current) {return;}
       setItems(existing => existing.map(item =>
         item.id === notification.id ? { ...item, is_read: true } : item
       ));
@@ -85,7 +85,7 @@ const Notifications = ({ portal = 'dashboard' }) => {
         setError(cause.message || 'Unable to mark the notification as read.');
       }
     } finally {
-      if (current === requestSerial.current) setMarkingId(null);
+      if (current === requestSerial.current) {setMarkingId(null);}
     }
   };
 

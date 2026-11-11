@@ -8,7 +8,7 @@ export default function DatabaseReadiness({ children }) {
   useEffect(() => {
     const update = event => {
       setState(event.detail);
-      if (event.detail === 'ready') setStarted(true);
+      if (event.detail === 'ready') {setStarted(true);}
     };
     window.addEventListener('quixo:database', update);
     ensureDatabaseReady().then(() => { setStarted(true); setState('ready'); }).catch(() => {});

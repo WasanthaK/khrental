@@ -26,3 +26,16 @@ test('live utility approval, rejection and governed invoice linkage remain intac
   assert.match(monthly, /invoice_id IS NULL/);
   assert.match(monthly, /UPDATE utility_readings[\s\S]*?WHERE tenant_id = @tenantId/);
 });
+
+test('legacy reading upload rejects unsupported photos before persisting a reading', async () => {
+  const source = read('../src/services/utilityBillingService.js');
+  const start = source.indexOf('export const submitUtilityReading =');
+  let writes = 0;
+  const submit = new Function('platformClient', 'console',
+    source.slice(start).replace('export const', 'const') + ';return submitUtilityReading;')(
+    { from() { writes++; throw new Error('Unexpected write'); } }, { log() {}, error() {} });
+  const result = await submit({ propertyid: 'property', renteeid: 'renter', utilitytype: 'water', readingvalue: 10 }, [{}]);
+  assert.equal(result.success, false);
+  assert.match(result.error, /utility reading form/);
+  assert.equal(writes, 0);
+});

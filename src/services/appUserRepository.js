@@ -210,12 +210,10 @@ export const linkAppUserRecord = async (authId, appUserId) => {
 export const findAppUserByEmailRecord = async (email) => {
   try {
     if (isMssqlApiEnabled()) {
-      try {
+
         const data = await requestMssqlApi(`/api/mssql/app-users/lookup?email=${encodeURIComponent(email)}`);
         return { success: true, data: data ? ensureValidTimestamps(data) : data };
-      } catch (mssqlError) {
-        throw mssqlError;
-      }
+
     }
 
     const { data, error } = await platformClient
@@ -242,12 +240,10 @@ export const findAppUserByEmailRecord = async (email) => {
 export const findAppUserByAuthIdRecord = async (authId) => {
   try {
     if (isMssqlApiEnabled()) {
-      try {
+
         const data = await requestMssqlApi(`/api/mssql/app-users/lookup?authId=${encodeURIComponent(authId)}`);
         return { success: true, data: data ? ensureValidTimestamps(data) : data };
-      } catch (mssqlError) {
-        throw mssqlError;
-      }
+
     }
 
     const { data, error } = await platformClient
@@ -274,12 +270,10 @@ export const findAppUserByAuthIdRecord = async (authId) => {
 export const checkAppUserInvitationStatusRecord = async (userId) => {
   try {
     if (isMssqlApiEnabled()) {
-      try {
+
         const data = await requestMssqlApi(`/api/mssql/app-users/${userId}/invitation-status`);
         return { success: true, data };
-      } catch (mssqlError) {
-        throw mssqlError;
-      }
+
     }
 
     try {
@@ -376,16 +370,14 @@ export const updateAppUserRecord = async (id, userData) => {
 export const fetchAppUserRecord = async (id) => {
   try {
     if (isMssqlApiEnabled()) {
-      try {
+
         const data = await requestMssqlApi(`/api/mssql/app-users/${id}`);
         if (!data) {
           throw new Error('User not found');
         }
 
         return ensureValidTimestamps(data);
-      } catch (mssqlError) {
-        throw mssqlError;
-      }
+
     }
 
     const { data, error } = await platformClient
@@ -416,7 +408,7 @@ export const fetchAppUsersRecord = async (userType, filters = {}) => {
     }
 
     if (isMssqlApiEnabled()) {
-      try {
+
         const searchParams = new URLSearchParams();
 
         if (userType) {
@@ -436,9 +428,7 @@ export const fetchAppUsersRecord = async (userType, filters = {}) => {
           throw error;
         }
         return data.map((record) => ensureValidTimestamps(record));
-      } catch (mssqlError) {
-        throw mssqlError;
-      }
+
     }
 
     let query = platformClient

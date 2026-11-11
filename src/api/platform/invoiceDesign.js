@@ -22,13 +22,13 @@ const reject = (field, message) => {
   throw error;
 };
 export const normalizeInvoiceDesign = (value = {}) => {
-  if (value === null || value === undefined) value = {};
+  if (value === null || value === undefined) {value = {};}
   if (typeof value !== 'object' || Array.isArray(value)) {
     reject('design', 'Invoice design must be a structured object.');
   }
   const allowed = Object.keys(DEFAULT_INVOICE_DESIGN);
   const extra = Object.keys(value).find(k => !allowed.includes(k));
-  if (extra) reject(extra, 'Unsupported invoice design field.');
+  if (extra) {reject(extra, 'Unsupported invoice design field.');}
   const template = value.template ?? DEFAULT_INVOICE_DESIGN.template;
   if (!Object.hasOwn(INVOICE_TEMPLATES, template)) {
     reject('template', 'Choose a curated invoice layout.');
@@ -48,7 +48,7 @@ export const normalizeInvoiceDesign = (value = {}) => {
     }
   }
   const paperFormat = value.paperFormat ?? 'A4';
-  if (!['A4', 'Letter'].includes(paperFormat)) reject('paperFormat', 'Choose A4 or Letter paper.');
+  if (!['A4', 'Letter'].includes(paperFormat)) {reject('paperFormat', 'Choose A4 or Letter paper.');}
   const showPropertyAddress = value.showPropertyAddress ?? true;
   const showIssuerContact = value.showIssuerContact ?? true;
   if (typeof showPropertyAddress !== 'boolean' || typeof showIssuerContact !== 'boolean') {

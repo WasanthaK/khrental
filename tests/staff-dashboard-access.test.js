@@ -13,11 +13,11 @@ async function load(flags, failTable) {
     'setLoading', 'setError', 'setActiveSection', 'setStats', 'setRecentInvoices', effect);
   run(...names.map(name => Boolean(flags[name])), async options => {
     calls.push(options.table);
-    if (options.table === failTable) return { error: new Error('Unavailable') };
+    if (options.table === failTable) {return { error: new Error('Unavailable') };}
     return { count: 2, data: options.table === 'invoices' ? [{ status: 'paid' }] : [] };
   }, async () => { calls.push('team'); return []; },
   { PAID: 'paid', PENDING: 'pending', OVERDUE: 'overdue' },
-  value => { if (!value) finish(); }, value => { state.error = value; }, () => {},
+  value => { if (!value) {finish();} }, value => { state.error = value; }, () => {},
   value => { state.stats = value; }, value => { state.recent = value; });
   await finished;
   return { calls, state };

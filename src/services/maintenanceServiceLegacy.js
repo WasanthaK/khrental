@@ -1,17 +1,10 @@
 import { platform as platformClient } from './platformClient';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
-import { notifyUser } from './notificationService';
+import './notificationService';
 import { toDatabaseFormat, fromDatabaseFormat } from '../utils/databaseUtils';
-import { fetchData, insertData, updateData, deleteData, checkUserExists } from './platformClient';
-import { saveFile, uploadFile, STORAGE_BUCKETS, BUCKET_FOLDERS, saveImage } from './fileService';
-import { 
-  notifyStaffAboutNewRequest, 
-  notifyAboutAssignment,
-  notifyRenteeAboutWorkStarted,
-  notifyRenteeAboutCompletion,
-  notifyAboutCancellation,
-  notifyAboutNewComment
-} from './notificationService';
+import { fetchData, updateData, deleteData, checkUserExists } from './platformClient';
+import { saveFile, STORAGE_BUCKETS, saveImage } from './fileService';
+import { notifyStaffAboutNewRequest, notifyAboutAssignment, notifyRenteeAboutWorkStarted, notifyRenteeAboutCompletion } from './notificationService';
 import { findAppUserByAuthId } from './appUserService';
 import { getApiBaseUrl } from '../utils/env';
 
@@ -24,7 +17,7 @@ import { getApiBaseUrl } from '../utils/env';
 export const createMaintenanceRequest = async (input, userId) => {
   try {
     console.log('Creating maintenance request with input:', input);
-    
+
     // Check for required fields - Modified to match what the form provides
     if (!input.title || !input.description || !input.propertyid) {
       return {
@@ -32,14 +25,14 @@ export const createMaintenanceRequest = async (input, userId) => {
         error: 'Missing required fields'
       };
     }
-    
+
     // Before creating request, get the user's profile ID from app_users
     let profileId = null;
-    
+
     if (userId) {
       // Use the checkUserExists utility function with isAuthId=true since userId is an auth ID
       const { data: userData, exists, error: userError } = await checkUserExists(userId, true);
-      
+
       if (userError) {
         console.error('Error fetching user profile:', userError);
       } else if (exists && userData) {
@@ -53,14 +46,14 @@ export const createMaintenanceRequest = async (input, userId) => {
         };
       }
     }
-    
+
     if (!profileId) {
       return {
         success: false,
         error: 'Unable to determine user profile ID for maintenance request'
       };
     }
-    
+
     // Construct the request object with the correct profileId as renteeid
     const request = {
       title: input.title,
@@ -74,39 +67,39 @@ export const createMaintenanceRequest = async (input, userId) => {
       createdat: new Date().toISOString(),
       updatedat: new Date().toISOString()
     };
-    
+
     console.log('Creating maintenance request with data:', request);
-    
+
     // Insert the request first
     const { data: insertedRequest, error: insertError } = await platformClient
       .from('maintenance_requests')
       .insert(request)
       .select('*');
-    
+
     if (insertError) {
       console.error('Error inserting maintenance request:', insertError);
       throw insertError;
     }
-    
+
     if (!insertedRequest || insertedRequest.length === 0) {
       throw new Error('Failed to create maintenance request');
     }
-    
+
     const createdRequest = insertedRequest[0];
     console.log('Created maintenance request:', createdRequest);
-    
+
     // Upload images and create entries in maintenance_request_images if images exist
     let imageUrls = [];
-    
+
     if (input.images && input.images.length > 0) {
       // First, upload the images to storage
       imageUrls = await uploadMaintenanceImages(createdRequest.id, input.images, 'initial');
       console.log('Uploaded image URLs:', imageUrls);
-      
+
       // Then create entries in maintenance_request_images table
       for (const imageUrl of imageUrls) {
-        if (!imageUrl) continue;
-        
+        if (!imageUrl) {continue;}
+
         // Create entry in maintenance_request_images table
         const { error: imageInsertError } = await platformClient
           .from('maintenance_request_images')
@@ -118,14 +111,14 @@ export const createMaintenanceRequest = async (input, userId) => {
             uploaded_by: userId,
             uploaded_at: new Date().toISOString()
           });
-        
+
         if (imageInsertError) {
           console.error('Error inserting image record:', imageInsertError);
           // Continue with other images even if one fails
         }
       }
     }
-    
+
     // Fetch the complete request data with images
     const { data: requestWithImages, error: fetchError } = await platformClient
       .from('maintenance_requests')
@@ -137,15 +130,15 @@ export const createMaintenanceRequest = async (input, userId) => {
       `)
       .eq('id', createdRequest.id)
       .single();
-    
+
     if (fetchError) {
       console.error('Error fetching created request:', fetchError);
       throw fetchError;
     }
-    
+
     // Notify staff about new request
     await notifyStaffAboutNewRequest(requestWithImages);
-    
+
     return {
       success: true,
       data: requestWithImages
@@ -267,19 +260,19 @@ export async function updateMaintenanceRequest(id, updateData) {
 export const assignMaintenanceRequest = async (id, assignmentData) => {
   try {
     console.log(`Assigning maintenance request ${id} to staff ${assignmentData.staffId}`);
-    
+
     // Validate the assignment data
     if (!id || !assignmentData || !assignmentData.staffId) {
       return { success: false, error: 'Invalid assignment data' };
     }
-    
+
     // Create the update object
     const dataToUpdate = {
       assignedto: assignmentData.staffId,
       assignedat: assignmentData.scheduledDate,
       updatedat: new Date().toISOString()
     };
-    
+
     // Add notes if provided
     if (assignmentData.notes) {
       dataToUpdate.notes = assignmentData.notes;
@@ -287,10 +280,10 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
 
     // First update the maintenance request
     const { data: updatedRequest, error: updateError } = await updateData('maintenance_requests', id, dataToUpdate);
-    
+
     if (updateError) {
       console.error('Error updating request:', updateError.message || JSON.stringify(updateError));
-      return { 
+      return {
         success: false, 
         error: updateError.message || 'Failed to assign request' 
       };
@@ -299,7 +292,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
     // If there are assignment images, create entries in maintenance_request_images
     if (assignmentData.assignmentImages && assignmentData.assignmentImages.length > 0) {
       console.log('Processing assignment images:', assignmentData.assignmentImages);
-      
+
       for (const image of assignmentData.assignmentImages) {
         try {
           // Skip if image is undefined or null
@@ -348,7 +341,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
         }
       }
     }
-    
+
     // Try to send notifications
     try {
       // Send notifications about the assignment
@@ -360,7 +353,7 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
     }
 
     // Fetch the updated request with images
-    const { data: completeRequest, error: fetchError } = await platformClient
+    const { data: completeRequest } = await platformClient
       .from('maintenance_requests')
       .select(`
         *,
@@ -368,14 +361,14 @@ export const assignMaintenanceRequest = async (id, assignmentData) => {
       `)
       .eq('id', id)
       .single();
-    
-    return { 
+
+    return {
       success: true, 
-      data: completeRequest || updatedRequest 
+      data: completeRequest || updatedRequest
     };
   } catch (error) {
     console.error('Error assigning maintenance request:', error.message || JSON.stringify(error));
-    return { 
+    return {
       success: false, 
       error: error.message || 'Failed to assign maintenance request' 
     };
@@ -393,19 +386,19 @@ export const startMaintenanceWork = async (id) => {
       status: MAINTENANCE_STATUS.IN_PROGRESS,
       updatedat: new Date().toISOString(),
     };
-    
+
     // Use the shared update helper
     const { data, error } = await updateData('maintenance_requests', id, requestUpdateData);
-    
+
     if (error) {
       throw error;
     }
-    
+
     // Notify the rentee that work has started only if data exists
     if (data) {
       await notifyRenteeAboutWorkStarted(data);
     }
-    
+
     return { success: true, data };
   } catch (error) {
     console.error('Error starting maintenance work:', error.message);
@@ -422,16 +415,16 @@ export const startMaintenanceWork = async (id) => {
 export const completeMaintenanceRequest = async (id, completionData) => {
   try {
     const { notes = '', images = [], userId = null } = completionData;
-    
+
     if (!id) {
       console.error('Cannot complete maintenance request: Missing request ID');
       return { success: false, error: 'Request ID is required' };
     }
-    
+
     // Get the current user information
     let userRole = 'staff';
     let userName = 'System';
-    
+
     if (userId) {
       const { data: userData, exists } = await checkUserExists(userId);
       if (exists && userData) {
@@ -439,10 +432,10 @@ export const completeMaintenanceRequest = async (id, completionData) => {
         userRole = userData.role || 'staff';
       }
     }
-    
+
     // Create a timestamp for the completion
     const timestamp = new Date().toISOString();
-    
+
     // Format the completion note as a JSON object
     const formattedNote = [{
       content: notes,
@@ -456,9 +449,9 @@ export const completeMaintenanceRequest = async (id, completionData) => {
       isAdminMessage: userRole === 'admin',
       isInternal: false
     }];
-    
+
     console.log('Formatted completion note:', formattedNote);
-    
+
     // Process completion images if provided
     let uploadedImages = [];
     if (images && images.length > 0) {
@@ -471,7 +464,7 @@ export const completeMaintenanceRequest = async (id, completionData) => {
         // Continue with completion even if image upload fails
       }
     }
-    
+
     // Prepare the update data
     const updateData = {
       status: MAINTENANCE_STATUS.COMPLETED,
@@ -479,7 +472,7 @@ export const completeMaintenanceRequest = async (id, completionData) => {
       notes: JSON.stringify(formattedNote),
       updatedat: timestamp
     };
-    
+
     // Update the maintenance request in the database
     const { data: updatedRequest, error: updateError } = await platformClient
       .from('maintenance_requests')
@@ -487,14 +480,14 @@ export const completeMaintenanceRequest = async (id, completionData) => {
       .eq('id', id)
       .select()
       .single();
-    
+
     if (updateError) {
       console.error('Error updating maintenance request status:', updateError);
       return { success: false, error: updateError.message };
     }
-    
+
     console.log('Maintenance request completed successfully:', updatedRequest);
-    
+
     // Notify the rentee about the completion if applicable
     if (updatedRequest?.renteeid) {
       try {
@@ -505,13 +498,13 @@ export const completeMaintenanceRequest = async (id, completionData) => {
         // Continue even if notification fails
       }
     }
-    
-    return { 
+
+    return {
       success: true, 
-      data: { 
+      data: {
         ...updatedRequest,
         uploadedImages
-      } 
+      }
     };
   } catch (error) {
     console.error('Error completing maintenance request:', error);
@@ -528,58 +521,58 @@ export const completeMaintenanceRequest = async (id, completionData) => {
 export const cancelMaintenanceRequest = async (id, reason) => {
   try {
     console.log(`Cancelling maintenance request ${id} with reason: ${reason}`);
-    
+
     // First get the current request to preserve existing notes
     const { data: currentRequest, error: fetchError } = await platformClient
       .from('maintenance_requests')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (fetchError) {
       console.error('Error fetching request for cancellation:', fetchError);
       throw new Error('Could not fetch maintenance request');
     }
-    
+
     console.log('Current request before cancellation:', currentRequest);
-    
+
     // Get the current user's role and ID
     const { data: { user } } = await platformClient.auth.getUser();
     const userLookup = user?.id ? await findAppUserByAuthId(user.id) : { success: false, data: null };
     const userData = userLookup?.data || null;
-    
+
     console.log('Current user data:', userData);
     console.log('Request renteeid:', currentRequest.renteeid);
-    
+
     const cancellationNote = `Cancellation reason: ${reason}`;
     let updatedNotes = cancellationNote;
-    
+
     // Only try to access notes if currentRequest exists
     if (currentRequest && currentRequest.notes) {
       updatedNotes = `${currentRequest.notes}\n\n${cancellationNote}`;
     }
-    
+
     const updateFields = {
       status: 'cancelled',
       notes: updatedNotes,
       cancellationreason: reason,
-      cancelledat: new Date().toISOString(), 
+      cancelledat: new Date().toISOString(),
       updatedat: new Date().toISOString(),
     };
-    
+
     console.log('Updating request with cancellation data:', updateFields);
-    
+
     // Update the request
     const { error: updateError } = await platformClient
       .from('maintenance_requests')
       .update(updateFields)
       .eq('id', id);
-    
+
     if (updateError) {
       console.error('Error updating maintenance request:', updateError);
       throw updateError;
     }
-    
+
     // Then fetch the updated request with all relations
     const { data: updatedRequest, error: selectError } = await platformClient
       .from('maintenance_requests')
@@ -592,19 +585,19 @@ export const cancelMaintenanceRequest = async (id, reason) => {
       `)
       .eq('id', id)
       .single();
-    
+
     if (selectError) {
       console.error('Error fetching updated request:', selectError);
       throw selectError;
     }
-    
+
     console.log('Updated request after cancellation:', updatedRequest);
-    
+
     return {
       success: true,
       data: updatedRequest
     };
-    
+
   } catch (error) {
     console.error('Error cancelling maintenance request:', error);
     return {
@@ -700,43 +693,43 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
     console.log('No images to upload');
     return [];
   }
-  
+
   console.log(`Uploading ${images.length} images for request ${requestId} with prefix ${prefix}`);
-  
+
   const imageUrls = [];
   const errors = [];
-  
+
   for (const image of images) {
     try {
       console.log('Processing image:', image);
-      
+
       // Check if it's already a string URL
       if (typeof image === 'string') {
         imageUrls.push(image);
         continue;
       }
-      
+
       // Check if it's an object with url property
       if (image && typeof image === 'object' && image.url) {
         imageUrls.push(image.url);
         continue;
       }
-      
+
       // If the image is a new file, upload it using fileService
       if (image && (image.file || image instanceof File)) {
         const file = image.file || image;
-        
+
         // Use the saveImage function instead of saveFile
         const result = await saveImage(file, {
           folder: 'maintenance'
         });
-        
+
         if (!result.success) {
           console.error('Error uploading image:', result.error);
           errors.push(result.error);
           continue;
         }
-        
+
         if (result.url) {
           imageUrls.push(result.url);
           console.log(`Uploaded new image: ${result.url}`);
@@ -750,11 +743,11 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
       errors.push(error.message || 'Unknown error processing image');
     }
   }
-  
+
   if (errors.length > 0) {
     console.warn(`Completed image upload with ${errors.length} errors and ${imageUrls.length} successful uploads`);
   }
-  
+
   console.log(`Successfully uploaded ${imageUrls.length} images`);
   return imageUrls;
 };
@@ -765,44 +758,6 @@ const uploadMaintenanceImages = async (requestId, images, prefix = 'request') =>
  * @param {string} newStatus - The new status
  * @param {Object} requestData - The request data
  */
-const handleStatusChange = async (id, newStatus, requestData) => {
-  if (!requestData || !id) {
-    console.log('Cannot handle status change: request data or ID is missing');
-    return;
-  }
-
-  switch (newStatus) {
-    case MAINTENANCE_STATUS.IN_PROGRESS:
-      // Add startedAt timestamp if not present
-      if (!requestData.startedAt) {
-        await updateData('maintenance_requests', id, { startedat: new Date().toISOString() });
-      }
-      
-      // Notify rentee
-      await notifyRenteeAboutWorkStarted(requestData);
-      break;
-      
-    case MAINTENANCE_STATUS.COMPLETED:
-      // Add completedDate timestamp if not present
-      if (!requestData.completedDate) {
-        await updateData('maintenance_requests', id, { completeddate: new Date().toISOString() });
-      }
-      
-      // Notify rentee
-      await notifyRenteeAboutCompletion(requestData);
-      break;
-      
-    case MAINTENANCE_STATUS.CANCELLED:
-      // Add cancelledAt timestamp if not present
-      if (!requestData.cancelledat) {
-        await updateData('maintenance_requests', id, { cancelledat: new Date().toISOString() });
-      }
-      
-      // Notify relevant parties
-      await notifyAboutCancellation(requestData);
-      break;
-  }
-};
 
 export async function deleteMaintenanceRequest(id) {
   try {
@@ -823,7 +778,7 @@ export async function deleteMaintenanceRequest(id) {
 export async function updateMaintenanceStatus(id, status, additionalData = {}) {
   try {
     console.log('Updating maintenance status:', { id, status, additionalData });
-    
+
     const updateFields = {
       status,
       updatedat: new Date().toISOString(),
@@ -889,7 +844,7 @@ export async function updateMaintenanceStatus(id, status, additionalData = {}) {
 export const getMaintenanceRequests = async (userId, role) => {
   try {
     console.log('Fetching maintenance requests for user:', { userId, role });
-    
+
     // First, fetch the maintenance requests with detailed logging
     const { data: requests, error: requestsError } = await platformClient
       .from('maintenance_requests')
@@ -935,7 +890,7 @@ export const getMaintenanceRequests = async (userId, role) => {
     const normalizedData = requests.map(request => {
       console.log('Processing request:', request);
       console.log('Property data:', request.property);
-      
+
       const normalizedRequest = {
         ...request,
         property: request.property || { name: 'Unknown property', id: request.propertyid },
@@ -970,7 +925,7 @@ const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 
     console.error('Cannot attach image: Missing request ID');
     return { success: false, error: 'Missing maintenance request ID' };
   }
-  
+
   if (!imageUrl) {
     console.error('Cannot attach image: Missing image URL');
     return { success: false, error: 'Missing image URL' };
@@ -978,10 +933,10 @@ const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 
 
   try {
     console.log(`Attaching image ${imageUrl} to maintenance request ${requestId}`);
-    
+
     // Validate and normalize the image URL
     let normalizedUrl = imageUrl;
-    
+
     // Check if the URL is properly formatted
     if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
       // Check if it's a relative path from platform storage
@@ -991,7 +946,7 @@ const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 
         console.log('Normalized relative URL to full URL:', normalizedUrl);
       }
     }
-    
+
     // Prepare the data object with required fields
     const imageData = {
       maintenance_request_id: requestId,
@@ -1000,7 +955,7 @@ const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 
       uploaded_at: new Date().toISOString(),
       description: description || ''
     };
-    
+
     // Handle user ID validation with our utility function
     if (userId) {
       const { exists } = await checkUserExists(userId);
@@ -1012,18 +967,18 @@ const attachImageToMaintenanceRequest = async (requestId, imageUrl, imageType = 
         // Continue without user ID to avoid foreign key constraint error
       }
     }
-    
+
     // Insert the image record in the maintenance_request_images table
     const { data, error } = await platformClient
       .from('maintenance_request_images')
       .insert(imageData)
       .select();
-    
+
     if (error) {
       console.error('Error attaching image to maintenance request:', error);
       return { success: false, error: error.message };
     }
-    
+
     console.log('Successfully attached image to maintenance request:', data);
     return { success: true, data };
   } catch (err) {
@@ -1057,7 +1012,7 @@ export const addMaintenanceRequestImage = async ({
     if (!image) {
       throw new Error('No image provided');
     }
-    
+
     // Validate user ID if provided
     let validatedUserId = null;
     if (userId) {
@@ -1069,7 +1024,7 @@ export const addMaintenanceRequestImage = async ({
         console.warn('Invalid user ID provided for image upload, continuing without user attribution');
       }
     }
-    
+
     // Handle file upload if the image is a File object
     let imageUrl = '';
     if (image instanceof File) {
@@ -1080,12 +1035,12 @@ export const addMaintenanceRequestImage = async ({
         compress: true,
         maxSize: 10 * 1024 * 1024 // 10MB
       });
-      
+
       if (!result.success || !result.url) {
         console.error('Failed to upload image file:', result.error);
         throw new Error(`Failed to upload image: ${result.error || 'Unknown error'}`);
       }
-      
+
       imageUrl = result.url;
       console.log('File uploaded successfully, URL:', imageUrl);
     } else if (typeof image === 'string') {
@@ -1095,7 +1050,7 @@ export const addMaintenanceRequestImage = async ({
     } else {
       throw new Error('Invalid image format. Expected File object or URL string.');
     }
-    
+
     // Attach the image to the maintenance request
     const attachResult = await attachImageToMaintenanceRequest(
       maintenance_request_id,
@@ -1104,14 +1059,14 @@ export const addMaintenanceRequestImage = async ({
       validatedUserId, // Use the validated user ID
       description
     );
-    
+
     if (!attachResult.success) {
       throw new Error(`Failed to attach image to maintenance request: ${attachResult.error}`);
     }
-    
+
     return { success: true, data: attachResult.data };
   } catch (error) {
     console.error('Error in addMaintenanceRequestImage:', error);
     return { success: false, error: error.message };
   }
-}; 
+};

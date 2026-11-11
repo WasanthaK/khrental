@@ -1,10 +1,10 @@
 /**
  * Updates the Evia webhook configuration in the database
- * 
+ *
  * This script:
  * 1. Updates the webhook URL in the evia_sign_config table
  * 2. Ensures the webhook_event_trigger is installed
- * 
+ *
  * Run with: node scripts/update-evia-webhook-config.js
  */
 
@@ -19,35 +19,35 @@ const WEBHOOK_URL = 'https://kh-reantals-webhook.azurewebsites.net/webhook/evia-
 async function updateWebhookConfig() {
   try {
     console.log('Updating Evia Sign webhook configuration...');
-    
+
     // 1. Update the webhook URL in the evia_sign_config table
     const { data: configData, error: configError } = await platformClient
       .from('evia_sign_config')
-      .update({ 
+      .update({
         config_value: WEBHOOK_URL,
         last_updated: new Date().toISOString()
       })
       .eq('config_key', 'webhook_url')
       .select();
-    
+
     if (configError) {
       console.error('Error updating webhook URL in evia_sign_config:', configError);
     } else if (configData && configData.length > 0) {
       console.log(`✅ Updated webhook URL to: ${WEBHOOK_URL}`);
     } else {
       console.log('⚠️ No rows updated. Checking if config exists...');
-      
+
       // Check if the config row exists
       const { data: checkData, error: checkError } = await platformClient
         .from('evia_sign_config')
         .select('*')
         .eq('config_key', 'webhook_url');
-      
+
       if (checkError) {
         console.error('Error checking evia_sign_config:', checkError);
       } else if (checkData && checkData.length === 0) {
         // Need to insert the config
-        const { data: insertData, error: insertError } = await platformClient
+        const { error: insertError } = await platformClient
           .from('evia_sign_config')
           .insert([{
             config_key: 'webhook_url',
@@ -56,7 +56,7 @@ async function updateWebhookConfig() {
             description: 'Webhook URL to receive Evia Sign events'
           }])
           .select();
-        
+
         if (insertError) {
           console.error('Error inserting webhook URL config:', insertError);
         } else {
@@ -64,7 +64,7 @@ async function updateWebhookConfig() {
         }
       }
     }
-    
+
     // 2. Check if the webhook_event_trigger is installed
     // Execute SQL to check if trigger exists
     const { data: triggerCheck, error: triggerCheckError } = await platformClient.rpc('exec_sql', {
@@ -76,27 +76,27 @@ async function updateWebhookConfig() {
         );
       `
     });
-    
+
     if (triggerCheckError) {
       console.error('Error checking for webhook trigger:', triggerCheckError);
     } else {
       const triggerExists = triggerCheck && triggerCheck[0] && triggerCheck[0].exists;
-      
+
       if (triggerExists) {
         console.log('✅ webhook_event_trigger is already installed');
       } else {
         console.log('⚠️ webhook_event_trigger is not installed. Installing...');
-        
+
         // Read the SQL file with the trigger definition
         const sqlPath = path.join(process.cwd(), 'scripts', 'createWebhookEventsTable.sql');
         let sql;
-        
+
         try {
           sql = fs.readFileSync(sqlPath, 'utf8');
         } catch (readError) {
           console.error('Error reading SQL file:', readError);
           console.log('Creating trigger from hardcoded definition...');
-          
+
           // Use hardcoded SQL as fallback
           sql = `
           -- Add a function to automatically update agreement status when a webhook is received
@@ -207,12 +207,12 @@ async function updateWebhookConfig() {
           EXECUTE FUNCTION public.update_agreement_from_webhook();
           `;
         }
-        
+
         // Execute the SQL to create the trigger
         const { error: createTriggerError } = await platformClient.rpc('exec_sql', {
           query: sql
         });
-        
+
         if (createTriggerError) {
           console.error('Error creating webhook trigger:', createTriggerError);
         } else {
@@ -220,7 +220,7 @@ async function updateWebhookConfig() {
         }
       }
     }
-    
+
     console.log('Webhook configuration update completed');
   } catch (error) {
     console.error('Error updating webhook configuration:', error);
@@ -228,4 +228,4 @@ async function updateWebhookConfig() {
 }
 
 // Run the update function
-updateWebhookConfig(); 
+updateWebhookConfig();

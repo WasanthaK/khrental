@@ -1,6 +1,6 @@
 /**
  * Azure Configuration Verification Tool
- * 
+ *
  * This script helps verify that all required environment variables are set
  * for Azure deployment and tests connections to necessary services.
  */
@@ -113,25 +113,25 @@ let databaseTestResult = { success: false, message: 'Test not run' };
 async function testDatabaseConnection() {
   try {
     // Test database connection
-    const { data, error } = await platformClient.from('webhook_events').select('id').limit(1);
-    
+    const { error } = await platformClient.from('webhook_events').select('id').limit(1);
+
     if (error) {
       throw error;
     }
-    
+
     // Also check if agreements table exists
-    const { data: agreementsData, error: agreementsError } = await platformClient
+    const { error: agreementsError } = await platformClient
       .from('agreements')
       .select('id')
       .limit(1);
-    
+
     if (agreementsError) {
-      return { 
+      return {
         success: false, 
         message: `Connected to the platform API but couldn't access agreements table: ${agreementsError.message}` 
       };
     }
-    
+
     return { success: true, message: 'Successfully connected to the platform API' };
   } catch (error) {
     return { success: false, message: `Error connecting to the platform API: ${error.message}` };
@@ -147,28 +147,28 @@ async function testWebhookEndpoint() {
     if (!process.env.EVIA_SIGN_WEBHOOK_URL) {
       return { success: false, message: 'Webhook URL is missing' };
     }
-    
+
     // Just check if the URL is valid and reachable
     // We don't actually send a POST request to avoid creating test data
     const webhookUrl = new URL(process.env.EVIA_SIGN_WEBHOOK_URL);
     const baseUrl = `${webhookUrl.protocol}//${webhookUrl.host}`;
-    
+
     // Try to reach the base URL
     const response = await fetch(baseUrl, {
       method: 'GET',
       timeout: 5000
     });
-    
+
     if (response.ok) {
       return { success: true, message: `Webhook endpoint base URL (${baseUrl}) is reachable` };
     } else {
-      return { 
+      return {
         success: false, 
         message: `Webhook endpoint base URL returned status ${response.status}` 
       };
     }
   } catch (error) {
-    return { 
+    return {
       success: false, 
       message: `Error checking webhook URL: ${error.message}` 
     };
@@ -196,7 +196,7 @@ if (fs.existsSync(webhookWorkflowPath)) {
 async function runTests() {
   databaseTestResult = await testDatabaseConnection();
   webhookTestResult = await testWebhookEndpoint();
-  
+
   // Log results of tests
   console.log(`\n${colors.blue}Platform data connection test:${colors.reset}`);
   if (databaseTestResult.success) {
@@ -204,7 +204,7 @@ async function runTests() {
   } else {
     console.log(`  ${colors.red}❌ ${databaseTestResult.message}${colors.reset}`);
   }
-  
+
   console.log(`\n${colors.blue}Webhook URL test:${colors.reset}`);
   if (webhookTestResult.success) {
     console.log(`  ${colors.green}✅ ${webhookTestResult.message}${colors.reset}`);
@@ -212,22 +212,22 @@ async function runTests() {
     console.log(`  ${colors.yellow}⚠️ ${webhookTestResult.message}${colors.reset}`);
     console.log(`  ${colors.yellow}   (This may be expected if webhook server is not running yet)${colors.reset}`);
   }
-  
+
   // Summary
   console.log(`\n${colors.cyan}========================================${colors.reset}`);
   console.log(`${colors.cyan}               Summary                  ${colors.reset}`);
   console.log(`${colors.cyan}========================================${colors.reset}\n`);
-  
+
   const mainConfigReady = mainMissingVars.length === 0;
   const databaseConfigReady = databaseMissingVars.length === 0;
   const workflowsReady = fs.existsSync(mainWorkflowPath) && fs.existsSync(webhookWorkflowPath);
   const databaseReady = databaseTestResult.success;
-  
+
   console.log(`Main App Configuration: ${mainConfigReady ? colors.green + '✅ Ready' : colors.red + '❌ Not Ready'}${colors.reset}`);
   console.log(`Database Configuration: ${databaseConfigReady ? colors.green + '✅ Ready' : colors.red + '❌ Not Ready'}${colors.reset}`);
   console.log(`GitHub Workflows: ${workflowsReady ? colors.green + '✅ Ready' : colors.red + '❌ Not Ready'}${colors.reset}`);
   console.log(`Platform Data Connection: ${databaseReady ? colors.green + '✅ Ready' : colors.red + '❌ Not Ready'}${colors.reset}`);
-  
+
   console.log(`\n${colors.magenta}Overall Deployment Readiness:${colors.reset}`);
   if (mainConfigReady && databaseConfigReady && workflowsReady && databaseReady) {
     console.log(`${colors.green}✅ Your configuration is ready for deployment to Azure!${colors.reset}`);
@@ -239,4 +239,4 @@ async function runTests() {
 
 runTests().catch(error => {
   console.error(`${colors.red}Error running tests: ${error.message}${colors.reset}`);
-}); 
+});

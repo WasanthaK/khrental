@@ -17,7 +17,7 @@ const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
   error.status = status;
   error.code = code;
-  if (details) error.details = details;
+  if (details) {error.details = details;}
   return error;
 };
 
@@ -45,7 +45,7 @@ const requireInvoiceManage = (req) => {
 };
 
 const requirePropertyScope = (req, propertyId) => {
-  if (isAdminRole({ user: req.user, membership: req.membership })) return;
+  if (isAdminRole({ user: req.user, membership: req.membership })) {return;}
   const assigned = new Set((req.membership?.assignedPropertyIds || []).map(String));
   if (!propertyId || !assigned.has(String(propertyId))) {
     throw createRequestError(403, 'The tenancy property is not assigned to the current staff account.', 'RESOURCE_ACCESS_DENIED');

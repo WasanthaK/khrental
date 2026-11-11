@@ -7,7 +7,7 @@ export const completeStoredEviaSignatories = (stored, completedAt) => {
       code: 'EVIA_COMPLETION_TIMESTAMP_INVALID'
     });
   }
-  if (!stored) return null;
+  if (!stored) {return null;}
   let parsed;
   try { parsed = typeof stored === 'string' ? JSON.parse(stored) : stored; }
   catch {
@@ -20,7 +20,7 @@ export const completeStoredEviaSignatories = (stored, completedAt) => {
       code: 'EVIA_SIGNATORIES_STORED_INVALID'
     });
   }
-  if (!parsed.length) return null;
+  if (!parsed.length) {return null;}
   return JSON.stringify(parsed.map(item => ({
     ...item,
     status: 'completed',

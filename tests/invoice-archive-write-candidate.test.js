@@ -40,7 +40,7 @@ const setup = async () => {
         if (!issued || storedHash!==values.snapshotSha256) {
           throw Object.assign(new Error('Issuance changed during SQL commit'),{code:'ISSUANCE_CHANGED'});
         }
-        if (row)return {outcome:'existing'};
+        if (row){return {outcome:'existing'};}
         row={tenantId:values.tenantId,invoiceId:values.invoiceId,
           version:values.version,bucket:values.bucket,path:values.path,
           pdfSha256:values.pdfSha256,snapshotSha256:values.snapshotSha256,
@@ -52,7 +52,7 @@ const setup = async () => {
       createIfAbsent:async (bucket,path,body)=>{
         creates++;
         const key=bucket+'/'+path;
-        if(objects.has(key))return 'exists';
+        if(objects.has(key)){return 'exists';}
         objects.set(key,Buffer.from(body));
         return 'created';
       },
@@ -191,7 +191,7 @@ test('race with conflicting committed record rejects even if object upload succe
   const committedOther={...f.expected,state:'committed',pdfSha256:'c'.repeat(64)};
   await assert.rejects(f.invoke({archiveLedger:{
     loadCommitted:async()=>{
-      if(!f.counters().commits)return null;
+      if(!f.counters().commits){return null;}
       return committedOther;
     },
     commitIfAbsent:async()=>({outcome:'existing'})

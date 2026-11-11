@@ -24,6 +24,7 @@ export const parseViewingAction=(body,owner=false)=>{
   }
   if (allowed.includes('instructions')) {
     const text=body.instructions??'';
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
     if (typeof text!=='string'||text.trim().length>500||/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(text)) {throw invalid();}
     result.instructions=text.trim();
   }

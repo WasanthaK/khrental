@@ -10,21 +10,21 @@ import { registerNavigate } from '../../utils/navigationHelpers';
 function NavigationRegistrar() {
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   useEffect(() => {
     // Register the navigate function for other components to use
     registerNavigate(navigate);
-    
+
     // Only log in development mode and only once per mount, not on every location change
     if (process.env.NODE_ENV === 'development') {
       console.debug('Navigation function registered', { path: location.pathname });
     }
-    
+
     // Only depend on navigate, not location, to avoid re-registering on every route change
-  }, [navigate]);
-  
+  }, [location?.pathname, navigate]);
+
   // Render nothing - this is just a setup component
   return null;
 }
 
-export default NavigationRegistrar; 
+export default NavigationRegistrar;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useProperty } from '../contexts/PropertyContext';
 import { getInvoiceSummaryByProperty, getPropertiesWithPendingReadings } from '../services/invoiceService';
@@ -7,7 +7,7 @@ import PropertySelector from '../components/properties/PropertySelector';
 
 const InvoiceManagementDashboard = () => {
   const { selectedPropertyIds, selectedProperties } = useProperty();
-  
+
   // State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -19,8 +19,47 @@ const InvoiceManagementDashboard = () => {
     status: 'all',
     period: 'current_month'
   });
-  
+
   // Load invoice summary data when selected properties change
+  const loadInvoiceSummary = useCallback(async (requestId) => {
+    setLoading(true);
+    setSummaryAvailable(false);
+    setInvoiceSummary({});
+    try {
+      setError(null);
+
+      // Set date filters based on period
+      const options = {};
+
+      if (filterOptions.status !== 'all') {
+        options.status = filterOptions.status;
+      }
+
+      Object.assign(options, getInvoiceSummaryDateRange(filterOptions.period, new Date()));
+
+      const { data, error } = await getInvoiceSummaryByProperty(selectedPropertyIds, options);
+
+      if (error) {
+        throw error;
+      }
+
+      if (requestId !== summaryRequestId.current) {return;}
+      if (!data || Array.isArray(data) || typeof data !== 'object') {
+        throw new Error('Invoice summary returned an invalid response.');
+      }
+      setInvoiceSummary(data || {});
+      setSummaryAvailable(true);
+    } catch (err) {
+      if (requestId !== summaryRequestId.current) {return;}
+      console.error('Error loading invoice summary:', err);
+      setInvoiceSummary({});
+      setSummaryAvailable(false);
+      setError(err?.message || 'Unable to load invoice summary.');
+    } finally {
+      if (requestId === summaryRequestId.current) {setLoading(false);}
+    }
+  }, [filterOptions?.period, filterOptions?.status, selectedPropertyIds]);
+
   useEffect(() => {
     const requestId = ++summaryRequestId.current;
     if (selectedPropertyIds.length > 0) {
@@ -30,62 +69,24 @@ const InvoiceManagementDashboard = () => {
       setSummaryAvailable(false);
       setLoading(false);
     }
-  }, [selectedPropertyIds, filterOptions]);
-  
+  }, [selectedPropertyIds, filterOptions, loadInvoiceSummary]);
+
   // Load properties with pending readings on mount
   useEffect(() => {
     loadPropertiesWithReadings();
   }, []);
-  
+
   // Load invoice summary for selected properties
-  const loadInvoiceSummary = async (requestId) => {
-    setLoading(true);
-    setSummaryAvailable(false);
-    setInvoiceSummary({});
-    try {
-      setError(null);
-      
-      // Set date filters based on period
-      const options = {};
-      
-      if (filterOptions.status !== 'all') {
-        options.status = filterOptions.status;
-      }
-      
-      Object.assign(options, getInvoiceSummaryDateRange(filterOptions.period, new Date()));
-      
-      const { data, error } = await getInvoiceSummaryByProperty(selectedPropertyIds, options);
-      
-      if (error) {
-        throw error;
-      }
-      
-      if (requestId !== summaryRequestId.current) return;
-      if (!data || Array.isArray(data) || typeof data !== 'object') {
-        throw new Error('Invoice summary returned an invalid response.');
-      }
-      setInvoiceSummary(data || {});
-      setSummaryAvailable(true);
-    } catch (err) {
-      if (requestId !== summaryRequestId.current) return;
-      console.error('Error loading invoice summary:', err);
-      setInvoiceSummary({});
-      setSummaryAvailable(false);
-      setError(err?.message || 'Unable to load invoice summary.');
-    } finally {
-      if (requestId === summaryRequestId.current) setLoading(false);
-    }
-  };
-  
+
   // Load properties with pending readings
   const loadPropertiesWithReadings = async () => {
     try {
       const { data, error } = await getPropertiesWithPendingReadings();
-      
+
       if (error) {
         throw error;
       }
-      
+
       setPropertiesWithReadings(data || []);
     } catch (err) {
       console.error('Error loading properties with readings:', err);
@@ -93,7 +94,7 @@ const InvoiceManagementDashboard = () => {
       setError(err?.message || 'Unable to load pending utility readings.');
     }
   };
-  
+
   // Handle filter change
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -102,7 +103,7 @@ const InvoiceManagementDashboard = () => {
       [name]: value
     }));
   };
-  
+
   // Format currency
   const formatCurrency = (amount) => {
     return amount.toLocaleString('en-US', {
@@ -111,21 +112,21 @@ const InvoiceManagementDashboard = () => {
       minimumFractionDigits: 2
     });
   };
-  
+
   // Get summary totals
   const getTotals = () => {
     let totalInvoices = 0;
     let totalAmount = 0;
     let pendingAmount = 0;
     let paidAmount = 0;
-    
+
     Object.values(invoiceSummary).forEach(property => {
       totalInvoices += property.totalInvoices || 0;
       totalAmount += property.totalAmount || 0;
       pendingAmount += property.pendingAmount || 0;
       paidAmount += property.paidAmount || 0;
     });
-    
+
     return {
       totalInvoices,
       totalAmount,
@@ -133,9 +134,9 @@ const InvoiceManagementDashboard = () => {
       paidAmount
     };
   };
-  
+
   const totals = getTotals();
-  
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="flex justify-between items-center mb-6">
@@ -161,7 +162,7 @@ const InvoiceManagementDashboard = () => {
           </Link>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left column: Property selection */}
         <div className="md:col-span-1">
@@ -169,7 +170,7 @@ const InvoiceManagementDashboard = () => {
             <h2 className="text-lg font-medium mb-4">Select Properties</h2>
             <PropertySelector multiSelect={true} />
           </div>
-          
+
           {propertiesWithReadings.length > 0 && (
             <div className="bg-white rounded-lg shadow p-4">
               <h2 className="text-lg font-medium mb-4">Properties with Pending Readings</h2>
@@ -192,7 +193,7 @@ const InvoiceManagementDashboard = () => {
             </div>
           )}
         </div>
-        
+
         {/* Right column: Dashboard content */}
         <div className="md:col-span-2">
           {/* Filters */}
@@ -215,7 +216,7 @@ const InvoiceManagementDashboard = () => {
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
-              
+
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Time Period
@@ -234,30 +235,30 @@ const InvoiceManagementDashboard = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Total Invoices</p>
               <p className="text-2xl font-semibold">{summaryAvailable ? totals.totalInvoices : '—'}</p>
             </div>
-            
+
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Total Amount</p>
               <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.totalAmount) : '—'}</p>
             </div>
-            
+
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Pending Amount</p>
               <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.pendingAmount) : '—'}</p>
             </div>
-            
+
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500">Paid Amount</p>
               <p className="text-2xl font-semibold">{summaryAvailable ? formatCurrency(totals.paidAmount) : '—'}</p>
             </div>
           </div>
-          
+
           {/* Property results */}
           {selectedPropertyIds.length === 0 ? (
             <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded relative">
@@ -280,7 +281,7 @@ const InvoiceManagementDashboard = () => {
             <div className="space-y-6">
               {selectedProperties.map(property => {
                 const propertyData = invoiceSummary[property.id];
-                
+
                 if (!propertyData) {
                   return (
                     <div key={property.id} className="bg-white rounded-lg shadow overflow-hidden">
@@ -293,37 +294,37 @@ const InvoiceManagementDashboard = () => {
                     </div>
                   );
                 }
-                
+
                 return (
                   <div key={property.id} className="bg-white rounded-lg shadow overflow-hidden">
                     <div className="bg-gray-100 px-4 py-3 border-b">
                       <h3 className="font-medium">{property.name}</h3>
                       <p className="text-sm text-gray-600">{property.address}</p>
                     </div>
-                    
+
                     <div className="p-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div>
                           <p className="text-sm text-gray-500">Invoices</p>
                           <p className="text-xl font-semibold">{propertyData.totalInvoices}</p>
                         </div>
-                        
+
                         <div>
                           <p className="text-sm text-gray-500">Total Amount</p>
                           <p className="text-xl font-semibold">{formatCurrency(propertyData.totalAmount)}</p>
                         </div>
-                        
+
                         <div>
                           <p className="text-sm text-gray-500">Pending</p>
                           <p className="text-xl font-semibold">{formatCurrency(propertyData.pendingAmount)}</p>
                         </div>
-                        
+
                         <div>
                           <p className="text-sm text-gray-500">Paid</p>
                           <p className="text-xl font-semibold">{formatCurrency(propertyData.paidAmount)}</p>
                         </div>
                       </div>
-                      
+
                       <div className="flex justify-end space-x-2">
                         <Link
                           to={`/dashboard/invoices?propertyId=${property.id}`}
@@ -331,7 +332,7 @@ const InvoiceManagementDashboard = () => {
                         >
                           View Invoices
                         </Link>
-                        
+
                         <Link
                           to={`/dashboard/utilities/review?propertyId=${property.id}`}
                           className="text-blue-600 hover:text-blue-800"
@@ -351,4 +352,4 @@ const InvoiceManagementDashboard = () => {
   );
 };
 
-export default InvoiceManagementDashboard; 
+export default InvoiceManagementDashboard;

@@ -52,7 +52,7 @@ export const loadStoredSession = () => {
   }
 
   const raw = storage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) return null;
+  if (!raw) {return null;}
 
   try {
     return JSON.parse(raw);

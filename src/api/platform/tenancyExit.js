@@ -32,7 +32,7 @@ export const isClosureReady = ({ inspectionStatus, settlementStatus }) => (
 export const validateNoticeResponse = (noticeType, response) => {
   const type = String(noticeType || '').toLowerCase();
   const normalized = String(response || '').toLowerCase();
-  if (type === 'renewal_offer') return ['accepted', 'declined'].includes(normalized);
-  if (type === 'termination_notice') return normalized === 'acknowledged';
+  if (type === 'renewal_offer') {return ['accepted', 'declined'].includes(normalized);}
+  if (type === 'termination_notice') {return normalized === 'acknowledged';}
   return false;
 };

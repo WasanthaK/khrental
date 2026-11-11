@@ -1,13 +1,6 @@
 import React from 'react';
 import { PORTAL_TYPES } from './accessModel.js';
-import {
-  PERMISSIONS as CANONICAL_PERMISSIONS,
-  getEffectivePortalType,
-  getPermissions,
-  hasAllPermissions as hasAllCanonicalPermissions,
-  hasAnyPermission as hasAnyCanonicalPermission,
-  hasPermission as hasCanonicalPermission
-} from './accessPolicy.js';
+import { PERMISSIONS as CANONICAL_PERMISSIONS, getEffectivePortalType, getPermissions, hasAnyPermission as hasAnyCanonicalPermission, hasPermission as hasCanonicalPermission } from './accessPolicy.js';
 
 /**
  * Phase 3C compatibility bridge.

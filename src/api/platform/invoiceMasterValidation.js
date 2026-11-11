@@ -4,27 +4,28 @@ const fail = (field, message) => Object.assign(new Error(message), {
 });
 const isObject = value => !!value && typeof value === 'object' && !Array.isArray(value);
 const clean = (value, field, max) => {
-  if (value === undefined || value === null || value === '') return '';
-  if (typeof value !== 'string') throw fail(field, 'Enter a valid text value.');
+  if (value === undefined || value === null || value === '') {return '';}
+  if (typeof value !== 'string') {throw fail(field, 'Enter a valid text value.');}
   const v = value.trim();
-  if (v.length > max || /[\u0000-\u001f\u007f]/.test(v)) throw fail(field, 'Value is too long or contains invalid characters.');
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
+  if (v.length > max || /[\u0000-\u001f\u007f]/.test(v)) {throw fail(field, 'Value is too long or contains invalid characters.');}
   return v;
 };
 const contact = (data, key, max = 255) => clean(data[key], key, max);
 const email = (data, key) => {
   const v = contact(data,key,320);
-  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw fail(key,'Enter a valid email address.');
+  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {throw fail(key,'Enter a valid email address.');}
   return v;
 };
 const phone = (data,key) => {
   const v = contact(data,key,100);
-  if (v && !/^[+0-9() .-]{5,100}$/.test(v)) throw fail(key,'Enter a valid contact telephone number.');
+  if (v && !/^[+0-9() .-]{5,100}$/.test(v)) {throw fail(key,'Enter a valid contact telephone number.');}
   return v;
 };
 const assertKeys = (data, keys) => {
-  if (!isObject(data)) throw fail('body','Provide a structured invoice profile.');
+  if (!isObject(data)) {throw fail('body','Provide a structured invoice profile.');}
   const extras = Object.keys(data).filter(key => !keys.includes(key));
-  if (extras.length) throw fail(extras[0], 'Field is not editable in invoice master data.');
+  if (extras.length) {throw fail(extras[0], 'Field is not editable in invoice master data.');}
 };
 import { normalizeInvoiceDesign } from './invoiceDesign.js';
 import { normalizeInvoiceLogo } from './invoiceLogo.js';
@@ -52,9 +53,9 @@ const partyKeys=['managementMode','externalManagerName','externalManagerAddress'
 export const normalizePropertyParties = input => {
   assertKeys(input, partyKeys);
   const managementMode = input.managementMode || 'tenant';
-  if (!['tenant','outsourced'].includes(managementMode)) throw fail('managementMode','Choose organization-managed or outsourced.');
+  if (!['tenant','outsourced'].includes(managementMode)) {throw fail('managementMode','Choose organization-managed or outsourced.');}
   const issuerRole = input.issuerRole || 'organization';
-  if (!['organization','owner','manager'].includes(issuerRole)) throw fail('issuerRole','Choose an authorized issuer role.');
+  if (!['organization','owner','manager'].includes(issuerRole)) {throw fail('issuerRole','Choose an authorized issuer role.');}
   const result = {
     managementMode, issuerRole,
     externalManagerName: contact(input,'externalManagerName',200),
@@ -78,7 +79,7 @@ export const normalizePropertyParties = input => {
   if (managementMode === 'tenant' && ['externalManagerName','externalManagerAddress','externalManagerEmail','externalManagerPhone'].some(k => !!result[k])) {
     throw fail('managementMode','Remove external manager details for organization-managed properties.');
   }
-  if (issuerRole === 'manager' && managementMode !== 'outsourced') throw fail('issuerRole','Manager override requires outsourced management.');
+  if (issuerRole === 'manager' && managementMode !== 'outsourced') {throw fail('issuerRole','Manager override requires outsourced management.');}
   if (issuerRole === 'owner' && (!result.propertyOwnerName || !result.propertyOwnerAddress ||
       (!result.propertyOwnerEmail && !result.propertyOwnerPhone))) {
     throw fail('propertyOwnerName','Owner-issued invoices need the verified owner name, address and contact.');

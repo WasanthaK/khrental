@@ -5,13 +5,13 @@ import { fetchData, insertData, updateData } from '../services/platformClient';
 // UI Components
 import FormInput from '../components/ui/FormInput';
 import FormTextarea from '../components/ui/FormTextarea';
-import FormSelect from '../components/ui/FormSelect';
+import '../components/ui/FormSelect';
 
 const CameraForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
-  
+
   // Form state
   const [formData, setFormData] = useState({
     propertyid: '',
@@ -25,13 +25,13 @@ const CameraForm = () => {
     },
     status: 'active'
   });
-  
+
   // UI state
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  
+
   // Camera type options
   const cameraTypeOptions = [
     { value: 'IP Camera', label: 'IP Camera' },
@@ -40,42 +40,42 @@ const CameraForm = () => {
     { value: 'Smart Camera', label: 'Smart Camera' },
     { value: 'Other', label: 'Other' }
   ];
-  
+
   // Status options
   const statusOptions = [
     { value: 'active', label: 'Active' },
     { value: 'inactive', label: 'Inactive' },
     { value: 'maintenance', label: 'Maintenance' }
   ];
-  
+
   // Fetch properties and camera data if in edit mode
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch properties
         const { data: propertiesData, error: propertiesError } = await fetchData('properties');
-        
+
         if (propertiesError) {
           throw propertiesError;
         }
-        
+
         setProperties(propertiesData || []);
-        
+
         // If in edit mode, fetch camera data
         if (isEditMode) {
           const { data: cameraData, error: cameraError } = await fetchData('cameras', {
             filters: [{ column: 'id', operator: 'eq', value: id }]
           });
-          
+
           if (cameraError) {
             throw cameraError;
           }
-          
+
           if (cameraData && cameraData.length > 0) {
             const camera = cameraData[0];
-            
+
             // Format the data for the form
             setFormData({
               propertyid: camera.propertyid || '',
@@ -101,10 +101,10 @@ const CameraForm = () => {
         setLoading(false);
       }
     };
-    
+
     fetchInitialData();
   }, [id, isEditMode]);
-  
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -113,7 +113,7 @@ const CameraForm = () => {
       [name]: value
     }));
   };
-  
+
   // Handle data package info changes
   const handleDataPackageChange = (e) => {
     const { name, value } = e.target;
@@ -125,7 +125,7 @@ const CameraForm = () => {
       }
     }));
   };
-  
+
   // Handle renewal date change
   const handleRenewalDateChange = (e) => {
     setFormData(prev => ({
@@ -136,55 +136,55 @@ const CameraForm = () => {
       }
     }));
   };
-  
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSubmitting(true);
       setError(null);
-      
+
       // Validate form data
       if (!formData.propertyid) {
         throw new Error('Please select a property');
       }
-      
+
       if (!formData.locationdescription) {
         throw new Error('Please provide a location description');
       }
-      
+
       if (!formData.cameratype) {
         throw new Error('Please select a camera type');
       }
-      
+
       // Prepare data for submission
       const cameraData = {
         ...formData,
         updatedat: new Date().toISOString()
       };
-      
+
       // If creating a new camera, add creation date
       if (!isEditMode) {
         cameraData.createdat = new Date().toISOString();
       }
-      
+
       // Save to database
       let result;
-      
+
       if (isEditMode) {
         result = await updateData('cameras', id, cameraData);
       } else {
         result = await insertData('cameras', cameraData);
       }
-      
+
       if (result.error) {
         throw result.error;
       }
-      
+
       // Navigate back to camera list
       navigate('/dashboard/cameras');
-      
+
     } catch (error) {
       console.error('Error saving camera:', error.message);
       setError(error.message);
@@ -192,7 +192,7 @@ const CameraForm = () => {
       setSubmitting(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -200,26 +200,26 @@ const CameraForm = () => {
       </div>
     );
   }
-  
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-6">
         {isEditMode ? 'Edit Camera' : 'Add New Camera'}
       </h1>
-      
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">Error!</strong>
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Basic Information */}
           <div>
             <h2 className="text-lg font-medium mb-4">Basic Information</h2>
-            
+
             <div className="mb-4">
               <label htmlFor="propertyid" className="block text-sm font-medium text-gray-700 mb-1">
                 Property *
@@ -240,7 +240,7 @@ const CameraForm = () => {
                 ))}
               </select>
             </div>
-            
+
             <FormInput
               label="Location Description *"
               id="locationdescription"
@@ -250,7 +250,7 @@ const CameraForm = () => {
               placeholder="e.g., Front entrance, Back yard"
               required
             />
-            
+
             <div className="mb-4">
               <label htmlFor="cameratype" className="block text-sm font-medium text-gray-700 mb-1">
                 Camera Type *
@@ -271,7 +271,7 @@ const CameraForm = () => {
                 ))}
               </select>
             </div>
-            
+
             <div className="mb-4">
               <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
                 Status
@@ -290,7 +290,7 @@ const CameraForm = () => {
                 ))}
               </select>
             </div>
-            
+
             <FormTextarea
               label="Installation Details"
               id="installationdetails"
@@ -301,11 +301,11 @@ const CameraForm = () => {
               rows={4}
             />
           </div>
-          
+
           {/* Data Package Information */}
           <div>
             <h2 className="text-lg font-medium mb-4">Data Package Information</h2>
-            
+
             <FormInput
               label="Phone Number"
               id="phoneNumber"
@@ -314,7 +314,7 @@ const CameraForm = () => {
               onChange={handleDataPackageChange}
               placeholder="e.g., 0771234567"
             />
-            
+
             <FormTextarea
               label="Plan Details"
               id="planDetails"
@@ -324,7 +324,7 @@ const CameraForm = () => {
               placeholder="Enter data plan details"
               rows={3}
             />
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Renewal Date
@@ -340,7 +340,7 @@ const CameraForm = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end space-x-3">
           <button
             type="button"
@@ -362,4 +362,4 @@ const CameraForm = () => {
   );
 };
 
-export default CameraForm; 
+export default CameraForm;

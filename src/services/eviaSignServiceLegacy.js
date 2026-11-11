@@ -11,18 +11,6 @@ const EVIA_SIGN_AUTH_URL = 'https://evia.enadocapp.com/_apis';
 // Load client credentials from environment variables
 const EVIA_SIGN_CLIENT_ID = ENV.EVIA_SIGN_CLIENT_ID || '';
 
-// Use a hardcoded port to ensure consistency
-const EVIA_SIGN_REDIRECT_URL = typeof window !== 'undefined' 
-  ? `${window.location.origin}/auth/evia-callback`
-  : 'http://localhost:5173/auth/evia-callback'; // Keep this as 5173, or whatever is registered
-
-const APP_NAME = 'Khrentals';
-
-// Enable offline mode for testing - set to false to use the real API
-const USE_OFFLINE_MODE = false;
-
-// Add a timestamp to localStorage key to avoid conflicts
-const STORAGE_KEY = 'eviaSignRequests';
 const AUTH_STORAGE_KEY = 'eviaSignAuth';
 
 // Constants for Evia Sign API
@@ -38,8 +26,6 @@ const EVIA_SIGN_API = {
     DOWNLOAD_DOCUMENT: '/sign/api/Requests'
   }
 };
-
-const EVIA_API_URL = 'https://evia.enadocapp.com/_apis/sign/api';
 
 const requestEviaToken = async (payload) => {
   const response = await fetch(`${getApiBaseUrl()}/api/evia/token`, {
@@ -63,55 +49,16 @@ const requestEviaToken = async (payload) => {
 };
 
 // Helper function to ensure URL has a protocol
-const ensureHttpsProtocol = (url) => {
-  if (!url) {
-    return '';
-  }
-  if (url.startsWith('https://')) {
-    return url;
-  }
-  if (url.startsWith('http://')) {
-    return `https://${url.substring(7)}`;
-  }
-  return `https://${url}`;
-};
 
 // Status mappings for better compatibility
-const STATUS_MAPPINGS = {
-  // Webhook event ID to database status
-  eventToStatus: {
-    1: 'pending',
-    2: 'in_progress', // We'll use this as the primary one stored in DB
-    3: 'completed'
-  },
-  // Alternative names to standardized values
-  normalize: {
-    'pending_signature': 'pending',
-    'partially_signed': 'in_progress',
-    'signed': 'completed'
-  },
-  // For display purposes - from DB value to human-readable
-  display: {
-    'pending': 'Pending Signature',
-    'in_progress': 'Partially Signed',
-    'completed': 'Signed',
-    'failed': 'Failed'
-  }
-};
 
 // Function to normalize status values for database compatibility
-function normalizeStatus(status) {
-  return STATUS_MAPPINGS.normalize[status] || status;
-}
 
 // Function to get display status from database status
-function getDisplayStatus(status) {
-  return STATUS_MAPPINGS.display[status] || status;
-}
 
 /**
  * Get the authorization URL to redirect users for authentication
- * 
+ *
  * @returns {string} The authorization URL
  */
 export function getAuthorizationUrl() {
@@ -126,11 +73,11 @@ export function getAuthorizationUrl() {
   // Get the current origin for the redirect URL - using dynamic origin to handle port changes
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
   const redirectUri = encodeURIComponent(`${currentOrigin}/auth/evia-callback`);
-  
+
   // CRITICAL: Use the EXACT format from the documentation, including the misspelled "responce_type"
   // The resource parameter MUST be included - it's required by the Evia Sign API
   const url = `https://evia.enadocapp.com/_apis/falcon/auth/oauth2/authorize?application_state=external&resource=RESOURCE_APPLICATION&client_id=${EVIA_SIGN_CLIENT_ID}&responce_type=code&redirect_uri=${redirectUri}&state=${state}`;
-  
+
   // Only log in development mode
   if (import.meta.env.DEV) {
     console.log('[eviaSignService] Authorization URL generated');
@@ -153,7 +100,7 @@ export async function handleAuthCallback(code) {
     if (import.meta.env.DEV) {
       console.log('[eviaSignService] Processing auth callback');
     }
-    
+
     // Get the current redirect URI to use in token requests - matching what was used in the auth URL
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
     const redirectUri = `${currentOrigin}/auth/evia-callback`;
@@ -171,7 +118,7 @@ export async function handleAuthCallback(code) {
     return processTokenResponse(tokenResponse);
   } catch (error) {
     console.error('[eviaSignService] Authentication error:', error.message);
-    
+
     // Try to extract more specific error message if available
     let errorMessage = 'Authentication failed';
     if (error.response?.data?.error_description) {
@@ -181,7 +128,7 @@ export async function handleAuthCallback(code) {
     } else if (error.message) {
       errorMessage += ': ' + error.message;
     }
-    
+
     throw new Error(errorMessage);
   }
 }
@@ -195,7 +142,7 @@ function processTokenResponse(data) {
   // Extract tokens - handle different possible response formats
   const authToken = data.authToken || data.access_token || data.token;
   const refreshToken = data.refreshToken || data.refresh_token;
-  
+
   if (!authToken) {
     throw new Error('Invalid token response: missing auth token');
   }
@@ -203,10 +150,10 @@ function processTokenResponse(data) {
   // Calculate expiration time (default to 24 hours if not provided)
   const expiresIn = data.expires_in || 86400; // 24 hours in seconds
   const expiresAt = Date.now() + (expiresIn * 1000);
-  
+
   // Extract user email if available
   const userEmail = data.userEmail || data.email || null;
-  
+
   // Store auth data in localStorage
     const authData = {
     authToken,
@@ -219,7 +166,7 @@ function processTokenResponse(data) {
   if (import.meta.env.DEV) {
     console.log('[eviaSignService] Auth data stored');
   }
-  
+
     return authData;
 }
 
@@ -232,12 +179,12 @@ function processTokenResponse(data) {
 async function uploadDocument(documentUrl, accessToken) {
   try {
     console.log('[eviaSignService] Starting document upload process...');
-    
+
     // Convert URL or base64 to blob
     let documentBlob;
     let fileName;
     let mimeType;
-    
+
     if (documentUrl.startsWith('data:')) {
       // Handle base64
       console.log('[eviaSignService] Processing base64 document...');
@@ -245,7 +192,7 @@ async function uploadDocument(documentUrl, accessToken) {
       const extension = mimeType === 'application/pdf' ? 'pdf' : 
                        mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'docx' : 
                        'pdf';
-      
+
       const base64Data = documentUrl.split(',')[1];
       const binaryData = atob(base64Data);
       const bytes = new Uint8Array(binaryData.length);
@@ -263,12 +210,12 @@ async function uploadDocument(documentUrl, accessToken) {
         throw new Error(`Failed to fetch document: ${response.status} ${response.statusText}`);
       }
       documentBlob = await response.blob();
-      
+
       // Determine the file extension and MIME type based on content type or URL
       const contentType = documentBlob.type;
       mimeType = contentType;
       let extension = 'pdf'; // Default
-      
+
       // Get extension from URL as a fallback
       if (documentUrl.toLowerCase().endsWith('.docx')) {
         extension = 'docx';
@@ -281,10 +228,10 @@ async function uploadDocument(documentUrl, accessToken) {
       } else if (contentType === 'application/pdf') {
         extension = 'pdf';
       }
-      
+
       // Create a new blob with the explicit content type (required for DOCX files)
       documentBlob = new Blob([await documentBlob.arrayBuffer()], { type: mimeType });
-      
+
       // According to Evia docs, keep the filename simple but include the correct extension
       fileName = `document_${Date.now()}.${extension}`;
       console.log('[eviaSignService] Fetched document with content type:', mimeType, 'extension:', extension);
@@ -295,17 +242,17 @@ async function uploadDocument(documentUrl, accessToken) {
     // IMPORTANT: The field name MUST be "File" according to the Evia Sign API documentation
     const formData = new FormData();
     formData.append('File', documentBlob, fileName);
-    
+
     // Add debugging info
     console.log('[eviaSignService] FormData entries:');
     for (const [key, value] of formData.entries()) {
       console.log(`- ${key}: ${value instanceof Blob ? `Blob (${value.size} bytes, type: ${value.type})` : value}`);
     }
-    
+
     // Upload document using the correct endpoint from Evia Sign documentation
     const uploadUrl = `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.DOCUMENT_UPLOAD}`;
     console.log('[eviaSignService] Sending document upload request to:', uploadUrl);
-    
+
     const response = await axios.post(
       uploadUrl,
       formData,
@@ -327,7 +274,7 @@ async function uploadDocument(documentUrl, accessToken) {
 
     // Handle response exactly as per Evia documentation
     let documentToken = '';
-    
+
     if (typeof response.data === 'string') {
       // Direct token string response
       documentToken = response.data;
@@ -350,12 +297,12 @@ async function uploadDocument(documentUrl, accessToken) {
         }
       }
     }
-    
+
     if (!documentToken) {
       console.error('[eviaSignService] Invalid upload response:', response.data);
       throw new Error('Invalid response from document upload - no document token returned');
     }
-    
+
     console.log('[eviaSignService] Successfully got document token:', documentToken);
     return documentToken;
   } catch (error) {
@@ -389,21 +336,21 @@ export async function sendDocumentForSignature(params) {
       documentUrl: params.documentUrl ? (typeof params.documentUrl === 'string' ? `${params.documentUrl.substring(0, 30)}...` : 'Not a string') : 'Missing',
       signatories: params.signatories ? params.signatories.length : 0
     });
-    
+
     // Get access token
     const accessToken = await getAccessToken();
     console.log('[eviaSignService] Retrieved access token:', accessToken ? 'Token obtained' : 'Failed to get token');
-      
+
     // Upload document
     console.log('[eviaSignService] Uploading document...');
     const documentToken = await uploadDocument(params.documentUrl, accessToken);
     console.log('[eviaSignService] Document uploaded successfully, received token:', documentToken);
-    
+
     // Validate documentToken
     if (!documentToken || typeof documentToken !== 'string' || documentToken.trim() === '') {
       throw new Error('Invalid document token received from Evia Sign');
     }
-    
+
     console.log('[eviaSignService] Preparing signature request with document token:', documentToken);
 
     // According to the Evia docs minimum requirement for type 3 request, using the exact format
@@ -486,7 +433,7 @@ export async function sendDocumentForSignature(params) {
     // Add the request as a JSON string with the key 'RequestJson'
     const formData = new FormData();
     formData.append('RequestJson', JSON.stringify(requestJson));
-    
+
     console.log('[eviaSignService] Making API request to send for signature (Auto-stamping)...');
     console.log('[eviaSignService] Endpoint:', `${EVIA_SIGN_API.BASE_URL}${EVIA_SIGN_API.ENDPOINTS.SEND_REQUEST}?type=3`);
 
@@ -501,10 +448,10 @@ export async function sendDocumentForSignature(params) {
         }
       }
     );
-        
+
     console.log('[eviaSignService] Signature request successful, response:', response.data);
-        
-    return { 
+
+    return {
       success: true, 
       requestId: response.data.requestId,
       status: 'pending'
@@ -516,7 +463,7 @@ export async function sendDocumentForSignature(params) {
       console.error('[eviaSignService] Response data:', error.response.data);
       console.error('[eviaSignService] Response headers:', error.response.headers);
     }
-    return { 
+    return {
       success: false, 
       error: error.message || 'Failed to send document for signature'
     };
@@ -534,7 +481,7 @@ export const getSignatureStatus = async (signatureId) => {
   try {
     // Get access token from available sources
     const accessToken = getEviaAccessToken();
-    
+
     // Log some debug info
     console.log(`Using Evia API endpoint for signature ID: ${signatureId}`);
 
@@ -554,43 +501,7 @@ export const getSignatureStatus = async (signatureId) => {
       return { error: `Status ${response.status}: ${response.statusText}` };
     }
 
-    [{
-	"resource": "/c:/Users/User/khrentals/src/index.css",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": "unknownAtRules",
-	"severity": 4,
-	"message": "Unknown at rule @tailwind",
-	"source": "css",
-	"startLineNumber": 1,
-	"startColumn": 1,
-	"endLineNumber": 1,
-	"endColumn": 10,
-	"modelVersionId": 4
-},{
-	"resource": "/c:/Users/User/khrentals/src/index.css",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": "unknownAtRules",
-	"severity": 4,
-	"message": "Unknown at rule @tailwind",
-	"source": "css",
-	"startLineNumber": 2,
-	"startColumn": 1,
-	"endLineNumber": 2,
-	"endColumn": 10,
-	"modelVersionId": 4
-},{
-	"resource": "/c:/Users/User/khrentals/src/index.css",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": "unknownAtRules",
-	"severity": 4,
-	"message": "Unknown at rule @tailwind",
-	"source": "css",
-	"startLineNumber": 3,
-	"startColumn": 1,
-	"endLineNumber": 3,
-	"endColumn": 10,
-	"modelVersionId": 4
-}];
+    const data = await response.json();
     return data;
   } catch (error) {
     console.error("Error getting signature status:", error);
@@ -602,35 +513,10 @@ export const getSignatureStatus = async (signatureId) => {
  * Helper function to get the stored authentication token
  * @returns {Promise<string|null>} - The auth token or null if not authenticated
  */
-async function getAuthToken() {
-  try {
-    const storedAuth = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{}');
-    
-    // Check if token exists and is not expired
-    if (storedAuth.authToken && storedAuth.expiresAt && storedAuth.expiresAt > Date.now()) {
-      return storedAuth.authToken;
-    }
-    
-    // Token is expired or doesn't exist
-    console.log('[eviaSignService] Auth token is missing or expired');
-    return null;
-  } catch (error) {
-    console.error('[eviaSignService] Error getting auth token:', error);
-    return null;
-  }
-}
 
 /**
  * Helper function to clear the stored token
  */
-function clearStoredToken() {
-  try {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    console.log('[eviaSignService] Cleared stored authentication token');
-  } catch (error) {
-    console.error('[eviaSignService] Error clearing auth token:', error);
-  }
-}
 
 /**
  * Download a signed document from Evia Sign by its request ID
@@ -640,22 +526,21 @@ function clearStoredToken() {
 export async function downloadSignedDocument(requestId) {
   try {
     console.log('[eviaSignService] Downloading signed document for request ID:', requestId);
-    
+
     // Get access token
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error('Authentication required to download document');
     }
-      
+
     // Try different endpoint formats due to potential inconsistency in API paths
     let response;
-    let error;
-    
+
     try {
       // Try first format with /document at the end
       const endpoint1 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}/document`;
       console.log('[eviaSignService] Trying endpoint 1:', endpoint1);
-      
+
       response = await axios.get(
         endpoint1,
         {
@@ -669,12 +554,12 @@ export async function downloadSignedDocument(requestId) {
     } catch (error1) {
       console.log('[eviaSignService] Endpoint 1 failed:', error1.message);
       const originalError = error1;
-      
+
       try {
         // Try second format with /Document (capital D)
         const endpoint2 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}/Document`;
         console.log('[eviaSignService] Trying endpoint 2:', endpoint2);
-        
+
         response = await axios.get(
           endpoint2,
           {
@@ -687,12 +572,12 @@ export async function downloadSignedDocument(requestId) {
         );
       } catch (error2) {
         console.log('[eviaSignService] Endpoint 2 also failed:', error2.message);
-        
+
         // Try a third format from docs
         try {
           const endpoint3 = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/document/${requestId}`;
           console.log('[eviaSignService] Trying endpoint 3:', endpoint3);
-          
+
           response = await axios.get(
             endpoint3,
             {
@@ -710,35 +595,35 @@ export async function downloadSignedDocument(requestId) {
         }
       }
     }
-    
+
     if (!response) {
       throw new Error('Failed to get document from any endpoint');
     }
-    
+
     console.log('[eviaSignService] Document download response received:', {
       status: response.status,
       statusText: response.statusText,
       contentType: response.headers['content-type'],
       dataSize: response.data ? response.data.byteLength : 0
     });
-    
+
     if (!response.data || response.data.byteLength === 0) {
       throw new Error('Empty document data received from Evia Sign');
     }
-    
+
     // Convert binary data to blob
-    const blob = new Blob([response.data], { 
+    const blob = new Blob([response.data], {
       type: response.headers['content-type'] || 'application/pdf' 
     });
-    
+
     console.log(`[eviaSignService] Created document blob with size: ${formatFileSize(blob.size)}`);
-    
+
     // Upload to platform storage
     const fileName = `signed_${requestId}_${Date.now()}.pdf`;
     const filePath = `agreements/${fileName}`;
-    
+
     console.log(`[eviaSignService] Uploading signed document to storage: ${filePath}`);
-    
+
     const uploadedDocument = await uploadTenantFile({
       bucket: 'files',
       path: filePath,
@@ -765,7 +650,7 @@ export async function downloadSignedDocument(requestId) {
       console.error('[eviaSignService] Response status:', error.response.status);
       console.error('[eviaSignService] Response headers:', error.response.headers);
     }
-    return { 
+    return {
       success: false, 
       error: error.message || 'Failed to download signed document'
     };
@@ -774,19 +659,19 @@ export async function downloadSignedDocument(requestId) {
 
 /**
  * Get document thumbnails from Evia Sign
- * @param {string} documentToken - The document token 
+ * @param {string} documentToken - The document token
  * @returns {Promise<Object>} - Result with thumbnail URL if successful
  */
 export async function getDocumentThumbnail(documentToken) {
   try {
     console.log('[eviaSignService] Getting thumbnail for document:', documentToken);
-    
+
     // Get access token
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error('Authentication required to get document thumbnail');
     }
-    
+
     // Request the thumbnail from Evia Sign API
       const response = await axios.get(
       `${EVIA_SIGN_API.BASE_URL}/sign/thumbs/api/Requests/document/${documentToken}/thumbnails/1`,
@@ -798,23 +683,23 @@ export async function getDocumentThumbnail(documentToken) {
           responseType: 'arraybuffer'
         }
       );
-      
+
     console.log('[eviaSignService] Thumbnail response received:', {
       status: response.status,
       statusText: response.statusText,
       contentType: response.headers['content-type'],
       dataSize: response.data ? response.data.byteLength : 0
     });
-    
+
     if (!response.data || response.data.byteLength === 0) {
       throw new Error('Empty thumbnail data received from Evia Sign');
     }
-    
+
     // Convert binary data to blob and create object URL
-    const blob = new Blob([response.data], { 
+    const blob = new Blob([response.data], {
       type: response.headers['content-type'] || 'image/png' 
     });
-    
+
     // Create a data URL for immediate display
     const reader = new FileReader();
     const dataUrl = await new Promise((resolve, reject) => {
@@ -822,10 +707,10 @@ export async function getDocumentThumbnail(documentToken) {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-    
+
     console.log('[eviaSignService] Thumbnail created successfully');
-    
-    return { 
+
+    return {
       success: true, 
       thumbnailUrl: dataUrl,
       size: blob.size
@@ -836,7 +721,7 @@ export async function getDocumentThumbnail(documentToken) {
       console.error('[eviaSignService] Response status:', error.response.status);
       console.error('[eviaSignService] Response headers:', error.response.headers);
     }
-    return { 
+    return {
       success: false, 
       error: error.message || 'Failed to get document thumbnail'
     };
@@ -846,20 +731,20 @@ export async function getDocumentThumbnail(documentToken) {
 /**
  * Get an access token for the Evia Sign API
  * This is a private helper function
- * 
+ *
  * @returns {Promise<string>} - The access token
  */
 async function getAccessToken() {
   try {
     console.log('[eviaSignService] Getting access token...');
     const storedAuth = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{}');
-    
+
     // If we have a valid token, return it
     if (storedAuth.authToken && storedAuth.expiresAt && storedAuth.expiresAt > Date.now()) {
       console.log('[eviaSignService] Using existing token, valid until:', new Date(storedAuth.expiresAt).toLocaleString());
       return storedAuth.authToken;
     }
-    
+
     console.log('[eviaSignService] Token expired or missing, trying refresh...');
     // If we have a refresh token, try to refresh
     if (storedAuth.refreshToken) {
@@ -878,7 +763,7 @@ async function getAccessToken() {
             expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
             userEmail: storedAuth.userEmail
           };
-          
+
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
           console.log('[eviaSignService] Token refreshed successfully');
           return authData.authToken;
@@ -887,7 +772,7 @@ async function getAccessToken() {
         console.error('[eviaSignService] Error refreshing token:', error);
       }
     }
-    
+
     // If we get here, we need to re-authenticate
     console.error('[eviaSignService] Authentication required - no valid token or refresh token');
     throw new Error('Authentication required');
@@ -899,14 +784,14 @@ async function getAccessToken() {
 
 /**
  * Check the status of a signature request
- * 
+ *
  * @param {string} requestId - The Evia Sign request ID
  * @returns {Promise<Object>} - The signature status
  */
 export async function checkSignatureStatus(requestId) {
   try {
     console.log(`[eviaSignService] Checking signature status for request: ${requestId}`);
-    
+
     // First check the database for webhook events directly - this is more reliable than API calls
     // especially if the document has been deleted from Evia Sign
     try {
@@ -918,15 +803,15 @@ export async function checkSignatureStatus(requestId) {
         .order('event_id', { ascending: false })
         .order('event_time', { ascending: false })
         .limit(5);
-      
+
       if (webhookError) {
         throw webhookError;
       }
-      
+
       // If we found webhook events, use the most recent one for status
       if (webhookEvents && webhookEvents.length > 0) {
         const latestEvent = webhookEvents[0];
-        
+
         // Map event ID to status
         let status;
         switch (latestEvent.event_id) {
@@ -934,9 +819,9 @@ export async function checkSignatureStatus(requestId) {
           case 2: status = 'in_progress'; break;
           default: status = 'pending';
         }
-        
+
         console.log('[eviaSignService] Using status from stored webhook events:', status);
-        
+
         return {
           success: true,
           status: status,
@@ -951,19 +836,19 @@ export async function checkSignatureStatus(requestId) {
       console.error('[eviaSignService] Error getting status from webhook events:', webhookError);
       // Continue with API calls if webhook check fails
     }
-    
+
     // Get access token for API calls
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error('Authentication required to check signature status');
     }
-    
+
     try {
       // Use the correct Evia Sign API endpoint based on their documentation
       // First try the standard request endpoint (without /Status or /status suffix)
       const requestEndpoint = `${EVIA_SIGN_API.BASE_URL}/sign/api/Requests/${requestId}`;
       console.log('[eviaSignService] Using request endpoint:', requestEndpoint);
-      
+
       const response = await axios.get(
         requestEndpoint,
         {
@@ -973,9 +858,9 @@ export async function checkSignatureStatus(requestId) {
           }
         }
       );
-      
+
       console.log('[eviaSignService] Request check response:', response.data);
-      
+
       // Check if we need to get signatories separately
       let signatories = [];
       try {
@@ -994,7 +879,7 @@ export async function checkSignatureStatus(requestId) {
         console.warn('[eviaSignService] Could not fetch signatories:', signatoriesError.message);
         // Continue without signatories data
       }
-      
+
       return {
         success: true,
         status: response.data.status || 'unknown',
@@ -1003,7 +888,7 @@ export async function checkSignatureStatus(requestId) {
       };
     } catch (apiError) {
       console.error('[eviaSignService] API error when checking request:', apiError.message);
-      
+
       // For any other error, fall back to webhook data directly from database
       // Try to find webhook events in the database
       try {
@@ -1014,10 +899,10 @@ export async function checkSignatureStatus(requestId) {
           .order('event_id', { ascending: false })
           .order('event_time', { ascending: false })
           .limit(1);
-        
+
         if (!webhookError && webhookEvents && webhookEvents.length > 0) {
           const latestEvent = webhookEvents[0];
-          
+
           // Map event ID to status
           let status;
           switch (latestEvent.event_id) {
@@ -1025,7 +910,7 @@ export async function checkSignatureStatus(requestId) {
             case 2: status = 'in_progress'; break;
             default: status = 'pending';
           }
-          
+
           return {
             success: true,
             status: status,
@@ -1037,7 +922,7 @@ export async function checkSignatureStatus(requestId) {
       } catch (queryError) {
         console.error('[eviaSignService] Error querying webhook events:', queryError);
       }
-      
+
       // If we can't find webhook events, return unknown status
       return {
         success: true,
@@ -1052,7 +937,7 @@ export async function checkSignatureStatus(requestId) {
       console.error('[eviaSignService] Response status:', error.response.status);
       console.error('[eviaSignService] Response data:', error.response.data);
     }
-    
+
     // Always try to get webhook status directly from database as last resort
     try {
       const { data: webhookEvents, error: webhookError } = await platformClient
@@ -1062,10 +947,10 @@ export async function checkSignatureStatus(requestId) {
         .order('event_id', { ascending: false })
         .order('event_time', { ascending: false })
         .limit(1);
-      
+
       if (!webhookError && webhookEvents && webhookEvents.length > 0) {
         const latestEvent = webhookEvents[0];
-        
+
         // Map event ID to status
         let status;
         switch (latestEvent.event_id) {
@@ -1073,7 +958,7 @@ export async function checkSignatureStatus(requestId) {
           case 2: status = 'in_progress'; break;
           default: status = 'pending';
         }
-        
+
         return {
           success: true,
           status: status,
@@ -1084,7 +969,7 @@ export async function checkSignatureStatus(requestId) {
     } catch (webhookError) {
       console.error('[eviaSignService] Final fallback to database also failed:', webhookError);
     }
-    
+
     // Return a generic error if all else fails
     return {
       success: false,
@@ -1096,195 +981,14 @@ export async function checkSignatureStatus(requestId) {
 
 /**
  * Update agreement signatures status by checking with Evia Sign
- * 
+ *
  * @param {string} agreementId - The agreement ID in our system
  * @param {string} eviaRequestId - The Evia Sign request ID
  * @returns {Promise<Object>} The result of the update
  */
-export async function updateAgreementSignatureStatus(agreementId, eviaRequestId) {
-  try {
-    console.log(`[eviaSignService] Updating agreement ${agreementId} signature status for Evia request ${eviaRequestId}`);
-    
-    // First check webhook events to see if we have status information
-    try {
-      const { data: webhookEvents } = await platformClient
-        .from('webhook_events')
-        .select('*')
-        .eq('request_id', eviaRequestId)
-        .order('event_time', { ascending: false })
-        .limit(10);
-      
-      if (webhookEvents && webhookEvents.length > 0) {
-        console.log('[eviaSignService] Found webhook events for this request, using those for status update');
-        
-        // Map of event IDs to statuses with corrected values that match DB constraints
-        const statusMap = {
-          1: 'pending',        // SignRequestReceived -> pending
-          2: 'in_progress',    // SignatoryCompleted -> in_progress
-          3: 'completed'       // RequestCompleted -> completed
-        };
-        
-        // Get the most recent event with the highest event_id (completed takes precedence)
-        const sortedEvents = webhookEvents.sort((a, b) => {
-          // First sort by event_id in descending order (3 > 2 > 1)
-          if (b.event_id !== a.event_id) {
-            return b.event_id - a.event_id;
-          }
-          // Then by event_time (most recent first)
-          return new Date(b.event_time) - new Date(a.event_time);
-        });
-        
-        const latestEvent = sortedEvents[0];
-        const signatureStatus = statusMap[latestEvent.event_id] || 'pending';
-        
-        // Map status to agreement.status (different from signature_status)
-        let agreementStatus = null;
-        if (signatureStatus === 'completed') {
-          agreementStatus = 'signed';
-        }
-        
-        console.log(`[eviaSignService] Latest webhook event: ${latestEvent.event_description}, setting signature status to ${signatureStatus}`);
-        
-        // Update agreement with this status
-        const updates = {
-          signature_status: signatureStatus,
-          updatedat: new Date().toISOString()
-        };
-        
-        // If the status is 'completed', update the agreement status too
-        if (signatureStatus === 'completed') {
-          updates.status = 'signed';
-          
-          // Try to get the signed document
-          try {
-            const docResult = await downloadSignedDocument(eviaRequestId);
-            if (docResult.success && docResult.documentUrl) {
-              updates.signatureurl = docResult.documentUrl;
-            }
-          } catch (docError) {
-            console.error('[eviaSignService] Error downloading signed document:', docError);
-          }
-        }
-        
-        // Update in database
-        return await updateAgreementStatus(agreementId, updates);
-      }
-    } catch (webhookError) {
-      console.error('[eviaSignService] Error checking webhook events:', webhookError);
-    }
-    
-    // If no webhook events found, proceed with API check
-    // Fetch current status from Evia Sign
-    const statusResult = await checkSignatureStatus(eviaRequestId);
-    
-    if (!statusResult.success) {
-      // If the request is not found but we have the "notFound" flag, handle differently
-      if (statusResult.notFound) {
-        console.log('[eviaSignService] Request not found in Evia Sign. Checking for webhook events...');
-        
-        try {
-          const { data: webhookEvents } = await platformClient
-            .from('webhook_events')
-            .select('*')
-            .eq('request_id', eviaRequestId)
-            .order('event_time', { ascending: false })
-            .limit(1);
-            
-          if (webhookEvents && webhookEvents.length > 0) {
-            const latestEvent = webhookEvents[0];
-            console.log(`[eviaSignService] Found webhook event ${latestEvent.event_description} for request not found in API`);
-            
-            // Use the webhook event to determine status - with corrected mapping
-            let signatureStatus;
-            switch (latestEvent.event_id) {
-              case 3: signatureStatus = 'completed'; break;
-              case 2: signatureStatus = 'in_progress'; break;
-              default: signatureStatus = 'pending';
-            }
-            
-            const { data: updateResult, error: updateError } = await platformClient
-              .from('agreements')
-              .update({
-                signature_status: signatureStatus,
-                updatedat: new Date().toISOString()
-              })
-              .eq('id', agreementId)
-              .select();
-              
-            if (updateError) {
-              console.error('[eviaSignService] Error updating agreement status:', updateError);
-            } else {
-              console.log('[eviaSignService] Agreement updated based on webhook event:', updateResult);
-            }
-            
-            return {
-              success: true,
-              message: `Status updated from webhook: ${signatureStatus}`,
-              status: signatureStatus
-            };
-          } else {
-            // If no webhook events found either, use failed status instead of error
-            console.log('[eviaSignService] No webhook events found, using failed status');
-            
-            const { data: updateResult, error: updateError } = await platformClient
-              .from('agreements')
-              .update({
-                signature_status: 'failed',
-                updatedat: new Date().toISOString()
-              })
-              .eq('id', agreementId)
-              .select();
-              
-            if (updateError) {
-              console.error('[eviaSignService] Error updating agreement status to failed:', updateError);
-              // Try an alternative update if the first one fails
-              try {
-                await platformClient.rpc('update_agreement_status', { 
-                  agreement_id: agreementId,
-                  status_value: 'failed'
-                });
-              } catch (rpcError) {
-                console.error('[eviaSignService] RPC update also failed:', rpcError);
-              }
-            } else {
-              console.log('[eviaSignService] Agreement updated to failed status:', updateResult);
-            }
-            
-            return {
-              success: false,
-              message: statusResult.error,
-              status: 'failed'
-            };
-          }
-        } catch (webhookError) {
-          console.error('[eviaSignService] Error checking webhook events:', webhookError);
-          
-          // Fall back to failed status if webhook check fails
-          try {
-            await platformClient
-              .from('agreements')
-              .update({
-                signature_status: 'failed',
-                updatedat: new Date().toISOString()
-              })
-              .eq('id', agreementId);
-              
-          } catch (updateError) {
-            console.error('[eviaSignService] Error updating agreement status to failed:', updateError);
-          }
-          
-          return {
-            success: false,
-            message: statusResult.error,
-            status: 'failed'
-          };
-        }
-      }
-      
-      throw new Error(`Failed to check status: ${statusResult.error}`);
-    }
-  } catch (error) {
-    console.error('[eviaSignService] Error updating agreement signature status:', error);
-    throw error;
-  }
-} 
+export async function updateAgreementSignatureStatus(_agreementId, _eviaRequestId) {
+  // Compatibility only: a browser observation cannot mutate signature evidence.
+  throw Object.assign(new Error('Agreement signature changes require the verified server workflow.'), {
+    code: 'AGREEMENT_SIGNING_AUTHORITY_REQUIRED'
+  });
+}

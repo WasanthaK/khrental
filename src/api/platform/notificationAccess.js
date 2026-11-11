@@ -16,7 +16,7 @@ export const parseNotificationPage = (query = {}) => {
 };
 
 export const listOwnNotificationPage = async ({ tenantId, userId, page, pageSize, query }) => {
-  if (!tenantId || !userId) throw createAccessError('Authenticated tenant context is required.', 'TENANT_CONTEXT_REQUIRED');
+  if (!tenantId || !userId) {throw createAccessError('Authenticated tenant context is required.', 'TENANT_CONTEXT_REQUIRED');}
   return query(
     `SELECT n.* FROM notifications n
      WHERE n.tenant_id = @tenantId AND n.user_id = @userId
@@ -27,8 +27,8 @@ export const listOwnNotificationPage = async ({ tenantId, userId, page, pageSize
 };
 
 export const markOwnNotificationRead = async ({ tenantId, userId, notificationId, queryOne }) => {
-  if (!tenantId || !userId) throw createAccessError('Authenticated tenant context is required.', 'TENANT_CONTEXT_REQUIRED');
-  if (!notificationId) throw createAccessError('Notification ID is required.', 'INVALID_NOTIFICATION_ID', 400);
+  if (!tenantId || !userId) {throw createAccessError('Authenticated tenant context is required.', 'TENANT_CONTEXT_REQUIRED');}
+  if (!notificationId) {throw createAccessError('Notification ID is required.', 'INVALID_NOTIFICATION_ID', 400);}
   const row = await queryOne(
     `UPDATE notifications
      SET is_read = 1, updatedat = SYSUTCDATETIME()
@@ -36,7 +36,7 @@ export const markOwnNotificationRead = async ({ tenantId, userId, notificationId
      WHERE tenant_id = @tenantId AND user_id = @userId AND id = @notificationId`,
     { tenantId, userId, notificationId }
   );
-  if (!row) throw createAccessError('Notification not found.', 'NOTIFICATION_NOT_FOUND', 404);
+  if (!row) {throw createAccessError('Notification not found.', 'NOTIFICATION_NOT_FOUND', 404);}
   return row;
 };
 

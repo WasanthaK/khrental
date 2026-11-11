@@ -8,7 +8,7 @@ import {
 } from '../src/api/auth/publicSignupIngressGuard.js';
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-const router = readFileSync(
+readFileSync(
   new URL('../src/api/auth/publicSignupRegistrationRouter.js', import.meta.url),
   'utf8'
 );
@@ -69,7 +69,6 @@ test('missing peer attestation, forged headers, duplicate XFF and port suffix fa
   });
   assert.equal(throws(raw('10.0.0.5', '192.0.2.1')), null);
 });
-
 
 test('ACA platform-managed HTTP ingress mode selects only Azure-appended rightmost XFF despite rotating socket peers', () => {
   const managed = createAzureSignupClientAddress({ azureManagedHttpIngress: true });

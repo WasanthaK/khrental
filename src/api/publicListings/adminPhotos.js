@@ -28,7 +28,7 @@ export const listAdminPhotos=async(args,{
   rows=params=>runQuery(ADMIN_PHOTOS_SQL,params)
 }={})=>{
   const source=await snapshot(args);
-  if(!source)throw problem(404,'PROPERTY_NOT_FOUND','Property is unavailable.');
+  if(!source){throw problem(404,'PROPERTY_NOT_FOUND','Property is unavailable.');}
   let images=[];
   try{images=typeof source.sourceImages==='string'?JSON.parse(source.sourceImages):source.sourceImages;}
   catch{images=[];}
@@ -53,15 +53,15 @@ export const listAdminPhotos=async(args,{
 export const previewAdminPhoto=async(args,{
   env=process.env,load=loadPhotoForReview,read=readPublicDerivative
 }={})=>{
-  if(!photoReviewEnabled(env))throw problem(404,'PHOTO_REVIEW_DISABLED','Photo review is not enabled.');
+  if(!photoReviewEnabled(env)){throw problem(404,'PHOTO_REVIEW_DISABLED','Photo review is not enabled.');}
   const before=await load(args);
   if(!before||!['withheld','ready'].includes(before.mediaStatus))
-    throw problem(404,'PUBLIC_IMAGE_NOT_FOUND','Photo is unavailable.');
+    {throw problem(404,'PUBLIC_IMAGE_NOT_FOUND','Photo is unavailable.');}
   const bytes=await read({listingId:before.listingPublicId,mediaId:args.mediaId,meta:before});
   const after=await load(args);
   if(!after||after.mediaStatus!==before.mediaStatus||after.sourceImages!==before.sourceImages||
      String(after.listingPublicId)!==String(before.listingPublicId)||
      after.derivativeSha256!==before.derivativeSha256)
-    throw problem(409,'PHOTO_REVIEW_STALE','The photo or access changed; reload before reviewing.');
+    {throw problem(409,'PHOTO_REVIEW_STALE','The photo or access changed; reload before reviewing.');}
   return bytes;
 };

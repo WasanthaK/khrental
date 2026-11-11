@@ -13,9 +13,9 @@ const row={public_id:publicId,propertytype:'house',country_code:'LK',
 const actor={authSession:{},user:{id:user,role:'admin'},tenantId:tenant,
   membership:{status:'active',role:'admin',tenant_id:tenant}};
 const makeCall=async(router,method,path,body,identity)=>{
-  const app=express();app.use(express.json());app.use((req,res,next)=>{if(identity)Object.assign(req,identity);next();});
+  const app=express();app.use(express.json());app.use((req,res,next)=>{if(identity){Object.assign(req,identity);}next();});
   app.use('/listing',router);
-  app.use((error,req,res,next)=>res.status(error.status||500).json({code:error.code||'ERROR'}));
+  app.use((error,req,res,_next)=>res.status(error.status||500).json({code:error.code||'ERROR'}));
   const server=await new Promise(resolve=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));});
   try{
     const result=await fetch('http://127.0.0.1:'+server.address().port+'/listing'+path,
@@ -178,10 +178,10 @@ test('tenant admin may prepare withheld photos, but cannot mass-assign readiness
     {imageIndex:0,altText:'Living room',rightsConfirmed:true},
     {imageIndex:0,altText:'Living room',sourceUrl:'https://example.com/private.jpg'},
     {imageIndex:-1,altText:'Living room'}
-  ])assert.equal((await makeCall(router,'POST',route,payload,actor)).status,400);
+  ]){assert.equal((await makeCall(router,'POST',route,payload,actor)).status,400);}
   for(const identity of [undefined,{...actor,membership:{...actor.membership,status:'inactive'}},
     {...actor,membership:{...actor.membership,tenant_id:'55555555-5555-4555-8555-555555555555'}}])
-    assert.equal((await makeCall(router,'POST',route,{imageIndex:0,altText:'Living room'},identity)).status,403);
+    {assert.equal((await makeCall(router,'POST',route,{imageIndex:0,altText:'Living room'},identity)).status,403);}
   assert.equal(args.length,0);
   const ok=await makeCall(router,'POST',route,{imageIndex:0,altText:'Living room'},actor);
   assert.equal(ok.status,202);
@@ -292,7 +292,6 @@ test('pilot detail rejects a mismatched projection even if the lookup regresses'
   });
   assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
 });
-
 
 test('private pilot preview is default-off and requires current tenant administrator',async()=>{
   let reads=0;

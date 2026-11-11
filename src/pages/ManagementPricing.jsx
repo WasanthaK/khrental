@@ -6,7 +6,7 @@ import {listAdminTenants} from '../services/tenantAdminService';
 const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:''};
 const money=(minor,currency='USD')=>new Intl.NumberFormat('en',{style:'currency',currency}).format(minor/100);
 const minor=value=>{
-  if(!/^\d+(\.\d{1,2})?$/.test(value)) throw new Error('Use an amount with no more than two decimal places.');
+  if(!/^\d+(\.\d{1,2})?$/.test(value)) {throw new Error('Use an amount with no more than two decimal places.');}
   const [whole,fraction='']=value.split('.');return Number(whole)*100+Number(fraction.padEnd(2,'0'));
 };
 const rulesFrom=form=>({market:form.market,billingCurrency:form.billingCurrency,baseFeeMinor:minor(form.baseFee),rentCurrency:form.rentCurrency,
@@ -109,11 +109,11 @@ export default function ManagementPricing(){
   const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('1'),[preview,setPreview]=useState(null),[busy,setBusy]=useState(false);
   const [workspaces,setWorkspaces]=useState([]),[enrollment,setEnrollment]=useState({tenantId:'',market:'LK',useApprovedSandboxBaseline:false,reason:''});
   const load=async()=>{setLoading(true);setError('');try{const [data,tenants]=await Promise.all([requestMssqlApi('/api/management-billing/admin/pricing'),listAdminTenants({pageSize:100})]);setVersions(data.versions);setReady(data.sandboxConfigured);setWorkspaces((Array.isArray(tenants)?tenants:tenants.items||[]).filter(t=>t.plan==='development-testing'&&t.status==='active'));}catch(e){setError(e.message);}finally{setLoading(false);}};
-  useEffect(()=>{if(isPlatformAdmin)load();},[isPlatformAdmin]);
+  useEffect(()=>{if(isPlatformAdmin){load();}},[isPlatformAdmin]);
   useEffect(()=>setPreview(null),[form,quantity]);
   const run=async action=>{setBusy(true);setNotice('');try{await action();}catch(e){setNotice(e.message);}finally{setBusy(false);}};
-  if(authorityLoading)return <p className="p-6">Checking platform access…</p>;
-  if(!isPlatformAdmin)return <p role="alert" className="p-6">Platform administrator access is required.</p>;
+  if(authorityLoading){return <p className="p-6">Checking platform access…</p>;}
+  if(!isPlatformAdmin){return <p role="alert" className="p-6">Platform administrator access is required.</p>;}
   return <><ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load}
     enrollment={{workspaces,value:enrollment,update:(key,value)=>setEnrollment(previous=>({...previous,[key]:value})),submit:()=>run(async()=>{await requestMssqlApi('/api/management-billing/admin/enroll',{method:'POST',body:enrollment});setNotice('Workspace enrolled. Its administrator can open Management subscription to test checkout.');})}}
     onPreview={()=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{rules:rulesFrom(form),quantity:Number(quantity)}})))}

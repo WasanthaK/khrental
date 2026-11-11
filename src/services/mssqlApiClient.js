@@ -60,7 +60,7 @@ export const requestMssqlApi = async (path, options = {}) => {
     return null;
   }
 
-  if (responseType === 'blob') return response.blob();
+  if (responseType === 'blob') {return response.blob();}
 
   const contentType = response.headers.get('content-type') || '';
 

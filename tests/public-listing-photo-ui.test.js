@@ -44,7 +44,7 @@ test('photo UI prepares privately, requires preview and both attestations, then 
     await page.waitForSelector('#photo-selection');
     const button=async text=>page.evaluate(text=>{
       const target=[...document.querySelectorAll('button')].find(b=>b.textContent===text);
-      if(!target)throw Error('Missing button: '+text);
+      if(!target){throw Error('Missing button: '+text);}
       const disabled=target.disabled;target.click();return disabled;
     },text);
     assert.equal(await page.evaluate(()=>window.calls.some(c=>c.method==='POST')),false,'mount performs no photo write');

@@ -21,26 +21,26 @@ let vite,server,browser,releaseAuth;
 let authRequests=0,redemptions=0,replyMode="password";
 const generatedId='abcdefab-abcd-4abc-8abc-abcdefabcdef';
 const plugin={name:'verification-bootstrap-fixture',enforce:'pre',resolveId(source,importer){
-  if(!importer?.includes('/src/'))return;
-  if(/\/hooks\/useAuth(?:\.jsx)?$/.test(source))return '\0verification-auth';
-  if(source.endsWith('/components/contexts/SafePropertyProvider'))return '\0verification-properties';
+  if(!importer?.includes('/src/')){return;}
+  if(/\/hooks\/useAuth(?:\.jsx)?$/.test(source)){return '\0verification-auth';}
+  if(source.endsWith('/components/contexts/SafePropertyProvider')){return '\0verification-properties';}
 },load(id){
-  if(id==='\0verification-auth')return authFixture;
-  if(id==='\0verification-properties')return 'export default function Provider({children}){return children;}';
+  if(id==='\0verification-auth'){return authFixture;}
+  if(id==='\0verification-properties'){return 'export default function Provider({children}){return children;}';}
 }};
 try {
   vite=await createViteServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
   const app=express();app.use(express.json());
   app.get('/api/mssql/health',(_req,res)=>res.json({ok:true,connection:'ready'}));
-  app.get('/fixture-auth',(req,res)=>{authRequests++;releaseAuth=()=>{if(!res.writableEnded)res.json({ok:true});};});
+  app.get('/fixture-auth',(req,res)=>{authRequests++;releaseAuth=()=>{if(!res.writableEnded){res.json({ok:true});}};});
   app.post('/api/public-signup/redeem',(req,res)=>{
     redemptions++;
     assert.equal(req.body.token,token);
     assert.equal(req.get('authorization'),undefined);
     assert.equal(req.get('x-tenant-id'),undefined);
-    if(replyMode==='password')return res.status(400).json({code:'SIGNUP_PASSWORD_INVALID'});
-    if(replyMode==='unavailable')return res.status(503).json({code:'PUBLIC_SIGNUP_NOT_READY'});
-    if(replyMode==='malformed')return res.status(201).json({data:{user:{id:generatedId,role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'different-account'}}}});
+    if(replyMode==='password'){return res.status(400).json({code:'SIGNUP_PASSWORD_INVALID'});}
+    if(replyMode==='unavailable'){return res.status(503).json({code:'PUBLIC_SIGNUP_NOT_READY'});}
+    if(replyMode==='malformed'){return res.status(201).json({data:{user:{id:generatedId,role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:'different-account'}}}});}
     res.status(201).json({data:{user:{id:generatedId,role:'authenticated',user_type:'seeker'},session:{access_token:'fixture-only',user:{id:generatedId.toUpperCase()}}}});
   });
   app.get('/api/platform/auth/seeker-context',(req,res)=>{
@@ -105,7 +105,7 @@ try {
   await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),page.click('a[href="/login"]')]);
   assert.equal(new URL(page.url()).pathname,'/login');
   assert.equal(await page.$('#seeker-password'),null);
-  if(releaseAuth)releaseAuth();
+  if(releaseAuth){releaseAuth();}
   await page.goto(origin+'/verify-email#token=short',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.innerText.includes('missing or invalid'));
   assert.equal(new URL(page.url()).hash,'');
@@ -113,7 +113,7 @@ try {
   replyMode='malformed';
   // A hash-only goto does not start a new isolated verification bootstrap.
   await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
-  if(releaseAuth)releaseAuth();
+  if(releaseAuth){releaseAuth();}
   await page.goto(origin+'/verify-email#token='+token,{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#seeker-password');
   await page.type('#seeker-password','Bird8!xx');await page.type('#seeker-password-confirm','Bird8!xx');
@@ -125,12 +125,12 @@ try {
   assert.ok(await page.$('a[href="/login"]'));
   assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage},history:history.state})),stored,'A mismatched identity never changes the existing session');
   await page.goto(origin+'/login',{waitUntil:'domcontentloaded'});
-  if(releaseAuth)releaseAuth();
+  if(releaseAuth){releaseAuth();}
   await page.evaluateOnNewDocument(()=>{
     const replace=history.replaceState.bind(history);
     // Deny the credential scrub while allowing React Router bookkeeping.
     history.replaceState=(state,title,url)=>{
-      if(url==='/verify-email')throw new Error('fixture scrub denied');
+      if(url==='/verify-email'){throw new Error('fixture scrub denied');}
       return replace(state,title,url);
     };
   });
@@ -140,8 +140,8 @@ try {
   assert.equal(redemptions,4);
   console.log('SEEKER_VERIFICATION_BROWSER=PASS entry_isolation auth_hydration fragment_scrub explicit_redemption eight_character_policy inline_validation retry_same_link sql_uuid_casing accepted_setup_no_replay session_preservation full_navigation invalid_fragment scrub_failure');
 } finally {
-  if(releaseAuth)releaseAuth();
-  if(browser)await browser.close();
-  if(server)await new Promise(r=>server.close(r));
-  if(vite)await vite.close();
+  if(releaseAuth){releaseAuth();}
+  if(browser){await browser.close();}
+  if(server){await new Promise(r=>server.close(r));}
+  if(vite){await vite.close();}
 }

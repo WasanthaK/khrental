@@ -32,16 +32,16 @@ const entry=`import React,{useState} from 'react';import {createRoot} from 'reac
   function Harness(){const [key,setKey]=useState(0);return <><button id="remount" onClick={()=>setKey(n=>n+1)}>Remount app</button><AuthProvider key={key}><Status/></AuthProvider></>;}
   createRoot(document.getElementById('root')).render(<React.StrictMode><Harness/></React.StrictMode>);`;
 const plugin={name:'renter-auth-fixture',enforce:'pre',resolveId(source,importer){
-  if(source==='virtual:renter-auth')return '\0renter-auth-entry.jsx';
-  if(!importer?.endsWith('/src/hooks/useAuth.jsx'))return;
-  if(source.endsWith('/services/platformClient'))return '\0renter-auth-platform';
-  if(source.endsWith('/services/mssqlApiClient'))return '\0renter-auth-mssql';
-  if(source.endsWith('/utils/env'))return '\0renter-auth-env';
+  if(source==='virtual:renter-auth'){return '\0renter-auth-entry.jsx';}
+  if(!importer?.endsWith('/src/hooks/useAuth.jsx')){return;}
+  if(source.endsWith('/services/platformClient')){return '\0renter-auth-platform';}
+  if(source.endsWith('/services/mssqlApiClient')){return '\0renter-auth-mssql';}
+  if(source.endsWith('/utils/env')){return '\0renter-auth-env';}
 },load(id){
-  if(id==='\0renter-auth-entry.jsx')return {code:entry,loader:'jsx'};
-  if(id==='\0renter-auth-platform')return authModule;
-  if(id==='\0renter-auth-env')return 'export const isDevBypassEnabled=()=>false;';
-  if(id==='\0renter-auth-mssql')return `export const isMssqlApiEnabled=()=>true;
+  if(id==='\0renter-auth-entry.jsx'){return {code:entry,loader:'jsx'};}
+  if(id==='\0renter-auth-platform'){return authModule;}
+  if(id==='\0renter-auth-env'){return 'export const isDevBypassEnabled=()=>false;';}
+  if(id==='\0renter-auth-mssql'){return `export const isMssqlApiEnabled=()=>true;
     export const requestMssqlApi=async(_path,options)=>{
       const id=options.headers['x-auth-id'];
       if(window.authFixture.holdProfile===id)await new Promise(resolve=>{
@@ -49,7 +49,7 @@ const plugin={name:'renter-auth-fixture',enforce:'pre',resolveId(source,importer
         state.releaseProfile=()=>state.releases.splice(0).forEach(release=>release());
       });
       return {id:'profile-'+id,role:'authenticated',user_type:'seeker'};
-    };`;
+    };`;}
 }};
 let vite,server,browser;
 try {

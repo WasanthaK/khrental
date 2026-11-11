@@ -25,17 +25,17 @@ const fixture = () => {
     accessToken: 'test-token',
     fetchImpl: async request => {
       calls.push(request);
-      if (request.endsWith('/requests/stored-request/documents')) return response([
+      if (request.endsWith('/requests/stored-request/documents')) {return response([
         { documentName: 'Signed.pdf', downloadUrl: url.replace('/audit/', '/signed/') },
         { documentName: 'audit_trail.pdf', downloadUrl: url }
-      ]);
+      ]);}
       assert.equal(request, url, 'must not download the already retained signed agreement');
       return response(pdf);
     },
     storageDriver: {
       getObject: async (bucket, key) => {
         assert.equal(bucket, 'documents'); assert.equal(key, path);
-        if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+        if (!retained) {throw Object.assign(new Error('missing'), { status: 404 });}
         return { body: retained };
       },
       createEviaAuditIfAbsent: async (bucket, key, body) => {
@@ -58,10 +58,10 @@ test('recovers the missing audit independently and repeat recovery never contact
 test('provider export filename recovers to canonical audit path without downloading the signed PDF', async () => {
   const f = fixture();
   const fetchImpl = async request => {
-    if (request.endsWith('/documents')) return response([
+    if (request.endsWith('/documents')) {return response([
       { documentName: 'EviaSign_AuditTrail_33333333-3333-4333-8333-333333333333.pdf', downloadUrl: url },
       { documentName: 'Signed.pdf', downloadUrl: url.replace('/audit/', '/signed/') }
-    ]);
+    ]);}
     assert.equal(request, url);
     return response(pdf);
   };
@@ -96,9 +96,9 @@ test('recovers an already-stored provider-named audit without provider calls or 
   const existingPath = path.replace('audit_trail.pdf', `EviaSign_AuditTrail_${requestId.toUpperCase()}.pdf`);
   const originalGet = f.args.storageDriver.getObject;
   f.args.storageDriver.getObject = async (bucket, key) => {
-    if (key === path) return originalGet(bucket, key);
+    if (key === path) {return originalGet(bucket, key);}
     assert.ok(key.startsWith(`tenants/${tenantId}/agreements/${agreementId}/signed/EviaSign_AuditTrail_`));
-    if (key === existingPath) return { body: pdf };
+    if (key === existingPath) {return { body: pdf };}
     throw Object.assign(new Error('missing'), { status: 404 });
   };
   f.args.fetchImpl = () => { throw new Error('Retained audit must not contact provider'); };
@@ -124,7 +124,7 @@ test('conflicting or invalid stored audit aliases fail without provider fetch or
   for (const invalid of [true, false]) {
     const f = fixture(); const requestId = 'abcdef12-3456-4789-8abc-123456789abc';
     f.args.storageDriver.getObject = async (bucket, key) => {
-      if (key === path) throw Object.assign(new Error('missing'), { status: 404 });
+      if (key === path) {throw Object.assign(new Error('missing'), { status: 404 });}
       return { body: invalid ? Buffer.from('invalid') :
         key.includes(requestId.toUpperCase()) ? Buffer.from('%PDF-different audit') : pdf };
     };
@@ -146,7 +146,7 @@ test('server integration connection recovers without browser OAuth and refreshes
     }
     if (request.includes('/requests/stored-request/documents')) {
       assert.equal(options.headers.Authorization, `Bearer integration-token-${exchanges}`);
-      if (++lists === 1) return response({ error: 'expired' }, 401);
+      if (++lists === 1) {return response({ error: 'expired' }, 401);}
     }
     return normalFetch(request, options);
   };
@@ -193,7 +193,7 @@ test('missing, ambiguous and invalid provider audits fail without a write', asyn
 test('storage outage and corrupt retained audit do not trigger overwrite or provider fetch', async () => {
   for (const error of [Object.assign(new Error('storage unavailable'), { status: 503 }), null]) {
     const f = fixture(); f.setRetained(Buffer.from('invalid existing object'));
-    if (error) f.args.storageDriver.getObject = async () => { throw error; };
+    if (error) {f.args.storageDriver.getObject = async () => { throw error; };}
     await assert.rejects(recoverHistoricEviaAudit(f.args));
     assert.equal(f.calls.length, 0); assert.equal(f.counts().writes, 0);
   }
@@ -224,7 +224,7 @@ test('HTTP recovery route requires session and tenant context and ignores caller
   app.use(createEviaAuditRecoveryRouter({
     requireApiSession: (req, res, next) => req.headers.authorization === 'Bearer admin' ? next() : res.sendStatus(401),
     resolveTenantContext: (req, res, next) => {
-      if (req.headers['x-tenant-id'] !== tenantId) return res.sendStatus(403);
+      if (req.headers['x-tenant-id'] !== tenantId) {return res.sendStatus(403);}
       Object.assign(req, { tenantId, user: f.args.user, membership: f.args.membership }); next();
     },
     loadAgreement: f.args.loadAgreement,
@@ -233,7 +233,7 @@ test('HTTP recovery route requires session and tenant context and ignores caller
       return recoverHistoricEviaAudit({ ...f.args, ...args });
     }
   }));
-  app.use((err, req, res, next) => res.status(err.status || 500).json({ code: err.code }));
+  app.use((err, req, res, _next) => res.status(err.status || 500).json({ code: err.code }));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   try {
     const target = `http://127.0.0.1:${server.address().port}/agreements/${agreementId}/audit-trail`;
@@ -252,7 +252,6 @@ test('HTTP recovery route requires session and tenant context and ignores caller
     assert.equal(f.calls[0].includes('foreign-request'), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
-
 
 test('newly completed signed PDF can retain its missing audit alone without touching the signed bytes', async () => {
   const f = fixture();

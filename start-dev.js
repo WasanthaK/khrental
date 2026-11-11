@@ -2,7 +2,7 @@
 // This is a cross-platform alternative to the npm run dev:with-proxy command
 
 const { spawn } = require('child_process');
-const path = require('path');
+require('path');
 const os = require('os');
 
 // Determine the correct command based on OS
@@ -73,4 +73,4 @@ proxyProcess.on('exit', (code) => {
     console.log('Make sure the port 9090 is not in use by another application.');
     process.exit(1);
   }
-}); 
+});

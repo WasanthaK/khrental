@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback, useEffect,useRef,useState} from 'react';
 import {requestMssqlApi} from '../../services/mssqlApiClient';
 import {buildPilotConfiguration} from '../../utils/publicListingPilotConfiguration.js';
 
@@ -21,34 +21,36 @@ export default function PropertyPhotoReview({propertyId,publicPreview=null,reque
   const alive=useRef(true);
   const objectUrl=useRef('');
   const clearPreview=()=>{
-    if(objectUrl.current)URL.revokeObjectURL(objectUrl.current);
+    if(objectUrl.current){URL.revokeObjectURL(objectUrl.current);}
     objectUrl.current='';setPreview('');setPreviewLoaded(false);setReview(null);setRights(false);setPrivacy(false);
   };
-  const reload=async()=>{
+
+  const reload=useCallback(async()=>{
     const data=await request(base);
-    if(alive.current)setModel(data);
-  };
+    if(alive.current){setModel(data);}
+  }, [base, request]);
+
   useEffect(()=>{
     alive.current=true;
-    reload().catch(e=>{if(alive.current&&e.status!==404)setError(e.message||'Unable to load photo reviews.');});
-    return()=>{alive.current=false;if(objectUrl.current)URL.revokeObjectURL(objectUrl.current);};
-  },[base]);
+    reload().catch(e=>{if(alive.current&&e.status!==404){setError(e.message||'Unable to load photo reviews.');}});
+    return()=>{alive.current=false;if(objectUrl.current){URL.revokeObjectURL(objectUrl.current);}};
+  },[base, reload]);
   const act=async action=>{
     setBusy(true);setError('');setMessage('');
     try{await action();}
     catch(e){if(alive.current){clearPreview();setError(e.message||'Photo action failed. Reload before retrying.');}}
-    finally{if(alive.current)setBusy(false);}
+    finally{if(alive.current){setBusy(false);}}
   };
   const prepare=()=>act(async()=>{
     clearPreview();
     await request(base+'/prepare',{method:'POST',body:{imageIndex:Number(selection),altText:alt.trim()}});
     await reload();
-    if(alive.current)setMessage('Photo prepared privately. Preview it and complete both confirmations before approval.');
+    if(alive.current){setMessage('Photo prepared privately. Preview it and complete both confirmations before approval.');}
   });
   const inspect=photo=>act(async()=>{
     clearPreview();
     const blob=await request(base+'/'+encodeURIComponent(photo.mediaId)+'/preview',{responseType:'blob',cache:'no-store'});
-    if(!alive.current)return;
+    if(!alive.current){return;}
     objectUrl.current=URL.createObjectURL(blob);setPreview(objectUrl.current);setReview(photo);
   });
   const approve=()=>act(async()=>{
@@ -56,18 +58,18 @@ export default function PropertyPhotoReview({propertyId,publicPreview=null,reque
       method:'POST',body:{confirmRights:rights,confirmPrivacy:privacy}
     });
     clearPreview();await reload();
-    if(alive.current)setMessage('Photo approved. Public visibility still follows property availability, opt-out and website release settings.');
+    if(alive.current){setMessage('Photo approved. Public visibility still follows property availability, opt-out and website release settings.');}
   });
   const withdraw=photo=>act(async()=>{
     clearPreview();
     const result=await request(base+'/'+encodeURIComponent(photo.mediaId)+'/withdraw',{method:'POST',body:{}});
     await reload();
-    if(alive.current)setMessage(result.storageDeletionSucceeded===false?
+    if(alive.current){setMessage(result.storageDeletionSucceeded===false?
       'Photo withdrawn. Stored copy cleanup needs administrator attention.':
-      'Photo withdrawn and no longer eligible for public delivery.');
+      'Photo withdrawn and no longer eligible for public delivery.');}
   });
   const pilotConfiguration=busy?null:buildPilotConfiguration(publicPreview,model?.prepared);
-  if(!model)return error?<p role="alert" className="text-red-700 mt-4">{error}</p>:null;
+  if(!model){return error?<p role="alert" className="text-red-700 mt-4">{error}</p>:null;}
   return <div className="border-t mt-6 pt-4" aria-labelledby="photo-review-title">
     <h3 id="photo-review-title" className="font-semibold">Public property photographs</h3>
     <p className="text-sm text-gray-600 my-2">Prepare a private copy with embedded metadata removed. Check the preview and description for faces, documents, number plates, contact details and exact private addresses before approval.</p>

@@ -28,7 +28,6 @@ test('MSSQL mode does not rely on the legacy realtime subscription', () => {
   assert.match(source, /if \(isMssqlApiEnabled\(\)\) \{[\s\S]*return undefined;/);
 });
 
-
 test('agreement form send flow uses secure agreement-bound Evia callback', () => {
   const source = fs.readFileSync(new URL('../src/components/agreements/AgreementFormContainer.jsx', import.meta.url), 'utf8');
 
@@ -40,7 +39,6 @@ test('agreement form send flow uses secure agreement-bound Evia callback', () =>
   assert.doesNotMatch(source, /webhookUrl,/);
 });
 
-
 test('signature progress counter prefers recorded completed signers over pending agreement status', () => {
   const source = fs.readFileSync(new URL('../src/components/ui/SignatureProgressTracker.jsx', import.meta.url), 'utf8');
 
@@ -51,7 +49,6 @@ test('signature progress counter prefers recorded completed signers over pending
   assert.ok(completedBranch < pendingBranch, 'completed signer count is evaluated before pending status');
   assert.match(source, /label: `\$\{completed\} of \$\{total\} Signed`/);
 });
-
 
 test('completed agreement view reconciles and opens retained signed document instead of unsigned original', () => {
   const cardSource = fs.readFileSync(new URL('../src/components/agreements/AgreementSummaryCard.jsx', import.meta.url), 'utf8');
@@ -70,7 +67,6 @@ test('completed agreement view reconciles and opens retained signed document ins
   assert.match(serverSource, /retrieveAndStoreEviaCompletedDocuments/);
 });
 
-
 test('renter agreement view disables Evia signature management while preserving admin default', () => {
   const actionsSource = fs.readFileSync(new URL('../src/components/agreements/AgreementActions.jsx', import.meta.url), 'utf8');
   const renterSource = fs.readFileSync(new URL('../src/pages/rentee/RenteeAgreements.jsx', import.meta.url), 'utf8');
@@ -85,21 +81,18 @@ test('renter agreement view disables Evia signature management while preserving 
   assert.match(dashboardSource, /showSignatureReference && agreement\.eviasignreference/);
 });
 
-
 test('unused agreement compatibility hook stays removed', () => {
   const hookUrl = new URL('../src/hooks/useAgreement.js', import.meta.url);
   assert.equal(fs.existsSync(hookUrl), false);
 });
 
-
 test('agreement detail read uses canonical MSSQL API without compatibility fallback', () => {
   const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
 
-  assert.match(source, /export const fetchAgreement = async \(agreementId\) => \{[\s\S]*return requestMssqlApi\(\`\/api\/mssql\/agreements\/\$\{agreementId\}\`\);[\s\S]*\};/);
+  assert.match(source, /export const fetchAgreement = async \(agreementId\) => \{[\s\S]*return requestMssqlApi\(`\/api\/mssql\/agreements\/\$\{agreementId\}`\);[\s\S]*\};/);
   assert.doesNotMatch(source, /const fetchAgreementRecord = async/);
   assert.doesNotMatch(source, /Error loading agreement from MSSQL, falling back to the local compatibility layer/);
 });
-
 
 test('unused expired agreement compatibility updater stays removed', () => {
   const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
@@ -107,7 +100,6 @@ test('unused expired agreement compatibility updater stays removed', () => {
   assert.doesNotMatch(source, /export const checkAndUpdateExpiredAgreements\s*=/);
   assert.doesNotMatch(source, /Error finding expired agreements in MSSQL, falling back to the local compatibility layer/);
 });
-
 
 test('unused legacy Evia agreement webhook handler stays removed', () => {
   const source = fs.readFileSync(new URL('../src/services/agreementService.js', import.meta.url), 'utf8');
