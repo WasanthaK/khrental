@@ -123,6 +123,7 @@ try{
     [...el.attributes].some(a=>/^on/i.test(a.name)||/javascript:/i.test(a.value)))),false);
   assert.equal(await page.evaluate(()=>[...document.querySelectorAll('td')].some(n=>n.textContent==='500')),true,'Legal tables survive');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await page.screenshot({path:path.join(output,`security-${screen}-initial-${width}.png`),fullPage:true});
   const cases=await page.evaluate(async()=>{
    const {sanitizeHtml}=await import('/src/utils/sanitizeHtml.js');
    const attacks=['<img src=x onerror="window.attackCount++">','<svg><g onload="window.attackCount++"></g></svg>',

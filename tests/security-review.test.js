@@ -9,7 +9,7 @@ import {createManualEmailGuards,validateManualEmail} from '../src/api/email/manu
 import {sanitizeClientAuthMetadata} from '../src/api/auth/index.js';
 import {authorizePlatformQuery} from '../src/api/platform/authorization.js';
 import {publicApiError} from '../src/api/httpErrors.js';
-import {R2StorageDriver,getStorageDriver} from '../src/api/storage/index.js';
+import {R2StorageDriver,getStorageDriver,storageDeliveryContent,createStorageDeliveryHandler} from '../src/api/storage/index.js';
 
 const source=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const context=(role='rentee',id='actor')=>({user:{id,role:'admin'},membership:{role,status:'active',tenant_id:'tenant-a'},tenantId:'tenant-a',memberships:[]});
@@ -79,6 +79,22 @@ test('local and R2 append-only uploads deny overwrites atomically',async()=>{
   let headers;
   await R2StorageDriver.prototype.upload.call({objectKey:()=> 'key',request:async(_method,_key,options)=>{headers=options.headers;}},'images','test.jpg',Buffer.from('x'),'image/jpeg',{createOnly:true});
   assert.equal(headers['if-none-match'],'*');
+});
+
+test('raw tenant objects cannot execute HTML/SVG while protected PDF/raster viewing is retained',async()=>{
+  for(const type of ['text/html','image/svg+xml','application/xhtml+xml','application/octet-stream'])assert.equal(storageDeliveryContent({contentType:type,body:Buffer.from('<script>attack()</script>')}).inline,false);
+  assert.deepEqual(storageDeliveryContent({contentType:'application/octet-stream',body:Buffer.from('%PDF-fixture')}),{type:'application/pdf',inline:true});
+  assert.equal(storageDeliveryContent({contentType:'image/jpeg'}).inline,true);
+  const driver=getStorageDriver(),path='security-active-'+crypto.randomUUID()+'.html';
+  try{
+    await driver.upload('images',path,Buffer.from('<script>attack()</script>'),'text/html');
+    const app=express();app.get('/:bucket/:name',(req,res,next)=>{req.params[0]=req.params.name;return createStorageDeliveryHandler()(req,res,next);});app.use(errors);
+    await serve(app,async origin=>{
+      const r=await fetch(origin+'/images/'+path);assert.equal(r.status,200);
+      assert.equal(r.headers.get('content-disposition'),'attachment');assert.equal(r.headers.get('x-content-type-options'),'nosniff');
+      assert.match(r.headers.get('content-security-policy'),/sandbox/);
+    });
+  }finally{await driver.deleteObjects('images',[path]);}
 });
 
 test('manual mail denies non-admins and quota failures without dispatch, and rate limits both actor/tenant',async()=>{

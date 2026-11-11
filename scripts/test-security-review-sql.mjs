@@ -38,7 +38,9 @@ export const verifySecurityReviewSql = async pool => {
     assert.equal(await check(),false,'Configured bootstrap cannot override a revoked registry');
     await query('DELETE FROM dbo.platform_admins WHERE app_user_id=@id',params);
     assert.equal(await check(),true,'Explicit configured bootstrap works only after bound verification');
-    await query('UPDATE dbo.public_signup_challenges SET revoked_at=SYSUTCDATETIME() WHERE id=@challenge',params);
+    // Construct the valid revoked/unconsumed fixture state. Production's
+    // finished-once constraint correctly forbids consumed AND revoked.
+    await query('UPDATE dbo.public_signup_challenges SET consumed_at=NULL,revoked_at=SYSUTCDATETIME() WHERE id=@challenge',params);
     assert.equal(await check(),false,'Revoked proof cannot authorize bootstrap');
     const limiter=createSqlPublicSignupLimiter({getPool:async()=>pool});
     const results=await Promise.all(Array.from({length:12},()=>limiter.consume({scope:'manual-email-user',key,max:5,windowSeconds:60})));

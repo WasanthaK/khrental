@@ -386,6 +386,21 @@ export const getStorageDriver = () => {
   return storageDriver;
 };
 
+export const storageDeliveryContent = object => {
+  let type=String(object.contentType||'application/octet-stream').split(';')[0].trim().toLowerCase();
+  // The local driver has no MIME metadata. Preserve raster/PDF viewing using
+  // bytes, never a caller-controlled suffix or an HTML sniffing fallback.
+  if (type==='application/octet-stream' && Buffer.isBuffer(object.body)) {
+    const b=object.body;
+    if (b.toString('ascii',0,5)==='%PDF-') type='application/pdf';
+    else if (b[0]===0xff && b[1]===0xd8 && b[2]===0xff) type='image/jpeg';
+    else if (b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) type='image/png';
+    else if (['GIF87a','GIF89a'].includes(b.toString('ascii',0,6))) type='image/gif';
+    else if (b.toString('ascii',0,4)==='RIFF' && b.toString('ascii',8,12)==='WEBP') type='image/webp';
+  }
+  return {type,inline:['image/jpeg','image/png','image/gif','image/webp','application/pdf'].includes(type)};
+};
+
 export const createStorageDeliveryHandler = () => async (req, res, next) => {
   try {
     const bucket = req.params.bucket;
@@ -395,7 +410,13 @@ export const createStorageDeliveryHandler = () => async (req, res, next) => {
       return;
     }
     const object = await getStorageDriver().getObject(bucket, objectPath);
-    res.setHeader('Content-Type', object.contentType);
+    const content=storageDeliveryContent(object);
+    res.setHeader('Content-Type', content.type);
+    res.setHeader('X-Content-Type-Options','nosniff');
+    if (!content.inline) {
+      res.setHeader('Content-Disposition','attachment');
+      res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'");
+    }
     if (object.etag) {
       res.setHeader('ETag', object.etag);
     }
