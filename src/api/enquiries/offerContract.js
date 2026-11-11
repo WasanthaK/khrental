@@ -40,14 +40,14 @@ export const assertOfferVersion=(row,input)=>{
 // A replacement preserves history and must never overlap a provider signing
 // request, any recorded signature, or an activated tenancy.
 export const canReplaceRentalDraft = (agreement) => {
-  if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') return false;
+  if (!agreement || String(agreement.status).toLowerCase() !== 'cancelled') {return false;}
   if (agreement.eviasignreference || agreement.signature_request_id || agreement.signature_sent_at || agreement.signeddate || agreement.signature_completed_at || agreement.activated_at
-      || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) return false;
-  if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) return false;
+      || agreement.signeddocumenturl || agreement.signed_document_url || agreement.signature_pdf_url) {return false;}
+  if (!['', 'pending', 'not_started'].includes(String(agreement.signature_status || '').toLowerCase())) {return false;}
   let roster = agreement.signatories_status;
   if (typeof roster === 'string') {
     try { roster = JSON.parse(roster); } catch { return false; }
   }
-  if (roster && (!Array.isArray(roster) || roster.some(s => !['pending', ''].includes(String(s?.status || '').toLowerCase()) || s?.signedAt || s?.signed_at))) return false;
+  if (roster && (!Array.isArray(roster) || roster.some(s => !['pending', ''].includes(String(s?.status || '').toLowerCase()) || s?.signedAt || s?.signed_at))) {return false;}
   return true;
 };

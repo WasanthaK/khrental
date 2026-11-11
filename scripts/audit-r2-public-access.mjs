@@ -8,15 +8,15 @@ export const auditR2PublicAccess=async({env=process.env,fetchImpl=globalThis.fet
   const token=String(env.CLOUDFLARE_R2_AUDIT_TOKEN||'').trim();
   const jurisdiction=String(env.R2_JURISDICTION||'').trim();
   const blocked=code=>({status:'BLOCKED',code});
-  if(!token)return blocked('MISSING_CLOUDFLARE_R2_AUDIT_TOKEN');
-  if(!/^[a-f0-9]{32}$/i.test(account))return blocked('INVALID_R2_ACCOUNT_ID');
-  if(!/^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$/.test(bucket))return blocked('INVALID_R2_BUCKET');
-  if(/\s/.test(token))return blocked('INVALID_AUDIT_TOKEN_FORMAT');
+  if(!token){return blocked('MISSING_CLOUDFLARE_R2_AUDIT_TOKEN');}
+  if(!/^[a-f0-9]{32}$/i.test(account)){return blocked('INVALID_R2_ACCOUNT_ID');}
+  if(!/^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$/.test(bucket)){return blocked('INVALID_R2_BUCKET');}
+  if(/\s/.test(token)){return blocked('INVALID_AUDIT_TOKEN_FORMAT');}
   if(jurisdiction&&!['default','eu','us','fedramp','fedramp-high'].includes(jurisdiction)){
     return blocked('INVALID_R2_JURISDICTION');
   }
   const headers={Authorization:'Bearer '+token,Accept:'application/json'};
-  if(jurisdiction)headers['cf-r2-jurisdiction']=jurisdiction;
+  if(jurisdiction){headers['cf-r2-jurisdiction']=jurisdiction;}
   const base='https://api.cloudflare.com/client/v4/accounts/'+account+
     '/r2/buckets/'+encodeURIComponent(bucket)+'/domains/';
   const get=async kind=>{

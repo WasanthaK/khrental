@@ -32,8 +32,8 @@ export const guardBillingPlatformQuery = (req, res, next) => {
 
 const getCompatibilityBillingTable = (path = '') => {
   const normalizedPath = String(path || '').trim().toLowerCase();
-  if (normalizedPath === '/invoices' || normalizedPath.startsWith('/invoices/')) return 'invoices';
-  if (normalizedPath === '/payments' || normalizedPath.startsWith('/payments/')) return 'payments';
+  if (normalizedPath === '/invoices' || normalizedPath.startsWith('/invoices/')) {return 'invoices';}
+  if (normalizedPath === '/payments' || normalizedPath.startsWith('/payments/')) {return 'payments';}
   return null;
 };
 

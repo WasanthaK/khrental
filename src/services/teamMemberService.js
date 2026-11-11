@@ -2,7 +2,7 @@ import { requestMssqlApi } from './mssqlApiClient';
 
 export const fetchTeamDirectory = async (search = '') => {
   const params = new URLSearchParams();
-  if (search) params.set('search', search);
+  if (search) {params.set('search', search);}
   const query = params.toString();
   const data = await requestMssqlApi(`/api/mssql/team-members${query ? `?${query}` : ''}`);
   return Array.isArray(data) ? data : [];

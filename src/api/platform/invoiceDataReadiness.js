@@ -5,7 +5,7 @@
 const text = value => typeof value === 'string' ? value.trim() : '';
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(value));
 const amountCents = value => {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === '') {return null;}
   const n = Number(value);
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 };
@@ -31,7 +31,7 @@ export const inspectInvoiceIssuanceReadiness = ({
 } = {}) => {
   const problems = [];
   const need = (value, field, label, owner) => {
-    if (!text(value)) problems.push(missingEntry(field, label, owner));
+    if (!text(value)) {problems.push(missingEntry(field, label, owner));}
   };
   if (!invoice || typeof invoice !== 'object') {
     problems.push(missingEntry('invoice', 'Draft invoice', 'billing'));

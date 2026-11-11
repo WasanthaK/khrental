@@ -15,7 +15,7 @@ const fail = (status, code, message) => {
 
 const request = (transaction, params = {}) => {
   const bound = new sql.Request(transaction);
-  for (const [key, value] of Object.entries(params)) bound.input(key, value);
+  for (const [key, value] of Object.entries(params)) {bound.input(key, value);}
   return bound;
 };
 
@@ -75,7 +75,7 @@ export const redeemPublicSignupChallenge = async ({ token, password, expectedEma
     const email = String(challenge.email_normalized || '');
     // Enforce the R3 canary recipient under the same serializable SQL lock,
     // before any global app/auth identity can be created.
-    if (expectedEmail !== null && email !== expectedEmail) throw unavailable();
+    if (expectedEmail !== null && email !== expectedEmail) {throw unavailable();}
     const name = String(challenge.display_name || '').trim();
     if (!email || email !== email.trim().toLowerCase() || email.length > 320 ||
         !name || name.length > 255) {
@@ -145,7 +145,7 @@ export const redeemPublicSignupChallenge = async ({ token, password, expectedEma
         AND expires_at > SYSUTCDATETIME()
         AND verify_attempts < 10
     `);
-    if (consumed.rowsAffected?.[0] !== 1) throw unavailable();
+    if (consumed.rowsAffected?.[0] !== 1) {throw unavailable();}
 
     await transaction.commit();
     begun = false;

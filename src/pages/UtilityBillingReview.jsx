@@ -296,7 +296,7 @@ const UtilityBillingReview = () => {
   // Function to save edited reading
   const handleSaveEdit = async (readingId) => {
     const reading = readings.find(row => row.id === readingId);
-    if (!reading) return;
+    if (!reading) {return;}
     try {
       const nextPrevious = editingField === 'previous'
         ? Number(editedPreviousValue) : Number(reading.previousreading);
@@ -492,7 +492,7 @@ const UtilityBillingReview = () => {
                         color="error"
                         onClick={() => {
                           const reason = window.prompt('Please provide a reason for rejection:');
-                          if (reason !== null) handleReject(reading, reason);
+                          if (reason !== null) {handleReject(reading, reason);}
                         }}
                         startIcon={<FiXCircle />}
                         disabled={editingReading === reading.id}

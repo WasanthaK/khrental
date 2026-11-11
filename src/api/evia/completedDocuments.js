@@ -240,7 +240,7 @@ const buildStoredDocumentUrl = (bucket, relativePath) => {
 
 const decodeWebhookDocumentContent = (value) => {
   const raw = String(value || '').trim();
-  if (!raw) return null;
+  if (!raw) {return null;}
 
   const encoded = raw
     .replace(/^data:[^;]+;base64,/i, '')
@@ -283,7 +283,7 @@ export const storeEviaWebhookCompletedDocuments = async ({
   for (let index = 0; index < sourceDocuments.length; index += 1) {
     const document = sourceDocuments[index] || {};
     const body = decodeWebhookDocumentContent(document.DocumentContent || document.documentContent);
-    if (!body) continue;
+    if (!body) {continue;}
 
     const documentName = documentNames[index];
     const relativePath = buildEviaCompletedDocumentPath({
@@ -342,7 +342,7 @@ export const retrieveAndStoreEviaCompletedDocuments = async ({
     try {
       return await operation(tokenState.accessToken);
     } catch (error) {
-      if (Number(error?.status) !== 401 || suppliedAccessToken) throw error;
+      if (Number(error?.status) !== 401 || suppliedAccessToken) {throw error;}
       tokenState = await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl, baseUrl: integrationBaseUrl });
       return operation(tokenState.accessToken);
     }

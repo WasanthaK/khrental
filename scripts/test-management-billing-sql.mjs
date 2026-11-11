@@ -78,12 +78,12 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   const propA=crypto.randomUUID(),propB=crypto.randomUUID();
   await store.locked('fixture',async q=>{
     await q(`UPDATE dbo.tenants SET [plan]='development-testing',status='active' WHERE id IN(@a,@b)`,{a:tenantA,b:tenantB});
-    for(const tenantId of [tenantA,tenantB])await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role)
-      VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
-    for(const [id,tenantId] of [[propA,tenantA],[propB,tenantB]])await q(`INSERT INTO dbo.properties(id,tenant_id,name,propertytype,country_code)
-      VALUES(@id,@tenantId,'Synthetic billing proof home','house','LK')`,{id,tenantId});
+    for(const tenantId of [tenantA,tenantB]){await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role)
+      VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});}
+    for(const [id,tenantId] of [[propA,tenantA],[propB,tenantB]]){await q(`INSERT INTO dbo.properties(id,tenant_id,name,propertytype,country_code)
+      VALUES(@id,@tenantId,'Synthetic billing proof home','house','LK')`,{id,tenantId});}
   });
-  for(const tenantId of [tenantA,tenantB]) await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Synthetic SQL transaction acceptance only.'});
+  for(const tenantId of [tenantA,tenantB]) {await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Synthetic SQL transaction acceptance only.'});}
   const accounts=await store.read('SELECT tenant_id FROM dbo.management_billing_accounts');assert.equal(accounts.length,2);
   const compChange={tenantId:tenantB,actorId,mode:'fixed',expiresAt:new Date(Date.now()+3600000).toISOString(),
     expectedVersion:1,reason:'Synthetic complimentary-access acceptance only.'};
@@ -106,19 +106,19 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={},key)=>{
     calls.push({method,path,body,key});
     if(method==='GET'){
-      if(path===`/v1/prices/${BILLING_PRICE}`)return structuredClone(price);
-      if(path==='/v1/events') return {data:[...remote.values()].filter(value=>value.type===body.type && value.created>=body.created.gte),has_more:false};
+      if(path===`/v1/prices/${BILLING_PRICE}`){return structuredClone(price);}
+      if(path==='/v1/events') {return {data:[...remote.values()].filter(value=>value.type===body.type && value.created>=body.created.gte),has_more:false};}
       const value=remote.get(path);assert.ok(value,`Unhandled synthetic GET ${path}`);return structuredClone(value);
     }
     assert.ok(key,'All synthetic provider writes need idempotency keys.');
     const prior=idempotency.get(key);
     if(prior){assert.equal(prior.hash,hash({path,body}),'Retries must preserve the original provider operation');return structuredClone(prior.value);}
     let result;
-    if(path==='/v1/customers')result={id:`cus_fixture${++customerCount}`,livemode:false};
+    if(path==='/v1/customers'){result={id:`cus_fixture${++customerCount}`,livemode:false};}
     else if(path==='/v1/checkout/sessions'){
       result={id:`cs_fixture${++sessionCount}`,object:'checkout.session',customer:body.customer,mode:'subscription',livemode:false,status:'open',url:'https://checkout.stripe.com/c/pay/cs_fixture'};
       remote.set(`/v1/checkout/sessions/${result.id}`,result);
-    }else if(path==='/v1/invoices/create_preview')result={total:1250,currency:'usd'};
+    }else if(path==='/v1/invoices/create_preview'){result={total:1250,currency:'usd'};}
     else if(path==='/v1/subscription_schedules'){
       const sub=remote.get(`/v1/subscriptions/${body.from_subscription}`);
       result={id:sub.id==='sub_fixtureA'?'sub_sched_fixture':'sub_sched_staged',customer:sub.customer,subscription:sub.id,status:'active',current_phase:{start_date:sub.items.data[0].current_period_start}};
@@ -131,10 +131,10 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
       remote.get(`/v1/subscriptions/${schedule.subscription}`).schedule=null;result=schedule;
     }else if(path.startsWith('/v1/subscriptions/')){
       const sub=remote.get(path);assert.ok(sub);
-      if(body.items)sub.items.data[0].quantity=body.items[0].quantity;
-      if('cancel_at_period_end' in body)sub.cancel_at_period_end=body.cancel_at_period_end;
+      if(body.items){sub.items.data[0].quantity=body.items[0].quantity;}
+      if('cancel_at_period_end' in body){sub.cancel_at_period_end=body.cancel_at_period_end;}
       result=sub;
-    }else throw new Error(`Unhandled synthetic POST ${path}`);
+    }else {throw new Error(`Unhandled synthetic POST ${path}`);}
     idempotency.set(key,{hash:hash({path,body}),value:structuredClone(result)});
     if(path==='/v1/checkout/sessions'&&timeoutOnce){timeoutOnce=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic response loss after provider success.');}
     if(path.startsWith('/v1/subscriptions/')&&body.items&&quantityTimeoutOnce){quantityTimeoutOnce=false;throw problem(503,'STRIPE_UNAVAILABLE','Synthetic quantity response loss.');}
@@ -221,8 +221,8 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   console.log('PASS: synthetic delayed first failure, durable receiver retry/rollback, duplicate and out-of-order events, grace pinning, recovery and two-organization isolation');
   const unit1=crypto.randomUUID(),unit2=crypto.randomUUID();
   await store.locked(tenantA,async q=>{
-    for(const id of [unit1,unit2])await q('INSERT INTO dbo.property_units(id,tenant_id,propertyid,unitnumber) VALUES(@id,@tenantId,@propertyId,@number)',
-      {id,tenantId:tenantA,propertyId:propA,number:id.slice(0,8)});
+    for(const id of [unit1,unit2]){await q('INSERT INTO dbo.property_units(id,tenant_id,propertyid,unitnumber) VALUES(@id,@tenantId,@propertyId,@number)',
+      {id,tenantId:tenantA,propertyId:propA,number:id.slice(0,8)});}
   });
   const increase=await service.quantityPreview({tenantId:tenantA,id:crypto.randomUUID(),actorId});assert.equal(increase.to,2);
   const increaseCommand=crypto.randomUUID();
@@ -406,7 +406,7 @@ const verifyCessation=async(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls
   });
   const scope={tenantId,actorId,propertyId:parent,unitId:unit1};
   let preview=await service.cessationPreview(scope);
-  for(const code of ['TENANCY_OPEN','FINANCIAL_OPEN','PAYMENT_OPEN','SETTLEMENT_OPEN','DEPOSIT_OPEN','MAINTENANCE_OPEN'])assert.ok(preview.blockers.some(b=>b.code===code),code);
+  for(const code of ['TENANCY_OPEN','FINANCIAL_OPEN','PAYMENT_OPEN','SETTLEMENT_OPEN','DEPOSIT_OPEN','MAINTENANCE_OPEN']){assert.ok(preview.blockers.some(b=>b.code===code),code);}
   const posts=calls.filter(c=>c.method==='POST').length;
   await assert.rejects(service.ceaseStock({...scope,id:crypto.randomUUID(),inventoryHash:preview.inventoryHash,reason:'Disposable blocked cessation proof.'}),{code:'BILLING_CESSATION_BLOCKED'});
   assert.equal(calls.filter(c=>c.method==='POST').length,posts,'Ineligible cessation cannot change the provider');
@@ -452,7 +452,7 @@ const verifyCessation=async(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls
     ["INSERT INTO dbo.maintenance_requests(id,tenant_id,propertyid,unitid,title,description,status) VALUES(NEWID(),@tenantId,@parent,@unit,'Fixture','Fixture','pending')",51071],
     ["INSERT INTO dbo.invoices(id,tenant_id,propertyid,agreementid,totalamount,status) VALUES(NEWID(),@tenantId,@parent,@agreementId,100,'draft')",51072],
     ["UPDATE dbo.property_units SET status='available' WHERE id=@unit",51073]
-  ])await assert.rejects(store.locked(tenantId,q=>q(statement,{tenantId,parent,unit:unit1,agreementId})),error=>error.number===number);
+  ]){await assert.rejects(store.locked(tenantId,q=>q(statement,{tenantId,parent,unit:unit1,agreementId})),error=>error.number===number);}
   const parentScope={tenantId,actorId,propertyId:parent,unitId:null};
   const finalPreview=await service.cessationPreview(parentScope);assert.equal(finalPreview.eligible,true);
   const finalRequest={...parentScope,id:crypto.randomUUID(),inventoryHash:finalPreview.inventoryHash,reason:'End the final fixture property after obligations close.'};

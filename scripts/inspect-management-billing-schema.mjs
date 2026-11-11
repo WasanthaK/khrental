@@ -31,26 +31,26 @@ export const inspectManagementBilling=async pool=>{
   const [columns=[],indexes=[],checks=[],fks=[]]=result.recordsets||[];
   const problems=[];
   for(const [table,fields] of Object.entries(managementBillingColumns)){
-    for(const name of fields) if(!columns.some(c=>c.table_name===table&&c.name===name))problems.push(`${table}.${name}`);
+    for(const name of fields) {if(!columns.some(c=>c.table_name===table&&c.name===name)){problems.push(`${table}.${name}`);}}
     const key=table==='management_billing_accounts'?'tenant_id':table==='management_billing_events'?'stripe_event_id':'id';
-    if(!indexes.some(i=>i.table_name===table&&i.is_primary_key&&!i.is_disabled&&i.keys===key))problems.push(`${table}.primary_key`);
+    if(!indexes.some(i=>i.table_name===table&&i.is_primary_key&&!i.is_disabled&&i.keys===key)){problems.push(`${table}.primary_key`);}
   }
   const norm=value=>String(value||'').toLowerCase().replace(/[\s\[\]()]/g,'');
   for(const [name,keys,filter] of [['UQ_management_pricing_version','market,version',''],['UQ_management_billing_customer','stripe_customer_id','stripe_customer_idisnotnull'],['UQ_management_billing_subscription','stripe_subscription_id','stripe_subscription_idisnotnull']]){
-    if(!indexes.some(i=>i.name===name&&i.is_unique&&!i.is_disabled&&i.keys===keys&&norm(i.filter_definition)===filter))problems.push(name);
+    if(!indexes.some(i=>i.name===name&&i.is_unique&&!i.is_disabled&&i.keys===keys&&norm(i.filter_definition)===filter)){problems.push(name);}
   }
   for(const [name,fragment] of [['CK_management_pricing_market',"'lk'"],['CK_management_pricing_version','version>0'],['CK_management_pricing_json','isjsonrules_json=1'],
     ['CK_management_pricing_status',"'sandbox_published'"],['CK_management_billing_sandbox',"stripe_account_id='acct_1utgcdq4sarulnqa'"],
     ['CK_management_billing_inventory','isjsoninventory_json=1'],['CK_management_billing_quantities','quantity>=0'],['CK_management_billing_comp',"'ongoing'"],
     ['CK_management_billing_market',"'lk'"],
     ['CK_management_billing_commands_status',"'pending'"],['CK_management_billing_commands_payload','isjsonpayload_json=1'],['CK_management_billing_commands_result','isjsonresult_json=1']]){
-    if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition).includes(fragment)))problems.push(name);
+    if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition).includes(fragment))){problems.push(name);}
   }
   for(const [table,column,target] of [['management_pricing_versions','created_by','app_users'],['management_billing_accounts','tenant_id','tenants'],
     ['management_billing_accounts','pricing_version_id','management_pricing_versions'],
     ['management_billing_commands','tenant_id','management_billing_accounts'],['management_billing_events','tenant_id','management_billing_accounts'],
     ['management_billing_audit','tenant_id','tenants'],['management_billing_audit','actor_id','app_users']]){
-    if(!fks.some(f=>f.table_name===table&&f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0))problems.push(`${table}.${column}.foreign_key`);
+    if(!fks.some(f=>f.table_name===table&&f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0)){problems.push(`${table}.${column}.foreign_key`);}
   }
   return {satisfied:problems.length===0,detail:problems.length?problems.join(', '):'Management billing schema, scoped identities and constraints verified.'};
 };
@@ -75,18 +75,18 @@ export const inspectManagementInventoryStaging=async pool=>{
   for(const [name,type,length,nullable] of [['id','uniqueidentifier',16,false],['tenant_id','uniqueidentifier',16,false],
     ['kind','varchar',12,false],['payload_json','nvarchar',-1,false],['payload_hash','char',64,false],['status','varchar',12,false],
     ['created_by','uniqueidentifier',16,false],['created_at','datetime2',8,false],['promoted_at','datetime2',8,true],['withdrawn_at','datetime2',8,true],['promotion_command_id','uniqueidentifier',16,true]]){
-    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable))problems.push(name);
+    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable)){problems.push(name);}
   }
-  if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id'))problems.push('primary_key');
-  if(!indexes.some(i=>i.name==='IX_management_inventory_pending'&&!i.is_disabled&&i.keys==='tenant_id,status,id'))problems.push('pending_index');
+  if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id')){problems.push('primary_key');}
+  if(!indexes.some(i=>i.name==='IX_management_inventory_pending'&&!i.is_disabled&&i.keys==='tenant_id,status,id')){problems.push('pending_index');}
   const norm=value=>String(value||'').toLowerCase().replace(/[\s\[\]()]/g,'');
   const expected={CK_management_inventory_kind:["kind='unit'orkind='property'","kind='property'orkind='unit'"],
     CK_management_inventory_payload:['isjsonpayload_json=1'],
     CK_management_inventory_status:["status='withdrawn'orstatus='promoted'orstatus='pending'","status='pending'orstatus='promoted'orstatus='withdrawn'"],
     CK_management_inventory_promotion:["status='pending'andpromoted_atisnullandpromotion_command_idisnullandwithdrawn_atisnullorstatus='promoted'andpromoted_atisnotnullandpromotion_command_idisnotnullandwithdrawn_atisnullorstatus='withdrawn'andpromoted_atisnullandpromotion_command_idisnullandwithdrawn_atisnotnull"]};
-  for(const [name,definitions] of Object.entries(expected))if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&definitions.includes(norm(c.definition))))problems.push(name);
+  for(const [name,definitions] of Object.entries(expected)){if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&definitions.includes(norm(c.definition)))){problems.push(name);}}
   for(const [column,target] of [['tenant_id','tenants'],['created_by','app_users'],['promotion_command_id','management_billing_commands']]){
-    if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0))problems.push(`${column}.foreign_key`);
+    if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0)){problems.push(`${column}.foreign_key`);}
   }
   return {satisfied:problems.length===0,detail:problems.length?problems.join(', '):'Pending stock identities and promotion constraints verified.'};
 };
@@ -113,24 +113,24 @@ export const inspectManagementCessation=async pool=>{
   for(const [name,type,length,nullable] of [['id','uniqueidentifier',16,false],['tenant_id','uniqueidentifier',16,false],
     ['property_id','uniqueidentifier',16,false],['unit_id','uniqueidentifier',16,true],['state','varchar',12,false],
     ['ceased_by','uniqueidentifier',16,false],['ceased_at','datetime2',8,false],['reason','nvarchar',2000,false]]){
-    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable))problems.push(name);
+    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable)){problems.push(name);}
   }
-  if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id'))problems.push('primary_key');
-  if(!indexes.some(i=>i.name==='UQ_management_inventory_resource'&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id'))problems.push('unique_resource');
+  if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id')){problems.push('primary_key');}
+  if(!indexes.some(i=>i.name==='UQ_management_inventory_resource'&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id')){problems.push('unique_resource');}
   const norm=v=>String(v||'').toLowerCase().replace(/[\s\[\]()]/g,'');
   for(const [name,definition] of [['CK_management_inventory_control_state',"state='ceased'"],
     ['CK_management_inventory_control_reason','lenltrimrtrimreason>=10andlenltrimrtrimreason<=1000']]){
-    if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===definition))problems.push(name);
+    if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===definition)){problems.push(name);}
   }
   for(const [column,target] of [['tenant_id','tenants'],['property_id','properties'],['unit_id','property_units'],['ceased_by','app_users']]){
-    if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0))problems.push(`${column}.foreign_key`);
+    if(!fks.some(f=>f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted&&f.delete_referential_action===0)){problems.push(`${column}.foreign_key`);}
   }
-  for(const [name,definition] of [['state',"'ceased'"],['ceased_at','sysutcdatetime']])if(!defaults.some(d=>d.name===name&&norm(d.definition)===definition))problems.push(`${name}.default`);
+  for(const [name,definition] of [['state',"'ceased'"],['ceased_at','sysutcdatetime']]){if(!defaults.some(d=>d.name===name&&norm(d.definition)===definition)){problems.push(`${name}.default`);}}
   const triggerNorm=v=>String(v||'').toLowerCase().replace(/create\s+(?:or\s+alter\s+)?trigger/,'trigger').replace(/\s+/g,'').trim();
   const source=fs.readFileSync(new URL('../migrations/20261110_02_management_cessation.sql',import.meta.url),'utf8');
   for(const match of source.matchAll(/EXEC\(N'((?:[^']|'')*)'\);/g)){
     const expected=match[1].replace(/''/g,"'"),name=expected.match(/TR_\w+/)[0],actual=triggers.find(t=>t.name===name);
-    if(!actual||actual.is_disabled||triggerNorm(actual.definition)!==triggerNorm(expected))problems.push(name);
+    if(!actual||actual.is_disabled||triggerNorm(actual.definition)!==triggerNorm(expected)){problems.push(name);}
   }
   return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Cessation identity, audit constraints and exact enabled domain guards verified.'};
 };

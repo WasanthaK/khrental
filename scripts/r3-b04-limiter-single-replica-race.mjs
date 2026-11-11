@@ -13,8 +13,8 @@ const execute = (mode, nonce, epoch) => new Promise(resolve => {
   let stdout = '';
   let stderr = '';
   const capture = (chunk, name) => {
-    if (name === 'out') stdout = (stdout + chunk.toString()).slice(-4096);
-    else stderr = (stderr + chunk.toString()).slice(-4096);
+    if (name === 'out') {stdout = (stdout + chunk.toString()).slice(-4096);}
+    else {stderr = (stderr + chunk.toString()).slice(-4096);}
   };
   child.stdout.on('data', b => capture(b, 'out'));
   child.stderr.on('data', b => capture(b, 'err'));

@@ -49,7 +49,7 @@ const normalizePeriodFilters = ({ month, year }) => {
     throw new Error('Unknown utility billing month.');
   }
   if (year == null) {
-    if (month != null) throw new Error('A year is required with a billing month.');
+    if (month != null) {throw new Error('A year is required with a billing month.');}
     return [];
   }
 
@@ -67,7 +67,7 @@ const normalizePeriodFilters = ({ month, year }) => {
 };
 
 const toFinite = (value) => {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === '') {return null;}
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 };
@@ -113,15 +113,15 @@ export const listUtilityInvoicePreviewRows = async ({
     { column: 'invoice_id', operator: 'is', value: null },
     ...normalizePeriodFilters({ month, year })
   ];
-  if (propertyId) filters.push({ column: 'propertyid', operator: 'eq', value: propertyId });
-  if (renteeId) filters.push({ column: 'renteeid', operator: 'eq', value: renteeId });
+  if (propertyId) {filters.push({ column: 'propertyid', operator: 'eq', value: propertyId });}
+  if (renteeId) {filters.push({ column: 'renteeid', operator: 'eq', value: renteeId });}
 
   const readings = [];
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const from = page * pageSize;
     const batch = await requestRows({ filters, range: { from, to: from + pageSize - 1 } });
     readings.push(...batch);
-    if (batch.length < pageSize) return readings.map(mapUtilityInvoicePreviewRow);
+    if (batch.length < pageSize) {return readings.map(mapUtilityInvoicePreviewRow);}
   }
   throw new Error('Utility invoice preview exceeded its pagination limit.');
 };

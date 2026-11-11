@@ -177,7 +177,7 @@ const RenteeAgreements = () => {
     } else {
       toast.success(`Billing day updated to day ${billingDay}`);
       setAgreements((current) => current.map((entry) => {
-        if (entry.id !== agreement.id) return entry;
+        if (entry.id !== agreement.id) {return entry;}
         let terms = entry.terms;
         if (typeof terms === 'string') {
           try {

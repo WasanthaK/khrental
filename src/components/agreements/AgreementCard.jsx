@@ -21,7 +21,7 @@ const AgreementCard = ({ agreement, property, rentee }) => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) {return 'N/A';}
     try {
       const date = new Date(dateString);
       return date.toLocaleDateString('en-US', {
@@ -36,7 +36,7 @@ const AgreementCard = ({ agreement, property, rentee }) => {
   };
 
   const formatStatus = (status) => {
-    if (!status) return 'Unknown';
+    if (!status) {return 'Unknown';}
     return status
       .split('_')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))

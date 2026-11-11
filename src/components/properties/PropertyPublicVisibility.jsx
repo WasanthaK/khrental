@@ -21,8 +21,8 @@ const PropertyPublicVisibility=({propertyId})=>{
     if(!admin||!propertyId){setLoading(false);return()=>{active=false;};}
     setLoading(true);setDraft(null);setError('');setPilot(null);setPreviewError('');
     requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId)+'/pilot-preview')
-      .then(data=>{if(active)setPilot(data);})
-      .catch(()=>{if(active)setPreviewError('Listing eligibility preview is unavailable. Refresh before release.');});
+      .then(data=>{if(active){setPilot(data);}})
+      .catch(()=>{if(active){setPreviewError('Listing eligibility preview is unavailable. Refresh before release.');}});
     requestMssqlApi('/api/public-listing-preferences/'+encodeURIComponent(propertyId))
       .then(data=>{if(active){setDraft({
         countryCode:data.countryCode||'',
@@ -30,11 +30,11 @@ const PropertyPublicVisibility=({propertyId})=>{
         headline:data.headline||'',
         locationLabel:data.locationLabel||''
       });}})
-      .catch(err=>{if(active&&err.status!==404)setError(err.message||'Unable to read public listing settings.');})
-      .finally(()=>{if(active)setLoading(false);});
+      .catch(err=>{if(active&&err.status!==404){setError(err.message||'Unable to read public listing settings.');}})
+      .finally(()=>{if(active){setLoading(false);}});
     return()=>{active=false;};
   },[admin,propertyId,membership?.tenant_id,user?.id]);
-  if(!admin||loading||!draft)return null;
+  if(!admin||loading||!draft){return null;}
   const update=(field,value)=>setDraft(prev=>({...prev,[field]:value}));
   const save=async()=>{
     try{

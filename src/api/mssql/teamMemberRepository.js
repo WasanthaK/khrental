@@ -23,7 +23,7 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const normalizeValue = (value) => String(value || '').trim().toLowerCase();
 
 const parseJsonValue = (value) => {
-  if (typeof value !== 'string') return value;
+  if (typeof value !== 'string') {return value;}
   try {
     return JSON.parse(value);
   } catch (_error) {
@@ -33,8 +33,8 @@ const parseJsonValue = (value) => {
 
 const inferLegacyBundle = (role) => {
   const normalized = normalizeValue(role);
-  if (normalized === 'manager') return STAFF_PERMISSION_BUNDLES.PROPERTY_OPERATIONS;
-  if (normalized === 'finance_staff') return STAFF_PERMISSION_BUNDLES.FINANCE;
+  if (normalized === 'manager') {return STAFF_PERMISSION_BUNDLES.PROPERTY_OPERATIONS;}
+  if (normalized === 'finance_staff') {return STAFF_PERMISSION_BUNDLES.FINANCE;}
   if (['maintenance', 'maintenance_staff', 'supervisor', 'staff'].includes(normalized)) {
     return STAFF_PERMISSION_BUNDLES.MAINTENANCE;
   }
@@ -57,7 +57,7 @@ const normalizeBundle = (payload = {}, fallbackRole = null) => {
 };
 
 const mapTeamRow = (row) => {
-  if (!row) return null;
+  if (!row) {return null;}
 
   const mapped = {};
   Object.entries(row).forEach(([key, value]) => {
@@ -104,7 +104,7 @@ export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 }
     ? `AND (LOWER(COALESCE(au.name, '')) LIKE @search OR LOWER(COALESCE(au.email, '')) LIKE @search)`
     : '';
 
-  if (search) params.search = `%${String(search).trim().toLowerCase()}%`;
+  if (search) {params.search = `%${String(search).trim().toLowerCase()}%`;}
 
   const rows = await runQuery(
     `SELECT TOP (${safePageSize})
@@ -220,7 +220,7 @@ export const createOrAttachTenantTeamMember = async (tenantId, payload = {}) => 
 
 export const updateTenantTeamMember = async (tenantId, appUserId, payload = {}) => {
   const current = await getTenantTeamMemberById(tenantId, appUserId);
-  if (!current) return null;
+  if (!current) {return null;}
 
   // Full forms can repeat unchanged profile fields while changing only the
   // organization membership. Never write even those fields across workspaces.

@@ -2,7 +2,7 @@ import {getMssqlPool,sql} from '../mssql/pool.js';
 // One durable per-market/detail minute bucket across all app replicas; no client identity stored.
 // Defaults to restrictive, safe when app scales to two ACA instances.
 export const consumeReadBudget=async(bucket,maxHits=120)=>{
-  if(!['LK','BN','DETAIL'].includes(bucket))throw new Error('Unsupported budget.');
+  if(!['LK','BN','DETAIL'].includes(bucket)){throw new Error('Unsupported budget.');}
   const pool=await getMssqlPool(),tx=new sql.Transaction(pool);
   await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   try{

@@ -40,11 +40,11 @@ const PropertyList = () => {
       String(property?.address || '').toLowerCase().includes(normalizedSearchTerm) ||
       String(property?.description || '').toLowerCase().includes(normalizedSearchTerm);
     
-    if (filter === 'all') return matchesSearch;
+    if (filter === 'all') {return matchesSearch;}
     
     // Add more filters as needed
-    if (filter === 'available') return matchesSearch && getPropertyAvailability(property.status).value === 'available';
-    if (filter === 'occupied') return matchesSearch && getPropertyAvailability(property.status).value === 'rented';
+    if (filter === 'available') {return matchesSearch && getPropertyAvailability(property.status).value === 'available';}
+    if (filter === 'occupied') {return matchesSearch && getPropertyAvailability(property.status).value === 'rented';}
     
     return matchesSearch;
   });

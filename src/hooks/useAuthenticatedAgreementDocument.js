@@ -53,7 +53,7 @@ export const useAuthenticatedAgreementDocument = (documentUrl, reloadKey = 0) =>
           invalidPdf = true;
           throw new Error('Invalid or empty PDF received.');
         }
-        if (cancelled) return;
+        if (cancelled) {return;}
         temporaryUrl = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
         setState({ status: 'ready', url: temporaryUrl, error: null });
       } catch (_error) {
@@ -67,7 +67,7 @@ export const useAuthenticatedAgreementDocument = (documentUrl, reloadKey = 0) =>
     void load();
     return () => {
       cancelled = true;
-      if (temporaryUrl) URL.revokeObjectURL(temporaryUrl);
+      if (temporaryUrl) {URL.revokeObjectURL(temporaryUrl);}
     };
   }, [documentUrl, reloadKey]);
   return state;

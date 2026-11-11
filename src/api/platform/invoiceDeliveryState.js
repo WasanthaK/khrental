@@ -6,9 +6,9 @@ const events = Object.freeze({
 });
 export const DELIVERY_EVENTS = events;
 export const deliveryOutcome = (eventType) => {
-  if (eventType === events.accepted) return 'accepted';
-  if (eventType === events.failed) return 'failed';
-  if (eventType === events.unknown || eventType === events.attempted) return 'unknown';
+  if (eventType === events.accepted) {return 'accepted';}
+  if (eventType === events.failed) {return 'failed';}
+  if (eventType === events.unknown || eventType === events.attempted) {return 'unknown';}
   return 'not_attempted';
 };
 export const classifyInvoiceEmailError = error => (

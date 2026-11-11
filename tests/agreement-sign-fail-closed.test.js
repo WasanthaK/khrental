@@ -32,12 +32,12 @@ function fixture({ mssql = true, apiError = null, apiResult = signedAgreement, l
     () => mssql,
     async (path, options) => {
       apiCalls.push({ path, options });
-      if (apiError) throw apiError;
+      if (apiError) {throw apiError;}
       return apiResult;
     },
     async id => {
       effects.push(['fetchAgreement', id]);
-      if (legacyError) throw legacyError;
+      if (legacyError) {throw legacyError;}
       return originalAgreement;
     },
     async (id, updates) => {

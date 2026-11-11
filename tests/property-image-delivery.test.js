@@ -42,6 +42,6 @@ test('renter detail photo accepts SQL JSON, registered image objects and old str
   const { getPrimaryPropertyImageUrl } = await import('../src/utils/propertyDetailFields.js');
   assert.equal(getPrimaryPropertyImageUrl(['first.jpg','second.jpg']),'first.jpg');
   assert.equal(getPrimaryPropertyImageUrl(JSON.stringify([{image_url:'second.jpg',order:2},{image_url:'first.jpg',order:0}])),'first.jpg');
-  for(const images of [null,'broken',{},[{},null]]) assert.equal(getPrimaryPropertyImageUrl(images),'');
+  for(const images of [null,'broken',{},[{},null]]) {assert.equal(getPrimaryPropertyImageUrl(images),'');}
   assert.equal(propertyImageDisplayUrl(getPrimaryPropertyImageUrl([{image_url:oldOrigin+imagePath}]),options),imagePath);
 });

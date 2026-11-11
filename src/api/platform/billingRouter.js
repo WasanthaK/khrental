@@ -30,7 +30,7 @@ const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
   error.status = status;
   error.code = code;
-  if (details) error.details = details;
+  if (details) {error.details = details;}
   return error;
 };
 
@@ -56,7 +56,7 @@ const requireInvoiceManage = (req) => {
 };
 
 const requirePropertyScope = (req, propertyId) => {
-  if (isAdminRole({ user: req.user, membership: req.membership })) return;
+  if (isAdminRole({ user: req.user, membership: req.membership })) {return;}
   const assigned = new Set((req.membership?.assignedPropertyIds || []).map(String));
   if (!propertyId || !assigned.has(String(propertyId))) {
     throw createRequestError(403, 'The invoice property is not assigned to the current staff account.', 'RESOURCE_ACCESS_DENIED');
@@ -86,7 +86,7 @@ const loadInvoice = async (tenantId, invoiceId) => {
     { tenantId, invoiceId }
   );
 
-  if (!invoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+  if (!invoice) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
   return invoice;
 };
 
@@ -117,8 +117,8 @@ const assertInvoiceAccess = (req, invoice, manage = false) => {
     return;
   }
 
-  if (manage) requirePaymentManage(req);
-  else requireInvoiceRead(req);
+  if (manage) {requirePaymentManage(req);}
+  else {requireInvoiceRead(req);}
   requirePropertyScope(req, invoice.propertyid);
 };
 
@@ -275,7 +275,7 @@ const issueReceipt = async (transaction, { tenantId, invoice, payment, actorUser
      WHERE tenant_id = @tenantId AND payment_id = @paymentId`,
     { tenantId, paymentId: payment.id }
   );
-  if (existing) return existing;
+  if (existing) {return existing;}
 
   const snapshot = {
     invoiceId: invoice.id,
@@ -485,7 +485,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
           }
         );
 
-        if (!updated) throw createRequestError(409, 'Invoice changed before the draft could be updated.', 'INVOICE_STATE_CHANGED');
+        if (!updated) {throw createRequestError(409, 'Invoice changed before the draft could be updated.', 'INVOICE_STATE_CHANGED');}
         await insertLifecycleEvent(transaction, {
           tenantId: req.tenantId, invoiceId: invoice.id, eventType: 'invoice_draft_updated',
           fromStatus: 'draft', toStatus: 'draft', actorUserId: req.user.id
@@ -595,15 +595,15 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
           { tenantId: req.tenantId, invoiceId: invoice.id, componentId: req.params.componentId }
         );
-        if (!component) throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');
+        if (!component) {throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');}
 
         const description = req.body?.description === undefined
           ? component.description
           : String(req.body.description || '').trim();
         const amount = req.body?.amount === undefined ? Number(component.amount) : Number(req.body.amount);
 
-        if (!description) throw createRequestError(400, 'A description is required.', 'COMPONENT_DESCRIPTION_REQUIRED');
-        if (!Number.isFinite(amount) || amount === 0) throw createRequestError(400, 'Amount must be a non-zero number.', 'INVALID_COMPONENT_AMOUNT');
+        if (!description) {throw createRequestError(400, 'A description is required.', 'COMPONENT_DESCRIPTION_REQUIRED');}
+        if (!Number.isFinite(amount) || amount === 0) {throw createRequestError(400, 'Amount must be a non-zero number.', 'INVALID_COMPONENT_AMOUNT');}
         if (String(component.component_type).toLowerCase() !== 'adjustment' && amount < 0) {
           throw createRequestError(400, 'Only adjustment lines may be negative.', 'INVALID_COMPONENT_AMOUNT');
         }
@@ -670,7 +670,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id = @tenantId AND invoice_id = @invoiceId AND id = @componentId`,
           { tenantId: req.tenantId, invoiceId: invoice.id, componentId: req.params.componentId }
         );
-        if (!component) throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');
+        if (!component) {throw createRequestError(404, 'Invoice component not found.', 'COMPONENT_NOT_FOUND');}
 
         if (String(component.source_type || '').toLowerCase() === 'utility_reading' && component.source_id) {
           await queryTransaction(
@@ -807,7 +807,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       // Fail before any invoice change if durable write-once R2 is absent.
       // The schema gate remains independently controlled by production rollout.
       const immutableArchive = isImmutableInvoiceArchiveEnabledForTenant(req.tenantId);
-      if (immutableArchive) createIssuedInvoiceR2ArchiveStore();
+      if (immutableArchive) {createIssuedInvoiceR2ArchiveStore();}
       const pool = await getMssqlPool();
       const tx = new sql.Transaction(pool);
       await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -831,7 +831,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            OUTPUT INSERTED.*
            WHERE tenant_id=@tenantId AND id=@invoiceId AND status='draft'`,
           { tenantId: req.tenantId, invoiceId: invoice.id, totalAmount, issuedBy: req.user.id });
-        if (!issued) throw createRequestError(409,'Invoice changed before issue.','INVOICE_STATE_CHANGED');
+        if (!issued) {throw createRequestError(409,'Invoice changed before issue.','INVOICE_STATE_CHANGED');}
         const configuredBank = await singleTransaction(tx,
           `SELECT p.bank_name AS property_bank_name, p.bank_branch AS property_bank_branch,
                   p.bank_account_number AS property_bank_account_number,
@@ -939,7 +939,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         const locked = await singleTransaction(tx,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
-        if (!locked) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        if (!locked) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
         assertInvoiceIssued(locked);
 
         const duplicate = await singleTransaction(tx,
@@ -948,7 +948,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
           "AND ISJSON(metadata)=1 AND JSON_VALUE(metadata, '$.resendRequestId')=@resendRequestId",
           { tenantId:req.tenantId, invoiceId:invoice.id,
             attempted:DELIVERY_EVENTS.attempted, resendRequestId });
-        if (duplicate) throw createRequestError(409, 'This resend command was already processed.', 'INVOICE_RESEND_DUPLICATE');
+        if (duplicate) {throw createRequestError(409, 'This resend command was already processed.', 'INVOICE_RESEND_DUPLICATE');}
 
         const last = await singleTransaction(tx,
           'SELECT TOP 1 event_type FROM billing_lifecycle_events ' +
@@ -1026,7 +1026,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
         const lockedInvoice = await singleTransaction(transaction,
           'SELECT TOP 1 * FROM invoices WITH (UPDLOCK, HOLDLOCK) WHERE tenant_id=@tenantId AND id=@invoiceId',
           { tenantId: req.tenantId, invoiceId: invoice.id });
-        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        if (!lockedInvoice) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
         requirePropertyScope(req, lockedInvoice.propertyid);
 
         // Keep payment checks atomic with reference allocation. An invoice
@@ -1089,7 +1089,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
       const invoice = await loadInvoice(req.tenantId, req.params.invoiceId);
       assertInvoiceAccess(req, invoice, false);
       const proofUrl = String(req.body?.proofUrl || '').trim();
-      if (!proofUrl) throw createRequestError(400, 'proofUrl is required.', 'PAYMENT_PROOF_REQUIRED');
+      if (!proofUrl) {throw createRequestError(400, 'proofUrl is required.', 'PAYMENT_PROOF_REQUIRED');}
       await verifyStoredPaymentProof({ proofUrl, tenantId: req.tenantId, invoiceId: invoice.id,
         readObject: (bucket, path) => getStorageDriver().getObject(bucket, path) });
 
@@ -1116,7 +1116,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id = @tenantId AND id = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
-        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        if (!lockedInvoice) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
 
         const lockedPayments = await queryTransaction(
           transaction,
@@ -1226,7 +1226,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id = @tenantId AND id = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
-        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        if (!lockedInvoice) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
 
         const payment = await singleTransaction(
           transaction,
@@ -1235,7 +1235,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            ORDER BY createdat DESC`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
-        if (!payment) throw createRequestError(409, 'No payment is awaiting verification for this invoice.', 'NO_PENDING_PAYMENT');
+        if (!payment) {throw createRequestError(409, 'No payment is awaiting verification for this invoice.', 'NO_PENDING_PAYMENT');}
 
         if (approved) {
           const otherPayments = await queryTransaction(
@@ -1275,7 +1275,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
             notes: notes || null
           }
         );
-        if (!updatedPayment) throw createRequestError(409, 'This payment has already been processed.', 'PAYMENT_ALREADY_PROCESSED');
+        if (!updatedPayment) {throw createRequestError(409, 'This payment has already been processed.', 'PAYMENT_ALREADY_PROCESSED');}
 
         let receipt = null;
         if (approved) {
@@ -1349,7 +1349,7 @@ export const createBillingRouter = ({ sendInvoiceEmail = sendBillingReminderEmai
            WHERE tenant_id = @tenantId AND id = @invoiceId`,
           { tenantId: req.tenantId, invoiceId: invoice.id }
         );
-        if (!lockedInvoice) throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');
+        if (!lockedInvoice) {throw createRequestError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND');}
 
         const lockedPayments = await queryTransaction(
           transaction,

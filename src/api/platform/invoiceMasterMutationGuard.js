@@ -11,7 +11,7 @@ export const INVOICE_MASTER_PROTECTED_COLUMNS = Object.freeze({
 });
 export const assertDedicatedInvoiceMasterMutation = ({table,action,payload}) => {
   const prohibited=INVOICE_MASTER_PROTECTED_COLUMNS[String(table||'').toLowerCase()];
-  if(!prohibited || !['insert','update','upsert','post','put','patch'].includes(String(action||'').toLowerCase())) return;
+  if(!prohibited || !['insert','update','upsert','post','put','patch'].includes(String(action||'').toLowerCase())) {return;}
   const rows=Array.isArray(payload)?payload:[payload];
   if(rows.some(row => row && typeof row==='object' && Object.keys(row).some(k=>prohibited.includes(k.toLowerCase())))){
     const error=new Error('Invoice master data must be changed using the audited administrator API.');

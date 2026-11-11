@@ -30,9 +30,9 @@ export default function PropertyInvoiceBilling({propertyId}){
   useEffect(()=>{
     let active=true;
     getPropertyInvoiceBilling(propertyId).then(({data:loaded,error})=>{
-      if(!active)return;
-      if(error)setError(error.message);
-      else setData({...EMPTY,...(loaded||{}),parties:{...EMPTY.parties,...(loaded?.parties||{})}});
+      if(!active){return;}
+      if(error){setError(error.message);}
+      else {setData({...EMPTY,...(loaded||{}),parties:{...EMPTY.parties,...(loaded?.parties||{})}});}
       setLoading(false);
     });
     return ()=>{active=false;};
@@ -41,19 +41,19 @@ export default function PropertyInvoiceBilling({propertyId}){
   const changeParty=(key,value)=>setData(current=>{
     const next={...current.parties,[key]:value};
     if(key==='managementMode' && value==='tenant'){
-      for(const k of ['externalManagerName','externalManagerAddress','externalManagerEmail','externalManagerPhone'])next[k]='';
+      for(const k of ['externalManagerName','externalManagerAddress','externalManagerEmail','externalManagerPhone']){next[k]='';}
       if(next.issuerRole==='manager'){next.issuerRole='organization';next.issuerAuthorityConfirmed=false;}
     }
     if(key==='issuerRole'){
       next.issuerAuthorityConfirmed=false;
-      if(value!=='owner')for(const k of ['propertyOwnerName','propertyOwnerAddress','propertyOwnerEmail','propertyOwnerPhone'])next[k]='';
+      if(value!=='owner'){for(const k of ['propertyOwnerName','propertyOwnerAddress','propertyOwnerEmail','propertyOwnerPhone']){next[k]='';}}
     }
     return {...current,parties:next};
   });
   const save=async(event)=>{
     event.preventDefault();setError('');setNotice('');setSaving(true);
     const result=await savePropertyInvoiceBilling(propertyId,data);
-    if(result.error)setError(result.error.message);
+    if(result.error){setError(result.error.message);}
     else {setData({...EMPTY,...result.data,parties:{...EMPTY.parties,...result.data.parties}});setNotice('Verified billing details saved. Previously issued invoices are unchanged.');}
     setSaving(false);
   };

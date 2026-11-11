@@ -38,31 +38,31 @@ export const VerifiedSeekerBoundary = ({ redirectOnly = false }) => {
   const candidate = personal ? Boolean(isAuthenticated&&user?.id) : isVerifiedTenantlessSeeker(profile);
 
   useEffect(() => {
-    if (!enabled || loading || !isAuthenticated || !candidate) return;
+    if (!enabled || loading || !isAuthenticated || !candidate) {return;}
     let active = true;
     (personal?fetchPersonalRentalBrowserContext:fetchVerifiedSeekerBrowserContext)({
       expectedAuthId: user.id,
       getSession: () => getPlatformClient().auth.getSession()
     })
       .then(result => {
-        if (active) setStatus({
+        if (active) {setStatus({
           key, eligible: result.verified === true && result.eligible === true
-        });
+        });}
       });
     return () => { active = false; };
   }, [key, user, loading, isAuthenticated, candidate, personal]);
 
-  if (!enabled) return <Navigate to="/unauthorized" replace />;
-  if (loading) return <div role="status">Checking your account…</div>;
+  if (!enabled) {return <Navigate to="/unauthorized" replace />;}
+  if (loading) {return <div role="status">Checking your account…</div>;}
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
-  if (!candidate) return <Navigate to={getDefaultLandingPath({user,membership})} replace />;
+  if (!candidate) {return <Navigate to={getDefaultLandingPath({user,membership})} replace />;}
 
   // Never reuse an earlier user's certification or an in-flight response.
-  if (status.key !== key) return <div role="status">Verifying your account…</div>;
-  if (!status.eligible) return <Navigate to="/unauthorized" replace />;
-  if (redirectOnly&&ownerSetupPath(location.search)) return <Navigate to={ownerSetupPath(location.search)} replace />;
-  if (redirectOnly) return <Navigate to={enquiryReturnPath(location.search) || getOwnerContinuationPath({user,membership}) || '/seeker'} replace />;
+  if (status.key !== key) {return <div role="status">Verifying your account…</div>;}
+  if (!status.eligible) {return <Navigate to="/unauthorized" replace />;}
+  if (redirectOnly&&ownerSetupPath(location.search)) {return <Navigate to={ownerSetupPath(location.search)} replace />;}
+  if (redirectOnly) {return <Navigate to={enquiryReturnPath(location.search) || getOwnerContinuationPath({user,membership}) || '/seeker'} replace />;}
   return <SeekerHome {...profile} personalRentalVerified={personal&&status.eligible} />;
 };

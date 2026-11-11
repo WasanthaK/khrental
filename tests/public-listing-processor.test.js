@@ -29,7 +29,7 @@ test('local public derivatives never map beneath express static public root',()=
     'public-listings/'+publicId+'/../../secret.webp',
     'public-listings/'+publicId+'/unapproved.svg',
     'public-listings/arbitrary-image',
-  ])assert.throws(()=>resolveLocalStoragePath('media',p));
+  ]){assert.throws(()=>resolveLocalStoragePath('media',p));}
 });
 
 test('only explicitly configured HTTPS app origins can supply registered photos',()=>{
@@ -45,7 +45,7 @@ test('only explicitly configured HTTPS app origins can supply registered photos'
   });
   assert.throws(()=>resolveRegisteredPhoto(JSON.stringify([url]),0,tenant));
   for(const raw of ['http://unsafe.example','https://any.example/private','https://user:pass@any.example'])
-    assert.throws(()=>trustedPhotoOrigins({PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:raw}));
+    {assert.throws(()=>trustedPhotoOrigins({PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:raw}));}
   assert.throws(()=>trustedPhotoOrigins({
     PUBLIC_LISTING_TRUSTED_IMAGE_ORIGINS:'https://*.example.com'
   }));
@@ -64,7 +64,7 @@ test('photo source parser only accepts tenant-owned registered property images',
     safeUrl.replace(filename,'%2e%2e%2fsecret.webp'),
     safeUrl.replace(filename,'../../secret.webp'),
     '/storage/images/tenants/'+actor+'/properties/'+filename
-  ])assert.throws(()=>resolveRegisteredPhoto(JSON.stringify([bad]),0,tenant),bad);
+  ]){assert.throws(()=>resolveRegisteredPhoto(JSON.stringify([bad]),0,tenant),bad);}
   assert.throws(()=>resolveRegisteredPhoto(sourceImages,1,tenant));
   assert.throws(()=>resolveRegisteredPhoto('{}',0,tenant));
   assert.throws(()=>resolveRegisteredPhoto('not json',0,tenant));
@@ -73,7 +73,7 @@ test('photo source parser only accepts tenant-owned registered property images',
 test('photo description strips whitespace and rejects unsafe markup/control',()=>{
   assert.equal(sanitizePhotoAlt('  A bright living room  '),'A bright living room');
   for(const bad of ['','<img src=x>','X'.repeat(181),null,123,'bad\nalt'])
-    assert.throws(()=>sanitizePhotoAlt(bad));
+    {assert.throws(()=>sanitizePhotoAlt(bad));}
 });
 test('tenant ownership ignores GUID casing while private object reads preserve the exact registered key',async()=>{
   const upperTenant='ABCDEF12-ABCD-4ABC-8ABC-ABCDEF123456';

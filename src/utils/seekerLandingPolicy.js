@@ -11,7 +11,7 @@ export const isVerifiedTenantlessSeeker = ({
   tenantContextVerified = false
 } = {}) => {
   // Unknown/in-flight context is not equivalent to verified zero membership.
-  if (tenantContextVerified !== true || !user || !hasId(user.id)) return false;
+  if (tenantContextVerified !== true || !user || !hasId(user.id)) {return false;}
   if (membership !== null || !Array.isArray(memberships) || memberships.length !== 0) {
     return false;
   }

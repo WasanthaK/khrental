@@ -14,10 +14,10 @@ const forbidden = () => {
   throw error;
 };
 export const assertGenericInvoiceArchiveMutationAllowed = (bucket, path) => {
-  if (isIssuedInvoiceArchivePath(bucket,path)) forbidden();
+  if (isIssuedInvoiceArchivePath(bucket,path)) {forbidden();}
 };
 export const assertGenericInvoiceArchiveBucketDeleteAllowed = bucket => {
-  if (String(bucket || '').toLowerCase() === 'invoices') forbidden();
+  if (String(bucket || '').toLowerCase() === 'invoices') {forbidden();}
 };
 
 // Local storage deletes directories recursively. An ancestor of issued bytes

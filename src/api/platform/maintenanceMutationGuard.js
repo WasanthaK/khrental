@@ -33,9 +33,9 @@ export const isProtectedMaintenanceCommentAccess = ({ table } = {}) => (
 );
 
 export const isProtectedMaintenanceMutation = ({ action, table, payload } = {}) => {
-  if (normalizeTable(table) !== MAINTENANCE_TABLE) return false;
+  if (normalizeTable(table) !== MAINTENANCE_TABLE) {return false;}
   const normalizedAction = normalizeAction(action);
-  if (FULLY_PROTECTED_ACTIONS.has(normalizedAction)) return true;
+  if (FULLY_PROTECTED_ACTIONS.has(normalizedAction)) {return true;}
   return normalizedAction === 'update' && hasMaintenanceLifecycleFields(payload);
 };
 

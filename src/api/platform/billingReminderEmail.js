@@ -7,7 +7,7 @@ const getDefaultSender = () => ({
 
 export const getBillingReminderPortalUrl = () => {
   const baseUrl = process.env.PUBLIC_APP_URL || process.env.VITE_APP_BASE_URL || process.env.PASSWORD_RESET_BASE_URL || '';
-  if (!baseUrl) return null;
+  if (!baseUrl) {return null;}
   return `${String(baseUrl).replace(/\/$/, '')}/rentee/invoices`;
 };
 

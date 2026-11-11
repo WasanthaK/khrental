@@ -244,7 +244,7 @@ async function verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b) {
       storageDriver: {
         getObject: async (bucket, key) => {
           assert.equal(bucket, 'documents'); assert.equal(key.toLowerCase(), prefix + 'audit_trail.pdf');
-          if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+          if (!retained) {throw Object.assign(new Error('missing'), { status: 404 });}
           return { body: retained };
         },
         createEviaAuditIfAbsent: async (bucket, key, body) => {
@@ -254,11 +254,11 @@ async function verifyEviaMissingAuditRetryAgainstDisposableSql(pool, a, b) {
       },
       fetchImpl: async url => {
         fetches++;
-        if (unavailable) return Response.json({}, { status: 503 });
-        if (url.endsWith('/oauth/exchange')) return Response.json({ access_token: 'fixture-token' });
-        if (url.endsWith(`/requests/${requestId}/documents`)) return Response.json([
+        if (unavailable) {return Response.json({}, { status: 503 });}
+        if (url.endsWith('/oauth/exchange')) {return Response.json({ access_token: 'fixture-token' });}
+        if (url.endsWith(`/requests/${requestId}/documents`)) {return Response.json([
           { documentName: 'audit_trail.pdf', downloadUrl }
-        ]);
+        ]);}
         assert.equal(url, downloadUrl, 'retry must not retrieve or rewrite the signed PDF');
         return new Response(audit);
       }
@@ -1635,7 +1635,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         ()=>commitWithheldDerivative(publicArgs),
         ()=>finalizePhotoReview(publicArgs),
         ()=>withdrawPreparedPhoto(publicArgs,{env:{PUBLIC_LISTING_MEDIA_REVIEW_ENABLED:'true'}})
-      ]) await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});
+      ]) {await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});}
       const beforeRepository = await writerSnapshot();
       for (const operation of [
         ()=>repository.updatePropertyById(scoped.propertyId,{status:'rented'},scoped.tenantId),
@@ -1644,7 +1644,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         ()=>repository.deleteAgreementTemplateById(templateId,scoped.tenantId),
         ()=>repository.createInvoice({propertyid:scoped.propertyId,renteeid:scoped.renteeId},scoped.tenantId),
         ()=>repository.updateInvoice(invoice.id,{notes:'Denied repository invoice'},scoped.tenantId)
-      ]) await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});
+      ]) {await assert.rejects(operation,{code:'MANAGEMENT_READ_ONLY'});}
       assert.deepEqual(await writerSnapshot(),beforeRepository,'Direct repository imports cannot bypass expiry');
       await setState('');
       // A later failed row must undo the earlier insert/update, not leave a
@@ -1751,7 +1751,7 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     console.log('PASS: scoped manual/scheduled monthly management expiry, database-clock grace/complimentary authority, revocation lock, full invoice rollback, historical reads and unaffected unselected organization');
   } finally {
     for (const key of keys) {
-      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+      if (previous[key] === undefined) {delete process.env[key];} else {process.env[key] = previous[key];}
     }
   }
 }
@@ -1963,7 +1963,7 @@ async function verifyInvitationLifecycleHttp({ pool, a, b, tokenA, call, createA
   const check = (result, expectedStatus, code) => {
     assert.equal(result.status, expectedStatus,
       'invitation HTTP status mismatch: ' + result.status + ', code=' + result.payload?.code);
-    if (code) assert.equal(result.payload?.code, code);
+    if (code) {assert.equal(result.payload?.code, code);}
     return result.payload?.data;
   };
   const createTarget = async (tenantId, role = 'rentee') => {
@@ -2515,7 +2515,7 @@ async function main() {
     const port = Number(match[1]);
     for (let attempt = 0; attempt < 45; attempt++) {
       try { master = await connect({ port, password }); break; }
-      catch (err) { if (attempt === 44) throw err; await delay(2000); }
+      catch (err) { if (attempt === 44) {throw err;} await delay(2000); }
     }
     await master.request().query('CREATE DATABASE [' + database + ']');
     await master.close();
@@ -3259,7 +3259,7 @@ async function main() {
       }
       console.log('PASS: actual pending-invoice browser reader respects SQL tenant isolation, stable pages and dashboard counts');
     } finally {
-      if (dashboardPage) await dashboardPage.close().catch(() => {});
+      if (dashboardPage) {await dashboardPage.close().catch(() => {});}
       for (const fixture of pendingFixtures) {
         await query(pool, 'DELETE FROM utility_readings WHERE id = @id AND tenant_id = @tenantId',
           { id: fixture.id, tenantId: fixture.tenantId });
@@ -3316,7 +3316,7 @@ async function main() {
           await page.evaluate(() => {
             const button = [...document.querySelectorAll('button')]
               .find(entry => entry.textContent.trim() === 'Account & Receipts');
-            if (!button) throw new Error('Account & Receipts read button is missing');
+            if (!button) {throw new Error('Account & Receipts read button is missing');}
             button.click();
           });
           await page.waitForFunction(
@@ -3456,7 +3456,7 @@ async function main() {
       await switchPage.evaluateOnNewDocument((token, tenantId, authId, email) => {
         // Seed this tab once; a real organization switch reloads the document
         // and must retain the membership selected through the actual control.
-        if (sessionStorage.getItem('fixture.shared-session-seeded')) return;
+        if (sessionStorage.getItem('fixture.shared-session-seeded')) {return;}
         sessionStorage.setItem('fixture.shared-session-seeded', '1');
         localStorage.removeItem('dev_bypass_role');
         localStorage.setItem('khrental.activeTenantId', tenantId);
@@ -3506,7 +3506,7 @@ async function main() {
         await switchPage.evaluate(() => {
           const button = [...document.querySelectorAll('button')]
             .find(entry => entry.textContent.trim() === 'Account & Receipts');
-          if (!button) throw new Error('Missing read-only account button');
+          if (!button) {throw new Error('Missing read-only account button');}
           button.click();
         });
         await switchPage.waitForFunction(
@@ -3521,7 +3521,7 @@ async function main() {
         await switchPage.evaluate(() => {
           const closeButton = [...document.querySelectorAll('button')]
             .find(entry => entry.textContent.trim() === 'Close');
-          if (!closeButton) throw new Error('Cannot close account read-only view');
+          if (!closeButton) {throw new Error('Cannot close account read-only view');}
           closeButton.click();
         });
         await switchPage.waitForFunction(
@@ -3581,12 +3581,12 @@ async function main() {
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {
-    if (browser) await browser.close().catch(() => {});
-    if (vite) await vite.close().catch(() => {});
-    if (httpServer) await new Promise(resolve => httpServer.close(resolve));
-    if (closeMssqlPool) await closeMssqlPool().catch(() => {});
-    if (pool) await pool.close().catch(() => {});
-    if (master) await master.close().catch(() => {});
+    if (browser) {await browser.close().catch(() => {});}
+    if (vite) {await vite.close().catch(() => {});}
+    if (httpServer) {await new Promise(resolve => httpServer.close(resolve));}
+    if (closeMssqlPool) {await closeMssqlPool().catch(() => {});}
+    if (pool) {await pool.close().catch(() => {});}
+    if (master) {await master.close().catch(() => {});}
     if (started) { try { docker(['rm', '-f', name]); } catch {} }
   }
 }

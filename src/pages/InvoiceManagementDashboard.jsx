@@ -60,20 +60,20 @@ const InvoiceManagementDashboard = () => {
         throw error;
       }
       
-      if (requestId !== summaryRequestId.current) return;
+      if (requestId !== summaryRequestId.current) {return;}
       if (!data || Array.isArray(data) || typeof data !== 'object') {
         throw new Error('Invoice summary returned an invalid response.');
       }
       setInvoiceSummary(data || {});
       setSummaryAvailable(true);
     } catch (err) {
-      if (requestId !== summaryRequestId.current) return;
+      if (requestId !== summaryRequestId.current) {return;}
       console.error('Error loading invoice summary:', err);
       setInvoiceSummary({});
       setSummaryAvailable(false);
       setError(err?.message || 'Unable to load invoice summary.');
     } finally {
-      if (requestId === summaryRequestId.current) setLoading(false);
+      if (requestId === summaryRequestId.current) {setLoading(false);}
     }
   };
   

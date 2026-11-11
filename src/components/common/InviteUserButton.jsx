@@ -21,7 +21,7 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
   const actionUnavailable = ['registered', 'setup_incomplete'].includes(effectiveStatus);
 
   const handleInvite = async () => {
-    if (actionUnavailable) return;
+    if (actionUnavailable) {return;}
 
     try {
       setLoading(true);
@@ -29,7 +29,7 @@ const InviteUserButton = ({ userId, invitationStatus = null, onSuccess, size = '
       setResultMessage(null);
 
       const result = await resendInvitation(userId, false);
-      if (!result.success) throw new Error(result.error || 'Failed to send invitation');
+      if (!result.success) {throw new Error(result.error || 'Failed to send invitation');}
 
       const successMessage = result.providerMessageId
         ? `Invitation accepted by SendGrid for delivery. Reference: ${result.providerMessageId}`

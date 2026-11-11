@@ -41,7 +41,7 @@ function fixture({ enabled = true, apiError = null } = {}) {
     () => enabled,
     async (path, options) => {
       calls.push({path, options});
-      if (apiError) throw apiError;
+      if (apiError) {throw apiError;}
       return { id: 'person-1', name: 'Success' };
     },
     client, data => data,
@@ -64,7 +64,7 @@ test('app-user write failures fail closed for 401/403/404/409/500/503 and ambigu
       const result = await f.actions[operation.name](...operation.args);
       assert.equal(result.success, false, operation.name);
       assert.equal(result.error, denial.message);
-      if (status) assert.equal(result.status, status);
+      if (status) {assert.equal(result.status, status);}
       assert.equal(f.calls.length, 1, operation.name + ' must not retry');
       assert.equal(f.calls[0].path, operation.path);
       assert.deepEqual(f.compatibility, [], operation.name + ' must not change app_users on another transport');

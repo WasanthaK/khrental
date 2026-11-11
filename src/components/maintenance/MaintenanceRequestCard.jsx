@@ -108,7 +108,7 @@ const MaintenanceRequestCard = ({ request, onCancelRequest }) => {
 
   // Handle cancel request
   const handleCancel = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting) {return;}
     
     try {
       setIsSubmitting(true);

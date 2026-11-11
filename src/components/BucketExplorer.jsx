@@ -106,7 +106,7 @@ const BucketExplorer = () => {
   };
 
   const loadFiles = async (bucketName) => {
-    if (!user) return;
+    if (!user) {return;}
     
     try {
       setLoading(true);
@@ -562,7 +562,7 @@ const BucketExplorer = () => {
 
 // Helper function to format file sizes
 const formatBytes = (bytes, decimals = 2) => {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) {return '0 Bytes';}
   
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;

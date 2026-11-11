@@ -34,12 +34,12 @@ const RenteeMaintenanceDetails = () => {
         setError(null);
         
         const appUserId = userData?.profileId || userData?.appUserId || null;
-        if (!appUserId) throw new Error('User not found');
+        if (!appUserId) {throw new Error('User not found');}
         
         // Authenticated server owns renter/tenant authorization; no client ID
         // can widen this scoped read or trigger a generic fallback.
         const requestData = await getAuthorizedMaintenanceDetail(id);
-        if (!requestData) throw new Error('Maintenance request not found');
+        if (!requestData) {throw new Error('Maintenance request not found');}
 
         console.log('Fetched request data:', requestData);
         setRequest(requestData);
@@ -131,7 +131,7 @@ const RenteeMaintenanceDetails = () => {
   
   // Parse notes from string to array of comments
   const parseNotes = (notes) => {
-    if (!notes) return [];
+    if (!notes) {return [];}
     
     try {
       // If it's already a string that looks like JSON, parse it
@@ -185,7 +185,7 @@ const RenteeMaintenanceDetails = () => {
   
   // Format comment for display
   const formatComment = (comment) => {
-    if (!comment) return '';
+    if (!comment) {return '';}
     
     if (typeof comment === 'string') {
       return comment;

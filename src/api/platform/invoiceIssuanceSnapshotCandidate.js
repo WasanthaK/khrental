@@ -12,10 +12,10 @@ const block=(field,message)=>{
 };
 const has=v=>typeof v==='string' && v.trim().length>0;
 const stored=(raw,field)=>{
-  if(raw===undefined || raw===null || raw==='')return null;
+  if(raw===undefined || raw===null || raw===''){return null;}
   try {
     const value=typeof raw==='string'?JSON.parse(raw):raw;
-    if(!value || typeof value!=='object' || Array.isArray(value))throw Error('object required');
+    if(!value || typeof value!=='object' || Array.isArray(value)){throw Error('object required');}
     return value;
   }catch {block(field,'Invalid invoice master data requires administrator correction.');}
 };
@@ -26,7 +26,7 @@ const selectIssuer=row=>{
   catch {block('parties','Property issuer authority is invalid.');}
   if(party.issuerRole==='organization'){
     const raw=stored(row.invoice_issuer_profile_json,'issuer');
-    if(!raw)block('issuer','Legal invoice issuer must be configured.');
+    if(!raw){block('issuer','Legal invoice issuer must be configured.');}
     let issuer;
     try{issuer=normalizeIssuerProfile(raw);}
     catch{block('issuer','Legal issuer profile is invalid.');}
@@ -76,24 +76,24 @@ const configuredBank=(row,prefix)=>{
 const selectPayment=row=>{
   const unit=configuredBank(row,'unit');
   if(unit.any){
-    if(!unit.all)block('unit.bank','Partial unit bank details cannot fall back to the property account.');
+    if(!unit.all){block('unit.bank','Partial unit bank details cannot fall back to the property account.');}
     return {source:'unit',...unit.value};
   }
   const property=configuredBank(row,'property');
   if(property.any){
-    if(!property.all)block('property.bank','Complete property bank details and beneficiary.');
+    if(!property.all){block('property.bank','Complete property bank details and beneficiary.');}
     return {source:'property',...property.value};
   }
   return null;
 };
 const toCents=(amount,field)=>{
   if(typeof amount!=='number' && typeof amount!=='string')
-    block(field,'Invoice amount is not numeric.');
+    {block(field,'Invoice amount is not numeric.');}
   const number=Number(amount),hundred=number*100;
   if(!Number.isFinite(number)||Math.abs(number)>1e12||
     !Number.isSafeInteger(Math.round(hundred))||
     Math.abs(hundred-Math.round(hundred))>0.000001)
-    block(field,'Invoice amount must have exact cent precision.');
+    {block(field,'Invoice amount must have exact cent precision.');}
   return Math.round(hundred);
 };
 export const buildInvoiceIssuanceSnapshotCandidate=({
@@ -104,27 +104,27 @@ export const buildInvoiceIssuanceSnapshotCandidate=({
      String(invoice.propertyid||'').toLowerCase()!==String(masterRow.property_id||'').toLowerCase()||
      String(invoice.renteeid||'').toLowerCase()!==String(masterRow.renter_id||'').toLowerCase()||
      !has(String(invoice.id||''))||!has(String(invoice.tenant_id||'')))
-    block('scope','Issuer/property/renter invoice identities do not agree.');
+    {block('scope','Issuer/property/renter invoice identities do not agree.');}
   if(String(invoice.status||'').toLowerCase()==='draft')
-    block('invoice.status','Cannot snapshot an unissued invoice.');
+    {block('invoice.status','Cannot snapshot an unissued invoice.');}
   if(!has(masterRow.property_name)||!has(masterRow.renter_name))
-    block('parties','Property and renter names must be present.');
+    {block('parties','Property and renter names must be present.');}
   if(!/^[0-9]{8}$/.test(paymentReference||'')||
     paymentReference!==masterRow.payment_reference)
-    block('paymentReference','Issued reference must match the allocated reference.');
+    {block('paymentReference','Issued reference must match the allocated reference.');}
   if(!Array.isArray(components)||components.length<1||components.length>300)
-    block('components','Issued invoice must contain 1-300 lines.');
+    {block('components','Issued invoice must contain 1-300 lines.');}
   const lines=components.map((item,i)=>{
     if(!item || (!has(item.description)&&!has(item.component_type)))
-      block('components','Every charge needs a description.');
+      {block('components','Every charge needs a description.');}
     const amountCents=toCents(item.amount,'components');
     if(amountCents<0 && String(item.component_type||'').toLowerCase()!=='adjustment')
-      block('components','Negative invoice charges require adjustment type.');
+      {block('components','Negative invoice charges require adjustment type.');}
     return {description:String(item.description||item.component_type).trim(),amountCents};
   });
   const totalCents=toCents(invoice.totalamount,'invoice.totalamount');
   if(totalCents<=0||lines.reduce((sum,line)=>sum+line.amountCents,0)!==totalCents)
-    block('invoice.totalamount','Issued invoice lines do not reconcile.');
+    {block('invoice.totalamount','Issued invoice lines do not reconcile.');}
   try {
     const documentSnapshot=normalizeInvoiceDocumentSnapshot({
       version:1,kind:'invoice_issued',
@@ -144,7 +144,7 @@ export const buildInvoiceIssuanceSnapshotCandidate=({
         .update(JSON.stringify(documentSnapshot)).digest('hex')
     };
   } catch(e) {
-    if(e.code==='INVOICE_ISSUANCE_SNAPSHOT_BLOCKED')throw e;
+    if(e.code==='INVOICE_ISSUANCE_SNAPSHOT_BLOCKED'){throw e;}
     block('documentSnapshot','Issued document details are incomplete.');
   }
 };
@@ -155,7 +155,7 @@ export const captureInvoiceIssuanceSnapshotCandidate=async ({
   transaction,sql,tenantId,invoiceId,paymentReference
 })=>{
   if(!transaction||!sql||typeof sql.Request!=='function')
-    block('transaction','Authorized SQL transaction required.');
+    {block('transaction','Authorized SQL transaction required.');}
   const query=async (statement)=>{
     const req=new sql.Request(transaction);
     req.input('tenantId',tenantId).input('invoiceId',invoiceId);
@@ -181,13 +181,13 @@ export const captureInvoiceIssuanceSnapshotCandidate=async ({
     'INNER JOIN dbo.invoice_payment_references refs ON refs.invoice_id=i.id AND refs.tenant_id=i.tenant_id',
     'WHERE i.id=@invoiceId AND i.tenant_id=@tenantId'
   ].join(' ')))[0];
-  if(!master)block('scope','Tenant-owned invoice master data is unavailable.');
+  if(!master){block('scope','Tenant-owned invoice master data is unavailable.');}
   const invoice=(await query([
     'SELECT TOP 1 id,tenant_id,propertyid,renteeid,status,totalamount,',
     'billingperiod,issued_at,duedate FROM dbo.invoices WITH(UPDLOCK,HOLDLOCK)',
     'WHERE id=@invoiceId AND tenant_id=@tenantId'
   ].join(' ')))[0];
-  if(!invoice)block('scope','Issued invoice no longer exists under this tenant.');
+  if(!invoice){block('scope','Issued invoice no longer exists under this tenant.');}
   const components=await query([
     'SELECT description,component_type,amount FROM dbo.invoice_components',
     'WHERE tenant_id=@tenantId AND invoice_id=@invoiceId',

@@ -4,8 +4,8 @@ export const createDatabaseReadiness = ({ probe, notify = () => {}, now = Date.n
   let readyAt = null;
   let pending = null;
   return function ensureReady() {
-    if (readyAt !== null && now() - readyAt < 30000) return Promise.resolve();
-    if (pending) return pending;
+    if (readyAt !== null && now() - readyAt < 30000) {return Promise.resolve();}
+    if (pending) {return pending;}
     notify('checking');
     pending = (async () => {
       try {
@@ -17,7 +17,7 @@ export const createDatabaseReadiness = ({ probe, notify = () => {}, now = Date.n
               return;
             }
           } catch { /* Network failures use the same bounded recovery state. */ }
-          if (attempt < 2) await delay(3000);
+          if (attempt < 2) {await delay(3000);}
         }
         notify('unavailable');
         throw new Error('Our helpers are taking a little longer. Please try again in a moment.');
@@ -42,7 +42,7 @@ export const ensureDatabaseReady = async () => {
           const response = await fetch(getApiBaseUrl() + '/api/mssql/health', {
             credentials: 'omit', cache: 'no-store', signal: controller.signal
           });
-          if (!response.ok) return false;
+          if (!response.ok) {return false;}
           const payload = await response.json();
           return payload.ok === true && payload.connection === 'ready';
         } finally { clearTimeout(timeout); }

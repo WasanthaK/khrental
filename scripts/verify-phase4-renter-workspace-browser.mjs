@@ -13,7 +13,7 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
     const browserErrors = [];
     page.on('pageerror', error => browserErrors.push('pageerror: ' + error.message));
     page.on('console', message => {
-      if (message.type() === 'error') browserErrors.push('console: ' + message.text().slice(0, 900));
+      if (message.type() === 'error') {browserErrors.push('console: ' + message.text().slice(0, 900));}
     });
     try {
       await page.evaluateOnNewDocument((accessToken, tenantId, authId, email) => {
@@ -65,7 +65,7 @@ export async function verifyPhase4RenterWorkspaceBrowser({ browser, origin, a, b
       assert.equal(state.route, route, 'authenticated renter must retain route: ' + diag);
       assert.ok(state.body.includes(expected), 'own fixture must render: ' + diag);
       assert.ok(!state.body.includes(forbidden), 'cross-tenant fixture must not render: ' + diag);
-      if (rejectEmpty) assert.ok(!state.body.includes(rejectEmpty), 'own fixture must not appear empty: ' + diag);
+      if (rejectEmpty) {assert.ok(!state.body.includes(rejectEmpty), 'own fixture must not appear empty: ' + diag);}
       assert.ok(!state.body.includes('Error loading requests'), 'renter maintenance query failed: ' + diag);
       assert.ok(!state.body.includes('Failed to load maintenance request details'), 'own maintenance detail failed: ' + diag);
       return state;

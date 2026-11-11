@@ -10,9 +10,9 @@ const ORIGIN = 'https://app.quixo.homes';
 
 const normalizeIp = value => {
   if (typeof value !== 'string' || !value || value !== value.trim() ||
-      value.length > 128) return null;
-  if (isIP(value) === 4) return value;
-  if (isIP(value) !== 6) return null;
+      value.length > 128) {return null;}
+  if (isIP(value) === 4) {return value;}
+  if (isIP(value) !== 6) {return null;}
 
   let normalized;
   try {
@@ -60,26 +60,26 @@ export const createAzureSignupClientAddress = ({
   return req => {
     try {
       const peer = normalizeIp(req?.socket?.remoteAddress);
-      if (!peer) return null;
+      if (!peer) {return null;}
       if (azureManagedHttpIngress) {
         // ACA's ingress overwrites this value even when supplied by a client.
         // This check is an additional sanity condition, NOT proxy identity.
-        if (req?.headers?.['x-forwarded-proto'] !== 'https') return null;
-      } else if (isTrustedIngressPeer(peer, req) !== true) return null;
-      if (!Array.isArray(req?.rawHeaders)) return null;
+        if (req?.headers?.['x-forwarded-proto'] !== 'https') {return null;}
+      } else if (isTrustedIngressPeer(peer, req) !== true) {return null;}
+      if (!Array.isArray(req?.rawHeaders)) {return null;}
       const xffOccurrences = [];
       for (let i = 0; i < req.rawHeaders.length - 1; i += 2) {
         if (String(req.rawHeaders[i]).toLowerCase() === 'x-forwarded-for') {
           xffOccurrences.push(req.rawHeaders[i + 1]);
         }
       }
-      if (xffOccurrences.length !== 1) return null;
+      if (xffOccurrences.length !== 1) {return null;}
       const header = xffOccurrences[0];
       if (typeof header !== 'string' || header.length > MAX_XFF_LENGTH) {
         return null;
       }
       const hops = header.split(',');
-      if (!hops.length || hops.length > MAX_HOPS) return null;
+      if (!hops.length || hops.length > MAX_HOPS) {return null;}
       // Ignore spoofed left hand header entries; validate the ingress-added
       // RIGHTMOST entry and never read req.ip/req.ips or X-Real-IP.
       const rightmost = hops[hops.length - 1].trim();

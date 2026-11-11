@@ -33,7 +33,7 @@ const connectWithRetry = async () => {
     } catch (error) {
       lastError = error;
       console.warn(`MSSQL connection attempt ${attempt}/4 failed: ${error.message}`);
-      if (attempt < 4) await sleep(attempt * 5000);
+      if (attempt < 4) {await sleep(attempt * 5000);}
     }
   }
   throw lastError;
@@ -176,7 +176,7 @@ const run = async () => {
   for (const column of referenceColumns.recordset || []) {
     const tableName = String(column.TABLE_NAME || '');
     const columnName = String(column.COLUMN_NAME || '');
-    if (tableName.toLowerCase() === 'agreements' && columnName.toLowerCase() === 'id') continue;
+    if (tableName.toLowerCase() === 'agreements' && columnName.toLowerCase() === 'id') {continue;}
 
     const request = pool.request();
     const idList = bindIds(request);

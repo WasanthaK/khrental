@@ -65,11 +65,11 @@ const AgreementTemplateList = () => {
       template.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       template.content?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (filter === 'all') return matchesSearch;
+    if (filter === 'all') {return matchesSearch;}
     
     // Add more filters as needed
-    if (filter === 'english') return matchesSearch && template.language === 'English';
-    if (filter === 'sinhala') return matchesSearch && template.language === 'Sinhala';
+    if (filter === 'english') {return matchesSearch && template.language === 'English';}
+    if (filter === 'sinhala') {return matchesSearch && template.language === 'Sinhala';}
     
     return matchesSearch;
   });

@@ -27,10 +27,10 @@ const MaintenanceImageUpload = ({
   
   // Handle file input change
   const handleFileChange = async (event) => {
-    if (disabled) return;
+    if (disabled) {return;}
     
     const files = Array.from(event.target.files);
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {return;}
     
     if (selectedImages.length + files.length > maxImages) {
       toast.error(`You can only upload a maximum of ${maxImages} images.`);
@@ -106,7 +106,7 @@ const MaintenanceImageUpload = ({
   
   // Handle removing an image
   const handleRemoveImage = (index) => {
-    if (disabled) return;
+    if (disabled) {return;}
     
     const newImages = [...selectedImages];
     
@@ -126,9 +126,9 @@ const MaintenanceImageUpload = ({
   
   // Get preview URL for an image (either from server or local preview)
   const getImagePreviewUrl = (image) => {
-    if (image.previewUrl) return image.previewUrl;
-    if (image.url) return image.url;
-    if (typeof image === 'string') return image;
+    if (image.previewUrl) {return image.previewUrl;}
+    if (image.url) {return image.url;}
+    if (typeof image === 'string') {return image;}
     return '';
   };
 

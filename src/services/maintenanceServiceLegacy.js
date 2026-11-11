@@ -105,7 +105,7 @@ export const createMaintenanceRequest = async (input, userId) => {
       
       // Then create entries in maintenance_request_images table
       for (const imageUrl of imageUrls) {
-        if (!imageUrl) continue;
+        if (!imageUrl) {continue;}
         
         // Create entry in maintenance_request_images table
         const { error: imageInsertError } = await platformClient

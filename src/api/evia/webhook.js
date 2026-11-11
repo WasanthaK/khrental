@@ -37,8 +37,8 @@ const summarizeStoredSignatories = (value) => parseJsonArray(value).map((entry) 
 }));
 
 const parseJsonArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string' || !value.trim()) return [];
+  if (Array.isArray(value)) {return value;}
+  if (typeof value !== 'string' || !value.trim()) {return [];}
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : [];
@@ -77,20 +77,20 @@ export const createEviaCallbackToken = ({
 };
 
 export const verifyEviaCallbackToken = ({ token, secret, now = Date.now() }) => {
-  if (!token || !secret) return { ok: false };
+  if (!token || !secret) {return { ok: false };}
 
   const [encodedPayload, signature, ...rest] = String(token).split('.');
-  if (!encodedPayload || !signature || rest.length > 0) return { ok: false };
+  if (!encodedPayload || !signature || rest.length > 0) {return { ok: false };}
 
   const expectedSignature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
-  if (!timingSafeStringEqual(signature, expectedSignature)) return { ok: false };
+  if (!timingSafeStringEqual(signature, expectedSignature)) {return { ok: false };}
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
     if (!payload?.agreementId || !payload?.tenantId || !Number.isFinite(Number(payload?.exp))) {
       return { ok: false };
     }
-    if (Number(payload.exp) <= Math.floor(now / 1000)) return { ok: false, expired: true };
+    if (Number(payload.exp) <= Math.floor(now / 1000)) {return { ok: false, expired: true };}
     return {
       ok: true,
       agreementId: String(payload.agreementId),
@@ -104,12 +104,12 @@ export const verifyEviaCallbackToken = ({ token, secret, now = Date.now() }) => 
 
 const splitSignatureCandidates = (value) => {
   const raw = Array.isArray(value) ? value.join(',') : String(value || '');
-  if (!raw.trim()) return [];
+  if (!raw.trim()) {return [];}
 
   const candidates = new Set();
   raw.split(',').forEach((part) => {
     const trimmed = part.trim().replace(/^['"]|['"]$/g, '');
-    if (!trimmed) return;
+    if (!trimmed) {return;}
     candidates.add(trimmed);
 
     const equalsIndex = trimmed.indexOf('=');
@@ -148,7 +148,7 @@ export const getEviaWebhookSignature = (headers = {}) => {
 };
 
 export const verifyEviaWebhookHmac = ({ rawBody, signature, secret }) => {
-  if (!secret || !rawBody || !signature) return false;
+  if (!secret || !rawBody || !signature) {return false;}
 
   const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
   const digest = crypto.createHmac('sha256', secret).update(body).digest();
@@ -440,7 +440,7 @@ const recordVerifiedWebhookEvent = async ({ agreement, normalized, payload, tran
 };
 
 const markWebhookEventProcessed = async (eventRecordId) => {
-  if (!eventRecordId) return;
+  if (!eventRecordId) {return;}
   await runQuery(`
     UPDATE dbo.webhook_events
     SET processed = 1,
@@ -452,7 +452,7 @@ const markWebhookEventProcessed = async (eventRecordId) => {
 
 
 const hasProcessedWebhookDelivery = async ({ tenantId, requestId, deliveryId }) => {
-  if (!tenantId || !requestId || !deliveryId) return false;
+  if (!tenantId || !requestId || !deliveryId) {return false;}
 
   // Match only previously completed deliveries within the resolved tenant.
   // In-flight or failed deliveries remain retryable; no second event is
@@ -487,8 +487,8 @@ const getStoredSignedDocumentUrl = (agreement = {}) => {
 // A processed completion without an archived signed document is still
 // recoverable: re-delivery may be the only chance to retain the signed PDF.
 export const shouldIgnoreProcessedEviaDelivery = ({ alreadyProcessed, normalized = {}, agreement = {} }) => {
-  if (!alreadyProcessed) return false;
-  if (!isCompletionNotification(normalized)) return true;
+  if (!alreadyProcessed) {return false;}
+  if (!isCompletionNotification(normalized)) {return true;}
   return String(agreement.status || '').toLowerCase() === 'signed'
     && String(agreement.signature_status || '').toLowerCase() === 'completed'
     && Boolean(getStoredSignedDocumentUrl(agreement));
@@ -496,7 +496,7 @@ export const shouldIgnoreProcessedEviaDelivery = ({ alreadyProcessed, normalized
 
 export const markAllSignatoriesCompleted = (value, completedAt) => {
   const signatories = parseJsonArray(value);
-  if (signatories.length === 0) return null;
+  if (signatories.length === 0) {return null;}
 
   return signatories.map((signatory) => ({
     ...signatory,
@@ -511,10 +511,10 @@ export const updateSignatoryCompletion = (value, { email, name, eventTime }) => 
   const signatories = parseJsonArray(value);
   const timestamp = eventTime || new Date().toISOString();
 
-  if (!normalizedRecipientEmail && !name) return null;
+  if (!normalizedRecipientEmail && !name) {return null;}
 
   const existingIndex = signatories.findIndex((signatory) => {
-    if (normalizedRecipientEmail && normalizeEmail(signatory?.email) === normalizedRecipientEmail) return true;
+    if (normalizedRecipientEmail && normalizeEmail(signatory?.email) === normalizedRecipientEmail) {return true;}
     return name && String(signatory?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase();
   });
 
@@ -541,7 +541,7 @@ export const updateSignatoryCompletion = (value, { email, name, eventTime }) => 
 };
 
 const isSignatoryCompletionNotification = ({ eventType, eventId }) => {
-  if (eventId === 2) return true;
+  if (eventId === 2) {return true;}
   return eventType === 'signatory.completed'
     || eventType.includes('signatorycompleted')
     || eventType.includes('signatory completed');
@@ -549,7 +549,7 @@ const isSignatoryCompletionNotification = ({ eventType, eventId }) => {
 
 export const updateSignatoryEmailDelivery = (value, { email, name, deliveryStatus, eventTime, eventType }) => {
   const normalizedRecipientEmail = normalizeEmail(email);
-  if (!normalizedRecipientEmail) return null;
+  if (!normalizedRecipientEmail) {return null;}
 
   const signatories = parseJsonArray(value);
   const delivery = deliveryStatus || (eventType === 'request.sent' ? 'sent' : 'unknown');
@@ -581,7 +581,7 @@ export const updateSignatoryEmailDelivery = (value, { email, name, deliveryStatu
 };
 
 const getDocumentUrlCandidate = (document) => {
-  if (!document || typeof document !== 'object') return null;
+  if (!document || typeof document !== 'object') {return null;}
   return firstDefined(
     document.SignedDocumentUrl,
     document.signedDocumentUrl,
@@ -611,7 +611,7 @@ export const extractSignedDocumentUrl = (payload = {}) => {
   );
 
   const candidate = direct || normalizeEviaWebhookPayload(payload).documents.map(getDocumentUrlCandidate).find(Boolean);
-  if (!candidate) return null;
+  if (!candidate) {return null;}
 
   try {
     const parsed = new URL(String(candidate));
@@ -622,21 +622,21 @@ export const extractSignedDocumentUrl = (payload = {}) => {
 };
 
 const isCompletionNotification = ({ eventType, eventId, status }) => {
-  if (eventId === 3) return true;
+  if (eventId === 3) {return true;}
   if (
     eventType === 'request.completed'
     || eventType === 'signing_completed'
     || eventType.includes('requestcompleted')
     || eventType.includes('request completed')
     || eventType.includes('signing completed')
-  ) return true;
+  ) {return true;}
   return COMPLETED_STATUSES.has(status);
 };
 
 export const shouldAcknowledgeUnmappedWebhook = ({ eventType, eventId, status }) => {
-  if (isCompletionNotification({ eventType, eventId, status })) return false;
-  if (CANCELLED_STATUSES.has(status)) return false;
-  if (REJECTED_STATUSES.has(status)) return false;
+  if (isCompletionNotification({ eventType, eventId, status })) {return false;}
+  if (CANCELLED_STATUSES.has(status)) {return false;}
+  if (REJECTED_STATUSES.has(status)) {return false;}
   return true;
 };
 
@@ -914,7 +914,7 @@ SELECT a.id FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`, {
       requestId: normalized.requestId,
       signatoriesStatus: JSON.stringify(emailStatuses)
     });
-    if (savedEmailStatus.length) agreement.signatories_status = JSON.stringify(emailStatuses);
+    if (savedEmailStatus.length) {agreement.signatories_status = JSON.stringify(emailStatuses);}
   }
 
   if (!finalState && isSignatoryCompletionNotification(normalized) && !terminalAtRead) {

@@ -27,7 +27,7 @@ test('migration ledger queries are read-only and limited to exactly two B04 IDs'
   assert.match(source, /b04_signup_sql_limiter_ledgered/);
   assert.doesNotMatch(source, /\b(?:INSERT INTO|UPDATE|DELETE FROM|DROP TABLE|ALTER TABLE|TRUNCATE TABLE|MERGE INTO)\s+dbo\./i);
   assert.match(workflow, /name: Diagnose production schema/);
-  assert.match(workflow, /^  workflow_dispatch:/m);
+  assert.match(workflow, /^ {2}workflow_dispatch:/m);
   assert.match(workflow, /Wait for this commit and MSSQL to be serving/);
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /git merge-base --is-ancestor/);

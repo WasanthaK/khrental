@@ -370,7 +370,7 @@ test('parallel PDF archives reject excess work before acquiring SQL connections 
   };
   const execute = async () => {
     entered += 1;
-    if (entered === 2) enteredResolve();
+    if (entered === 2) {enteredResolve();}
     await blocked;
     return 'archived';
   };
@@ -472,7 +472,7 @@ test('API-retrieved Evia PDF also uses attempt-scoped immutable path when opted 
     if (String(url).endsWith('/requests/request-1/documents')) {
       return jsonResponse([{ DocumentName: 'Lease.pdf', DownloadUrl: downloads }]);
     }
-    if (String(url) === downloads) return binaryResponse('signed-by-evia');
+    if (String(url) === downloads) {return binaryResponse('signed-by-evia');}
     throw new Error('unexpected fetch: ' + url);
   };
   const archiveAttemptId = createEviaArchiveAttemptId();
@@ -633,7 +633,7 @@ test('expired or stolen owner aborts staging and cannot finalize even if upload 
     renew: async () => { throw lost; },
     stageDocuments: async ({ signal }) => {
       await new Promise(resolve => {
-        if (signal.aborted) return resolve();
+        if (signal.aborted) {return resolve();}
         signal.addEventListener('abort', resolve, { once: true });
       });
       aborted = signal.aborted;

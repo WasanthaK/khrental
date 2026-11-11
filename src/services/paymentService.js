@@ -29,7 +29,7 @@ export const generateInvoice = async (invoiceData) => {
           0
         );
       }
-      if (totalamount <= 0) totalamount = 1;
+      if (totalamount <= 0) {totalamount = 1;}
     }
 
     const invoice = {
@@ -102,7 +102,7 @@ export const uploadPaymentProof = async (invoiceId, file, paymentDetails = {}) =
       notes: paymentDetails.notes || null
     });
 
-    if (error) throw error;
+    if (error) {throw error;}
     return { success: true, data: data?.invoice || null, payment: data?.payment || null, url: proofUrl };
   } catch (error) {
     console.error('Error uploading payment proof:', error.message);
@@ -120,7 +120,7 @@ export const verifyPaymentProof = async (invoiceId, isApproved, notes = '') => {
       approved: Boolean(isApproved),
       notes
     });
-    if (error) throw error;
+    if (error) {throw error;}
     return {
       success: true,
       data: data?.invoice || null,
@@ -140,7 +140,7 @@ export const verifyPaymentProof = async (invoiceId, isApproved, notes = '') => {
 export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
   try {
     const { data, error } = await recordManualInvoicePayment(invoiceId, paymentDetails);
-    if (error) throw error;
+    if (error) {throw error;}
     return {
       success: true,
       data: data?.invoice || null,
@@ -161,7 +161,7 @@ export const markInvoiceAsPaid = async (invoiceId, paymentDetails = {}) => {
 export const sendPaymentReminder = async (invoiceId) => {
   try {
     const { data, error } = await sendInvoicePaymentReminder(invoiceId);
-    if (error) throw error;
+    if (error) {throw error;}
     if (!data || data.sent !== true || String(data.invoiceId || '').toLowerCase() !== String(invoiceId || '').toLowerCase()) {
       throw new Error('Payment reminder delivery was not acknowledged for this invoice.');
     }
@@ -176,11 +176,11 @@ export const checkOverdueInvoices = async () => {
   try {
     const today = new Date();
     const { data, error } = await listInvoices({ pageSize: 1000 });
-    if (error) throw error;
+    if (error) {throw error;}
 
     const overdueInvoices = (data || []).filter((invoice) => {
-      if ([INVOICE_STATUS.DRAFT, INVOICE_STATUS.PAID].includes(invoice.status)) return false;
-      if (!invoice.duedate) return false;
+      if ([INVOICE_STATUS.DRAFT, INVOICE_STATUS.PAID].includes(invoice.status)) {return false;}
+      if (!invoice.duedate) {return false;}
       const dueDate = new Date(invoice.duedate);
       return !Number.isNaN(dueDate.getTime()) && dueDate < today;
     });
@@ -212,7 +212,7 @@ export const generateMonthlyInvoices = async (options = {}) => {
       billingPeriod,
       dueDate
     });
-    if (error) throw error;
+    if (error) {throw error;}
 
     return {
       success: (data?.errors || []).length === 0 || (data?.created || []).length > 0,

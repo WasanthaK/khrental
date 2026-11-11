@@ -5,8 +5,8 @@ const normalizeId = (value) => String(value || '').trim().toLowerCase();
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 const parseMetadata = (value) => {
-  if (!value) return {};
-  if (typeof value === 'object') return value;
+  if (!value) {return {};}
+  if (typeof value === 'object') {return value;}
   try {
     return JSON.parse(value);
   } catch (_error) {
@@ -27,7 +27,7 @@ const isAuthRegistrationStructurallyComplete = ({ user, auth }) => Boolean(
 );
 
 const isAuthRegistrationComplete = ({ user, auth }) => {
-  if (!isAuthRegistrationStructurallyComplete({ user, auth })) return false;
+  if (!isAuthRegistrationStructurallyComplete({ user, auth })) {return false;}
 
   const metadata = parseMetadata(auth.metadata);
   return Boolean(
@@ -37,16 +37,16 @@ const isAuthRegistrationComplete = ({ user, auth }) => {
 };
 
 const deriveInvitationStatus = ({ user, auth = null, invitation, hasAcceptedInvitation = false, now = new Date() }) => {
-  if (isAuthRegistrationComplete({ user, auth })) return 'registered';
+  if (isAuthRegistrationComplete({ user, auth })) {return 'registered';}
 
   // An accepted invitation or partial/unverified auth linkage is evidence that
   // setup was attempted, but it must never be presented as Registered until
   // account access has actually been verified by the server.
-  if (invitation?.accepted_at || hasAcceptedInvitation || user?.auth_id || auth?.id) return 'setup_incomplete';
+  if (invitation?.accepted_at || hasAcceptedInvitation || user?.auth_id || auth?.id) {return 'setup_incomplete';}
 
-  if (!invitation) return 'not_invited';
-  if (invitation.revoked_at) return 'revoked';
-  if (invitation.expires_at && new Date(invitation.expires_at).getTime() <= now.getTime()) return 'expired';
+  if (!invitation) {return 'not_invited';}
+  if (invitation.revoked_at) {return 'revoked';}
+  if (invitation.expires_at && new Date(invitation.expires_at).getTime() <= now.getTime()) {return 'expired';}
   return 'pending';
 };
 
@@ -58,7 +58,7 @@ const deriveInvitationStatus = ({ user, auth = null, invitation, hasAcceptedInvi
  * a successful login.
  */
 export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = new Date() }) => {
-  if (!tenantId || !appUserId) return null;
+  if (!tenantId || !appUserId) {return null;}
 
   const user = await runSingleQuery(`
     SELECT TOP 1
@@ -73,7 +73,7 @@ export const getCanonicalInvitationStatus = async ({ tenantId, appUserId, now = 
       AND (au.tenant_id = @tenantId OR tm.id IS NOT NULL)
   `, { tenantId, appUserId });
 
-  if (!user) return null;
+  if (!user) {return null;}
 
   const auth = await runSingleQuery(`
     SELECT TOP 1

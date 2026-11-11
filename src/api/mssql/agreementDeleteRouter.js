@@ -80,27 +80,27 @@ export const getAgreementDeletionEligibility = (agreement) => {
 };
 
 export const extractManagedAgreementStorageObjects = (agreement, tenantId) => {
-  if (!agreement?.id || !tenantId) return [];
+  if (!agreement?.id || !tenantId) {return [];}
 
   const expectedPrefix = `tenants/${tenantId}/agreements/${agreement.id}/`.toLowerCase();
   const objects = new Map();
 
   for (const field of DOCUMENT_URL_FIELDS) {
     const value = agreement[field];
-    if (!hasValue(value)) continue;
+    if (!hasValue(value)) {continue;}
 
     try {
       const parsed = new URL(String(value), 'https://khrentals.local');
       const marker = '/storage/';
       const markerIndex = parsed.pathname.toLowerCase().indexOf(marker);
-      if (markerIndex < 0) continue;
+      if (markerIndex < 0) {continue;}
 
       const storagePath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
       const [bucket, ...pathParts] = storagePath.split('/').filter(Boolean);
-      if (!bucket || pathParts.length === 0) continue;
+      if (!bucket || pathParts.length === 0) {continue;}
 
       const relativePath = normalizeStoragePath(pathParts.join('/'));
-      if (!relativePath.toLowerCase().startsWith(expectedPrefix)) continue;
+      if (!relativePath.toLowerCase().startsWith(expectedPrefix)) {continue;}
 
       objects.set(`${bucket}:${relativePath}`, { bucket, path: relativePath });
     } catch (_error) {
@@ -129,8 +129,8 @@ const findAgreementDependencies = async (pool, agreementId) => {
     const columnName = String(row.COLUMN_NAME || '');
     const normalizedReference = `${tableName}.${columnName}`.toLowerCase();
 
-    if (tableName.toLowerCase() === 'agreements' && columnName.toLowerCase() === 'id') continue;
-    if (SAFE_CASCADE_DEPENDENCIES.has(normalizedReference)) continue;
+    if (tableName.toLowerCase() === 'agreements' && columnName.toLowerCase() === 'id') {continue;}
+    if (SAFE_CASCADE_DEPENDENCIES.has(normalizedReference)) {continue;}
 
     const request = new sql.Request(pool);
     request.input('agreementId', sql.UniqueIdentifier, agreementId);
@@ -183,7 +183,7 @@ const deleteCancelledAgreement = (agreementId, tenantId) => withManagementWrite(
   `);
   const agreement = agreementResult.recordset?.[0] || null;
   const eligibility = getAgreementDeletionEligibility(agreement);
-  if (!eligibility.ok) return { eligibility };
+  if (!eligibility.ok) {return { eligibility };}
 
   const blockers = await findAgreementDependencies(pool, agreementId);
   if (blockers.length > 0) {

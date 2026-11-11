@@ -12,7 +12,7 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
   const [lifecycleComments, setLifecycleComments] = useState(null);
 
   const refreshComments = useCallback(async () => {
-    if (!requestId) return;
+    if (!requestId) {return;}
     const result = await getMaintenanceComments(requestId);
     if (!result.success) {
       console.error('Failed to load maintenance lifecycle comments:', result.error);

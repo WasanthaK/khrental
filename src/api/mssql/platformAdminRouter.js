@@ -30,13 +30,13 @@ const asyncHandler = (handler) => async (req, res, next) => {
   try {
     await handler(req, res, next);
   } catch (error) {
-    if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
+    if (error.retryAfter) {res.set('Retry-After', String(error.retryAfter));}
     next(error);
   }
 };
 
 export const isPlatformAdmin = async (user, { query = runSingleQuery, env = process.env } = {}) => {
-  if (!user?.id || !user?.auth_id) return false;
+  if (!user?.id || !user?.auth_id) {return false;}
   const record = await query(`SELECT auth.app_user_id,auth.auth_id,auth.email,auth.metadata,
     CASE WHEN EXISTS(SELECT 1 FROM dbo.public_signup_challenges c
       WHERE c.email_normalized=LOWER(auth.email) AND c.sent_at IS NOT NULL
@@ -52,16 +52,16 @@ export const isPlatformAdmin = async (user, { query = runSingleQuery, env = proc
   catch { return false; }
   // This also contains the historical email-seeded registry migration on a
   // fresh/restored database: an unverified email claim grants no platform role.
-  if (metadata?.global_email_verified !== true || Number(record?.email_proof)!==1) return false;
+  if (metadata?.global_email_verified !== true || Number(record?.email_proof)!==1) {return false;}
   const verified = {...record,verified:true};
   const tableState = await query(
     `SELECT CASE WHEN OBJECT_ID(N'dbo.platform_admins', N'U') IS NULL THEN 0 ELSE 1 END AS exists_value`
   );
-  if (!tableState?.exists_value) return isBootstrapPlatformOwner(user, verified, env);
+  if (!tableState?.exists_value) {return isBootstrapPlatformOwner(user, verified, env);}
   const row = await query(`SELECT TOP 1 id FROM dbo.platform_admins
     WHERE app_user_id=@appUserId AND LOWER(COALESCE(status,'active'))='active'`, {appUserId:user.id});
   // A disabled registry entry must not be bypassed by the fallback.
-  if (row?.id) return true;
+  if (row?.id) {return true;}
   const existing = await query('SELECT TOP 1 id FROM dbo.platform_admins WHERE app_user_id=@appUserId', {appUserId:user.id});
   return !existing?.id && isBootstrapPlatformOwner(user, verified, env);
 };

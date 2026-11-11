@@ -11,7 +11,7 @@ import {
 } from './identity-membership-audit-queries.mjs';
 
 const main = async () => {
-  if (!isMssqlConfigured()) throw new Error('Production SQL connection is not configured.');
+  if (!isMssqlConfigured()) {throw new Error('Production SQL connection is not configured.');}
   const schema = await runSingleQuery(`
     SELECT
       CASE WHEN OBJECT_ID('dbo.app_users', 'U') IS NULL THEN 0 ELSE 1 END AS app_users,

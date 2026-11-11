@@ -38,5 +38,5 @@ try {
   for (const probe of uploaded) {
     await storage.deleteObjects(probe.bucket, [probe.path]);
   }
-  if (uploaded.length) console.log('R2 probe cleanup succeeded.');
+  if (uploaded.length) {console.log('R2 probe cleanup succeeded.');}
 }

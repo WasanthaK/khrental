@@ -245,7 +245,7 @@ export const ensureEviaSignatureAnchors = (html = '') => {
   const missing = Object.values(EVIA_SIGNATURE_ANCHORS)
     .filter((anchor) => !source.includes(anchor));
 
-  if (missing.length === 0) return source;
+  if (missing.length === 0) {return source;}
 
   const anchorMarkup = [
     '<div data-evia-signature-anchors="true">',

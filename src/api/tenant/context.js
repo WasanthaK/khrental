@@ -100,7 +100,7 @@ const readRequestedTenantId = (req) => normalizeString(
 );
 
 const getUserForIdentity = async ({ authId, userId, email }) => {
-  if (!authId && !userId && !email) return null;
+  if (!authId && !userId && !email) {return null;}
   if (!(await tableExists('app_users'))) {
     return null;
   }

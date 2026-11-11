@@ -98,7 +98,7 @@ export default function ManagementSubscription(){
   const [cessation,setCessation]=useState(null),[cessationReason,setCessationReason]=useState('');
   const context=useRef('');context.current=`${user?.id}:${tenantId}`;
   const requests=useRef(new Map());
-  const load=async()=>{const scope=context.current;setLoading(true);setError('');try{const result=await requestMssqlApi('/api/management-billing/status');if(context.current===scope)setData(result);}catch(e){if(context.current===scope)setError(e.message);}finally{if(context.current===scope)setLoading(false);}};
+  const load=async()=>{const scope=context.current;setLoading(true);setError('');try{const result=await requestMssqlApi('/api/management-billing/status');if(context.current===scope){setData(result);}}catch(e){if(context.current===scope){setError(e.message);}}finally{if(context.current===scope){setLoading(false);}}};
   useEffect(()=>{setData(null);setPreview(null);setCessation(null);setCessationReason('');setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
   const action=async(kind,payload,resumeId)=>{
     const scope=context.current;setBusy(true);setNotice('');
@@ -107,17 +107,17 @@ export default function ManagementSubscription(){
     if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
     try{
       const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')&&kind!=='stock/cessation'?payload:{...payload,requestId}});
-      if(context.current!==scope)return;
+      if(context.current!==scope){return;}
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
       if(kind==='stock/cessation-preview'){setCessation(result);setCessationReason('');setPreview(null);}
       else if(kind==='quantity-preview'){setPreview(result);setCessation(null);}
       else{setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
-      if(kind==='stock/prepare')setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});
-      if(kind==='stock/cessation')setNotice('Management ended. Billing changes apply at renewal; historical records remain available.');
+      if(kind==='stock/prepare'){setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});}
+      if(kind==='stock/cessation'){setNotice('Management ended. Billing changes apply at renewal; historical records remain available.');}
       await load();
       return true;
-    }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500)requests.current.delete(key);await load();}}finally{if(context.current===scope)setBusy(false);}
+    }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500){requests.current.delete(key);}await load();}}finally{if(context.current===scope){setBusy(false);}}
   };
   return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason}} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
 }

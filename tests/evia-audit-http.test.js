@@ -36,7 +36,7 @@ test('actual HTTP storage router enforces credential, tenant, role and publicati
       return;
     }
     req.testSubject = sessions.get(key);
-    if (req.testSubject) req.authSession = { accessToken: key };
+    if (req.testSubject) {req.authSession = { accessToken: key };}
     next();
   };
   const tenantMiddleware = (req, res, next) => {

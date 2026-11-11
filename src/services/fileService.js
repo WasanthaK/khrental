@@ -258,7 +258,7 @@ const saveFile = async (file, { bucket, folder }) => {
  */
 const ensureFolderExists = async (bucket, folderPath) => {
   try {
-    if (!folderPath) return { success: true };
+    if (!folderPath) {return { success: true };}
     await listTenantFiles({ bucket, path: folderPath });
     return { success: true };
   } catch (error) {
@@ -355,8 +355,8 @@ const cleanupUnusedFiles = async (category, usedUrls, bucketName = null) => {
     }
 
     const { data: files, error: listError } = await listFiles(targetBucket);
-    if (listError) throw listError;
-    if (!files) return { deleted: 0, errors: 0, skipped: 0 };
+    if (listError) {throw listError;}
+    if (!files) {return { deleted: 0, errors: 0, skipped: 0 };}
 
     const usedPaths = usedUrls
       .filter((url) => isDefinedValue(url))

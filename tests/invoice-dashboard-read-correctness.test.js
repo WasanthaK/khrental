@@ -176,7 +176,7 @@ test('Phase 5 browser: real PropertySelector selects, toggles, clears, and respe
 
     assert.deepEqual(browserErrors, [], 'real React selector must render without browser exceptions');
   } finally {
-    if (browser) await browser.close();
+    if (browser) {await browser.close();}
     await vite.close();
   }
 });

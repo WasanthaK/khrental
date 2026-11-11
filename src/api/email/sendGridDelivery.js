@@ -1,12 +1,12 @@
 export const EMAIL_PROVIDER = 'twilio-sendgrid';
 
 const safeString = (value, maxLength = 160) => {
-  if (value === undefined || value === null || value === '') return null;
+  if (value === undefined || value === null || value === '') {return null;}
   return String(value).replace(/[\r\n\t]/g, ' ').slice(0, maxLength);
 };
 
 const safeNumber = (value) => {
-  if (value === undefined || value === null || value === '') return null;
+  if (value === undefined || value === null || value === '') {return null;}
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
 };
@@ -28,7 +28,7 @@ const createDeliveryError = (message, {
 };
 
 export const normalizeEmailAttachments = (attachments = []) => {
-  if (!Array.isArray(attachments)) return [];
+  if (!Array.isArray(attachments)) {return [];}
 
   return attachments
     .filter((attachment) => attachment && attachment.filename && attachment.content)

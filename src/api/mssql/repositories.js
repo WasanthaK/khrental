@@ -1607,7 +1607,7 @@ export const listInvoices = async ({
   }
 
   if (Array.isArray(status)) {
-    if (status.length === 0) return [];
+    if (status.length === 0) {return [];}
     const values = [...new Set(status.map(value => String(value)))];
     values.forEach((value, index) => {
       params['status' + index] = value;
@@ -2033,7 +2033,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     params, tenantId
   );
 
-  if (rows[0]) return getAgreementById(rows[0].id, tenantId);
+  if (rows[0]) {return getAgreementById(rows[0].id, tenantId);}
   const existing = await getAgreementById(id, tenantId);
   if (existing) {
     throw Object.assign(new Error('Signed agreements cannot be changed through generic updates.'), {

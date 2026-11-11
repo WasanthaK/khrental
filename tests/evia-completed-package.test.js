@@ -76,7 +76,7 @@ test('rejects unverified, expired or unsafe descriptors before any fetch', async
       'https://evia.enadocapp.com/other/package'].map(url => ({ completedPackage: { ...descriptor, url } })),
     { completedPackage: { ...descriptor, expiresAt: '2000-01-01' } },
     { completedPackage: { ...descriptor, token: 'bad\r\nheader' } }
-  ]) await assert.rejects(downloadEviaCompletedPackage({ ...args, ...change, fetchImpl: async () => { calls++; } }));
+  ]) {await assert.rejects(downloadEviaCompletedPackage({ ...args, ...change, fetchImpl: async () => { calls++; } }));}
   assert.equal(calls, 0);
 });
 
@@ -101,7 +101,7 @@ test('rejects traversal, duplicate audit, normalization collisions, symlinks, co
     [{ name: 'audit_trail.pdf', size: 51 * 1024 * 1024 }],
     [{ name: 'signed.pdf' }],
     Array.from({ length: 101 }, (_, i) => ({ name: `${i}.pdf` }))
-  ]) await assert.rejects(extractEviaPackagePdfs(zip(bad)));
+  ]) {await assert.rejects(extractEviaPackagePdfs(zip(bad)));}
 });
 
 const agreement = { id: '22222222-2222-4222-8222-222222222222', tenant_id: '11111111-1111-4111-8111-111111111111', status: 'signed', signature_status: 'completed' };
@@ -115,18 +115,18 @@ test('metadata-only completion retries audit-only retrieval and then reuses the 
     getObject: async (bucket, key) => {
       assert.equal(bucket, 'documents');
       assert.equal(key, signedUrl.slice('/storage/documents/'.length).replace('signed.pdf', 'audit_trail.pdf'));
-      if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+      if (!retained) {throw Object.assign(new Error('missing'), { status: 404 });}
       return { body: retained };
     },
     createEviaAuditIfAbsent: async (bucket, key, body) => { writes++; retained ||= body; }
   };
   const fetchImpl = async url => {
     fetches++;
-    if (unavailable) return new Response('{}', { status: 503, headers: { 'content-type': 'application/json' } });
-    if (url.endsWith('/oauth/exchange')) return Response.json({ access_token: 'fixture-token' });
-    if (url.endsWith('/requests/persisted-request/documents')) return Response.json([
+    if (unavailable) {return new Response('{}', { status: 503, headers: { 'content-type': 'application/json' } });}
+    if (url.endsWith('/oauth/exchange')) {return Response.json({ access_token: 'fixture-token' });}
+    if (url.endsWith('/requests/persisted-request/documents')) {return Response.json([
       { documentName: 'audit_trail.pdf', downloadUrl }
-    ]);
+    ]);}
     assert.equal(url, downloadUrl, 'must never download or replace the signed document');
     return new Response(pdf);
   };
@@ -163,7 +163,7 @@ test('late completed-package replay writes only the missing audit, and repeat sk
   const storageDriver = {
     getObject: async (bucket, path) => {
       assert.equal(bucket, 'documents'); assert.ok(path.endsWith('/signed/audit_trail.pdf'));
-      if (!retained) throw Object.assign(new Error('missing'), { status: 404 });
+      if (!retained) {throw Object.assign(new Error('missing'), { status: 404 });}
       return { body: retained };
     },
     createEviaAuditIfAbsent: async (bucket, path, body) => { writes.push(path); retained ||= body; }

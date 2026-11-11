@@ -289,7 +289,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
       body: proofBytes
     });
     const receipt = await uploaded.json();
-    if (uploaded.status !== 201) return { status: uploaded.status, payload: receipt };
+    if (uploaded.status !== 201) {return { status: uploaded.status, payload: receipt };}
     const proofUrl = '/storage/invoices/' + receipt.data.path;
     return send(invoiceId, '/payment-proof', {
       token, tenantId,
@@ -530,7 +530,7 @@ export async function verifyPhase4PaymentLifecycleHttp({
         const button = [...(card?.querySelectorAll('button') || [])].find(element =>
           element.textContent.trim() === 'Account & Receipts'
         );
-        if (button) button.click();
+        if (button) {button.click();}
         return { clicked: Boolean(button), heading };
       }, invoiceId);
       // Tenant A was explicitly supplemented above, while tenant B remains

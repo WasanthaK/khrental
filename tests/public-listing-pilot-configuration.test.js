@@ -21,7 +21,7 @@ for(const [label,p,photos] of [
   ['withdrawn photo',preview,[{...photo,status:'withdrawn'}]],
   ['multiple approved photos',preview,[photo,{...photo,mediaId:'cccccccc-cccc-4ccc-8ccc-cccccccccccc'}]],
   ['invalid media ID',preview,[{...photo,mediaId:'original-file'}]]
-])test('suppresses export for '+label,()=>assert.equal(buildPilotConfiguration(p,photos),null));
+]){test('suppresses export for '+label,()=>assert.equal(buildPilotConfiguration(p,photos),null));}
 test('unapproved photos cannot replace the approved copy',()=>{
   assert.deepEqual(buildPilotConfiguration(preview,[{...photo,status:'withheld'},photo]),buildPilotConfiguration(preview,[photo]));
 });

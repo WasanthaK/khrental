@@ -5,8 +5,8 @@ import {LISTING_CATEGORIES,normalizeListingCategory,normalizePropertyRentalValue
 import {toPublicDTO} from '../src/api/publicListings/contract.js';
 test('registration requires one of three explicit website categories',()=>{
   assert.deepEqual(LISTING_CATEGORIES.map(c=>c.code),['residential','retail','office']);
-  for(const code of ['residential','retail','office'])assert.equal(normalizeListingCategory(' '+code.toUpperCase()+' '),code);
-  for(const value of [null,'','commercial','land',[],{},'tenant_id'])assert.throws(()=>normalizeListingCategory(value),{status:400});
+  for(const code of ['residential','retail','office']){assert.equal(normalizeListingCategory(' '+code.toUpperCase()+' '),code);}
+  for(const value of [null,'','commercial','land',[],{},'tenant_id']){assert.throws(()=>normalizeListingCategory(value),{status:400});}
   assert.throws(()=>normalizePropertyRentalValues({rent:1},{requireCategory:true}),{code:'PROPERTY_LISTING_CATEGORY_REQUIRED'});
   assert.deepEqual(normalizePropertyRentalValues('{"rent":1,"deposit":2,"listingCategory":"OFFICE"}',{requireCategory:true}),{rent:1,deposit:2,listingCategory:'office'});
   assert.deepEqual(normalizePropertyRentalValues({rent:3}),{rent:3},'legacy rent-only updates can preserve existing metadata');

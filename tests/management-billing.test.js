@@ -21,7 +21,7 @@ test('prepared stock has immutable validated identities and accepts no billing o
   assert.equal(record.payload.name,'  Prepared condominium  ','Preparing must not mutate the input');
   assert.equal(dwellingInventory({tenantId:tenant,properties:[{...normalized.payload,tenant_id:tenant}],units:[]}).length,1,'UI condo spelling counts as a residential dwelling');
   for(const change of [{status:'occupied'},{tenant_id:other},{initial_payment_verified:true},{quantity:0},{id:'invalid'},{propertytype:'land'},{country_code:'US'},{rentalvalues:{listingCategory:'office'}}])
-    assert.throws(()=>stagedStock([{...record,payload:{...record.payload,...change}}]));
+    {assert.throws(()=>stagedStock([{...record,payload:{...record.payload,...change}}]));}
   assert.throws(()=>stagedStock([record,record]),{code:'BILLING_DUPLICATE_DWELLING'});
   assert.throws(()=>stagedStock([]));assert.throws(()=>stagedStock(Array.from({length:101},()=>record)));
   assert.throws(()=>stagedStock([{kind:'unit',payload:{id:other,propertyid:tenant,unitnumber:'Unit',bedrooms:1.5}}]));
@@ -29,11 +29,11 @@ test('prepared stock has immutable validated identities and accepts no billing o
 
 test('controlled stock scope cannot bypass preparation or cessation through generic bulk mutations',()=>{
   const env={MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenant};
-  for(const table of ['properties','property_units'])for(const action of ['insert','upsert','delete']){
+  for(const table of ['properties','property_units']){for(const action of ['insert','upsert','delete']){
     assert.throws(()=>assertInventoryMutation({tenantId:tenant,table,action,env}),{code:action==='delete'?'BILLING_CESSATION_REQUIRED':'BILLING_STOCK_PREPARATION_REQUIRED'});
     assertInventoryMutation({tenantId:other,table,action,env});
     assertInventoryMutation({tenantId:tenant,table,action,env:{}});
-  }
+  }}
   assertInventoryMutation({tenantId:tenant,table:'properties',action:'update',env});
   assertInventoryMutation({tenantId:tenant,table:'invoices',action:'insert',env});
 });
@@ -44,7 +44,7 @@ test('cessation eligibility requires closed actual obligations and treats unknow
     [{invoices:[{status:'paid',totalamount:null,outstanding:null}]},'FINANCIAL_OPEN'],[{invoices:[{status:'draft',totalamount:0,outstanding:0}]},'FINANCIAL_OPEN'],
     [{invoices:[{status:'cancelled',totalamount:100,paid:10}]},'FINANCIAL_OPEN'],[{payments:[{}]},'PAYMENT_OPEN'],[{settlements:[{}]},'SETTLEMENT_OPEN'],
     [{deposits:[{}]},'DEPOSIT_OPEN'],[{maintenance:[{}]},'MAINTENANCE_OPEN'],[{holds:[{}]},'RESERVATION_OPEN'],[{pending:[{}]},'BILLING_OPERATION_OPEN'],
-    [{staged:[{}]},'PREPARED_STOCK_OPEN'],[{riskHold:true},'BILLING_REVIEW_HOLD']])assert.ok(cessationBlockers(input).some(b=>b.code===code));
+    [{staged:[{}]},'PREPARED_STOCK_OPEN'],[{riskHold:true},'BILLING_REVIEW_HOLD']]){assert.ok(cessationBlockers(input).some(b=>b.code===code));}
 });
 
 test('ceased units never resurrect a billable parent and governed state suppresses public availability',()=>{
@@ -147,14 +147,14 @@ const zeroStockFixture=()=>{
   };
   const store={account:async()=>({...state.account}),inventory:async()=>structuredClone(state.inventory),
     read:async()=>Object.values(state.commands).filter(command=>command.status==='pending'),
-    assertActor:async()=>{if(denyActor)throw Object.assign(new Error('Revoked actor'),{code:'BILLING_ADMIN_REQUIRED'});},
-    audit:async()=>{if(failAudit)throw new Error('Synthetic audit failure');},
+    assertActor:async()=>{if(denyActor){throw Object.assign(new Error('Revoked actor'),{code:'BILLING_ADMIN_REQUIRED'});}},
+    audit:async()=>{if(failAudit){throw new Error('Synthetic audit failure');}},
     locked:async(_tenant,action)=>{
       const snapshot=structuredClone(state);
       try{return await action(q);}catch(error){state=snapshot;throw error;}
     },
     beginCommand:async({id,kind,payload,tenantId})=>{
-      const existing=state.commands[id];if(existing)return {...existing,createdNow:false};
+      const existing=state.commands[id];if(existing){return {...existing,createdNow:false};}
       const storedPayload=['cancellation','quantity_apply'].includes(kind)?{...payload,_subscriptionId:state.account.stripe_subscription_id}:payload;
       state.commands[id]={id,tenant_id:tenantId,kind,payload,payload_json:JSON.stringify(storedPayload),status:'pending'};
       return {...state.commands[id],createdNow:true};
@@ -162,8 +162,8 @@ const zeroStockFixture=()=>{
     completeCommand:async(_q,id,result)=>Object.assign(state.commands[id],{status:'completed',result_json:JSON.stringify(result)})};
   const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body,key)=>{
     calls.push({method,path,body,key});
-    if(method==='GET'&&path===`/v1/subscriptions/${remote.id}`)return structuredClone(remote);
-    if(method==='GET'&&path===`/v1/invoices/${paid.id}`)return structuredClone(paid);
+    if(method==='GET'&&path===`/v1/subscriptions/${remote.id}`){return structuredClone(remote);}
+    if(method==='GET'&&path===`/v1/invoices/${paid.id}`){return structuredClone(paid);}
     if(method==='POST'&&path===`/v1/subscriptions/${remote.id}`){
       assert.ok(key);assert.deepEqual(Object.keys(body),['cancel_at_period_end']);
       remote.cancel_at_period_end=body.cancel_at_period_end;
@@ -192,11 +192,11 @@ test('interrupted cancellation readback completes once without replaying provide
     // Recovery does not depend on the original command's idempotency window.
     f.state().commands[request.id].created_at=new Date(Date.now()-48*3600000);
     const before=f.calls.filter(call=>call.method==='POST').length;
-    if(kind==='cancellation')f.state().account.pending_quantity=1;
+    if(kind==='cancellation'){f.state().account.pending_quantity=1;}
     const result=await f.service.reconcileCancellation(request);
     assert.equal(result.cancelAtPeriodEnd,true);
-    if(kind==='quantity_apply')assert.equal(f.state().account.pending_quantity,0);
-    else assert.equal(f.state().account.pending_quantity,null);
+    if(kind==='quantity_apply'){assert.equal(f.state().account.pending_quantity,0);}
+    else {assert.equal(f.state().account.pending_quantity,null);}
     assert.equal(f.state().commands[request.id].status,'completed');
     assert.deepEqual(await f.service.reconcileCancellation(request),result);
     assert.equal(f.calls.filter(call=>call.method==='POST').length,before);
@@ -207,7 +207,7 @@ test('cancellation readback rejects foreign commands and revoked actors before s
   for(const denied of ['foreign','revoked']){
     const {f,request}=await interruptedCancellation();
     const before=f.calls.length;
-    if(denied==='foreign')request.tenantId=other;else f.denyActor();
+    if(denied==='foreign'){request.tenantId=other;}else {f.denyActor();}
     await assert.rejects(f.service.reconcileCancellation(request),{code:denied==='foreign'?'BILLING_COMMAND_NOT_FOUND':'BILLING_ADMIN_REQUIRED'});
     assert.equal(f.calls.length,before);
     assert.equal(f.state().commands[request.id].status,'pending');
@@ -217,15 +217,15 @@ test('cancellation readback rejects foreign commands and revoked actors before s
 test('unconfirmed cancellation, active schedule and changed stock retain pending work',async()=>{
   for(const mismatch of ['flag','schedule','inventory','quantity','renewal','binding','legacy']){
     const {f,request}=await interruptedCancellation();
-    if(mismatch==='flag')f.remote.cancel_at_period_end=false;
-    if(mismatch==='schedule')f.remote.schedule='sub_sched_unfinished';
-    if(mismatch==='inventory')f.restoreStock();
+    if(mismatch==='flag'){f.remote.cancel_at_period_end=false;}
+    if(mismatch==='schedule'){f.remote.schedule='sub_sched_unfinished';}
+    if(mismatch==='inventory'){f.restoreStock();}
     const preview=Object.values(f.state().commands).find(command=>command.kind==='quantity_preview');
-    if(mismatch==='quantity')preview.result_json=JSON.stringify({...JSON.parse(preview.result_json),to:1});
-    if(mismatch==='renewal')Object.assign(f.state().commands[request.id],{kind:'cancellation',payload_json:'{"cancelAtPeriodEnd":false}'});
+    if(mismatch==='quantity'){preview.result_json=JSON.stringify({...JSON.parse(preview.result_json),to:1});}
+    if(mismatch==='renewal'){Object.assign(f.state().commands[request.id],{kind:'cancellation',payload_json:'{"cancelAtPeriodEnd":false}'});}
     if(mismatch==='binding'||mismatch==='legacy'){
       const command=f.state().commands[request.id],payload=JSON.parse(command.payload_json);
-      if(mismatch==='binding')payload._subscriptionId='sub_other';else delete payload._subscriptionId;
+      if(mismatch==='binding'){payload._subscriptionId='sub_other';}else {delete payload._subscriptionId;}
       command.payload_json=JSON.stringify(payload);
     }
     const before=f.calls.filter(call=>call.method==='POST').length;
@@ -298,8 +298,8 @@ test('pricing drafts preserve unresolved policy and preview uses exact minor uni
   assert.equal(pricingPreview(parsePricing(rules),12).ready,false);
   assert.equal(pricingPreview(parsePricing({...rules,includedRentMinor:0,excessPolicy:'none',effectiveAt:'2026-12-01T00:00:00Z'}),1).ready,true);
   for(const change of [{market:'US'},{billingCurrency:'LKR'},{rentCurrency:'BND'},{baseFeeMinor:1.1},{baseFeeMinor:0},{includedRentMinor:-1},{excessPolicy:'percentage'},{reason:'short'},{effectiveAt:'2026-12-01'}])
-    assert.throws(()=>parsePricing({...rules,...change}));
-  for(const quantity of [0,-1,1.1,10001,'12']) assert.throws(()=>pricingPreview(rules,quantity));
+    {assert.throws(()=>parsePricing({...rules,...change}));}
+  for(const quantity of [0,-1,1.1,10001,'12']) {assert.throws(()=>pricingPreview(rules,quantity));}
 });
 test('dwelling count separates whole houses and child units without occupancy or listing loopholes',()=>{
   const properties=[{id:'p1',tenant_id:tenant,name:'House',propertytype:'house',status:'occupied',published:false},
@@ -352,7 +352,7 @@ test('webhook signatures require original bytes, bounded timestamps, sandbox and
   assert.equal(verifyStripeSignature({body,signature,secret,now}).id,'evt_test');
   for(const change of [{body:Buffer.concat([body,Buffer.from(' ')])},{signature:signatureFor(body,now/1000-301)},{signature:signatureFor(body,now/1000+301)},
     {signature:`${signature},t=${now/1000}`},{signature:signature.replace(/v1=.*/, 'v1=bad')},{body:JSON.parse(body)}])
-    assert.throws(()=>verifyStripeSignature({body,signature,secret,now,...change}),{code:'STRIPE_SIGNATURE_INVALID'});
+    {assert.throws(()=>verifyStripeSignature({body,signature,secret,now,...change}),{code:'STRIPE_SIGNATURE_INVALID'});}
   for(const extra of [{livemode:true},{account:'acct_other'}]){
     const changed=Buffer.from(JSON.stringify({...JSON.parse(body),...extra}));
     assert.throws(()=>verifyStripeSignature({body:changed,signature:signatureFor(changed),secret,now}));
@@ -362,7 +362,7 @@ test('paid invoice graph and line period, not active status, establish initial p
   const projected=subscriptionProjection({subscription,invoice,account,now});
   assert.equal(projected.initial_payment_verified,true);assert.equal(projected.paid_through,new Date(now+86400000).toISOString());
   for(const change of [{customer:'cus_foreign'},{parent:{subscription_details:{subscription:'sub_foreign'}}},{status:'open'},{amount_remaining:1},{lines:{data:[]}}])
-    assert.equal(subscriptionProjection({subscription,invoice:{...invoice,...change},account,now}).initial_payment_verified,false);
+    {assert.equal(subscriptionProjection({subscription,invoice:{...invoice,...change},account,now}).initial_payment_verified,false);}
   assert.throws(()=>subscriptionProjection({subscription:{...subscription,customer:'cus_foreign'},invoice,account,now}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
   assert.throws(()=>subscriptionProjection({subscription:{...subscription,trial_end:now/1000+30},invoice,account,now}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
 });

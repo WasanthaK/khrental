@@ -16,7 +16,7 @@ export default function RouteRenderError() {
     </div>;
   }
   // Avoid exposing error internals, tenant data or stack traces to browsers.
-  if (import.meta.env.DEV) console.error('Route rendering failure', error);
+  if (import.meta.env.DEV) {console.error('Route rendering failure', error);}
   return <div role="alert" className="m-6 rounded border border-red-200 bg-red-50 p-6">
     <h1 className="text-lg font-semibold">We could not display this page</h1>
     <p>Your records were not changed. Please return to Properties and try again.</p>

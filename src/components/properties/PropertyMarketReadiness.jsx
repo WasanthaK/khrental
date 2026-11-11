@@ -17,13 +17,13 @@ const PropertyMarketReadiness=()=>{
   const [hidden,setHidden]=useState(false);
 
   const refresh=useCallback(async()=>{
-    if(!isAdmin||!activeTenantId)return;
+    if(!isAdmin||!activeTenantId){return;}
     try{
       const data=await requestMssqlApi(base+'/market-readiness?offset='+(page*PAGE_SIZE)+'&limit='+PAGE_SIZE);
       setSnapshot(data);setError('');setHidden(false);
     }catch(err){
       if(err.status===404){setHidden(true);setSnapshot(null);}
-      else setError(err.message||'Unable to retrieve public listing market assignments.');
+      else {setError(err.message||'Unable to retrieve public listing market assignments.');}
     }
   },[isAdmin,activeTenantId,page]);
 
@@ -32,15 +32,15 @@ const PropertyMarketReadiness=()=>{
   },[activeTenantId]);
   useEffect(()=>{
     let active=true;
-    if(!isAdmin||!activeTenantId)return ()=>{active=false;};
+    if(!isAdmin||!activeTenantId){return ()=>{active=false;};}
     requestMssqlApi(base+'/market-readiness?offset='+(page*PAGE_SIZE)+'&limit='+PAGE_SIZE)
       .then(data=>{if(active){setSnapshot(data);setHidden(false);setError('');}})
       .catch(err=>{if(active){if(err.status===404){setHidden(true);setSnapshot(null);}
-        else setError(err.message||'Unable to retrieve public listing market assignments.');}});
+        else {setError(err.message||'Unable to retrieve public listing market assignments.');}}});
     return ()=>{active=false;};
   },[isAdmin,activeTenantId,page]);
 
-  if(!isAdmin||hidden)return null;
+  if(!isAdmin||hidden){return null;}
   const assign=async propertyId=>{
     const countryCode=selected[propertyId];
     if(countryCode!=='LK'&&countryCode!=='BN'){setError('Choose a valid country first.');return;}
@@ -50,8 +50,8 @@ const PropertyMarketReadiness=()=>{
         {method:'PATCH',body:{countryCode}});
       setSelected(old=>{const next={...old};delete next[propertyId];return next;});
       // If the last record on this page was assigned, return to the preceding page.
-      if(snapshot?.records?.length===1&&page>0)setPage(n=>n-1);
-      else await refresh();
+      if(snapshot?.records?.length===1&&page>0){setPage(n=>n-1);}
+      else {await refresh();}
     }catch(err){setError(err.message||'Unable to assign country.');}
     finally{setSaving(null);}
   };

@@ -177,7 +177,7 @@ try {
   page.on('pageerror',e=>{errors.push(e.message);console.error('FIXTURE_PAGE_ERROR='+e.message);});
   page.on('response',r=>{if(r.status()>=400){console.error('FIXTURE_HTTP_ERROR='+r.status()+' '+r.url());}});
   await page.setRequestInterception(true);
-  page.on('request',r=>{if(r.url().startsWith('https://quixo.homes/'))return r.respond({status:200,contentType:'text/html',body:'<h1>Public browsing fixture</h1>'});return r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort();});
+  page.on('request',r=>{if(r.url().startsWith('https://quixo.homes/')){return r.respond({status:200,contentType:'text/html',body:'<h1>Public browsing fixture</h1>'});}return r.url().startsWith(origin)||r.url().startsWith('data:')?r.continue():r.abort();});
   await page.setViewport({width:1280,height:900});
   await page.goto(origin+'/enquire?listingId='+listingId+'&country=LK',{waitUntil:'networkidle0'});
   console.log('BROWSER_STAGE=anonymous_listing');

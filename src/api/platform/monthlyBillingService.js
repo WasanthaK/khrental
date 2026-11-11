@@ -208,7 +208,7 @@ export const generateMonthlyInvoicesForTenant = async ({
             { tenantId, propertyId: agreement.propertyid }
           );
         } catch (error) {
-          if (error?.number !== 207) throw error;
+          if (error?.number !== 207) {throw error;}
           fixedUtilityRows = [];
         }
 
@@ -253,11 +253,11 @@ export const generateMonthlyInvoicesForTenant = async ({
 
         for (const reading of utilityRows) {
           const amount = toMoney(reading.calculatedbill);
-          if (amount <= 0) continue;
+          if (amount <= 0) {continue;}
           const rawType = String(reading.utilitytype || '').trim().toLowerCase();
           const componentType = rawType === 'electricity' || rawType === 'water' ? rawType : 'utility';
-          if (rawType === 'electricity') legacyComponents.electricity += amount;
-          if (rawType === 'water') legacyComponents.water += amount;
+          if (rawType === 'electricity') {legacyComponents.electricity += amount;}
+          if (rawType === 'water') {legacyComponents.water += amount;}
           componentRows.push({
             componentType,
             description: `${reading.utilitytype || 'Utility'} charge from prior service period`,
@@ -273,11 +273,11 @@ export const generateMonthlyInvoicesForTenant = async ({
 
         for (const config of fixedUtilityRows) {
           const amount = toMoney(config.fixedamount);
-          if (amount <= 0) continue;
+          if (amount <= 0) {continue;}
           const rawType = String(config.utilitytype || '').trim().toLowerCase();
           const componentType = rawType === 'electricity' || rawType === 'water' ? rawType : 'utility';
-          if (rawType === 'electricity') legacyComponents.electricity += amount;
-          if (rawType === 'water') legacyComponents.water += amount;
+          if (rawType === 'electricity') {legacyComponents.electricity += amount;}
+          if (rawType === 'water') {legacyComponents.water += amount;}
           componentRows.push({
             componentType,
             description: `Fixed ${config.utilitytype || 'utility'} charge for ${normalizedBillingPeriod}`,
@@ -294,12 +294,12 @@ export const generateMonthlyInvoicesForTenant = async ({
 
         for (const adjustment of adjustmentRows) {
           const amount = toMoney(adjustment.amount);
-          if (amount === 0) continue;
+          if (amount === 0) {continue;}
           const componentType = String(adjustment.component_type || '').trim().toLowerCase();
-          if (componentType === 'arrears') legacyComponents.pastDues += amount;
-          if (componentType === 'tax') legacyComponents.taxes += amount;
-          if (componentType === 'adjustment') legacyComponents.adjustments += amount;
-          if (componentType === 'other') legacyComponents.other += amount;
+          if (componentType === 'arrears') {legacyComponents.pastDues += amount;}
+          if (componentType === 'tax') {legacyComponents.taxes += amount;}
+          if (componentType === 'adjustment') {legacyComponents.adjustments += amount;}
+          if (componentType === 'other') {legacyComponents.other += amount;}
           componentRows.push({
             componentType,
             description: adjustment.description,

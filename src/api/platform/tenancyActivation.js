@@ -77,14 +77,14 @@ export const getActivationBlockingReasons = (readiness = {}) => {
   const checks = readiness.checks || {};
   const reasons = [];
 
-  if (!checks.tenantAssigned) reasons.push('Tenant is not assigned to the agreement.');
-  if (!checks.propertyAssigned) reasons.push('Property is not assigned to the agreement.');
-  if (!checks.accountAccepted) reasons.push('Tenant invitation has not been accepted.');
-  if (!checks.membershipActive) reasons.push('An active Tenant/Rentee membership is required.');
-  if (!checks.agreementSigned) reasons.push('Agreement signature is not complete.');
-  if (!checks.securityDepositSatisfied) reasons.push('Required security deposit has not been fully received.');
-  if (!checks.moveInChecklistComplete) reasons.push('Move-in checklist is not complete.');
-  if (checks.rentalReservationValid === false) reasons.push('The accepted rental reservation is expired, withdrawn or changed. Review the current offer before activation.');
+  if (!checks.tenantAssigned) {reasons.push('Tenant is not assigned to the agreement.');}
+  if (!checks.propertyAssigned) {reasons.push('Property is not assigned to the agreement.');}
+  if (!checks.accountAccepted) {reasons.push('Tenant invitation has not been accepted.');}
+  if (!checks.membershipActive) {reasons.push('An active Tenant/Rentee membership is required.');}
+  if (!checks.agreementSigned) {reasons.push('Agreement signature is not complete.');}
+  if (!checks.securityDepositSatisfied) {reasons.push('Required security deposit has not been fully received.');}
+  if (!checks.moveInChecklistComplete) {reasons.push('Move-in checklist is not complete.');}
+  if (checks.rentalReservationValid === false) {reasons.push('The accepted rental reservation is expired, withdrawn or changed. Review the current offer before activation.');}
 
   return reasons;
 };

@@ -24,7 +24,7 @@ export const createInvoiceArchiveLocalProofStore = ({ rootDirectory }) => {
   };
   return {
     createIfAbsent: async (bucket, objectPath, body) => {
-      if (!Buffer.isBuffer(body)) throw new Error('Archive proof requires binary bytes.');
+      if (!Buffer.isBuffer(body)) {throw new Error('Archive proof requires binary bytes.');}
       const target = locate(bucket, objectPath);
       const folder = path.dirname(target);
       await fs.mkdir(folder, { recursive: true, mode: 0o700 });
@@ -38,7 +38,7 @@ export const createInvoiceArchiveLocalProofStore = ({ rootDirectory }) => {
         await fs.link(stage, target); // link fails on existing object (unlike rename)
         return 'created';
       } catch (error) {
-        if (error.code === 'EEXIST') return 'exists';
+        if (error.code === 'EEXIST') {return 'exists';}
         throw error;
       } finally {
         await fs.rm(stage, { force: true });

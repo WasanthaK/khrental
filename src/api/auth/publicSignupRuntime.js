@@ -29,12 +29,12 @@ const unavailable = Object.freeze({ error: 'Public registration is temporarily u
 // Exact socket-peer addresses must first be independently established against
 // Azure ingress. Never trust arbitrary headers or allow a broad proxy CIDR.
 export const createApprovedSignupPeerPredicate = (source) => {
-  if (typeof source !== 'string' || !source.trim() || source.length > 1024) return () => false;
+  if (typeof source !== 'string' || !source.trim() || source.length > 1024) {return () => false;}
   const entries = source.split(',').map(x => x.trim());
   if (entries.length < 1 || entries.length > 8 || entries.some(x =>
-    !x || x.includes('/') || x.includes('*') || x.includes(' ') || x.includes('%'))) return () => false;
+    !x || x.includes('/') || x.includes('*') || x.includes(' ') || x.includes('%'))) {return () => false;}
   const peers = entries.map(normalizePublicSignupIp);
-  if (peers.some(x => !x || x === '0.0.0.0' || x === '::') || new Set(peers).size !== peers.length) return () => false;
+  if (peers.some(x => !x || x === '0.0.0.0' || x === '::') || new Set(peers).size !== peers.length) {return () => false;}
   const allow = new Set(peers);
   return peer => allow.has(normalizePublicSignupIp(peer));
 };

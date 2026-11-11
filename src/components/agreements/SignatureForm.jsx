@@ -413,7 +413,7 @@ const SignatureForm = ({
 
   // Function to remove a signatory
   const removeSignatory = (index) => {
-    if (index < 2) return;
+    if (index < 2) {return;}
     setSignatories(signatories.filter((_, i) => i !== index));
   };
 

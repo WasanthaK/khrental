@@ -10,7 +10,7 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
   const lower = value => String(value || '').toLowerCase();
   const q = async (statement, args = {}) => {
     const request = pool.request();
-    for (const [key, value] of Object.entries(args)) request.input(key, value);
+    for (const [key, value] of Object.entries(args)) {request.input(key, value);}
     return (await request.query(statement)).recordset || [];
   };
   const createUser = async (tenantId, role) => {
@@ -120,7 +120,7 @@ export async function verifyPhase4AgreementSignedDocumentClosure({
       const card = [...document.querySelectorAll('div.border.rounded-lg')]
         .find(element => element.innerText.includes(title)
           && [...element.querySelectorAll('button')].some(b => b.textContent.includes('View Document')));
-      if (!card) return false;
+      if (!card) {return false;}
       [...card.querySelectorAll('button')]
         .find(b => b.textContent.includes('View Document')).click();
       return true;

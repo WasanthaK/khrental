@@ -14,7 +14,7 @@ const get=async(path,{json=false,allowError=false}={})=>{
     const response=await fetch(url,{method:'GET',redirect:'error',signal:controller.signal,
       headers:{Accept:json?'application/json':'text/html'},cache:'no-store'});
     requests.push({path:url.pathname+(url.search?'?type=selected':''),http:response.status});
-    if(allowError&&response.status!==200)return {http:response.status};
+    if(allowError&&response.status!==200){return {http:response.status};}
     assert.equal(response.status,200,url.pathname+' HTTP');
     assert.ok((response.headers.get('content-type')||'').includes(json?'json':'html'),url.pathname+' content type');
     const text=await response.text();
@@ -61,7 +61,7 @@ for(const [country,code] of [['lk','LK'],['bn','BN']]){
     assert.equal(property.data?.title,item.title,'Listing title preserved on detail');
     const enquiry=await get('/api/public-listings/'+encodeURIComponent(item.id)+'/enquiry-status?country='+code,{json:true});
     assert.ok(typeof enquiry.data?.enquiriesOpen==='boolean','Enquiry availability is explicit');
-    if(enquiry.data.enquiriesOpen)enquiryEligible++;
+    if(enquiry.data.enquiriesOpen){enquiryEligible++;}
     detailsChecked++;
   }
   console.log('PUBLIC_MARKET_READONLY=PASS country='+code+' inventoryCount='+catalog.data.length+' detailsChecked='+detailsChecked+' enquiryOpenAmongChecked='+enquiryEligible);

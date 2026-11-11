@@ -47,7 +47,7 @@ async function runMigration() {
       const statements = sqlContent.split(';').filter(stmt => stmt.trim());
       
       for (const statement of statements) {
-        if (!statement.trim()) continue;
+        if (!statement.trim()) {continue;}
         
         console.log(`Executing statement: ${statement.substring(0, 50)}...`);
         const { error: stmtError } = await platformClient.rpc('exec_sql', {

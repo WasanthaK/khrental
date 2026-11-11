@@ -60,10 +60,10 @@ const MaintenanceRequestDetails = () => {
   
   // Check if user can perform actions
   const canPerformActions = () => {
-    if (!request || !userData) return false;
+    if (!request || !userData) {return false;}
     
     // Admin can do everything
-    if (userData.role === 'admin') return true;
+    if (userData.role === 'admin') {return true;}
     
     // Staff can perform actions on assigned requests
     if (userData.role === 'staff') {

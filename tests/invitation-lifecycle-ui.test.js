@@ -136,7 +136,7 @@ test('secure invitation redemption preserves only a server-valid different brows
   assert.match(acceptInviteSource, /establishSession: !preserveSession/);
   assert.match(acceptInviteSource, /if \(preserveSession\) \{[\s\S]*setPreservedExistingSession\(true\);[\s\S]*setSuccess\(true\);[\s\S]*return;/);
 
-  const preserveBlock = acceptInviteSource.match(/if \(preserveSession\) \{[\s\S]*?\n      \}/)?.[0] || '';
+  const preserveBlock = acceptInviteSource.match(/if \(preserveSession\) \{[\s\S]*?\n {6}\}/)?.[0] || '';
   assert.doesNotMatch(preserveBlock, /saveStoredSession|clearActiveTenantId/);
   assert.match(acceptInviteSource, /Your existing signed-in account was kept active in this browser/);
 });

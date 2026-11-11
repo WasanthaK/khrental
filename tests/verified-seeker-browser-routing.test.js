@@ -38,7 +38,7 @@ const supply = ({
   };
   const fetchImpl = async (url, options) => {
     captures.push({ url, options });
-    if (throws) throw new Error('network offline');
+    if (throws) {throw new Error('network offline');}
     return {
       ok: httpStatus >= 200 && httpStatus < 300,
       json: async () => payload

@@ -9,7 +9,7 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
   const lower = value => String(value || '').toLowerCase();
   const one = async (statement, params = {}) => {
     const request = pool.request();
-    for (const [name, value] of Object.entries(params)) request.input(name, value);
+    for (const [name, value] of Object.entries(params)) {request.input(name, value);}
     return (await request.query(statement)).recordset?.[0] || null;
   };
   const visit = async (page, token) => {
@@ -29,7 +29,7 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
       await page.evaluateOnNewDocument(tenantId => {
         // Seed once per tab: running on the post-redemption navigation would
         // overwrite the real authenticated session being verified.
-        if (sessionStorage.getItem('phase4.invitation.staleSeeded')) return;
+        if (sessionStorage.getItem('phase4.invitation.staleSeeded')) {return;}
         sessionStorage.setItem('phase4.invitation.staleSeeded', '1');
         localStorage.removeItem('dev_bypass_role');
         localStorage.setItem('khrental.activeTenantId', tenantId);
@@ -42,7 +42,7 @@ export async function verifyPhase4InvitationBrowser({ browser, origin, pool, a, 
     await visit(page, token);
     return { page, context };
   };
-  const close = async view => { if (view) await view.context.close(); };
+  const close = async view => { if (view) {await view.context.close();} };
   const verifyUnusable = async token => {
     let view;
     try {

@@ -13,8 +13,8 @@ export const isEviaFencedArchiveCanaryEligible = ({
   // Only callbacks carrying a cryptographically verified agreement/tenant
   // binding may opt in. HMAC-only shared RequestId lookup remains legacy.
   if (env?.EVIA_FENCED_ARCHIVE_MODE !== 'canary'
-      || verifiedRequest !== true || verifiedAgreementBound !== true) return false;
-  if (!agreement || !normalized || finalState?.signatureStatus !== 'completed') return false;
+      || verifiedRequest !== true || verifiedAgreementBound !== true) {return false;}
+  if (!agreement || !normalized || finalState?.signatureStatus !== 'completed') {return false;}
   const tenantId = String(agreement.tenant_id || '').toLowerCase();
   const agreementId = String(agreement.id || '').toLowerCase();
   if (!guid(tenantId) || !guid(agreementId)
@@ -23,13 +23,13 @@ export const isEviaFencedArchiveCanaryEligible = ({
     return false;
   }
   if (!normalized.requestId || !String(normalized.deliveryId || '').trim()
-      || hasRetainedSignedDocument) return false;
+      || hasRetainedSignedDocument) {return false;}
   // A completion signatory-specific delivery belongs to the legacy metadata
   // workflow. Do not silently lose per-recipient delivery diagnostics.
-  if (normalized.recipientEmail || normalized.recipientName) return false;
+  if (normalized.recipientEmail || normalized.recipientName) {return false;}
   const status = String(agreement.status || '').toLowerCase();
   const signature = String(agreement.signature_status || '').toLowerCase();
   if (['cancelled', 'rejected', 'terminated', 'expired'].includes(status)
-    || signature === 'failed') return false;
+    || signature === 'failed') {return false;}
   return true;
 };

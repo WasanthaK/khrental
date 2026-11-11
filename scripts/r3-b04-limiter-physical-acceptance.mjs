@@ -48,7 +48,7 @@ const main = async () => {
       fail('invalid shared concurrency start time; no writes attempted');
     }
     const ms = Math.max(0, epoch * 1000 - Date.now());
-    if (ms) await new Promise(resolve => setTimeout(resolve, ms));
+    if (ms) {await new Promise(resolve => setTimeout(resolve, ms));}
     const limiter = createSqlPublicSignupLimiter();
     const outcomes = await Promise.allSettled(Array.from({ length: REQUESTS }, () =>
       limiter.consume({
@@ -74,7 +74,7 @@ const main = async () => {
     }
     const allowed = outcomes.filter(result => result.value === true).length;
     const denied = outcomes.filter(result => result.value === false).length;
-    if (allowed + denied !== REQUESTS) fail('unrecognized quota response');
+    if (allowed + denied !== REQUESTS) {fail('unrecognized quota response');}
     console.log('R3_LIMITER_WORKER_DONE allowed=' + allowed + ' denied=' + denied +
       ' requests=' + REQUESTS);
     return;

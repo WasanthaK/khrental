@@ -37,7 +37,7 @@ function readFixture({ enabled = true, result = { id: 'user-1', status: 'registe
     () => enabled,
     async path => {
       requests.push(path);
-      if (denial) throw denial;
+      if (denial) {throw denial;}
       return path.includes('/app-users?') ? (Array.isArray(result) ? result : [result]) : result;
     },
     platformClient, data => data, () => identity,
@@ -61,7 +61,7 @@ test('MSSQL app-user read denial remains authoritative and is never retried thro
         assert.equal(out.success, false);
         assert.equal(out.error, denial.message);
         assert.equal(out.code, denial.code);
-        if (status) assert.equal(out.status, status);
+        if (status) {assert.equal(out.status, status);}
       }
       assert.equal(f.requests.length, 1, op.name);
       assert.ok(f.requests[0].includes(op.fragment), op.name);

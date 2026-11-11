@@ -21,12 +21,12 @@ const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
   error.status = status;
   error.code = code;
-  if (details) error.details = details;
+  if (details) {error.details = details;}
   return error;
 };
 
 const normalizeChecklistItems = (rawItems) => {
-  if (!rawItems) return [];
+  if (!rawItems) {return [];}
 
   let parsed = rawItems;
   if (typeof rawItems === 'string') {
@@ -37,7 +37,7 @@ const normalizeChecklistItems = (rawItems) => {
     }
   }
 
-  if (!Array.isArray(parsed)) return [];
+  if (!Array.isArray(parsed)) {return [];}
 
   return parsed
     .map((item, index) => {
@@ -46,7 +46,7 @@ const normalizeChecklistItems = (rawItems) => {
       }
 
       const label = String(item?.label || item?.name || item?.title || item?.description || '').trim();
-      if (!label) return null;
+      if (!label) {return null;}
       return {
         label,
         isRequired: item?.required !== false && item?.isRequired !== false && item?.is_required !== false,
@@ -64,7 +64,7 @@ const requireManagementPermission = (req) => {
 };
 
 const requirePropertyScope = (req, propertyId) => {
-  if (isAdminRole({ user: req.user, membership: req.membership })) return;
+  if (isAdminRole({ user: req.user, membership: req.membership })) {return;}
 
   const assignedPropertyIds = new Set(
     (Array.isArray(req.membership?.assignedPropertyIds) ? req.membership.assignedPropertyIds : []).map(String)
@@ -149,10 +149,10 @@ const loadDepositSummary = async (tenantId, agreementId) => {
   );
 
   const totals = transactions.reduce((summary, transaction) => {
-    if (String(transaction.status).toLowerCase() !== 'received') return summary;
+    if (String(transaction.status).toLowerCase() !== 'received') {return summary;}
     const amount = Number(transaction.amount) || 0;
-    if (transaction.transaction_type === 'security_deposit') summary.securityDeposit += amount;
-    if (transaction.transaction_type === 'confirmation_advance') summary.confirmationAdvance += amount;
+    if (transaction.transaction_type === 'security_deposit') {summary.securityDeposit += amount;}
+    if (transaction.transaction_type === 'confirmation_advance') {summary.confirmationAdvance += amount;}
     return summary;
   }, { securityDeposit: 0, confirmationAdvance: 0 });
 
@@ -168,7 +168,7 @@ const loadChecklist = async (tenantId, agreementId) => {
     { tenantId, agreementId }
   );
 
-  if (!checklist) return null;
+  if (!checklist) {return null;}
 
   const items = await runQuery(
     `SELECT *
@@ -183,7 +183,7 @@ const loadChecklist = async (tenantId, agreementId) => {
 };
 
 const loadInvitationState = async (tenantId, appUserId) => {
-  if (!appUserId) return null;
+  if (!appUserId) {return null;}
 
   return runSingleQuery(
     `SELECT TOP 1
@@ -528,8 +528,8 @@ export const createTenancyOnboardingRouter = () => {
       );
       res.status(transaction.replayed ? 200 : 201).json({ data: transaction, error: null });
     } catch (error) {
-      if (error?.number === 51106) return next(createRequestError(409, 'This reference already records a different payment. Check the ledger before continuing.', 'DEPOSIT_REFERENCE_CONFLICT'));
-      if (error?.number === 51105) return next(createRequestError(409, 'This agreement is no longer open for deposit recording.', 'DEPOSIT_AGREEMENT_UNAVAILABLE'));
+      if (error?.number === 51106) {return next(createRequestError(409, 'This reference already records a different payment. Check the ledger before continuing.', 'DEPOSIT_REFERENCE_CONFLICT'));}
+      if (error?.number === 51105) {return next(createRequestError(409, 'This agreement is no longer open for deposit recording.', 'DEPOSIT_AGREEMENT_UNAVAILABLE'));}
       next(error);
     }
   });

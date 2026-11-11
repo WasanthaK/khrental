@@ -7,7 +7,7 @@
  * can enforce it immediately before credential creation.
  */
 export const rejectPublicSignupForExistingAppUser = (existingAppUser) => {
-  if (!existingAppUser) return;
+  if (!existingAppUser) {return;}
 
   const alreadyClaimed = Boolean(existingAppUser.auth_id);
   const error = new Error(

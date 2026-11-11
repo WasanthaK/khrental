@@ -7,7 +7,7 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim()) {return;}
 
     const success = await onAddComment({
       content: newComment,
@@ -88,7 +88,7 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
       <div className="space-y-4">
         {comments.map((comment, index) => {
           // Skip internal comments for non-staff users
-          if (comment.isInternal && !isStaff) return null;
+          if (comment.isInternal && !isStaff) {return null;}
 
           return (
             <div

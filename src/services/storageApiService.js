@@ -38,7 +38,7 @@ const readError = async (response) => {
   const payload = await response.json().catch(() => null);
   const error = new Error(payload?.error || payload?.message || `Storage request failed with status ${response.status}`);
   error.status = response.status;
-  if (payload?.code) error.code = payload.code;
+  if (payload?.code) {error.code = payload.code;}
   return error;
 };
 
@@ -51,8 +51,8 @@ const requestJson = async (path, options = {}) => {
     }
   });
 
-  if (!response.ok) throw await readError(response);
-  if (response.status === 204) return null;
+  if (!response.ok) {throw await readError(response);}
+  if (response.status === 204) {return null;}
   return response.json();
 };
 
@@ -127,7 +127,7 @@ export const uploadTenantFile = async ({ bucket, path, file }) => {
     }
   );
 
-  if (!response.ok) throw await readError(response);
+  if (!response.ok) {throw await readError(response);}
   const payload = await response.json();
   const storedPath = payload?.data?.path || normalizePath(path);
 
@@ -148,7 +148,7 @@ export const downloadTenantFile = async ({ bucket, path }) => {
     headers: buildRequestContextHeaders()
   });
 
-  if (!response.ok) throw await readError(response);
+  if (!response.ok) {throw await readError(response);}
   return response.blob();
 };
 

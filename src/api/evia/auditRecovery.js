@@ -11,7 +11,7 @@ const validPdf = body => Buffer.isBuffer(body) && body.length >= 5
 // candidates derived from the persisted request inside this agreement's path.
 const readPreviouslyStoredAudit = async ({ storageDriver, objectPath, requestId }) => {
   const id = String(requestId);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {return null;}
   const prefix = objectPath.slice(0, objectPath.lastIndexOf('/') + 1);
   const names = new Set([id, id.toUpperCase(), id.toLowerCase()]
     .map(value => `EviaSign_AuditTrail_${value}.pdf`));
@@ -19,8 +19,8 @@ const readPreviouslyStoredAudit = async ({ storageDriver, objectPath, requestId 
   for (const name of names) {
     let object;
     try { object = await storageDriver.getObject('documents', prefix + name); }
-    catch (error) { if (missing(error)) continue; throw error; }
-    if (!validPdf(object.body)) throw failure('The retained audit is invalid; recovery will not overwrite it.', 409, 'EVIA_AUDIT_RETAINED_INVALID');
+    catch (error) { if (missing(error)) {continue;} throw error; }
+    if (!validPdf(object.body)) {throw failure('The retained audit is invalid; recovery will not overwrite it.', 409, 'EVIA_AUDIT_RETAINED_INVALID');}
     if (retained && !retained.equals(object.body)) {
       throw failure('Retained audit copies conflict.', 409, 'EVIA_AUDIT_READBACK_CONFLICT');
     }
@@ -44,15 +44,15 @@ export const retainEviaAuditForVerifiedRequest = async ({
     && signedDocumentUrl.toLowerCase().startsWith(prefix.toLowerCase())
     && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.pdf$/i.test(signedDocumentUrl.slice(prefix.length))
     && normalizeEviaCompletedDocumentName(signedDocumentUrl.slice(prefix.length)) !== 'audit_trail.pdf';
-  if (!validSigned) throw failure('Only retained historic agreement audits can be recovered here.', 409, 'EVIA_AUDIT_RECOVERY_SCOPE');
-  if (!String(requestId || '').trim()) throw failure('Agreement has no Evia request reference.', 409, 'EVIA_REQUEST_REFERENCE_MISSING');
+  if (!validSigned) {throw failure('Only retained historic agreement audits can be recovered here.', 409, 'EVIA_AUDIT_RECOVERY_SCOPE');}
+  if (!String(requestId || '').trim()) {throw failure('Agreement has no Evia request reference.', 409, 'EVIA_REQUEST_REFERENCE_MISSING');}
   const objectPath = signedDocumentUrl.slice('/storage/documents/'.length, signedDocumentUrl.lastIndexOf('/') + 1) + 'audit_trail.pdf';
   const auditTrailUrl = '/storage/documents/' + objectPath;
   try {
     const existing = await storageDriver.getObject('documents', objectPath);
-    if (!validPdf(existing.body)) throw failure('The retained audit is invalid; recovery will not overwrite it.', 409, 'EVIA_AUDIT_RETAINED_INVALID');
+    if (!validPdf(existing.body)) {throw failure('The retained audit is invalid; recovery will not overwrite it.', 409, 'EVIA_AUDIT_RETAINED_INVALID');}
     return { auditTrailUrl, recovered: false };
-  } catch (error) { if (!missing(error)) throw error; }
+  } catch (error) { if (!missing(error)) {throw error;} }
 
   let downloaded;
   const previousAudit = await readPreviouslyStoredAudit({ storageDriver, objectPath, requestId });
@@ -65,21 +65,21 @@ export const retainEviaAuditForVerifiedRequest = async ({
   } else {
     let token = String(accessToken || '').trim();
     const supplied = Boolean(token);
-    if (!token) token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
+    if (!token) {token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;}
     const withRefresh = async operation => {
       try { return await operation(token); }
       catch (error) {
-        if (error.status !== 401 || supplied) throw error;
+        if (error.status !== 401 || supplied) {throw error;}
         token = (await exchangeEviaIntegrationApiKey({ apiKey, fetchImpl })).accessToken;
         return operation(token);
       }
     };
     const documents = await withRefresh(accessToken => listEviaCompletedDocuments({ requestId, accessToken, fetchImpl }));
     const audits = documents.filter(document => document.documentName.toLowerCase() === 'audit_trail.pdf');
-    if (audits.length !== 1) throw failure('Evia must return exactly one audit_trail.pdf for this agreement request.', 502, 'EVIA_AUDIT_DOCUMENT_MISSING_OR_AMBIGUOUS');
+    if (audits.length !== 1) {throw failure('Evia must return exactly one audit_trail.pdf for this agreement request.', 502, 'EVIA_AUDIT_DOCUMENT_MISSING_OR_AMBIGUOUS');}
     downloaded = await withRefresh(accessToken => downloadEviaCompletedDocument({ downloadUrl: audits[0].downloadUrl, accessToken, fetchImpl }));
   }
-  if (!validPdf(downloaded.body)) throw failure('Evia did not return a valid audit PDF.', 502, 'EVIA_AUDIT_PDF_INVALID');
+  if (!validPdf(downloaded.body)) {throw failure('Evia did not return a valid audit PDF.', 502, 'EVIA_AUDIT_PDF_INVALID');}
   await storageDriver.createEviaAuditIfAbsent('documents', objectPath, downloaded.body);
   const retained = await storageDriver.getObject('documents', objectPath);
   if (!Buffer.isBuffer(retained.body) || !retained.body.equals(downloaded.body)) {

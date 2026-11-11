@@ -20,7 +20,7 @@ createRoot(document.getElementById('root')).render(<BrowserRouter><main classNam
 })}</main></BrowserRouter>);`;
 let vite,server,browser;
 try {
- const plugin={name:'rentee-detail-proof',resolveId(id){if(id==='virtual:rentee-detail')return '\0rentee-detail.jsx';},load(id){if(id==='\0rentee-detail.jsx')return transformWithEsbuild(entry,'rentee-detail.jsx',{loader:'jsx',jsx:'automatic'});}};
+ const plugin={name:'rentee-detail-proof',resolveId(id){if(id==='virtual:rentee-detail'){return '\0rentee-detail.jsx';}},load(id){if(id==='\0rentee-detail.jsx'){return transformWithEsbuild(entry,'rentee-detail.jsx',{loader:'jsx',jsx:'automatic'});}}};
  vite=await createServer({configFile:false,plugins:[plugin,react()],server:{middlewareMode:true},appType:'custom'});
  const app=express();
  app.get(imagePath,(_req,res)=>res.type('png').send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8N8AAAAASUVORK5CYII=','base64')));

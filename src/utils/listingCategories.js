@@ -6,16 +6,16 @@ export const LISTING_CATEGORIES=Object.freeze([
 ]);
 export const normalizeListingCategory=value=>{
   const code=typeof value==='string'?value.trim().toLowerCase():'';
-  if(!LISTING_CATEGORIES.some(c=>c.code===code))throw Object.assign(
+  if(!LISTING_CATEGORIES.some(c=>c.code===code)){throw Object.assign(
     new Error('Choose houses & apartments, shops & retail, or offices & workspaces.'),
-    {status:400,code:'PROPERTY_LISTING_CATEGORY_REQUIRED'});
+    {status:400,code:'PROPERTY_LISTING_CATEGORY_REQUIRED'});}
   return code;
 };
 export const normalizePropertyRentalValues=(value,{requireCategory=false}={})=>{
   let data=value;
   if(typeof data==='string'){try{data=JSON.parse(data);}catch{data=null;}}
-  if(!data||typeof data!=='object'||Array.isArray(data))throw Object.assign(
-    new Error('Property rental settings must be an object.'),{status:400,code:'INVALID_PROPERTY_RENTAL_VALUES'});
+  if(!data||typeof data!=='object'||Array.isArray(data)){throw Object.assign(
+    new Error('Property rental settings must be an object.'),{status:400,code:'INVALID_PROPERTY_RENTAL_VALUES'});}
   const result={...data};
   // Older shared clients lowercased keys inside JSON columns. Accept that
   // exact wire spelling, then store only the canonical category key.
@@ -28,7 +28,7 @@ export const normalizePropertyRentalValues=(value,{requireCategory=false}={})=>{
     result.listingCategory=category;
     delete result.listingcategory;
   }
-  if(requireCategory||Object.hasOwn(result,'listingCategory'))result.listingCategory=normalizeListingCategory(result.listingCategory);
+  if(requireCategory||Object.hasOwn(result,'listingCategory')){result.listingCategory=normalizeListingCategory(result.listingCategory);}
   return result;
 };
 export const publicListingCategory=(explicit,physicalType)=>{
@@ -37,6 +37,6 @@ export const publicListingCategory=(explicit,physicalType)=>{
   }
   // Preserve known legacy classifications; never guess retail versus office.
   const type=String(physicalType||'').toLowerCase();
-  if(['house','apartment','condo'].includes(type))return 'residential';
+  if(['house','apartment','condo'].includes(type)){return 'residential';}
   return ['commercial','land'].includes(type)?type:'other';
 };

@@ -66,7 +66,7 @@ const PropertyDetails = () => {
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
       const type = image.image_type || 'exterior';
-      if (!acc[type]) acc[type] = [];
+      if (!acc[type]) {acc[type] = [];}
       acc[type].push(image);
       return acc;
     }, {});

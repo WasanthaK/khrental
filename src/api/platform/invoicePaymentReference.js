@@ -14,7 +14,7 @@ const ymd = (now, timeZone) => {
   }
   const part = type => parts.find(p => p.type === type)?.value;
   const value = part('year') + part('month') + part('day');
-  if (!/^\d{6}$/.test(value)) throw new Error('Invalid billing date');
+  if (!/^\d{6}$/.test(value)) {throw new Error('Invalid billing date');}
   return value;
 };
 
@@ -56,7 +56,7 @@ export const resolveBillingTimezone = value => String(value || '').trim() || 'UT
 export const allocateInvoicePaymentReference = async ({
   transaction, sql, tenantId, invoiceId, actorUserId, source, now = new Date()
 }) => {
-  if (!['invoice_issue', 'manual_supplement'].includes(source)) throw new Error('Invalid reference source');
+  if (!['invoice_issue', 'manual_supplement'].includes(source)) {throw new Error('Invalid reference source');}
   const request = (query, params = {}) => {
     const r = new sql.Request(transaction);
     Object.entries(params).forEach(([key,value]) => r.input(key,value));

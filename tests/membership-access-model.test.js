@@ -210,7 +210,7 @@ test('invitation card uses the mounted toast system and canonical action labels'
 });
 
 test('simulated invitations never create a token or call the email delivery endpoint', () => {
-  const simulationBlock = invitationServiceSource.match(/if \(simulated\) \{[\s\S]*?\n    \}/)?.[0] || '';
+  const simulationBlock = invitationServiceSource.match(/if \(simulated\) \{[\s\S]*?\n {4}\}/)?.[0] || '';
   assert.match(simulationBlock, /Invitation simulation completed without delivery/);
   assert.doesNotMatch(simulationBlock, /createSecureInvitation/);
   assert.doesNotMatch(simulationBlock, /sendInvitationEmail/);

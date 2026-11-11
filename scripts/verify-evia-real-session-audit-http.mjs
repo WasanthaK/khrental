@@ -23,7 +23,7 @@ export const verifyEviaRealSessionAuditHttp = async ({
 }) => {
   const q = async (statement, params = {}) => {
     const request = pool.request();
-    for (const [name, value] of Object.entries(params)) request.input(name, value);
+    for (const [name, value] of Object.entries(params)) {request.input(name, value);}
     return (await request.query(statement)).recordset || [];
   };
   const id = value => String(value || '').toLowerCase();

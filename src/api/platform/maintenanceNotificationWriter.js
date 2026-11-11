@@ -17,7 +17,7 @@ export const writeMaintenanceNotifications = async ({
   transaction, queryTransaction, tenantId, requestId, eventType,
   propertyId, renteeId, assignedStaffId = null, previousStaffId = null
 }) => {
-  if (!EVENT_LABELS[eventType]) throw new Error('Unsupported maintenance notification event');
+  if (!EVENT_LABELS[eventType]) {throw new Error('Unsupported maintenance notification event');}
   const recipients = new Set();
 
   if (eventType === 'request_created') {
@@ -47,7 +47,7 @@ export const writeMaintenanceNotifications = async ({
     }
   } else {
     for (const recipient of [renteeId, assignedStaffId, previousStaffId]) {
-      if (recipient) recipients.add(String(recipient).toLowerCase());
+      if (recipient) {recipients.add(String(recipient).toLowerCase());}
     }
   }
 

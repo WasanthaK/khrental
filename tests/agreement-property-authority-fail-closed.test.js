@@ -30,7 +30,7 @@ const fixture = ({ mssql = true, apiError = null } = {}) => {
     () => mssql,
     async (path, options) => {
       api.push({ path, options });
-      if (apiError) throw apiError;
+      if (apiError) {throw apiError;}
       return { path, options };
     },
     async id => mssql ? assertNoLegacy('fetchPropertyRecord') : { id, source: 'compatibility' },

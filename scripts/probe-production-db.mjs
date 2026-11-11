@@ -2,7 +2,7 @@ import sql from 'mssql';
 
 const requiredEnv = (name) => {
   const value = String(process.env[name] || '').trim();
-  if (!value) throw new Error(`${name} is required.`);
+  if (!value) {throw new Error(`${name} is required.`);}
   return value;
 };
 

@@ -18,12 +18,12 @@ export const imagePreparationEnabled=env=>String(env?.PUBLIC_LISTING_IMAGE_PREPA
 // EXIF orientation or "compressed" source. Sharp strips source metadata by default.
 export const convertPropertyPhoto=async(source,{sharpImpl}={})=>{
   if(!Buffer.isBuffer(source)||source.length<32||source.length>MAX_SOURCE_BYTES)
-    throw error(400,'IMAGE_SOURCE_SIZE','Image source exceeds safe input limits.');
+    {throw error(400,'IMAGE_SOURCE_SIZE','Image source exceeds safe input limits.');}
   const jpeg=source[0]===0xff&&source[1]===0xd8&&source[2]===0xff;
   const png=source.toString('hex',0,8)==='89504e470d0a1a0a';
   const webp=source.toString('ascii',0,4)==='RIFF'&&source.toString('ascii',8,12)==='WEBP';
   if(!jpeg&&!png&&!webp)
-    throw error(400,'IMAGE_SOURCE_TYPE','Only valid registered JPEG, PNG or WebP images are supported.');
+    {throw error(400,'IMAGE_SOURCE_TYPE','Only valid registered JPEG, PNG or WebP images are supported.');}
   let sharp=sharpImpl;
   if(!sharp){
     try{sharp=(await import('sharp')).default;}
@@ -33,7 +33,7 @@ export const convertPropertyPhoto=async(source,{sharpImpl}={})=>{
   const inspect=await sharp(source,options).metadata();
   if(!['jpeg','png','webp'].includes(inspect?.format)||!inspect.width||!inspect.height||
     inspect.width*inspect.height>MAX_PIXELS||(inspect.pages||1)!==1)
-    throw error(400,'IMAGE_FORMAT_INVALID','Source image dimensions or animation are not supported.');
+    {throw error(400,'IMAGE_FORMAT_INVALID','Source image dimensions or animation are not supported.');}
   const bytes=await sharp(source,options).rotate()
     .resize({width:1600,height:1200,fit:'inside',withoutEnlargement:true})
     .webp({quality:78,effort:4,lossless:false}).toBuffer();
@@ -43,7 +43,7 @@ export const convertPropertyPhoto=async(source,{sharpImpl}={})=>{
   const check=await sharp(bytes,options).metadata();
   if(check.format!=='webp'||check.exif||check.xmp||check.icc||check.iptc||
      check.width>1600||check.height>1200)
-    throw error(500,'DERIVATIVE_PRIVACY_FAILED','Generated image contains metadata or invalid dimensions.');
+    {throw error(500,'DERIVATIVE_PRIVACY_FAILED','Generated image contains metadata or invalid dimensions.');}
   return bytes;
 };
 
@@ -75,7 +75,7 @@ export const commitWithheldDerivative=async({
     await assertManagementWrite({tenantId,transaction:tx});
     const request=async(query,params={})=>{
       const q=new sql.Request(tx);
-      for(const [key,value] of Object.entries(params))q.input(key,value);
+      for(const [key,value] of Object.entries(params)){q.input(key,value);}
       return (await q.query(query)).recordset||[];
     };
     const base={tenantId,propertyId,actorId};
@@ -93,10 +93,10 @@ export const commitWithheldDerivative=async({
    AND member.role=N'admin' AND member.status=N'active'
    AND (actor.status IS NULL OR actor.status=N'active')
    AND (tenant.status IS NULL OR tenant.status=N'active')`,base);
-    if(!current.length)throw error(403,'IMAGE_PREPARATION_DENIED','Property or active administrator access changed.');
+    if(!current.length){throw error(403,'IMAGE_PREPARATION_DENIED','Property or active administrator access changed.');}
     if(String(current[0].publicId).toLowerCase()!==String(publicId).toLowerCase()||
        String(current[0].sourceImages||'')!==String(sourceImages||''))
-      throw error(409,'IMAGE_SOURCE_CHANGED','Registered property photos changed during processing.');
+      {throw error(409,'IMAGE_SOURCE_CHANGED','Registered property photos changed during processing.');}
     await request(`
  UPDATE dbo.public_listing_media SET media_status=N'withdrawn',withdrawn_at=SYSUTCDATETIME()
  WHERE listing_public_id=@publicId AND display_order=@imageIndex
@@ -121,22 +121,22 @@ export const preparePropertyPhoto=async({
   convert=convertPropertyPhoto,allowedOrigins
 }={})=>{
   if(!imagePreparationEnabled(env))
-    throw error(404,'IMAGE_PREPARATION_DISABLED','Image preparation is not enabled.');
+    {throw error(404,'IMAGE_PREPARATION_DISABLED','Image preparation is not enabled.');}
   if(![tenantId,propertyId,actorId].every(isId))
-    throw error(400,'INVALID_IMAGE_CONTEXT','Invalid image owner context.');
+    {throw error(400,'INVALID_IMAGE_CONTEXT','Invalid image owner context.');}
   if(!Number.isInteger(imageIndex)||imageIndex<0||imageIndex>49)
-    throw error(400,'INVALID_IMAGE_INDEX','Select an existing property image.');
+    {throw error(400,'INVALID_IMAGE_INDEX','Select an existing property image.');}
   const alt=sanitizePhotoAlt(altText);
   const snapshot=await readSnapshot({tenantId,propertyId,actorId});
   if(!snapshot?.publicId||!isId(snapshot.publicId))
-    throw error(404,'IMAGE_PROPERTY_UNAVAILABLE','Property is unavailable for image preparation.');
+    {throw error(404,'IMAGE_PROPERTY_UNAVAILABLE','Property is unavailable for image preparation.');}
   const source=resolveRegisteredPhoto(snapshot.sourceImages,imageIndex,tenantId,{
     allowedOrigins:allowedOrigins||trustedPhotoOrigins(env)
   });
   const original=await storage.getObject(source.bucket,source.path);
   const originalBytes=original?.body;
   if(!Buffer.isBuffer(originalBytes)||originalBytes.length>MAX_SOURCE_BYTES)
-    throw error(400,'IMAGE_SOURCE_SIZE','Invalid private image object.');
+    {throw error(400,'IMAGE_SOURCE_SIZE','Invalid private image object.');}
   const derivative=await convert(originalBytes);
   verifySafeWebp(derivative);
   const mediaId=crypto.randomUUID();

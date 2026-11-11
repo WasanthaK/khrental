@@ -93,9 +93,9 @@ export const resolveLocalStoragePath=(bucket,relativePath='')=>{
       (chunks.length===2 && validGuidPart(chunks[1])) ||
       (chunks.length===3 && validGuidPart(chunks[1]) &&
         chunks[2].endsWith('.webp') && validGuidPart(chunks[2].slice(0,-5)));
-    if(!approved)throw Object.assign(new Error('Invalid public derivative path.'),{
+    if(!approved){throw Object.assign(new Error('Invalid public derivative path.'),{
       status:400,code:'INVALID_PUBLIC_MEDIA_PATH'
-    });
+    });}
     return path.join(PRIVATE_LISTING_MEDIA_ROOT,...chunks.slice(1));
   }
   return path.join(STORAGE_ROOT,safeBucket,safePath);
@@ -156,7 +156,7 @@ class LocalStorageDriver {
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     try { await fs.writeFile(targetPath, body, createOnly ? {flag:'wx'} : {}); }
     catch(error) {
-      if (error.code==='EEXIST') throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      if (error.code==='EEXIST') {throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});}
       throw error;
     }
     return { path: safePath, fullPath: `${safeBucket}/${safePath}` };
@@ -167,7 +167,7 @@ class LocalStorageDriver {
     const targetPath = path.join(STORAGE_ROOT, bucket, safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     try { await fs.writeFile(targetPath, body, { flag: 'wx' }); return 'created'; }
-    catch (error) { if (error.code === 'EEXIST') return 'exists'; throw error; }
+    catch (error) { if (error.code === 'EEXIST') {return 'exists';} throw error; }
   }
 
   async deleteObjects(bucket, paths = []) {
@@ -353,7 +353,7 @@ export class R2StorageDriver {
     try {
       await this.request('PUT', this.objectKey(bucket, safePath), {body,headers:{'content-type':contentType,...(createOnly?{'if-none-match':'*'}:{})}});
     } catch(error) {
-      if (error.status===412) throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      if (error.status===412) {throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});}
       throw error;
     }
     return { path: safePath, fullPath: `${ensureBucketName(bucket)}/${safePath}` };
@@ -374,7 +374,7 @@ export class R2StorageDriver {
         body, headers: { 'content-type': 'application/pdf', 'if-none-match': '*' }
       });
       return 'created';
-    } catch (error) { if (error.status === 412) return 'exists'; throw error; }
+    } catch (error) { if (error.status === 412) {return 'exists';} throw error; }
   }
 
   // Candidate-only, conditional-create archive writer. No production route
@@ -399,7 +399,7 @@ export class R2StorageDriver {
     } catch (error) {
       // 412 is not success: the higher-level writer MUST read back and
       // compare exact bytes before reconciling an interrupted SQL commit.
-      if (error?.status === 412) return 'exists';
+      if (error?.status === 412) {return 'exists';}
       throw error;
     }
   }
@@ -431,11 +431,11 @@ export const storageDeliveryContent = object => {
   // bytes, never a caller-controlled suffix or an HTML sniffing fallback.
   if (type==='application/octet-stream' && Buffer.isBuffer(object.body)) {
     const b=object.body;
-    if (b.toString('ascii',0,5)==='%PDF-') type='application/pdf';
-    else if (b[0]===0xff && b[1]===0xd8 && b[2]===0xff) type='image/jpeg';
-    else if (b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) type='image/png';
-    else if (['GIF87a','GIF89a'].includes(b.toString('ascii',0,6))) type='image/gif';
-    else if (b.toString('ascii',0,4)==='RIFF' && b.toString('ascii',8,12)==='WEBP') type='image/webp';
+    if (b.toString('ascii',0,5)==='%PDF-') {type='application/pdf';}
+    else if (b[0]===0xff && b[1]===0xd8 && b[2]===0xff) {type='image/jpeg';}
+    else if (b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) {type='image/png';}
+    else if (['GIF87a','GIF89a'].includes(b.toString('ascii',0,6))) {type='image/gif';}
+    else if (b.toString('ascii',0,4)==='RIFF' && b.toString('ascii',8,12)==='WEBP') {type='image/webp';}
   }
   return {type,inline:['image/jpeg','image/png','image/gif','image/webp','application/pdf'].includes(type)};
 };

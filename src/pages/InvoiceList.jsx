@@ -103,14 +103,14 @@ const InvoiceList = () => {
         const isThisMonth =
           invoiceDate.getMonth() === now.getMonth() &&
           invoiceDate.getFullYear() === now.getFullYear();
-        if (!isThisMonth) return false;
+        if (!isThisMonth) {return false;}
       } else if (dateFilter === 'last_month') {
         const lastMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
         const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
         const isLastMonth =
           invoiceDate.getMonth() === lastMonth &&
           invoiceDate.getFullYear() === lastMonthYear;
-        if (!isLastMonth) return false;
+        if (!isLastMonth) {return false;}
       } else if (dateFilter === 'this_year' && invoiceDate.getFullYear() !== now.getFullYear()) {
         return false;
       }

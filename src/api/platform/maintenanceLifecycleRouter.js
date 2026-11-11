@@ -22,7 +22,7 @@ const createRequestError = (status, message, code, details = null) => {
   const error = new Error(message);
   error.status = status;
   error.code = code;
-  if (details) error.details = details;
+  if (details) {error.details = details;}
   return error;
 };
 
@@ -52,7 +52,7 @@ const requireManager = (req) => {
 };
 
 const hasPropertyScope = (req, propertyId) => {
-  if (isAdminRole({ user: req.user, membership: req.membership })) return true;
+  if (isAdminRole({ user: req.user, membership: req.membership })) {return true;}
   return (req.membership?.assignedPropertyIds || []).some((id) => sameMaintenanceIdentifier(id, propertyId));
 };
 
@@ -96,7 +96,7 @@ const loadRequest = async (tenantId, requestId) => {
      WHERE mr.tenant_id = @tenantId AND mr.id = @requestId`,
     { tenantId, requestId }
   );
-  if (!request) throw createRequestError(404, 'Maintenance request not found.', 'MAINTENANCE_REQUEST_NOT_FOUND');
+  if (!request) {throw createRequestError(404, 'Maintenance request not found.', 'MAINTENANCE_REQUEST_NOT_FOUND');}
   return request;
 };
 
@@ -108,8 +108,8 @@ const assertReadAccess = (req, request) => {
     return;
   }
 
-  if (isManager(req) && hasPropertyScope(req, request.propertyid)) return;
-  if (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user?.id)) return;
+  if (isManager(req) && hasPropertyScope(req, request.propertyid)) {return;}
+  if (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user?.id)) {return;}
   throw createRequestError(403, 'This maintenance request is outside the current assignment scope.', 'RESOURCE_ACCESS_DENIED');
 };
 
@@ -229,7 +229,7 @@ export const createMaintenanceLifecycleRouter = () => {
       const byId = new Map();
       for (const image of images) {
         const key = String(image.maintenance_request_id).toLowerCase();
-        if (!byId.has(key)) byId.set(key, []);
+        if (!byId.has(key)) {byId.set(key, []);}
         byId.get(key).push(image);
       }
       res.json({
@@ -251,7 +251,7 @@ export const createMaintenanceLifecycleRouter = () => {
   router.post('/requests', async (req, res, next) => {
     try {
       const isRenter = isTenantRole({ user: req.user, membership: req.membership });
-      if (!isRenter) requireManager(req);
+      if (!isRenter) {requireManager(req);}
       const title = String(req.body?.title || '').trim();
       const description = String(req.body?.description || '').trim();
       const propertyId = req.body?.propertyid || req.body?.propertyId || null;
@@ -371,7 +371,7 @@ export const createMaintenanceLifecycleRouter = () => {
         throw createRequestError(409, 'Closed maintenance requests cannot be reassigned.', 'MAINTENANCE_REQUEST_CLOSED');
       }
       const staffUserId = req.body?.staffUserId || req.body?.staffId;
-      if (!staffUserId) throw createRequestError(400, 'staffUserId is required.', 'STAFF_USER_REQUIRED');
+      if (!staffUserId) {throw createRequestError(400, 'staffUserId is required.', 'STAFF_USER_REQUIRED');}
 
       const eligible = await listEligibleMaintenanceAssignees(req.tenantId, staffUserId);
       if (!eligible.length) {
@@ -431,7 +431,7 @@ export const createMaintenanceLifecycleRouter = () => {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       const allowed = (isManager(req) && hasPropertyScope(req, request.propertyid))
         || (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user.id));
-      if (!allowed) throw createRequestError(403, 'Only the assigned worker or maintenance manager can start work.', 'RESOURCE_ACCESS_DENIED');
+      if (!allowed) {throw createRequestError(403, 'Only the assigned worker or maintenance manager can start work.', 'RESOURCE_ACCESS_DENIED');}
       assertMaintenanceTransition(request.status, MAINTENANCE_STATUS.IN_PROGRESS);
 
       const pool = await getMssqlPool();
@@ -447,7 +447,7 @@ export const createMaintenanceLifecycleRouter = () => {
            WHERE tenant_id = @tenantId AND id = @requestId AND status = 'pending'`,
           { tenantId: req.tenantId, requestId: request.id }
         );
-        if (!updated) throw createRequestError(409, 'Maintenance request status changed before work could start.', 'MAINTENANCE_STATE_CONFLICT');
+        if (!updated) {throw createRequestError(409, 'Maintenance request status changed before work could start.', 'MAINTENANCE_STATE_CONFLICT');}
         await insertEvent(transaction, {
           tenantId: req.tenantId,
           requestId: request.id,
@@ -478,7 +478,7 @@ export const createMaintenanceLifecycleRouter = () => {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       const allowed = (isManager(req) && hasPropertyScope(req, request.propertyid))
         || (canUpdateAssigned(req) && sameMaintenanceIdentifier(request.assignedto, req.user.id));
-      if (!allowed) throw createRequestError(403, 'Only the assigned worker or maintenance manager can complete work.', 'RESOURCE_ACCESS_DENIED');
+      if (!allowed) {throw createRequestError(403, 'Only the assigned worker or maintenance manager can complete work.', 'RESOURCE_ACCESS_DENIED');}
       assertMaintenanceTransition(request.status, MAINTENANCE_STATUS.COMPLETED);
       const completionCost = req.body?.completionCost === undefined || req.body?.completionCost === null || req.body?.completionCost === ''
         ? null
@@ -509,7 +509,7 @@ export const createMaintenanceLifecycleRouter = () => {
             notes: req.body?.notes || null
           }
         );
-        if (!updated) throw createRequestError(409, 'Maintenance request status changed before completion.', 'MAINTENANCE_STATE_CONFLICT');
+        if (!updated) {throw createRequestError(409, 'Maintenance request status changed before completion.', 'MAINTENANCE_STATE_CONFLICT');}
         await insertEvent(transaction, {
           tenantId: req.tenantId,
           requestId: request.id,
@@ -548,7 +548,7 @@ export const createMaintenanceLifecycleRouter = () => {
       }
       assertMaintenanceTransition(request.status, MAINTENANCE_STATUS.CANCELLED);
       const reason = String(req.body?.reason || req.body?.cancellationReason || '').trim();
-      if (!reason) throw createRequestError(400, 'A cancellation reason is required.', 'CANCELLATION_REASON_REQUIRED');
+      if (!reason) {throw createRequestError(400, 'A cancellation reason is required.', 'CANCELLATION_REASON_REQUIRED');}
 
       const pool = await getMssqlPool();
       const transaction = new sql.Transaction(pool);
@@ -564,7 +564,7 @@ export const createMaintenanceLifecycleRouter = () => {
            WHERE tenant_id = @tenantId AND id = @requestId AND status IN ('pending', 'in_progress')`,
           { tenantId: req.tenantId, requestId: request.id, actorUserId: req.user.id, reason }
         );
-        if (!updated) throw createRequestError(409, 'Maintenance request status changed before cancellation.', 'MAINTENANCE_STATE_CONFLICT');
+        if (!updated) {throw createRequestError(409, 'Maintenance request status changed before cancellation.', 'MAINTENANCE_STATE_CONFLICT');}
         await insertEvent(transaction, {
           tenantId: req.tenantId,
           requestId: request.id,
@@ -645,7 +645,7 @@ export const createMaintenanceLifecycleRouter = () => {
       const request = await loadRequest(req.tenantId, req.params.requestId);
       assertReadAccess(req, request);
       const comment = String(req.body?.comment || '').trim();
-      if (!comment) throw createRequestError(400, 'comment is required.', 'COMMENT_REQUIRED');
+      if (!comment) {throw createRequestError(400, 'comment is required.', 'COMMENT_REQUIRED');}
       const internalRequested = Boolean(req.body?.isInternal);
       if (internalRequested && isTenantRole({ user: req.user, membership: req.membership })) {
         throw createRequestError(403, 'Tenant comments cannot be marked internal.', 'INTERNAL_COMMENT_FORBIDDEN');

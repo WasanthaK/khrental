@@ -96,7 +96,7 @@ export const IDENTITY_MEMBERSHIP_AUDIT_FIELDS = Object.freeze([
 ]);
 
 export const readIdentityMembershipAuditCounts = (row) => {
-  if (!row || typeof row !== 'object') throw new Error('Audit query returned no count row.');
+  if (!row || typeof row !== 'object') {throw new Error('Audit query returned no count row.');}
   const result = {};
   for (const field of IDENTITY_MEMBERSHIP_AUDIT_FIELDS) {
     const raw = row[field];

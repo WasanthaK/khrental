@@ -10,13 +10,13 @@ export async function verifyPhase4StaffMaintenanceHttp({
   // A/B are disposable Docker SQL tenants. No live people or external URLs.
   const sqlRows = async (statement, inputs = {}) => {
     const request = pool.request();
-    for (const [key, value] of Object.entries(inputs)) request.input(key, value);
+    for (const [key, value] of Object.entries(inputs)) {request.input(key, value);}
     return (await request.query(statement)).recordset || [];
   };
   const one = async (statement, inputs) => (await sqlRows(statement, inputs))[0] || null;
   const check = (response, status, code = null) => {
     assert.equal(response.status, status, JSON.stringify(response));
-    if (code) assert.equal(response.payload?.code, code, JSON.stringify(response));
+    if (code) {assert.equal(response.payload?.code, code, JSON.stringify(response));}
     return response.payload?.data;
   };
   const actor = async (item, bundle, assignedPropertyId = null, membershipRole = 'staff') => {
@@ -525,7 +525,7 @@ export async function verifyPhase4StaffMaintenanceHttp({
         const button = [...document.querySelectorAll('button')].find(
           candidate => candidate.textContent.trim() === text && !candidate.disabled
         );
-        if (!button) return false;
+        if (!button) {return false;}
         button.click();
         return true;
       }, label);
@@ -561,7 +561,7 @@ export async function verifyPhase4StaffMaintenanceHttp({
         ?.closest('div.fixed');
       const button = [...(dialog?.querySelectorAll('button') || [])]
         .find(node => node.textContent.trim() === 'Mark as Completed' && !node.disabled);
-      if (!button) return false;
+      if (!button) {return false;}
       button.click();
       return true;
     });

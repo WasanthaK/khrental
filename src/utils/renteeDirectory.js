@@ -13,7 +13,7 @@ export const normalizeRenteeDirectoryRecords = (records = []) => {
     .filter(isRenteeDirectoryRecord)
     .filter((record) => {
       const id = String(record?.id || '').trim();
-      if (!id || seen.has(id)) return false;
+      if (!id || seen.has(id)) {return false;}
       seen.add(id);
       return true;
     });

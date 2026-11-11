@@ -22,8 +22,8 @@ const ID_COPY_BUCKET = 'images';
 const ID_COPY_FOLDER = 'id-copies';
 
 const normalizePropertyIds = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string') return [];
+  if (Array.isArray(value)) {return value;}
+  if (typeof value !== 'string') {return [];}
 
   try {
     const parsed = JSON.parse(value);
@@ -67,17 +67,17 @@ const RenteeForm = () => {
         setError(null);
 
         const propertyData = await listTenantProperties();
-        if (cancelled) return;
+        if (cancelled) {return;}
 
         setProperties(propertyData.map((property) => ({
           ...property,
           displayName: property.name || property.address || 'Unnamed Property'
         })));
 
-        if (!isEditMode) return;
+        if (!isEditMode) {return;}
 
         const rentee = await getRentee(id);
-        if (cancelled) return;
+        if (cancelled) {return;}
 
         setFormData({
           name: rentee?.name || '',
@@ -91,9 +91,9 @@ const RenteeForm = () => {
         setExistingIdCopyUrl(rentee?.id_copy_url || null);
       } catch (loadError) {
         console.error('Failed to load tenant form:', loadError);
-        if (!cancelled) setError(loadError.message || 'Failed to load tenant information.');
+        if (!cancelled) {setError(loadError.message || 'Failed to load tenant information.');}
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {setLoading(false);}
       }
     };
 
@@ -115,7 +115,7 @@ const RenteeForm = () => {
 
       try {
         const units = await listTenantPropertyUnits(selectedProperty);
-        if (!cancelled) setPropertyUnits(units);
+        if (!cancelled) {setPropertyUnits(units);}
       } catch (unitError) {
         console.error('Failed to load property units:', unitError);
         if (!cancelled) {
@@ -177,7 +177,7 @@ const RenteeForm = () => {
   };
 
   const addPropertyAssociation = () => {
-    if (!selectedProperty) return;
+    if (!selectedProperty) {return;}
 
     if (selectedPropertyIsApartment && !selectedUnit) {
       toast.error('Select a unit for this apartment.');
@@ -234,7 +234,7 @@ const RenteeForm = () => {
     const property = properties.find((item) => String(item.id) === String(association.propertyId));
     const propertyName = property?.displayName || association.propertyId;
 
-    if (!association.unitId) return propertyName;
+    if (!association.unitId) {return propertyName;}
 
     const unit = propertyUnits.find((item) => String(item.id) === String(association.unitId));
     return `${propertyName} — Unit ${unit?.unitnumber || association.unitId}`;

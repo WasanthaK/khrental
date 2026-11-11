@@ -133,7 +133,7 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
     await assertManagementWrite({tenantId,transaction:tx});
     const query=async(sqlText,params={})=>{
       const request=new sql.Request(tx);
-      for(const [key,value] of Object.entries(params))request.input(key,value);
+      for(const [key,value] of Object.entries(params)){request.input(key,value);}
       return (await request.query(sqlText)).recordset||[];
     };
     const args={tenantId,propertyId,actorId};
@@ -146,12 +146,12 @@ export const updatePreference=async({tenantId,propertyId,actorId,changes})=>{
         AND tm.status=N'active' AND tm.role=N'admin'
         AND (t.status IS NULL OR t.status=N'active')
         AND (au.status IS NULL OR au.status=N'active')`,args);
-    if(!user.length)throw Object.assign(new Error('An active tenant administrator is required.'),{status:403,code:'ACTIVE_ADMIN_REQUIRED'});
+    if(!user.length){throw Object.assign(new Error('An active tenant administrator is required.'),{status:403,code:'ACTIVE_ADMIN_REQUIRED'});}
     const pref=await query(`
       SELECT TOP(1) pref.public_id FROM dbo.public_listing_preferences pref WITH(UPDLOCK,HOLDLOCK)
       JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
       WHERE pref.tenant_id=@tenantId AND pref.property_id=@propertyId`,args);
-    if(!pref.length)throw Object.assign(new Error('Property not found in this tenant.'),{status:404,code:'PROPERTY_NOT_FOUND'});
+    if(!pref.length){throw Object.assign(new Error('Property not found in this tenant.'),{status:404,code:'PROPERTY_NOT_FOUND'});}
     if(Object.hasOwn(changes,'countryCode')){
       await query(`UPDATE dbo.properties SET country_code=@countryCode
         WHERE id=@propertyId AND tenant_id=@tenantId`,{...args,countryCode:changes.countryCode});

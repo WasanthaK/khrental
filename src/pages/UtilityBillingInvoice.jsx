@@ -56,7 +56,7 @@ const UtilityBillingInvoice = () => {
         year: filter.year
       });
       
-      if (error) throw error;
+      if (error) {throw error;}
       
       setBillingData(data || []);
     } catch (error) {

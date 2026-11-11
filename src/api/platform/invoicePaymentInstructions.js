@@ -19,7 +19,7 @@ export const captureInvoiceBankDetails = (row = {}) => {
   const property = readBank(row, 'property');
   // A partial unit override needs correction; silently falling back to
   // another account could route tenant payments to the wrong recipient.
-  if (hasAny(unit)) return complete(unit) ? { ...unit, source: 'unit' } : null;
+  if (hasAny(unit)) {return complete(unit) ? { ...unit, source: 'unit' } : null;}
   return complete(property) ? { ...property, source: 'property' } : null;
 };
 
@@ -31,7 +31,7 @@ export const readIssuedInvoiceBankDetails = metadata => {
   try { record = typeof metadata === 'string' ? JSON.parse(metadata) : metadata; }
   catch { return null; }
   const bank = record?.paymentInstructions;
-  if (!bank || !['unit', 'property'].includes(bank.source)) return null;
+  if (!bank || !['unit', 'property'].includes(bank.source)) {return null;}
   const normalized = {
     bankName: clean(bank.bankName),
     branch: clean(bank.branch),
@@ -48,10 +48,10 @@ const escapeHtml = value => clean(value).replace(/&/g, '&amp;')
 
 export const buildInvoiceBankEmailSections = (instructions, paymentReference) => {
   const bank = readIssuedInvoiceBankDetails({paymentInstructions:instructions});
-  if (!bank) return {
+  if (!bank) {return {
     text: 'Bank transfer details are not on this invoice. Confirm payment instructions with your property manager before sending funds.',
     html: '<p>Bank transfer details are not on this invoice. Confirm payment instructions with your property manager before sending funds.</p>'
-  };
+  };}
   const ref = displayInvoicePaymentReference(paymentReference) || 'Not assigned';
   return {
     text: [

@@ -92,7 +92,7 @@ export const createPasswordResetRequest = async ({ email, ttlMinutes = 30 }) => 
 };
 
 export const revokePasswordResetToken = async (token) => {
-  if (!token) return;
+  if (!token) {return;}
   try {
     await runQuery(`
       UPDATE dbo.password_reset_tokens
@@ -107,7 +107,7 @@ export const revokePasswordResetToken = async (token) => {
 };
 
 const loadResetByToken = async (token) => {
-  if (!token) return null;
+  if (!token) {return null;}
 
   try {
     return await runSingleQuery(`

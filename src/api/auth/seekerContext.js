@@ -36,7 +36,7 @@ export const resolveVerifiedSeekerContext = async ({
       tenantContext.memberships.length !== 0) {
     return denied;
   }
-  if (typeof query !== 'function') return denied;
+  if (typeof query !== 'function') {return denied;}
 
   // Do not use the legacy active-memberships projection: it ignores revoked
   // rows and can return [] when the membership schema is missing. A direct
@@ -47,7 +47,7 @@ export const resolveVerifiedSeekerContext = async ({
     FROM dbo.tenant_memberships
     WHERE app_user_id = @appUserId
   `, { appUserId: record.appUserId });
-  if (!Array.isArray(rows)) return denied;
+  if (!Array.isArray(rows)) {return denied;}
   return rows.length === 0
     ? { verified: true, eligible: true, userType: 'seeker', tenantId: null }
     : { verified: true, eligible: false };

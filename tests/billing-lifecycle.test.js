@@ -585,8 +585,8 @@ test('billing reminder portal URL uses the configured public application URL', (
     process.env.PUBLIC_APP_URL = 'https://rentals.example.com/';
     assert.equal(getBillingReminderPortalUrl(), 'https://rentals.example.com/rentee/invoices');
   } finally {
-    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
-    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousPublicUrl === undefined) {delete process.env.PUBLIC_APP_URL;}
+    else {process.env.PUBLIC_APP_URL = previousPublicUrl;}
   }
 });
 
@@ -644,10 +644,10 @@ test('billing reminder delivery fails clearly when server email is not configure
       (error) => error?.status === 503 && error?.code === 'EMAIL_NOT_CONFIGURED'
     );
   } finally {
-    if (previousTwilioKey === undefined) delete process.env.TWILIO_SENDGRID_API_KEY;
-    else process.env.TWILIO_SENDGRID_API_KEY = previousTwilioKey;
-    if (previousSendGridKey === undefined) delete process.env.SENDGRID_API_KEY;
-    else process.env.SENDGRID_API_KEY = previousSendGridKey;
+    if (previousTwilioKey === undefined) {delete process.env.TWILIO_SENDGRID_API_KEY;}
+    else {process.env.TWILIO_SENDGRID_API_KEY = previousTwilioKey;}
+    if (previousSendGridKey === undefined) {delete process.env.SENDGRID_API_KEY;}
+    else {process.env.SENDGRID_API_KEY = previousSendGridKey;}
   }
 });
 

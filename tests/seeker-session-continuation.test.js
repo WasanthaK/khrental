@@ -10,8 +10,8 @@ const fixture=({before=null,oldStatus=200,newStatus=200,payload=certified,mutate
   const requests=[];
   const fetchImpl=async(url,options)=>{
     requests.push({url,options});
-    if(mutateAt===requests.length)stored={...existing,access_token:'changed-session'};
-    if(throwsAt===requests.length)throw Error('Synthetic outage');
+    if(mutateAt===requests.length){stored={...existing,access_token:'changed-session'};}
+    if(throwsAt===requests.length){throw Error('Synthetic outage');}
     const status=url.endsWith('seeker-context')?newStatus:oldStatus;
     return {ok:status===200,status,json:async()=>payload};
   };

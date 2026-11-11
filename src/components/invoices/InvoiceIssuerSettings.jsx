@@ -25,7 +25,7 @@ export default function InvoiceIssuerSettings(){
   const importLogo=event=>{
     const file=event.target.files?.[0];
     event.target.value='';
-    if(!file)return;
+    if(!file){return;}
     setLogoError('');
     if(file.type!=='image/png'||file.size>128*1024||file.size<45){
       setLogoError('Choose an RGB or RGBA PNG logo no larger than 128 KB.');
@@ -46,18 +46,18 @@ export default function InvoiceIssuerSettings(){
   useEffect(()=>{
     let mounted=true;
     getInvoiceIssuerProfile().then(({data,error:loadError})=>{
-      if(!mounted)return;
-      if(loadError)setError(loadError.message);
-      else setProfile(normal(data));
+      if(!mounted){return;}
+      if(loadError){setError(loadError.message);}
+      else {setProfile(normal(data));}
       setLoading(false);
     });
     return()=>{mounted=false;};
   },[]);
-  useEffect(()=>()=>{if(pdfUrl)URL.revokeObjectURL(pdfUrl);},[pdfUrl]);
+  useEffect(()=>()=>{if(pdfUrl){URL.revokeObjectURL(pdfUrl);}},[pdfUrl]);
   const save=async event=>{
     event.preventDefault();setSaving(true);setNotice('');setError('');
     const result=await saveInvoiceIssuerProfile(profile);
-    if(result.error)setError(result.error.message);
+    if(result.error){setError(result.error.message);}
     else {
       setProfile(normal(result.data));
       setNotice('Invoice profile and design saved. Existing issued PDFs never change.');
@@ -67,14 +67,14 @@ export default function InvoiceIssuerSettings(){
   const preview=async()=>{
     setPreviewing(true);setPreviewError('');
     const result=await previewInvoiceDesign(profile);
-    if(result.error) setPreviewError(result.error.message);
+    if(result.error) {setPreviewError(result.error.message);}
     else if(result.data?.isSample && result.data.type==='application/pdf' && result.data.content){
       try {
         const binary=atob(result.data.content);
         const bytes=Uint8Array.from(binary,ch=>ch.charCodeAt(0));
         setPdfUrl(URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})));
       }catch {setPreviewError('The PDF preview could not be decoded.');}
-    }else setPreviewError('Preview response was not a sample PDF.');
+    }else {setPreviewError('Preview response was not a sample PDF.');}
     setPreviewing(false);
   };
   return <section className="app-panel lg:col-span-2" aria-label="Invoice Designer">

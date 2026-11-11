@@ -26,7 +26,7 @@ test('production cannot accept dev bypass even when explicitly enabled with forg
     process.env.NODE_ENV='production';process.env.VITE_ENABLE_DEV_BYPASS='true';
     const result=await resolveTenantContext({headers:{'x-dev-bypass-role':'admin','x-tenant-id':'foreign-tenant','x-user-id':'fake'}});
     assert.equal(result.user,null);assert.equal(result.isAuthenticated,false);assert.equal(result.identity.devBypassRole,null);
-  }finally{for(const [key,value]of Object.entries(before)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+  }finally{for(const [key,value]of Object.entries(before)){if(value===undefined){delete process.env[key];}else {process.env[key]=value;}}}
   assert.match(source('docker-compose.yml'),/VITE_ENABLE_DEV_BYPASS:-false/);
   assert.match(source('docker-compose.yml'),/MSSQL_PASSWORD:\?/);
 });
@@ -39,9 +39,9 @@ test('client account updates cannot forge verification, invitation or onboarding
 });
 
 test('generic admin query cannot grant, revoke, delete or bulk upsert memberships',()=>{
-  for(const action of ['insert','update','delete','upsert'])assert.throws(()=>authorizePlatformQuery({
+  for(const action of ['insert','update','delete','upsert']){assert.throws(()=>authorizePlatformQuery({
     ...context('admin'),action,table:'tenant_memberships',payload:[{role:'admin'}],filters:[{column:'id',operator:'eq',value:'target'}]
-  }),{code:'MEMBERSHIP_MUTATION_BLOCKED'});
+  }),{code:'MEMBERSHIP_MUTATION_BLOCKED'});}
 });
 
 test('storage HTTP guards deny renter/staff/tenant-admin bucket mutations before driver calls',async()=>{
@@ -50,16 +50,16 @@ test('storage HTTP guards deny renter/staff/tenant-admin bucket mutations before
   const app=express();app.use(express.json());app.use((req,_res,next)=>{req.tenantContext=context(req.get('test-role')||'rentee',req.get('test-actor')||'actor');next();});
   app.use(createPlatformRouter({getStorageDriver:()=>driver,checkPlatformAdmin:async user=>user.id==='platform'}));app.use(errors);
   await serve(app,async origin=>{
-    for(const role of ['rentee','staff','admin'])for(const method of ['POST','DELETE']) {
+    for(const role of ['rentee','staff','admin']){for(const method of ['POST','DELETE']) {
       const r=await fetch(origin+'/storage/buckets'+(method==='DELETE'?'/images':''),{method,headers:{'content-type':'application/json','test-role':role},body:method==='POST'?JSON.stringify({name:'images'}):undefined});
       assert.equal(r.status,403);assert.equal(calls.length,0);
-    }
+    }}
     assert.equal((await fetch(origin+'/storage/buckets',{method:'POST',headers:{'content-type':'application/json','test-actor':'platform'},body:JSON.stringify({name:'images'})})).status,201);
     calls.length=0;
-    for(const role of ['rentee','staff'])assert.equal((await fetch(origin+'/storage/objects',{method:'DELETE',headers:{'content-type':'application/json','test-role':role},body:JSON.stringify({bucket:'images',paths:['properties/existing.jpg']})})).status,403);
+    for(const role of ['rentee','staff']){assert.equal((await fetch(origin+'/storage/objects',{method:'DELETE',headers:{'content-type':'application/json','test-role':role},body:JSON.stringify({bucket:'images',paths:['properties/existing.jpg']})})).status,403);}
     assert.equal(calls.length,0);
     const image=Buffer.from([0xff,0xd8,0xff,1]);
-    for(const path of ['properties/existing.jpg','maintenance/other/old.jpg'])assert.equal((await fetch(origin+'/storage/upload?bucket=images&path='+path,{method:'POST',headers:{'content-type':'image/jpeg'},body:image})).status,403);
+    for(const path of ['properties/existing.jpg','maintenance/other/old.jpg']){assert.equal((await fetch(origin+'/storage/upload?bucket=images&path='+path,{method:'POST',headers:{'content-type':'image/jpeg'},body:image})).status,403);}
     assert.equal(calls.length,0);
     const own=await fetch(origin+'/storage/upload?bucket=images&path=maintenance/photo.jpg',{method:'POST',headers:{'content-type':'image/jpeg'},body:image});
     assert.equal(own.status,201);assert.equal(calls[0].path,'tenants/tenant-a/maintenance/actor/photo.jpg');assert.equal(calls[0].options.createOnly,true);
@@ -84,7 +84,7 @@ test('local and R2 append-only uploads deny overwrites atomically',async()=>{
 });
 
 test('raw tenant objects cannot execute HTML/SVG while protected PDF/raster viewing is retained',async()=>{
-  for(const type of ['text/html','image/svg+xml','application/xhtml+xml','application/octet-stream'])assert.equal(storageDeliveryContent({contentType:type,body:Buffer.from('<script>attack()</script>')}).inline,false);
+  for(const type of ['text/html','image/svg+xml','application/xhtml+xml','application/octet-stream']){assert.equal(storageDeliveryContent({contentType:type,body:Buffer.from('<script>attack()</script>')}).inline,false);}
   assert.deepEqual(storageDeliveryContent({contentType:'application/octet-stream',body:Buffer.from('%PDF-fixture')}),{type:'application/pdf',inline:true});
   assert.equal(storageDeliveryContent({contentType:'image/jpeg'}).inline,true);
   const driver=getStorageDriver(),path='security-active-'+crypto.randomUUID()+'.html';
@@ -106,7 +106,7 @@ test('manual mail denies non-admins and quota failures without dispatch, and rat
   app.post('/send',...createManualEmailGuards({resolveContext:(_req,_res,next)=>next(),secret:'s'.repeat(32),limiter:{durable:true,consume:async input=>{quotas.push(input);return ++used<=2;}}}),(_req,res)=>{dispatch++;res.json({ok:true});});app.use(errors);
   await serve(app,async origin=>{
     const send=role=>fetch(origin+'/send',{method:'POST',headers:{'content-type':'application/json','test-role':role},body:JSON.stringify({to:'recipient@example.test',subject:'Test',text:'Test',from:'spoof@example.test'})});
-    for(const role of ['rentee','staff'])assert.equal((await send(role)).status,403);
+    for(const role of ['rentee','staff']){assert.equal((await send(role)).status,403);}
     assert.equal(dispatch,0);assert.equal(quotas.length,0);
     assert.equal((await send('admin')).status,200);assert.equal(dispatch,1);
     const limited=await send('admin');assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'60');assert.equal(dispatch,1);
@@ -123,7 +123,7 @@ test('manual mail denies non-admins and quota failures without dispatch, and rat
 
 test('manual mail bounds recipient, subject, content and attachment payloads',()=>{
   const good={to:'a@example.test',subject:'Test',text:'Test'};
-  for(const patch of [{to:Array(6).fill('a@example.test')},{to:'a@example.test\r\nBcc:other@example.test'},{subject:'bad\nheader'},{html:'x'.repeat(200001)},{attachments:Array(6).fill({filename:'x',content:'x'})}])assert.throws(()=>validateManualEmail({...good,...patch}),{code:'EMAIL_REQUEST_INVALID'});
+  for(const patch of [{to:Array(6).fill('a@example.test')},{to:'a@example.test\r\nBcc:other@example.test'},{subject:'bad\nheader'},{html:'x'.repeat(200001)},{attachments:Array(6).fill({filename:'x',content:'x'})}]){assert.throws(()=>validateManualEmail({...good,...patch}),{code:'EMAIL_REQUEST_INVALID'});}
 });
 
 test('5xx public errors hide raw SQL/provider details and return a server-generated request id',()=>{

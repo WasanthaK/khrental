@@ -221,7 +221,7 @@ export const getUserNotifications = async (_userId) => {
         throw new Error('Notification list returned an invalid response.');
       }
       for (const row of rows) {
-        if (seen.has(row.id)) throw new Error('Notification list contains repeated results.');
+        if (seen.has(row.id)) {throw new Error('Notification list contains repeated results.');}
         seen.add(row.id);
         all.push({ ...row, title: 'Notification' });
       }
@@ -239,12 +239,12 @@ export const getUserNotifications = async (_userId) => {
 // An ID is only a locator. The server enforces BOTH the tenant and owner.
 export const markNotificationAsRead = async (notificationId) => {
   try {
-    if (!notificationId) throw new Error('Notification ID is required.');
+    if (!notificationId) {throw new Error('Notification ID is required.');}
     const record = await requestMssqlApi(
       `/api/notifications/${encodeURIComponent(notificationId)}/read`,
       { method: 'PATCH' }
     );
-    if (!record?.id) throw new Error('Notification update returned an invalid response.');
+    if (!record?.id) {throw new Error('Notification update returned an invalid response.');}
     return { success: true, data: [record], error: null };
   } catch (error) {
     console.error('Error marking notification as read:', error.message);

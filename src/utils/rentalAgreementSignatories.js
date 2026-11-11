@@ -38,7 +38,7 @@ export const matchesPendingRentalRoster = (stored, pending) => {
   let rows;
   try { rows = typeof stored === 'string' ? JSON.parse(stored) : stored; }
   catch { return false; }
-  if (!Array.isArray(rows) || rows.length !== pending.length) return false;
+  if (!Array.isArray(rows) || rows.length !== pending.length) {return false;}
   return pending.every(person => rows.some(row =>
     nonempty(row.type).toLowerCase() === person.type
     && nonempty(row.email).toLowerCase() === person.email

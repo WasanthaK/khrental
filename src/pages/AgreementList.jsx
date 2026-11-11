@@ -175,7 +175,7 @@ const AgreementList = () => {
     const confirmed = window.confirm(
       'Permanently delete this cancelled agreement? This removes the agreement record and its unused generated documents. This cannot be undone.'
     );
-    if (!confirmed) return;
+    if (!confirmed) {return;}
 
     try {
       setDeletingAgreementId(agreementId);

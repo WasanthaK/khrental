@@ -11,7 +11,7 @@ const clean = (v, max = 300) => typeof v === 'string'
   ? v.replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, max) : '';
 const required = (v, field, max = 300) => {
   const value = clean(v, max);
-  if (!value) throw new Error('Missing issued document field: ' + field);
+  if (!value) {throw new Error('Missing issued document field: ' + field);}
   return value;
 };
 const positiveCents = (v, field, allowZero = false) => {
@@ -23,7 +23,7 @@ const positiveCents = (v, field, allowZero = false) => {
 const dateString = (v, field) => {
   const value = required(v, field, 40);
   const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) throw new Error('Invalid issued date: ' + field);
+  if (!Number.isFinite(parsed.getTime())) {throw new Error('Invalid issued date: ' + field);}
   return parsed.toISOString().slice(0, 10);
 };
 const amount = cents => 'LKR ' + (cents / 100).toFixed(2);
@@ -52,7 +52,7 @@ export const normalizeInvoiceDocumentSnapshot = source => {
     throw new Error('Issued invoice must have 1-300 lines.');
   }
   const lines = source.lines.map((line, index) => {
-    if (!obj(line)) throw new Error('Invalid issued line: ' + index);
+    if (!obj(line)) {throw new Error('Invalid issued line: ' + index);}
     const cents = line.amountCents;
     if (!Number.isSafeInteger(cents) || Math.abs(cents) > 1e14) {
       throw new Error('Invalid issued line amount: ' + index);
@@ -137,13 +137,13 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
         }
         token += char;
       }
-      if (!token) continue;
+      if (!token) {continue;}
       const next = current ? current + ' ' + token : token;
       if (current && width(next, font, size) > maxWidth) {
         result.push(current); current = token;
-      } else current = next;
+      } else {current = next;}
     }
-    if (current) result.push(current);
+    if (current) {result.push(current);}
     return result.length ? result : ['-'];
   };
   const draw = (text, x, baseline, font=regular, size=9.5, color=navy) =>
@@ -155,7 +155,7 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
   };
   const right = (text, rightX, baseline, font=regular, size=9.5) => {
     let actual = size;
-    while (actual > 7 && width(text,font,actual) > RIGHT-LEFT-30) actual -= .5;
+    while (actual > 7 && width(text,font,actual) > RIGHT-LEFT-30) {actual -= .5;}
     draw(text, rightX-width(text,font,actual), baseline,font,actual);
   };
   const line = baseline => page.drawLine({
@@ -181,7 +181,7 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
       (model.design.template === 'minimal' ? LEFT : LEFT+13)+(logoImage ? 50 : 0),
       H-34,bold,15);
     right(model.paymentReference,RIGHT,H-33,bold,10);
-    if (continuation) draw('CHARGES CONTINUED',LEFT+13,H-51,regular,8.5,muted);
+    if (continuation) {draw('CHARGES CONTINUED',LEFT+13,H-51,regular,8.5,muted);}
     line(H-62);
     y=H-83;
   };
@@ -192,7 +192,7 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
     y -= 25;
   };
   const ensure = needed => {
-    if (y-needed >= BOTTOM) return;
+    if (y-needed >= BOTTOM) {return;}
     header(true);
     tableHeader();
   };
@@ -205,13 +205,13 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
       : ''].filter(Boolean);
   const leftHeight = leftIssuer.reduce((acc,val,i)=>acc+wrap(val,240,i===0?bold:regular,i===0?10:9).length*11,0);
   let yy=y-18;
-  for (const [i,v] of leftIssuer.entries()) yy -= drawWrapped(v,LEFT,yy,240,i===0?bold:regular,i===0?10:9,11);
+  for (const [i,v] of leftIssuer.entries()) {yy -= drawWrapped(v,LEFT,yy,240,i===0?bold:regular,i===0?10:9,11);}
   drawWrapped(model.renter.name,LEFT+270,y-18,RIGHT-LEFT-280,bold,10,12);
   y -= Math.max(62,leftHeight+29);
   line(y+8);
   draw('PROPERTY',LEFT,y-9,bold,8,muted);
   drawWrapped(model.property.name,LEFT,y-25,225,bold,10);
-  if (model.design.showPropertyAddress && model.property.address) drawWrapped(model.property.address,LEFT,y-40,225,regular,8.5,10);
+  if (model.design.showPropertyAddress && model.property.address) {drawWrapped(model.property.address,LEFT,y-40,225,regular,8.5,10);}
   draw('BILLING PERIOD',LEFT+270,y-9,bold,8,muted);
   draw(model.billingPeriod,LEFT+270,y-25,bold,10);
   draw('ISSUED',LEFT+270,y-47,bold,8,muted);
@@ -229,7 +229,7 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
     const wrapped=wrap(entry.description,RIGHT-LEFT-170,regular,9.5);
     const h=Math.max(30,10+wrapped.length*12);
     ensure(h+2);
-    if (i%2) page.drawRectangle({x:LEFT,y:y-h,width:RIGHT-LEFT,height:h,color:pale});
+    if (i%2) {page.drawRectangle({x:LEFT,y:y-h,width:RIGHT-LEFT,height:h,color:pale});}
     wrapped.forEach((part,j)=>draw(part,LEFT+10,y-17-j*12));
     right(amount(entry.amountCents),RIGHT-10,y-17,bold,9);
     y -= h;
@@ -246,7 +246,7 @@ export const createInvoiceDocumentPdfCandidate = async (issuedSnapshot, { previe
     wrap(value,colW-8,regular,9).length))*11+20):[];
   const paymentHeight=bank?35+rowHeights.reduce((a,b)=>a+b,0)+8:76;
   const finalH=14+49+10+paymentHeight+8;
-  if (y-finalH < BOTTOM) header(true);
+  if (y-finalH < BOTTOM) {header(true);}
   y -= 12;
   page.drawRectangle({x:LEFT,y:y-49,width:boxW,height:49,color:pale});
   draw('TOTAL DUE',LEFT+14,y-30,bold,12);

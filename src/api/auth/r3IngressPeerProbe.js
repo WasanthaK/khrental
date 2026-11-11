@@ -17,16 +17,16 @@ export const observeR3IngressPeer = (req, res, config = process.env) => {
   const expiry = Number(config.PUBLIC_SIGNUP_INGRESS_PROBE_EXPIRES_AT);
   const now = Math.floor(Date.now() / 1000);
   if (typeof secret !== 'string' || !SECRET_FORMAT.test(secret) ||
-      !Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 3600) return disabled();
+      !Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 3600) {return disabled();}
   const auth = req.headers?.authorization;
   if (req.method !== 'POST' || req.originalUrl !== '/api/internal/r3-ingress-peer' ||
       typeof auth !== 'string' || !auth.startsWith('Bearer ') ||
       !SECRET_FORMAT.test(auth.slice(7)) ||
-      !timingSafeEqual(digest(auth.slice(7)), digest(secret))) return disabled();
+      !timingSafeEqual(digest(auth.slice(7)), digest(secret))) {return disabled();}
   // No request body, no DB, no SendGrid, no mutation. This is never signup.
   if (req.headers?.['transfer-encoding'] !== undefined ||
       (req.headers?.['content-length'] !== undefined &&
-       req.headers['content-length'] !== '0')) return res.status(400).json({ code: 'NO_BODY' });
+       req.headers['content-length'] !== '0')) {return res.status(400).json({ code: 'NO_BODY' });}
 
   const peer = normalizePublicSignupIp(req.socket?.remoteAddress);
   const xff = [];

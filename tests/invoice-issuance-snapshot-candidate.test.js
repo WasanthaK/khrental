@@ -81,7 +81,7 @@ test('partial property bank is blocked rather than inventing a payee',()=>{
   blocked(()=>run({masterRow:r}),'property.bank');
 });
 test('completely absent banking is represented as missing, not invented',()=>{
-  const r=master();for(const k of Object.keys(r))if(k.includes('_bank_'))r[k]=null;
+  const r=master();for(const k of Object.keys(r)){if(k.includes('_bank_')){r[k]=null;}}
   assert.equal(run({masterRow:r}).documentSnapshot.payment,null);
 });
 test('different tenant, renter and payment reference are rejected',()=>{

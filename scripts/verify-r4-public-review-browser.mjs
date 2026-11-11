@@ -39,13 +39,13 @@ try{
   await assetPage.close();
   console.log('QUIXO_R4_IMAGE_DECODING='+JSON.stringify(imageProbes));
   assert.deepEqual(imageProbes.filter(x=>!x.ok).map(x=>x.name),[],'All owner-approved sample photos must decode');
-  for(const p of sitePaths)for(const width of [320,390,768,1280]){
+  for(const p of sitePaths){for(const width of [320,390,768,1280]){
     const page=await browser.newPage(),remote=[],failedResources=[];
     let catalogRequests=0;
     const liveMarket=['/lk/','/lk/search/'].includes(p)&&lkLive?'LK':['/bn/','/bn/search/'].includes(p)&&bnLive?'BN':null;
     await page.setRequestInterception(true);
     page.on('request',r=>{
-      if(r.url().startsWith(origin+'/'))return void r.continue();
+      if(r.url().startsWith(origin+'/')){return void r.continue();}
       if(liveMarket&&r.url()===apiOrigin+'/api/public-listings?country='+liveMarket){
         catalogRequests++;
         return void r.respond({status:200,contentType:'application/json',
@@ -55,10 +55,10 @@ try{
             images:[{url:fixtureImage.replace('country=LK','country='+liveMarket),alt:'Synthetic exterior'}]}]})});
       }
       if(liveMarket&&r.url()===apiOrigin+fixtureImage.replace('country=LK','country='+liveMarket))
-        return void r.respond({status:200,contentType:'image/webp',body:fs.readFileSync(path.join(base,'assets/hero-house.webp'))});
+        {return void r.respond({status:200,contentType:'image/webp',body:fs.readFileSync(path.join(base,'assets/hero-house.webp'))});}
       remote.push(r.url());return void r.abort();
     });
-    page.on('response',r=>{if(r.url().startsWith(origin+'/')&&r.status()>=400)failedResources.push(r.url()+' '+r.status())});
+    page.on('response',r=>{if(r.url().startsWith(origin+'/')&&r.status()>=400){failedResources.push(r.url()+' '+r.status())}});
     page.on('requestfailed',r=>failedResources.push(r.url()+' '+r.failure()?.errorText));
     await page.setViewport({width,height:900,deviceScaleFactor:1});
     const response=await page.goto(origin+p,{waitUntil:'networkidle0',timeout:15000});
@@ -96,7 +96,7 @@ try{
       assert.match(policy,/support@quixo.online/,'Policy has customer support contact');
       const toc=await page.$$eval('.policy-toc a',links=>links.map(a=>a.hash));
       assert.ok(toc.length>=4,'Policy has section navigation');
-      for(const hash of toc)assert.equal(await page.$eval(hash,element=>element.tagName),'H2','Section link resolves');
+      for(const hash of toc){assert.equal(await page.$eval(hash,element=>element.tagName),'H2','Section link resolves');}
       await page.click('.policy-toc a:last-child');
       assert.equal(new URL(page.url()).hash,toc.at(-1),'Section navigation works');
       await page.reload({waitUntil:'networkidle0'});
@@ -126,15 +126,15 @@ try{
     if(p.endsWith('/search/')){
       assert.equal(data.forms,1,p+' search filters are a read-only catalog form');
       assert.equal(data.enabledButtons,1,p+' only apply-filters control is enabled');
-    }else assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');
+    }else {assert.ok(!data.forms&&!data.enabledButtons,p+' unsafe live actions');}
     const expectedListingPanel=['/lk/','/bn/','/lk/search/','/bn/search/','/lk/property/','/bn/property/'].includes(p);
     assert.deepEqual(data.scripts,(expectedListingPanel||p==='/')?['/assets/public-listing-client.mjs']:[],p+' only approved dormant read-only script');
-    if(expectedListingPanel)assert.equal(data.livePanel,(p.startsWith('/lk/')?lkLive:bnLive)?'true':'false',p+' live country pages');
+    if(expectedListingPanel){assert.equal(data.livePanel,(p.startsWith('/lk/')?lkLive:bnLive)?'true':'false',p+' live country pages');}
     if(liveMarket){
       assert.equal(catalogRequests,1,'Exactly one anonymous catalog request');
       assert.deepEqual(data.liveTitles,['Synthetic pilot rental'],'Render only the synthetic approved API fixture');
       assert.equal(data.examplesHidden,true,'Illustrations are hidden from live search results');
-    }else assert.equal(catalogRequests,0,'Dormant pages do not query inventory');
+    }else {assert.equal(catalogRequests,0,'Dormant pages do not query inventory');}
     if(p.endsWith('/search/')){
       const actual=await page.$eval('[data-country-filter]',n=>({
         selected:n.dataset.countryFilter,
@@ -153,11 +153,11 @@ try{
     if(p.endsWith('/owners/')){assert.ok(!data.links.includes('https://app.quixo.homes/login'),p+' owner links retain their purpose');}
     assert.equal(remote.length,0,p+' external network requests');
     assert.equal(failedResources.length,0,p+' failed assets: '+failedResources.join('; '));
-    for(const photo of data.photos)assert.ok(photo.loaded&&photo.width>0,p+' non-decodable image '+photo.src);
-    if(p==='/'||p.endsWith('/search/')||p.endsWith('/property/'))assert.ok(data.photos.length>=1,p+' expected photographic preview cards');
-    if(p==='/'||p==='/lk/'||p==='/bn/')assert.ok(data.photoStyles.length>=1,p+' expected photographic hero/category CSS');
+    for(const photo of data.photos){assert.ok(photo.loaded&&photo.width>0,p+' non-decodable image '+photo.src);}
+    if(p==='/'||p.endsWith('/search/')||p.endsWith('/property/')){assert.ok(data.photos.length>=1,p+' expected photographic preview cards');}
+    if(p==='/'||p==='/lk/'||p==='/bn/'){assert.ok(data.photoStyles.length>=1,p+' expected photographic hero/category CSS');}
     for(const l of data.links){
-      if(l.startsWith('#')||l.startsWith('https://')||l==='mailto:support@quixo.online')continue;
+      if(l.startsWith('#')||l.startsWith('https://')||l==='mailto:support@quixo.online'){continue;}
       const u=new URL(l,origin+p);
       assert.equal(u.origin,origin,p+' unexpected origin '+l);
       const file=path.resolve(base,'.'+u.pathname+(u.pathname.endsWith('/')?'index.html':''));
@@ -174,11 +174,11 @@ try{
     if(width===390&&p.endsWith('/search/')){
       const splitWords=await page.$$eval('.page-intro .search-tabs a',links=>links.flatMap(link=>{
         const node=link.firstChild;
-        if(!node||node.nodeType!==Node.TEXT_NODE)return ['missing category text'];
+        if(!node||node.nodeType!==Node.TEXT_NODE){return ['missing category text'];}
         const bad=[];
         for(const match of node.textContent.matchAll(/\S+/g)){
           const range=document.createRange();range.setStart(node,match.index);range.setEnd(node,match.index+match[0].length);
-          if(range.getClientRects().length>1)bad.push(match[0]);
+          if(range.getClientRects().length>1){bad.push(match[0]);}
         }
         return bad;
       }));
@@ -195,7 +195,7 @@ try{
       assert.ok(await page.$eval('.mobile-menu',e=>e.open),p+' keyboard menu');
     }
     await page.close();passes++;
-  }
+  }}
   // Country changes retain the selected rental category, without carrying arbitrary query data.
   for(const [from,to] of [['lk','bn'],['bn','lk']]){
     const tab=await browser.newPage();
@@ -233,7 +233,7 @@ try{
     await tab.setRequestInterception(true);
     let requests=0;
     tab.on('request',request=>{
-      if(request.url().startsWith(origin+'/'))return void request.continue();
+      if(request.url().startsWith(origin+'/')){return void request.continue();}
       if(request.url()===apiOrigin+'/api/public-listings?country='+market){
         requests++;
         return void request.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},
@@ -274,18 +274,18 @@ try{
   }
   console.log('QUIXO_UX08_FILTERS=PASS countries=2 public_fields_only category_market_continuity empty_state mobile');
   // Exercise actual homepage links, three categories, broad commercial and detail.
-  if(lkLive)for(const kind of ['residential','retail','office','commercial']){
+  if(lkLive){for(const kind of ['residential','retail','office','commercial']){
     const tab=await browser.newPage();
     const rows=['residential','retail','office'].map((category,index)=>({
       id:index===0?fixtureId:index===1?'cccccccc-cccc-4ccc-8ccc-cccccccccccc':'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       country:'LK',category,title:'Synthetic '+category,location:'Sri Lanka',monthlyRent:1,currency:'LKR',images:[]}));
     await tab.setRequestInterception(true);
     tab.on('request',r=>{
-      if(r.url().startsWith(origin+'/'))return void r.continue();
+      if(r.url().startsWith(origin+'/')){return void r.continue();}
       const response=r.url()===apiOrigin+'/api/public-listings?country=LK'?{country:'LK',data:rows}:
         r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'?country=LK'?{data:rows[0]}:
         r.url()===apiOrigin+'/api/public-listings/'+fixtureId+'/enquiry-status?country=LK'?{data:{enquiriesOpen:kind==='residential'}}:null;
-      if(response)return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:JSON.stringify(response)});
+      if(response){return void r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':origin},body:JSON.stringify(response)});}
       return void r.abort();
     });
     await tab.goto(origin+'/lk/',{waitUntil:'networkidle0'});
@@ -331,7 +331,7 @@ try{
 
     }
     await tab.close();
-  }
+  }}
   const logo=fs.readFileSync(path.join(base,'assets/quixo-homes-primary.svg'),'utf8');
   assert.ok(logo.includes('fill="#3B8DCC"')&&logo.includes('fill="#22C55E"'));
   for(const file of ['hero-house.webp','hero-commercial.webp','residential-interior.webp','residential-villa.webp','commercial-office.webp','commercial-retail.webp']){const bytes=fs.readFileSync(path.join(base,'assets',file));assert.equal(bytes.subarray(0,4).toString('ascii'),'RIFF',file+' header');assert.equal(bytes.subarray(8,12).toString('ascii'),'WEBP',file+' container');assert.equal(bytes.readUInt32LE(4)+8,bytes.length,file+' size');}
@@ -339,4 +339,4 @@ try{
   assert.ok(robots.includes('Disallow: /'));
   console.log('QUIXO_R4_PUBLIC_REVIEW_BROWSER=PASS checked='+passes+' pages='+sitePaths.length+' viewports=4 liveActions=0 syntheticFeed='+lkLive);
 }catch(e){console.error('QUIXO_R4_PUBLIC_REVIEW_BROWSER=FAIL '+e.stack);process.exitCode=1;
-}finally{if(browser)await browser.close();if(app.listening)await new Promise(r=>app.close(r))}
+}finally{if(browser){await browser.close();}if(app.listening){await new Promise(r=>app.close(r))}}

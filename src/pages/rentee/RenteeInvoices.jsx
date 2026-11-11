@@ -29,7 +29,7 @@ const RenteeInvoices = () => {
     setError(null);
     setAccount(null);
 
-    if (!user?.id) return;
+    if (!user?.id) {return;}
 
     const fetchRenteeInvoices = async () => {
       try {
@@ -39,7 +39,7 @@ const RenteeInvoices = () => {
         // boundary; this UI neither supplies a user ID nor uses generic SQL.
         const { data: invoicesData, error: invoicesError } = await listRenteeInvoices();
 
-        if (invoicesError) throw invoicesError;
+        if (invoicesError) {throw invoicesError;}
 
         const visibleInvoices = invoicesData || [];
         setInvoices(visibleInvoices);
@@ -86,7 +86,7 @@ const RenteeInvoices = () => {
       setPaymentLoadingId(invoice.id);
       setError(null);
       const { data, error: accountError } = await getInvoiceAccount(invoice.id);
-      if (accountError) throw accountError;
+      if (accountError) {throw accountError;}
       if (!data || Number(data.outstandingBalance) <= 0) {
         throw new Error('This invoice has no outstanding balance to pay.');
       }
@@ -106,7 +106,7 @@ const RenteeInvoices = () => {
       setError(null);
       setSelectedInvoice(invoice);
       const { data, error: accountError } = await getInvoiceAccount(invoice.id);
-      if (accountError) throw accountError;
+      if (accountError) {throw accountError;}
       setAccount(data);
     } catch (accountError) {
       setError(accountError.message);

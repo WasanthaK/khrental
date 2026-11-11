@@ -23,7 +23,7 @@ const modules={
   tenancyExitService:`const noWrite=async()=>{throw Error('Read-only fixture')};export const addTenancySettlementItem=noWrite,approveTenancySettlement=noWrite,closeTenancy=noWrite,completeMoveOutInspection=noWrite,createRenewalDraft=noWrite,createTenancyNotice=noWrite,initializeMoveOutInspection=noWrite,reviewTenancySettlementItem=noWrite,settleTenancy=noWrite,updateMoveOutInspectionItem=noWrite;export const getTenancyExit=async()=>{const currency=new URLSearchParams(location.search).get('currency')||'LKR';return {data:{agreement:{id:'fixture',status:'closed',terms:currency==='missing'?{}:currency==='malformed'?'{broken':{currency}},notices:[],inspection:{status:'completed',items:[]},settlement:{status:'settled',deposit_received:125000,approved_deductions:1000,outstanding_invoices:2500,refund_amount:121500,amount_due:0,items:[{id:'deduction',description:'Synthetic deduction',item_type:'damage',amount:1000,status:'approved'}]}}};};`,
   invitationService:`export const resendInvitation=async()=>{throw Error('No invitations')};`
 };
-const plugin={name:'r5-fixtures',enforce:'pre',resolveId(source,importer){if(source==='virtual:r5')return '\0r5.jsx';if(source.startsWith('\0'))return source;if(!importer?.includes('/src/'))return;const key=source.split('/').at(-1).replace(/\.js$/,'');if(modules[key])return '\0r5-'+key;},async load(id){if(id==='\0r5.jsx')return transformWithEsbuild(entry,'r5.jsx',{loader:'jsx',jsx:'automatic'});if(id.startsWith('\0r5-'))return modules[id.slice(4)];}};
+const plugin={name:'r5-fixtures',enforce:'pre',resolveId(source,importer){if(source==='virtual:r5'){return '\0r5.jsx';}if(source.startsWith('\0')){return source;}if(!importer?.includes('/src/')){return;}const key=source.split('/').at(-1).replace(/\.js$/,'');if(modules[key]){return '\0r5-'+key;}},async load(id){if(id==='\0r5.jsx'){return transformWithEsbuild(entry,'r5.jsx',{loader:'jsx',jsx:'automatic'});}if(id.startsWith('\0r5-')){return modules[id.slice(4)];}}};
 let vite,server,browser;
 try {
   await fs.mkdir(output,{recursive:true});
@@ -41,9 +41,9 @@ try {
       auditRequests.push({body,headers:r.headers()});
       assert.equal(r.headers().authorization,'Bearer fixture-quixo-session');
       assert.equal(r.headers()['x-tenant-id'],'fixture-tenant');
-      if(body.localOnly===true) return r.respond({status:404,headers:{'Cache-Control':'no-store'},contentType:'application/json',body:JSON.stringify({code:'EVIA_AUDIT_LOCAL_MISSING'})});
+      if(body.localOnly===true) {return r.respond({status:404,headers:{'Cache-Control':'no-store'},contentType:'application/json',body:JSON.stringify({code:'EVIA_AUDIT_LOCAL_MISSING'})});}
       assert.deepEqual(body,{},'customer requests cannot supply provider credentials');
-      if(auditAttempts++===0) return r.respond({status:503,contentType:'application/json',body:JSON.stringify({code:'EVIA_API_KEY_EXCHANGE_FAILED',error:'fixture provider unavailable'})});
+      if(auditAttempts++===0) {return r.respond({status:503,contentType:'application/json',body:JSON.stringify({code:'EVIA_API_KEY_EXCHANGE_FAILED',error:'fixture provider unavailable'})});}
       auditRecovered=true;
       return r.respond({status:200,contentType:'application/json',body:JSON.stringify({auditTrailUrl:'/storage/documents/tenants/11111111-1111-4111-8111-111111111111/agreements/22222222-2222-4222-8222-222222222222/signed/audit_trail.pdf'})});
     }
@@ -94,11 +94,11 @@ try {
           assert.match(body,new RegExp(`Agreement currency: ${currency}`));
           assert.match(body,new RegExp(`${currency}\\s125,000\\.00`));
           assert.doesNotMatch(body,new RegExp(currency==='BND'?'LKR|Rs\\.':'BND'));
-          if(route==='exit')assert.match(body,new RegExp(`${currency}\\s121,500\\.00`));
+          if(route==='exit'){assert.match(body,new RegExp(`${currency}\\s121,500\\.00`));}
         }
         await page.reload({waitUntil:'networkidle0'});
         assert.match(await page.evaluate(()=>document.body.innerText),currency==='missing'||currency==='malformed'?/Currency is not recorded/:new RegExp(`Agreement currency: ${currency}`),'currency survives refresh');
-        if(currency==='BND'||currency==='missing')await page.screenshot({path:`${output}/${route}-${currency}-${width}.png`,fullPage:true});
+        if(currency==='BND'||currency==='missing'){await page.screenshot({path:`${output}/${route}-${currency}-${width}.png`,fullPage:true});}
       }
     }
   }

@@ -65,7 +65,7 @@ const requestEviaToken = async (payload) => {
 const persistEviaAuth = (data, fallbackUserEmail = null) => {
   const authToken = data.authToken || data.access_token || data.token;
   const refreshToken = data.refreshToken || data.refresh_token || null;
-  if (!authToken) throw new Error('Invalid token response: missing auth token');
+  if (!authToken) {throw new Error('Invalid token response: missing auth token');}
 
   const expiresIn = Number(data.expires_in) || 86400;
   const authData = {
@@ -118,7 +118,7 @@ const getActiveEviaAccessToken = async ({ forceRefresh = false } = {}) => {
 };
 
 export async function reconcileEviaSignedDocument(agreementId) {
-  if (!agreementId) throw new Error('Agreement ID is required to retrieve the signed document.');
+  if (!agreementId) {throw new Error('Agreement ID is required to retrieve the signed document.');}
 
   const response = await fetch(
     `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/signed-document`,
@@ -146,7 +146,7 @@ export async function reconcileEviaSignedDocument(agreementId) {
 }
 
 export async function recoverEviaAuditTrail(agreementId) {
-  if (!agreementId) throw new Error('Agreement ID is required to recover its audit.');
+  if (!agreementId) {throw new Error('Agreement ID is required to recover its audit.');}
   const requestAudit = async body => {
     const response = await fetch(
       `${getApiBaseUrl()}/api/evia/agreements/${encodeURIComponent(agreementId)}/audit-trail`, {
@@ -164,7 +164,7 @@ export async function recoverEviaAuditTrail(agreementId) {
   // Existing storage needs only the application's administrator/tenant checks.
   // This request cannot contact Evia or exchange provider credentials.
   const local = await requestAudit({ localOnly: true });
-  if (local.response.ok && local.data?.auditTrailUrl) return local.data;
+  if (local.response.ok && local.data?.auditTrailUrl) {return local.data;}
   if (local.response.status !== 404 || local.data?.code !== 'EVIA_AUDIT_LOCAL_MISSING') {
     throw recoveryError(local);
   }
@@ -179,7 +179,7 @@ export async function recoverEviaAuditTrail(agreementId) {
 }
 
 export async function getEviaAgreementCallbackUrl(agreementId) {
-  if (!agreementId) throw new Error('Agreement ID is required for Evia callback setup.');
+  if (!agreementId) {throw new Error('Agreement ID is required for Evia callback setup.');}
   if (typeof window === 'undefined' || !window.location?.origin) {
     throw new Error('Evia callback setup requires a browser origin.');
   }
@@ -206,7 +206,7 @@ export async function getEviaAgreementCallbackUrl(agreementId) {
 }
 
 const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
-  if (!documentUrl) throw new Error('No document available for signature.');
+  if (!documentUrl) {throw new Error('No document available for signature.');}
 
   let blob;
   let fileName = `agreement_${Date.now()}.pdf`;
@@ -216,7 +216,7 @@ const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
     const mimeType = metadata.match(/^data:([^;]+)/)?.[1] || 'application/pdf';
     const binary = atob(encoded);
     const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    for (let index = 0; index < binary.length; index += 1) {bytes[index] = binary.charCodeAt(index);}
     blob = new Blob([bytes], { type: mimeType });
     fileName = `agreement_${Date.now()}.${mimeType.includes('wordprocessingml') ? 'docx' : 'pdf'}`;
   } else {
@@ -254,30 +254,30 @@ const uploadDocumentForV2Request = async (documentUrl, accessToken) => {
     throw new Error(detail || `Evia document upload failed with status ${uploadResponse.status}`);
   }
 
-  if (typeof uploadData === 'string' && uploadData.trim()) return uploadData.trim();
+  if (typeof uploadData === 'string' && uploadData.trim()) {return uploadData.trim();}
   const directToken = uploadData?.documentToken || uploadData?.DocumentToken;
-  if (directToken) return directToken;
+  if (directToken) {return directToken;}
 
   const match = JSON.stringify(uploadData || {}).match(/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/);
-  if (match?.[0]) return match[0];
+  if (match?.[0]) {return match[0];}
   throw new Error('Evia document upload returned no document token.');
 };
 
 const normalizeEviaStatus = (value) => {
-  if (value === 3 || value === '3') return 'completed';
-  if (value === 2 || value === '2') return 'in_progress';
-  if (value === 1 || value === '1') return 'pending';
+  if (value === 3 || value === '3') {return 'completed';}
+  if (value === 2 || value === '2') {return 'in_progress';}
+  if (value === 1 || value === '1') {return 'pending';}
 
   const status = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (['completed', 'complete', 'signed', 'fully_signed'].includes(status)) return 'completed';
-  if (['in_progress', 'partially_signed', 'partial', 'signing'].includes(status)) return 'in_progress';
-  if (['pending', 'pending_signature', 'sent', 'received', 'created', 'awaiting_signature'].includes(status)) return 'pending';
-  if (['cancelled', 'canceled', 'recalled', 'declined', 'failed'].includes(status)) return status === 'canceled' ? 'cancelled' : status;
+  if (['completed', 'complete', 'signed', 'fully_signed'].includes(status)) {return 'completed';}
+  if (['in_progress', 'partially_signed', 'partial', 'signing'].includes(status)) {return 'in_progress';}
+  if (['pending', 'pending_signature', 'sent', 'received', 'created', 'awaiting_signature'].includes(status)) {return 'pending';}
+  if (['cancelled', 'canceled', 'recalled', 'declined', 'failed'].includes(status)) {return status === 'canceled' ? 'cancelled' : status;}
   return status || 'unknown';
 };
 
 const startSameOriginAuthBridge = () => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') {return;}
 
   if (eviaAuthBridgeTimer) {
     window.clearInterval(eviaAuthBridgeTimer);
@@ -294,11 +294,11 @@ const startSameOriginAuthBridge = () => {
     }
 
     const currentValue = localStorage.getItem(EVIA_AUTH_STORAGE_KEY);
-    if (!currentValue || currentValue === initialValue) return;
+    if (!currentValue || currentValue === initialValue) {return;}
 
     try {
       const authData = JSON.parse(currentValue);
-      if (!authData?.authToken || !authData?.expiresAt || authData.expiresAt <= Date.now()) return;
+      if (!authData?.authToken || !authData?.expiresAt || authData.expiresAt <= Date.now()) {return;}
 
       window.clearInterval(eviaAuthBridgeTimer);
       eviaAuthBridgeTimer = null;
@@ -371,7 +371,7 @@ export async function handleAuthCallback(code) {
  */
 export async function getSignatureStatus(requestId) {
   try {
-    if (!requestId) throw new Error('Evia request ID is required.');
+    if (!requestId) {throw new Error('Evia request ID is required.');}
     const accessToken = await getActiveEviaAccessToken();
     console.info('[EviaDiag] status_poll_start', {
       requestId: shortId(requestId),

@@ -23,8 +23,8 @@ export const createControlledResetMailbox = () => {
       assert.ok(url.searchParams.get('token'));
       deliveries.push({ email, link: url.toString() });
       const failure = failures.get(email);
-      if (failure === 'throw') throw new Error('Controlled provider unavailable');
-      if (failure === 'return') return { success: false };
+      if (failure === 'throw') {throw new Error('Controlled provider unavailable');}
+      if (failure === 'return') {return { success: false };}
       return { success: true, provider: 'controlled-disposable-mailbox', providerStatus: 202 };
     }
   };
@@ -36,7 +36,7 @@ export async function verifyPhase4PasswordRecoveryBrowser({
   const guid = value => String(value || '').toLowerCase();
   const rows = async (statement, params = {}) => {
     const req = pool.request();
-    for (const [name, value] of Object.entries(params)) req.input(name, value);
+    for (const [name, value] of Object.entries(params)) {req.input(name, value);}
     return (await req.query(statement)).recordset || [];
   };
   const actor = async item => {
@@ -157,7 +157,7 @@ export async function verifyPhase4PasswordRecoveryBrowser({
   try {
     // A stale local login must not hijack anonymous password recovery.
     await page.evaluateOnNewDocument(() => {
-      if (sessionStorage.getItem('recovery.stale.seen')) return;
+      if (sessionStorage.getItem('recovery.stale.seen')) {return;}
       sessionStorage.setItem('recovery.stale.seen', '1');
       localStorage.setItem('khrental.activeTenantId', 'some-other-tenant');
       localStorage.setItem('khrental.local.session', JSON.stringify({

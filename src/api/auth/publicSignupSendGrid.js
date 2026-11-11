@@ -8,11 +8,11 @@ const invalid = () => Object.assign(new Error('Public signup email delivery is n
 });
 
 const normalizedAddress = value => {
-  if (typeof value !== 'string' || value.length > 320) return null;
+  if (typeof value !== 'string' || value.length > 320) {return null;}
   const address = value.trim().toLowerCase();
   if (address !== value.toLowerCase() ||
       !/^[a-z0-9.!#$%&'*+/=?^`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(address) ||
-      /[\s\r\n]/.test(address)) return null;
+      /[\s\r\n]/.test(address)) {return null;}
   return address;
 };
 

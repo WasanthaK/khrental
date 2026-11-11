@@ -58,22 +58,22 @@ const MaintenanceRequestForm = ({ onSubmitSuccess, onCancel, isEditMode = false,
         const { data, error: tenancyError } = canManage
           ? await listMaintenanceEligibleProperties()
           : await getMyTenancySummary();
-        if (tenancyError) throw tenancyError;
+        if (tenancyError) {throw tenancyError;}
         const eligible = canManage ? data : maintenancePropertiesFromTenancies(data);
-        if (!Array.isArray(eligible)) throw new Error('Invalid property response');
-        if (cancelled) return;
+        if (!Array.isArray(eligible)) {throw new Error('Invalid property response');}
+        if (cancelled) {return;}
         setProperties(eligible);
         setFormData(prev => ({ ...prev, propertyid: eligible.length === 1 ? eligible[0].id : '' }));
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled) {return;}
         setProperties([]);
         setError(canManage ? 'Unable to load properties you can manage. Please try again.' : 'Unable to verify active tenancy properties. Please try again.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {setLoading(false);}
       }
     };
-    if (user?.id && activeTenantId) load();
-    else setLoading(false);
+    if (user?.id && activeTenantId) {load();}
+    else {setLoading(false);}
     return () => { cancelled = true; };
   }, [user?.id, activeTenantId, canManage]);
 

@@ -14,7 +14,7 @@ const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document',
   const [recoveryError, setRecoveryError] = useState(null);
   const documentState = useAuthenticatedAgreementDocument(documentUrl, reloadKey);
   const recover = async () => {
-    if (recovering || !onRecover) return;
+    if (recovering || !onRecover) {return;}
     setRecovering(true); setRecoveryError(null);
     try {
       await onRecover();

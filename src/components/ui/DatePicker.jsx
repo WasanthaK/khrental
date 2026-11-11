@@ -15,7 +15,7 @@ const DatePicker = ({
 }) => {
   // Format date to a string that can be used in the input
   const formatDateValue = (dateValue) => {
-    if (!dateValue) return '';
+    if (!dateValue) {return '';}
     
     // If it's already a string in YYYY-MM-DD format, return it
     if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
@@ -26,7 +26,7 @@ const DatePicker = ({
     const date = new Date(dateValue);
     
     // Check if valid date
-    if (isNaN(date.getTime())) return '';
+    if (isNaN(date.getTime())) {return '';}
     
     // Format as YYYY-MM-DD
     return date.toISOString().split('T')[0];

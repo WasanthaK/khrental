@@ -18,7 +18,7 @@ export const assertEviaEvidenceDeletionAllowed = (bucket, paths = []) => {
     error.code = 'EVIA_EVIDENCE_DELETE_DENIED';
     throw error;
   }
-  if (String(bucket || '').toLowerCase() !== 'documents') return;
+  if (String(bucket || '').toLowerCase() !== 'documents') {return;}
   for (const path of paths) {
     const normalized = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     // Protect both exact staged objects and recursive ancestor deletion.
@@ -46,7 +46,7 @@ const agreementSignedNamespace = new RegExp(
 );
 
 export const assertEviaGenericDocumentUploadAllowed = (bucket, relativePath) => {
-  if (String(bucket || '').toLowerCase() !== 'documents') return;
+  if (String(bucket || '').toLowerCase() !== 'documents') {return;}
   const normalized = String(relativePath || '').replace(/\\/g, '/')
     .replace(/^\/+|\/+$/g, '');
   if (agreementSignedNamespace.test(normalized)) {

@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'kh_rentals_structured_associations';
 
 export const storeRenteeAssociations = (renteeId, associations = []) => {
-  if (!renteeId || typeof sessionStorage === 'undefined') return false;
+  if (!renteeId || typeof sessionStorage === 'undefined') {return false;}
 
   try {
     const existing = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
@@ -15,7 +15,7 @@ export const storeRenteeAssociations = (renteeId, associations = []) => {
 };
 
 export const getRenteeAssociations = (renteeId) => {
-  if (!renteeId || typeof sessionStorage === 'undefined') return [];
+  if (!renteeId || typeof sessionStorage === 'undefined') {return [];}
 
   try {
     const existing = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');

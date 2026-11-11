@@ -14,11 +14,11 @@ export const maintenancePropertiesFromTenancies = (payload) => {
       throw new Error('Invalid active tenancy property');
     }
     const key = row.property_id.toLowerCase();
-    if (!byId.has(key)) byId.set(key, {
+    if (!byId.has(key)) {byId.set(key, {
       id: row.property_id,
       name: row.property_name,
       address: row.property_address || null
-    });
+    });}
   }
   return [...byId.values()];
 };

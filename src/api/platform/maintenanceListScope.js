@@ -6,11 +6,11 @@ export const buildMaintenanceListScope = ({
   actorId, isRenter = false, canManage = false,
   isAdmin = false, canUpdateAssigned = false, assignedPropertyIds = []
 }) => {
-  if (!actorId) throw Object.assign(new Error('Authenticated actor is required'), { status: 401 });
+  if (!actorId) {throw Object.assign(new Error('Authenticated actor is required'), { status: 401 });}
   if (isRenter) {
     return { predicate: 'mr.renteeid = @actorId', params: { actorId } };
   }
-  if (canManage && isAdmin) return { predicate: '1 = 1', params: {} };
+  if (canManage && isAdmin) {return { predicate: '1 = 1', params: {} };}
   const predicates = [];
   const params = {};
   if (canManage && Array.isArray(assignedPropertyIds) && assignedPropertyIds.length) {

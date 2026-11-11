@@ -32,6 +32,6 @@ export function PropertyFixtureProvider({ children }) {
 
 export function useProperty() {
   const context = useContext(FixtureContext);
-  if (!context) throw new Error('Fixture PropertyContext not mounted');
+  if (!context) {throw new Error('Fixture PropertyContext not mounted');}
   return context;
 }

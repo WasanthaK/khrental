@@ -8,9 +8,9 @@ import {
 } from '../../services/platformClient';
 
 const toDateInput = (value) => {
-  if (!value) return '';
+  if (!value) {return '';}
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  if (Number.isNaN(date.getTime())) {return '';}
   return date.toISOString().slice(0, 10);
 };
 
@@ -57,7 +57,7 @@ const InvoiceDraftEditor = ({
       setError?.(null);
       setNotice?.(null);
       const result = await operation();
-      if (result?.error) throw result.error;
+      if (result?.error) {throw result.error;}
       setNotice?.(successMessage);
       await onChanged?.();
       return true;
@@ -91,7 +91,7 @@ const InvoiceDraftEditor = ({
   };
 
   const removeComponent = async (component) => {
-    if (!window.confirm(`Remove "${component.description || component.component_type}" from this draft invoice?`)) return;
+    if (!window.confirm(`Remove "${component.description || component.component_type}" from this draft invoice?`)) {return;}
     await run(
       () => removeInvoiceDraftComponent(invoice.id, component.id),
       'Invoice line removed from draft.'
@@ -119,13 +119,13 @@ const InvoiceDraftEditor = ({
   };
 
   const issue = async () => {
-    if (!window.confirm('Issue this invoice and email it to the renter? After issue, line items are locked.')) return;
+    if (!window.confirm('Issue this invoice and email it to the renter? After issue, line items are locked.')) {return;}
     try {
       setWorking(true);
       setError?.(null);
       setNotice?.(null);
       const result = await issueInvoiceDraft(invoice.id);
-      if (result?.error) throw result.error;
+      if (result?.error) {throw result.error;}
       const status = result?.data?.delivery?.status;
       setNotice?.(status === 'accepted'
         ? 'Invoice issued. The email provider accepted the notification (delivery is not yet confirmed).'

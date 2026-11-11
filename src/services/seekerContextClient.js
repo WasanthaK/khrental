@@ -57,7 +57,7 @@ export const fetchVerifiedSeekerBrowserContext = async ({
       referrerPolicy: 'no-referrer',
       redirect: 'error'
     });
-    if (!response?.ok) return denied;
+    if (!response?.ok) {return denied;}
     const context = (await response.json())?.data;
     // Fail closed: unknown, stale or malformed server projections cannot be
     // promoted into a client-visible seeker landing decision.
@@ -95,20 +95,20 @@ export const continueVerifiedSeekerSession = async ({
     const proof=await fetchVerifiedSeekerBrowserContext({
       expectedAuthId,fetchImpl,getSession:async()=>({data:{session}})
     });
-    if(!proof.verified||!proof.eligible)return {adopted:false,reason:'verification_unavailable'};
-    if(!unchanged())return {adopted:false,reason:'session_changed'};
+    if(!proof.verified||!proof.eligible){return {adopted:false,reason:'verification_unavailable'};}
+    if(!unchanged()){return {adopted:false,reason:'session_changed'};}
     if(before?.access_token && String(before.user?.id||'').toLowerCase()!==String(session.user.id).toLowerCase()){
       const response=await fetchImpl('/api/platform/auth/context',{
         method:'GET',headers:{Authorization:'Bearer '+before.access_token},
         credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error'
       });
-      if(!unchanged())return {adopted:false,reason:'session_changed'};
-      if(response.ok)return {adopted:false,reason:'another_account'};
+      if(!unchanged()){return {adopted:false,reason:'session_changed'};}
+      if(response.ok){return {adopted:false,reason:'another_account'};}
       // Only a definite authentication rejection permits stale-session
       // replacement. Outages, forbidden responses and unknowns preserve it.
-      if(response.status!==401)return {adopted:false,reason:'verification_unavailable'};
+      if(response.status!==401){return {adopted:false,reason:'verification_unavailable'};}
     }
-    if(!unchanged())return {adopted:false,reason:'session_changed'};
+    if(!unchanged()){return {adopted:false,reason:'session_changed'};}
     clearTenant();
     writeSession(session);
     return {adopted:true};

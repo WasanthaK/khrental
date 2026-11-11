@@ -111,7 +111,7 @@ export const startAutomaticMonthlyBillingScheduler = ({
   let stopped = false;
 
   const run = async () => {
-    if (running || stopped) return;
+    if (running || stopped) {return;}
     running = true;
     try {
       await runAutomaticMonthlyBilling({ billingDay, dueDays, logger });

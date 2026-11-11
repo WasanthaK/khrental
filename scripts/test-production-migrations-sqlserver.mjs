@@ -111,7 +111,7 @@ const waitForSqlServer = async (connection) => {
       return;
     } catch (error) {
       lastError = error;
-      if (attempt < 45) await sleep(2000);
+      if (attempt < 45) {await sleep(2000);}
     }
   }
   throw new Error(`Disposable SQL Server did not become ready: ${lastError?.message || 'unknown error'}`);
@@ -120,7 +120,7 @@ const waitForSqlServer = async (connection) => {
 const parsePublishedPort = (value) => {
   const line = String(value || '').split(/\r?\n/).find(Boolean) || '';
   const match = line.match(/:(\d+)$/);
-  if (!match) throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);
+  if (!match) {throw new Error(`Unable to resolve disposable SQL Server port from: ${line}`);}
   return Number(match[1]);
 };
 
