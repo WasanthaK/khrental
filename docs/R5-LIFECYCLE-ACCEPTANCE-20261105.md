@@ -1,6 +1,14 @@
-# Current R5 prelaunch completion ledger — 10 November 2026
+# Current R5 prelaunch completion ledger — 11 November 2026
 
 Documentation reconciled **11 November 2026**. The latest verified implementation/release checkpoints below supersede older pending statements; dated historical evidence and owner milestone dispositions are retained. No rollout, pricing or production mutation is authorized by this documentation update.
+
+## Current programme and runtime checkpoint — 11 November 2026
+
+The [canonical current status](EXECUTION-PLAN.md#canonical-current-status--11-november-2026) is the controlling milestone/runtime summary. R1 is owner-closed; R2 is owner-deferred and incomplete; R3 is owner-closed within single-replica scope; R4 is owner-closed for its deployed sandbox foundation; **R5 remains active and incomplete**. Sri Lanka precedes Brunei; live charging remains disabled.
+
+Security hardening from [PR #553](https://github.com/WasanthaK/khrental/pull/553) is deployed as `751a99d92e847df097b39919d6aa8f0fe8e9b150`, Ready **0000486**, through [manual release #1520](https://github.com/WasanthaK/khrental/actions/runs/42962949282). All 1,166 tests/build passed; exact source, SQL recovery, headers and empty-credential denial are recorded in the [security release evidence](SECURITY-REVIEW-20261111.md#verified-secondary-production-release--11-november-2026). This adds security and runtime evidence, not new rental/billing acceptance or natural-pause proof. Signing and accepted demo/provider journeys remain closed.
+
+The task-level dispositions below remain controlling for individual exits. Next engineering is normal property/unit form integration with complete metadata, restoration/splits, remaining cessation states and owned reconciliation, then full matrix/controlled rollout acceptance. The staging/cessation migrations remain recorded PENDING, readiness/full enforcement are OFF, and no apply or activation occurred in this release. Owner/provider dependencies and source lint debt remain open. Older dated pending statements are historical and are superseded by later verified checkpoints; they do not reopen delivered source slices.
 
 ## Audited cessation implementation — 10 November 2026
 
