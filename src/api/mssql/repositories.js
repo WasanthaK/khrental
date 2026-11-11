@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { paginateQuery, runQuery, runSingleQuery } from './query.js';
 import { getMssqlPool, sql } from './pool.js';
 import { evaluateManualSigning } from '../../utils/manualAgreementSigning.js';
-import { assertGenericAgreementWriteSafe, shouldApplyGenericAgreementChange } from './agreementWritePolicy.js';
+import { assertGenericAgreementWriteSafe, shouldApplyGenericAgreementChange, normalizeAgreementPayload } from './agreementWritePolicy.js';
 
 const DEFAULT_PAGE_SIZE = 50;
 const TABLE_COLUMN_CACHE = new Map();
@@ -1850,6 +1850,7 @@ export const getAgreementById = async (id, tenantId) => {
 };
 
 export const createAgreement = async (payload, tenantId) => {
+  payload = normalizeAgreementPayload(payload || {});
   assertGenericAgreementWriteSafe(payload || {});
   const now = new Date().toISOString();
   const scopedPayload = mergeTenantPayload(payload || {}, tenantId);
@@ -1999,6 +2000,7 @@ SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
 };
 
 export const updateAgreement = async (id, payload, tenantId) => {
+  payload = normalizeAgreementPayload(payload || {});
   assertGenericAgreementWriteSafe(payload || {});
   const entries = Object.entries(payload || {}).filter(([key]) =>
     AGREEMENT_UPDATABLE_FIELDS.includes(key) && shouldApplyGenericAgreementChange(key));
@@ -2025,7 +2027,7 @@ UPDATE agreements
      OUTPUT INSERTED.id INTO @rental_changed
      WHERE id = @id
        AND tenant_id = @tenantId
-       AND LOWER(LTRIM(RTRIM(COALESCE(status, '')))) NOT IN ('signed', 'completed', 'active')
+       AND LOWER(LTRIM(RTRIM(COALESCE(status, '')))) NOT IN ('signed', 'completed', 'active', 'closed')
        AND LOWER(LTRIM(RTRIM(COALESCE(signature_status, '')))) NOT IN ('signed', 'completed', 'signing_complete');
 SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
     params, tenantId

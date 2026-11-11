@@ -1,3 +1,4 @@
+import { normalizeAgreementPayload, assertGenericAgreementWriteSafe, shouldApplyGenericAgreementChange } from '../mssql/agreementWritePolicy.js';
 import { assertDedicatedInvoiceMasterMutation } from './invoiceMasterMutationGuard.js';
 import {
   PERMISSIONS,
@@ -499,17 +500,31 @@ export const authorizePermission = ({ user, membership }, permission) => {
 export const authorizePlatformQuery = ({ action = 'select', table, filters = [], payload, user, membership }) => {
   const normalizedAction = String(action || 'select').trim().toLowerCase();
   const normalizedTable = String(table || '').trim().toLowerCase();
+  if (normalizedTable === 'agreements' && ['insert','update','upsert'].includes(normalizedAction)) {
+    payload = Array.isArray(payload) ? payload.map(normalizeAgreementPayload) : normalizeAgreementPayload(payload);
+  }
+  const finish = authorized => {
+    if (normalizedTable !== 'agreements' || normalizedAction === 'select') { return authorized; }
+    if (normalizedAction === 'delete') {
+      throw Object.assign(new Error('Use the dedicated agreement deletion endpoint.'), {status:409,code:'AGREEMENT_DELETE_DEDICATED_API_REQUIRED'});
+    }
+    const prepare = row => {
+      assertGenericAgreementWriteSafe(row);
+      return Object.fromEntries(Object.entries(row).filter(([key]) => shouldApplyGenericAgreementChange(key)));
+    };
+    return {...authorized,payload:Array.isArray(authorized.payload) ? authorized.payload.map(prepare) : prepare(authorized.payload)};
+  };
   const request = { action: normalizedAction, table: normalizedTable, filters, payload, user, membership };
   assertDedicatedInvoiceMasterMutation({table:normalizedTable,action:normalizedAction,payload});
 
   if (isAdminRole({ user, membership })) {
-    return authorizeAdminQuery(request);
+    return finish(authorizeAdminQuery(request));
   }
   if (isTenantRole({ user, membership })) {
-    return authorizeTenantQuery(request);
+    return finish(authorizeTenantQuery(request));
   }
   if (isStaffRole({ user, membership })) {
-    return authorizeStaffQuery(request);
+    return finish(authorizeStaffQuery(request));
   }
 
   throw createAuthorizationError('This account is not linked to an authorized business role.', 'ROLE_ACCESS_DENIED');

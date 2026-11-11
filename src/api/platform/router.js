@@ -1,3 +1,4 @@
+import { assertGenericAgreementWriteSafe, assertGenericAgreementRecordMutable } from '../mssql/agreementWritePolicy.js';
 import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRouter.js';
 import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
 import {createCredentialThrottle} from '../auth/credentialThrottle.js';
@@ -31,9 +32,10 @@ import {
   updateAuthRecord,
   verifyPasswordCredential
 } from '../auth/index.js';
-import { getStorageDriver as defaultStorageDriver, normalizeStoragePath } from '../storage/index.js';
+import { getStorageDriver as defaultStorageDriver, normalizeStoragePath, ensureBucketName, requireCanonicalStoragePath, assertStorageObjectDeletionAllowed } from '../storage/index.js';
+import { assertGenericInvoiceArchiveMutationAllowed } from '../storage/invoiceArchiveStoragePolicy.js';
 import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
-import { authorizePaymentProofAccess, denyPaymentProofMutation } from './paymentProofAccess.js';
+import { authorizePaymentProofAccess } from './paymentProofAccess.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
 import { requireNotificationTenantRecipient } from './notificationAccess.js';
 
@@ -785,6 +787,13 @@ const executeUpdate = async ({ table, payload, filters = [], tenantId = null, tr
     throw new Error('Unsupported update filter.');
   }
 
+  if (safeTable === 'agreements') {
+    // The surrounding management transaction is SERIALIZABLE. Lock the full
+    // authorized target set before any row changes, including bulk/upsert.
+    const current = await runQuery(`SELECT status, signature_status FROM agreements WITH (UPDLOCK,HOLDLOCK) ${whereClause}`, params, transaction);
+    current.forEach(assertGenericAgreementRecordMutable);
+  }
+
   const assignments = entries.map(([key, value], index) => {
     const paramKey = `value${index}`;
     params[paramKey] = normalizeValue(value);
@@ -932,13 +941,10 @@ const executeRpc = async (name, args = {}, tenantContext = null, transaction = n
       const agreementId = args.agreement_id || args.agreementId;
       const status = args.new_status || args.status;
       if (!agreementId || !status) {throw new Error('agreement_id and status are required');}
-      const rows = await runQuery(
-        `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
-UPDATE agreements SET status = @status, updatedat = @updatedat OUTPUT INSERTED.id INTO @rental_changed WHERE id = @agreementId AND tenant_id = @tenantId;
-SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-        { agreementId, tenantId: tenantContext.tenantId, status, updatedat: new Date().toISOString() }, transaction
-      );
-      return { data: rows.map(mapRow)[0] || null, error: null };
+      assertGenericAgreementWriteSafe({status});
+      const result = await executeUpdate({table:'agreements',payload:{status,updatedat:new Date().toISOString()},
+        filters:[{column:'id',operator:'eq',value:agreementId}],tenantId:tenantContext.tenantId,transaction});
+      return { data: result.data[0] || null, error: null };
     }
     case 'get_rentees_by_property': {
       requireTenantForTable('app_users', tenantContext?.tenantId);
@@ -980,7 +986,7 @@ const getTenantStoragePrefix = (tenantId) => {
 };
 
 const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = false } = {}) => {
-  const normalizedPath = normalizeStoragePath(relativePath);
+  const normalizedPath = requireCanonicalStoragePath(relativePath ?? '');
   const tenantPrefix = getTenantStoragePrefix(tenantId);
 
   if (!tenantPrefix) {
@@ -1318,7 +1324,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.post('/storage/buckets', requireAuthenticated, requireBucketAdmin, async (req, res, next) => {
     try {
-      const bucketName = req.body?.bucketName || req.body?.name;
+      const bucketName = ensureBucketName(req.body?.bucketName || req.body?.name);
       res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
     } catch (error) {
       next(error);
@@ -1327,7 +1333,7 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.delete('/storage/buckets/:bucket', requireAuthenticated, requireBucketAdmin, async (req, res, next) => {
     try {
-      await getStorageDriver().deleteBucket(req.params.bucket);
+      await getStorageDriver().deleteBucket(ensureBucketName(req.params.bucket));
       res.json({ data: true });
     } catch (error) {
       next(error);
@@ -1336,13 +1342,14 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.get('/storage/list', requireBusinessTenant, async (req, res, next) => {
     try {
+      const bucket = ensureBucketName(req.query.bucket);
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
-      if (String(req.query.bucket).toLowerCase() === 'invoices' && relativePath.includes('/payment_proofs')) {
+      if (['invoices', 'images'].includes(bucket.toLowerCase()) && /(?:^|\/)payment[_-]proofs(?:\/|$)/i.test(relativePath)) {
         throw Object.assign(new Error('Payment proof listing is not available.'), {
           status: 403, code: 'PAYMENT_PROOF_LIST_FORBIDDEN'
         });
       }
-      const items = await getStorageDriver().list(req.query.bucket, relativePath);
+      const items = await getStorageDriver().list(bucket, relativePath);
       res.json({ data: items, meta: { path: relativePath, tenantContext: serializeTenantContext(req.tenantContext) } });
     } catch (error) {
       next(error);
@@ -1351,12 +1358,14 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.post('/storage/upload', requireBusinessTenant, express.raw({ type: '*/*', limit: '25mb' }), async (req, res, next) => {
     try {
+      const bucket = ensureBucketName(req.query.bucket);
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
-      assertEviaGenericDocumentUploadAllowed(req.query.bucket, relativePath);
-      const proof=await authorizeProofObject(req, req.query.bucket, relativePath, 'upload');
-      const policy=storageUploadPolicy({req,bucket:req.query.bucket,path:relativePath,proof});
+      assertEviaGenericDocumentUploadAllowed(bucket, relativePath);
+      assertGenericInvoiceArchiveMutationAllowed(bucket, relativePath);
+      const proof=await authorizeProofObject(req, bucket, relativePath, 'upload');
+      const policy=storageUploadPolicy({req,bucket,path:relativePath,proof});
       const data = await getStorageDriver().upload(
-        req.query.bucket,
+        bucket,
         policy.path,
         req.body,
         policy.contentType || req.headers['content-type'] || 'application/octet-stream',
@@ -1370,10 +1379,11 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.delete('/storage/objects', requireBusinessTenant, requireTenantStorageAdmin, async (req, res, next) => {
     try {
+      const bucket = ensureBucketName(req.body?.bucket || req.query.bucket);
       const pathsToDelete = Array.isArray(req.body?.paths) ? req.body.paths : [];
       const scopedPaths = pathsToDelete.map((item) => resolveTenantStoragePath(item, req.tenantId, { requireTenant: true }));
-      denyPaymentProofMutation(req.body?.bucket || req.query.bucket, scopedPaths);
-      res.json({ data: await getStorageDriver().deleteObjects(req.body?.bucket || req.query.bucket, scopedPaths) });
+      assertStorageObjectDeletionAllowed(bucket, scopedPaths);
+      res.json({ data: await getStorageDriver().deleteObjects(bucket, scopedPaths) });
     } catch (error) {
       next(error);
     }

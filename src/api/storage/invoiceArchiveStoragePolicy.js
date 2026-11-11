@@ -19,3 +19,11 @@ export const assertGenericInvoiceArchiveMutationAllowed = (bucket, path) => {
 export const assertGenericInvoiceArchiveBucketDeleteAllowed = bucket => {
   if (String(bucket || '').toLowerCase() === 'invoices') forbidden();
 };
+
+// Local storage deletes directories recursively. An ancestor of issued bytes
+// is as protected as the bytes themselves, regardless of the chosen driver.
+export const assertGenericInvoiceArchiveDeletionAllowed = (bucket, value) => {
+  assertGenericInvoiceArchiveMutationAllowed(bucket, value);
+  if (String(bucket).toLowerCase() !== 'invoices') { return; }
+  if (/^(?:tenants(?:\/[^/]+(?:\/invoices(?:\/[^/]+)?)?)?)?$/.test(value)) { forbidden(); }
+};

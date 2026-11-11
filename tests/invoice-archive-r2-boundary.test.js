@@ -24,7 +24,7 @@ test('generic authenticated storage path refuses issued PDFs without invoice aut
   assert.match(router,/isIssuedInvoiceArchivePath\(req\.params\.bucket, objectPath\)/);
   assert.match(router,/INVOICE_ARCHIVE_DEDICATED_API_REQUIRED/);
 });
-test('generic writes and deletes can never overwrite or remove issued PDFs', () => {
+test('generic writes and deletes can never overwrite or remove issued PDFs', async () => {
   assert.throws(()=>assertGenericInvoiceArchiveMutationAllowed('invoices',path),
     e=>e.code==='INVOICE_ARCHIVE_DEDICATED_API_REQUIRED');
   assert.throws(()=>assertGenericInvoiceArchiveBucketDeleteAllowed('invoices'),
@@ -35,7 +35,15 @@ test('generic writes and deletes can never overwrite or remove issued PDFs', () 
   assert.equal(source.split('assertGenericInvoiceArchiveBucketDeleteAllowed(bucket)').length-1,2);
   assert.match(source,/assertGenericInvoiceArchiveMutationAllowed\(safeBucket, safePath\)/);
   assert.match(source,/assertGenericInvoiceArchiveMutationAllowed\(bucket, safePath\)/);
-  assert.equal(source.split('safePaths.forEach(item => assertGenericInvoiceArchiveMutationAllowed').length-1,2);
+  const driver = Object.create(R2StorageDriver.prototype);
+  driver.logicalBuckets = ['invoices'];
+  let requests = 0;
+  driver.request = async () => { requests++; };
+  await assert.rejects(driver.upload('invoices', path, pdf), {code:'INVOICE_ARCHIVE_DEDICATED_API_REQUIRED'});
+  for (const target of [path, 'tenants/'+tenant+'/invoices/'+invoice, 'tenants/'+tenant+'/invoices']) {
+    await assert.rejects(driver.deleteObjects('invoices', [target]), {code:'INVOICE_ARCHIVE_DEDICATED_API_REQUIRED'});
+  }
+  assert.equal(requests, 0);
 });
 test('R2 archive creates only canonical content-addressed PDFs with atomic precondition', async () => {
   const cfg={R2_ACCOUNT_ID:'test-id',R2_BUCKET:'private-bucket',

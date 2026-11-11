@@ -14,7 +14,35 @@ const invalid = (detail) => Object.assign(
 );
 const normalized = value => String(value || '').trim().toLowerCase();
 
+// MSSQL column names are case-insensitive. Normalize only top-level column
+// keys; nested terms and signatory content retain their original spelling.
+export const normalizeAgreementPayload = (payload = {}) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) { throw invalid('invalid_payload'); }
+  const result = {};
+  for (const [key, value] of Object.entries(payload)) {
+    const column = key.toLowerCase();
+    if (Object.hasOwn(result, column)) {
+      throw Object.assign(new Error('Duplicate agreement field.'), {status:400, code:'AGREEMENT_FIELD_COLLISION'});
+    }
+    Object.defineProperty(result, column, {value, enumerable:true, writable:true, configurable:true});
+  }
+  return result;
+};
+
+export const assertGenericAgreementRecordMutable = record => {
+  if (['signed', 'completed', 'active', 'closed'].includes(normalized(record?.status))
+      || SIGNED_SIGNATURE_STATES.has(normalized(record?.signature_status))) {
+    throw Object.assign(new Error('Signed agreements cannot be changed through generic updates.'), {
+      status:409, code:'SIGNED_AGREEMENT_IMMUTABLE'
+    });
+  }
+};
+
 export const assertGenericAgreementWriteSafe = (payload = {}) => {
+  payload = normalizeAgreementPayload(payload);
+  if (normalized(payload.status) === 'closed') {
+    throw Object.assign(new Error('Tenancy closure must use the dedicated exit and settlement endpoint.'), {status:409,code:'TENANCY_CLOSURE_REQUIRED'});
+  }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw invalid('invalid_payload');
   }
@@ -42,4 +70,4 @@ export const assertGenericAgreementWriteSafe = (payload = {}) => {
 };
 
 export const shouldApplyGenericAgreementChange = key =>
-  !PROTECTED_SIGNATURE_FIELDS.has(key);
+  !PROTECTED_SIGNATURE_FIELDS.has(String(key).toLowerCase());

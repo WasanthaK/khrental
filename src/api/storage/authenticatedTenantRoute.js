@@ -5,7 +5,7 @@ import { runSingleQuery } from '../mssql/query.js';
 import { authorizeFencedEviaAuditTrailRead, authorizeHistoricEviaAuditTrailRead } from '../evia/auditTrailAccess.js';
 import { authorizeSignedAgreementDocumentRead } from '../evia/signedDocumentAccess.js';
 import { authorizePaymentProofAccess } from '../platform/paymentProofAccess.js';
-import { createStorageDeliveryHandler } from './index.js';
+import { createStorageDeliveryHandler, ensureBucketName, requireCanonicalStoragePath } from './index.js';
 import { isIssuedInvoiceArchivePath } from './invoiceArchiveStoragePolicy.js';
 
 // Production uses the existing real authentication, tenant, SQL and storage.
@@ -52,7 +52,16 @@ export const createAuthenticatedTenantStorageRouter = ({
   router.use(
     '/:bucket',
     (req, res, next) => {
-      const parts = String(req.path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      let objectPath;
+      try {
+        const bucket = ensureBucketName(req.params.bucket);
+        // Express decodes route parameters, but req.path is still URL encoded.
+        // Decode exactly once and refuse encoded separators, not a second ACL identity.
+        if (/%2f|%5c/i.test(req.path)) { throw Object.assign(new Error('Invalid storage path.'), { status: 400, code: 'INVALID_STORAGE_PATH' }); }
+        objectPath = requireCanonicalStoragePath(decodeURIComponent(req.path.replace(/^\//, '')));
+        req.storageIdentity = Object.freeze({ bucket, path: objectPath });
+      } catch (error) { next(Object.assign(error, { status: 400 })); return; }
+      const parts = objectPath.split('/');
       const tenantIdFromPath = parts[0] === 'tenants' ? parts[1] : null;
       if (!tenantIdFromPath) {
         res.status(403).json({ error: 'Tenant-scoped storage path required.', code: 'TENANT_STORAGE_PATH_REQUIRED' });
@@ -64,7 +73,7 @@ export const createAuthenticatedTenantStorageRouter = ({
     tenantMiddleware,
     async (req, res, next) => {
       try {
-        const objectPath = String(req.params[0] || req.path || '').replace(/^\/+/, '');
+        const objectPath = req.storageIdentity.path;
         // A tenant login alone is not permission to download issued invoices.
         // The future invoice document route must check renter/property access
         // and verify a committed write-once manifest before serving bytes.

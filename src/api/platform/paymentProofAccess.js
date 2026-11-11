@@ -76,7 +76,9 @@ export const authorizePaymentProofAccess = async ({
 };
 
 export const denyPaymentProofMutation = (bucket, paths) => {
-  if ((paths || []).some(path => parsePaymentProofPath(bucket, path).applies)) {
+  const protectedBucket = ['invoices', 'images'].includes(String(bucket).toLowerCase());
+  if ((paths || []).some(path => parsePaymentProofPath(bucket, path).applies
+      || (protectedBucket && /^(?:tenants(?:\/[^/]+)?)?$/.test(path)))) {
     throw err(403, 'PAYMENT_PROOF_DELETE_FORBIDDEN',
       'Payment evidence cannot be deleted through generic storage.');
   }
