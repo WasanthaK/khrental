@@ -48,9 +48,11 @@ jobs:
     steps:
       - name: Validate explicit verification confirmation
         shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.confirmation }}" != "VERIFY-MIGRATION-EXECUTOR" ]; then
+          if [ "$CONFIRMATION" != "VERIFY-MIGRATION-EXECUTOR" ]; then
             echo "Verification requires confirmation text VERIFY-MIGRATION-EXECUTOR." >&2
             exit 1
           fi

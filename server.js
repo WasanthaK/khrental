@@ -38,15 +38,17 @@ import { exchangeEviaV2Token } from './src/api/evia/oauthV2.js';
 import { retrieveAndStoreEviaCompletedDocuments } from './src/api/evia/completedDocuments.js';
 import { createEviaAuditRecoveryRouter } from './src/api/evia/auditRecoveryRouter.js';
 import { normalizeEmailAttachments, sendViaSendGrid, writeEmailDeliveryLog } from './src/api/email/sendGridDelivery.js';
+import {createManualEmailGuards} from './src/api/email/manualEmailPolicy.js';
+import {publicApiError} from './src/api/httpErrors.js';
 import { createManagementBillingRouter, createManagementBillingWebhook } from './src/api/managementBilling/router.js';
 
 dotenv.config();
 
 const getTwilioSendGridApiKey = () => process.env.TWILIO_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY || '';
 const shortId = (value) => String(value || '').slice(0, 8);
-const getDefaultEmailSender = ({ from, fromName } = {}) => ({
-  email: from || process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
-  name: fromName || process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'Quixo.Homes'
+const getDefaultEmailSender = () => ({
+  email: process.env.EMAIL_FROM || process.env.DEFAULT_FROM_EMAIL || process.env.VITE_EMAIL_FROM || 'noreply@khrentals.com',
+  name: process.env.EMAIL_FROM_NAME || process.env.DEFAULT_FROM_NAME || process.env.VITE_EMAIL_FROM_NAME || 'Quixo.Homes'
 });
 
 async function createServer() {
@@ -67,9 +69,9 @@ async function createServer() {
   const getEviaClientId = () => process.env.EVIA_SIGN_CLIENT_ID || process.env.VITE_EVIA_SIGN_CLIENT_ID || '';
   const getEviaClientSecret = () => process.env.EVIA_SIGN_CLIENT_SECRET || '';
 
-  const sendEmail = async ({ to, subject, html, text, from, fromName, attachments }) => sendViaSendGrid({
+  const sendEmail = async ({ to, subject, html, text, attachments }) => sendViaSendGrid({
     apiKey: getTwilioSendGridApiKey(),
-    sender: getDefaultEmailSender({ from, fromName }),
+    sender: getDefaultEmailSender(),
     to,
     subject,
     html,
@@ -135,10 +137,10 @@ async function createServer() {
     });
   });
 
-  app.post('/api/send-email', requireApiSession, async (req, res, next) => {
+  app.post('/api/send-email', requireApiSession, ...createManualEmailGuards(), async (req, res, next) => {
     const requestId = String(req.get('x-request-id') || req.get('x-correlation-id') || `email_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
     const startedAt = Date.now();
-    const { to, subject, html, text, from, fromName, attachments } = req.body || {};
+    const { to, subject, html, text, attachments } = req.body || {};
     const normalizedAttachments = normalizeEmailAttachments(attachments);
     const logContext = {
       requestId,
@@ -158,7 +160,7 @@ async function createServer() {
     }
 
     try {
-      const result = await sendEmail({ to, subject, html, text, from, fromName, attachments: normalizedAttachments });
+      const result = await sendEmail({ to, subject, html, text, attachments: normalizedAttachments });
       writeEmailDeliveryLog('info', 'email_provider_accepted', {
         ...logContext,
         provider: result.provider,
@@ -467,16 +469,14 @@ async function createServer() {
 
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found' }); });
   app.use((error, _req, res, _next) => {
+    const reply=publicApiError(error);
     console.error('[Server] Unhandled API error:', {
       message: error?.message || 'Unexpected server error',
       code: error?.code || null,
-      status: Number(error?.status) || 500
+      status: reply.status,
+      requestId:reply.body.requestId
     });
-    res.status(Number(error?.status) || 500).json({
-      error: error.message || 'Unexpected server error',
-      ...(error?.code ? { code: error.code } : {}),
-      ...(error?.details ? { details: error.details } : {})
-    });
+    res.status(reply.status).json(reply.body);
   });
 
   const port = Number(process.env.PORT) || 5174;

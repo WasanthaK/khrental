@@ -258,6 +258,9 @@ const requireAssignedPropertyPayload = (payload, membership) => {
 };
 
 const authorizeAdminQuery = ({ action, table, filters, payload }) => {
+  if (table === 'tenant_memberships' && action !== 'select') {
+    throw createAuthorizationError('Use the dedicated membership administration flow.', 'MEMBERSHIP_MUTATION_BLOCKED');
+  }
   if (!ADMIN_QUERY_TABLES.has(table)) {
     throw createAuthorizationError('This table is not available through the runtime platform API.', 'TABLE_BLOCKED');
   }

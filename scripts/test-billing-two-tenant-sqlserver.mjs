@@ -1,3 +1,4 @@
+import {verifySecurityReviewSql} from './test-security-review-sql.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -3517,6 +3518,7 @@ async function main() {
     // Extra invoice fixtures must follow the established global read-only
     // snapshot assertions, whose expected event counts remain unchanged.
     await verifyMonthlyManagementAccessAgainstDisposableSql(pool);
+    await verifySecurityReviewSql(pool);
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {

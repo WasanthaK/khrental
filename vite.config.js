@@ -8,16 +8,20 @@ let hasLoggedEnv = false;
 export default defineConfig(({ command, mode }) => {
   // Load environment variables from .env file
   const env = loadEnv(mode, process.cwd(), '');
+  // Vite exposes VITE_* by default even without an explicit define entry.
+  // Fail the build instead of silently shipping a stale credential.
+  const forbidden = ['VITE_EVIA_ACCESS_TOKEN','VITE_EVIA_SIGN_CLIENT_SECRET'];
+  if (forbidden.some(name => env[name])) {
+    throw new Error('Remove browser-prefixed Evia credentials; use the server-side integration.');
+  }
 
   // Check if environment variables are set
   const EVIA_CLIENT_ID_SET = !!env.VITE_EVIA_SIGN_CLIENT_ID;
-  const EVIA_ACCESS_TOKEN_SET = !!env.VITE_EVIA_ACCESS_TOKEN;
 
   // Only log in development and only once per session
   if (mode === 'development' && !hasLoggedEnv) {
     console.log('Environment variables loaded in Vite config:', {
-      EVIA_CLIENT_ID_SET,
-      EVIA_ACCESS_TOKEN_SET
+      EVIA_CLIENT_ID_SET
     });
     hasLoggedEnv = true;
   }
@@ -33,9 +37,7 @@ export default defineConfig(({ command, mode }) => {
     define: {
       // Make environment variables available to the app
       'process.env.VITE_EVIA_SIGN_CLIENT_ID': JSON.stringify(env.VITE_EVIA_SIGN_CLIENT_ID),
-      'process.env.VITE_EVIA_ACCESS_TOKEN': JSON.stringify(env.VITE_EVIA_ACCESS_TOKEN),
       'import.meta.env.VITE_EVIA_SIGN_CLIENT_ID': JSON.stringify(env.VITE_EVIA_SIGN_CLIENT_ID),
-      'import.meta.env.VITE_EVIA_ACCESS_TOKEN': JSON.stringify(env.VITE_EVIA_ACCESS_TOKEN),
       'process.env.VITE_API_ENDPOINT': JSON.stringify(env.VITE_API_ENDPOINT),
       'process.env.VITE_USE_MSSQL_API': JSON.stringify(env.VITE_USE_MSSQL_API),
       'import.meta.env.VITE_API_ENDPOINT': JSON.stringify(env.VITE_API_ENDPOINT),

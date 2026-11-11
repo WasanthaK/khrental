@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../../utils/sanitizeHtml.js';
 import React, { useEffect, useState } from 'react';
 import { useAuthenticatedAgreementDocument } from '../../hooks/useAuthenticatedAgreementDocument';
 import { FiDownload, FiX } from 'react-icons/fi';
@@ -108,7 +109,7 @@ const AgreementDocument = ({ documentUrl, onClose, title = 'Agreement Document',
           )}
           
           {isHtmlContent ? (
-            <div dangerouslySetInnerHTML={{ __html: documentUrl }} className="p-4 bg-white min-h-full" />
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(documentUrl) }} className="p-4 bg-white min-h-full" />
           ) : viewUrl ? (
             <iframe 
               src={viewUrl} 

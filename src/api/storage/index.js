@@ -110,13 +110,17 @@ class LocalStorageDriver {
     return Promise.all(entries.map((entry) => mapLocalEntry(targetPath, entry)));
   }
 
-  async upload(bucket, relativePath, body) {
+  async upload(bucket, relativePath, body, _contentType, {createOnly=false}={}) {
     const safeBucket = ensureBucketName(bucket);
     const safePath = normalizeStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(safeBucket, safePath);
     const targetPath = resolveLocalStoragePath(safeBucket,safePath);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(targetPath, body);
+    try { await fs.writeFile(targetPath, body, createOnly ? {flag:'wx'} : {}); }
+    catch(error) {
+      if (error.code==='EEXIST') throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      throw error;
+    }
     return { path: safePath, fullPath: `${safeBucket}/${safePath}` };
   }
 
@@ -303,10 +307,15 @@ export class R2StorageDriver {
     return [...folders, ...files];
   }
 
-  async upload(bucket, relativePath, body, contentType = 'application/octet-stream') {
+  async upload(bucket, relativePath, body, contentType = 'application/octet-stream', {createOnly=false}={}) {
     const safePath = normalizeStoragePath(relativePath);
     assertGenericInvoiceArchiveMutationAllowed(bucket, safePath);
-    await this.request('PUT', this.objectKey(bucket, safePath), { body, headers: { 'content-type': contentType } });
+    try {
+      await this.request('PUT', this.objectKey(bucket, safePath), {body,headers:{'content-type':contentType,...(createOnly?{'if-none-match':'*'}:{})}});
+    } catch(error) {
+      if (error.status===412) throw Object.assign(new Error('This upload already exists. Use a new file name.'),{status:409,code:'STORAGE_OBJECT_EXISTS'});
+      throw error;
+    }
     return { path: safePath, fullPath: `${ensureBucketName(bucket)}/${safePath}` };
   }
 

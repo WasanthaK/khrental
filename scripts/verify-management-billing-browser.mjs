@@ -112,4 +112,33 @@ try{
   await page.screenshot({path:path.join(output,`${screen}-${width}.png`),fullPage:true});
   await page.close();console.log(`PASS: rendered ${screen} at ${width}px, no page error or viewport overflow`);
  }
+ for(const screen of ['document','editor'])for(const width of [390,1440]){
+  const page=await browser.newPage();await page.setViewport({width,height:1000});
+  await page.setRequestInterception(true);
+  page.on('request',r=>new URL(r.url()).hostname==='127.0.0.1'?r.continue():r.abort());
+  await page.goto(`${origin}/tests/fixtures/security/index.html?screen=${screen}`,{waitUntil:'networkidle2'});
+  await page.waitForFunction(()=>document.body.innerText.includes('Preserved legal wording'));
+  assert.equal(await page.evaluate(()=>window.attackCount),0,'Stored event/script payloads must not execute');
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#root *')].some(el=>
+    [...el.attributes].some(a=>/^on/i.test(a.name)||/javascript:/i.test(a.value)))),false);
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('td')].some(n=>n.textContent==='500')),true,'Legal tables survive');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  const cases=await page.evaluate(async()=>{
+   const {sanitizeHtml}=await import('/src/utils/sanitizeHtml.js');
+   const attacks=['<img src=x onerror="window.attackCount++">','<svg><g onload="window.attackCount++"></g></svg>',
+    '<math><mtext><table><mglyph><style><!--</style><img title="--><img src=x onerror=window.attackCount++>">',
+    '<a href="jav&#x61;script:window.attackCount++">click</a>','<iframe srcdoc="<script>parent.attackCount++</script>"></iframe>',
+    '<form id=location><input name=href value=javascript:alert(1)></form>'];
+   for(const attack of attacks){
+    const box=document.createElement('div');box.innerHTML=sanitizeHtml(attack);document.body.append(box);
+    if(box.querySelector('script,iframe,svg,math,form,input')||[...box.querySelectorAll('*')].some(el=>[...el.attributes].some(a=>/^on/i.test(a.name)||/javascript:/i.test(a.value))))return false;
+    box.remove();
+   }return true;
+  });assert.equal(cases,true,'Encoded, namespaced, mutation and clobbering payloads are removed');
+  await page.evaluate(()=>window.updateSecurityContent('<h2>Updated agreement wording</h2><p><em>Updated retained wording</em></p><img src=x onerror="window.attackCount++">'));
+  await page.waitForFunction(()=>document.body.innerText.includes('Updated retained wording'));
+  assert.equal(await page.evaluate(()=>window.attackCount),0,'Updated editor and document content remains sanitized');
+  await page.screenshot({path:path.join(output,`security-${screen}-${width}.png`),fullPage:true});
+  await page.close();console.log(`PASS: actual ${screen} initial/update HTML, stored/encoded/mutation XSS denials and preserved formatting at ${width}px`);
+ }
 }finally{await browser?.close();await vite.close();}

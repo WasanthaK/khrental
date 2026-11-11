@@ -39,7 +39,7 @@ permissions:
 
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('khrental-pr-{0}', github.event.pull_request.number) || 'khrental-production' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CONTAINER_PORT: '5174'

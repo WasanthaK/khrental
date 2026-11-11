@@ -87,7 +87,8 @@ const readRequestIdentity = (req) => {
 
 const readDevBypassRole = (req) => normalizeString(readRequestValue(req.headers['x-dev-bypass-role']));
 
-const isDevBypassAllowed = () => String(process.env.VITE_ENABLE_DEV_BYPASS || '').trim().toLowerCase() === 'true';
+const isDevBypassAllowed = () => process.env.NODE_ENV !== 'production'
+  && String(process.env.VITE_ENABLE_DEV_BYPASS || '').trim().toLowerCase() === 'true';
 
 const readRequestedTenantId = (req) => normalizeString(
   readRequestValue(req.headers['x-tenant-id'])
@@ -99,6 +100,7 @@ const readRequestedTenantId = (req) => normalizeString(
 );
 
 const getUserForIdentity = async ({ authId, userId, email }) => {
+  if (!authId && !userId && !email) return null;
   if (!(await tableExists('app_users'))) {
     return null;
   }

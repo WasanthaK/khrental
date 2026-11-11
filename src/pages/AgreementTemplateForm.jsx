@@ -1,3 +1,4 @@
+import {sanitizeHtml} from '../utils/sanitizeHtml.js';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -331,8 +332,7 @@ const AgreementTemplateForm = () => {
 
       // Replace all merge field placeholders with sample data
       // Using a document fragment approach to preserve HTML structure
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = previewContent;
+      const tempDiv = new DOMParser().parseFromString(sanitizeHtml(previewContent), 'text/html').body;
       
       // Process text nodes to replace merge fields
       const replaceInTextNodes = (node) => {

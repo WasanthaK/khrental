@@ -523,23 +523,10 @@ export async function sendDocumentForSignature(params) {
   }
 }
 
-// Utility function to get the access token from all possible sources
+// Retired browser-token fallback. Current signing/recovery uses authorized
+// application routes; do not resurrect a token from build-time configuration.
 const getEviaAccessToken = () => {
-  // Try to get the token from import.meta.env first (Vite preferred method)
-  const viteToken = import.meta.env?.VITE_EVIA_ACCESS_TOKEN;
-  
-  // If not found, try process.env (fallback method)
-  const processToken = process.env?.VITE_EVIA_ACCESS_TOKEN;
-  
-  // Use the first available token or fallback to a placeholder
-  const token = viteToken || processToken || "missing_token";
-  
-  // Log warning if using placeholder
-  if (token === "missing_token") {
-    console.warn("⚠️ WARNING: Using placeholder access token. Set VITE_EVIA_ACCESS_TOKEN in your .env file");
-  }
-  
-  return token;
+  throw new Error('Use the authenticated Quixo signing service. Browser Evia tokens are disabled.');
 };
 
 // Get signature status

@@ -1,3 +1,5 @@
+import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRouter.js';
+import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
 import { withManagementWrite } from '../managementBilling/store.js';
 import { assertInventoryMutation } from '../managementBilling/contract.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
@@ -18,6 +20,7 @@ import { rejectPublicSignupForExistingAppUser } from '../auth/publicSignupPolicy
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
 import {
   createAuthRecord,
+  sanitizeClientAuthMetadata,
   clearStorageSessionCookie,
   findAuthRecordByEmail,
   issueAuthSession,
@@ -27,7 +30,7 @@ import {
   updateAuthRecord,
   verifyPasswordCredential
 } from '../auth/index.js';
-import { getStorageDriver, normalizeStoragePath } from '../storage/index.js';
+import { getStorageDriver as defaultStorageDriver, normalizeStoragePath } from '../storage/index.js';
 import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
 import { authorizePaymentProofAccess, denyPaymentProofMutation } from './paymentProofAccess.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
@@ -47,6 +50,7 @@ const authorizeProofObject = async (req, bucket, path, operation) => {
       status: 403, code: 'PAYMENT_PROOF_ACCESS_DENIED'
     });
   }
+  return permission;
 };
 
 const IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -1001,7 +1005,7 @@ const resolveTenantStoragePath = (relativePath, tenantId, { requireTenant = fals
   return `${tenantPrefix}/${normalizedPath}`;
 };
 
-export const createPlatformRouter = () => {
+export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,checkPlatformAdmin=defaultPlatformAdmin}={}) => {
   const router = express.Router();
   const requireAuthenticated = createTenantContextMiddleware({ requireUser: true });
   // Global seeker identities may authenticate without belonging to any business.
@@ -1014,6 +1018,13 @@ export const createPlatformRouter = () => {
       return;
     }
     next();
+  };
+
+  const requireBucketAdmin = async(req,res,next) => {
+    try {
+      if (!(await checkPlatformAdmin(req.user))) return res.status(403).json({error:'Platform administrator access is required for bucket administration.',code:'PLATFORM_ADMIN_REQUIRED'});
+      next();
+    } catch(error) {next(error);}
   };
 
   router.use(createTenantContextMiddleware());
@@ -1245,7 +1256,7 @@ export const createPlatformRouter = () => {
     try {
       const { password, metadata } = req.body || {};
       const currentRecord = req.authSession?.record;
-      const record = currentRecord ? await updateAuthRecord(currentRecord, { password, metadata }) : null;
+      const record = currentRecord ? await updateAuthRecord(currentRecord, { password, metadata: sanitizeClientAuthMetadata(metadata) }) : null;
       if (!record) {
         res.status(401).json({ error: 'Authenticated session required.' });
         return;
@@ -1303,7 +1314,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.post('/storage/buckets', requireBusinessTenant, async (req, res, next) => {
+  router.post('/storage/buckets', requireAuthenticated, requireBucketAdmin, async (req, res, next) => {
     try {
       const bucketName = req.body?.bucketName || req.body?.name;
       res.status(201).json({ data: await getStorageDriver().createBucket(bucketName) });
@@ -1312,7 +1323,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/buckets/:bucket', requireBusinessTenant, async (req, res, next) => {
+  router.delete('/storage/buckets/:bucket', requireAuthenticated, requireBucketAdmin, async (req, res, next) => {
     try {
       await getStorageDriver().deleteBucket(req.params.bucket);
       res.json({ data: true });
@@ -1340,12 +1351,14 @@ export const createPlatformRouter = () => {
     try {
       const relativePath = resolveTenantStoragePath(req.query.path, req.tenantId, { requireTenant: true });
       assertEviaGenericDocumentUploadAllowed(req.query.bucket, relativePath);
-      await authorizeProofObject(req, req.query.bucket, relativePath, 'upload');
+      const proof=await authorizeProofObject(req, req.query.bucket, relativePath, 'upload');
+      const policy=storageUploadPolicy({req,bucket:req.query.bucket,path:relativePath,proof});
       const data = await getStorageDriver().upload(
         req.query.bucket,
-        relativePath,
+        policy.path,
         req.body,
-        req.headers['content-type'] || 'application/octet-stream'
+        req.headers['content-type'] || 'application/octet-stream',
+        {createOnly:policy.createOnly}
       );
       res.status(201).json({ data });
     } catch (error) {
@@ -1353,7 +1366,7 @@ export const createPlatformRouter = () => {
     }
   });
 
-  router.delete('/storage/objects', requireBusinessTenant, async (req, res, next) => {
+  router.delete('/storage/objects', requireBusinessTenant, requireTenantStorageAdmin, async (req, res, next) => {
     try {
       const pathsToDelete = Array.isArray(req.body?.paths) ? req.body.paths : [];
       const scopedPaths = pathsToDelete.map((item) => resolveTenantStoragePath(item, req.tenantId, { requireTenant: true }));
