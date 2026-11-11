@@ -37,7 +37,7 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(_error) {
     return { hasError: true };
   }
 
@@ -51,7 +51,7 @@ class ErrorBoundary extends React.Component {
         <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4 text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
           <p className="mb-4">The application encountered an error. Please try refreshing the page.</p>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
@@ -66,8 +66,8 @@ class ErrorBoundary extends React.Component {
 }
 
 // Disable React.StrictMode in development to prevent double renders which can trigger HMR issues
-const AppWithErrorHandling = import.meta.env.DEV ? 
-  <ErrorBoundary><App /></ErrorBoundary> : 
+const AppWithErrorHandling = import.meta.env.DEV ?
+  <ErrorBoundary><App /></ErrorBoundary> :
   <React.StrictMode><ErrorBoundary><App /></ErrorBoundary></React.StrictMode>;
 
 const root = ReactDOM.createRoot(document.getElementById('root'));

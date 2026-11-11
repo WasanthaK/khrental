@@ -134,7 +134,6 @@ const productionMigrationRunnerSource = readFileSync(
   'utf8'
 );
 
-
 const createMockResponse = () => {
   const response = {
     statusCode: 200,
@@ -314,7 +313,7 @@ test('staff invoice list uses central scoped queries and gates payment actions b
 test('invoice payment actions route to the existing invoice details page', () => {
   assert.doesNotMatch(invoiceCardSource, /\/dashboard\/invoices\/\$\{id\}\/verify/);
   assert.doesNotMatch(invoiceCardSource, /\/dashboard\/invoices\/\$\{id\}\/payment/);
-  assert.match(invoiceCardSource, /to=\{\`\/dashboard\/invoices\/\$\{id\}\`\}/);
+  assert.match(invoiceCardSource, /to=\{`\/dashboard\/invoices\/\$\{id\}`\}/);
   assert.match(routesSource, /path: ':id'[\s\S]*InvoiceDetails/);
 });
 
@@ -651,14 +650,12 @@ test('billing reminder delivery fails clearly when server email is not configure
   }
 });
 
-
 test('payment proof storage uses tenant API while billing authority remains server-side', () => {
   assert.doesNotMatch(paymentServiceSource, /platformClient\.storage/);
   assert.match(paymentServiceSource, /uploadTenantFile/);
   assert.match(paymentServiceSource, /submitInvoicePaymentProof/);
   assert.match(paymentServiceSource, /proofUrl/);
 });
-
 
 test('unused invoice detail compatibility read stays removed', () => {
   assert.doesNotMatch(invoiceServiceSource, /export const fetchInvoice\s*=/);
@@ -847,7 +844,6 @@ test('numeric payment reference uses the tenant local day and accepts exactly 8 
   assert.throws(() => invoiceReferenceDay(instant,'Invalid/Zone'),error => error.code==='BILLING_TIMEZONE_INVALID');
 });
 
-
 test('historical invoice supplement eligibility excludes drafts, payments, duplicates and settled invoices', () => {
   const invoice = { status: 'pending', totalamount: 1500, payment_reference: null };
   const eligible = (changes = {}) => isLegacyInvoiceReferenceEligible({
@@ -907,7 +903,6 @@ test('reference allocation remains separate from invoice UUID with SQL uniquenes
   assert.match(billingRouterSource,/buildInvoiceBankEmailSections\(invoice\.paymentInstructions, invoice\.payment_reference\)/);
 });
 
-
 test('all invoice UI headings use stored reference and never a UUID fragment', () => {
   assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111', payment_reference: '26101901' }), 'Invoice #26101901');
   assert.equal(invoiceHeading({ id: '01234567-1111-4111-8111-111111111111' }), 'Invoice — reference not assigned');
@@ -933,7 +928,6 @@ test('all invoice list APIs read tenant-scoped stored bank reference without bac
   const portal = readFileSync(new URL('../src/pages/rentee/RenteePortal.jsx', import.meta.url), 'utf8');
   assert.match(portal, /await listRenteeInvoices\(\)/);
 });
-
 
 test('two-tenant browser acceptance selects invoices by internal ID, not an obsolete UUID heading', () => {
   const browserScript = readFileSync(

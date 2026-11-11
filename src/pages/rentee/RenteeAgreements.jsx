@@ -24,7 +24,6 @@ const getAgreementBillingDay = (agreement) => {
   return Number.isInteger(value) && value >= 5 && value <= 28 ? value : fallback;
 };
 
-
 const NoticeCard = ({ notice, working, onRespond }) => (
   <div className="mt-4 border border-blue-200 bg-blue-50 rounded-md p-3">
     <div className="flex items-start justify-between gap-3">
@@ -166,7 +165,7 @@ const RenteeAgreements = () => {
     if (user?.id) {
       fetchAgreements();
     }
-  }, [user?.id, user?.profileId, user?.isDevelopmentBypass, activeTenantId]);
+  }, [user?.id, user?.profileId, user?.isDevelopmentBypass, activeTenantId, user?.appUserId, user?.name, user?.email]);
 
   const handleBillingDaySave = async (agreement) => {
     const billingDay = Number.parseInt(String(billingDays[agreement.id] ?? 5), 10);

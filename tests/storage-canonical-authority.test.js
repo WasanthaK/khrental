@@ -17,7 +17,6 @@ const signed = `${root}/agreements/${resource}/signed/Signed.pdf`;
 const issued = `${root}/invoices/${resource}/issued/document.pdf`;
 const proof = `${root}/payment_proofs/${resource}/${resource}.pdf`;
 // Express recognizes error middleware by its four-argument arity.
-// eslint-disable-next-line no-unused-vars
 const errors = (error, _req, res, _next) => res.status(error.status || 500).json({ code: error.code });
 const serve = async (app, work) => {
   const server = app.listen(0, '127.0.0.1');

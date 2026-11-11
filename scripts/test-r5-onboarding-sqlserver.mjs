@@ -81,7 +81,7 @@ try {
 
   const app=express();app.use(express.json());app.use('/api',createSessionAuthMiddleware());app.use('/api/tenancies',createTenancyOnboardingRouter());
   app.use('/api/tenancy-exit',createTenancyExitRouter());
-  app.use((err,req,res,next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
+  app.use((err,req,res,_next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin=`http://127.0.0.1:${server.address().port}`;
   const call=async(suffix,body,who=a.owner,tenantId=a.tenantId,method=body?'POST':'GET')=>{

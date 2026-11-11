@@ -35,7 +35,7 @@ export const inspectManagementBilling=async pool=>{
     const key=table==='management_billing_accounts'?'tenant_id':table==='management_billing_events'?'stripe_event_id':'id';
     if(!indexes.some(i=>i.table_name===table&&i.is_primary_key&&!i.is_disabled&&i.keys===key)){problems.push(`${table}.primary_key`);}
   }
-  const norm=value=>String(value||'').toLowerCase().replace(/[\s\[\]()]/g,'');
+  const norm=value=>String(value||'').toLowerCase().replace(/[\s[\]()]/g,'');
   for(const [name,keys,filter] of [['UQ_management_pricing_version','market,version',''],['UQ_management_billing_customer','stripe_customer_id','stripe_customer_idisnotnull'],['UQ_management_billing_subscription','stripe_subscription_id','stripe_subscription_idisnotnull']]){
     if(!indexes.some(i=>i.name===name&&i.is_unique&&!i.is_disabled&&i.keys===keys&&norm(i.filter_definition)===filter)){problems.push(name);}
   }
@@ -79,7 +79,7 @@ export const inspectManagementInventoryStaging=async pool=>{
   }
   if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id')){problems.push('primary_key');}
   if(!indexes.some(i=>i.name==='IX_management_inventory_pending'&&!i.is_disabled&&i.keys==='tenant_id,status,id')){problems.push('pending_index');}
-  const norm=value=>String(value||'').toLowerCase().replace(/[\s\[\]()]/g,'');
+  const norm=value=>String(value||'').toLowerCase().replace(/[\s[\]()]/g,'');
   const expected={CK_management_inventory_kind:["kind='unit'orkind='property'","kind='property'orkind='unit'"],
     CK_management_inventory_payload:['isjsonpayload_json=1'],
     CK_management_inventory_status:["status='withdrawn'orstatus='promoted'orstatus='pending'","status='pending'orstatus='promoted'orstatus='withdrawn'"],
@@ -117,7 +117,7 @@ export const inspectManagementCessation=async pool=>{
   }
   if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id')){problems.push('primary_key');}
   if(!indexes.some(i=>i.name==='UQ_management_inventory_resource'&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id')){problems.push('unique_resource');}
-  const norm=v=>String(v||'').toLowerCase().replace(/[\s\[\]()]/g,'');
+  const norm=v=>String(v||'').toLowerCase().replace(/[\s[\]()]/g,'');
   for(const [name,definition] of [['CK_management_inventory_control_state',"state='ceased'"],
     ['CK_management_inventory_control_reason','lenltrimrtrimreason>=10andlenltrimrtrimreason<=1000']]){
     if(!checks.some(c=>c.name===name&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===definition)){problems.push(name);}

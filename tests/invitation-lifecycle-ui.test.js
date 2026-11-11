@@ -97,7 +97,7 @@ test('invite button stays on secure invitation service and blocks unsafe resend 
   assert.match(inviteButtonSource, /resendInvitation\(userId, false\)/);
   assert.match(inviteButtonSource, /getInvitationActionLabel/);
   assert.match(inviteButtonSource, /\['registered', 'setup_incomplete'\]\.includes\(effectiveStatus\)/);
-  assert.match(inviteButtonSource, /if \(actionUnavailable\) return;/);
+  assert.match(inviteButtonSource, /if \(actionUnavailable\) \{return;\}/);
   assert.match(inviteButtonSource, /Use account recovery instead of issuing another invitation/);
   assert.match(inviteButtonSource, /Invitation accepted by SendGrid for delivery/);
 });

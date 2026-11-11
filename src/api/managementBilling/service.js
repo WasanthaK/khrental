@@ -354,7 +354,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       const remaining=items.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
       const blockers=[...preview.blockers];
       if(!['active','ending'].includes(entitlement(account).state)){blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});}
-      const {record,...visible}=preview;
+      const visible={...preview};delete visible.record;
       return {...visible,eligible:!blockers.length,blockers,currentBilledQuantity:account.quantity,remainingManagedDwellings:remaining.length,
         timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'next_renewal'};
     });

@@ -1790,7 +1790,6 @@ async function seedAccountHistory(pool, item, invoiceId, tag, verifiedAmount, pe
       receiptNumber: item.receiptNumber, amount: verifiedAmount });
 }
 
-
 /**
  * Phase 4 acceptance on the disposable SQL Server already used by billing.
  * Exercise the real parameterized notification access contracts against two
@@ -2758,7 +2757,7 @@ async function main() {
       appType: 'spa'
     });
     app.use(vite.middlewares);
-    app.use((err, req, res, next) => {
+    app.use((err, req, res, _next) => {
       res.status(Number(err?.status) || 500).json({
         error: err.message, code: err.code || null
       });
@@ -3066,7 +3065,6 @@ async function main() {
     assert.equal(ownB.payload.data.length, 1);
     assert.equal(guid(ownB.payload.data[0].id), b.readingId);
 
-
     // Only the new dedicated billing reader determines renter ownership, and
     // draft invoices remain invisible until issued, even to their owner.
     for (const item of [a, b]) {
@@ -3176,7 +3174,6 @@ async function main() {
       tenantId: a.tenantId
     });
     assert.equal(anonymousAccount.status, 401, 'anonymous billing account query must be denied');
-
 
     // Run the actual new browser-side pending-invoice dashboard read client
     // against the same disposable SQL backend with two real renter sessions.
@@ -3587,7 +3584,7 @@ async function main() {
     if (closeMssqlPool) {await closeMssqlPool().catch(() => {});}
     if (pool) {await pool.close().catch(() => {});}
     if (master) {await master.close().catch(() => {});}
-    if (started) { try { docker(['rm', '-f', name]); } catch {} }
+    if (started) { try { docker(['rm', '-f', name]); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ } }
   }
 }
 main().catch(error => {

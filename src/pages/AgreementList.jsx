@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AgreementSummaryCard from '../components/agreements/AgreementSummaryCard';
@@ -24,9 +24,30 @@ const AgreementList = () => {
     return requestMssqlApi('/api/mssql/agreements?pageSize=500');
   };
 
+  const fetchAgreements = useCallback(async ({ background = false } = {}) => {
+    try {
+      if (!background) {
+        setLoading(true);
+      }
+      setError(null);
+
+      const data = await fetchAgreementsFromMssql();
+      setAgreements(data || []);
+    } catch (fetchError) {
+      console.error('Error fetching agreements:', fetchError);
+      setError(fetchError.message);
+      setAgreements([]);
+      toast.error('Failed to load agreements from the canonical database');
+    } finally {
+      if (!background) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchAgreements();
-  }, [activeTenantId]);
+  }, [activeTenantId, fetchAgreements]);
 
   useEffect(() => {
     const hasPendingSignature = agreements.some((agreement) => {
@@ -53,66 +74,7 @@ const AgreementList = () => {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [agreements, activeTenantId]);
-
-  const fetchAgreements = async ({ background = false } = {}) => {
-    try {
-      if (!background) {
-        setLoading(true);
-      }
-      setError(null);
-
-      const data = await fetchAgreementsFromMssql();
-      setAgreements(data || []);
-    } catch (fetchError) {
-      console.error('Error fetching agreements:', fetchError);
-      setError(fetchError.message);
-      setAgreements([]);
-      toast.error('Failed to load agreements from the canonical database');
-    } finally {
-      if (!background) {
-        setLoading(false);
-      }
-    }
-  };
-
-  const getStatusText = (status) => {
-    const statusLabels = {
-      draft: 'Draft',
-      review: 'In Review',
-      created: 'Created',
-      pending: 'Pending Signature',
-      pending_signature: 'Pending Signature',
-      partially_signed: 'Partially Signed',
-      pending_activation: 'Pending Activation',
-      signed: 'Signed',
-      active: 'Active',
-      expired: 'Expired',
-      rejected: 'Rejected',
-      cancelled: 'Cancelled',
-      terminated: 'Terminated'
-    };
-    return statusLabels[status] || status;
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'bg-gray-100 text-gray-800 border border-gray-300',
-      review: 'bg-blue-100 text-blue-800 border border-blue-300',
-      created: 'bg-gray-100 text-gray-800 border border-gray-300',
-      pending: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
-      pending_signature: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
-      partially_signed: 'bg-blue-100 text-blue-800 border border-blue-300',
-      pending_activation: 'bg-blue-100 text-blue-800 border border-blue-300',
-      signed: 'bg-green-100 text-green-800 border border-green-300',
-      active: 'bg-green-100 text-green-800 border border-green-300',
-      expired: 'bg-red-100 text-red-800 border border-red-300',
-      rejected: 'bg-red-100 text-red-800 border border-red-300',
-      cancelled: 'bg-orange-100 text-orange-800 border border-orange-300',
-      terminated: 'bg-gray-100 text-gray-800 border border-gray-300'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800 border border-gray-300';
-  };
+  }, [agreements, activeTenantId, fetchAgreements]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredAgreements = agreements.filter((agreement) => {
@@ -131,11 +93,6 @@ const AgreementList = () => {
 
     return matchesSearch && matchesStatus;
   });
-
-  const openPreview = (url) => {
-    setPreviewUrl(url);
-    setShowPreview(true);
-  };
 
   const closePreview = () => {
     setShowPreview(false);

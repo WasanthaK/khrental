@@ -114,7 +114,7 @@ export const buildInvoiceIssuanceSnapshotCandidate=({
     {block('paymentReference','Issued reference must match the allocated reference.');}
   if(!Array.isArray(components)||components.length<1||components.length>300)
     {block('components','Issued invoice must contain 1-300 lines.');}
-  const lines=components.map((item,i)=>{
+  const lines=components.map((item,_i)=>{
     if(!item || (!has(item.description)&&!has(item.component_type)))
       {block('components','Every charge needs a description.');}
     const amountCents=toCents(item.amount,'components');

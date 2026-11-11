@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { formatCurrency } from '../../utils/helpers';
-import { calculateUtilityAmount } from '../../services/utilityBillingService';
+import '../../services/utilityBillingService';
 import { useAuth } from '../../hooks/useAuth';
 
 const UtilityHistory = () => {
@@ -18,45 +18,7 @@ const UtilityHistory = () => {
   const [user, setUser] = useState(null);
   const [property, setProperty] = useState(null);
 
-  useEffect(() => {
-    const fetchUserAndProperty = async () => {
-      try {
-        setUser(null);
-        setProperty(null);
-        setReadings([]);
-
-        const appUserId = authUser?.profileId || authUser?.appUserId || null;
-        if (!appUserId) {
-          throw new Error('Failed to load user data');
-        }
-
-        setUser({ ...authUser, appUserId });
-
-        const { data: propertyData, error: propertyError } = await platformClient
-          .from('properties')
-          .select('*')
-          .limit(1)
-          .maybeSingle();
-
-        if (propertyError) {throw propertyError;}
-        setProperty(propertyData || null);
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        toast.error('Failed to load user data');
-      }
-    };
-
-    fetchUserAndProperty();
-  }, [activeTenantId, authUser?.id, authUser?.profileId]);
-
-  useEffect(() => {
-    if (user && property) {
-      fetchReadings();
-    }
-  }, [user, property, filter]);
-
-  // Modify the fetchReadings function to also fetch property data for rate calculations
-  const fetchReadings = async () => {
+  const fetchReadings = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await platformClient
@@ -89,13 +51,52 @@ const UtilityHistory = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter?.utilityType, property?.id, user?.appUserId, user?.id]);
+
+  useEffect(() => {
+    const fetchUserAndProperty = async () => {
+      try {
+        setUser(null);
+        setProperty(null);
+        setReadings([]);
+
+        const appUserId = authUser?.profileId || authUser?.appUserId || null;
+        if (!appUserId) {
+          throw new Error('Failed to load user data');
+        }
+
+        setUser({ ...authUser, appUserId });
+
+        const { data: propertyData, error: propertyError } = await platformClient
+          .from('properties')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+
+        if (propertyError) {throw propertyError;}
+        setProperty(propertyData || null);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        toast.error('Failed to load user data');
+      }
+    };
+
+    fetchUserAndProperty();
+  }, [activeTenantId, authUser, authUser?.id, authUser?.profileId]);
+
+  useEffect(() => {
+    if (user && property) {
+      fetchReadings();
+    }
+  }, [user, property, filter, fetchReadings]);
+
+  // Modify the fetchReadings function to also fetch property data for rate calculations
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Utility Reading History</h1>
-        
+
         {/* Utility Type Filter */}
         <select
           value={filter.utilityType}
@@ -155,7 +156,7 @@ const UtilityHistory = () => {
                   {(reading.currentreading - (reading.previousreading || 0)).toFixed(2)} {reading.utilitytype === UTILITY_TYPES.ELECTRICITY ? 'kWh' : 'm³'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {reading.utilitytype === UTILITY_TYPES.ELECTRICITY 
+                  {reading.utilitytype === UTILITY_TYPES.ELECTRICITY
                     ? formatCurrency(reading.properties?.electricity_rate || 0) + '/kWh'
                     : formatCurrency(reading.properties?.water_rate || 0) + '/m³'}
                 </td>
@@ -255,4 +256,4 @@ const UtilityHistory = () => {
   );
 };
 
-export default UtilityHistory; 
+export default UtilityHistory;

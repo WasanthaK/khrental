@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { platform as platformClient } from '../services/platformClient';
 import {
   buildStorageUrl,
@@ -21,7 +21,7 @@ const BucketExplorer = () => {
   const [newBucketName, setNewBucketName] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [fileSizeLimit, setFileSizeLimit] = useState(50); // Default 50MB
-  
+
   // Test section states
   const [testFile, setTestFile] = useState(null);
   const [testResults, setTestResults] = useState([]);
@@ -29,28 +29,11 @@ const BucketExplorer = () => {
   const [testError, setTestError] = useState(null);
 
   // Load buckets when user is authenticated
-  useEffect(() => {
-    if (user) {
-      loadBuckets();
-    } else {
-      setBuckets([]);
-      setSelectedBucket(null);
-      setFiles([]);
-    }
-  }, [user]);
-
-  // Load files when bucket is selected
-  useEffect(() => {
-    if (selectedBucket && user) {
-      loadFiles(selectedBucket);
-    }
-  }, [selectedBucket, user]);
-
-  const loadBuckets = async () => {
+  const loadBuckets = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const { data: session } = await platformClient.auth.getSession();
       if (!session?.access_token) {
         throw new Error('No auth session found');
@@ -60,10 +43,10 @@ const BucketExplorer = () => {
 
       console.log('Loaded buckets:', buckets);
       setBuckets(buckets || []);
-      
+
       // Auto-select first bucket if available
-      if (buckets && buckets.length > 0 && !selectedBucket) {
-        setSelectedBucket(buckets[0].name);
+      if (buckets && buckets.length > 0) {
+        setSelectedBucket(current => current || buckets[0].name);
       }
     } catch (err) {
       console.error('Error loading buckets:', err);
@@ -72,46 +55,15 @@ const BucketExplorer = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const createBucket = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Create the bucket. The legacy compatibility client ignored the
-      // public/file-size options as well, so this preserves current behavior.
-      const bucket = await createStorageBucket(newBucketName);
-
-      console.log('Created bucket:', bucket);
-      
-      // Reset form
-      setNewBucketName('');
-      setIsPublic(false);
-      setFileSizeLimit(50);
-      setShowCreateForm(false);
-      
-      // Refresh bucket list
-      await loadBuckets();
-      
-      // Select the new bucket
-      setSelectedBucket(newBucketName);
-    } catch (err) {
-      console.error('Error creating bucket:', err);
-      setError(err.message || 'Failed to create bucket');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadFiles = async (bucketName) => {
+  const loadFiles = useCallback(async (bucketName) => {
     if (!user) {return;}
-    
+
     try {
       setLoading(true);
       setError(null);
-      
+
       const { data: session } = await platformClient.auth.getSession();
       if (!session?.access_token) {
         throw new Error('No auth session found');
@@ -133,6 +85,54 @@ const BucketExplorer = () => {
     } finally {
       setLoading(false);
     }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadBuckets();
+    } else {
+      setBuckets([]);
+      setSelectedBucket(null);
+      setFiles([]);
+    }
+  }, [loadBuckets, user]);
+
+  // Load files when bucket is selected
+  useEffect(() => {
+    if (selectedBucket && user) {
+      loadFiles(selectedBucket);
+    }
+  }, [loadFiles, selectedBucket, user]);
+
+  const createBucket = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Create the bucket. The legacy compatibility client ignored the
+      // public/file-size options as well, so this preserves current behavior.
+      const bucket = await createStorageBucket(newBucketName);
+
+      console.log('Created bucket:', bucket);
+
+      // Reset form
+      setNewBucketName('');
+      setIsPublic(false);
+      setFileSizeLimit(50);
+      setShowCreateForm(false);
+
+      // Refresh bucket list
+      await loadBuckets();
+
+      // Select the new bucket
+      setSelectedBucket(newBucketName);
+    } catch (err) {
+      console.error('Error creating bucket:', err);
+      setError(err.message || 'Failed to create bucket');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getFileUrl = (bucketName, fileName) => buildStorageUrl(bucketName, fileName);
@@ -149,18 +149,18 @@ const BucketExplorer = () => {
 
     try {
       const results = [];
-      
+
       // Test 1: Check bucket permissions
       results.push({
         name: 'Bucket Permissions',
         status: 'running'
       });
-      
+
       await listTenantFiles({
         bucket: selectedBucket,
         path: ''
       });
-      
+
       results[results.length - 1] = {
         name: 'Bucket Permissions',
         status: 'success',
@@ -274,7 +274,7 @@ const BucketExplorer = () => {
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">Storage Explorer</h1>
-      
+
       {!user && (
         <div className="text-red-600 mb-4">
           Please log in to access storage.
@@ -300,7 +300,7 @@ const BucketExplorer = () => {
               {showCreateForm ? 'Cancel' : 'Create Bucket'}
             </button>
           </div>
-          
+
           {showCreateForm && (
             <form onSubmit={createBucket} className="mb-4 p-4 bg-white rounded shadow">
               <div className="mb-4">
@@ -316,7 +316,7 @@ const BucketExplorer = () => {
                   required
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   File Size Limit (MB)
@@ -330,7 +330,7 @@ const BucketExplorer = () => {
                   required
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="flex items-center">
                   <input
@@ -344,7 +344,7 @@ const BucketExplorer = () => {
                   </span>
                 </label>
               </div>
-              
+
               <button
                 type="submit"
                 disabled={loading}
@@ -354,7 +354,7 @@ const BucketExplorer = () => {
               </button>
             </form>
           )}
-          
+
           {loading && buckets.length === 0 ? (
             <div className="animate-pulse">Loading buckets...</div>
           ) : buckets.length === 0 ? (
@@ -379,7 +379,7 @@ const BucketExplorer = () => {
               ))}
             </ul>
           )}
-          
+
           <button
             onClick={loadBuckets}
             className="mt-4 w-full px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
@@ -388,7 +388,7 @@ const BucketExplorer = () => {
             Refresh Buckets
           </button>
         </div>
-        
+
         {/* File list */}
         <div className="flex-1">
           {selectedBucket ? (
@@ -402,7 +402,7 @@ const BucketExplorer = () => {
                   Refresh Files
                 </button>
               </div>
-              
+
               {loading ? (
                 <div className="animate-pulse">Loading files...</div>
               ) : files.length === 0 ? (
@@ -488,7 +488,7 @@ const BucketExplorer = () => {
       {/* Test Section */}
       <div className="mt-8">
         <h2 className="text-xl font-bold mb-4">Storage Tests</h2>
-        
+
         {testError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <strong className="font-bold">Test Error:</strong>
@@ -563,14 +563,14 @@ const BucketExplorer = () => {
 // Helper function to format file sizes
 const formatBytes = (bytes, decimals = 2) => {
   if (bytes === 0) {return '0 Bytes';}
-  
+
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  
+
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
-export default BucketExplorer; 
+export default BucketExplorer;

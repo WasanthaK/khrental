@@ -7,6 +7,7 @@ const clean = (value, field, max) => {
   if (value === undefined || value === null || value === '') {return '';}
   if (typeof value !== 'string') {throw fail(field, 'Enter a valid text value.');}
   const v = value.trim();
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   if (v.length > max || /[\u0000-\u001f\u007f]/.test(v)) {throw fail(field, 'Value is too long or contains invalid characters.');}
   return v;
 };

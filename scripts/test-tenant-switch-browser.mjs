@@ -24,7 +24,7 @@ switchTenant:async id=>{const mode=new URLSearchParams(location.search).get('mod
 if(mode==='mismatch')return {data:{tenantContextVerified:true,membership:active}};
 if(mode==='unverified')return {data:{tenantContextVerified:false,membership:memberships.find(m=>m.tenant_id===id)}};
 localStorage.setItem('tenant',id);state=id;update(id);return {data:{role:'authenticated',tenantContextVerified:true,membership:memberships.find(m=>m.tenant_id===id)}};}};}`;
-const plugin={name:'tenant-switch-fixture',enforce:'pre',resolveId(source,importer){
+const plugin={name:'tenant-switch-fixture',enforce:'pre',resolveId(source,_importer){
   if(source==='virtual:switch'){return '\0switch-entry.jsx';}
   if(source.endsWith('/hooks/useAuth')||source.endsWith('/hooks/useAuth.jsx')){return '\0switch-auth.jsx';}
 },async load(id){

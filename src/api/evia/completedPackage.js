@@ -15,7 +15,7 @@ export const downloadEviaCompletedPackage = async ({ completedPackage, verifiedR
   if (url.origin !== 'https://evia.enadocapp.com' || url.username || url.password || url.hash
       || !url.pathname.startsWith('/_apis/sign/')) {throw fail('EVIA_PACKAGE_URL_UNTRUSTED');}
   const rawToken = String(completedPackage?.token || completedPackage?.Token || '').trim().replace(/^Bearer\s+/i, '');
-  if (!rawToken || rawToken.length > 8192 || !/^[A-Za-z0-9._~+\/-]+=*$/.test(rawToken)) {throw fail('EVIA_PACKAGE_TOKEN_INVALID');}
+  if (!rawToken || rawToken.length > 8192 || !/^[A-Za-z0-9._~+/-]+=*$/.test(rawToken)) {throw fail('EVIA_PACKAGE_TOKEN_INVALID');}
   const expiry = completedPackage?.expiresAt ?? completedPackage?.ExpiresAt;
   if (expiry != null && (!Number.isFinite(Date.parse(expiry)) || Date.parse(expiry) <= now)) {throw fail('EVIA_PACKAGE_EXPIRED', 410);}
   let response;

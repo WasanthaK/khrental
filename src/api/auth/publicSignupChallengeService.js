@@ -23,6 +23,7 @@ export const normalizePublicSignupDetails = ({ email, name, enquiry,ownerCountry
   if (normalized.length < 6 || normalized.length > 320 ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ||
       displayName.length < 1 || displayName.length > 255 ||
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
       /[\x00-\x1f\x7f]/.test(displayName)) {return null;}
   const intent=enquiry===undefined?null:parseEnquiryIntent(enquiry);
   if(enquiry!==undefined&&!intent){return null;}

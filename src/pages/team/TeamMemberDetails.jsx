@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchData, deleteData, updateData, platform as platformClient } from '../../services/platformClient';
+import { fetchData } from '../../services/platformClient';
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -17,13 +17,13 @@ const TeamMemberDetails = () => {
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
 
   useEffect(() => {
     const fetchTeamMemberData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch team member details from app_users table
         const teamMemberData = await fetchAppUser(id);
 
@@ -48,21 +48,21 @@ const TeamMemberDetails = () => {
 
         if (assignmentsData && assignmentsData.length > 0) {
           setAssignments(assignmentsData);
-          
+
           // Get unique property IDs from assignments
           const propertyIds = [...new Set(assignmentsData.map(a => a.propertyid))];
-          
+
           // Fetch property details
           if (propertyIds.length > 0) {
             const { data: propertiesData, error: propertiesError } = await fetchData({
               table: 'properties',
               filters: [{ column: 'id', operator: 'in', value: propertyIds }],
             });
-            
+
             if (propertiesError) {
               throw propertiesError;
             }
-            
+
             if (propertiesData) {
               setProperties(propertiesData);
             }
@@ -83,14 +83,14 @@ const TeamMemberDetails = () => {
   const handleDeleteTeamMember = async () => {
     try {
       setDeleteLoading(true);
-      
+
       // Delete team member from app_users table
       const result = await deleteAppUser(id);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to delete team member');
       }
-      
+
       toast.success('Team member deleted successfully');
       navigate('/dashboard/team');
     } catch (error) {
@@ -144,7 +144,7 @@ const TeamMemberDetails = () => {
               <p className="text-gray-600">{teamMember.role}</p>
             </div>
             <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
-              <Link 
+              <Link
                 to={`/dashboard/team/${id}/edit`}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -190,7 +190,7 @@ const TeamMemberDetails = () => {
                   <p className="mt-1 capitalize">{teamMember.status || 'Active'}</p>
                 </div>
                 <div className="md:col-span-2">
-                  <InvitationStatus 
+                  <InvitationStatus
                     id={id}
                     type="team_member"
                     name={teamMember.name}
@@ -307,4 +307,4 @@ const TeamMemberDetails = () => {
   );
 };
 
-export default TeamMemberDetails; 
+export default TeamMemberDetails;

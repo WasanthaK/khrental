@@ -73,7 +73,7 @@ export const createIssuedInvoicePdfAttachment = async args => {
     const border = rgb(0.84, 0.88, 0.92);
     const light = rgb(0.95, 0.97, 0.99);
     const cream = rgb(1.0, 0.97, 0.88);
-    const white = rgb(1, 1, 1);
+    rgb(1, 1, 1);
     const red = rgb(0.72, 0.15, 0.23);
     let page, y;
 
@@ -186,12 +186,12 @@ export const createIssuedInvoicePdfAttachment = async args => {
 
     page.drawText('ITEMIZED CHARGES',{x:L,y,font:bold,size:12,color:navy});
     y-=17;rule(y);y-=12;
-    function tableHeader(){
+    const tableHeader = () => {
       page.drawRectangle({x:L,y:y-30,width:R-L,height:30,color:light});
       page.drawText('DESCRIPTION',{x:L+12,y:y-20,font:bold,size:9,color:navy});
       rightText('AMOUNT (LKR)',R-12,y-20,{font:bold,size:9,color:navy,minX:L+310});
       y-=30;
-    }
+    };
     tableHeader();
     const descriptionWidth=R-L-163;
     model.lines.forEach((item,index)=>{

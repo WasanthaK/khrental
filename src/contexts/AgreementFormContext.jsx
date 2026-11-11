@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useCallback, createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { fetchAppUsers } from '../services/appUserService';
 import {
@@ -70,33 +70,129 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       specialConditions: ''
     }
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
   const [properties, setProperties] = useState([]);
   const [propertyUnits, setPropertyUnits] = useState([]);
   const [rentees, setRentees] = useState([]);
   const [templateContent, setTemplateContent] = useState('');
   const [templateLoadError, setTemplateLoadError] = useState(null);
-  
+
   // Load existing agreement data
+  const loadPropertyDetails = useCallback(async (propertyId) => {
+    try {
+      console.log('Loading property details for ID:', propertyId);
+      const property = await fetchProperty(propertyId);
+
+      if (!property) {throw new Error('Property not found');}
+
+      console.log('Retrieved property data:', property);
+      console.log('Property rental values:', property.rentalvalues);
+
+      // Extract rental values, handling both naming formats
+      // The database often uses "rent" and "deposit" instead of "monthlyRent" and "depositAmount"
+      const rentalValues = property.rentalvalues || {};
+      console.log('Rental values object:', rentalValues);
+
+      // Convert all values to strings for consistency in the form
+      const monthlyRent = String(rentalValues.monthlyRent || rentalValues.rent || '');
+      const depositAmount = String(rentalValues.depositAmount || rentalValues.deposit || '');
+
+      console.log('Extracted rental values:', { monthlyRent, depositAmount });
+
+      // Extract property terms data
+      const propertyTerms = property.terms || {};
+      const paymentDueDay = propertyTerms.paymentDueDay || '5';
+      const noticePeriod = propertyTerms.noticePeriod || '30';
+      const specialConditions = propertyTerms.specialConditions || '';
+
+      console.log('Extracted terms:', {
+        monthlyRent,
+        depositAmount,
+        paymentDueDay,
+        noticePeriod,
+        specialConditions
+      });
+
+      // If it's an apartment, load units
+      if (property.propertytype === 'apartment') {
+        const units = await listPropertyUnits(propertyId);
+        setPropertyUnits(units || []);
+
+        // For apartments, always set property rental values as defaults
+        setFormData(prev => ({
+          ...prev,
+          propertyType: property.propertytype,
+          terms: {
+            ...prev.terms,
+            // Always set these values from the property data
+            monthlyRent,
+            depositAmount,
+            paymentDueDay,
+            noticePeriod,
+            specialConditions
+          }
+        }));
+
+        console.log('Set property-level terms for apartment property with default rent values');
+      } else {
+        // For non-apartment properties, clear the unitid field
+        setPropertyUnits([]);
+        // For non-apartment properties, set all terms from property profile
+        setFormData(prev => ({
+          ...prev,
+          // Clear unitid for non-apartment properties
+          unitid: '',
+          propertyType: property.propertytype,
+          terms: {
+            ...prev.terms,
+            // Always set these values for non-apartments too
+            monthlyRent,
+            depositAmount,
+            paymentDueDay,
+            noticePeriod,
+            specialConditions,
+            // Add any additional terms from property profile
+            ...propertyTerms
+          }
+        }));
+
+        console.log('Set all terms for non-apartment property and cleared unit ID');
+      }
+
+      // Log the loaded property details for debugging
+      console.log('Updated form data after loading property details:', {
+        propertyType: property.propertytype,
+        rentalValues: {
+          original: property.rentalvalues,
+          mapped: { monthlyRent, depositAmount }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error loading property details:', error);
+      toast.error('Failed to load property details');
+    }
+  }, []);
+
   useEffect(() => {
     const loadExistingAgreement = async () => {
       if (!agreementId) {
         return;
       }
-      
+
       setLoading(true);
       try {
         console.log('Loading existing agreement with ID:', agreementId);
         const agreement = await fetchAgreement(agreementId);
-        
+
         console.log('Loaded agreement data:', agreement);
-        
+
         // Fix issue with terms being stored as character array
         let parsedTerms = agreement.terms;
-        
+
         // Check if terms is stored as a character array or string rather than an object
         if (typeof parsedTerms === 'string') {
           try {
@@ -124,7 +220,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
             };
           }
         }
-        
+
         // If parsedTerms is still not an object, create a default object
         if (typeof parsedTerms !== 'object' || parsedTerms === null) {
           console.warn('Terms is not an object, creating default terms');
@@ -136,10 +232,10 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
             specialConditions: ''
           };
         }
-        
+
         if (agreement) {
           console.log('Setting form data with agreement values');
-          
+
           // Set form data with existing agreement values
           setFormData({
             id: agreement.id,
@@ -177,7 +273,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
           if (agreement.propertyid) {
             console.log('Loading property details for property ID:', agreement.propertyid);
             await loadPropertyDetails(agreement.propertyid);
-            
+
             // Then load unit details if unitid is available
             if (agreement.unitid) {
               console.log('Loading unit details for unit ID:', agreement.unitid);
@@ -222,17 +318,17 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
     };
 
     loadInitialData();
-  }, [agreementId]);
-  
+  }, [agreementId, loadPropertyDetails]);
+
   // Handle input changes
   const handleInputChange = async (name, value) => {
     console.log(`Changing ${name} to ${value}`);
-    
+
     // If we're setting a numeric field, ensure it's stored as a string for consistency
     const formattedValue = ['terms.monthlyRent', 'terms.depositAmount', 'terms.paymentDueDay', 'terms.noticePeriod'].includes(name) 
       ? String(value)
       : value;
-    
+
     setFormData(prev => {
       const newData = { ...prev };
       if (name.includes('.')) {
@@ -243,7 +339,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       }
       return newData;
     });
-    
+
     // When template changes, load its content
     if (name === 'templateid' && value) {
       loadTemplateContent(value);
@@ -259,7 +355,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       await loadUnitDetails(value);
     }
   };
-  
+
   // Handle terms object changes
   const handleTermsChange = (field, value) => {
     setFormData(prev => ({
@@ -270,27 +366,27 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       }
     }));
   };
-  
+
   // Determine if agreement is editable
   const isAgreementEditable = () => {
     // Don't allow editing of signed, pending_signature, cancelled, or expired agreements
-    return !formData.status || 
-           formData.status === STATUS.DRAFT || 
+    return !formData.status ||
+           formData.status === STATUS.DRAFT ||
            formData.status === STATUS.REVIEW;
            // Explicitly not allowing:
-           // formData.status === STATUS.SIGNED 
+           // formData.status === STATUS.SIGNED
            // formData.status === STATUS.PENDING_SIGNATURE
            // formData.status === STATUS.CANCELLED
            // formData.status === STATUS.EXPIRED
   };
-  
+
   // Load template content
   const loadTemplateContent = async (templateId) => {
     try {
       setTemplateLoadError(null);
       console.log('Loading template content for:', templateId);
       const data = await getTemplate(templateId);
-      
+
       if (!data) {
         console.error('Error loading template: template not found');
         setTemplateLoadError('Failed to load template: template not found');
@@ -298,7 +394,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
         toast.error('Error loading template: template not found');
         return;
       }
-      
+
       if (data && data.content) {
         console.log('Template content loaded successfully');
         setTemplateContent(data.content);
@@ -315,109 +411,10 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       toast.error('Failed to load template content');
     }
   };
-  
+
   // Load property details including units and terms
-  const loadPropertyDetails = async (propertyId) => {
-    try {
-      console.log('Loading property details for ID:', propertyId);
-      const property = await fetchProperty(propertyId);
-
-      if (!property) {throw new Error('Property not found');}
-
-      console.log('Retrieved property data:', property);
-      console.log('Property rental values:', property.rentalvalues);
-
-      // Extract rental values, handling both naming formats
-      // The database often uses "rent" and "deposit" instead of "monthlyRent" and "depositAmount"
-      const rentalValues = property.rentalvalues || {};
-      console.log('Rental values object:', rentalValues);
-      
-      // Convert all values to strings for consistency in the form
-      const monthlyRent = String(rentalValues.monthlyRent || rentalValues.rent || '');
-      const depositAmount = String(rentalValues.depositAmount || rentalValues.deposit || '');
-      
-      console.log('Extracted rental values:', { monthlyRent, depositAmount });
-      
-      // Extract property terms data
-      const propertyTerms = property.terms || {};
-      const paymentDueDay = propertyTerms.paymentDueDay || '5';
-      const noticePeriod = propertyTerms.noticePeriod || '30';
-      const specialConditions = propertyTerms.specialConditions || '';
-
-      console.log('Extracted terms:', {
-        monthlyRent,
-        depositAmount,
-        paymentDueDay,
-        noticePeriod,
-        specialConditions
-      });
-
-      // If it's an apartment, load units
-      if (property.propertytype === 'apartment') {
-        const units = await listPropertyUnits(propertyId);
-        setPropertyUnits(units || []);
-        
-        // For apartments, always set property rental values as defaults
-        setFormData(prev => ({
-          ...prev,
-          propertyType: property.propertytype,
-          terms: {
-            ...prev.terms,
-            // Always set these values from the property data
-            monthlyRent,
-            depositAmount,
-            paymentDueDay,
-            noticePeriod,
-            specialConditions
-          }
-        }));
-        
-        console.log('Set property-level terms for apartment property with default rent values');
-      } else {
-        // For non-apartment properties, clear the unitid field
-        setPropertyUnits([]);
-        // For non-apartment properties, set all terms from property profile
-        setFormData(prev => ({
-          ...prev,
-          // Clear unitid for non-apartment properties
-          unitid: '',
-          propertyType: property.propertytype,
-          terms: {
-            ...prev.terms,
-            // Always set these values for non-apartments too
-            monthlyRent,
-            depositAmount,
-            paymentDueDay,
-            noticePeriod,
-            specialConditions,
-            // Add any additional terms from property profile
-            ...propertyTerms
-          }
-        }));
-        
-        console.log('Set all terms for non-apartment property and cleared unit ID');
-      }
-
-      // Log the loaded property details for debugging
-      console.log('Updated form data after loading property details:', {
-        propertyType: property.propertytype,
-        rentalValues: {
-          original: property.rentalvalues,
-          mapped: { monthlyRent, depositAmount }
-        },
-        currentTerms: getFormDataTerms() // Get current form data terms
-      });
-
-    } catch (error) {
-      console.error('Error loading property details:', error);
-      toast.error('Failed to load property details');
-    }
-  };
 
   // Helper function to get current terms
-  const getFormDataTerms = () => {
-    return formData.terms;
-  };
 
   // Load unit details and rental values
   const loadUnitDetails = async (unitId) => {
@@ -440,26 +437,26 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       const propertyTerms = property?.terms || {};
       const propertyRentalValues = property?.rentalvalues || {};
       const unitRentalValues = unit.rentalvalues || {};
-      
+
       console.log('Unit rental values:', unitRentalValues);
       console.log('Property rental values:', propertyRentalValues);
-      
+
       // Extract rental values, handling both naming formats
       // Use unit values first, fall back to property values if unit values don't exist
       // Convert to string for consistency in form
       const monthlyRent = String(
-        unitRentalValues.monthlyRent || 
-        unitRentalValues.rent || 
-        propertyRentalValues.monthlyRent || 
-        propertyRentalValues.rent || 
+        unitRentalValues.monthlyRent ||
+        unitRentalValues.rent ||
+        propertyRentalValues.monthlyRent ||
+        propertyRentalValues.rent ||
         ''
       );
-        
+
       const depositAmount = String(
-        unitRentalValues.depositAmount || 
-        unitRentalValues.deposit || 
-        propertyRentalValues.depositAmount || 
-        propertyRentalValues.deposit || 
+        unitRentalValues.depositAmount ||
+        unitRentalValues.deposit ||
+        propertyRentalValues.depositAmount ||
+        propertyRentalValues.deposit ||
         ''
       );
 
@@ -500,7 +497,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
       toast.error('Failed to load unit details');
     }
   };
-  
+
   // Values to expose in context
   const contextValue = {
     formData,
@@ -523,7 +520,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
     STORAGE_BUCKETS,
     BUCKET_FOLDERS
   };
-  
+
   return (
     <AgreementFormContext.Provider value={contextValue}>
       {children}
@@ -531,4 +528,4 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
   );
 };
 
-export default AgreementFormContext; 
+export default AgreementFormContext;

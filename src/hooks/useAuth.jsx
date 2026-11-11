@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useCallback, useState, useEffect, createContext, useContext, useRef } from 'react';
 import { getPlatformClient, getCurrentUser, signIn, signUp, signOut, resetPassword, updatePassword } from '../services/platformClient';
 import { isMssqlApiEnabled, requestMssqlApi } from '../services/mssqlApiClient';
 import { isDevBypassEnabled } from '../utils/env';
@@ -28,12 +28,13 @@ const AuthProvider = ({ children }) => {
   const [devBypassRole, setDevBypassRole] = useState(
     DEV_BYPASS_ENABLED ? localStorage.getItem('dev_bypass_role') : null
   );
-  
+
   // Use refs to track initialization state
   const initialized = useRef(false);
   const platformClient = getPlatformClient();
 
-  const normalizeTenantState = (userRecord, tenantContext = null) => {
+  // Effect for development bypass
+  const normalizeTenantState = useCallback((userRecord, tenantContext = null) => {
     // A verified list of choices is not an active membership. Keep every
     // cached tenant/role out until the user explicitly selects and reloads it.
     if (tenantContext?.resolution === 'selection-required') {
@@ -86,9 +87,9 @@ const AuthProvider = ({ children }) => {
       tenantResolution: tenantContext?.resolution || userRecord?.tenantResolution || (resolvedMembership ? 'resolved' : 'none'),
       hasTenantAccess: memberships.length > 0 || Boolean(finalTenantId)
     };
-  };
+  }, []);
 
-  const mergeTenantContext = async (userRecord) => {
+  const mergeTenantContext = useCallback(async (userRecord) => {
     try {
       const { data: tenantContext, error: tenantContextError } = await platformClient.auth.getTenantContext();
 
@@ -107,37 +108,9 @@ const AuthProvider = ({ children }) => {
     } catch (_error) {
       return normalizeTenantState(userRecord);
     }
-  };
+  }, [normalizeTenantState, platformClient?.auth]);
 
-  // Effect for development bypass
-  useEffect(() => {
-    if (DEV_BYPASS_ENABLED && devBypassRole) {
-      logDebug('Development bypass activated', devBypassRole);
-      logDebug('localStorage dev_bypass_role', localStorage.getItem('dev_bypass_role'));
-      console.warn('Using development authentication bypass. DO NOT USE IN PRODUCTION!');
-      setUserData({
-        id: 'dev-user-id',
-        email: 'dev@example.com',
-        role: devBypassRole,
-        name: `Development ${devBypassRole.charAt(0).toUpperCase() + devBypassRole.slice(1)} User`,
-        userType: devBypassRole,
-        profileId: null,
-        isDevelopmentBypass: true,
-      });
-      setLoading(false);
-      // Set initialized to prevent normal auth from running
-      initialized.current = true;
-    } else {
-      logDebug('No dev bypass active', {
-        devBypassRole,
-        userProp: !!userData,
-        loading
-      });
-    }
-  }, [devBypassRole]);
-
-  // Fetch user profile from app_users table
-  const fetchUserProfile = async (authUser) => {
+  const fetchUserProfile = useCallback(async (authUser) => {
     if (!authUser || !authUser.id) {
       logDebug('No auth user to fetch profile for');
       return null;
@@ -145,7 +118,7 @@ const AuthProvider = ({ children }) => {
 
     logDebug('Fetching user profile for auth ID', authUser.id);
     const preferredLanguage = getStoredPreferredLanguage(authUser.id, authUser.preferred_language || 'en');
-    
+
     try {
       if (isMssqlApiEnabled()) {
         try {
@@ -181,7 +154,7 @@ const AuthProvider = ({ children }) => {
         .select('*')
         .eq('auth_id', authUser.id)
         .maybeSingle(); // Use maybeSingle instead of single to avoid errors if user doesn't exist
-      
+
       if (appUserError) {
         console.error('[Auth DEBUG] Error fetching app user:', appUserError.message);
         // Continue with auth user rather than completely failing
@@ -209,7 +182,7 @@ const AuthProvider = ({ children }) => {
           preferred_language: preferredLanguage
         });
       }
-      
+
       // If no profile found, return the auth user with some defaults
       logDebug('No profile found for user, using default auth user');
       return await mergeTenantContext({
@@ -228,7 +201,31 @@ const AuthProvider = ({ children }) => {
         preferred_language: preferredLanguage
       });
     }
-  };
+  }, [mergeTenantContext, platformClient]);
+
+  useEffect(() => {
+    if (DEV_BYPASS_ENABLED && devBypassRole) {
+      logDebug('Development bypass activated', devBypassRole);
+      logDebug('localStorage dev_bypass_role', localStorage.getItem('dev_bypass_role'));
+      console.warn('Using development authentication bypass. DO NOT USE IN PRODUCTION!');
+      setUserData({
+        id: 'dev-user-id',
+        email: 'dev@example.com',
+        role: devBypassRole,
+        name: `Development ${devBypassRole.charAt(0).toUpperCase() + devBypassRole.slice(1)} User`,
+        userType: devBypassRole,
+        profileId: null,
+        isDevelopmentBypass: true,
+      });
+      setLoading(false);
+      // Set initialized to prevent normal auth from running
+      initialized.current = true;
+    } else {
+      logDebug('No dev bypass active', { devBypassRole });
+    }
+  }, [devBypassRole]);
+
+  // Fetch user profile from app_users table
 
   const refreshTenantContext = async (authUser = null) => {
     const fallbackAuthUser = authUser || userData || null;
@@ -304,10 +301,10 @@ const AuthProvider = ({ children }) => {
       logDebug('Skipping normal auth - already initialized');
       return;
     }
-    
+
     logDebug('Initializing normal authentication');
     initialized.current = true;
-    
+
     let active=true;
     let generation=0;
     const applySession=async session=>{
@@ -347,7 +344,7 @@ const AuthProvider = ({ children }) => {
       subscription.unsubscribe();
       initialized.current=false;
     };
-  }, []); // Empty dependency array - run only once
+  }, [fetchUserProfile, platformClient?.auth]); // Empty dependency array - run only once
 
   // Login function
   const login = async (email, password) => {
@@ -356,13 +353,13 @@ const AuthProvider = ({ children }) => {
       // Login owns its pending form state. Global loading would unmount the
       // form in PublicRoute and erase an unsuccessful request's visible error.
       setError(null);
-      
+
       // Validate inputs
       if (!email || !password) {
         setError('Email and password are required');
         return { error: { message: 'Email and password are required' } };
       }
-      
+
       // Log environment information for debugging
       console.log('[Auth] Environment check:', {
         window_env: window?._env_ ? "Available" : "Not available",
@@ -370,16 +367,16 @@ const AuthProvider = ({ children }) => {
         apiEndpoint: window?._env_?.VITE_API_ENDPOINT || import.meta.env?.VITE_API_ENDPOINT || window?.location?.origin || 'not set',
         useMssqlApi: window?._env_?.VITE_USE_MSSQL_API || import.meta.env?.VITE_USE_MSSQL_API || 'not set'
       });
-      
+
       console.log('[Auth] Calling signIn function...');
       const { data, error } = await signIn(email, password);
       console.log('[Auth] SignIn complete, checking results:', { 
-        success: !error, 
+        success: !error,
         hasData: !!data,
         hasUser: !!data?.user,
-        hasSession: !!data?.session 
+        hasSession: !!data?.session
       });
-      
+
       logDebug('Login result', {
         success: !error,
         hasSession: !!data?.session,
@@ -391,21 +388,21 @@ const AuthProvider = ({ children }) => {
       // Handle login errors
       if (error) {
         console.error('[Auth] Login error:', error.message);
-        
+
         // Handle specific error cases
         if (error.message.includes('Invalid login credentials')) {
           setError('Email or password is incorrect');
-        } 
+        }
         else if (error.message.includes('Email not confirmed')) {
           setError('Please confirm your email before logging in');
         }
         else {
           setError(error.message || 'An error occurred during login');
         }
-        
+
         return { error };
       }
-      
+
       // Fetch user profile after successful login
       let resolvedProfile=null;
       if (data?.user) {
@@ -413,7 +410,7 @@ const AuthProvider = ({ children }) => {
         console.log('[Auth] Login successful, fetching user profile for:', data.user.id);
         const userWithProfile = await fetchUserProfile(data.user);
         console.log('[Auth] User profile fetched:', { 
-          hasProfile: !!userWithProfile, 
+          hasProfile: !!userWithProfile,
           role: userWithProfile?.role,
           id: userWithProfile?.id
         });
@@ -428,22 +425,22 @@ const AuthProvider = ({ children }) => {
         if (data.user.user_metadata?.force_password_change) {
           console.log('[Auth] User needs to change password');
           // Return a special flag for the login component to handle
-          return { 
-            data, 
+          return {
+            data,
             requirePasswordChange: true 
           };
         }
       } else {
         console.warn('[Auth] Login successful but no user data returned');
       }
-      
+
       return { data, profile:resolvedProfile };
     } catch (error) {
       console.error('[Auth] Error logging in:', error.message);
-      
+
       // Create a more user-friendly error message
       let userMessage = 'Failed to log in. Please try again.';
-      
+
       if (error.message?.toLowerCase().includes('network') || 
           error.message?.toLowerCase().includes('fetch')) {
         userMessage = 'Network error. Please check your internet connection.';
@@ -453,7 +450,7 @@ const AuthProvider = ({ children }) => {
       } else if (error.message?.toLowerCase().includes('too many requests')) {
         userMessage = 'Too many login attempts. Please try again later.';
       }
-      
+
       setError(userMessage);
       return { error: { message: userMessage } };
     }
@@ -465,11 +462,11 @@ const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       const { data, error } = await signUp(email, password);
-      
+
       if (error) {
         throw error;
       }
-      
+
       return { data };
     } catch (error) {
       console.error('[Auth] Error registering:', error.message);
@@ -487,11 +484,11 @@ const AuthProvider = ({ children }) => {
       setError(null);
       setUserData(null);
       const { error } = await signOut();
-      
+
       if (error) {
         throw error;
       }
-      
+
       return {};
     } catch (error) {
       console.error('[Auth] Error logging out:', error.message);
@@ -523,11 +520,11 @@ const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       const { error } = await resetPassword(email);
-      
+
       if (error) {
         throw error;
       }
-      
+
       return { success: true };
     } catch (err) {
       console.error('[Auth DEBUG] Password reset email error:', err);
@@ -544,11 +541,11 @@ const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       const { error } = await updatePassword(newPassword);
-      
+
       if (error) {
         throw error;
       }
-      
+
       return { success: true };
     } catch (err) {
       console.error('[Auth DEBUG] Set new password error:', err);

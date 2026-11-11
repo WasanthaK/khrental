@@ -54,6 +54,7 @@ export const resolveRegisteredPhoto=(rawImages,index,tenantId,{
 export const sanitizePhotoAlt=value=>{
   if(typeof value!=='string'){throw new Error('Photo description must be text.');}
   const alt=value.trim();
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   if(!alt||alt.length>180||/[<>\x00-\x1f]/.test(alt))
     {throw new Error('Invalid public photo description.');}
   return alt;

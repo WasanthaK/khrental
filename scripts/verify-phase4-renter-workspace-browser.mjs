@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-const fixtureLabel = (own, a, b) => own.tenantId === a.tenantId ? 'A' : 'B';
+const fixtureLabel = (own, a, _b) => own.tenantId === a.tenantId ? 'A' : 'B';
 
 /**
  * Genuine routed React acceptance for a SQL-backed renter session, with

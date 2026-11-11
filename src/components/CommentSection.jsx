@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
   const [newComment, setNewComment] = useState('');
-  const [isInternal, setIsInternal] = useState(false);
+
   const [messageType, setMessageType] = useState('regular'); // 'regular', 'internal', or 'admin_message'
 
   const handleSubmit = async (e) => {
@@ -29,7 +29,7 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4">
       <h3 className="text-lg font-semibold mb-4">Comments & Updates</h3>
-      
+
       {/* Add comment form */}
       <div className="mb-4">
         <h4 className="text-md mb-2">Add a comment</h4>
@@ -40,7 +40,7 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
           onChange={(e) => setNewComment(e.target.value)}
           rows={4}
         />
-        
+
         {/* Message type selector for staff */}
         {isStaff && (
           <div className="flex items-center mb-2 space-x-4">
@@ -73,7 +73,7 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
             </label>
           </div>
         )}
-        
+
         <div className="flex justify-end">
           <button
             onClick={handleSubmit}
@@ -129,4 +129,4 @@ const CommentSection = ({ comments, onAddComment, userRole, userName }) => {
   );
 };
 
-export default CommentSection; 
+export default CommentSection;

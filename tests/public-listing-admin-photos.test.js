@@ -21,7 +21,7 @@ const serve=async(options,route,identity=admin)=>{
   const app=express();
   app.use((req,res,next)=>{Object.assign(req,identity);next();});
   app.use('/prefs',createPublicListingPreferencesRouter({context:(req,res,next)=>next(),...options}));
-  app.use((e,req,res,next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
+  app.use((e,req,res,_next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
   const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   try{
     const res=await fetch('http://127.0.0.1:'+server.address().port+'/prefs/'+property+route);

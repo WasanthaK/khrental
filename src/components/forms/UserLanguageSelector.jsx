@@ -1,9 +1,9 @@
 import React from 'react';
-import { LANGUAGES } from '../../utils/constants';
+import '../../utils/constants';
 
 /**
  * Component for selecting a user's preferred language
- * 
+ *
  * @param {Object} props
  * @param {string} props.value - Current selected language value
  * @param {Function} props.onChange - Function to call when language changes
@@ -34,4 +34,4 @@ const UserLanguageSelector = ({ value = 'en', onChange, disabled = false }) => {
   );
 };
 
-export default UserLanguageSelector; 
+export default UserLanguageSelector;

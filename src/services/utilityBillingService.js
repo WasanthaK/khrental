@@ -11,29 +11,29 @@ export const calculateUtilityAmount = (reading) => {
   if (!reading) {
     return 0;
   }
-  
+
   // Calculate consumption
   const consumption = reading.currentreading - (reading.previousreading || 0);
-  
+
   // Get the appropriate rate
   let rate = 0;
-  
+
   // First try to get rate from billing_data if it exists
   if (reading.billing_data?.rate) {
     rate = parseFloat(reading.billing_data.rate);
-  } 
+  }
   // Next try to get from properties
   else if (reading.utilitytype === UTILITY_TYPES.ELECTRICITY && reading.properties?.electricity_rate) {
     rate = parseFloat(reading.properties.electricity_rate);
   } else if (reading.utilitytype === UTILITY_TYPES.WATER && reading.properties?.water_rate) {
     rate = parseFloat(reading.properties.water_rate);
-  } 
+  }
   // Default rates if none available
   else {
     // Standard rates: 50 per unit for electricity, 25 for water
     rate = reading.utilitytype === UTILITY_TYPES.ELECTRICITY ? 50 : 25;
   }
-  
+
   // Calculate total amount
   return consumption * rate;
 };
@@ -51,25 +51,25 @@ export const calculateUtilityAmount = (reading) => {
 export const fetchReadings = async ({ propertyId, renteeId, status, billingStatus, utilityType }) => {
   try {
     console.log('Fetching readings with filters:', { propertyId, renteeId, status, billingStatus, utilityType });
-    
+
     let query = platformClient
       .from('utility_readings')
       .select('*, properties:propertyid(name, water_rate, electricity_rate), app_users:renteeid(name, email)')
       .order('readingdate', { ascending: false });
-    
+
     // Apply filters if provided
     if (propertyId) {
       query = query.eq('propertyid', propertyId);
     }
-    
+
     if (renteeId) {
       query = query.eq('renteeid', renteeId);
     }
-    
+
     if (utilityType) {
       query = query.eq('utilitytype', utilityType);
     }
-    
+
     // Status filter can be array or string
     if (status) {
       if (Array.isArray(status)) {
@@ -78,7 +78,7 @@ export const fetchReadings = async ({ propertyId, renteeId, status, billingStatu
         query = query.eq('status', status);
       }
     }
-    
+
     // Billing status filter can be array or string
     if (billingStatus) {
       if (Array.isArray(billingStatus)) {
@@ -87,56 +87,56 @@ export const fetchReadings = async ({ propertyId, renteeId, status, billingStatu
         query = query.eq('billing_status', billingStatus);
       }
     }
-    
+
     console.log('Executing query for readings');
     const { data, error } = await query;
-    
+
     if (error) {
       throw error;
     }
-    
+
     console.log(`Successfully fetched ${data?.length || 0} readings`);
-    
+
     // For rejected status, we need to include readings with effective_status='rejected'
     if (billingStatus === 'rejected' && data) {
-      // Get readings where billing_data.effective_status is 'rejected' 
+      // Get readings where billing_data.effective_status is 'rejected'
       const additionalQuery = platformClient
         .from('utility_readings')
         .select('*, properties:propertyid(name, water_rate, electricity_rate), app_users:renteeid(name, email)')
         .order('readingdate', { ascending: false })
         .filter('billing_data->effective_status', 'eq', 'rejected');
-      
+
       if (propertyId) {
         additionalQuery.eq('propertyid', propertyId);
       }
-      
+
       if (renteeId) {
         additionalQuery.eq('renteeid', renteeId);
       }
-      
+
       if (utilityType) {
         additionalQuery.eq('utilitytype', utilityType);
       }
-      
+
       const { data: additionalData, error: additionalError } = await additionalQuery;
-      
+
       if (!additionalError && additionalData) {
         // Combine and deduplicate results
         const allReadings = [...data];
         const existingIds = new Set(data.map(r => r.id));
-        
+
         for (const reading of additionalData) {
           if (!existingIds.has(reading.id)) {
             allReadings.push(reading);
             existingIds.add(reading.id);
           }
         }
-        
+
         console.log(`Added ${allReadings.length - data.length} additional readings with effective_status='rejected'`);
         return { data: allReadings, error: null };
       }
     }
-    
+
     return { data, error: null };
   } catch (error) {
     console.error('Error fetching readings:', error);
@@ -172,12 +172,6 @@ export const fetchReadingsForInvoice = async (options = {}) => {
   }
 };
 
-// Array of months for date calculations
-const months = [
-  'January', 'February', 'March', 'April', 'May', 'June', 
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
 /**
  * Get utility usage summary for a rentee
  * @param {string} renteeId - The rentee ID
@@ -189,14 +183,14 @@ export const getRenteeUtilityUsage = async (renteeId, options = {}) => {
     if (!renteeId) {
       throw new Error('Rentee ID is required');
     }
-    
+
     const { months = 6, utilityType } = options;
-    
+
     // Get the date range for the last X months
     const endDate = new Date();
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
-    
+
     let query = platformClient
       .from('utility_readings')
       .select(`
@@ -218,19 +212,19 @@ export const getRenteeUtilityUsage = async (renteeId, options = {}) => {
       .eq('status', 'approved')
       .gte('readingdate', startDate.toISOString())
       .lte('readingdate', endDate.toISOString());
-      
+
     if (utilityType) {
       query = query.eq('utilitytype', utilityType);
     }
-    
+
     query = query.order('readingdate', { ascending: false });
-    
+
     const { data, error } = await query;
-    
-    if (error) { 
-      throw error; 
+
+    if (error) {
+      throw error;
     }
-    
+
     // Process data to create usage summary
     const summary = {
       readings: data,
@@ -251,29 +245,29 @@ export const getRenteeUtilityUsage = async (renteeId, options = {}) => {
         [UTILITY_TYPES.WATER]: 0
       }
     };
-    
+
     // Calculation of totals
     data.forEach(reading => {
       const consumption = reading.calculatedbill || 0;
       const cost = reading.billing_data?.amount || 0;
-      
+
       summary.totalUsage[reading.utilitytype] += consumption;
       summary.totalCost[reading.utilitytype] += cost;
     });
-    
+
     // Calculate monthly averages
     if (months > 0) {
-      summary.monthlyAverageUsage[UTILITY_TYPES.ELECTRICITY] = 
+      summary.monthlyAverageUsage[UTILITY_TYPES.ELECTRICITY] =
         summary.totalUsage[UTILITY_TYPES.ELECTRICITY] / months;
-      summary.monthlyAverageUsage[UTILITY_TYPES.WATER] = 
+      summary.monthlyAverageUsage[UTILITY_TYPES.WATER] =
         summary.totalUsage[UTILITY_TYPES.WATER] / months;
-      
-      summary.monthlyAverageCost[UTILITY_TYPES.ELECTRICITY] = 
+
+      summary.monthlyAverageCost[UTILITY_TYPES.ELECTRICITY] =
         summary.totalCost[UTILITY_TYPES.ELECTRICITY] / months;
-      summary.monthlyAverageCost[UTILITY_TYPES.WATER] = 
+      summary.monthlyAverageCost[UTILITY_TYPES.WATER] =
         summary.totalCost[UTILITY_TYPES.WATER] / months;
     }
-    
+
     return { data: summary, error: null };
   } catch (error) {
     console.error('Error getting rentee utility usage:', error);
@@ -292,9 +286,9 @@ export const fetchReadingById = async (readingId) => {
       console.error('Reading ID is required');
       return { data: null, error: new Error('Reading ID is required') };
     }
-    
+
     console.log('Fetching reading by ID:', readingId);
-    
+
     const { data, error } = await platformClient
       .from('utility_readings')
       .select(`
@@ -314,12 +308,12 @@ export const fetchReadingById = async (readingId) => {
       `)
       .eq('id', readingId)
       .single();
-    
+
     if (error) {
       console.error('Error fetching reading by ID:', error);
       return { data: null, error };
     }
-    
+
     console.log('Reading details fetched:', data ? 'Found' : 'Not found');
     if (data) {
       console.log('Processing status indicators:', {
@@ -332,7 +326,7 @@ export const fetchReadingById = async (readingId) => {
         rejected_date: data.rejected_date
       });
     }
-    
+
     return { data, error: null };
   } catch (error) {
     console.error('Error in fetchReadingById:', error);
@@ -349,7 +343,7 @@ export const ensureUtilityReadingsSchema = async () => {
   try {
     // First try to get schema information
     const { data: columns, error: schemaError } = await platformClient.rpc('get_table_columns', { table_name: 'utility_readings' });
-    
+
     // If RPC doesn't exist or fails, try direct query
     if (schemaError) {
       // Try fetching a record to see what columns exist
@@ -357,12 +351,12 @@ export const ensureUtilityReadingsSchema = async () => {
         .from('utility_readings')
         .select('*')
         .limit(1);
-        
+
       if (fetchError) {
         console.error('Could not validate schema:', fetchError);
         return false;
       }
-      
+
       // Check for missing columns that we need
       if (sampleData && sampleData.length > 0) {
         const existingColumns = Object.keys(sampleData[0]);
@@ -374,9 +368,9 @@ export const ensureUtilityReadingsSchema = async () => {
           'calculatedbill',
           'billing_data' 
         ];
-        
+
         const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
-        
+
         if (missingColumns.length > 0) {
           console.warn('Missing required columns:', missingColumns);
         }
@@ -388,7 +382,7 @@ export const ensureUtilityReadingsSchema = async () => {
         return true;
       }
     }
-    
+
     return true;
   } catch (error) {
     console.error('Schema compatibility check failed:', error);
@@ -398,6 +392,9 @@ export const ensureUtilityReadingsSchema = async () => {
 
 export const submitUtilityReading = async (readingData, photos) => {
   try {
+    if (photos?.length > 0) {
+      throw new Error('Use the utility reading form to upload reading photos before submission.');
+    }
     console.log('Submitting utility reading:', readingData);
 
     // Validate required fields
@@ -429,9 +426,6 @@ export const submitUtilityReading = async (readingData, photos) => {
     }
 
     // Process photos if provided
-    if (photos && photos.length > 0) {
-      await uploadReadingPhotos(data[0].id, photos);
-    }
 
     console.log('Utility reading submitted successfully:', data);
     return { success: true, data: data[0] };
@@ -439,4 +433,4 @@ export const submitUtilityReading = async (readingData, photos) => {
     console.error('Error submitting utility reading:', error);
     return { success: false, error: error.message };
   }
-}; 
+};

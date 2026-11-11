@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Button, Card, CardContent, CircularProgress, Container, Divider, FormControl, Grid, InputLabel, MenuItem, Paper, Select, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Alert, Chip, Tooltip, IconButton, TextField } from '@mui/material';
+import React, { useCallback, useState, useEffect } from 'react';
+import { Box, Button, Card, CardContent, CircularProgress, Container, Divider, FormControl, Grid, InputLabel, MenuItem, Paper, Select, Snackbar, Typography, Alert, Tooltip, IconButton, TextField } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { FiCheckCircle, FiXCircle, FiFilter, FiImage, FiDollarSign, FiActivity, FiHelpCircle, FiEdit, FiSave } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiFilter, FiImage, FiActivity, FiEdit, FiSave } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { fetchReadings, fetchReadingById, calculateUtilityAmount } from '../services/utilityBillingService';
+import { fetchReadings, calculateUtilityAmount } from '../services/utilityBillingService';
 import { transitionUtilityReading, editPendingUtilityReading } from '../services/utilityReviewClient';
 import { UTILITY_TYPES } from '../utils/constants';
 import ImageViewer from '../components/common/ImageViewer';
 
 const UtilityBillingReview = () => {
-  const theme = useTheme();
-  const navigate = useNavigate();
-  
+  useTheme();
+  useNavigate();
+
   const [readings, setReadings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending'); // Default to pending
@@ -23,24 +23,20 @@ const UtilityBillingReview = () => {
     message: '',
     severity: 'info'
   });
-  
+
   // New state for editing functionality
   const [editingReading, setEditingReading] = useState(null);
   const [editedValue, setEditedValue] = useState('');
   const [editingField, setEditingField] = useState(null); // Track which field is being edited
   const [editedPreviousValue, setEditedPreviousValue] = useState('');
-  
-  useEffect(() => {
-    loadReadings();
-  }, [filter, utilityTypeFilter]);
-  
-  const loadReadings = async () => {
+
+  const loadReadings = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       let statusFilter = null;
       let billingStatusFilter = null;
-      
+
       // Set filters based on selected filter
       if (filter === 'pending') {
         statusFilter = 'pending';
@@ -55,43 +51,47 @@ const UtilityBillingReview = () => {
       } else if (filter === 'billed') {
         billingStatusFilter = 'invoiced';
       }
-      
+
       const options = {
         status: statusFilter,
         billingStatus: billingStatusFilter,
         utilityType: utilityTypeFilter || undefined
       };
-      
+
       console.log('Fetching readings with options:', options);
-      
+
       const { data, error } = await fetchReadings(options);
-      
+
       if (error) {
         throw error;
       }
-      
+
       // Additional client-side filtering for effective_status in billing_data
       let filteredData = data;
-      
+
       if (filter === 'rejected' && data) {
         // Also include readings where billing_data.effective_status is 'rejected'
-        filteredData = data.filter(reading => 
+        filteredData = data.filter(reading =>
           reading.billing_status === 'rejected' || 
           reading.billing_data?.effective_status === 'rejected' ||
           reading.status === 'rejected'
         );
       }
-      
+
       setReadings(filteredData || []);
-      
+
     } catch (error) {
       console.error('Error loading readings:', error);
       showAlert('Failed to load readings', 'error');
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [filter, utilityTypeFilter]);
+
+  useEffect(() => {
+    loadReadings();
+  }, [filter, loadReadings, utilityTypeFilter]);
+
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
     if (name === 'status') {
@@ -100,17 +100,17 @@ const UtilityBillingReview = () => {
       setUtilityTypeFilter(value);
     }
   };
-  
+
   const handleViewImage = (imageUrl) => {
     setSelectedImage(imageUrl);
     setShowImageViewer(true);
   };
-  
+
   const closeImageViewer = () => {
     setShowImageViewer(false);
     setSelectedImage(null);
   };
-  
+
   const handleApprove = async (reading) => {
     try {
       await transitionUtilityReading(reading.id, 'approve');
@@ -143,18 +143,18 @@ const UtilityBillingReview = () => {
       severity
     });
   };
-  
+
   const handleAlertClose = () => {
     setAlert(prev => ({
       ...prev,
       open: false
     }));
   };
-  
+
   const calculateConsumption = (reading) => {
     return reading.currentreading - (reading.previousreading || 0);
   };
-  
+
   const formatCurrency = (amount) => {
     // Format with Sri Lankan Rupee symbol
     try {
@@ -169,7 +169,7 @@ const UtilityBillingReview = () => {
       return `LKR ${Number(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
     }
   };
-  
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -177,7 +177,7 @@ const UtilityBillingReview = () => {
       day: 'numeric'
     });
   };
-  
+
   // Get status chip color and label
   const getStatusChip = (reading) => {
     if (!reading) {
@@ -187,7 +187,7 @@ const UtilityBillingReview = () => {
         </span>
       );
     }
-    
+
     // First check if billing_status is 'rejected'
     if (reading.billing_status === 'rejected') {
       return (
@@ -196,10 +196,10 @@ const UtilityBillingReview = () => {
         </span>
       );
     }
-    
+
     // Check for effective_status in billing_data
     const effectiveStatus = reading.billing_data?.effective_status;
-    
+
     if (effectiveStatus === 'rejected') {
       return (
         <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 text-xs font-medium">
@@ -225,7 +225,7 @@ const UtilityBillingReview = () => {
         </span>
       );
     }
-    
+
     // If effective_status isn't set, fall back to the actual status
     switch (reading.status) {
       case 'pending':
@@ -272,19 +272,19 @@ const UtilityBillingReview = () => {
         );
     }
   };
-  
+
   // Function to start editing a reading
   const handleStartEdit = (reading, field = 'current') => {
     setEditingReading(reading.id);
     setEditingField(field);
-    
+
     if (field === 'previous') {
       setEditedPreviousValue((reading.previousreading || 0).toString());
     } else {
       setEditedValue(reading.currentreading.toString());
     }
   };
-  
+
   // Function to cancel editing
   const handleCancelEdit = () => {
     setEditingReading(null);
@@ -292,7 +292,7 @@ const UtilityBillingReview = () => {
     setEditedValue('');
     setEditedPreviousValue('');
   };
-  
+
   // Function to save edited reading
   const handleSaveEdit = async (readingId) => {
     const reading = readings.find(row => row.id === readingId);
@@ -334,14 +334,14 @@ const UtilityBillingReview = () => {
         <Typography variant="h4" gutterBottom>
           Utility Readings Review
         </Typography>
-        
+
         {/* Filter controls in a card at the top */}
         <Card variant="outlined" sx={{ mb: 3, p: 2 }}>
           <CardContent sx={{ p: 1 }}>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
               <FiFilter style={{ marginRight: 8 }} /> Filters
             </Typography>
-            
+
             <Grid container spacing={2} alignItems="center">
               <Grid size={{ xs: 12, sm: 4, md: 3 }}>
                 <FormControl variant="outlined" size="small" fullWidth>
@@ -363,7 +363,7 @@ const UtilityBillingReview = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              
+
               <Grid size={{ xs: 12, sm: 4, md: 3 }}>
                 <FormControl variant="outlined" size="small" fullWidth>
                   <InputLabel id="utility-type-label">Utility Type</InputLabel>
@@ -381,7 +381,7 @@ const UtilityBillingReview = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              
+
               <Grid size={{ xs: 12, sm: 4, md: 2 }}>
                 <Button
                   variant="outlined"
@@ -395,7 +395,7 @@ const UtilityBillingReview = () => {
             </Grid>
           </CardContent>
         </Card>
-        
+
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
@@ -418,10 +418,10 @@ const UtilityBillingReview = () => {
         ) : (
           <Box sx={{ overflowX: 'auto' }}>
             {readings.map((reading) => (
-              <Paper 
-                key={reading.id} 
+              <Paper
+                key={reading.id}
                 elevation={1} 
-                sx={{ 
+                sx={{
                   mb: 2, 
                   overflow: 'hidden',
                   '&:hover': { 
@@ -430,8 +430,8 @@ const UtilityBillingReview = () => {
                 }}
               >
                 {/* Utility Information Header */}
-                <Box 
-                  sx={{ 
+                <Box
+                  sx={{
                     p: 1.5, 
                     bgcolor: 'background.default',
                     borderBottom: '1px solid',
@@ -444,30 +444,30 @@ const UtilityBillingReview = () => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
                     {getStatusChip(reading)}
-                    
+
                     <Typography variant="subtitle1" sx={{ mx: 2, fontWeight: 'bold' }}>
-                      {reading.utilitytype === UTILITY_TYPES.ELECTRICITY ? 
+                      {reading.utilitytype === UTILITY_TYPES.ELECTRICITY ?
                         'Electricity' : reading.utilitytype === UTILITY_TYPES.WATER ? 
                         'Water' : reading.utilitytype}
                     </Typography>
-                    
+
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                    
+
                     <Tooltip title="Property">
                       <Typography variant="body2" sx={{ mx: 1 }}>
                         {reading.properties?.name || "Unknown Property"}
                       </Typography>
                     </Tooltip>
-                    
+
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                    
+
                     <Tooltip title="Tenant">
                       <Typography variant="body2" sx={{ mx: 1 }}>
                         {reading.app_users?.name || "Unknown Tenant"}
                       </Typography>
                     </Tooltip>
                   </Box>
-                  
+
                   {/* Action buttons */}
                   {(!reading.billing_data?.effective_status ||
                     (reading.billing_data?.effective_status !== 'approved' && 
@@ -501,12 +501,12 @@ const UtilityBillingReview = () => {
                       </Button>
                     </Box>
                   )}
-                  
+
                   <Typography variant="body2" color="textSecondary">
                     {formatDate(reading.readingdate)}
                   </Typography>
                 </Box>
-                
+
                 {/* Reading Details */}
                 <Grid container spacing={2} p={2} alignItems="center">
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -520,12 +520,12 @@ const UtilityBillingReview = () => {
                           value={editedPreviousValue}
                           onChange={(e) => setEditedPreviousValue(e.target.value)}
                           type="number"
-                          InputProps={{ 
-                            inputProps: { 
+                          InputProps={{
+                            inputProps: {
                               max: reading.currentreading - 0.01, 
                               step: 'any' 
                             },
-                            sx: { 
+                            sx: {
                               bgcolor: 'background.paper', 
                               width: '80px',
                               '& input': {
@@ -534,7 +534,7 @@ const UtilityBillingReview = () => {
                             }
                           }}
                         />
-                        <IconButton 
+                        <IconButton
                           color="primary" 
                           size="small" 
                           onClick={() => handleSaveEdit(reading.id)}
@@ -542,7 +542,7 @@ const UtilityBillingReview = () => {
                         >
                           <FiSave />
                         </IconButton>
-                        <IconButton 
+                        <IconButton
                           color="default" 
                           size="small" 
                           onClick={handleCancelEdit}
@@ -555,7 +555,7 @@ const UtilityBillingReview = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Typography variant="h6">{reading.previousreading || 0}</Typography>
                         {reading.status === 'pending' && editingReading !== reading.id && (
-                          <IconButton 
+                          <IconButton
                             color="primary" 
                             size="small" 
                             onClick={() => handleStartEdit(reading, 'previous')}
@@ -568,7 +568,7 @@ const UtilityBillingReview = () => {
                       </Box>
                     )}
                   </Grid>
-                  
+
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                     <Typography variant="body2" color="textSecondary" gutterBottom>
                       Current Reading
@@ -580,12 +580,12 @@ const UtilityBillingReview = () => {
                           value={editedValue}
                           onChange={(e) => setEditedValue(e.target.value)}
                           type="number"
-                          InputProps={{ 
-                            inputProps: { 
+                          InputProps={{
+                            inputProps: {
                               min: reading.previousreading || 0, 
                               step: 'any' 
                             },
-                            sx: { 
+                            sx: {
                               bgcolor: 'background.paper', 
                               width: '80px',
                               '& input': {
@@ -594,7 +594,7 @@ const UtilityBillingReview = () => {
                             }
                           }}
                         />
-                        <IconButton 
+                        <IconButton
                           color="primary" 
                           size="small" 
                           onClick={() => handleSaveEdit(reading.id)}
@@ -602,7 +602,7 @@ const UtilityBillingReview = () => {
                         >
                           <FiSave />
                         </IconButton>
-                        <IconButton 
+                        <IconButton
                           color="default" 
                           size="small" 
                           onClick={handleCancelEdit}
@@ -615,7 +615,7 @@ const UtilityBillingReview = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Typography variant="h6">{reading.currentreading}</Typography>
                         {reading.status === 'pending' && editingReading !== reading.id && (
-                          <IconButton 
+                          <IconButton
                             color="primary" 
                             size="small" 
                             onClick={() => handleStartEdit(reading, 'current')}
@@ -628,7 +628,7 @@ const UtilityBillingReview = () => {
                       </Box>
                     )}
                   </Grid>
-                  
+
                   <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                     <Typography variant="body2" color="textSecondary" gutterBottom>
                       Consumption
@@ -637,7 +637,7 @@ const UtilityBillingReview = () => {
                       {calculateConsumption(reading).toFixed(2)} {reading.utilitytype === UTILITY_TYPES.ELECTRICITY ? 'kWh' : 'm³'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                     <Typography variant="body2" color="textSecondary" gutterBottom>
                       Amount
@@ -646,7 +646,7 @@ const UtilityBillingReview = () => {
                       {formatCurrency(calculateUtilityAmount(reading))}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                     <Typography variant="body2" color="textSecondary" gutterBottom>
                       Photo
@@ -674,17 +674,17 @@ const UtilityBillingReview = () => {
           </Box>
         )}
       </Paper>
-      
+
       {showImageViewer && (
-        <ImageViewer 
-          imageUrl={selectedImage} 
-          open={showImageViewer} 
-          onClose={closeImageViewer} 
+        <ImageViewer
+          imageUrl={selectedImage}
+          open={showImageViewer}
+          onClose={closeImageViewer}
         />
       )}
-      
-      <Snackbar 
-        open={alert.open} 
+
+      <Snackbar
+        open={alert.open}
         autoHideDuration={6000} 
         onClose={handleAlertClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
@@ -697,4 +697,4 @@ const UtilityBillingReview = () => {
   );
 };
 
-export default UtilityBillingReview; 
+export default UtilityBillingReview;

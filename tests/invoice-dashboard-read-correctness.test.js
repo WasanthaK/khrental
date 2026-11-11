@@ -16,8 +16,8 @@ test('dashboard totals iterate paginated tenant-scoped invoice-list endpoint to 
   assert.match(summary, /propertyId,\s*status: options\.status/);
   assert.match(summary, /page,\s*pageSize/);
   assert.match(summary, /invoices\.push\(\.\.\.data\)/);
-  assert.match(summary, /if \(data\.length < pageSize\) break/);
-  assert.match(summary, /if \(error\) throw error/);
+  assert.match(summary, /if \(data\.length < pageSize\) \{break/);
+  assert.match(summary, /if \(error\) \{throw error/);
   assert.match(summary, /if \(!Array\.isArray\(data\)\)/);
   assert.match(summary, /pagination limit/);
   assert.doesNotMatch(summary, /pageSize:\s*1000/);
@@ -29,7 +29,7 @@ test('pending readings dashboard uses the explicit scoped read client and preser
   assert.match(pending, /for \(const reading of propertiesData\)/);
   assert.match(pending, /counts\[reading\.propertyid\] = \(counts\[reading\.propertyid\] \|\| 0\) \+ 1/);
   assert.match(pending, /pendingReadingsCount: counts\[property\.id\] \|\| 0/);
-  assert.match(pending, /if \(data\.length < pageSize\) break/);
+  assert.match(pending, /if \(data\.length < pageSize\) \{break/);
   assert.match(pending, /pagination limit/);
   assert.doesNotMatch(pending, /platformClient/);
 });
@@ -45,7 +45,7 @@ test('explicit pending reading transport retains scoped filters and avoids compa
   assert.match(client, /missingTable/);
   assert.match(client, /databaseConfigured === false/);
   // Guard actual compatibility imports/calls, not comments describing the migration.
-  assert.doesNotMatch(client, /from ['\"][^'\"]*platformClient/);
+  assert.doesNotMatch(client, /from ['"][^'"]*platformClient/);
   assert.doesNotMatch(client, /platformClient\\./);
 });
 
@@ -79,7 +79,6 @@ test('shared invoice property selector uses supported context selection contract
     assert.ok(context.includes(name), name + ' must be implemented by PropertyContext');
   }
 });
-
 
 test('Phase 5 browser: real PropertySelector selects, toggles, clears, and respects controlled empty state', { timeout: 120000 }, async () => {
   const { fileURLToPath } = await import('node:url');

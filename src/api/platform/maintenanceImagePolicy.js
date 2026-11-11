@@ -10,7 +10,7 @@ export const sameMaintenanceIdentifier = (left, right) => (
   && String(left).trim().toLowerCase() === String(right).trim().toLowerCase()
 );
 
-export const authorizeMaintenanceImageAttachment = ({ user, membership, request, isTenant, canManage, canUpdateAssigned, hasPropertyScope }) => {
+export const authorizeMaintenanceImageAttachment = ({ user, request, isTenant, canManage, canUpdateAssigned, hasPropertyScope }) => {
   const actor = String(user?.id || '').trim();
   if (!actor || !request || !['pending', 'in_progress'].includes(String(request.status || '').toLowerCase())) {
     return false;

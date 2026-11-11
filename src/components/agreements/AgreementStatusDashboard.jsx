@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiFileText, FiUser, FiHome, FiCalendar, FiCheck, FiClock, FiAlertTriangle } from 'react-icons/fi';
+import { FiFileText, FiUser, FiHome, FiCheck, FiClock, FiAlertTriangle } from 'react-icons/fi';
 
 /**
  * AgreementStatusDashboard - Displays detailed status information for an agreement
@@ -17,7 +17,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
   const getStatusInfo = () => {
     const status = agreement.status || '';
     const signatureStatus = agreement.signature_status || '';
-    
+
     // Priority order for status display
     if (status === 'rejected') {
       return {
@@ -85,10 +85,10 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
       };
     }
   };
-  
+
   const statusInfo = getStatusInfo();
   const StatusIcon = statusInfo.icon;
-  
+
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4">
       <div className="flex items-center mb-4">
@@ -107,7 +107,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
           )}
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-3">
           <div>
@@ -123,7 +123,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
             <p className="font-medium">{formatDate(agreement.createdat)}</p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           {property && (
             <div>
@@ -134,7 +134,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
               </div>
             </div>
           )}
-          
+
           {rentee && (
             <div>
               <p className="text-sm text-gray-500 mb-1">Tenant</p>
@@ -144,7 +144,7 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
               </div>
             </div>
           )}
-          
+
           {showSignatureReference && agreement.eviasignreference && (
             <div>
               <p className="text-sm text-gray-500 mb-1">Signature Reference</p>
@@ -157,4 +157,4 @@ const AgreementStatusDashboard = ({ agreement, rentee, property, showSignatureRe
   );
 };
 
-export default AgreementStatusDashboard; 
+export default AgreementStatusDashboard;

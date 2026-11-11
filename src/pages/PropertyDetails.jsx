@@ -17,7 +17,7 @@ import PropertyPublicVisibility from '../components/properties/PropertyPublicVis
 const PropertyDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [property, setProperty] = useState(null);
   const [rentees, setRentees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,17 +26,17 @@ const PropertyDetails = () => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [activeCategory, setActiveCategory] = useState('exterior');
   const [organizedImages, setOrganizedImages] = useState([]);
-  const [agreements, setAgreements] = useState([]);
+  const [, setAgreements] = useState([]);
 
   const propertyCoordinates = property?.coordinates || null;
-  
+
   // Function to organize images by category
   const organizeImagesByCategory = (images) => {
     if (!images || images.length === 0) {
       console.log('No property images found to organize');
       return [];
     }
-    
+
     // Clone the images array and ensure each image has all required properties
     const sortedImages = [...images].map(img => {
       // Handle both string URLs and object format
@@ -47,7 +47,7 @@ const PropertyDetails = () => {
           uploaded_at: new Date().toISOString()
         };
       }
-      
+
       return {
         ...img,
         image_url: img.image_url || img, // Handle both formats
@@ -55,13 +55,13 @@ const PropertyDetails = () => {
         uploaded_at: img.uploaded_at || new Date().toISOString()
       };
     });
-    
+
     // Filter out any images with empty URLs
     const validImages = sortedImages.filter(img => {
       const url = typeof img === 'string' ? img : img.image_url;
       return !!url;
     });
-    
+
     // Group images by type
     const groupedImages = validImages.reduce((acc, image) => {
       // Make sure we have a valid type
@@ -70,7 +70,7 @@ const PropertyDetails = () => {
       acc[type].push(image);
       return acc;
     }, {});
-    
+
     // Define category order and labels
     const categoryOrder = ['exterior', 'interior', 'floorplan', 'other'];
     const categoryLabels = {
@@ -79,7 +79,7 @@ const PropertyDetails = () => {
       'floorplan': 'Floor Plans',
       'other': 'Other Images'
     };
-    
+
     // Create the final structure
     const organizedImages = categoryOrder
       .filter(category => groupedImages[category] && groupedImages[category].length > 0)
@@ -88,28 +88,28 @@ const PropertyDetails = () => {
         label: categoryLabels[category],
         images: groupedImages[category]
       }));
-    
+
     return organizedImages;
   };
-  
+
   // Add this function after the organizeImagesByCategory function
   const handleDeleteImage = async (imageToDelete) => {
     if (!confirm('Are you sure you want to delete this image? This cannot be undone.')) {
       return;
     }
-    
+
     try {
       setLoading(true);
-      
+
       // Get the image URL (handle both string and object formats)
       const imageUrl = typeof imageToDelete === 'string' 
-        ? imageToDelete 
+        ? imageToDelete
         : imageToDelete.image_url;
-      
+
       if (!imageUrl) {
         throw new Error('Invalid image URL');
       }
-      
+
       const legacyMarker = '/storage/v1/object/public/';
       let bucket = '';
       let filePath = '';
@@ -150,7 +150,7 @@ const PropertyDetails = () => {
         }
         console.warn('Property image file is already missing; removing its property reference.', { bucket, path: filePath });
       }
-      
+
       // Update the property in the database by removing the image from the images array
       const updatedImages = property.images.filter(img => {
         if (typeof img === 'string') {
@@ -158,30 +158,30 @@ const PropertyDetails = () => {
         }
         return img.image_url !== imageUrl;
       });
-      
+
       const { error: updateError } = await updateData('properties', id, {
         images: updatedImages
       });
-      
+
       if (updateError) {
         throw updateError;
       }
-      
+
       // Update local state
       setProperty(prev => ({
         ...prev,
         images: updatedImages
       }));
-      
+
       // Re-organize images
       const organized = organizeImagesByCategory(updatedImages);
       setOrganizedImages(organized);
-      
+
       // Reset active image index if needed
       if (activeImageIndex >= organized.find(cat => cat.category === activeCategory)?.images?.length) {
         setActiveImageIndex(0);
       }
-      
+
       toast.success('Image deleted successfully');
     } catch (error) {
       console.error('Error deleting image:', error);
@@ -190,23 +190,23 @@ const PropertyDetails = () => {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
     const fetchPropertyData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch the primary property record through the explicit tenant directory.
         const propertyData = await getTenantPropertyById(id);
-        
+
         if (propertyData) {
           // Inspect the raw property data before any processing
           console.log('Raw property data from DB:', propertyData);
           console.log('Terms type:', typeof propertyData.terms);
-          
+
           // Add more robust terms handling
           let processedProperty = { ...propertyData };
-          
+
           // Handle terms properly - if it's a string, parse it
           if (typeof processedProperty.terms === 'string') {
             try {
@@ -238,16 +238,16 @@ const PropertyDetails = () => {
             console.log('Terms has unexpected type:', typeof processedProperty.terms);
             processedProperty.terms = { value: String(processedProperty.terms) };
           }
-          
+
           console.log('Final property data:', processedProperty);
-          
+
           setProperty(processedProperty);
-          
+
           // Organize property images
           const images = processedProperty.images || [];
           const organized = organizeImagesByCategory(images);
           setOrganizedImages(organized);
-          
+
           // Set default active category if it exists
           if (organized.length > 0) {
             setActiveCategory(organized[0].category);
@@ -256,7 +256,7 @@ const PropertyDetails = () => {
           // Fetch agreements once through the explicit tenant-scoped API and reuse them below.
           const agreementsData = await listAgreementsByProperty(id);
           setAgreements(agreementsData);
-          
+
           // Active agreements own the current renter relationship. Manual global
           // property-id arrays and cancelled/expired contracts are history only.
           setRentees(getCurrentPropertyRentees(agreementsData, id));
@@ -271,19 +271,19 @@ const PropertyDetails = () => {
         setLoading(false);
       }
     };
-    
+
     fetchPropertyData();
   }, [id]);
-  
+
   const handleDelete = async () => {
     try {
       setLoading(true);
       const { error } = await deleteData('properties', id);
-      
+
       if (error) {
         throw error;
       }
-      
+
       navigate('/dashboard/properties');
     } catch (error) {
       console.error('Error deleting property:', error.message);
@@ -293,7 +293,7 @@ const PropertyDetails = () => {
       setShowDeleteConfirm(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -301,7 +301,7 @@ const PropertyDetails = () => {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -310,7 +310,7 @@ const PropertyDetails = () => {
       </div>
     );
   }
-  
+
   if (!property) {
     return (
       <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
@@ -319,7 +319,7 @@ const PropertyDetails = () => {
       </div>
     );
   }
-  
+
   return (
     <div>
       {/* Header with actions */}
@@ -346,7 +346,7 @@ const PropertyDetails = () => {
           </button>
         </div>
       </div>
-      
+
       {/* Property details */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column - Images */}
@@ -372,7 +372,7 @@ const PropertyDetails = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 {/* Active category images */}
                 {organizedImages.find(cat => cat.category === activeCategory) && (
                   <div>
@@ -381,33 +381,33 @@ const PropertyDetails = () => {
                         const categoryImages = organizedImages.find(cat => cat.category === activeCategory).images;
                         const currentImage = categoryImages[activeImageIndex >= categoryImages.length ? 0 : activeImageIndex];
                         const imageUrl = typeof currentImage === 'string' ? currentImage : currentImage.image_url;
-                        
+
                         return (
-                          <img 
+                          <img
                             src={propertyImageDisplayUrl(imageUrl, {tenantId: property.tenant_id}) || DEFAULT_IMAGE}
-                            alt={property.name} 
+                            alt={property.name}
                             className="w-full h-full object-contain"
-                            onError={(e) => { 
+                            onError={(e) => {
                               console.log("Image failed to load, using fallback");
                               e.target.onerror = null; 
-                              e.target.src = DEFAULT_IMAGE; 
+                              e.target.src = DEFAULT_IMAGE;
                             }}
                           />
                         );
                       })()}
                     </div>
-                    
+
                     {/* Thumbnails */}
                     {(() => {
                       const categoryImages = organizedImages.find(cat => cat.category === activeCategory).images;
-                      
+
                       return categoryImages.length > 1 ? (
                         <div className="p-2 flex space-x-2 overflow-x-auto">
                           {categoryImages.map((image, index) => {
                             const imageUrl = typeof image === 'string' ? image : image.image_url;
-                            
+
                             return (
-                              <div 
+                              <div
                                 key={index}
                                 className="relative group h-16 w-16 flex-shrink-0 rounded overflow-hidden"
                               >
@@ -417,17 +417,17 @@ const PropertyDetails = () => {
                                     index === activeImageIndex ? 'border-blue-500' : 'border-transparent'
                                   }`}
                                 >
-                                  <img 
+                                  <img
                                     src={propertyImageDisplayUrl(imageUrl, {tenantId: property.tenant_id}) || DEFAULT_IMAGE}
                                     alt={`Thumbnail ${index + 1}`} 
                                     className="w-full h-full object-cover"
-                                    onError={(e) => { 
+                                    onError={(e) => {
                                       e.target.onerror = null; 
-                                      e.target.src = DEFAULT_IMAGE; 
+                                      e.target.src = DEFAULT_IMAGE;
                                     }}
                                   />
                                 </button>
-                                
+
                                 {/* Delete button that appears on hover */}
                                 <button
                                   type="button"
@@ -451,8 +451,8 @@ const PropertyDetails = () => {
             ) : (
               <div className="h-96 bg-gray-100 flex items-center justify-center">
                 <div className="text-center">
-                  <img 
-                    src={DEFAULT_IMAGE} 
+                  <img
+                    src={DEFAULT_IMAGE}
                     alt="No images available" 
                     className="w-full max-w-md mx-auto"
                   />
@@ -461,7 +461,7 @@ const PropertyDetails = () => {
               </div>
             )}
           </div>
-          
+
           {/* Description */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Description</h2>
@@ -469,7 +469,7 @@ const PropertyDetails = () => {
               {property.description || 'No description available.'}
             </p>
           </div>
-          
+
           {/* Amenities */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Amenities</h2>
@@ -485,7 +485,7 @@ const PropertyDetails = () => {
               <p className="text-gray-500">No amenities available.</p>
             )}
           </div>
-          
+
           {/* Checklist Items */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Checklist Items</h2>
@@ -499,24 +499,24 @@ const PropertyDetails = () => {
               <p className="text-gray-500">No checklist items available.</p>
             )}
           </div>
-          
+
           {/* Location */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Location</h2>
-            <PropertyMap 
+            <PropertyMap
               address={property.address || ''} 
-              coordinates={propertyCoordinates} 
+              coordinates={propertyCoordinates}
               readOnly={true} 
             />
           </div>
         </div>
-        
+
         {/* Right column - Details */}
         <div>
           {/* Basic Info */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-medium mb-4">Property Details</h2>
-            
+
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-500">Country</p>
@@ -526,41 +526,41 @@ const PropertyDetails = () => {
                 <p className="text-sm text-gray-500">Address</p>
                 <p className="font-medium">{property.address || 'No address provided'}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Property Type</p>
                 <p className="font-medium capitalize">{property.propertytype || 'Not specified'}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Unit Configuration</p>
                 <p className="font-medium">{property.unitconfiguration || 'Not specified'}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Monthly Rent</p>
                 <p className="font-medium">{formatCurrency(property.rentalvalues?.rent || 0)}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Deposit</p>
                 <p className="font-medium">{formatCurrency(property.rentalvalues?.deposit || 0)}</p>
               </div>
-              
+
               {property.squarefeet && (
                 <div>
                   <p className="text-sm text-gray-500">Square Feet</p>
                   <p className="font-medium">{property.squarefeet} sq ft</p>
                 </div>
               )}
-              
+
               {property.yearbuilt && (
                 <div>
                   <p className="text-sm text-gray-500">Year Built</p>
                   <p className="font-medium">{property.yearbuilt}</p>
                 </div>
               )}
-              
+
               <div>
                 <p className="text-sm text-gray-500">Availability</p>
                 <div className="mt-1">
@@ -571,7 +571,7 @@ const PropertyDetails = () => {
                   }`}>
                     {getPropertyAvailability(property.status).label}
                   </span>
-                  
+
                   {property.availablefrom && property.status !== 'available' && (
                     <p className="text-sm mt-1">
                       Available from: {formatDate(property.availablefrom)}
@@ -581,14 +581,14 @@ const PropertyDetails = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Public marketplace opt-out and market metadata; hidden until backend release gate is enabled. */}
           <PropertyPublicVisibility propertyId={id} />
 
           {/* Terms */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Terms</h2>
-            
+
             {property.terms && typeof property.terms === 'object' && Object.keys(property.terms).length > 0 ? (
               <div className="space-y-3">
                 {Object.entries(property.terms).map(([key, value]) => {
@@ -596,12 +596,12 @@ const PropertyDetails = () => {
                   if (value === null || value === undefined) {
                     return null;
                   }
-                  
+
                   // Format the key for display
                   const displayKey = key.replace(/([A-Z])/g, ' $1')
                                 .trim()
                                 .replace(/^\w/, c => c.toUpperCase());
-                  
+
                   return (
                     <div key={key}>
                       <p className="text-sm text-gray-500">{displayKey}</p>
@@ -621,16 +621,16 @@ const PropertyDetails = () => {
               <p className="text-gray-500">No terms available.</p>
             )}
           </div>
-          
+
           {/* Current Rentees */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Current Rentees</h2>
-            
+
             {rentees && rentees.length > 0 ? (
               <div className="space-y-4">
                 {rentees.map(rentee => (
                   <div key={rentee.id} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
-                    <Link 
+                    <Link
                       to={`/dashboard/rentees/${rentee.id}`}
                       className="font-medium text-blue-600 hover:text-blue-800"
                     >
@@ -653,7 +653,7 @@ const PropertyDetails = () => {
               <div className="text-gray-500">
                 <p>No rentees currently associated with this property.</p>
                 <div className="mt-2">
-                  <Link 
+                  <Link
                     to="/dashboard/rentees/new" 
                     className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center"
                   >
@@ -666,11 +666,11 @@ const PropertyDetails = () => {
               </div>
             )}
           </div>
-          
+
           {/* Quick Actions */}
           <div className="bg-white rounded-lg shadow p-6 mt-6">
             <h2 className="text-lg font-medium mb-4">Quick Actions</h2>
-            
+
             <div className="space-y-2">
               <Link
                 to={`/dashboard/agreements/new?property_id=${id}`}
@@ -678,14 +678,14 @@ const PropertyDetails = () => {
               >
                 Create New Agreement
               </Link>
-              
+
               <Link
                 to={`/dashboard/invoices/new?property_id=${id}`}
                 className="block w-full text-center px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
               >
                 Generate Invoice
               </Link>
-              
+
               <Link
                 to={`/dashboard/maintenance/new?property_id=${id}`}
                 className="block w-full text-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -696,7 +696,7 @@ const PropertyDetails = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -731,4 +731,4 @@ const PropertyDetails = () => {
   );
 };
 
-export default PropertyDetails; 
+export default PropertyDetails;

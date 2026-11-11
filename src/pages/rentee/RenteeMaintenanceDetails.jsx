@@ -14,7 +14,7 @@ const RenteeMaintenanceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userData, activeTenantId } = useAuth();
-  
+
   // State
   const [request, setRequest] = useState(null);
   const [property, setProperty] = useState(null);
@@ -25,17 +25,17 @@ const RenteeMaintenanceDetails = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
-  
+
   // Fetch request data
   useEffect(() => {
     const fetchRequestData = async () => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const appUserId = userData?.profileId || userData?.appUserId || null;
         if (!appUserId) {throw new Error('User not found');}
-        
+
         // Authenticated server owns renter/tenant authorization; no client ID
         // can widen this scoped read or trigger a generic fallback.
         const requestData = await getAuthorizedMaintenanceDetail(id);
@@ -52,38 +52,38 @@ const RenteeMaintenanceDetails = () => {
         setLoading(false);
       }
     };
-    
+
     if (id && userData?.id) {
       fetchRequestData();
     }
-  }, [id, userData?.id, userData?.profileId, activeTenantId]);
-  
+  }, [id, userData?.id, userData?.profileId, activeTenantId, userData?.appUserId]);
+
   // Handle request cancellation
   const handleCancelRequest = async () => {
     if (!cancellationReason.trim()) {
       toast.error('Please provide a reason for cancellation');
       return;
     }
-    
+
     try {
       setActionLoading(true);
       console.log('Starting cancellation process for request:', id);
       console.log('Current request state:', request);
-      
+
       const result = await cancelMaintenanceRequest(id, cancellationReason);
       console.log('Raw cancellation result:', result);
-      
+
       if (!result.success) {
         console.error('Cancellation failed:', result.error);
         throw new Error(result.error || 'Failed to cancel request');
       }
-      
+
       // Update the local state with the cancelled request
       if (result.data) {
         console.log('Updating local state with cancelled request:', result.data);
         setRequest(result.data);
         setProperty(result.data.property);
-        
+
         // Verify the update
         console.log('Updated request state:', result.data);
         console.log('Updated property state:', result.data.property);
@@ -91,10 +91,10 @@ const RenteeMaintenanceDetails = () => {
         console.error('No data returned from cancellation');
         throw new Error('No data returned from cancellation');
       }
-      
+
       toast.success('Maintenance request cancelled successfully');
       setShowCancelDialog(false);
-      
+
     } catch (error) {
       console.error('Error cancelling request:', error);
       console.error('Error stack:', error.stack);
@@ -103,16 +103,16 @@ const RenteeMaintenanceDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle adding a comment
   const handleAddComment = async (commentData) => {
     try {
       const result = await addMaintenanceComment(id, commentData);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to add comment');
       }
-      
+
       // Refresh through the same server-authorized tenant/owner projection.
       // A denied refresh must never retry via the compatibility table client.
       const updatedRequest = await getAuthorizedMaintenanceDetail(id);
@@ -121,18 +121,18 @@ const RenteeMaintenanceDetails = () => {
       setRequest(updatedRequest);
       setProperty(updatedRequest.property);
       return true;
-      
+
     } catch (error) {
       console.error('Error adding comment:', error);
       toast.error('Failed to add comment: ' + error.message);
       return false;
     }
   };
-  
+
   // Parse notes from string to array of comments
   const parseNotes = (notes) => {
     if (!notes) {return [];}
-    
+
     try {
       // If it's already a string that looks like JSON, parse it
       if (typeof notes === 'string' && (notes.startsWith('[') || notes.startsWith('{'))) {
@@ -146,7 +146,7 @@ const RenteeMaintenanceDetails = () => {
           return [parsedNotes];
         }
       }
-      
+
       // If it's a plain string, treat it as a single comment
       if (typeof notes === 'string') {
         return [{
@@ -156,17 +156,17 @@ const RenteeMaintenanceDetails = () => {
           isAdminMessage: false
         }];
       }
-      
+
       // If it's already an array, return it
       if (Array.isArray(notes)) {
         return notes;
       }
-      
+
       // If it's an object, wrap it in an array
       if (typeof notes === 'object') {
         return [notes];
       }
-      
+
       return [];
     } catch (e) {
       console.error('Error parsing notes:', e);
@@ -182,22 +182,9 @@ const RenteeMaintenanceDetails = () => {
       return [];
     }
   };
-  
+
   // Format comment for display
-  const formatComment = (comment) => {
-    if (!comment) {return '';}
-    
-    if (typeof comment === 'string') {
-      return comment;
-    }
-    
-    if (typeof comment === 'object') {
-      return comment.content || JSON.stringify(comment, null, 2);
-    }
-    
-    return String(comment);
-  };
-  
+
   // Add debug logging for notes
   useEffect(() => {
     if (request?.notes) {
@@ -206,7 +193,7 @@ const RenteeMaintenanceDetails = () => {
       console.log('Parsed notes:', parsed);
     }
   }, [request?.notes]);
-  
+
   // Get priority info (color and label)
   const getPriorityInfo = (priority) => {
     switch (priority) {
@@ -222,7 +209,7 @@ const RenteeMaintenanceDetails = () => {
         return { color: 'bg-gray-100 text-gray-800', label: 'Unknown' };
     }
   };
-  
+
   // Get request type label
   const getRequestTypeLabel = (type) => {
     switch (type) {
@@ -246,7 +233,7 @@ const RenteeMaintenanceDetails = () => {
         return type || 'Unknown';
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -254,7 +241,7 @@ const RenteeMaintenanceDetails = () => {
       </div>
     );
   }
-  
+
   if (error || !request) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -263,9 +250,9 @@ const RenteeMaintenanceDetails = () => {
       </div>
     );
   }
-  
+
   const priorityInfo = getPriorityInfo(request.priority);
-  
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
@@ -279,7 +266,7 @@ const RenteeMaintenanceDetails = () => {
           Back to Maintenance Requests
         </button>
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Request Details */}
         <div className="lg:col-span-2 space-y-6">
@@ -300,12 +287,12 @@ const RenteeMaintenanceDetails = () => {
                   </span>
                 </div>
               </div>
-              
+
               <div className="mb-6">
                 <h3 className="text-md font-medium mb-2">Description</h3>
                 <p className="text-gray-700 whitespace-pre-wrap">{request.description}</p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                   <h3 className="text-md font-medium mb-2">Property</h3>
@@ -314,13 +301,13 @@ const RenteeMaintenanceDetails = () => {
                     <p className="text-gray-600 text-sm">{property.address}</p>
                   )}
                 </div>
-                
+
                 <div>
                   <h3 className="text-md font-medium mb-2">Request Type</h3>
                   <p className="text-gray-700">{getRequestTypeLabel(request.requesttype)}</p>
                 </div>
               </div>
-              
+
               {/* Images Timeline */}
               {request.images && request.images.length > 0 && (
                 <div className="mb-6">
@@ -352,7 +339,7 @@ const RenteeMaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {/* Action Buttons */}
               {request.status === MAINTENANCE_STATUS.PENDING && (
                 <div className="flex justify-end">
@@ -367,7 +354,7 @@ const RenteeMaintenanceDetails = () => {
               )}
             </div>
           </div>
-          
+
           {/* Comments Section */}
           <CommentSection
             comments={parseNotes(request?.notes || [])}
@@ -376,12 +363,12 @@ const RenteeMaintenanceDetails = () => {
             userName={userData?.name || 'Rentee'}
           />
         </div>
-        
+
         {/* Right Column - Status Timeline */}
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-medium mb-4">Request Timeline</h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
@@ -396,7 +383,7 @@ const RenteeMaintenanceDetails = () => {
                   <p className="text-sm text-gray-500">{formatDate(request.createdat)}</p>
                 </div>
               </div>
-              
+
               {request.assignedto && (
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
@@ -412,7 +399,7 @@ const RenteeMaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {request.status === MAINTENANCE_STATUS.IN_PROGRESS && (
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
@@ -428,7 +415,7 @@ const RenteeMaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {request.status === MAINTENANCE_STATUS.COMPLETED && (
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
@@ -444,7 +431,7 @@ const RenteeMaintenanceDetails = () => {
                   </div>
                 </div>
               )}
-              
+
               {request.status === MAINTENANCE_STATUS.CANCELLED && (
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
@@ -467,14 +454,14 @@ const RenteeMaintenanceDetails = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Cancel Dialog */}
       {showCancelDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium mb-4">Cancel Maintenance Request</h3>
             <p className="text-gray-600 mb-4">Please provide a reason for cancelling this request:</p>
-            
+
             <textarea
               value={cancellationReason}
               onChange={(e) => setCancellationReason(e.target.value)}
@@ -482,7 +469,7 @@ const RenteeMaintenanceDetails = () => {
               rows="3"
               placeholder="Enter cancellation reason..."
             />
-            
+
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowCancelDialog(false)}
@@ -502,7 +489,7 @@ const RenteeMaintenanceDetails = () => {
           </div>
         </div>
       )}
-      
+
       {/* Image Modal */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
@@ -542,4 +529,4 @@ const RenteeMaintenanceDetails = () => {
   );
 };
 
-export default RenteeMaintenanceDetails; 
+export default RenteeMaintenanceDetails;

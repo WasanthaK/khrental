@@ -4,7 +4,7 @@ import SignatureProgressTracker from '../ui/SignatureProgressTracker';
 const SignatureProgressDemo = () => {
   // Demo states to showcase different signature scenarios
   const [demoState, setDemoState] = useState('pending');
-  
+
   // Sample data for different scenarios
   const scenarios = {
     // No signatories have signed yet
@@ -44,14 +44,14 @@ const SignatureProgressDemo = () => {
       ]
     }
   };
-  
+
   // Get current scenario data
   const currentScenario = scenarios[demoState];
-  
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Signature Progress Demo</h1>
-      
+
       {/* Controls to switch between scenarios */}
       <div className="mb-6 p-4 bg-gray-100 rounded-lg">
         <h2 className="text-lg font-semibold mb-2">Select a scenario:</h2>
@@ -64,7 +64,7 @@ const SignatureProgressDemo = () => {
           >
             Awaiting Signatures
           </button>
-          
+
           <button
             onClick={() => setDemoState('first_signed')}
             className={`px-4 py-2 rounded-md ${demoState === 'first_signed' 
@@ -73,7 +73,7 @@ const SignatureProgressDemo = () => {
           >
             1st Signatory Signed
           </button>
-          
+
           <button
             onClick={() => setDemoState('second_signed')}
             className={`px-4 py-2 rounded-md ${demoState === 'second_signed' 
@@ -82,7 +82,7 @@ const SignatureProgressDemo = () => {
           >
             2nd Signatory Signed
           </button>
-          
+
           <button
             onClick={() => setDemoState('completed')}
             className={`px-4 py-2 rounded-md ${demoState === 'completed' 
@@ -93,23 +93,23 @@ const SignatureProgressDemo = () => {
           </button>
         </div>
       </div>
-      
+
       {/* Display the full signature progress tracker */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-3">Full View</h2>
-        <SignatureProgressTracker 
+        <SignatureProgressTracker
           status={currentScenario.status}
           signatories={currentScenario.signatories}
         />
       </div>
-      
+
       {/* Display the compact signature progress tracker */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-3">Compact View (for Cards)</h2>
         <div className="p-4 bg-white rounded shadow">
           <div className="flex justify-between items-center">
             <h3 className="font-medium">Agreement #12345</h3>
-            <SignatureProgressTracker 
+            <SignatureProgressTracker
               status={currentScenario.status}
               signatories={currentScenario.signatories}
               compact={true}
@@ -118,7 +118,7 @@ const SignatureProgressDemo = () => {
           <p className="mt-2 text-gray-600">Rental Agreement for 123 Main St.</p>
         </div>
       </div>
-      
+
       {/* Integration example in an agreement card */}
       <div>
         <h2 className="text-xl font-semibold mb-3">Example Integration in Agreement Card</h2>
@@ -126,7 +126,7 @@ const SignatureProgressDemo = () => {
           <div className="p-4 border-b">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium">Rental Agreement</h3>
-              <SignatureProgressTracker 
+              <SignatureProgressTracker
                 status={currentScenario.status}
                 signatories={currentScenario.signatories}
                 compact={true}
@@ -146,12 +146,12 @@ const SignatureProgressDemo = () => {
                 </button>
               </div>
             </div>
-            
+
             {/* Mini signatory list to show in card */}
             <div className="mt-4 pt-4 border-t">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Signatories:</h4>
               <div className="space-y-1">
-                {currentScenario.signatories.map((signatory, index) => (
+                {currentScenario.signatories.map((signatory, _index) => (
                   <div key={signatory.id} className="flex items-center text-sm">
                     <div className={`w-2 h-2 rounded-full mr-2 ${signatory.completed ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     <span>{signatory.name}</span>
@@ -167,4 +167,4 @@ const SignatureProgressDemo = () => {
   );
 };
 
-export default SignatureProgressDemo; 
+export default SignatureProgressDemo;

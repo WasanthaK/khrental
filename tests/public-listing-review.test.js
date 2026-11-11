@@ -49,7 +49,7 @@ const send=async(router,verb,route,body,identity=asAdmin)=>{
   app.use(express.json());
   app.use((req,res,next)=>{if(identity){Object.assign(req,identity);}next();});
   app.use('/prefs',router);
-  app.use((e,req,res,next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
+  app.use((e,req,res,_next)=>res.status(e.status||500).json({code:e.code||'ERR'}));
   const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   try{
     const r=await fetch('http://127.0.0.1:'+server.address().port+'/prefs'+route,{
@@ -156,11 +156,7 @@ test('photo withdrawal requires review gate, active admin and no arbitrary media
   assert.equal(touched,1);
 });
 test('withdrawal commits the authoritative denial before attempting storage deletion',async()=>{
-  const actions=[];
-  const tx={
-    commit:async()=>actions.push('commit'),
-    rollback:async()=>actions.push('rollback')
-  };
+
   // Query stub cannot stand in for SQL.Request; the integration database test
   // exercises the actual write and event, including a storage failure path.
   assert.equal(photoReviewEnabled(env),true);

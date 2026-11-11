@@ -15,7 +15,7 @@ const actor={authSession:{},user:{id:user,role:'admin'},tenantId:tenant,
 const makeCall=async(router,method,path,body,identity)=>{
   const app=express();app.use(express.json());app.use((req,res,next)=>{if(identity){Object.assign(req,identity);}next();});
   app.use('/listing',router);
-  app.use((error,req,res,next)=>res.status(error.status||500).json({code:error.code||'ERROR'}));
+  app.use((error,req,res,_next)=>res.status(error.status||500).json({code:error.code||'ERROR'}));
   const server=await new Promise(resolve=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));});
   try{
     const result=await fetch('http://127.0.0.1:'+server.address().port+'/listing'+path,
@@ -292,7 +292,6 @@ test('pilot detail rejects a mismatched projection even if the lookup regresses'
   });
   assert.equal((await makeCall(router,'GET','/'+publicId+'?country=LK')).status,404);
 });
-
 
 test('private pilot preview is default-off and requires current tenant administrator',async()=>{
   let reads=0;

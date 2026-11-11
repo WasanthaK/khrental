@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
 import { UTILITY_TYPES } from '../../utils/constants';
 import { formatCurrency, formatDate } from '../../utils/helpers';
-import { toast } from 'react-hot-toast';
-import { calculateUtilityAmount } from '../../services/utilityBillingService';
+import 'react-hot-toast';
+import '../../services/utilityBillingService';
 
 const RenteeUtilities = () => {
   const { user, activeTenantId } = useAuth();
@@ -13,17 +13,7 @@ const RenteeUtilities = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    setRecentReadings([]);
-    setError(null);
-    fetchRecentReadings();
-  }, [user?.id, activeTenantId]);
-
-  const fetchRecentReadings = async () => {
+  const fetchRecentReadings = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -63,12 +53,12 @@ const RenteeUtilities = () => {
           .eq('renteeid', appUserId)
           .order('createdat', { ascending: false })
           .limit(10);
-          
+
         if (invoiceError) {
           console.error('Error fetching invoices:', invoiceError);
           // Continue without invoices
         }
-        
+
         if (invoiceData && invoiceData.length > 0) {
           // Associate invoices with readings using a more robust approach
           readingsData.forEach(reading => {
@@ -85,14 +75,14 @@ const RenteeUtilities = () => {
               }
               return false;
             });
-            
+
             if (matchingInvoice) {
               reading.invoice = matchingInvoice;
             }
           });
         }
       }
-      
+
       setRecentReadings(readingsData || []);
     } catch (err) {
       console.error('Error fetching recent readings:', err);
@@ -100,7 +90,17 @@ const RenteeUtilities = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.appUserId, user?.profileId]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    setRecentReadings([]);
+    setError(null);
+    fetchRecentReadings();
+  }, [user?.id, activeTenantId, fetchRecentReadings]);
 
   if (loading) {
     return (
@@ -292,4 +292,4 @@ const RenteeUtilities = () => {
   );
 };
 
-export default RenteeUtilities; 
+export default RenteeUtilities;

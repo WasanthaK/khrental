@@ -7,8 +7,8 @@ import { toast } from 'react-hot-toast';
 import InvitationStatusBadge from '../components/common/InvitationStatusBadge';
 import useInvitationStatus from '../hooks/useInvitationStatus';
 import InviteUserButton from '../components/common/InviteUserButton';
-import PropertyCard from '../components/properties/PropertyCard';
-import AgreementCard from '../components/agreements/AgreementCard';
+import '../components/properties/PropertyCard';
+import '../components/agreements/AgreementCard';
 import InvoiceCard from '../components/invoices/InvoiceCard';
 import { mapAppUserToRentee } from '../services/appUserService';
 import { getRentee, setRenteeMembershipStatus } from '../services/renteeService';
@@ -62,11 +62,11 @@ const IdCopyDisplay = ({ url }) => {
 };
 
 // Custom component for displaying agreements in RenteeDetails page
-const AgreementSummaryCard = ({ agreement, property, rentee }) => {
+const AgreementSummaryCard = ({ agreement, property }) => {
   const formattedStartDate = formatDate(agreement.startdate);
   const formattedEndDate = formatDate(agreement.enddate);
   const hasUnit = agreement.unitid && agreement.unit;
-  
+
   return (
     <Link to={`/dashboard/agreements/${agreement.id}`} className="block">
       <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
@@ -95,7 +95,7 @@ const AgreementSummaryCard = ({ agreement, property, rentee }) => {
             </span>
           </div>
         </div>
-        
+
         <div className="mt-2 pt-2 border-t border-gray-100 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Monthly Rent:</span>
@@ -122,15 +122,15 @@ const RenteePropertyCard = ({ property, agreement }) => {
   useEffect(() => { setImageFailed(false); }, [imageUrl]);
   const isApartment = property.propertytype === 'apartment';
   const hasAssignedUnits = isApartment && property.assignedUnits && property.assignedUnits.length > 0;
-  
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
       <Link to={`/dashboard/properties/${property.id}`} className="block">
         <div className="relative h-40 bg-gray-100">
           {imageUrl && !imageFailed ? (
-            <img 
+            <img
               src={imageUrl}
-              alt={property.name} 
+              alt={property.name}
               className="w-full h-full object-cover"
               onError={() => setImageFailed(true)}
             />
@@ -152,11 +152,11 @@ const RenteePropertyCard = ({ property, agreement }) => {
             </span>
           </div>
         </div>
-        
+
         <div className="p-4">
           <h3 className="font-semibold text-lg mb-1 text-gray-900">{property.name}</h3>
           <p className="text-sm text-gray-600 mb-2">{property.address}</p>
-          
+
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-900">
               {formatAgreementRent(agreement)}/month
@@ -165,17 +165,17 @@ const RenteePropertyCard = ({ property, agreement }) => {
               {property.propertytype || 'Residential'}
             </span>
           </div>
-          
+
           {isApartment && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <h4 className="text-sm font-medium text-gray-700 mb-2">
                 {hasAssignedUnits ? 'Assigned Units:' : 'No Units Assigned'}
               </h4>
-              
+
               {hasAssignedUnits && (
                 <div className="flex flex-wrap gap-2">
                   {property.assignedUnits.map(unit => (
-                    <span 
+                    <span
                       key={unit.id}
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                     >
@@ -200,7 +200,7 @@ const RenteePropertyCard = ({ property, agreement }) => {
 const RenteeDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [rentee, setRentee] = useState(null);
   const [properties, setProperties] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -208,23 +208,23 @@ const RenteeDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
-  
+
   // Get invitation status only when needed (not during form edits)
   const invitationStatus = useInvitationStatus(id, true);
-  
+
   // Add a function to manually check status when needed
   const checkInvitationStatus = () => {
     invitationStatus.refresh();
   };
-  
+
   useEffect(() => {
     const fetchRenteeData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch the organization-scoped canonical renter projection.
         const renteeData = await getRentee(id);
-        
+
         if (renteeData && renteeData.directory_role === 'rentee') {
           // Map the rentee data to the state
           const renteeInfo = {
@@ -232,19 +232,19 @@ const RenteeDetails = () => {
             structuredAssociations: renteeData.current_properties
               ?? (Array.isArray(renteeData?.associated_properties) ? renteeData.associated_properties : [])
           };
-          
+
           setRentee(renteeInfo);
-          
+
           // Prepare for property fetching
           let propertyIds = [];
-          
+
           // Use structured associations if available, fall back to legacy format
           if (renteeInfo.structuredAssociations && renteeInfo.structuredAssociations.length > 0) {
             propertyIds = [...new Set(renteeInfo.structuredAssociations.map(assoc => assoc.propertyId))];
           } else if (renteeInfo.associatedPropertyIds && renteeInfo.associatedPropertyIds.length > 0) {
             propertyIds = renteeInfo.associatedPropertyIds;
           }
-          
+
           if (propertyIds.length > 0) {
             // Fetch all associated properties
             const { data: propertiesData, error: propertiesError } = await platformClient
@@ -254,11 +254,11 @@ const RenteeDetails = () => {
                 property_units(*)
               `)
               .in('id', propertyIds);
-            
+
             if (propertiesError) {
               throw propertiesError;
             }
-            
+
             // Map properties to display format and include unit information
             const associatedProperties = await Promise.all(propertiesData.map(async (property) => {
               const propertyItem = {
@@ -275,20 +275,20 @@ const RenteeDetails = () => {
                 amenities: property.amenities || [],
                 units: property.property_units || []
               };
-              
+
               // If it's an apartment, attach which units this rentee is assigned to
               if (property.propertytype === 'apartment' && renteeInfo.structuredAssociations) {
                 const associatedUnits = renteeInfo.structuredAssociations
                   .filter(assoc => assoc.propertyId === property.id && assoc.unitId)
                   .map(assoc => assoc.unitId);
-                
+
                 if (associatedUnits.length > 0) {
                   // Fetch the unit details for display
                   const { data: unitData, error: unitError } = await platformClient
                     .from('property_units')
                     .select('*')
                     .in('id', associatedUnits);
-                  
+
                   if (!unitError && unitData) {
                     propertyItem.assignedUnits = unitData;
                   } else {
@@ -299,13 +299,13 @@ const RenteeDetails = () => {
                   propertyItem.assignedUnits = [];
                 }
               }
-              
+
               return propertyItem;
             }));
-            
+
             setProperties(associatedProperties);
           }
-          
+
           // Fetch invoices for this rentee
           const { data: invoicesData, error: invoicesError } = await platformClient
             .from('invoices')
@@ -318,7 +318,7 @@ const RenteeDetails = () => {
               )
             `)
             .eq('renteeid', id);
-          
+
           if (invoicesError) {
             console.error('Error fetching invoices:', invoicesError);
             throw invoicesError;
@@ -336,10 +336,10 @@ const RenteeDetails = () => {
               property: invoice.property,
               propertyid: invoice.propertyid
             }));
-            
+
             setInvoices(formattedInvoices || []);
           }
-          
+
           // Fetch agreements for this rentee
           const { data: agreementsData, error: agreementsError } = await platformClient
             .from('agreements')
@@ -357,7 +357,7 @@ const RenteeDetails = () => {
             `)
             .eq('renteeid', id)
             .order('createdat', { ascending: false });
-          
+
           if (agreementsError) {
             console.error('Error fetching agreements:', agreementsError);
             throw agreementsError;
@@ -390,14 +390,14 @@ const RenteeDetails = () => {
         setLoading(false);
       }
     };
-    
+
     fetchRenteeData();
   }, [id]);
-  
+
   const handleDeactivate = async () => {
     try {
       setLoading(true);
-      
+
       await setRenteeMembershipStatus(id, 'inactive');
       toast.success('Tenant deactivated for this organization');
       navigate('/dashboard/rentees');
@@ -410,13 +410,13 @@ const RenteeDetails = () => {
       setShowDeactivateConfirm(false);
     }
   };
-  
+
   // Handle successful invitation
   const handleInviteSuccess = () => {
     checkInvitationStatus();
     toast.success('Invitation sent successfully');
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -424,7 +424,7 @@ const RenteeDetails = () => {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -433,7 +433,7 @@ const RenteeDetails = () => {
       </div>
     );
   }
-  
+
   if (!rentee) {
     return (
       <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
@@ -442,7 +442,7 @@ const RenteeDetails = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
@@ -462,7 +462,7 @@ const RenteeDetails = () => {
           </button>
         </div>
       </div>
-      
+
       {showDeactivateConfirm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
@@ -485,49 +485,49 @@ const RenteeDetails = () => {
           </div>
         </div>
       )}
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column - Basic Info */}
         <div className={`lg:col-span-1 ${properties.length === 0 ? 'lg:col-span-2' : ''}`}>
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-lg font-medium mb-4">Basic Information</h2>
-            
+
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Name</h3>
                 <p className="mt-1">{rentee.name}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Email</h3>
                 <p className="mt-1">{rentee.contactDetails?.email || 'Not provided'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Phone</h3>
                 <p className="mt-1">{rentee.contactDetails?.phone || 'Not provided'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Registration Date</h3>
                 <p className="mt-1">{formatDate(rentee.registrationDate) || 'Not available'}</p>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">ID Copy</h3>
                 <IdCopyDisplay url={rentee.idCopyUrl} />
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Invitation Status</h3>
                 <div className="mt-2 flex items-center">
                   <InvitationStatusBadge status={invitationStatus.status} />
-                  
+
                   {invitationStatus.status !== 'registered' && !invitationStatus.loading && (
                     <div className="ml-2">
-                      <InviteUserButton 
-                        userId={id} 
-                        onSuccess={handleInviteSuccess} 
+                      <InviteUserButton
+                        userId={id}
+                        onSuccess={handleInviteSuccess}
                         size="sm"
                       />
                     </div>
@@ -537,7 +537,7 @@ const RenteeDetails = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Middle column - Associated Properties - Only show if properties exist */}
         {properties.length > 0 && (
           <div className="lg:col-span-1">
@@ -545,9 +545,9 @@ const RenteeDetails = () => {
               <h2 className="text-xl font-semibold mb-4">Associated Properties</h2>
               <div className="space-y-6">
                 {properties.map((property) => (
-                  <RenteePropertyCard 
-                    key={property.id} 
-                    property={property} 
+                  <RenteePropertyCard
+                    key={property.id}
+                    property={property}
                     agreement={agreements.find(agreement => agreement.status === 'active'
                       && String(agreement.propertyid).toLowerCase() === String(property.id).toLowerCase())}
                   />
@@ -556,37 +556,37 @@ const RenteeDetails = () => {
             </div>
           </div>
         )}
-        
+
         {/* Right column - Agreements & Invoices */}
         <div className="lg:col-span-1">
           <div className="bg-white shadow-md rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Agreements</h2>
-            
+
             {agreements.length === 0 ? (
               <p className="text-gray-500">No agreements found for this rentee.</p>
             ) : (
               <div className="space-y-6">
                 {agreements.map((agreement) => (
-                  <AgreementSummaryCard 
-                    key={agreement.id} 
-                    agreement={agreement} 
-                    property={agreement.properties} 
+                  <AgreementSummaryCard
+                    key={agreement.id}
+                    agreement={agreement}
+                    property={agreement.properties}
                     rentee={rentee}
                   />
                 ))}
               </div>
             )}
           </div>
-          
+
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-medium mb-4">Invoices</h2>
-            
+
             {invoices.length > 0 ? (
               <div className="space-y-6">
                 {invoices.map(invoice => (
-                  <InvoiceCard 
-                    key={invoice.id} 
-                    invoice={invoice} 
+                  <InvoiceCard
+                    key={invoice.id}
+                    invoice={invoice}
                     rentee={rentee}
                   />
                 ))}

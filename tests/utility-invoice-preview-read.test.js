@@ -8,7 +8,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 test('utility invoice preview routes through scoped read and never mutates', () => {
   const service = read('../src/services/utilityBillingService.js');
   const start = service.indexOf('export const fetchReadingsForInvoice =');
-  const end = service.indexOf('// Array of months for date calculations', start);
+  const end = service.indexOf('export const getRenteeUtilityUsage', start);
   const body = service.slice(start, end);
   assert.ok(start > -1 && end > start);
   assert.match(body, /listUtilityInvoicePreviewRows\(options\)/);

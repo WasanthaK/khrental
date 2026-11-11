@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from 'react-hot-toast';
@@ -10,7 +10,7 @@ import { getStoredPreferredLanguage, setStoredPreferredLanguage } from '../utils
 
 const UserProfile = () => {
   const { user, setUser } = useAuth();
-  const navigate = useNavigate();
+  useNavigate();
   const [loading, setLoading] = useState(true);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [profile, setProfile] = useState({
@@ -22,13 +22,7 @@ const UserProfile = () => {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
       const preferredLanguage = getStoredPreferredLanguage(user?.id, user?.preferred_language || 'en');
@@ -55,7 +49,13 @@ const UserProfile = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.contactDetails, user?.email, user?.id, user?.name, user?.preferred_language, user?.profileId, user?.profile_image_url]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [fetchProfile, user]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -87,10 +87,10 @@ const UserProfile = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
       let profileImageUrl = profile.profile_image_url;
-      
+
       // Upload new image if selected
       if (imageFile) {
         const uploadResult = await saveImage(imageFile, {
@@ -133,7 +133,7 @@ const UserProfile = () => {
         profile_image_url: profileImageUrl,
         preferred_language: profile.preferred_language
       });
-      
+
       setUpdateSuccess(true);
       toast.success('Profile updated successfully');
       setTimeout(() => setUpdateSuccess(false), 3000);
@@ -154,15 +154,15 @@ const UserProfile = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">My Profile</h1>
-      
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Profile Image Section */}
         <div className="bg-white shadow rounded-lg overflow-hidden p-4 sm:p-6 mb-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Profile Image</h2>
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="relative w-32 h-32 overflow-hidden rounded-full border-2 border-gray-200">
-              <img 
-                src={imagePreview || DEFAULT_IMAGE} 
+              <img
+                src={imagePreview || DEFAULT_IMAGE}
                 alt="Profile" 
                 className="w-full h-full object-cover"
               />
@@ -188,7 +188,7 @@ const UserProfile = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Personal Information Section */}
         <div className="bg-white shadow rounded-lg overflow-hidden p-4 sm:p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h2>
@@ -208,7 +208,7 @@ const UserProfile = () => {
                 required
               />
             </div>
-            
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email
@@ -223,7 +223,7 @@ const UserProfile = () => {
               />
               <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
             </div>
-            
+
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                 Phone Number
@@ -240,7 +240,7 @@ const UserProfile = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Preferences Section */}
         <div className="bg-white shadow rounded-lg overflow-hidden p-4 sm:p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Preferences</h2>
@@ -249,14 +249,14 @@ const UserProfile = () => {
               <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-1">
                 Preferred Language
               </label>
-              <UserLanguageSelector 
+              <UserLanguageSelector
                 value={profile.preferred_language}
                 onChange={handleLanguageChange}
               />
             </div>
           </div>
         </div>
-        
+
         {/* Submit Button */}
         <div className="flex justify-end">
           {updateSuccess && (
@@ -277,4 +277,4 @@ const UserProfile = () => {
   );
 };
 
-export default UserProfile; 
+export default UserProfile;

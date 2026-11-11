@@ -39,7 +39,7 @@ test('signed agreement state is immutable in SQL even for generic writable field
 
 test('browser Evia polling cannot invent terminal state or external signed-document URLs', () => {
   const source = fs.readFileSync(new URL('../src/components/agreements/AgreementActions.jsx', import.meta.url), 'utf8');
-  const begin = source.indexOf('const checkSignatureStatus = async');
+  const begin = source.indexOf('const checkSignatureStatus = useCallback(async');
   const end = source.indexOf('const handleSendForSignature = async');
   const polling = source.slice(begin, end);
   assert.ok(begin >= 0 && end > begin);
@@ -77,8 +77,17 @@ test('agreement creation persists roster before Evia provider submission', () =>
   assert.match(source,/matchesPendingRentalRoster/);
   assert.match(source,/sentEviaRequestRef.current = true/);
   const form = fs.readFileSync(new URL('../src/components/agreements/SignatureForm.jsx',import.meta.url),'utf8');
-  assert.match(form,/if \(index < 2\) return/);
+  assert.match(form,/if \(index < 2\) \{return/);
   assert.match(form,/prepareRentalAgreementSignatories\(signatories\)/);
   const card = fs.readFileSync(new URL('../src/components/agreements/AgreementSummaryCard.jsx',import.meta.url),'utf8');
   assert.match(card,/Delivery not tracked/);
+});
+
+test('legacy browser signature mutation fails closed without provider or database calls', async () => {
+  const source = fs.readFileSync(new URL('../src/services/eviaSignServiceLegacy.js', import.meta.url), 'utf8');
+  const start = source.indexOf('export async function updateAgreementSignatureStatus(');
+  const module = await import('data:text/javascript,' + encodeURIComponent(source.slice(start)));
+  await assert.rejects(module.updateAgreementSignatureStatus('agreement', 'request'), {
+    code: 'AGREEMENT_SIGNING_AUTHORITY_REQUIRED'
+  });
 });

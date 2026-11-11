@@ -1,4 +1,4 @@
-import { fetchData } from '../services/platformClient';
+import '../services/platformClient';
 import { cleanupUnusedFiles, STORAGE_BUCKETS, BUCKET_FOLDERS } from '../services/fileService';
 
 /**
@@ -74,21 +74,21 @@ export const cleanupUtilityReadingImages = async (usedImageUrls) => {
 export const cleanupAllImages = async () => {
   try {
     console.log('Starting cleanup of all image categories...');
-    
+
     const results = {
       properties: await cleanupPropertyImages(),
       idCopies: await cleanupIdCopyImages(),
       paymentProofs: await cleanupPaymentProofImages(),
       utilityReadings: await cleanupUtilityReadingImages(),
     };
-    
+
     const totalDeleted = Object.values(results).reduce((sum, result) => sum + result.deleted, 0);
     const totalErrors = Object.values(results).reduce((sum, result) => sum + result.errors, 0);
-    
+
     console.log(`All cleanups complete: ${totalDeleted} files deleted, ${totalErrors} errors`);
     return results;
   } catch (error) {
     console.error('Error cleaning up all images:', error);
     throw error;
   }
-}; 
+};

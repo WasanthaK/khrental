@@ -7,7 +7,7 @@ const columns={property_applications:{enquiry_id:['uniqueidentifier',16,false],.
   property_application_events:{id:['uniqueidentifier',16,false],enquiry_id:['uniqueidentifier',16,false],
     actor_id:['uniqueidentifier',16,false],request_id:['uniqueidentifier',16,false],payload_hash:['char',64,false],
     ...fields,created_at:['datetime2',8,false]}};
-const norm=value=>String(value||'').toLowerCase().replace(/[\s\[\]()]/g,'');
+const norm=value=>String(value||'').toLowerCase().replace(/[\s[\]()]/g,'');
 const predicate=value=>norm(value).replace(/^(status|country_code)in(.+)$/,(_,key,list)=>
   list.split(',').map(v=>key+'='+v).join('or')).split('or').sort().join('or');
 export const inspectPropertyApplications=async pool=>{

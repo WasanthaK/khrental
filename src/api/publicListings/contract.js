@@ -9,6 +9,7 @@ const text=(value,max,name)=>{
   if(value===null||value===undefined||value===''){return null;}
   if(typeof value!=='string'){throw reject('INVALID_PUBLIC_FIELD',name+' must be text.');}
   const s=value.trim();
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   if(!s||s.length>max||/[<>\x00-\x1F]/.test(s))
     {throw reject('INVALID_PUBLIC_FIELD',name+' contains unsupported characters.');}
   return s;

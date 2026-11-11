@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createAppUser, fetchAppUser, updateAppUser } from '../../services/appUserService';
-import { toast } from 'react-hot-toast';
+import 'react-hot-toast';
 
 const TeamMemberForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -30,29 +30,23 @@ const TeamMemberForm = () => {
     notes: '',
     status: 'active'
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  
+  const [, setError] = useState('');
+
   // Fetch team member data if in edit mode
-  useEffect(() => {
-    if (isEditMode) {
-      fetchTeamMember();
-    }
-  }, [id, isEditMode]);
-  
-  const fetchTeamMember = async () => {
+  const fetchTeamMember = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Fetch team member from app_users table
       const data = await fetchAppUser(id);
 
       if (data?.user_type && data.user_type !== 'staff') {
         throw new Error('Team member not found');
       }
-      
+
       if (data) {
         setFormData({
           name: data.name || '',
@@ -72,12 +66,18 @@ const TeamMemberForm = () => {
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [id]);
+
+  useEffect(() => {
+    if (isEditMode) {
+      fetchTeamMember();
+    }
+  }, [fetchTeamMember, id, isEditMode]);
+
   // Handle form input changes
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     if (type === 'checkbox') {
       if (name.startsWith('availability.')) {
         const day = name.split('.')[1];
@@ -106,32 +106,32 @@ const TeamMemberForm = () => {
       }
     }
   };
-  
+
   // Handle skills input (comma separated)
   const handleSkillsChange = (e) => {
     const skills = e.target.value.split(',')
       .map(skill => skill.trim())
       .filter(skill => skill !== '');
-    
+
     setFormData(prev => ({ ...prev, skills }));
   };
-  
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setIsSubmitting(true);
-      
+
       // Validate form data
       if (!formData.name || !formData.role) {
         throw new Error('Name and role are required');
       }
-      
+
       if (!formData.contactDetails.email) {
         throw new Error('Email is required');
       }
-      
+
       // Format data for database
       const teamMemberData = {
         name: formData.name,
@@ -144,9 +144,9 @@ const TeamMemberForm = () => {
         status: formData.status,
         user_type: 'staff'
       };
-      
+
       let result;
-      
+
       if (isEditMode) {
         // Update existing team member
         result = await updateAppUser(id, teamMemberData);
@@ -154,11 +154,11 @@ const TeamMemberForm = () => {
         // Create new team member
         result = await createAppUser(teamMemberData, 'staff');
       }
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to save team member');
       }
-      
+
       // Navigate back to team list
       navigate('/dashboard/team');
     } catch (error) {
@@ -168,7 +168,7 @@ const TeamMemberForm = () => {
       setIsSubmitting(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -176,7 +176,7 @@ const TeamMemberForm = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center mb-6">
@@ -185,7 +185,7 @@ const TeamMemberForm = () => {
         </Link>
         <h1 className="text-2xl font-bold">{isEditMode ? 'Edit Team Member' : 'Add Team Member'}</h1>
       </div>
-      
+
       <div className="bg-white rounded-lg shadow-md p-6">
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -204,7 +204,7 @@ const TeamMemberForm = () => {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="role" className="block text-sm font-medium text-gray-700">
                   Role
@@ -222,7 +222,7 @@ const TeamMemberForm = () => {
                   <option value="supervisor">Supervisor</option>
                 </select>
               </div>
-              
+
               <div>
                 <label htmlFor="contactDetails.email" className="block text-sm font-medium text-gray-700">
                   Email *
@@ -237,7 +237,7 @@ const TeamMemberForm = () => {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="contactDetails.phone" className="block text-sm font-medium text-gray-700">
                   Phone
@@ -251,7 +251,7 @@ const TeamMemberForm = () => {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="contactDetails.address" className="block text-sm font-medium text-gray-700">
                   Address
@@ -266,7 +266,7 @@ const TeamMemberForm = () => {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label htmlFor="skills" className="block text-sm font-medium text-gray-700">
@@ -282,7 +282,7 @@ const TeamMemberForm = () => {
                   placeholder="e.g. Plumbing, Electrical, Carpentry"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Availability
@@ -305,7 +305,7 @@ const TeamMemberForm = () => {
                   ))}
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
                   Notes
@@ -321,7 +321,7 @@ const TeamMemberForm = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="mt-6 flex justify-end space-x-3">
             <Link
               to="/dashboard/team"
@@ -343,4 +343,4 @@ const TeamMemberForm = () => {
   );
 };
 
-export default TeamMemberForm; 
+export default TeamMemberForm;

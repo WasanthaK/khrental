@@ -17,6 +17,7 @@ export const parseOfferAction=(body,owner=false)=>{
         (body.unitId!==null&&!isUuid(body.unitId))||![body.rent,body.deposit,body.fees].every(money)||Number(body.rent)<=0||
         !date(body.startDate)||!date(body.endDate)||body.endDate<=body.startDate||
         !instant(body.offerUntil)||!instant(body.holdUntil)||body.holdUntil<=body.offerUntil||
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
         typeof body.terms!=='string'||!body.terms.trim()||body.terms.length>8000||/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(body.terms)){throw invalid();}
     Object.assign(out,{applicationVersion:body.applicationVersion,unitId:body.unitId?.toLowerCase()||null,
       rent:Number(body.rent).toFixed(2),deposit:Number(body.deposit).toFixed(2),fees:Number(body.fees).toFixed(2),

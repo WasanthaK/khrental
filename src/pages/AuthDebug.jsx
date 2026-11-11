@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { platform as platformClient } from '../services/platformClient';
 import { Card, Row, Col, Button, Table, Badge, Alert } from 'react-bootstrap';
-import { getAppBaseUrl, ENV } from '../utils/env';
+import { getAppBaseUrl } from '../utils/env';
 
 /**
  * Debug page for authentication issues
@@ -11,7 +11,7 @@ const AuthDebug = () => {
   const { user, loading } = useAuth();
   const [session, setSession] = useState(null);
   const [envVars, setEnvVars] = useState({});
-  const [authSettings, setAuthSettings] = useState(null);
+
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -57,10 +57,10 @@ const AuthDebug = () => {
 
   // Helper to get env value from different possible sources
   const getEnvValue = (key, env) => {
-    return env.windowEnv[key] || 
-           env.importMetaEnv[key] || 
+    return env.windowEnv[key] ||
+           env.importMetaEnv[key] ||
            env.importMetaEnv[`VITE_${key}`] || 
-           env.processEnv[key] || 
+           env.processEnv[key] ||
            env.processEnv[`REACT_APP_${key}`] || 
            null;
   };
@@ -77,9 +77,9 @@ const AuthDebug = () => {
   return (
     <div className="container my-4">
       <h1>Authentication Debug</h1>
-      
+
       {error && <Alert variant="danger">{error}</Alert>}
-      
+
       <Row className="mb-4">
         <Col>
           <Card>
@@ -157,7 +157,7 @@ const AuthDebug = () => {
                   <p><strong>Access Token:</strong> {session.access_token.substring(0, 15)}...</p>
                   <p><strong>Refresh Token:</strong> {session.refresh_token?.substring(0, 15)}...</p>
                   <p><strong>Expires At:</strong> {new Date(session.expires_at * 1000).toLocaleString()}</p>
-                  
+
                   <div className="mt-3">
                     <h6>User Info from Session:</h6>
                     <pre className="bg-light p-2">
@@ -184,4 +184,4 @@ const AuthDebug = () => {
   );
 };
 
-export default AuthDebug; 
+export default AuthDebug;

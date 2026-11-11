@@ -21,7 +21,7 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
   // Initialize with the selectedAmenities prop
   const [amenities, setAmenities] = useState(selectedAmenities || []);
   const [customAmenity, setCustomAmenity] = useState('');
-  
+
   // Update local state when selectedAmenities prop changes
   useEffect(() => {
     // Only update if the arrays are different
@@ -32,23 +32,21 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
       return arr1?.every((item, index) => item === arr2[index]);
     };
 
-    if (!areArraysEqual(selectedAmenities, amenities)) {
-      setAmenities(selectedAmenities || []);
-    }
+    setAmenities(current => areArraysEqual(selectedAmenities, current) ? current : (selectedAmenities || []));
   }, [selectedAmenities]);
-  
+
   // Toggle amenity selection
   const toggleAmenity = (amenity) => {
     const updatedAmenities = amenities.includes(amenity)
       ? amenities.filter(a => a !== amenity)
       : [...amenities, amenity];
-    
+
     setAmenities(updatedAmenities);
     if (onChange) {
       onChange(updatedAmenities);
     }
   };
-  
+
   // Add custom amenity
   const handleAddCustomAmenity = () => {
     if (customAmenity.trim() && !amenities.includes(customAmenity.trim())) {
@@ -60,12 +58,12 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
       setCustomAmenity('');
     }
   };
-  
+
   // Handle custom amenity input
   const handleCustomAmenityChange = (e) => {
     setCustomAmenity(e.target.value);
   };
-  
+
   // Handle custom amenity input keypress
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -73,7 +71,7 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
       handleAddCustomAmenity();
     }
   };
-  
+
   return (
     <div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
@@ -92,7 +90,7 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
           </div>
         ))}
       </div>
-      
+
       {/* Custom amenity input */}
       <div className="flex mt-2">
         <input
@@ -111,15 +109,15 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
           Add
         </button>
       </div>
-      
+
       {/* Selected custom amenities */}
       {amenities.filter(a => !COMMON_AMENITIES.includes(a)).length > 0 && (
         <div className="mt-4">
           <p className="text-sm font-medium text-gray-700 mb-2">Custom Amenities:</p>
           <div className="flex flex-wrap gap-2">
             {amenities.filter(a => !COMMON_AMENITIES.includes(a)).map(amenity => (
-              <span 
-                key={amenity} 
+              <span
+                key={amenity}
                 className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
               >
                 {amenity}
@@ -140,4 +138,4 @@ const PropertyAmenities = ({ selectedAmenities = [], onChange }) => {
   );
 };
 
-export default PropertyAmenities; 
+export default PropertyAmenities;

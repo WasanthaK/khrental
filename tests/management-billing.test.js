@@ -132,7 +132,7 @@ const zeroStockFixture=()=>{
       return saved?.tenant_id===params.tenantId && saved.kind==='quantity_preview' && saved.status==='completed'?[saved]:[];
     }
     if(statement.startsWith('UPDATE dbo.management_billing_accounts SET subscription_status')){
-      const {tenantId,...projection}=params;Object.assign(state.account,projection);return [];
+      const projection={...params};delete projection.tenantId;Object.assign(state.account,projection);return [];
     }
     if(statement.startsWith('UPDATE dbo.management_billing_accounts SET inventory_json')){
       state.account.inventory_json=params.inventory;state.account.pending_quantity=0;return [];

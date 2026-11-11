@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { platform as platformClient } from '../../services/platformClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -7,15 +7,15 @@ import { toast } from 'react-hot-toast';
 import MaintenanceRequestCard from './MaintenanceRequestCard';
 
 const MaintenanceRequestList = () => {
-  const navigate = useNavigate();
+  useNavigate();
   const { userData } = useAuth();
   const appUserId = userData?.profileId || userData?.appUserId || null;
-  
+
   // State management
   const [maintenanceRequests, setMaintenanceRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Filter states
   const [filters, setFilters] = useState({
     status: 'all',
@@ -24,7 +24,9 @@ const MaintenanceRequestList = () => {
   });
 
   // Fetch maintenance requests with proper joins
-  const fetchMaintenanceRequests = async () => {
+
+  // Initial fetch
+  const fetchMaintenanceRequests = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -112,12 +114,11 @@ const MaintenanceRequestList = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [appUserId, userData?.role]);
 
-  // Initial fetch
   useEffect(() => {
     fetchMaintenanceRequests();
-  }, [appUserId, userData.id, userData.role]);
+  }, [appUserId, fetchMaintenanceRequests, userData?.id, userData?.role]);
 
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
@@ -131,9 +132,9 @@ const MaintenanceRequestList = () => {
   const filteredRequests = maintenanceRequests.filter(request => {
     const matchesStatus = filters.status === 'all' || request.status === filters.status;
     const matchesPriority = filters.priority === 'all' || request.priority === filters.priority;
-    
+
     const searchTerm = filters.search.toLowerCase();
-    const matchesSearch = !filters.search || 
+    const matchesSearch = !filters.search ||
       request.title?.toLowerCase().includes(searchTerm) ||
       request.description?.toLowerCase().includes(searchTerm) ||
       request.property?.name?.toLowerCase().includes(searchTerm) ||
@@ -231,4 +232,4 @@ const MaintenanceRequestList = () => {
   );
 };
 
-export default MaintenanceRequestList; 
+export default MaintenanceRequestList;

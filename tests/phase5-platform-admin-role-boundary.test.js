@@ -69,7 +69,7 @@ test('Phase 5: the composite router installs platform and role guards ahead of l
   assert.match(platform, /router\.use\('\/admin', requireResolvedUser, requirePlatformAdmin\)/);
   assert.match(platform, /router\.post\('\/admin\/app-users'/);
   assert.match(platform, /GENERIC_PLATFORM_USER_CREATION_DISABLED/);
-  assert.match(platform, /router\.post\('\/admin\/tenants\/\:tenantId\/memberships'/);
+  assert.match(platform, /router\.post\('\/admin\/tenants\/:tenantId\/memberships'/);
   assert.match(platform, /PLATFORM_MEMBERSHIP_ROLE_RESTRICTED/);
   assert.match(legacy, /router\.use\(requireScopedTenant\)/);
 });
@@ -77,8 +77,8 @@ test('Phase 5: the composite router installs platform and role guards ahead of l
 test('Phase 5: only platform administrators may appoint tenant admins on platform routes', () => {
   const platform = source('../src/api/mssql/platformAdminRouter.js');
   assert.match(platform, /router\.use\('\/admin', requireResolvedUser, requirePlatformAdmin\)/);
-  assert.match(platform, /router\.post\('\/admin\/tenants\/\:tenantId\/administrators'/);
-  assert.match(platform, /router\.post\('\/admin\/tenants\/\:tenantId\/administrators\/\:appUserId\/invitations'/);
+  assert.match(platform, /router\.post\('\/admin\/tenants\/:tenantId\/administrators'/);
+  assert.match(platform, /router\.post\('\/admin\/tenants\/:tenantId\/administrators\/:appUserId\/invitations'/);
   assert.match(platform, /TENANT_ADMIN_MEMBERSHIP_NOT_FOUND/);
   assert.match(platform, /normalizeRole\(membership\.role\) !== 'admin'/);
 });

@@ -26,7 +26,7 @@ const on={
 };
 const http=async(router,path)=>{
   const app=express();app.use('/api/public-listings',router);
-  app.use((e,req,res,next)=>res.status(e.status||500).json({code:e.code||'ERROR'}));
+  app.use((e,req,res,_next)=>res.status(e.status||500).json({code:e.code||'ERROR'}));
   const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   try{
     const response=await fetch('http://127.0.0.1:'+server.address().port+path);

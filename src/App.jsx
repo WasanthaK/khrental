@@ -1,4 +1,4 @@
-import React, { useEffect, Suspense, useMemo } from 'react';
+import React, { useEffect, Suspense, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { Toaster } from 'react-hot-toast';
@@ -32,10 +32,9 @@ function ensureEnvironmentURLs() {
   }
 }
 
-const TenantScopedAppShell = () => {
-  const { activeTenantId } = useAuth();
-  const tenantScopeKey = activeTenantId || 'no-tenant';
-  const queryClient = useMemo(() => createQueryClient(), [tenantScopeKey]);
+// The keyed boundary owns a fresh cache for each organization.
+const TenantScopedProviders = ({ tenantScopeKey }) => {
+  const [queryClient] = useState(createQueryClient);
 
   return (
     <QueryClientProvider client={queryClient} key={tenantScopeKey}>
@@ -55,6 +54,12 @@ const TenantScopedAppShell = () => {
   );
 };
 
+const TenantScopedAppShell = () => {
+  const { activeTenantId } = useAuth();
+  const tenantScopeKey = activeTenantId || 'no-tenant';
+  return <TenantScopedProviders key={tenantScopeKey} tenantScopeKey={tenantScopeKey} />;
+};
+
 function App() {
   // Fix environment URLs immediately on app initialization
   useEffect(() => {
@@ -67,15 +72,15 @@ function App() {
     const handleFocus = () => {
       windowHasFocus = true;
     };
-    
+
     const handleBlur = () => {
       windowHasFocus = false;
     };
-    
+
     // Add event listeners
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
-    
+
     // Clean up
     return () => {
       window.removeEventListener('focus', handleFocus);

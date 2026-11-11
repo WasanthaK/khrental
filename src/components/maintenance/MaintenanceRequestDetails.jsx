@@ -1,16 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import {
-  getMaintenanceRequest,
-  updateMaintenanceRequest,
-  assignMaintenanceRequest,
-  startMaintenanceWork,
-  completeMaintenanceRequest,
-  cancelMaintenanceRequest,
-  addMaintenanceRequestImage,
-  addMaintenanceRequestComment
-} from '../../services/maintenanceService';
+import { getMaintenanceRequest, assignMaintenanceRequest, startMaintenanceWork, addMaintenanceRequestImage, addMaintenanceRequestComment } from '../../services/maintenanceService';
 import { MaintenanceStatus, MaintenanceImageType } from '../../utils/constants';
 import { formatDate } from '../../utils/helpers';
 import { toast } from 'react-hot-toast';
@@ -22,23 +13,18 @@ const MaintenanceRequestDetails = () => {
   const navigate = useNavigate();
   const { userData } = useAuth();
   const appUserId = userData?.profileId || userData?.appUserId || null;
-  
+
   // State
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // UI state
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancellationReason, setCancellationReason] = useState('');
-  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
-  const [completionNotes, setCompletionNotes] = useState('');
-  const [completionImages, setCompletionImages] = useState([]);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [imageCollection, setImageCollection] = useState({ images: [], title: '' });
-  
+  const [, setShowCancelDialog] = useState(false);
+
+  const [, setShowCompleteDialog] = useState(false);
+
   // Fetch request details
   useEffect(() => {
     const fetchRequest = async () => {
@@ -54,26 +40,26 @@ const MaintenanceRequestDetails = () => {
         setLoading(false);
       }
     };
-    
+
     fetchRequest();
   }, [id]);
-  
+
   // Check if user can perform actions
   const canPerformActions = () => {
     if (!request || !userData) {return false;}
-    
+
     // Admin can do everything
     if (userData.role === 'admin') {return true;}
-    
+
     // Staff can perform actions on assigned requests
     if (userData.role === 'staff') {
       return Boolean(appUserId) && request.assignedto === appUserId;
     }
-    
+
     // Rentees can only view their own requests
     return Boolean(appUserId) && request.renteeid === appUserId;
   };
-  
+
   // Handle assign staff
   const handleAssignStaff = async (staffId) => {
     try {
@@ -88,7 +74,7 @@ const MaintenanceRequestDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle start work
   const handleStartWork = async () => {
     try {
@@ -103,56 +89,11 @@ const MaintenanceRequestDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle complete request
-  const handleCompleteRequest = async () => {
-    if (!completionNotes.trim()) {
-      toast.error('Please provide completion notes');
-      return;
-    }
-    
-    try {
-      setActionLoading(true);
-      const updatedRequest = await completeMaintenanceRequest(
-        request.id,
-        completionNotes,
-        completionImages
-      );
-      setRequest(updatedRequest);
-      setShowCompleteDialog(false);
-      toast.success('Maintenance request completed successfully');
-    } catch (error) {
-      console.error('Error completing request:', error);
-      toast.error('Failed to complete request');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-  
+
   // Handle cancel request
-  const handleCancelRequest = async () => {
-    if (!cancellationReason.trim()) {
-      toast.error('Please provide a reason for cancellation');
-      return;
-    }
-    
-    try {
-      setActionLoading(true);
-      const updatedRequest = await cancelMaintenanceRequest(
-        request.id,
-        cancellationReason
-      );
-      setRequest(updatedRequest);
-      setShowCancelDialog(false);
-      toast.success('Maintenance request cancelled successfully');
-    } catch (error) {
-      console.error('Error cancelling request:', error);
-      toast.error('Failed to cancel request');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-  
+
   // Handle add image
   const handleAddImage = async (files, type) => {
     try {
@@ -164,7 +105,7 @@ const MaintenanceRequestDetails = () => {
           image_type: type
         });
       }
-      
+
       // Refresh request data
       const updatedRequest = await getMaintenanceRequest(request.id);
       setRequest(updatedRequest);
@@ -176,7 +117,7 @@ const MaintenanceRequestDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Handle add comment
   const handleAddComment = async (comment) => {
     try {
@@ -185,7 +126,7 @@ const MaintenanceRequestDetails = () => {
         maintenance_request_id: request.id,
         comment
       });
-      
+
       // Refresh request data
       const updatedRequest = await getMaintenanceRequest(request.id);
       setRequest(updatedRequest);
@@ -197,7 +138,7 @@ const MaintenanceRequestDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -205,7 +146,7 @@ const MaintenanceRequestDetails = () => {
       </div>
     );
   }
-  
+
   if (error || !request) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -214,7 +155,7 @@ const MaintenanceRequestDetails = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -229,7 +170,7 @@ const MaintenanceRequestDetails = () => {
           </button>
         </div>
       </div>
-      
+
       {/* Main Content */}
       <div className="bg-white rounded-lg shadow-md p-6">
         {/* Request Info */}
@@ -237,7 +178,7 @@ const MaintenanceRequestDetails = () => {
           <div>
             <h2 className="text-lg font-medium mb-2">{request.title}</h2>
             <p className="text-gray-600 mb-4">{request.description}</p>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Property</p>
@@ -265,7 +206,7 @@ const MaintenanceRequestDetails = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Actions */}
           <div className="space-y-4">
             {canPerformActions() && (
@@ -279,7 +220,7 @@ const MaintenanceRequestDetails = () => {
                     Assign to Me
                   </button>
                 )}
-                
+
                 {request.status === MaintenanceStatus.ASSIGNED && (
                   <button
                     onClick={handleStartWork}
@@ -289,7 +230,7 @@ const MaintenanceRequestDetails = () => {
                     Start Work
                   </button>
                 )}
-                
+
                 {request.status === MaintenanceStatus.IN_PROGRESS && (
                   <button
                     onClick={() => setShowCompleteDialog(true)}
@@ -299,8 +240,8 @@ const MaintenanceRequestDetails = () => {
                     Complete Request
                   </button>
                 )}
-                
-                {request.status !== MaintenanceStatus.COMPLETED && 
+
+                {request.status !== MaintenanceStatus.COMPLETED &&
                  request.status !== MaintenanceStatus.CANCELLED && (
                   <button
                     onClick={() => setShowCancelDialog(true)}
@@ -314,7 +255,7 @@ const MaintenanceRequestDetails = () => {
             )}
           </div>
         </div>
-        
+
         {/* Images */}
         <div className="mb-6">
           <h3 className="text-lg font-medium mb-4">Images</h3>
@@ -325,7 +266,7 @@ const MaintenanceRequestDetails = () => {
             disabled={!canPerformActions()}
           />
         </div>
-        
+
         {/* Comments */}
         <div>
           <h3 className="text-lg font-medium mb-4">Comments</h3>
@@ -340,4 +281,4 @@ const MaintenanceRequestDetails = () => {
   );
 };
 
-export default MaintenanceRequestDetails; 
+export default MaintenanceRequestDetails;

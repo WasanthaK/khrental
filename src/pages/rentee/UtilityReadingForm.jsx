@@ -82,7 +82,7 @@ const UtilityReadingForm = () => {
     };
 
     fetchUserAndProperty();
-  }, [activeTenantId, authUser?.id, authUser?.profileId]);
+  }, [activeTenantId, authUser, authUser?.id, authUser?.profileId]);
 
   useEffect(() => {
     const fetchLastReading = async () => {
@@ -93,7 +93,7 @@ const UtilityReadingForm = () => {
       try {
         // Use app_user id instead of auth_id
         const userId = user.appUserId || user.id;
-        
+
         // Build the query without headers
         const query = platformClient
           .from('utility_readings')
@@ -103,7 +103,7 @@ const UtilityReadingForm = () => {
           .eq('utilitytype', formData.utilityType)
           .order('readingdate', { ascending: false })
           .limit(1);
-          
+
         // Execute the query
         const { data, error } = await query;
 
@@ -119,7 +119,7 @@ const UtilityReadingForm = () => {
             ...prev,
             previousReading: data[0].currentreading
           }));
-          
+
           // Reset meter reset flag when we get new previous reading
           setIsMeterReset(false);
         } else {
@@ -145,14 +145,14 @@ const UtilityReadingForm = () => {
 
     try {
       setLoading(true);
-      
+
       // Create a preview URL
       const previewUrl = URL.createObjectURL(file);
       setPhotoPreview(previewUrl);
 
       // Get the correct user ID (app_user ID)
       const userId = user.appUserId || user.id;
-      
+
       // Upload to storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -185,36 +185,36 @@ const UtilityReadingForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!property) {
       toast.error('No property found for this user');
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       // Validate readings
       if (!formData.currentReading || isNaN(formData.currentReading)) {
         throw new Error('Please enter a valid current reading');
       }
-      
+
       // Only validate current > previous if meter hasn't been reset
       if (formData.previousReading !== null && 
-          !isMeterReset && 
+          !isMeterReset &&
           Number(formData.currentReading) < Number(formData.previousReading)) {
         throw new Error('Current reading cannot be less than previous reading unless meter has been reset');
       }
-      
+
       // Calculate consumption
-      const consumption = formData.previousReading 
+      const consumption = formData.previousReading
         ? Number(formData.currentReading) - Number(formData.previousReading)
         : 0;
-      
+
       // Ensure we have the correct user ID
       const userId = user.appUserId || user.id;
       console.log('Submitting utility reading with user ID:', userId);
-      
+
       // Set up insertion data
       const insertData = {
         renteeid: userId, // Use app_user id instead of auth_id
@@ -227,7 +227,7 @@ const UtilityReadingForm = () => {
         calculatedbill: consumption,
         status: 'pending'
       };
-      
+
       // Insert reading into database without headers
       const { error } = await platformClient
         .from('utility_readings')
@@ -255,7 +255,7 @@ const UtilityReadingForm = () => {
     <div className="max-w-2xl mx-auto px-4 py-6 sm:px-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl sm:text-2xl font-bold">Submit Utility Reading</h1>
-        <button 
+        <button
           onClick={() => navigate('/rentee/utilities')}
           className="text-sm text-blue-600 px-3 py-1 rounded-md border border-blue-600"
           type="button"
@@ -263,7 +263,7 @@ const UtilityReadingForm = () => {
           Cancel
         </button>
       </div>
-      
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Utility Type Selection - Larger touch targets */}
         <div>
@@ -286,7 +286,7 @@ const UtilityReadingForm = () => {
               </svg>
               <span>Electricity</span>
             </button>
-            
+
             <button
               type="button"
               onClick={() => setFormData(prev => ({ ...prev, utilityType: UTILITY_TYPES.WATER }))}
@@ -303,10 +303,10 @@ const UtilityReadingForm = () => {
               <span>Water</span>
             </button>
           </div>
-          
+
           {property && (
             <div className="mt-2 text-sm text-gray-600">
-              Current rate: {formData.utilityType === UTILITY_TYPES.ELECTRICITY 
+              Current rate: {formData.utilityType === UTILITY_TYPES.ELECTRICITY
                 ? `${property.electricity_rate || 'N/A'} per unit` 
                 : `${property.water_rate || 'N/A'} per unit`}
             </div>
@@ -318,7 +318,7 @@ const UtilityReadingForm = () => {
           <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
             <p className="text-sm text-gray-600">Previous Reading:</p>
             <p className="text-lg font-semibold">{formData.previousReading}</p>
-            
+
             <div className="mt-4">
               <label className="flex items-center">
                 <input
@@ -372,7 +372,7 @@ const UtilityReadingForm = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Meter Photo
           </label>
-          
+
           <div className="flex items-center mb-3">
             <button
               type="button"
@@ -386,12 +386,12 @@ const UtilityReadingForm = () => {
             >
               {captureMode ? 'Use File Upload' : 'Use Camera'}
             </button>
-            
+
             <span className="text-xs text-gray-500">
               {captureMode ? 'Taking photo directly' : 'Upload existing photo'}
             </span>
           </div>
-          
+
           {captureMode ? (
             <input
               type="file"
@@ -412,7 +412,7 @@ const UtilityReadingForm = () => {
               disabled={loading}
             />
           )}
-          
+
           {photoPreview && (
             <div className="mt-3">
               <img
@@ -444,4 +444,4 @@ const UtilityReadingForm = () => {
   );
 };
 
-export default UtilityReadingForm; 
+export default UtilityReadingForm;

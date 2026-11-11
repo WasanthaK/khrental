@@ -3,6 +3,7 @@ import { displayInvoicePaymentReference } from './invoicePaymentReference.js';
 // Immutable payment-destination metadata is captured when an invoice is issued.
 // Never show live property edits as if they were the original invoice instructions.
 const clean = value => typeof value === 'string'
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   ? value.replace(/[\u0000-\u001F\u007F]/g, ' ').trim().slice(0, 255) : '';
 
 const readBank = (row, prefix) => ({

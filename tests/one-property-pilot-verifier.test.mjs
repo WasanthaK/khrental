@@ -50,7 +50,7 @@ for(const [name,change] of [
   ['wrong-country detail',(r,u)=>{if(u.pathname.endsWith(id)&&u.searchParams.get('country')==='BN'){r.status=200;r.body={data:expected};}}],
   ['cached response',(r)=>{r.headers['cache-control']='public, max-age=3600';}],
   ['credentialed CORS',(r)=>{r.headers['access-control-allow-credentials']='true';}],
-  ['untrusted CORS',(r,u)=>{r.headers['access-control-allow-origin']='*';}],
+  ['untrusted CORS',(r,_u)=>{r.headers['access-control-allow-origin']='*';}],
   ['anonymous cookie',(r)=>{r.headers['set-cookie']='session=example';}],
   ['malformed image',(r)=>{if(r.bytes){r.bytes=Buffer.from('not a WebP');}}],
   ['EXIF metadata',(r)=>{if(r.bytes){r.bytes.write('EXIF',12);}}]

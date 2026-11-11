@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
+import React, { useCallback, useState, useEffect } from 'react';
+import {
   Alert, Box, Button, CircularProgress, Container,
   FormControl, InputLabel, MenuItem, Paper, Select, Snackbar,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography
@@ -20,7 +20,7 @@ const UtilityBillingInvoice = () => {
     { user, membership: membership || user?.membership || null },
     PERMISSIONS.INVOICES_MANAGE
   );
-  
+
   const [billingData, setBillingData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -33,20 +33,16 @@ const UtilityBillingInvoice = () => {
     message: '',
     severity: 'info'
   });
-  
+
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June', 
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  
+
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-  
-  useEffect(() => {
-    loadBillingData();
-  }, [filter]);
-  
-  const loadBillingData = async () => {
+
+  const loadBillingData = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
 
@@ -55,9 +51,9 @@ const UtilityBillingInvoice = () => {
         month: filter.month,
         year: filter.year
       });
-      
+
       if (error) {throw error;}
-      
+
       setBillingData(data || []);
     } catch (error) {
       console.error('Error loading billing data:', error);
@@ -67,8 +63,12 @@ const UtilityBillingInvoice = () => {
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [filter?.month, filter?.year]);
+
+  useEffect(() => {
+    loadBillingData();
+  }, [filter, loadBillingData]);
+
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
     setFilter(prev => ({
@@ -76,7 +76,7 @@ const UtilityBillingInvoice = () => {
       [name]: value
     }));
   };
-  
+
   const showAlert = (message, severity = 'info') => {
     setAlert({
       open: true,
@@ -84,14 +84,14 @@ const UtilityBillingInvoice = () => {
       severity
     });
   };
-  
+
   const handleAlertClose = () => {
     setAlert(prev => ({
       ...prev,
       open: false
     }));
   };
-  
+
   const formatCurrency = (amount) => {
     if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) {
       return 'Not calculated';
@@ -101,7 +101,7 @@ const UtilityBillingInvoice = () => {
       currency: 'USD'
     }).format(amount);
   };
-  
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -109,10 +109,10 @@ const UtilityBillingInvoice = () => {
       day: 'numeric'
     });
   };
-  
+
   const groupByRentee = () => {
     const grouped = {};
-    
+
     billingData.forEach(item => {
       if (!grouped[item.rentee_id]) {
         grouped[item.rentee_id] = {
@@ -121,13 +121,13 @@ const UtilityBillingInvoice = () => {
           readings: []
         };
       }
-      
+
       grouped[item.rentee_id].readings.push(item);
     });
-    
+
     return grouped;
   };
-  
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -137,7 +137,7 @@ const UtilityBillingInvoice = () => {
         <Typography variant="body1" paragraph>
           Review utility readings awaiting billing. This screen does not create or issue invoices.
         </Typography>
-        
+
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
           <FiFilter style={{ marginRight: 8 }} />
           <FormControl variant="outlined" size="small" sx={{ minWidth: 150, mr: 2 }}>
@@ -155,7 +155,7 @@ const UtilityBillingInvoice = () => {
               ))}
             </Select>
           </FormControl>
-          
+
           <FormControl variant="outlined" size="small" sx={{ minWidth: 100, mr: 2 }}>
             <InputLabel id="year-label">Year</InputLabel>
             <Select
@@ -172,7 +172,7 @@ const UtilityBillingInvoice = () => {
             </Select>
           </FormControl>
         </Box>
-        
+
         <Alert severity="info" sx={{ mb: 2 }}>
           Read-only utility billing preview. Only pending, unlinked readings are shown.
           Amounts are persisted estimates, not final invoice charges. Monthly invoice generation
@@ -211,7 +211,7 @@ const UtilityBillingInvoice = () => {
                 <Typography variant="h6">
                   {data.rentee?.name} - {data.property?.name}
                 </Typography>
-                
+
                 <TableContainer>
                   <Table>
                     <TableHead>
@@ -227,7 +227,7 @@ const UtilityBillingInvoice = () => {
                       {data.readings.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>
-                            {item.utility_type === UTILITY_TYPES.ELECTRICITY ? 
+                            {item.utility_type === UTILITY_TYPES.ELECTRICITY ?
                               'Electricity' : item.utility_type === UTILITY_TYPES.WATER ? 
                               'Water' : item.utility_type}
                           </TableCell>
@@ -245,7 +245,7 @@ const UtilityBillingInvoice = () => {
           </>
         )}
       </Paper>
-      
+
       <Snackbar
         open={alert.open}
         autoHideDuration={6000}
@@ -260,4 +260,4 @@ const UtilityBillingInvoice = () => {
   );
 };
 
-export default UtilityBillingInvoice; 
+export default UtilityBillingInvoice;

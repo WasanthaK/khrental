@@ -56,7 +56,7 @@ const Notifications = ({ portal = 'dashboard' }) => {
     } finally {
       if (current === requestSerial.current) {setLoading(false);}
     }
-  }, [activeTenantId]);
+  }, []);
 
   useEffect(() => {
     // Clear the previous organization's list immediately on a tenant switch.
@@ -64,7 +64,7 @@ const Notifications = ({ portal = 'dashboard' }) => {
     setMarkingId(null);
     refresh();
     return () => { requestSerial.current += 1; };
-  }, [refresh]);
+  }, [refresh, activeTenantId]);
 
   const markRead = async notification => {
     if (!notification?.id || markingId) {return;}

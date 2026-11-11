@@ -233,7 +233,7 @@ test('HTTP recovery route requires session and tenant context and ignores caller
       return recoverHistoricEviaAudit({ ...f.args, ...args });
     }
   }));
-  app.use((err, req, res, next) => res.status(err.status || 500).json({ code: err.code }));
+  app.use((err, req, res, _next) => res.status(err.status || 500).json({ code: err.code }));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   try {
     const target = `http://127.0.0.1:${server.address().port}/agreements/${agreementId}/audit-trail`;
@@ -252,7 +252,6 @@ test('HTTP recovery route requires session and tenant context and ignores caller
     assert.equal(f.calls[0].includes('foreign-request'), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
-
 
 test('newly completed signed PDF can retain its missing audit alone without touching the signed bytes', async () => {
   const f = fixture();

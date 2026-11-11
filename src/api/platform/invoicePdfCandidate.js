@@ -8,6 +8,7 @@ import { normalizeInvoiceLogo, invoiceLogoBytes } from './invoiceLogo.js';
 // for a customer resend or an original-document download.
 const obj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clean = (v, max = 300) => typeof v === 'string'
+// eslint-disable-next-line no-control-regex -- Intentionally reject ASCII control characters in untrusted input.
   ? v.replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, max) : '';
 const required = (v, field, max = 300) => {
   const value = clean(v, max);

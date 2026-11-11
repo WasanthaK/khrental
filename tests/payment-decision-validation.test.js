@@ -12,7 +12,6 @@ test('actual payment route rejects non-boolean decisions before database access'
   });
   app.use(createBillingRouter());
   // Express selects an error handler using its four-argument arity.
-  // eslint-disable-next-line no-unused-vars
   app.use((error,_req,res,_next)=>res.status(error.status||500).json({code:error.code}));
   const server=app.listen(0,'127.0.0.1');
   await new Promise(resolve=>server.once('listening',resolve));

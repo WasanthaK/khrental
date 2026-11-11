@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 /**
@@ -13,25 +13,25 @@ const PublicRoute = ({ children }) => {
   const navigate = useNavigate();
   const [showContent, setShowContent] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
-  
+
   // Show content after 2 seconds if still loading
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowContent(true);
     }, 2000);
-    
+
     return () => clearTimeout(timer);
   }, []);
-  
+
   // Track when user profile is loaded or when we're sure it's an authenticated user without a profile
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
       // Check if profile data is present
       if (user.profileId || user.role !== 'authenticated') {
         console.log('[PublicRoute] User profile loaded:', { 
-          role: user.role, 
-          profileId: user.profileId, 
-          profileType: user.profileType 
+          role: user.role,
+          profileId: user.profileId,
+          profileType: user.profileType
         });
         setProfileLoaded(true);
       } else {
@@ -42,12 +42,12 @@ const PublicRoute = ({ children }) => {
       }
     }
   }, [loading, isAuthenticated, user]);
-  
+
   // Handle role-based redirects when authenticated and profile is loaded
   useEffect(() => {
     if (profileLoaded && user) {
       console.log('[PublicRoute] User profile loaded, redirecting based on role:', user.role);
-      
+
       // Redirect based on role
       if (user.role === 'authenticated') {
         // Redirect new authenticated users to dashboard instead of admin-tools
@@ -68,12 +68,12 @@ const PublicRoute = ({ children }) => {
       }
     }
   }, [profileLoaded, user, navigate]);
-  
+
   // If loading but not past timeout, show loading indicator
   if (loading && !showContent) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
-  
+
   // If authenticated, show loading while redirect happens
   if (isAuthenticated) {
     return <div className="flex justify-center items-center h-screen">
@@ -83,9 +83,9 @@ const PublicRoute = ({ children }) => {
       </div>
     </div>;
   }
-  
+
   // Otherwise show the public content
   return children;
 };
 
-export default PublicRoute; 
+export default PublicRoute;

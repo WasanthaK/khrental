@@ -363,16 +363,16 @@ const main = async () => {
     console.log('PASS: Phase 1 renter workflow persisted structured associations across create/edit/reconnect, rejected duplicate same-organization renter creates without profile mutation, rejected invalid associations without data loss, scoped deactivate/reactivate to membership, blocked platform-admin creation, and rejected same-organization role conflicts without profile mutation.');
   } finally {
     if (closeMssqlPool) {
-      try { await closeMssqlPool(); } catch {}
+      try { await closeMssqlPool(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (fixturePool) {
-      try { await fixturePool.close(); } catch {}
+      try { await fixturePool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (masterPool) {
-      try { await masterPool.close(); } catch {}
+      try { await masterPool.close(); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
     if (containerStarted) {
-      try { runDocker(['rm', '-f', containerName]); } catch {}
+      try { runDocker(['rm', '-f', containerName]); } catch { /* Best-effort fixture cleanup must not hide the original failure. */ }
     }
   }
 };

@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback, useEffect,useRef,useState} from 'react';
 import {requestMssqlApi} from '../../services/mssqlApiClient';
 import {buildPilotConfiguration} from '../../utils/publicListingPilotConfiguration.js';
 
@@ -24,15 +24,17 @@ export default function PropertyPhotoReview({propertyId,publicPreview=null,reque
     if(objectUrl.current){URL.revokeObjectURL(objectUrl.current);}
     objectUrl.current='';setPreview('');setPreviewLoaded(false);setReview(null);setRights(false);setPrivacy(false);
   };
-  const reload=async()=>{
+
+  const reload=useCallback(async()=>{
     const data=await request(base);
     if(alive.current){setModel(data);}
-  };
+  }, [base, request]);
+
   useEffect(()=>{
     alive.current=true;
     reload().catch(e=>{if(alive.current&&e.status!==404){setError(e.message||'Unable to load photo reviews.');}});
     return()=>{alive.current=false;if(objectUrl.current){URL.revokeObjectURL(objectUrl.current);}};
-  },[base]);
+  },[base, reload]);
   const act=async action=>{
     setBusy(true);setError('');setMessage('');
     try{await action();}

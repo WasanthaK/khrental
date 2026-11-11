@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { platform as platformClient } from '../../services/platformClient';
 import { UTILITY_TYPES } from '../../utils/constants';
@@ -16,11 +16,7 @@ const UtilityReadingsReview = () => {
     utilityType: UTILITY_TYPES.ELECTRICITY
   });
 
-  useEffect(() => {
-    fetchReadings();
-  }, [filter]);
-
-  const fetchReadings = async () => {
+  const fetchReadings = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await platformClient
@@ -59,7 +55,11 @@ const UtilityReadingsReview = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter?.status, filter?.utilityType]);
+
+  useEffect(() => {
+    fetchReadings();
+  }, [fetchReadings, filter]);
 
   const handleApprove = async (reading) => {
     try {
@@ -110,7 +110,7 @@ const UtilityReadingsReview = () => {
             {notice.text}
           </div>
         )}
-        
+
         {/* Filters */}
         <div className="flex gap-4">
           <select
@@ -181,15 +181,15 @@ const UtilityReadingsReview = () => {
               // Calculate consumption and estimate cost
               const consumption = reading.currentreading - (reading.previousreading || 0);
               let rate = 0;
-              
+
               if (reading.utilitytype === UTILITY_TYPES.ELECTRICITY) {
                 rate = parseFloat(reading.properties?.electricity_rate) || 0;
               } else if (reading.utilitytype === UTILITY_TYPES.WATER) {
                 rate = parseFloat(reading.properties?.water_rate) || 0;
               }
-              
+
               const estimatedCost = consumption * rate;
-              
+
               return (
               <tr key={reading.id}>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -299,4 +299,4 @@ const UtilityReadingsReview = () => {
   );
 };
 
-export default UtilityReadingsReview; 
+export default UtilityReadingsReview;

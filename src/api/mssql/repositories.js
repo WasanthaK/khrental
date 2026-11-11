@@ -97,12 +97,7 @@ const INVOICE_UPDATABLE_FIELDS = [
   'updatedat'
 ];
 const INVOICE_JSON_FIELDS = new Set(['components']);
-const TENANT_MUTABLE_FIELDS = [
-  'name',
-  'slug',
-  'status',
-  'plan'
-];
+
 const TENANT_SETTINGS_MUTABLE_FIELDS = [
   'branding_json',
   'email_json',
@@ -111,11 +106,6 @@ const TENANT_SETTINGS_MUTABLE_FIELDS = [
   'feature_flags_json'
 ];
 const TENANT_SETTINGS_JSON_FIELDS = new Set(TENANT_SETTINGS_MUTABLE_FIELDS);
-const TENANT_MEMBERSHIP_MUTABLE_FIELDS = [
-  'role',
-  'status',
-  'is_default'
-];
 
 const parseJsonValue = (value) => {
   if (typeof value !== 'string') {

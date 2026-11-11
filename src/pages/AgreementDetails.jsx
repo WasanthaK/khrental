@@ -34,7 +34,7 @@ const normalizeAgreementRecord = (record) => {
 const AgreementDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [agreement, setAgreement] = useState(null);
   const [property, setProperty] = useState(null);
   const [rentee, setRentee] = useState(null);
@@ -126,7 +126,7 @@ const AgreementDetails = () => {
   useEffect(() => {
     fetchAgreementData();
   }, [fetchAgreementData]);
-  
+
   const handleDelete = async () => {
     try {
       setLoading(true);
@@ -144,21 +144,21 @@ const AgreementDetails = () => {
       setShowDeleteConfirm(false);
     }
   };
-  
+
   const handleSignAgreement = async () => {
     try {
       setLoading(true);
-      
+
       if (!agreement) {
         toast.error('Agreement data not found');
         return;
       }
       await markAgreementAsSigned(id);
-      
+
       // Show success message and refresh data
       toast.success('Agreement has been marked as signed!');
       await fetchAgreementData();
-      
+
     } catch (error) {
       console.error('Error signing agreement:', error);
       toast.error('Failed to sign agreement: ' + error.message);
@@ -167,7 +167,7 @@ const AgreementDetails = () => {
       setShowSignConfirm(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-10">
@@ -177,7 +177,7 @@ const AgreementDetails = () => {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -196,7 +196,7 @@ const AgreementDetails = () => {
       </div>
     );
   }
-  
+
   if (!agreement) {
     return (
       <div className="container mx-auto px-4 py-10">
@@ -213,37 +213,11 @@ const AgreementDetails = () => {
       </div>
     );
   }
-  
+
   // Determine status color
-  const getStatusColor = () => {
-    switch (agreement.status) {
-      case 'signed':
-        return 'bg-green-100 text-green-800';
-      case 'pending_signature':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'draft':
-        return 'bg-blue-100 text-blue-800';
-      case 'review':
-        return 'bg-indigo-100 text-indigo-800';
-      case 'expired':
-        return 'bg-red-100 text-red-800';
-      case 'cancelled':
-        return 'bg-orange-100 text-orange-800';
-      case 'terminated':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-  
+
   // Format status text
-  const formatStatus = (status) => {
-    return status
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header with agreement title and status */}
@@ -263,7 +237,7 @@ const AgreementDetails = () => {
 
         {/* Use our new SignatureProgressTracker in compact mode */}
         <div className="mt-4 md:mt-0">
-          <SignatureProgressTracker 
+          <SignatureProgressTracker
             status={agreement.signature_status || agreement.status}
             signatories={signatories}
             compact={true}
@@ -273,12 +247,12 @@ const AgreementDetails = () => {
 
       {/* Signature Status Details panel */}
       <div className="mb-8">
-        <SignatureProgressTracker 
+        <SignatureProgressTracker
           status={agreement.signature_status || agreement.status}
           signatories={signatories}
         />
       </div>
-      
+
       {/* Actions */}
       <div className="mb-8 flex flex-wrap gap-3">
         <div className="flex-1"></div>
@@ -295,7 +269,7 @@ const AgreementDetails = () => {
               Mark as Signed
             </button>
           )}
-          
+
           {/* Only show Edit button if agreement is still editable */}
           {!['signed', 'completed', 'cancelled'].includes(agreement.status) && (
             <Link
@@ -308,7 +282,7 @@ const AgreementDetails = () => {
               Edit
             </Link>
           )}
-          
+
           {agreement.status === 'cancelled' && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -322,32 +296,32 @@ const AgreementDetails = () => {
           )}
         </div>
       </div>
-      
+
       {/* Agreement details */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Left column - Details */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-medium mb-4">Agreement Details</h2>
-            
+
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-500">Created Date</p>
                 <p className="font-medium">{formatDate(agreement.createdat)}</p>
               </div>
-              
+
               {agreement.signeddate && (
                 <div>
                   <p className="text-sm text-gray-500">Signed Date</p>
                   <p className="font-medium">{formatDate(agreement.signeddate)}</p>
                 </div>
               )}
-              
+
               <div>
                 <p className="text-sm text-gray-500">Language</p>
                 <p className="font-medium">{agreement.language}</p>
               </div>
-              
+
               {template && (
                 <div>
                   <p className="text-sm text-gray-500">Template</p>
@@ -358,7 +332,7 @@ const AgreementDetails = () => {
               )}
             </div>
           </div>
-          
+
           {/* Property Information */}
           {property && (
             <div className="bg-white rounded-lg shadow p-6 mt-6">
@@ -371,18 +345,18 @@ const AgreementDetails = () => {
                   View Property
                 </Link>
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-gray-500">Name</p>
                   <p className="font-medium">{property.name}</p>
                 </div>
-                
+
                 <div>
                   <p className="text-sm text-gray-500">Address</p>
                   <p className="font-medium">{property.address}</p>
                 </div>
-                
+
                 <div>
                   <p className="text-sm text-gray-500">Unit Configuration</p>
                   <p className="font-medium">{property.unitconfiguration}</p>
@@ -390,7 +364,7 @@ const AgreementDetails = () => {
               </div>
             </div>
           )}
-          
+
           {/* Rentee Information */}
           {rentee && (
             <div className="bg-white rounded-lg shadow p-6 mt-6">
@@ -403,18 +377,18 @@ const AgreementDetails = () => {
                   View Rentee
                 </Link>
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-gray-500">Name</p>
                   <p className="font-medium">{rentee.name}</p>
                 </div>
-                
+
                 <div>
                   <p className="text-sm text-gray-500">Email</p>
                   <p className="font-medium">{rentee.contact_details?.email || 'N/A'}</p>
                 </div>
-                
+
                 <div>
                   <p className="text-sm text-gray-500">Phone</p>
                   <p className="font-medium">{rentee.contact_details?.phone || 'N/A'}</p>
@@ -423,7 +397,7 @@ const AgreementDetails = () => {
             </div>
           )}
         </div>
-        
+
         {/* Right column - Agreement Document or Content */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-lg shadow p-6">
@@ -448,7 +422,7 @@ const AgreementDetails = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Document View - Show iframe if PDF is available, otherwise show content */}
             {documentState.status === 'loading' ? (
               <p role="status">Loading authenticated agreement document...</p>
@@ -480,7 +454,7 @@ const AgreementDetails = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -506,7 +480,7 @@ const AgreementDetails = () => {
           </div>
         </div>
       )}
-      
+
       {showAuditViewer && auditTrailUrl && (
         <AgreementDocument documentUrl={auditTrailUrl} title="Evia Signing Audit" onClose={() => setShowAuditViewer(false)} onRecover={() => recoverEviaAuditTrail(agreement.id)} />
       )}
