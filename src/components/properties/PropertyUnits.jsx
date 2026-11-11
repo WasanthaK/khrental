@@ -208,7 +208,7 @@ const PropertyUnits = ({ propertyId, propertyType }) => {
             </div>
           ) : (
             <div className="text-center py-4 bg-gray-50 rounded-md">
-              No units added yet. Click "Add Unit" to create your first unit.
+              No units added yet.
             </div>
           )}
         </>
@@ -243,4 +243,4 @@ const PropertyUnits = ({ propertyId, propertyType }) => {
   );
 };
 
-export default PropertyUnits; 
+export default PropertyUnits;

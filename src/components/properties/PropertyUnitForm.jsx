@@ -201,7 +201,7 @@ const PropertyUnitForm = ({
           
           <FormInput
             label="Square Feet"
-            id="squarefeet"
+            id="unit-squarefeet"
             name="squarefeet"
             type="number"
             value={formData.squarefeet}
@@ -210,7 +210,7 @@ const PropertyUnitForm = ({
           />
           
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
               Status
             </label>
             <select
@@ -228,12 +228,12 @@ const PropertyUnitForm = ({
           </div>
 
           {/* Banking Details Section */}
-          <div className="col-span-2">
+          <div className="col-span-full">
             <h3 className="text-md font-medium mb-4 mt-4">Banking Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormInput
                 label="Bank Name"
-                id="bank_name"
+                id="unit-bank_name"
                 name="bank_name"
                 value={formData.bank_name}
                 onChange={handleInputChange}
@@ -243,7 +243,7 @@ const PropertyUnitForm = ({
               
               <FormInput
                 label="Bank Branch"
-                id="bank_branch"
+                id="unit-bank_branch"
                 name="bank_branch"
                 value={formData.bank_branch}
                 onChange={handleInputChange}
@@ -253,7 +253,7 @@ const PropertyUnitForm = ({
               
               <FormInput
                 label="Account Number"
-                id="bank_account_number"
+                id="unit-bank_account_number"
                 name="bank_account_number"
                 value={formData.bank_account_number}
                 onChange={handleInputChange}
@@ -266,7 +266,7 @@ const PropertyUnitForm = ({
         
         <FormTextarea
           label="Description"
-          id="description"
+          id="unit-description"
           name="description"
           value={formData.description}
           onChange={handleInputChange}

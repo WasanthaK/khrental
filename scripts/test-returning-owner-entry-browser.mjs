@@ -248,7 +248,7 @@ try{
       const unitRequest=preparationRequests.at(-1);assert.equal(unitRequest.kind,'unit');assert.equal(unitRequest.payload.bank_account_number,'000456');
       assert.equal(unitRequest.payload.availability,'reserved');assert.equal(unitRequest.payload.propertyid,'55555555-5555-4555-8555-555555555555');
       await openUnit();assert.equal(await page.$eval('#unitnumber',e=>e.value),'Prepared Unit One');
-      for(const width of [1440,390]){await page.setViewport({width,height:900});await page.screenshot({path:`enquiry-browser-proof/prepared-unit-retry-${width}.png`,fullPage:true});}
+      for(const width of [1440,390]){await page.setViewport({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));if(width===390){assert.ok(await page.$eval('#unitnumber',e=>e.getBoundingClientRect().width>250),'Mobile unit fields retain a usable full row');}await page.screenshot({path:`enquiry-browser-proof/prepared-unit-retry-${width}.png`,fullPage:true});}
       await page.focus('form:has(#unitnumber) button[type="submit"]');await page.keyboard.press('Enter');
       await page.waitForFunction(()=>location.pathname==='/dashboard/subscription');
       assert.deepEqual(preparationRequests.at(-1),unitRequest);assert.equal(prepared.size,2);
