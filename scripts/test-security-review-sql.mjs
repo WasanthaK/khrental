@@ -49,7 +49,7 @@ export const verifySecurityReviewSql = async pool => {
     assert.equal(await limiter.consume({scope:'manual-email-user',key,max:5,windowSeconds:60}),false);
     const credentialResults=await Promise.all(Array.from({length:16},()=>limiter.consume({scope:'credential-signin-email',key:credentialKey,max:10,windowSeconds:900})));
     assert.equal(credentialResults.filter(Boolean).length,10,'Shared SQL admits exactly ten concurrent credential attempts');
-    console.log('PASS: real SQL verified platform authority, historical/forged email denial, revoked bootstrap denial and atomic concurrent manual-email quota; synthetic mailbox proof');
+    console.log('PASS: real SQL verified platform authority, historical/forged email denial, revoked bootstrap denial and atomic concurrent manual-email (5) and credential (10) quotas; synthetic mailbox proof');
   }finally{
     await query(`DELETE FROM dbo.public_signup_rate_limits WHERE bucket_hash IN (@key,@credentialKey);
       DELETE FROM dbo.public_signup_challenges WHERE id=@challenge;

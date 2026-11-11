@@ -26,6 +26,9 @@ try{
    if(!path.startsWith('/api/')){return original(url,options);}
    if(path==='/api/mssql/health'){return Response.json({ok:true,connection:'ready'});}
    const body=options.body?JSON.parse(options.body):{};
+   // The comments child independently reads the same projection. Keep its
+   // immediate empty fixture separate from the page's signal-bearing read.
+   if(/^\/api\/maintenance-lifecycle\/requests\/[^/]+$/.test(path)&&!options.signal){return Response.json({data:{request:{id:path.split('/').at(-1)},images:[],comments:[]}});}
    if((path==='/api/platform/query'&&body.table==='properties')||/^\/api\/maintenance-lifecycle\/requests\/[^/]+$/.test(path)){
     // Deliberately return a late success even after abort: scope guards must
     // reject it independently of browser/network cancellation.
