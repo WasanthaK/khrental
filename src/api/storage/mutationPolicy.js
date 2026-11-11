@@ -4,6 +4,7 @@ const evidenceContentType = body => {
   if (!Buffer.isBuffer(body)) throw denied();
   if (body[0]===0xff && body[1]===0xd8 && body[2]===0xff) return 'image/jpeg';
   if (body.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return 'image/png';
+  if (['GIF87a','GIF89a'].includes(body.toString('ascii',0,6))) return 'image/gif';
   if (body.toString('ascii',0,4)==='RIFF' && body.toString('ascii',8,12)==='WEBP') return 'image/webp';
   if (body.toString('ascii',0,5)==='%PDF-') return 'application/pdf';
   throw denied();

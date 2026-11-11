@@ -17,7 +17,11 @@ This setup is intended to support local development, testing, and future deploym
 - [Dockerfile](../Dockerfile)
 - [docker-compose.yml](../docker-compose.yml)
 - [.dockerignore](../.dockerignore)
-- [.env.docker.example](../.env.docker.example)
+- [.env.example](../.env.example)
+
+## Security defaults — 11 November 2026
+
+Compose runs a production-mode web container: development impersonation is always disabled in that mode, even if an old environment file enables its flag. Bucket administration is an explicit verified platform-admin operation; ordinary application startup only checks storage availability. See the [security review disposition](SECURITY-REVIEW-20261111.md) for the verified boundaries. The steps below configure local development infrastructure, not production migration or cloud authority.
 
 ## Important Notes
 
@@ -37,12 +41,12 @@ This setup is intended to support local development, testing, and future deploym
 
 ### 1. Create the Docker env file
 
-Copy `.env.docker.example` to `.env.docker` and adjust values as needed.
+Copy `.env.example` to an untracked `.env.docker`. Set `MSSQL_DATABASE`, `MSSQL_USER` and a strong nonempty `MSSQL_PASSWORD` for your local SQL instance. Compose intentionally has no shared SA password fallback. Pass that file with `--env-file` so Compose interpolation and the web container use the same values. Never commit the filled file.
 
 ### 2. Build and start the containers
 
 ```bash
-docker compose --profile core up --build
+docker compose --env-file .env.docker --profile core up --build
 ```
 
 ### 3. Open the application
@@ -54,13 +58,13 @@ Use:
 ### 4. Stop the containers
 
 ```bash
-docker compose --profile core down
+docker compose --env-file .env.docker --profile core down
 ```
 
 To also remove volumes:
 
 ```bash
-docker compose --profile core down -v
+docker compose --env-file .env.docker --profile core down -v
 ```
 
 ## Default Services
@@ -153,13 +157,13 @@ If `5174` or `1433` is already in use, update the compose port mapping.
 Check container logs:
 
 ```bash
-docker compose logs web
-docker compose logs mssql
+docker compose --env-file .env.docker logs web
+docker compose --env-file .env.docker logs mssql
 ```
 
 ### Rebuild after dependency changes
 If `package.json` changes, rebuild:
 
 ```bash
-docker compose --profile core up --build
+docker compose --env-file .env.docker --profile core up --build
 ```

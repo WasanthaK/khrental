@@ -2,9 +2,11 @@
 
 ## Security review follow-up — 11 November 2026
 
-The [verified review disposition](SECURITY-REVIEW-20261111.md) records the six priority corrections under review, focused/SQL/browser evidence boundaries and the secondary queue. This work closes concrete authority, mail, build-token and stored-HTML paths before returning to the remaining R5 inventory integration. It also blocks client-forged auth verification and generic membership writes. CI, deployed role acceptance and any necessary historical token rotation remain separate; no launch or billing rollout is activated by this patch. Preserve accepted signing and the existing owner milestone dispositions.
+[PR #551](https://github.com/WasanthaK/khrental/pull/551), merged as `2996a89e02850f40c430a1a17629f3fd54c552a2`, fixes the six priority authority, mail, build-token and stored-HTML findings, plus forged verification metadata and generic membership mutations. All six final-head workflows passed, including **934/934 tests**, real disposable SQL authority/concurrent-quota proof and reviewed desktop/mobile XSS renders. The [review disposition](SECURITY-REVIEW-20261111.md) retains exact evidence, deployment boundaries, the confirmed lint configuration failure and the secondary queue. Genuine privileged live-role acceptance and any necessary historical token rotation remain separate. No launch/billing rollout, migration apply or repeat signing is activated by this patch.
 
 Documentation reconciled **11 November 2026**. The latest verified implementation/release checkpoints below supersede older pending statements; dated historical evidence and owner milestone dispositions are retained. No rollout, pricing or production mutation is authorized by this documentation update.
+
+[Security release 42952159871](https://github.com/WasanthaK/khrental/actions/runs/42952159871) passed at Ready **0000484**, exact source `2996a89e02850f40c430a1a17629f3fd54c552a2`. Independent source readback matched at **08:57:49 Asia/Colombo** on 11 November. An initial SQL HTTP 503 at **08:58:04** recovered; independent SQL was HTTP 200 ready at **08:59:36**. Anonymous forged-admin, platform-admin, manual-mail and bucket probes returned HTTP 401. This is bounded live verification, not privileged role acceptance, provider-token rotation or genuine paused-database acceptance. Full management enforcement, pending staging/cessation migrations and live charging remain OFF. See the review record for exact evidence, secondary work and rollback limits.
 
 ## Staged inventory and audited cessation — 10 November 2026
 
