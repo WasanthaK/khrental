@@ -145,7 +145,7 @@ export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 }
 
 export const getTenantTeamMemberById = async (tenantId, appUserId) => {
   const rows = await listTenantTeamMembers(tenantId, { pageSize: 500 });
-  return rows.find((row) => String(row.id) === String(appUserId)) || null;
+  return rows.find((row) => String(row.id).toLowerCase() === String(appUserId).toLowerCase()) || null;
 };
 
 const buildProfileUpdates = (payload = {}) => {

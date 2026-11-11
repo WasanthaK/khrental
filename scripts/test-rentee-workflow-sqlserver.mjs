@@ -346,11 +346,11 @@ const main = async () => {
     });
     assert.equal(sharedStaff.data.id, staff.data.id);
     assert.equal(sharedStaff.data.name, 'Original Staff');
-    await assert.rejects(updateTenantTeamMember(otherTenantId, staff.data.id, {
+    await assert.rejects(updateTenantTeamMember(otherTenantId, String(staff.data.id).toLowerCase(), {
       name: 'Untrusted Staff Edit', permission_bundle: 'finance'
     }), error => error.status === 409 && error.code === 'SHARED_PROFILE_EDIT_FORBIDDEN');
     assert.equal((await getTenantTeamMemberById(otherTenantId, staff.data.id)).permission_bundle, 'read_only');
-    const membershipEdit = await updateTenantTeamMember(otherTenantId, staff.data.id, {
+    const membershipEdit = await updateTenantTeamMember(otherTenantId, String(staff.data.id).toLowerCase(), {
       name: sharedStaff.data.name, email: sharedStaff.data.email,
       contact_details: sharedStaff.data.contact_details, permission_bundle: 'finance'
     });

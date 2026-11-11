@@ -254,7 +254,7 @@ export const listTenantRentees = async (tenantId, { search, pageSize = 250, stat
 
 export const getTenantRenteeById = async (tenantId, appUserId) => {
   const rows = await listTenantRentees(tenantId, { pageSize: 500, status: 'all' });
-  return rows.find((row) => String(row.id) === String(appUserId)) || null;
+  return rows.find((row) => String(row.id).toLowerCase() === String(appUserId).toLowerCase()) || null;
 };
 
 export const updateTenantRentee = async (tenantId, appUserId, payload = {}) => {
