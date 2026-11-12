@@ -2,6 +2,10 @@
 
 Source baseline: `1f114d1fcd71ea93a8d399cb21a1b5c9881e5268`. This is the read-first report requested by the owner-supplied **R5 Engineering Handoff for Astra: Recovery, Restore/Split, Cessation**. No application code, migration, production data, provider object or flag was changed during discovery. No runtime or provider acceptance is claimed by source inspection.
 
+## Current implementation checkpoint
+
+Recovery source is merged through [PR #574](https://github.com/WasanthaK/khrental/pull/574), with 1,257 passing tests and both SQL suites. See the [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) for exact evidence. The tables below preserve the original discovery baseline; they must not requeue completed recovery or worker implementation. The next engineering work is restoration/split and remaining cessation states under the approved defaults below. Staging, genuine provider acceptance and activation remain open.
+
 ## Result and implementation boundary
 
 Extend the existing billing-command journal, inventory calculator and transactional authority. Do not introduce a parallel billing model. Workstream 1 precedes restore/split and broader cessation. Finished property/unit forms and accepted signing remain untouched. The handoff's D1–D8 defaults are authorized defaults for otherwise unanswered choices, and the owner has approved the four concrete corrections below.
