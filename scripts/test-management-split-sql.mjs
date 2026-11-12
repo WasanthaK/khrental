@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
+import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
 import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
 import {inspectManagementSplits} from './inspect-management-billing-schema.mjs';
@@ -103,6 +104,31 @@ export const verifySplits=async(pool,actorId)=>{
       assert.equal((await store.inventory(tenantId)).length,4);
       const check=await createBillingInvariantInspector({store,stripe:readOnlyStripe(stripe)}).inspect(tenantId);
       assert.equal(check.status,'consistent',JSON.stringify(check));
+    }
+    if(mode==='complimentary'){
+      // Restored-parent -> split -> cease, including both original children.
+      const secondCease=await service.cessationPreview({tenantId,actorId,propertyId:second});
+      await service.ceaseStock({tenantId,actorId,id:crypto.randomUUID(),propertyId:second,inventoryHash:secondCease.inventoryHash,reason:'Cease before testing restored parent split.'});
+      const secondRestore=await service.restorationPreview({tenantId,actorId,propertyId:second});
+      await service.restoreStock({tenantId,actorId,id:crypto.randomUUID(),propertyId:second,inventoryHash:secondRestore.inventoryHash,reason:'Restore before splitting the same parent.'});
+      const childUnits=[1,2].map(n=>({id:crypto.randomUUID(),propertyid:second,unitnumber:`Child ${n}`}));
+      const fresh=await service.splitPreview({tenantId,actorId,propertyId:second,units:childUnits});
+      const rollbackId=crypto.randomUUID(),payload={propertyId:second,units:childUnits,inventoryHash:fresh.inventoryHash,reason:'Prove reservation compensation before external intent.'};
+      await store.beginCommand({tenantId,actorId,id:rollbackId,kind:'split',payload,recovery:true,prepareRecovery:async q=>{
+        await store.reserveSplitLocked(q,{tenantId,actorId,id:rollbackId,...payload});return {};
+      }});
+      const journal=createRecoveryJournal({store,complete:async()=>({})}),claim=await journal.claim({tenantId,id:rollbackId});
+      await journal.fail({tenantId,id:rollbackId,token:claim.token,review:true,code:'BILLING_SPLIT_STATE_CHANGED',delaySeconds:30});
+      assert.equal((await store.read('SELECT id FROM dbo.management_inventory_split_units WHERE command_id=@id',{id:rollbackId})).length,0);
+      assert.equal((await store.read('SELECT state FROM dbo.management_inventory_splits WHERE command_id=@id',{id:rollbackId}))[0].state,'aborted');
+      await service.splitStock({tenantId,actorId,id:crypto.randomUUID(),...payload});
+      const parentCease=await service.cessationPreview({tenantId,actorId,propertyId:second});
+      await service.ceaseStock({tenantId,actorId,id:crypto.randomUUID(),propertyId:second,inventoryHash:parentCease.inventoryHash,reason:'Cease restored and split parent with both units.'});
+      assert.equal((await store.inventory(tenantId)).length,3);
+      const parentRestore=await service.restorationPreview({tenantId,actorId,propertyId:second});
+      await service.restoreStock({tenantId,actorId,id:crypto.randomUUID(),propertyId:second,inventoryHash:parentRestore.inventoryHash,reason:'Restore split parent and both retained units.'});
+      assert.equal((await store.inventory(tenantId)).length,5);
+      assert.equal((await createBillingInvariantInspector({store,stripe:readOnlyStripe(stripe)}).inspect(tenantId)).status,'consistent');
     }
     assert.equal((await store.read('SELECT propertyid,unitid FROM dbo.agreements WHERE id=@id',{id:parentAgreement}))[0].unitid,null);
   }

@@ -102,7 +102,13 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     // Deliberately includes malformed cross-tenant child relationships so the contract rejects them.
     const units = await q(`SELECT u.id,u.tenant_id,u.propertyid,u.unitnumber FROM dbo.property_units u
       JOIN dbo.properties p ON p.id=u.propertyid WHERE p.tenant_id=@tenantId`,{tenantId});
-    units.push(...splitRecords.map(payload=>({...payload,tenant_id:tenantId})));
+    // Preview uses the same SQL UUID representation as the activated rows.
+    // Keep existing inventory hashes stable for already prepared operations.
+    for(const payload of splitRecords){
+      const projected=await q('SELECT CAST(@id AS UNIQUEIDENTIFIER) AS id,CAST(@tenantId AS UNIQUEIDENTIFIER) AS tenant_id,CAST(@propertyId AS UNIQUEIDENTIFIER) AS propertyid,@label AS unitnumber',
+        {id:payload.id,tenantId,propertyId:payload.propertyid,label:payload.unitnumber});
+      units.push(projected[0]);
+    }
     if(cessationEnabled()){
       const controls=await q("SELECT id,property_id,unit_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND state='ceased'"+(restorationEnabled()?" AND restored_at IS NULL":''),{tenantId});
       for(const property of properties){if(controls.filter(c=>!restoreControlIds.includes(String(c.id).toLowerCase())).some(c=>!c.unit_id&&String(c.property_id).toLowerCase()===String(property.id).toLowerCase())){property.management_state='ceased';}}
