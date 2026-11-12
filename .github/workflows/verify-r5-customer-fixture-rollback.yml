@@ -1,0 +1,89 @@
+name: R5 customer recovery fixture rollback verification
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact unchanged application SHA serving publicly
+        type: string
+        required: true
+      confirmation:
+        description: VERIFY-R5-CUSTOMER-FIXTURE-ROLLBACK
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Verify reviewed source and unchanged serving image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-R5-CUSTOMER-FIXTURE-ROLLBACK
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|.github/workflows/verify-r5-customer-fixture-rollback.yml|scripts/verify-r5-customer-fixture-rollback.mjs|.github/workflows/verify-r5-customer-recovery-preflight.yml) ;;
+              *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Run rolled-back SQL fixture against serving application identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app.json")
+          image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          encoded=$(node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {deflateRawSync} from 'node:zlib';
+          const source=readFileSync('scripts/verify-r5-customer-fixture-rollback.mjs');
+          console.log(deflateRawSync(source).toString('base64url'));
+          JS
+          )
+          # One bounded connection. Abort before execution if the encoded payload is oversized.
+          test "${#encoded}" -lt 6500
+          command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"
+          grep '^R5_CUSTOMER_FIXTURE_PASS=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > fixture-rollback.txt
+          cat fixture-rollback.txt
+          jq -e '.rolledBack==true and .existingScopePreserved==true and .customerCreated==false and .workerScopeChanged==false and .syntheticChecks==6 and .rollbackChecks==6' < <(sed 's/^R5_CUSTOMER_FIXTURE_PASS=//' fixture-rollback.txt)
+          curl -fsS --max-time 30 https://app.quixo.homes/api/health >/dev/null
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          cat fixture-rollback.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: r5-customer-fixture-rollback
+          path: fixture-rollback.txt
+          if-no-files-found: warn
+          retention-days: 30
