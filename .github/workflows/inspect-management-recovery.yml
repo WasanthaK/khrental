@@ -1,26 +1,37 @@
-name: Read-only scoped management recovery acceptance
+name: Scoped management recovery controls
 on:
   workflow_dispatch:
     inputs:
-      expected_build:
-        description: Exact accepted serving application SHA
+      mode:
+        description: Inspect, enable scoped recovery, or disable the worker
+        type: choice
+        options: [inspect, enable, disable]
+        default: inspect
         required: true
+      confirmation:
+        description: ENABLE-SCOPED-RECOVERY or DISABLE-RECOVERY (blank for inspect)
+        type: string
+        required: false
+      expected_build:
+        description: Exact accepted serving application SHA (not needed to disable)
+        required: false
         type: string
       customer:
-        description: Approved sandbox customer ID
-        required: true
+        description: Approved sandbox customer ID (not needed to disable)
+        required: false
         type: string
       subscription:
-        description: Matching approved sandbox subscription ID
-        required: true
+        description: Matching approved sandbox subscription ID (not needed to disable)
+        required: false
         type: string
 permissions:
   contents: read
 concurrency:
-  group: management-recovery-inspection
+  group: khrental-production
   cancel-in-progress: false
 jobs:
   schema:
+    if: github.ref == 'refs/heads/main' && inputs.mode != 'disable'
     permissions:
       contents: read
       id-token: write
@@ -31,18 +42,28 @@ jobs:
     secrets: inherit
   inspect:
     needs: schema
-    if: github.ref == 'refs/heads/main'
+    if: always() && github.ref == 'refs/heads/main' && (inputs.mode == 'disable' || needs.schema.result == 'success')
     environment: Production
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
       id-token: write
     env:
+      MODE: ${{ inputs.mode }}
+      CONFIRMATION: ${{ inputs.confirmation }}
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       INSPECT_CUSTOMER: ${{ inputs.customer }}
       INSPECT_SUBSCRIPTION: ${{ inputs.subscription }}
     steps:
+      - name: Validate explicit control request
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$MODE:$CONFIRMATION" in
+            inspect:|enable:ENABLE-SCOPED-RECOVERY|disable:DISABLE-RECOVERY) ;;
+            *) echo 'Invalid recovery control request.' >&2; exit 1 ;;
+          esac
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
@@ -50,6 +71,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify exact serving build and runtime parity
+        if: inputs.mode != 'disable'
         shell: bash
         run: |
           set -euo pipefail
@@ -70,16 +92,23 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
       - name: Inspect scoped recovery using existing runtime identity and SELECT only
+        id: inspect
+        if: inputs.mode != 'disable'
         shell: bash
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > app-config.json
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' app-config.json >/dev/null
+          rm app-config.json
           revision=$(az containerapp show -g khrental-prod-rg -n khrental-app --query properties.latestReadyRevisionName -o tsv)
           image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
           encoded=$(node --input-type=module <<'JS'
           import {deflateRawSync} from 'node:zlib';
-          const target=JSON.stringify({customer:process.env.INSPECT_CUSTOMER,subscription:process.env.INSPECT_SUBSCRIPTION});
+          const target=JSON.stringify({enable:process.env.MODE==='enable',customer:process.env.INSPECT_CUSTOMER,subscription:process.env.INSPECT_SUBSCRIPTION});
           const source=`
           import assert from 'node:assert/strict';
           import {getMssqlPool,closeMssqlPool,sql} from 'file:///app/src/api/mssql/pool.js';
@@ -88,7 +117,7 @@ jobs:
           const target=${target};
           try {
             assert.equal(process.env.MANAGEMENT_BILLING_SANDBOX_ENABLED,'true');
-            assert.notEqual(process.env.MANAGEMENT_RECOVERY_WORKER_ENABLED,'true');
+            if(target.enable){assert.notEqual(process.env.MANAGEMENT_RECOVERY_WORKER_ENABLED,'true');}
             const pool=await getMssqlPool();
             const rows=(await pool.request().input('customer',sql.VarChar(100),target.customer).input('subscription',sql.VarChar(100),target.subscription)
               .query("SELECT tenant_id FROM dbo.management_billing_accounts WHERE stripe_customer_id=@customer AND stripe_subscription_id=@subscription AND stripe_account_id='acct_1UTgcdQ4sARuLNQa'")).recordset;
@@ -110,9 +139,10 @@ jobs:
             const worker=createRecoveryWorker({store:createBillingStore(),service:null,env});
             const result=await worker.run({dryRun:true});
             assert.equal(result.dryRun,true);assert.ok(result.candidates.every(row=>row.tenant_id===tenant));
+            if(target.enable){assert.equal(dmlReady,true);assert.equal(result.candidates.length,0,'Activation requires the accepted empty scope');console.log('RECOVERY_SCOPE='+tenant);}
             console.log('RECOVERY_DRY_RUN='+JSON.stringify({dryRun:true,scopeCount:1,tablesReadable:tables.length,dmlReady,
               candidates:result.candidates.length,due:result.candidates.filter(row=>row.due).length,
-              review:result.candidates.filter(row=>row.state==='failed_needs_review').length,workerEnabled:false}));
+              review:result.candidates.filter(row=>row.state==='failed_needs_review').length,workerEnabled:process.env.MANAGEMENT_RECOVERY_WORKER_ENABLED==='true'}));
           }catch(error){console.error('RECOVERY_DRY_RUN_FAILED '+(error.code||'UNCONFIRMED'));process.exitCode=1;}finally{await closeMssqlPool();}
           `;
           console.log(deflateRawSync(source).toString('base64url'));
@@ -120,13 +150,90 @@ jobs:
           )
           node_command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v exec_command '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$node_command"
-          script -q -e -c "$exec_command" /dev/null | tee recovery-inspection.txt
+          # Keep the resolved internal scope out of the retained public artifact.
+          script -q -e -c "$exec_command" /dev/null > recovery-raw.txt
+          if [ "$MODE" = enable ]; then
+            tenant=$(sed -n 's/^RECOVERY_SCOPE=//p' recovery-raw.txt | tr -d '\r')
+            [[ "$tenant" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
+            echo "::add-mask::$tenant"
+            echo "tenant=$tenant" >> "$GITHUB_OUTPUT"
+          fi
+          grep '^RECOVERY_DRY_RUN=' recovery-raw.txt | tr -d '\r' > recovery-inspection.txt
+          rm recovery-raw.txt
+          cat recovery-inspection.txt
           grep -Fq 'RECOVERY_DRY_RUN={"dryRun":true,"scopeCount":1,"tablesReadable":6' recovery-inspection.txt
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
           grep '^RECOVERY_DRY_RUN=' recovery-inspection.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply scoped worker switch
+        id: switch
+        if: inputs.mode != 'inspect'
+        env:
+          RECOVERY_TENANT: ${{ steps.inspect.outputs.tenant }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          echo 'mutated=true' >> "$GITHUB_OUTPUT"
+          if [ "$MODE" = enable ]; then
+            test -n "$RECOVERY_TENANT"
+            az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars \
+              MANAGEMENT_RECOVERY_SCHEMA_READY=true MANAGEMENT_RECOVERY_WORKER_ENABLED=true \
+              MANAGEMENT_RECOVERY_TENANT_IDS="$RECOVERY_TENANT" -o none
+          else
+            # Preserve schema readiness, journal and scope for safe drain/readback.
+            az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars MANAGEMENT_RECOVERY_WORKER_ENABLED=false -o none
+          fi
+      - name: Verify serving worker configuration and application health
+        if: inputs.mode != 'inspect'
+        env:
+          RECOVERY_TENANT: ${{ steps.inspect.outputs.tenant }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          for attempt in $(seq 1 90); do
+            az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$folder/app"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$folder/app" >/dev/null; then break; fi
+            sleep 10
+          done
+          jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.configuration.activeRevisionsMode=="Single" and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$folder/app" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
+          az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" -o json > "$folder/revision"
+          expected=false; if [ "$MODE" = enable ]; then expected=true; fi
+          jq -e --arg value "$expected" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_RECOVERY_WORKER_ENABLED" and .value==$value)' "$folder/revision" >/dev/null
+          if [ "$MODE" = enable ]; then
+            jq -e --arg tenant "$RECOVERY_TENANT" '.properties.template.containers[0].env as $env |
+              any($env[]; .name=="MANAGEMENT_RECOVERY_SCHEMA_READY" and .value=="true") and
+              any($env[]; .name=="MANAGEMENT_BILLING_SANDBOX_ENABLED" and .value=="true") and
+              any($env[]; .name=="MANAGEMENT_RECOVERY_TENANT_IDS" and .value==$tenant)' "$folder/revision" >/dev/null
+            jq -e --arg sha "$EXPECTED_BUILD" '.properties.template.containers[0].image | endswith(":"+$sha)' "$folder/revision" >/dev/null
+            curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          fi
+          curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok==true and .connection=="ready"'
+          echo "RECOVERY_CONTROL=PASS mode=$MODE workerEnabled=$expected revision=$revision" | tee recovery-control.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Disable worker if activation verification fails
+        if: failure() && steps.switch.outputs.mutated == 'true' && inputs.mode == 'enable'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars MANAGEMENT_RECOVERY_WORKER_ENABLED=false -o none
+          for attempt in $(seq 1 90); do
+            latest=$(az containerapp show -g khrental-prod-rg -n khrental-app --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show -g khrental-prod-rg -n khrental-app --query properties.latestReadyRevisionName -o tsv)
+            if [ -n "$latest" ] && [ "$latest" = "$ready" ]; then break; fi
+            sleep 10
+          done
+          test "$latest" = "$ready"
+          flag=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$ready" --query "properties.template.containers[0].env[?name=='MANAGEMENT_RECOVERY_WORKER_ENABLED'].value | [0]" -o tsv)
+          test "$flag" = false
+          echo 'RECOVERY_CONTROL=DISABLED_AFTER_FAILED_ACTIVATION' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: scoped-recovery-readonly-evidence
-          path: recovery-inspection.txt
+          path: |
+            recovery-inspection.txt
+            recovery-control.txt
           retention-days: 30
