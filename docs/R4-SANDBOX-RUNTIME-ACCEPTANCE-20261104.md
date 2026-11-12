@@ -1,5 +1,10 @@
 # R3/R4 current acceptance checkpoint
 
+## Scoped public HTTP enforcement — prepared, execution pending
+
+The next bounded BL07/BL08 acceptance temporarily enables serving write enforcement for a new empty test organization only, using the accepted application image. Public authenticated agreement-template create/update calls must deny seeded expired grace without writes, allow current grace/paid/complimentary states, retain historical reads, deny naturally expired fixed complimentary access and revoked access, and reject stale role/foreign-organization requests. This uses a persisted disposable fixture session, not a credential-login acceptance claim. No Stripe operations or Evia calls occur. The workflow restores the exact original enforcement configuration on success or failure; the fixture session is revoked and its membership/user/organization deactivated. Seeded grace dates do not establish seven days naturally elapsed, and one route does not close the full endpoint/job/role matrix. Existing billing fixtures and accepted lifecycle evidence remain protected.
+
+
 ## Deployed grace and recovery — passed 12 November 2026
 
 **BL05.4 passed: genuine failed renewal, grace and recovery within grace.** [Run 43224159517](https://github.com/WasanthaK/khrental/actions/runs/43224159517) passed at **13:09:20 UTC / 18:39:20 Asia/Colombo** on unchanged Ready **0000491**, image `59050153ad96b10be7c1990df846363a1642c046`. A distinct USD 5 renewal on the dedicated sandbox fixture failed; signed deployed HTTP reconciliation persisted grace at the first genuine failure time, **13:09:11 UTC**. A duplicate did not extend its seven-day deadline. Genuine payment within grace restored active paid-through and cleared grace. Failure and payment each retained exactly one SQL event/audit row. [Durable evidence](evidence/r5-deployed-grace-recovery-20261112.json).
