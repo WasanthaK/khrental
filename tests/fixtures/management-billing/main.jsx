@@ -14,6 +14,7 @@ function Fixture(){
    inventory:Array.from({length:12},(_,i)=>({key:`unit:${i}`,label:`Example residence · Unit ${i+1}`}))};
  if(screen==='subscription'){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
+  if(scenario==='cessation-local'){data.entitlement={state:'complimentary'};}
   if(scenario==='applied'){Object.assign(data,{billedQuantity:1,pendingQuantity:null});}
   if(scenario==='cancelled'){data.cancelAtPeriodEnd=true;}
   if(scenario==='missing-date'){data.paidThrough=null;}
