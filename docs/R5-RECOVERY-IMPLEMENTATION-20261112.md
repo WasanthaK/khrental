@@ -1,5 +1,10 @@
 # R5 recovery implementation — 12 November 2026
 
+## Next deployed acceptance: delayed failure after recovery — 12 November 2026
+
+**Prepared; execution pending.** The next bounded BL06.3 case uses a new, uniquely reserved sandbox fixture with no users, memberships or property stock. A genuine failed renewal is paid successfully before its customer is bound to the deployed SQL account. Signed HTTP delivery of the old failure must retain active entitlement and no grace, with one event/audit row after two duplicates. The existing retained renewal account, subscription and clock are protected by before/after checks. The fixture stays outside the automatic worker scope; no feature activation or application redeployment is required. The main-only workflow defaults to read-only inspection; after any failed or unknown run, inspect its exact fixture and logged provider IDs before retrying. This is harness preparation, not an acceptance pass; deployed failure/grace enforcement and the remaining financial-operation/role/isolation cases remain open.
+
+
 ## Canonical R5 engineering status — 12 November 2026
 
 **Recovery, all-state cessation, restoration and property splitting are implemented and source-verified. The Stripe test-clock failure-history bug is fixed and genuine isolated renewal/failure/recovery acceptance passed. Evia is paused by the user. The app is now deployed at Ready 0000491 (`5905015`), with healthy SQL. The retained two-to-one renewal and deployed genuine-event/duplicate ledger proof also passed. Scoped recovery activation passed. The deployed genuine portal response-loss case passed. R5 remains open for other provider-operation and acceptance cases and broader launch exits.** Do not requeue completed implementation or accepted signing. The dated checkpoints below are historical evidence, not the current task queue.

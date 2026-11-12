@@ -1,5 +1,10 @@
 # R3/R4 current acceptance checkpoint
 
+## Next deployed acceptance: delayed failure after recovery — 12 November 2026
+
+**Prepared; execution pending.** The next bounded BL06.3 case uses a new, uniquely reserved sandbox fixture with no users, memberships or property stock. A genuine failed renewal is paid successfully before its customer is bound to the deployed SQL account. Signed HTTP delivery of the old failure must retain active entitlement and no grace, with one event/audit row after two duplicates. The existing retained renewal account, subscription and clock are protected by before/after checks. The fixture stays outside the automatic worker scope; no feature activation or application redeployment is required. The main-only workflow defaults to read-only inspection; after any failed or unknown run, inspect its exact fixture and logged provider IDs before retrying. This is harness preparation, not an acceptance pass; deployed failure/grace enforcement and the remaining financial-operation/role/isolation cases remain open.
+
+
 ## Current follow-on R5 checkpoint — 12 November 2026
 
 The [canonical R5 ledger](R5-RECOVERY-IMPLEMENTATION-20261112.md#passing-genuine-stripe-evidence--12-november-2026) supersedes the older follow-on status below. Stripe test-clock failure history is fixed in merged #583, and genuine isolated API/application-service acceptance passed 24 checks in [43194909443](https://github.com/WasanthaK/khrental/actions/runs/43194909443): renewal, failure, clock-controlled grace expiry, recovery within/after grace and event replay. Source validation passed 1,397 tests and both SQL workflows. No Cloud Browser access was used for the passing test. Evia is paused by user direction.
