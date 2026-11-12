@@ -1,5 +1,10 @@
 # R5 recovery implementation — 12 November 2026
 
+## Deployed grace and recovery — next bounded acceptance
+
+**Prepared; execution pending.** The next BL05.4 proof reuses the dedicated empty sandbox fixture from the accepted delayed-event case for a distinct failed renewal. It verifies signed deployed HTTP delivery, SQL grace anchored to the first genuine failure, duplicate stability, genuine payment recovery within grace, and active paid-through readback. The deployed SQL write guard is invoked with an explicit process-local fixture scope, with a missing-account denial as a negative control; the serving HTTP enforcement configuration is unchanged. No database timestamps, leases or backoff are edited. Real seven-day SQL grace expiry, full HTTP enforcement activation and the remaining financial-operation/role/isolation cases remain open. Protect the original retained renewal account and clock; do not repeat accepted tests. Inspect the exact operation and fixture after any failed/unknown result before retrying.
+
+
 ## Deployed delayed failure after recovery — passed 12 November 2026
 
 **BL06.3 delayed-failure case passed.** [Run 43221739128](https://github.com/WasanthaK/khrental/actions/runs/43221739128) passed at **12:53:39 UTC / 18:23:39 Asia/Colombo**, using the unchanged Ready **0000491** application image `59050153ad96b10be7c1990df846363a1642c046`. A new empty sandbox fixture genuinely failed a USD 5 renewal and paid it before its customer was bound to deployed SQL. Signed HTTP delivery of that old failure retained **active** entitlement, verified paid-through and **no grace**. Two additional signed duplicates returned duplicate and left exactly **one failure event and one audit**; the paid event likewise has one event/audit. The protected retained account/subscription and clock were unchanged. [Durable evidence and exact IDs](evidence/r5-deployed-delayed-failure-20261112.json).

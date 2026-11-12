@@ -1,0 +1,115 @@
+name: Genuine sandbox deployed grace and recovery
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect the dedicated fixture, or verify its next failed renewal and recovery
+        type: choice
+        default: inspect
+        options: [inspect, run]
+        required: true
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Unique operation UUID; inspect this operation after any failed or unknown result
+        required: true
+        type: string
+      confirmation:
+        description: VERIFY-SANDBOX-GRACE-RECOVERY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROOF_MODE: ${{ inputs.mode }}
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Validate exact request and unchanged deployed implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PROOF_MODE" = inspect || "$PROOF_MODE" = run ]]
+          test "$CONFIRMATION" = VERIFY-SANDBOX-GRACE-RECOVERY
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|.github/workflows/inspect-management-recovery.yml|.github/workflows/verify-deployed-portal-recovery.yml|scripts/verify-deployed-portal-recovery.mjs|.github/workflows/verify-deployed-delayed-failure.yml|scripts/verify-deployed-delayed-failure.mjs|.github/workflows/verify-deployed-grace-recovery.yml|scripts/verify-deployed-grace-recovery.mjs) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Verify genuine grace and recovery through deployed HTTP and SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          folder=$(mktemp -d); trap 'rm -rf "$folder"' EXIT
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$folder/app"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$folder/app" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
+          image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          encoded=$(node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {brotliCompressSync} from 'node:zlib';
+          const target=JSON.stringify({inspect:process.env.PROOF_MODE==='inspect',id:process.env.OPERATION_ID});
+          const source='process.env.GRACE_ACCEPTANCE_TARGET='+JSON.stringify(target)+';\n'+readFileSync('scripts/verify-deployed-grace-recovery.mjs','utf8');
+          console.log(brotliCompressSync(Buffer.from(source)).toString('base64url'));
+          JS
+          )
+          # Keep every exec URL short; Azure rejects large startup commands before execution.
+          remote="/tmp/r5-grace-$OPERATION_ID.b64"
+          digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
+          : > deployed-grace.txt
+          for ((offset=0; offset<${#encoded}; offset+=1400)); do
+            chunk=${encoded:offset:1400}
+            method=appendFileSync; if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
+            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('PAYLOAD_CHUNK_$offset')\""
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            script -q -e -c "$invocation" /dev/null | tee -a deployed-grace.txt
+            grep -Fq "PAYLOAD_CHUNK_$offset" deployed-grace.txt
+          done
+          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee -a deployed-grace.txt
+          marker=GRACE_PASS; if [ "$PROOF_MODE" = inspect ]; then marker=GRACE_INSPECT; fi
+          grep -Fq "$marker=" deployed-grace.txt
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          grep "^$marker=" deployed-grace.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: genuine-sandbox-deployed-grace-recovery
+          path: deployed-grace.txt
+          retention-days: 30
