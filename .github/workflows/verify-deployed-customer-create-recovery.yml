@@ -41,7 +41,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|.github/workflows/verify-r5-genuine-customer-recovery.yml|scripts/verify-deployed-customer-create-recovery.mjs|scripts/verify-deployed-customer-create-recovery.mjs|.github/workflows/verify-deployed-customer-create-recovery.yml|.github/workflows/verify-r5-customer-recovery-preflight.yml) ;;
+              docs/*|*.md|.github/workflows/verify-r5-customer-recovery-preflight.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|scripts/verify-r5-customer-fixture-rollback.mjs|scripts/verify-deployed-customer-create-recovery.mjs) ;;
               *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
@@ -95,9 +95,9 @@ jobs:
           report_remote_failure() {
             local phase="$1" captured="$2" exit_code="$3" failure_class
             echo "R5_CUSTOMER_REMOTE_EXEC_STATUS=failed phase=$phase exit_code=$exit_code" | tee -a r5-genuine-customer-recovery.txt
-            if grep -Fq 'R5_CUSTOMER_FIXTURE_FAILED=' "$captured"; then
-              failure_class=fixture_sql_or_assertion
-              grep -Eo 'R5_CUSTOMER_FIXTURE_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
+            if grep -Fq 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=' "$captured"; then
+              failure_class=provider_or_journal_acceptance
+              grep -Eo 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=\{[^}]{1,440}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
             elif grep -Fq 'R5_CUSTOMER_ROLLBACK_FAILED=' "$captured"; then
               failure_class=fixture_rollback_error
               grep -Eo 'R5_CUSTOMER_ROLLBACK_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
@@ -129,8 +129,8 @@ jobs:
               exit 1
             fi
           done
-          stage=remote_sql_rollback
-          echo "R5_CUSTOMER_PHASE=remote_sql_rollback"
+          stage=provider_customer_write_and_journal_recovery
+          echo "R5_CUSTOMER_PHASE=provider_customer_write_and_journal_recovery"
           # The execution command verifies the original uploaded archive hash
           # and cleans up its temporary files even if fixture assertions fail.
           command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
