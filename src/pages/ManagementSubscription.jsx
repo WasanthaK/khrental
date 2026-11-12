@@ -49,7 +49,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
     </section>}
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Billing actions</h2>
       {!data.enrolled?<p className="text-slate-600">A platform administrator must enroll this development workspace before sandbox checkout is available.</p>:!data.configured?<p className="text-slate-600">The sandbox connection is being configured. Your existing records remain available.</p>:<>
-        <p className="text-sm text-slate-600">Monthly, no trial. Additions are prorated onto the next regular invoice. Reductions apply at renewal. A failed renewal has a seven-day grace period.</p>
+        <p className="text-sm text-slate-600">{data.status==='trialing'?'This existing trial does not grant management access. You can end management without a new charge or credit.':'Monthly, no trial. Additions are prorated onto the next regular invoice. Reductions apply at renewal. A failed renewal has a seven-day grace period.'}</p>
         <div className="flex flex-wrap gap-3">
           {data.status==='pending'&&<button className={button} disabled={busy} onClick={()=>onAction('checkout',{inventoryHash:data.inventoryHash})}>Open sandbox checkout</button>}
           <button className={button} disabled={busy} onClick={()=>onAction('refresh',{})}>Refresh Stripe status</button>

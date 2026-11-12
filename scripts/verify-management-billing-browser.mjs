@@ -76,6 +76,7 @@ try{
       const section=await page.$eval('section[aria-labelledby="cessation-title"]',el=>el.innerText);
       assert.match(section,/no new charge or credit is created/);
       if(scenario==='cessation-grace'){assert.match(section,/retries keep their original amounts/);}
+      else{assert.match(await page.$eval('body',el=>el.innerText),/existing trial does not grant management access/);}
      }
      if(scenario==='cessation-local'){
       const section=await page.$eval('section[aria-labelledby="cessation-title"]',el=>el.innerText);
