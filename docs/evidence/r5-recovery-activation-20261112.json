@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-12",
+  "controlPr": 590,
+  "controlMerge": "f9e97e32082b42405779e2316b1c6e381232074d",
+  "controlCiRun": 43204074659,
+  "activationRun": 43204524714,
+  "schemaJob": 131136206152,
+  "activationJob": 131137029759,
+  "result": "success",
+  "revision": "khrental-app--0000491",
+  "applicationSha": "59050153ad96b10be7c1990df846363a1642c046",
+  "applicationImageChanged": false,
+  "scopeCount": 1,
+  "scopeBinding": "Exact previously accepted sandbox customer/subscription and canonical Stripe account",
+  "preflight": {
+    "workerEnabled": false,
+    "candidates": 0,
+    "due": 0,
+    "review": 0,
+    "tablesReadable": 6,
+    "dmlReady": true
+  },
+  "recoverySchemaReady": true,
+  "workerEnabled": true,
+  "sandboxBillingEnabled": true,
+  "replicas": {
+    "min": 1,
+    "max": 1
+  },
+  "sqlHealth": "ready",
+  "artifactId": 13937261234,
+  "artifactSha256": "c3226ce385ea456ea17c00918f99fe7c6fc772a95d794156ef1eacbc2646d44e",
+  "automaticFailureDisableInvoked": false,
+  "manualDisableDrillPerformed": false,
+  "genuineInterruptedOperationRecovered": false,
+  "liveChargingEnabled": false,
+  "limitations": [
+    "Schema readiness selects journaled sandbox service paths globally; automatic scheduler scope is one organization.",
+    "No pending recovery candidates existed at activation; this is configuration/startup acceptance, not genuine interrupted-operation recovery.",
+    "Evia remains paused; wider R5 and commercial launch exits remain open."
+  ],
+  "postActivationReadback": {
+    "run": 43205174978,
+    "schemaJob": 131138442032,
+    "inspectionJob": 131139496897,
+    "result": "success",
+    "observedAt": "2026-11-12T11:02:16Z",
+    "dryRun": true,
+    "scopeCount": 1,
+    "workerEnabled": true,
+    "tablesReadable": 6,
+    "dmlReady": true,
+    "candidates": 0,
+    "due": 0,
+    "review": 0,
+    "artifactId": 13937906049,
+    "artifactSha256": "cceaa8e5bba516e1b39b2b1260ab61bd344b9c78fa1ad875db10f1adbbb7a70e"
+  },
+  "independentPublicReadback": {
+    "buildSha": "59050153ad96b10be7c1990df846363a1642c046",
+    "sqlHealth": "ready"
+  }
+}
