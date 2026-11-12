@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       inspect_only:
-        description: Read-only fixture schema and cleanup inspection; no enforcement changes or acceptance run
+        description: Read-only fixture schema inspection; no enforcement changes or acceptance run
         type: boolean
         default: false
         required: true
@@ -98,7 +98,7 @@ jobs:
           revision=$(az containerapp show -g khrental-prod-rg -n khrental-app --query properties.latestReadyRevisionName -o tsv)
           image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
-          command="node --input-type=module -e \"const{getMssqlPool,closeMssqlPool}=await import('/app/src/api/mssql/pool.js');try{const p=await getMssqlPool();const r=await p.request().query(\\\"SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,IS_NULLABLE,COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN('properties','app_users','agreements','maintenance_requests') ORDER BY TABLE_NAME,ORDINAL_POSITION\\\");console.log('FIXTURE_SCHEMA='+JSON.stringify(r.recordset));console.log('INSPECT_PASS')}finally{await closeMssqlPool()}\""
+          command="node --input-type=module -e \"const{getMssqlPool,closeMssqlPool}=await import('/app/src/api/mssql/pool.js');try{const p=await getMssqlPool();const r=await p.request().query(Buffer.from('U0VMRUNUIFRBQkxFX05BTUUsQ09MVU1OX05BTUUsREFUQV9UWVBFLElTX05VTExBQkxFLENPTFVNTl9ERUZBVUxUIEZST00gSU5GT1JNQVRJT05fU0NIRU1BLkNPTFVNTlMgV0hFUkUgVEFCTEVfTkFNRSBJTigncHJvcGVydGllcycsJ2FwcF91c2VycycsJ2FncmVlbWVudHMnLCdtYWludGVuYW5jZV9yZXF1ZXN0cycpIE9SREVSIEJZIFRBQkxFX05BTUUsT1JESU5BTF9QT1NJVElPTg==','base64').toString());console.log('FIXTURE_SCHEMA='+JSON.stringify(r.recordset));console.log('INSPECT_PASS')}finally{await closeMssqlPool()}\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee deployed-http.txt
           grep -Fq 'INSPECT_PASS' deployed-http.txt
