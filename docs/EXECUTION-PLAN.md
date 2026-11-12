@@ -2,7 +2,7 @@
 
 ## Canonical current status — 12 November 2026
 
-**Provider-operation continuation:** [PR #574](https://github.com/WasanthaK/khrental/pull/574) implements the remaining customer/Checkout, portal, preview, cessation-provider and pricing-publication recovery policies. [Operation coverage and evidence boundaries](R5-RECOVERY-IMPLEMENTATION-20261112.md#remaining-provider-operations--pr-574) distinguish source work from staging/production acceptance. Its final-head validation/merge state is recorded on the PR; this is not a deployment or activation record. After this source package is accepted, do not reimplement those paths: next engineering is restore/split and remaining cessation entitlement states, followed by controlled acceptance. Full Workstream 1 still requires accepted staging/operational recovery evidence.
+**Provider-operation recovery — merged and source-verified:** [PR #574](https://github.com/WasanthaK/khrental/pull/574) merged as `8b5d1f30633a83dc548415b957e77c57f31f170d`. Final head `7034d7526ffb42bae47588069f5fd646d268d020` passed [strict lint, 1,257/1,257 tests and production build](https://github.com/WasanthaK/khrental/actions/runs/43169040896), [migration/recovery SQL](https://github.com/WasanthaK/khrental/actions/runs/43169040880) and [two-tenant billing SQL](https://github.com/WasanthaK/khrental/actions/runs/43169040834). This includes 41 process-interruption cases. Customer/Checkout, portal, preview, cessation-provider and pricing-publication recovery are source-complete; do not requeue them. [Operation coverage and evidence boundaries](R5-RECOVERY-IMPLEMENTATION-20261112.md#remaining-provider-operations--pr-574) remain controlling. No deployment, migration apply or activation occurred. Workstream 1 remains yellow for staging/real-provider acceptance. **Active next engineering:** restoration/split and remaining cessation entitlement states, followed by the controlled acceptance matrix.
 
 
 This is the controlling programme summary. It supersedes older dated “current”, “next” and runtime statements below without changing owner-approved milestone scope or deleting historical evidence. The [R5 task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) controls individual acceptance cases; the [commercial record](QUIXO-STRIPE-B02-B03-READINESS.md#controlling-commercial-decision-pack--10-november-2026) separates approved behaviour from held decisions.
@@ -15,7 +15,7 @@ This is the controlling programme summary. It supersedes older dated “current�
 | R4 — Organization billing foundation | CLOSED BY OWNER — deployed sandbox foundation | Genuine paid lifecycle, production enforcement and merchant/commercial exits continue under R5. |
 | R5 — Marketplace and regional rollout | ACTIVE; partially delivered | Finish applicable Sri Lanka exits, then separate Brunei acceptance. Neither regional launch nor live charging is approved. |
 
-**Owner-approved recovery handoff:** the owner confirmed there are no production clients and approved the four [discovery corrections](R5-ENGINEERING-DISCOVERY-20261112.md). The recovery engineering and interruption-test slices are merged through `b64d756e8d8eb942e0534b55c6bb031b2e9edf07`; [implementation and rollback details](R5-RECOVERY-IMPLEMENTATION-20261112.md) distinguish source verification from runtime/acceptance. These merges have not been deployed in this handoff execution.
+**Owner-approved recovery handoff:** the owner confirmed there are no production clients and approved the four [discovery corrections](R5-ENGINEERING-DISCOVERY-20261112.md). The recovery engineering and interruption-test slices are merged through `8b5d1f30633a83dc548415b957e77c57f31f170d`; [implementation and rollback details](R5-RECOVERY-IMPLEMENTATION-20261112.md) distinguish source verification from runtime/acceptance. These merges have not been deployed in this handoff execution.
 
 | Recovery handoff item | Signal | Verified disposition |
 | --- | --- | --- |
@@ -26,9 +26,9 @@ This is the controlling programme summary. It supersedes older dated “current�
 | Cancellation process-interruption harness | 🟢 Source complete | #568; five actual SIGKILL/restart boundaries using durable test files, distinct from real SQL/provider proof. |
 | Quantity-application recovery | 🟢 Source complete | #570; persisted increase/schedule steps, request evidence, exact staged promotion and zero-stock recovery pass real SQL with synthetic provider transport. |
 | Quantity process-interruption harness | 🟢 Source complete | #572; 18 actual SIGKILL/restart cases for increases, schedule creation/phases and zero stock; all 23 process cases pass. |
-| Remaining provider operations | 🟢 Source implemented in #574 | Customer/Checkout, portal, preview, cessation-provider and platform pricing recovery; 41 process cases plus operation-specific SQL/unit evidence. Final PR-head CI controls source acceptance. |
+| Remaining provider operations | 🟢 Merged/source verified #574 | Customer/Checkout, portal, preview, cessation-provider and platform pricing recovery; 41 process cases plus operation-specific SQL/unit evidence. Final head passed 1,257 tests, lint/build and both SQL suites; evidence above. |
 | Workstream 1 as a whole | 🟡 Acceptance remains | Provider-operation implementation is covered; accepted staging dry-run, real-provider recovery evidence and governed deployment/activation remain. |
-| Split/restore and wider cessation states | 🟡 Pending dependent engineering | Existing paid/ending cessation, finished forms and signing remain preserved. |
+| Split/restore and wider cessation states | 🟡 Active next engineering | Existing paid/ending cessation, finished forms and signing remain preserved. |
 | Evia supported retrieval and matching audit | 🟡 Open | No new provider acceptance claimed. |
 | Production schema/readiness/worker activation | ⚪ Not performed | Migrations remain owner-run; worker requires accepted staging dry-run. Live charging remains OFF. |
 
@@ -45,8 +45,8 @@ Quantity recovery [PR #570](https://github.com/WasanthaK/khrental/pull/570) merg
 **Completed preparation and next independent engineering:**
 
 1. Property/unit form preparation in [PR #561](https://github.com/WasanthaK/khrental/pull/561) is merged, deployed and independently verified. Complete metadata, scoped exact retry drafts, mobile/desktop/keyboard and real SQL promotion pass. Existing atomic staged batch imports retain their authority. BL08.6 stays YELLOW because production migration/readiness and controlled live acceptance depend on the remaining stock and reconciliation work below.
-2. Remaining engineering order after PR #574 source acceptance: implement restore/split and remaining cessation entitlement states, then complete the controlled endpoint/job, stale-authority and stock/usability acceptance matrix. Provider-operation recovery implementation is covered by #564–#568/#570/#572/#574; do not requeue it. Accepted staging recovery/dry-run, genuine provider evidence and governed activation remain separate open acceptance tasks. Routine regressions for changed code remain required.
-3. Then complete restoration, parent/unit splits and remaining cessation states using the same locked inventory/quantity authority, including the endpoint/job, stale actor/resource and stock/failure/usability matrix.
+2. Remaining engineering order after merged PR #574: implement restore/split and remaining cessation entitlement states, then complete the controlled endpoint/job, stale-authority and stock/usability acceptance matrix. Provider-operation recovery implementation is covered by #564–#568/#570/#572/#574; do not requeue it. Accepted staging recovery/dry-run, genuine provider evidence and governed activation remain separate open acceptance tasks. Routine regressions for changed code remain required.
+3. Complete the endpoint/job, stale actor/resource and stock/failure/usability matrix for those new operations. Reuse existing evidence for unchanged accepted journeys.
 4. Only after those dependencies pass, apply separately governed readiness changes and accept one explicit reversible rollout scope. This documentation update does not authorize apply or activation.
 
 ### Completed work and reopening rule
@@ -56,7 +56,7 @@ Do not reimplement or rerun accepted customer journeys merely to fill an older c
 - R1 and R3 owner closure; R4 sandbox-foundation closure. R2 remains owner-deferred; distinct-replica R3 acceptance is required only before scaling.
 - Accepted signing and the labelled simulated rental journey through activation, operations, settlement/closure and relisting; organization switching; accepted initial sandbox Checkout, customer controls and quantity scheduling. Missing matching audit, genuine recurring events and specific remaining matrix cases are separate tasks.
 - Deployed security fixes/lint cleanup (#555–#559), staged create/import and paid/ending cessation (#547/#548), and complete property/unit forms with exact retry (#561).
-- Merged recovery journal/fencing, scoped default-off worker, invariants, application clock/replay, cancellation interruption, quantity recovery and quantity interruption (#564–#568, #570, #572). These are source-complete slices, not deployed or full Workstream 1 acceptance.
+- Merged recovery journal/fencing, scoped default-off worker, invariants, application clock/replay, cancellation interruption, quantity recovery and quantity interruption and remaining provider-operation recovery (#564–#568, #570, #572, #574). These are source-complete slices, not deployed or full Workstream 1 acceptance.
 
 Reopen one of these only for a new regression, changed implementation, invalidated evidence or an explicit owner scope change. Record the affected task and reason. Run appropriate regression checks for new changes without relabelling the accepted task as unfinished. Each remaining task must name its missing evidence or implementation, not restart an entire journey.
 
