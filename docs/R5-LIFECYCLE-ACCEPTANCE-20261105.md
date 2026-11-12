@@ -1,4 +1,12 @@
-# Current R5 prelaunch completion ledger — 11 November 2026
+# Current R5 prelaunch completion ledger — 12 November 2026
+
+## Recovery handoff engineering — 12 November 2026
+
+The owner confirmed no production clients and approved the four discovery corrections. PRs #564–#568 are merged: durable cancellation steps and fenced leases; a default-off scoped worker with SELECT-only inspection; read-only paid/renewal inventory invariants; injectable application time and synthetic event replay; and five actual process-kill/restart tests. [Implementation evidence and rollback](R5-RECOVERY-IMPLEMENTATION-20261112.md) and the [canonical signal table](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) control this checkpoint.
+
+The final source head is `96052ca8e2b0c8a29cc027af2507b06511016b5a`. PR-head CI passed 1,206 tests, strict lint and build; preceding slices passed their real disposable SQL checks. This handoff execution has not deployed these changes, applied a migration or enabled recovery/readiness/live charging. The previous verified runtime below remains the latest deployment evidence.
+
+Workstream 1 remains incomplete until other provider operation types migrate and their failure/evidence cases pass. Split/restore, remaining cessation states, Evia supported retrieval/audit and the wider task-level exits remain open. Synthetic replay is not genuine Stripe lifecycle acceptance. No BL task is promoted to full green merely by these framework slices.
 
 ## Property and unit preparation integration — 11 November 2026
 
@@ -17,7 +25,7 @@ Documentation reconciled **11 November 2026**. The latest verified implementatio
 
 ## Current programme and runtime checkpoint — 11 November 2026
 
-The [canonical current status](EXECUTION-PLAN.md#canonical-current-status--11-november-2026) is the controlling milestone/runtime summary. R1 is owner-closed; R2 is owner-deferred and incomplete; R3 is owner-closed within single-replica scope; R4 is owner-closed for its deployed sandbox foundation; **R5 remains active and incomplete**. Sri Lanka precedes Brunei; live charging remains disabled.
+The [canonical current status](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) is the controlling milestone/runtime summary. R1 is owner-closed; R2 is owner-deferred and incomplete; R3 is owner-closed within single-replica scope; R4 is owner-closed for its deployed sandbox foundation; **R5 remains active and incomplete**. Sri Lanka precedes Brunei; live charging remains disabled.
 
 The earlier security follow-ups #555–#558 and lint cleanup #559 remain deployed; historical acceptance: [manual release #1538](https://github.com/WasanthaK/khrental/actions/runs/43045282585) passed at Ready revision **0000487**, serving `673f975394cdbfe85e3ca27f94a78e0c92ffb0f2`. The release reran strict lint with zero errors/warnings, **1,178/1,178 tests** and the production build. Independent public build readback matched at **15:15:36 UTC** on 11 November; SQL health returned **HTTP 200 ready at 15:15:40 UTC**. Exact scope and CI/browser evidence are in the [security release record](SECURITY-REVIEW-20261111.md#lint-and-review-follow-up-release--11-november-2026). This establishes source/runtime acceptance, not new genuine rental, inbox, billing or natural-pause acceptance. Signing and accepted demo/provider journeys remain closed.
 
