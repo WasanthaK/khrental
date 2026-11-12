@@ -7,6 +7,7 @@ import {createBillingService} from '../src/api/managementBilling/service.js';
 import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createRecoveryWorker} from '../src/api/managementBilling/recoveryWorker.js';
 import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
+import {verifyQuantityRecovery} from './test-management-quantity-recovery-sql.mjs';
 
 // Called only by the disposable SQL Server harness. Provider transport is synthetic.
 export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,remote,calls})=>{
@@ -86,4 +87,5 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   assert.equal(observed.nextRenewalQuantity,0);assert.equal(observed.currentPaidQuantity,account.quantity);
   assert.deepEqual(await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}),savedBefore,'Invariant inspection changes no recovery metadata');
   console.log('PASS: recovery schema replay/drift, durable intent, aged provider readback, tenant isolation, atomic result/audit, exclusive leases, fencing, revoked actor and attempt cap');
+  await verifyQuantityRecovery(pool,{tenantId,actorId,stripe,remote,calls,retiredFixtureId:leaseId});
 };

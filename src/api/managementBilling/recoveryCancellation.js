@@ -3,7 +3,7 @@ import {objectId} from './stripe.js';
 
 // Cancellation rolls forward. Never restore an old schedule or invent a credit.
 // Legacy operation keys are retained, including the unsuffixed cancellation key.
-export const cancellationRecovery=({store,stripe})=>async({job,step})=>{
+export const cancellationRecovery=({store,stripe,keySuffix=''})=>async({job,step})=>{
   const {tenant_id:tenantId,id,intent}=job;
   const subscriptionId=intent._subscriptionId;
   const current=await store.account(tenantId);
@@ -25,7 +25,7 @@ export const cancellationRecovery=({store,stripe})=>async({job,step})=>{
   if(!intent.cancelAtPeriodEnd&&!(await store.inventory(tenantId)).length){
     throw problem(409,'BILLING_INVENTORY_EMPTY','Add managed dwellings before choosing to renew this subscription.');
   }
-  const key=`quixo:${tenantId}:${id}`;
+  const key=`quixo:${tenantId}:${id}${keySuffix}`;
   if(intent.scheduleId){
     if(!intent.cancelAtPeriodEnd){throw problem(409,'BILLING_SCHEDULE_REVIEW','This subscription already has an active renewal schedule.');}
     await step('release_schedule',{
