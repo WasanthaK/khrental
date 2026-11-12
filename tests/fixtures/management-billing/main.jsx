@@ -8,6 +8,7 @@ function Fixture(){
  const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
  const [compMode,setCompMode]=useState('fixed'),[expiry,setExpiry]=useState('2027-01-01T00:00'),[note,setNote]=useState('Synthetic complimentary acceptance decision.');
  const [stockDraft,setStockDraft]=useState({id:'11111111-1111-4111-8111-111111111111',name:'',country:'LK',type:'house'});
+ const [restorationReason,setRestorationReason]=useState('');
  const [cessationReason,setCessationReason]=useState(''),[loading,setLoading]=useState(false);
  const params=new URLSearchParams(location.search),screen=params.get('screen'),scenario=params.get('scenario');
  const data={enrolled:true,configured:true,inventoryQuantity:12,billedQuantity:12,status:'active',entitlement:{state:'active'},cancelAtPeriodEnd:false,
@@ -16,6 +17,9 @@ function Fixture(){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
   if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}
   if(scenario==='cessation-grace'){data.inventoryQuantity=2;data.inventory=[data.inventory[0],{key:'unit:2',label:'Second example residence'}];}
+  if(scenario==='restore-ending'){data.cancelAtPeriodEnd=true;data.entitlement={state:'ending'};data.pendingQuantity=0;}
+  if(scenario==='restore-complimentary'){data.entitlement={state:'complimentary'};}
+  if(scenario==='restore-additional'){data.billedQuantity=1;data.pendingQuantity=null;}
   if(scenario==='cessation-local'){data.entitlement={state:'complimentary'};}
   if(scenario==='applied'){Object.assign(data,{billedQuantity:1,pendingQuantity:null});}
   if(scenario==='cancelled'){data.cancelAtPeriodEnd=true;}
@@ -29,7 +33,10 @@ function Fixture(){
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
   const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:scenario==='cessation-local'?'unchanged':'cancel_at_renewal',eligible:scenario!=='cessation-blocked',blockers:scenario!=='cessation-blocked'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
   if(cessation&&['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(cessation,{cleanupMode:scenario==='cessation-grace'?'grace':'trial',remainingManagedDwellings:scenario==='cessation-grace'?1:0,timing:scenario==='cessation-grace'?'future_invoices':'cancel_at_renewal'});}
+  const restoration=scenario?.startsWith('restore-')?{label:'Retained residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),to:2,timing:scenario==='restore-additional'?'prorated_next_invoice':scenario==='restore-ending'?'paid_capacity':scenario==='restore-complimentary'?'unchanged':'next_renewal'}:null;
+  if(restoration){data.restorationEnabled=true;data.ceasedStock=[{id:'ceased-home',propertyId:restoration.propertyId,unitId:null,label:'Retained residence'}];}
   return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} loading={loading}
+    restoration={restoration} restorationReason={restorationReason} onRestorationReason={setRestorationReason}
     stockDraft={stockDraft} onStockDraftChange={setStockDraft} cessation={cessation} cessationReason={cessationReason} onCessationReason={setCessationReason}
     onAction={async(kind,payload)=>{
       if(scenario==='staged-stock-failure'&&kind==='stock/prepare'){

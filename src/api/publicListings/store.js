@@ -7,6 +7,7 @@ import {runQuery,runSingleQuery} from '../mssql/query.js';
 // suppressing stock even when new offers are closed. No table is queried before apply.
 const holdsReady=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true';
 const cessationReady=process.env.MANAGEMENT_CESSATION_SCHEMA_READY==='true';
+const activeCessation=process.env.MANAGEMENT_RESTORATION_SCHEMA_READY==='true'?' AND c.restored_at IS NULL':'';
 // A reservation linked to a settled, explicitly closed tenancy is no longer
 // current stock. Other accepted/draft reservations still suppress availability.
 const holdStillCurrent=`AND NOT EXISTS(SELECT 1 FROM dbo.agreements ended
@@ -23,7 +24,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
   JOIN dbo.properties p ON p.id=pref.property_id AND p.tenant_id=pref.tenant_id
   JOIN dbo.tenants t ON t.id=p.tenant_id
   WHERE pref.opted_out=0
-    ${cessationReady?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=p.tenant_id AND c.property_id=p.id AND c.unit_id IS NULL AND c.state='ceased')`:''}
+    ${cessationReady?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=p.tenant_id AND c.property_id=p.id AND c.unit_id IS NULL AND c.state='ceased'${activeCessation})`:''}
     ${wholeHold}
     AND p.country_code COLLATE DATABASE_DEFAULT=pref.country_code
     AND (t.status IS NULL OR t.status=N'active')
@@ -40,7 +41,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
          SELECT 1 FROM dbo.property_units u
          WHERE u.propertyid=p.id AND u.tenant_id=p.tenant_id
            AND LOWER(COALESCE(u.status,N''))=N'available'
-           ${cessationReady?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=u.tenant_id AND c.property_id=p.id AND c.unit_id=u.id AND c.state='ceased')`:''}
+           ${cessationReady?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=u.tenant_id AND c.property_id=p.id AND c.unit_id=u.id AND c.state='ceased'${activeCessation})`:''}
            ${unitHold}
            AND NOT EXISTS(
              SELECT 1 FROM dbo.agreements a WHERE a.tenant_id=u.tenant_id

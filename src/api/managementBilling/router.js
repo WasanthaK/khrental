@@ -144,6 +144,18 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
       propertyId:identifier(req.body.propertyId),unitId:req.body.unitId===null?null:identifier(req.body.unitId),
       inventoryHash:req.body.inventoryHash,reason:reason(req.body.reason)}));
   }));
+  router.post('/stock/restoration-preview',orgAdmin,wrap(async(req,res)=>{
+    exact(req.body,['propertyId','unitId']);
+    send(res,await service.restorationPreview({tenantId:req.tenantId,actorId:req.user.id,
+      propertyId:identifier(req.body.propertyId),unitId:req.body.unitId===null?null:identifier(req.body.unitId)}));
+  }));
+  router.post('/stock/restore',orgAdmin,wrap(async(req,res)=>{
+    exact(req.body,['requestId','propertyId','unitId','inventoryHash','reason']);
+    if(typeof req.body.inventoryHash!=='string'||!/^[a-f0-9]{64}$/.test(req.body.inventoryHash)){throw problem(400,'BILLING_PREVIEW_REQUIRED','Review restoration before confirming it.');}
+    send(res,await service.restoreStock({tenantId:req.tenantId,actorId:req.user.id,id:identifier(req.body.requestId),
+      propertyId:identifier(req.body.propertyId),unitId:req.body.unitId===null?null:identifier(req.body.unitId),
+      inventoryHash:req.body.inventoryHash,reason:reason(req.body.reason)}));
+  }));
   router.post('/refresh',orgAdmin,wrap(async(req,res)=>{exact(req.body,[]);send(res,await service.refresh(req.tenantId));}));
   const command=(kind,extraKeys,run)=>router.post(`/${kind}`,orgAdmin,wrap(async(req,res)=>{
     exact(req.body,['requestId',...extraKeys]);

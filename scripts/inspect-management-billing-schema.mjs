@@ -140,7 +140,7 @@ export const inspectManagementCessation=async pool=>{
   const result=await pool.request().query(`
     SELECT c.name,ty.name AS type_name,c.max_length,c.is_nullable FROM sys.columns c
       JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE c.object_id=OBJECT_ID('dbo.management_inventory_controls');
-    SELECT i.name,i.is_disabled,i.is_primary_key,i.is_unique,
+    SELECT i.name,i.is_disabled,i.is_primary_key,i.is_unique,i.filter_definition,
       (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX),c.name),',') WITHIN GROUP(ORDER BY ic.key_ordinal)
        FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
        WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0) AS keys
@@ -161,7 +161,8 @@ export const inspectManagementCessation=async pool=>{
     if(!columns.some(c=>c.name===name&&c.type_name===type&&c.max_length===length&&Boolean(c.is_nullable)===nullable)){problems.push(name);}
   }
   if(!indexes.some(i=>i.is_primary_key&&!i.is_disabled&&i.keys==='id')){problems.push('primary_key');}
-  if(!indexes.some(i=>i.name==='UQ_management_inventory_resource'&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id')){problems.push('unique_resource');}
+  const restoration=columns.some(c=>c.name==='restored_at');
+  if(!indexes.some(i=>i.name===(restoration?'UQ_management_inventory_active_resource':'UQ_management_inventory_resource')&&i.is_unique&&!i.is_disabled&&i.keys==='tenant_id,property_id,unit_id'&&(!restoration||String(i.filter_definition).replace(/[\s[\]()]/g,'').toLowerCase()==='restored_atisnull'))){problems.push('unique_resource');}
   const norm=v=>String(v||'').toLowerCase().replace(/[\s[\]()]/g,'');
   for(const [name,definition] of [['CK_management_inventory_control_state',"state='ceased'"],
     ['CK_management_inventory_control_reason','lenltrimrtrimreason>=10andlenltrimrtrimreason<=1000']]){
@@ -172,10 +173,35 @@ export const inspectManagementCessation=async pool=>{
   }
   for(const [name,definition] of [['state',"'ceased'"],['ceased_at','sysutcdatetime']]){if(!defaults.some(d=>d.name===name&&norm(d.definition)===definition)){problems.push(`${name}.default`);}}
   const triggerNorm=v=>String(v||'').toLowerCase().replace(/create\s+(?:or\s+alter\s+)?trigger/,'trigger').replace(/\s+/g,'').trim();
-  const source=fs.readFileSync(new URL('../migrations/20261110_02_management_cessation.sql',import.meta.url),'utf8');
+  const source=fs.readFileSync(new URL(restoration?'../migrations/20261112_02_management_restoration.sql':'../migrations/20261110_02_management_cessation.sql',import.meta.url),'utf8');
   for(const match of source.matchAll(/EXEC\(N'((?:[^']|'')*)'\);/g)){
+    if(!match[1].startsWith('CREATE OR ALTER TRIGGER')){continue;}
     const expected=match[1].replace(/''/g,"'"),name=expected.match(/TR_\w+/)[0],actual=triggers.find(t=>t.name===name);
     if(!actual||actual.is_disabled||triggerNorm(actual.definition)!==triggerNorm(expected)){problems.push(name);}
   }
   return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Cessation identity, audit constraints and exact enabled domain guards verified.'};
+};
+
+
+export const inspectManagementRestoration=async pool=>{
+  const base=await inspectManagementCessation(pool);
+  const result=await pool.request().query(`
+    SELECT c.name,ty.name AS type_name,c.is_nullable FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+      WHERE c.object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT name,definition,is_disabled,is_not_trusted FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.management_inventory_controls');
+    SELECT c.name,rt.name AS target,f.is_disabled,f.is_not_trusted FROM sys.foreign_keys f
+      JOIN sys.foreign_key_columns fc ON fc.constraint_object_id=f.object_id JOIN sys.columns c ON c.object_id=f.parent_object_id AND c.column_id=fc.parent_column_id
+      JOIN sys.tables rt ON rt.object_id=f.referenced_object_id WHERE f.parent_object_id=OBJECT_ID('dbo.management_inventory_controls');
+  `);
+  const [columns=[],checks=[],fks=[]]=result.recordsets||[],problems=base.satisfied?[]:[base.detail];
+  for(const [name,type] of [['restored_at','datetime2'],['restored_by','uniqueidentifier'],['restoration_command_id','uniqueidentifier'],['restoration_reason','nvarchar']]){
+    if(!columns.some(c=>c.name===name&&c.type_name===type&&c.is_nullable)){problems.push(name);}
+  }
+  for(const [name,target] of [['restored_by','app_users'],['restoration_command_id','management_billing_commands']]){
+    if(!fks.some(f=>f.name===name&&f.target===target&&!f.is_disabled&&!f.is_not_trusted)){problems.push(name+'.foreign_key');}
+  }
+  const norm=s=>String(s||'').toLowerCase().replace(/[\s[\]()]/g,'');
+  const expected='restored_atisnullandrestored_byisnullandrestoration_command_idisnullandrestoration_reasonisnullorrestored_atisnotnullandrestored_byisnotnullandrestoration_command_idisnotnullandrestoration_reasonisnotnullandrestored_at>=ceased_atandlenltrimrtrimrestoration_reason>=10andlenltrimrtrimrestoration_reason<=1000';
+  if(!checks.some(c=>c.name==='CK_management_inventory_restoration'&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===expected)){problems.push('restoration.constraint');}
+  return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Restoration metadata, active episode uniqueness and exact domain guards verified.'};
 };

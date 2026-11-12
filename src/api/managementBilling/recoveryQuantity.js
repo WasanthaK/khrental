@@ -35,7 +35,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
     const value=await stripe.request('GET',`/v1/subscriptions/${intent._subscriptionId}`),item=value.items?.data?.[0];
     if(value.id!==intent._subscriptionId||value.livemode!==false||objectId(value.customer)!==intent.customerId||
       value.items?.data?.length!==1||item?.id!==intent.itemId||objectId(item?.price)!==intent.priceId||
-      value.status!=='active'||value.cancel_at_period_end||value.trial_start||value.trial_end){
+      value.status!==(job.kind==='restore'&&intent.restoreMode==='grace'?'past_due':'active')||value.cancel_at_period_end||value.trial_start||value.trial_end){
       throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription terms need review before quantity recovery.');
     }
     return value;

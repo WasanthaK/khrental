@@ -46,6 +46,12 @@ export const createRecoveryJournal=({store,complete})=>{
     if(row.kind==='checkout'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
     }
+    if(row.kind==='restore'){
+      const preview=await store.restorationPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
+      if(preview.mode!==intent.restoreMode||preview.inventoryHash!==intent.inventoryHash||preview.proposedHash!==intent.preview.inventoryHash||preview.controlId!==intent.controlId){
+        throw problem(409,'BILLING_RESTORE_STATE_CHANGED','The reviewed restoration changed before this write.');
+      }
+    }
     if(row.kind==='cessation'){
       if(intent.cleanupMode&&cessationCleanupMode(account,new Date(row.checked_at).getTime())!==intent.cleanupMode){
         throw problem(409,'BILLING_CESSATION_STATE_CHANGED','Subscription access changed before cleanup.');
