@@ -335,8 +335,8 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     await audit(q,{tenantId,actorId,action:'sandbox.enrolled',resourceId:tenantId,current:{inventory:items,market,price:selectedPrice,pricingVersion,useApprovedSandboxBaseline},reason});
     return account(tenantId,q);
   });
-  const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false}) => locked(tenantId,async q => {
-    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||kind!=='cancellation')){
+  const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false,prepareRecovery=null}) => locked(tenantId,async q => {
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply'].includes(kind))){
       throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
     }
     await assertActor(q,tenantId,actorId);
@@ -360,9 +360,11 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
     if(recovery){
       if(!current?.stripe_subscription_id){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
+      if(kind==='quantity_apply'&&!prepareRecovery){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Quantity recovery requires a reviewed intent.');}
+      const prepared=prepareRecovery?await prepareRecovery(q,current):{};
       await q(`INSERT dbo.management_billing_recovery(command_id,actor_id,intent_json)
         VALUES(@id,@actorId,@intent)`,{id,actorId,intent:JSON.stringify({...storedPayload,
-        customerId:current.stripe_customer_id,scheduleId:current.stripe_schedule_id||null})});
+        customerId:current.stripe_customer_id,scheduleId:current.stripe_schedule_id||null,...prepared,_subscriptionId:current.stripe_subscription_id})});
     }
     return {id,status:'pending',createdNow:true};
   });

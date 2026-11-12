@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import {problem} from './contract.js';
+import {hash,problem} from './contract.js';
 
 // Reuses the account lock: independent property operations share one subscription.
 // Claims and step checkpoints use short transactions. The completion callback
@@ -38,6 +38,10 @@ export const createRecoveryJournal=({store,complete})=>{
     const account=await store.account(args.tenantId,q);
     if(account?.stripe_subscription_id!==JSON.parse(row.intent_json)._subscriptionId){
       throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding changed before this billing write.');
+    }
+    const intent=JSON.parse(row.intent_json);
+    if(row.kind==='quantity_apply'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.preview.inventoryHash){
+      throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before this provider write.');
     }
     await q(`UPDATE dbo.management_billing_recovery SET lease_until=DATEADD(minute,5,SYSUTCDATETIME()),
       updated_at=SYSUTCDATETIME() WHERE command_id=@id`,{id:args.id});

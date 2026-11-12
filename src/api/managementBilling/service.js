@@ -3,6 +3,7 @@ import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjecti
 import {createRecoveryRunner,billingClock} from './recovery.js';
 import {createRecoveryJournal} from './recoveryJournal.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
+import {quantityRecovery,quantityScheduleBody,quantityScheduleMatches,scheduleFingerprint} from './recoveryQuantity.js';
 
 const safeUrl = (value, host) => {
   const url = new URL(value);
@@ -277,13 +278,33 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const intent=JSON.parse(row.intent_json);
     const account=await requireAccount(row.tenant_id,q);
     if(account.stripe_subscription_id!==intent._subscriptionId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');}
+    if(row.kind==='quantity_apply'){
+      const inventory=await store.inventory(row.tenant_id,q,{includePending:true});
+      if(hash(inventory)!==intent.preview.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before completion.');}
+      const confirmed=await reconcileLocked(q,account,{promoteCheckout:false});
+      if(confirmed.quantity!==result.currentQuantity||Boolean(confirmed.cancel_at_period_end)!==(intent.preview.to===0)){
+        throw problem(409,'BILLING_QUANTITY_UNCONFIRMED','The current subscription no longer confirms this quantity operation.');
+      }
+      if(result.schedule){
+        const schedule=await stripe.request('GET',`/v1/subscription_schedules/${result.schedule.id}`);
+        if(confirmed.stripe_schedule_id!==result.schedule.id||objectId(schedule.subscription)!==intent._subscriptionId||
+          objectId(schedule.customer)!==intent.customerId||schedule.livemode!==false||!quantityScheduleMatches(schedule,result.schedule.body)){
+          throw problem(409,'BILLING_SCHEDULE_UNCONFIRMED','The renewal schedule changed before completion.');
+        }
+      }else if(confirmed.stripe_schedule_id){throw problem(409,'BILLING_SCHEDULE_UNCONFIRMED','An unexpected schedule needs review.');}
+      if(inventory[0]?.stagedRecords?.length){await store.promoteStock(q,{tenantId:row.tenant_id,snapshot:inventory,commandId:row.id});}
+      await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
+        {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to<confirmed.quantity?intent.preview.to:null});
+      return {currentQuantity:confirmed.quantity,nextRenewalQuantity:intent.preview.to,timing:intent.preview.timing,
+        ...(intent.preview.to===0?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:{})};
+    }
     const confirmed=await reconcileLocked(q,account);
     if(confirmed.cancel_at_period_end!==result.cancelAtPeriodEnd||confirmed.stripe_schedule_id){
       throw problem(409,'BILLING_CANCELLATION_UNCONFIRMED','The subscription no longer confirms this operation.');
     }
     if(intent.scheduleId){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId:row.tenant_id});}
     return {cancelAtPeriodEnd:result.cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
-  }}),handlers:{cancellation:cancellationRecovery({store,stripe})}});
+  }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock})}});
   const recoverOperation=async({tenantId,id})=>{
     if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');}
     return recovery.run({tenantId,id});
@@ -367,7 +388,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       {tenantId,inventory:JSON.stringify(await store.inventory(tenantId,q)),pending:target<confirmed.quantity?target:null});
     return {currentQuantity:confirmed.quantity,nextRenewalQuantity:target,timing:preview.timing};
   };
-  const quantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
+  const legacyQuantityApply=async({tenantId,id,actorId,previewId})=>runCommand({tenantId,id,actorId,kind:'quantity_apply',payload:{previewId},action:async(q,account,key,resuming)=>{
     const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
       AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
     if(!row) {throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');}
@@ -377,6 +398,35 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       {throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');}
     return applyQuantityLocked(q,{tenantId,id,account,key,resuming,preview,inventory});
   }});
+  const quantityApply=async args=>{
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){return legacyQuantityApply(args);}
+    await stripe.assertAccount();
+    const {tenantId,previewId}=args;
+    await store.beginCommand({...args,kind:'quantity_apply',payload:{previewId},recovery:true,prepareRecovery:async(q,current)=>{
+      const row=(await q(`SELECT result_json FROM dbo.management_billing_commands WHERE id=@previewId AND tenant_id=@tenantId
+        AND kind='quantity_preview' AND status='completed'`,{previewId,tenantId}))[0];
+      if(!row){throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');}
+      const preview=JSON.parse(row.result_json),inventory=await store.inventory(tenantId,q,{includePending:true});
+      if(hash(inventory)!==preview.inventoryHash||Date.parse(preview.expiresAt)<clock.now()){
+        throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');
+      }
+      const account=await reconcileLocked(q,current,{promoteCheckout:false});
+      if(entitlement(account,clock.now()).state!=='active'||account.quantity!==preview.from||inventory.length!==preview.to){
+        throw problem(409,'BILLING_PREVIEW_STALE','The subscription changed. Request a new preview.');
+      }
+      const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`),item=subscription.items.data[0];
+      const schedule=account.stripe_schedule_id?await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`):null;
+      const body=schedule&&preview.to>0?quantityScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,
+        priceId:account.stripe_price_id,from:preview.from,to:preview.to}):null;
+      if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==account.stripe_subscription_id||
+        objectId(schedule.customer)!==account.stripe_customer_id)){throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review.');}
+      return {preview,itemId:account.stripe_item_id,priceId:account.stripe_price_id,periodEnd:item.current_period_end,
+        scheduleId:account.stripe_schedule_id||null,phaseStart:schedule?.current_phase?.start_date||null,
+        scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body))};
+    }});
+    const rows=await store.read('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id});
+    return rows.length?recoverOperation(args):legacyQuantityApply(args);
+  };
   const cessationPreview=async({tenantId,actorId,propertyId,unitId=null})=>{
     if(!store.cessationEnabled?.()){throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');}
     await stripe.assertAccount();
