@@ -128,10 +128,10 @@ jobs:
 
           # Both entrypoints are read-only and require the isolated identity.
           verification_script="scripts/run-production-migration-verify.sh"
-          verification_marker="Strict read-only migration verification passed for 20 managed migrations;"
+          verification_marker="Strict read-only migration verification passed for 21 managed migrations;"
           if [ "$VERIFICATION_MODE" = "preflight" ]; then
             verification_script="scripts/run-production-migration-preflight.sh"
-            verification_marker="Read-only executor preflight passed for 20 managed migrations;"
+            verification_marker="Read-only executor preflight passed for 21 managed migrations;"
           fi
 
           # Per-execution overrides do not change the resting job definition.
@@ -195,7 +195,8 @@ jobs:
             20261029_01_rental_offers_and_holds
             20261103_01_management_billing
             20261110_01_management_inventory_staging
-            20261110_02_management_cessation"
+            20261110_02_management_cessation
+            20261112_01_management_recovery"
 
             for migration_id in $migration_ids; do
               if [ "$VERIFICATION_MODE" = "strict" ]; then
@@ -226,7 +227,7 @@ jobs:
                   echo "| $migration_id | LEDGERED | SCHEMA_OK |"
                 done
                 echo
-                echo "**20/20 ledger/schema checks passed.** Raw Azure logs are not published."
+                echo "**21/21 ledger/schema checks passed.** Raw Azure logs are not published."
               else
                 echo "Pre-apply preflight inspected all twenty migrations with no database writes."
                 echo "Preflight allows PENDING and SATISFIED_UNTRACKED. It does not certify an applied schema."

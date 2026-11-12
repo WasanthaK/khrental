@@ -1,5 +1,8 @@
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
+import {createRecoveryRunner} from './recovery.js';
+import {createRecoveryJournal} from './recoveryJournal.js';
+import {cancellationRecovery} from './recoveryCancellation.js';
 
 const safeUrl = (value, host) => {
   const url = new URL(value);
@@ -188,6 +191,14 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   // that the intended proration or future schedule was applied.
   const reconcileCancellation=async({tenantId,id,actorId})=>{
     await stripe.assertAccount();
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'){
+      const journaled=await store.locked(tenantId,async q=>{
+        await store.assertActor(q,tenantId,actorId);
+        return q(`SELECT r.command_id FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c
+          ON c.id=r.command_id WHERE c.tenant_id=@tenantId AND c.id=@id`,{tenantId,id});
+      });
+      if(journaled.length){return recoverOperation({tenantId,id});}
+    }
     return store.locked(tenantId,async q=>{
       await store.assertActor(q,tenantId,actorId);
       const command=(await q(`SELECT * FROM dbo.management_billing_commands
@@ -258,10 +269,33 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     if(confirmed.cancel_at_period_end!==cancelAtPeriodEnd) {throw problem(502,'BILLING_CANCELLATION_UNCONFIRMED','Stripe has not confirmed the cancellation change.');}
     return confirmed;
   };
-  const cancel=async({tenantId,id,actorId,cancelAtPeriodEnd})=>runCommand({tenantId,id,actorId,kind:'cancellation',payload:{cancelAtPeriodEnd},action:async(q,account,key)=>{
+  const legacyCancel=async({tenantId,id,actorId,cancelAtPeriodEnd})=>runCommand({tenantId,id,actorId,kind:'cancellation',payload:{cancelAtPeriodEnd},action:async(q,account,key)=>{
     const confirmed=await cancelLocked(q,account,key,cancelAtPeriodEnd);
     return {cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }});
+  const recovery=createRecoveryRunner({journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
+    const intent=JSON.parse(row.intent_json);
+    const account=await requireAccount(row.tenant_id,q);
+    if(account.stripe_subscription_id!==intent._subscriptionId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');}
+    const confirmed=await reconcileLocked(q,account);
+    if(confirmed.cancel_at_period_end!==result.cancelAtPeriodEnd||confirmed.stripe_schedule_id){
+      throw problem(409,'BILLING_CANCELLATION_UNCONFIRMED','The subscription no longer confirms this operation.');
+    }
+    if(intent.scheduleId){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId:row.tenant_id});}
+    return {cancelAtPeriodEnd:result.cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
+  }}),handlers:{cancellation:cancellationRecovery({store,stripe})}});
+  const recoverOperation=async({tenantId,id})=>{
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');}
+    return recovery.run({tenantId,id});
+  };
+  const cancel=async args=>{
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){return legacyCancel(args);}
+    await stripe.assertAccount();
+    await store.beginCommand({...args,kind:'cancellation',payload:{cancelAtPeriodEnd:args.cancelAtPeriodEnd},recovery:true});
+    const rows=await store.read('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id});
+    // Existing unjournaled requests keep their original replay/readback path.
+    return rows.length?recoverOperation(args):legacyCancel(args);
+  };
   const quantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
     account=await reconcileLocked(q,account);
     if(entitlement(account).state!=='active') {throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');}
@@ -408,5 +442,5 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       return {received:true};
     });
   };
-  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,quantityPreview,quantityApply,cessationPreview,ceaseStock,webhook,price};
+  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,webhook,price};
 };

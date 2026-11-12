@@ -38,6 +38,7 @@ on:
           - 20261103_01_management_billing
           - 20261110_01_management_inventory_staging
           - 20261110_02_management_cessation
+          - 20261112_01_management_recovery
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false
