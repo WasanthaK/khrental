@@ -1,0 +1,158 @@
+{
+  "date": "2026-11-12",
+  "releaseRun": 43201035104,
+  "applyRun": 43202047924,
+  "applyJob": 131127674900,
+  "executor": "khrental-db-migrator-wfc4116",
+  "revision": "khrental-app--0000490",
+  "source": "59050153ad96b10be7c1990df846363a1642c046",
+  "mode": "apply",
+  "result": "success",
+  "previouslyAppliedSkipped": 18,
+  "newlyAppliedAndVerified": 5,
+  "migrations": [
+    {
+      "status": "APPLIED",
+      "migration": "20260920_01_add_tenancy_billing_adjustments",
+      "sha256": "88abc88ab5f435cfc7384f740a5eec9340ebbb163ee41d216759bfafb16950ec"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20260920_02_create_platform_admins",
+      "sha256": "49dd65ec114f5f4d966862642b75d3ec33933b8d9daceb6e0a86b2212acf3e85"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20260920_03_backfill_legacy_app_user_memberships",
+      "sha256": "ac7f73704a49eeab8422462d4d918592d0cb58db434b3fce64ecdcc329393555"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20260926_01_add_rentee_property_unit_associations",
+      "sha256": "a5c6515a1ddc481fd9b3b0d82b8bb9f6d497f47c07a7b5c111673972cbe48463"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261005_01_add_property_utility_configs",
+      "sha256": "bd6b8635e7700b38bde03f4eec7bf9926ca6b8d6bb5405caeb3f6f84001a276d"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261006_01_repair_auth_store_runtime_columns",
+      "sha256": "a29fa605c1563d51a9413c8abeb834a2c03717555906da8c8f111810cc9dd9d7"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261018_01_invoice_payment_references",
+      "sha256": "e74d9a14ad7b6392e33cb22bf274d96275fb3659a82225ad19c58433f9de6a38"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261019_01_invoice_master_data",
+      "sha256": "d485fb83568647262885b89ce924ad78c7dc757f2ff19ba5b473a12045c61605"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261020_01_immutable_invoice_pdf_archive",
+      "sha256": "77d67cc22a592442ae4a828d45b5ec0c2142e6ca3067b508a2dd04ef6c869846"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261023_01_create_public_signup_challenges",
+      "sha256": "86c3bbdc88becde35bd1c8ffb7c477248523970a3f12df2f1ea93b9f3e077cbf"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261024_01_create_public_signup_rate_limits",
+      "sha256": "da33ffbbf87ee77e3a36da43e99db328554b3a48712820f4af9b61a6fd4972bc"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261026_02_property_iso_country",
+      "sha256": "219f71aa6fe30b87429a1cd1c5908a4765c5c72d6be3661409a9ff3fafa2d85a"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261026_01_public_listing_preferences",
+      "sha256": "2a896a9990de2db5fe93803301740d5d598027811f4efd16065164488bf426c6"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261028_01_property_enquiries",
+      "sha256": "707600d0aafc196c2c7f3412a07c8cc1140f7bf3e4daf4238305a12d76fda3ab"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261028_02_property_viewings",
+      "sha256": "3d6341b13ad1be61e708113dee6b83f98bbc73d71a8b014bb9c38391a4d3b575"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261028_03_property_applications",
+      "sha256": "fa703bbffd70ab7e7137486103f8a3ce24ad8288a994e8478e565a857c961013"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261029_01_rental_offers_and_holds",
+      "sha256": "d1eca6a505bc958a0b6e5040d771d3debb019096dcc14180029db9cf977f628a"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261103_01_management_billing",
+      "sha256": "9e3c8f76e8695463c94f1721664d1e64bb56d838d53f69bed99ed4f525a2b90d"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261110_01_management_inventory_staging",
+      "sha256": "bb4f788de6382338e7401c21718a847055bd23a0feb29b5dcfcc79c01befa00f"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261110_02_management_cessation",
+      "sha256": "1f28e04f377a436865fa900237730ddd43ec554055e477feb8574fa3113d8bf5"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261112_01_management_recovery",
+      "sha256": "02e3cceab6aaed7a25e0045c313717071bafca08f779570074035b999006744a"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261112_02_management_restoration",
+      "sha256": "99d7eb4a2d3d7cdfc93f9eebcd0e9d7efcb97c03a1b20369cc325513ce335006"
+    },
+    {
+      "status": "APPLIED",
+      "migration": "20261112_03_management_splits",
+      "sha256": "3e5ca77957a0954fbfad9dff4ed0995a751ee865f3e22445b083e42b5a05c619"
+    }
+  ],
+  "workerEnabled": false,
+  "liveChargingEnabled": false,
+  "strictVerification": {
+    "run": 43202578930,
+    "job": 131129512613,
+    "execution": "khrental-db-migrator-c4g535b",
+    "result": "success",
+    "managedMigrations": 23,
+    "ledgerAndSchemaVerified": 23,
+    "note": "Workflow verifies 23 explicit IDs and the 23-migration success marker; its final console label still says seventeen."
+  },
+  "recoveryDryRun": {
+    "run": 43202578930,
+    "job": 131130305015,
+    "workflowMerge": "238a4f80f47fafc791e130b92be168546b628bc8",
+    "result": "success",
+    "dryRun": true,
+    "scopeCount": 1,
+    "tablesReadable": 6,
+    "dmlReady": true,
+    "candidates": 0,
+    "due": 0,
+    "review": 0,
+    "workerEnabled": false,
+    "artifactId": 13936167031,
+    "artifactSha256": "8ed87816ecd89d772537c183a0d7076dee38ac69b0f6a76b12cce8122b4dd252",
+    "limitations": "No recovery candidate existed in scope; no provider calls, claims, SQL writes or runtime flag changes. Activation and genuine interrupted-operation recovery remain open."
+  }
+}
