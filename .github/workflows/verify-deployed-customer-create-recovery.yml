@@ -1,0 +1,172 @@
+name: R5 genuine Stripe sandbox customer response-loss acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact unchanged application SHA serving publicly
+        type: string
+        required: true
+      confirmation:
+        description: CREATE-ONE-SANDBOX-CUSTOMER-AND-RECOVER
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 18
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Verify reviewed source and unchanged serving image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = CREATE-ONE-SANDBOX-CUSTOMER-AND-RECOVER
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|.github/workflows/verify-r5-customer-recovery-preflight.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|scripts/verify-r5-customer-fixture-rollback.mjs|scripts/verify-deployed-customer-create-recovery.mjs) ;;
+              *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - name: Verify customer acceptance script syntax
+        run: node --check scripts/verify-deployed-customer-create-recovery.mjs
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Execute single disposable Stripe sandbox customer response-loss and recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage=preflight
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "R5_CUSTOMER_BLOCKED_STAGE=$stage" | tee -a r5-genuine-customer-recovery.txt; fi' EXIT
+          echo "R5_CUSTOMER_PHASE=preflight"
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app.json" >/dev/null
+          stage=runtime_identity
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app.json")
+          echo "R5_CUSTOMER_PHASE=runtime_identity"
+          image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          if [ "${image##*:}" != "$EXPECTED_BUILD" ]; then
+            echo "R5_CUSTOMER_BLOCKED=serving_image_mismatch" >&2
+            exit 1
+          fi
+          stage=payload_size
+          # Reuse the bounded Azure exec transfer proven by genuine portal recovery.
+          # Azure rejects oversized startup commands before executing them.
+          encoded=$(node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {brotliCompressSync} from 'node:zlib';
+          const source=readFileSync('scripts/verify-deployed-customer-create-recovery.mjs');
+          console.log(brotliCompressSync(source).toString('base64url'));
+          JS
+          )
+          echo "R5_CUSTOMER_PHASE=payload_size compressed_characters=${#encoded}"
+          if [ "${#encoded}" -lt 1 ] || [ "${#encoded}" -ge 14000 ]; then
+            echo 'R5_CUSTOMER_BLOCKED=invalid_payload_size' >&2
+            exit 1
+          fi
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          remote="/tmp/r5-genuine-customer-$GITHUB_RUN_ID.b64"
+          digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
+          # Only bounded explicit failure codes are retained. Never dump the
+          # raw Azure exec terminal transcript or environment variables.
+          report_remote_failure() {
+            local phase="$1" captured="$2" exit_code="$3" failure_class
+            echo "R5_CUSTOMER_REMOTE_EXEC_STATUS=failed phase=$phase exit_code=$exit_code" | tee -a r5-genuine-customer-recovery.txt
+            if grep -Fq 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=' "$captured"; then
+              failure_class=provider_or_journal_acceptance
+              grep -Eo 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=\{[^}]{1,440}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
+            elif grep -Fq 'R5_CUSTOMER_ROLLBACK_FAILED=' "$captured"; then
+              failure_class=fixture_rollback_error
+              grep -Eo 'R5_CUSTOMER_ROLLBACK_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
+            elif grep -Eq 'SyntaxError|ERR_INVALID_URL|ERR_MODULE_NOT_FOUND|ERR_UNSUPPORTED_RESOLVE_REQUEST' "$captured"; then
+              failure_class=node_loader
+            elif grep -Eqi 'WebSocket|handshake|unable to connect|connection refused|dial tcp|i/o timeout|Too Many Requests|HTTP 429' "$captured"; then
+              failure_class=azure_exec_transport
+            else
+              failure_class=unclassified_remote_exit
+            fi
+            echo "R5_CUSTOMER_REMOTE_ERROR_CLASS=$failure_class" | tee -a r5-genuine-customer-recovery.txt
+          }
+          stage=remote_payload_delivery
+          echo "R5_CUSTOMER_PHASE=remote_payload_delivery"
+          for ((offset=0; offset<${#encoded}; offset+=1300)); do
+            chunk=${encoded:offset:1300}
+            method=appendFileSync
+            if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
+            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('R5_CUSTOMER_CHUNK_$offset')\""
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/chunk.txt"; then
+              if ! grep -Fq "R5_CUSTOMER_CHUNK_$offset" "$RUNNER_TEMP/chunk.txt"; then
+                report_remote_failure "chunk_$offset-missing-marker" "$RUNNER_TEMP/chunk.txt" 0
+                exit 1
+              fi
+            else
+              remote_rc=$?
+              report_remote_failure "chunk_$offset" "$RUNNER_TEMP/chunk.txt" "$remote_rc"
+              exit 1
+            fi
+          done
+          stage=provider_customer_write_and_journal_recovery
+          echo "R5_CUSTOMER_PHASE=provider_customer_write_and_journal_recovery"
+          # The execution command verifies the original uploaded archive hash
+          # and cleans up its temporary files even if fixture assertions fail.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
+            echo 'R5_CUSTOMER_REMOTE_EXEC_STATUS=success'
+          else
+            remote_rc=$?
+            report_remote_failure execute "$RUNNER_TEMP/result.txt" "$remote_rc"
+            echo 'R5_CUSTOMER_BLOCKED=remote_execution_failure' >&2
+            exit 1
+          fi
+          stage=evidence
+          # The acceptance script logs only structured summary markers.
+          # A failure must retain its one-time operation for reconciliation,
+          # rather than rerunning an ambiguous Stripe customer write.
+          grep '^R5_GENUINE_CUSTOMER_RECOVERY_PASS=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > r5-genuine-customer-recovery.txt
+          test -s r5-genuine-customer-recovery.txt
+          sed 's/^R5_GENUINE_CUSTOMER_RECOVERY_PASS=//' r5-genuine-customer-recovery.txt |
+            jq -e '.sandbox==true and .providerWrites==1 and
+              .responseDiscarded==true and .customerStepCompleted==true and
+              .recoveredByProviderEvidence==true and .originalIdempotencyKeyPreserved==true and
+              .matchingCustomerEvents==1 and .checkoutSessionPosts==0 and
+              .checkoutPostBlocked==1 and .subscriptionsCreated==0 and
+              .originalScopedAccountUnchanged==true and .customerDeleted==true and
+              .fixtureCleaned==true and .automaticWorkerRetargeted==false and
+              .liveChargingEnabled==false' >/dev/null
+          cat r5-genuine-customer-recovery.txt
+          stage=public_health
+          curl -fsS --max-time 30 https://app.quixo.homes/api/health >/dev/null
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          cat r5-genuine-customer-recovery.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: r5-genuine-customer-recovery
+          path: r5-genuine-customer-recovery.txt
+          if-no-files-found: warn
+          retention-days: 30
