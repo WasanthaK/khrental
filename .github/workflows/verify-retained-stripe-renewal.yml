@@ -75,7 +75,7 @@ jobs:
           revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
           echo "ACCEPTANCE_REVISION=$revision" >> "$GITHUB_ENV"
           encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-preflight)
-          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$revision" --command "$node_command"
           script -q -e -c "$exec_command" /dev/null | tee retained-preflight.txt
           grep -Fq 'RETAINED_RECEIVER={"bound":true,"quantity":2' retained-preflight.txt
@@ -89,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-verify)
-          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ACCEPTANCE_REVISION" --command "$node_command"
           script -q -e -c "$exec_command" /dev/null | tee retained-genuine-receiver.txt
           grep -Fq '"eventCount":1,"auditCount":1' retained-genuine-receiver.txt
@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-verify)
-          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ACCEPTANCE_REVISION" --command "$node_command"
           script -q -e -c "$exec_command" /dev/null | tee retained-duplicate-receiver.txt
           grep -Fq '"eventCount":1,"auditCount":1' retained-duplicate-receiver.txt
