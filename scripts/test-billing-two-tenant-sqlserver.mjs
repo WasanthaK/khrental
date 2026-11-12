@@ -2575,7 +2575,27 @@ async function main() {
     const generate = tenantId => generateMonthlyInvoicesForTenant({
       tenantId, billingPeriod: '2026-10', source: 'test', authorizeProperty: () => {}
     });
-    const resultA = await generate(a.tenantId);
+    // Production cessation installs an AFTER INSERT trigger on invoices.
+    // OUTPUT without INTO fails before any trigger logic can run (SQL 334).
+    await pool.request().batch(`CREATE TRIGGER dbo.invoice_insert_compatibility_proof
+      ON dbo.invoices AFTER INSERT AS BEGIN SET NOCOUNT ON;
+      IF EXISTS (SELECT 1 FROM inserted WHERE billingperiod='2040-01')
+        THROW 51072,'Disposable invoice trigger refusal',1;
+      END`);
+    let resultA;
+    try {
+      resultA = await generate(a.tenantId);
+      assert.deepEqual(resultA.errors, []);
+      assert.equal(resultA.created.length, 1);
+      const refused = await generateMonthlyInvoicesForTenant({tenantId:a.tenantId,billingPeriod:'2040-01'});
+      assert.equal(refused.created.length, 0);
+      assert.equal(refused.errors.length, 1);
+      assert.match(refused.errors[0].error, /Disposable invoice trigger refusal/);
+      assert.equal((await query(pool,
+        "SELECT id FROM invoices WHERE tenant_id=@tenantId AND billingperiod='2040-01'", a)).length, 0);
+    } finally {
+      await pool.request().batch('DROP TRIGGER dbo.invoice_insert_compatibility_proof');
+    }
     assert.deepEqual(resultA.errors, []);
     assert.equal(resultA.created.length, 1);
     const invoiceA = await verify(pool, a);

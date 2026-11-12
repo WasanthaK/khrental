@@ -323,16 +323,19 @@ export const generateMonthlyInvoicesForTenant = async ({
 
         const invoice = await singleTransaction(
           transaction,
-          `INSERT INTO invoices (
+          `DECLARE @created_invoice TABLE (id UNIQUEIDENTIFIER);
+           INSERT INTO invoices (
              tenant_id, renteeid, propertyid, agreementid, billingperiod,
              components, totalamount, status, duedate, issued_at, issued_by, notes
-           ) OUTPUT INSERTED.*
+           ) OUTPUT INSERTED.id INTO @created_invoice
            VALUES (
              @tenantId, @renteeId, @propertyId, @agreementId, @billingPeriod,
              @components, @totalAmount, 'draft',
              COALESCE(@dueDate, DATEADD(day, 14, SYSUTCDATETIME())),
              NULL, NULL, @notes
-           )`,
+           );
+           SELECT i.* FROM invoices i INNER JOIN @created_invoice c ON c.id=i.id
+           WHERE i.tenant_id=@tenantId;`,
           {
             tenantId,
             renteeId: agreement.renteeid,
