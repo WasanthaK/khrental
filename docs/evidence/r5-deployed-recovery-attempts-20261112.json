@@ -1,6 +1,6 @@
 {
   "date": "2026-11-12",
-  "status": "blocked_before_provider_execution",
+  "status": "original_operation_outcome_unverified_inspection_rate_limited",
   "canonicalReconciliationPr": 592,
   "harnessPr": 593,
   "harnessMerge": "b00535122634c9be7b9ad213c06885973d2b8af7",
@@ -20,8 +20,8 @@
   "workerEnabled": true,
   "workerScopeCount": 1,
   "applicationRedeployed": false,
-  "providerProofExecuted": false,
-  "genuineInterruptedOperationRecovered": false,
+  "providerProofExecuted": true,
+  "genuineInterruptedOperationRecovered": null,
   "liveCharge": false,
   "attempts": [
     {
@@ -46,10 +46,28 @@
       "retryAfterSeconds": 600,
       "artifactId": 13941400632,
       "artifactSha256": "cad2ece181fccd237610c3de0db27563a6c4325d5b2c53bb67c191d627a59cca"
+    },
+    {
+      "run": 43211919780,
+      "job": 131161441499,
+      "failure": "Reached controlled_response_loss; ERR_ASSERTION without PORTAL_RESPONSE_DISCARDED marker; command/provider outcome unverified",
+      "observedAt": "2026-11-12T11:46:56Z",
+      "artifactId": 13941716679,
+      "artifactSha256": "7180017411c91eb0df3c58a8c61449f19caf773ec5d513ed3fc0c691243e04a6"
+    },
+    {
+      "run": 43212845293,
+      "job": 131165027181,
+      "mode": "inspect",
+      "failure": "Azure 429 after chunk zero; read-only inspection did not execute",
+      "observedAt": "2026-11-12T11:53:52Z",
+      "retryAfterSeconds": 600,
+      "artifactId": 13942640596,
+      "artifactSha256": "c3796a1477f5ab01e9669069c0fce1f4408f46416da758d2f511c23ebe517c1d"
     }
   ],
   "retry": {
-    "notBefore": "2026-11-12T11:45:28Z",
+    "notBefore": "2026-11-12T12:03:52Z",
     "scheduled": false,
     "workflow": "verify-deployed-portal-recovery.yml",
     "branch": "main",
@@ -58,13 +76,19 @@
     "subscription": "sub_1UYmVVQ4sARuLNQakc6Gat2Z",
     "operation_id": "ce7208e7-bb54-4bc8-81db-8d837f0de221",
     "confirmation": "VERIFY-SANDBOX-PORTAL-RECOVERY",
-    "existingOperationPolicy": "Inspect an existing command; never replace its ID blindly",
-    "partialPayloadPolicy": "Chunk zero overwrites the same operation-specific temporary file; SHA-256 verified before importing; file-module cleanup in finally"
+    "existingOperationPolicy": "Read original command/journal/steps/audit and matching events before any new proof; do not reset, delete, replace ID, or blindly rerun",
+    "partialPayloadPolicy": "Chunk zero overwrites the same operation-specific temporary file; SHA-256 verified before importing; file-module cleanup in finally",
+    "mode": "inspect"
   },
   "acceptanceBoundary": [
     "Controlled response loss after a genuine restricted sandbox portal creation, recovered by the existing automatic worker using deployed SQL.",
     "No manual recovery or SQL clock/lease/backoff edits; requires matching key/session/event, exactly one effect/step/audit and unchanged subscription/account.",
     "Not a whole-process crash test, financial-operation acceptance, HTTP role acceptance or full R5 closure.",
     "Do not advance the retained clock, repeat accepted signing, widen worker scope or retry paused Evia."
-  ]
+  ],
+  "controlledResponseLossConfirmed": false,
+  "inspectionPr": 597,
+  "inspectionMerge": "7247c0cefb234b41846f7d232e25ca3382cb61d9",
+  "inspectionCiRun": 43212519113,
+  "assertionCause": "Likely SQL UUID casing in harness key comparison; not confirmed by live readback"
 }
