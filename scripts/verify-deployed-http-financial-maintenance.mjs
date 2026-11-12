@@ -44,10 +44,15 @@ const main=async()=>{
   Object.assign(proof,{propertyId,renteeId,agreementId,maintenanceId});
   await store.locked(target.id,async q=>{
     const params={id:target.id,propertyId,renteeId,agreementId,maintenanceId,actor:actorId,email:`r5-fixture-rentee-${target.id}@example.invalid`};
+    stage='fixture_properties';
     await q("INSERT INTO properties(id,tenant_id,name,status) VALUES(@propertyId,@id,'Synthetic R5 acceptance property','available')",params);
+    stage='fixture_app_users';
     await q("INSERT INTO app_users(id,tenant_id,name,email,role,user_type) VALUES(@renteeId,@id,'Synthetic R5 acceptance renter',@email,'rentee','rentee')",params);
+    stage='fixture_tenant_memberships';
     await q("INSERT INTO tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@id,@renteeId,'rentee','active',1)",params);
+    stage='fixture_agreements';
     await q("INSERT INTO agreements(id,tenant_id,renteeid,propertyid,status,rentamount,startdate) VALUES(@agreementId,@id,@renteeId,@propertyId,'active',100,'2035-11-01')",params);
+    stage='fixture_maintenance_requests';
     await q("INSERT INTO maintenance_requests(id,tenant_id,propertyid,title,description,status,assignedto) VALUES(@maintenanceId,@id,@propertyId,'Synthetic R5 acceptance request','Not a customer request','pending',@actor)",params);
   });
   const tables=['invoices','invoice_components','payments','payment_receipts','tenancy_billing_adjustments','maintenance_requests','maintenance_lifecycle_events','maintenance_request_comments','maintenance_request_images','notifications','billing_lifecycle_events'];
@@ -114,7 +119,7 @@ const main=async()=>{
   Object.assign(proof,{passed:true,protectedBillingFixturesUnchanged:true,stripeWrites:0,seededGraceDates:true,seededPaidState:true,naturalSevenDayGrace:false,syntheticRentalRecords:true,successfulPaymentAccepted:false,externalDispatchRoutesTested:false,
     credentialLoginAccepted:false,persistedSessionAuthority:true,fullRouteMatrixAccepted:false});
 };
-try{await main();}catch(error){console.error('HTTP_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
+try{await main();}catch(error){console.error('HTTP_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:error.number,sqlMessage:stage.startsWith('fixture_')?error.message:undefined,...proof}));process.exitCode=1;}
 finally{
   try{
     if(token){await revokeAccessToken(token);}
