@@ -1,0 +1,117 @@
+name: Retained sandbox renewal and deployed receiver
+on:
+  workflow_dispatch:
+    inputs:
+      customer:
+        description: Exact retained sandbox customer ID
+        required: true
+        type: string
+      subscription:
+        description: Exact retained sandbox subscription ID
+        required: true
+        type: string
+      clock:
+        description: Exact retained sandbox test clock ID
+        required: true
+        type: string
+      schedule:
+        description: Exact approved 2-to-1 schedule ID
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: retained-stripe-renewal
+  cancel-in-progress: false
+env:
+  RETAINED_CUSTOMER: ${{ inputs.customer }}
+  RETAINED_SUBSCRIPTION: ${{ inputs.subscription }}
+  RETAINED_CLOCK: ${{ inputs.clock }}
+  RETAINED_SCHEDULE: ${{ inputs.schedule }}
+  AZURE_RESOURCE_GROUP: khrental-prod-rg
+  AZURE_CONTAINER_APP_NAME: khrental-app
+jobs:
+  acceptance:
+    if: github.ref == 'refs/heads/main'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Verify deployed source parity and SQL health
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-retained-stripe-renewal.mjs receiver-preflight > /dev/null
+          serving=$(curl --fail --silent --show-error https://app.quixo.homes/build-info.json | jq -r .buildSha)
+          [[ "$serving" =~ ^[a-f0-9]{40}$ ]]
+          git merge-base --is-ancestor "$serving" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|scripts/verify-retained-stripe-renewal.mjs|.github/workflows/verify-retained-stripe-renewal.yml) ;;
+              *) echo "Runtime parity not proven: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$serving" "$GITHUB_SHA")
+          curl --fail --silent --show-error https://app.quixo.homes/api/mssql/health | jq -e '.connection == "ready"'
+          echo "Verified serving source $serving"
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Read exact deployed account before advancing
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          revision=$(az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.latestReadyRevisionName -o tsv)
+          echo "ACCEPTANCE_REVISION=$revision" >> "$GITHUB_ENV"
+          encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-preflight)
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$revision" --command "$node_command"
+          script -q -e -c "$exec_command" /dev/null | tee retained-preflight.txt
+          grep -Fq 'RETAINED_RECEIVER={"bound":true,"quantity":2' retained-preflight.txt
+      - name: Advance only the retained sandbox schedule
+        env:
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          RETAINED_RENEWAL_CONFIRM: ADVANCE-RETAINED-SANDBOX
+        run: node scripts/verify-retained-stripe-renewal.mjs advance
+      - name: Prove genuine delivery in deployed SQL before any replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-verify)
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ACCEPTANCE_REVISION" --command "$node_command"
+          script -q -e -c "$exec_command" /dev/null | tee retained-genuine-receiver.txt
+          grep -Fq '"eventCount":1,"auditCount":1' retained-genuine-receiver.txt
+      - name: Replay genuine event twice through signed HTTP
+        env:
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          STRIPE_SANDBOX_WEBHOOK_SECRET: ${{ secrets.STRIPE_SANDBOX_WEBHOOK_SECRET }}
+        run: node scripts/verify-retained-stripe-renewal.mjs duplicate
+      - name: Prove duplicate delivery leaves one event and audit record
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded=$(node scripts/verify-retained-stripe-renewal.mjs receiver-verify)
+          node_command="node --input-type=module -e \"await import('data:text/javascript;base64,$encoded')\""
+          printf -v exec_command '%q ' az containerapp exec --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --revision "$ACCEPTANCE_REVISION" --command "$node_command"
+          script -q -e -c "$exec_command" /dev/null | tee retained-duplicate-receiver.txt
+          grep -Fq '"eventCount":1,"auditCount":1' retained-duplicate-receiver.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: retained-renewal-evidence
+          path: |
+            retained-*.txt
+            retained-renewal-evidence.json
+          retention-days: 30
