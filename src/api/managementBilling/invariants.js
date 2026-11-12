@@ -4,7 +4,7 @@ import {billingClock} from './recovery.js';
 
 // Compares three distinct facts: current paid capacity, managed inventory, and
 // verified renewal quantity. This function never proposes a corrective write.
-export const billingInvariants=({account,inventory,commands=[],subscription=null,schedule=null,now})=>{
+export const billingInvariants=({account,inventory,commands=[],subscription=null,schedule=null,trialCleanup=null,now})=>{
   const issues=[];
   const state=entitlement(account,now).state;
   if(!account){return {status:'not_enrolled',issues:[],managedQuantity:inventory.length,entitlement:state};}
@@ -24,7 +24,14 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
       if(subscription.status!==account.subscription_status){issues.push('SUBSCRIPTION_STATUS');}
       if(Boolean(subscription.cancel_at_period_end)!==Boolean(account.cancel_at_period_end)){issues.push('CANCELLATION_STATE');}
       if((objectId(subscription.schedule)||null)!==(account.stripe_schedule_id||null)){issues.push('SCHEDULE_BINDING');}
-      if(subscription.trial_start||subscription.trial_end){issues.push('UNSUPPORTED_TRIAL');}
+      if(subscription.trial_start||subscription.trial_end){
+        const saved=trialCleanup?.intent;
+        const known=trialCleanup?.result?.managementEnded&&saved?.cleanupMode==='trial'&&saved._subscriptionId===subscription.id&&
+          saved.customerId===account.stripe_customer_id&&saved.priceId===account.stripe_price_id&&saved.trialStart===subscription.trial_start&&
+          saved.trialEnd===subscription.trial_end&&saved.preview?.inventoryHash===hash(inventory)&&
+          ['trialing','canceled'].includes(subscription.status)&&!entitlement(account,now).management;
+        if(!known){issues.push('UNSUPPORTED_TRIAL');}
+      }
       if(account.stripe_schedule_id){
         const matches=(phase,quantity)=>phase?.items?.length===1&&objectId(phase.items[0].price)===account.stripe_price_id&&phase.items[0].quantity===quantity;
         const currentPhase=schedule?.phases?.find(p=>p.start_date===schedule.current_phase?.start_date);
@@ -48,6 +55,12 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
 export const createBillingInvariantInspector=({store,stripe,clock=billingClock})=>{
   const snapshot=tenantId=>store.locked(tenantId,async q=>({
     account:await store.account(tenantId,q),inventory:await store.inventory(tenantId,q),
+    trialCleanup:store.recoveryEnabled?.()?await (async()=>{
+      const rows=await q(`SELECT TOP (1) r.intent_json,c.result_json FROM dbo.management_billing_commands c
+        JOIN dbo.management_billing_recovery r ON r.command_id=c.id WHERE c.tenant_id=@tenantId AND c.kind='cessation'
+        AND c.status='completed' AND JSON_VALUE(r.intent_json,'$.cleanupMode')='trial' ORDER BY c.completed_at DESC`,{tenantId});
+      return rows.length?{intent:JSON.parse(rows[0].intent_json),result:JSON.parse(rows[0].result_json)}:null;
+    })():null,
     commands:await q("SELECT id,kind,status FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending' ORDER BY id",{tenantId})
   }));
   const inspect=async value=>{

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {cessationCleanupRecovery} from '../src/api/managementBilling/recoveryQuantity.js';
+import {cessationCleanupMode,entitlement} from '../src/api/managementBilling/contract.js';
+import {subscriptionProjection} from '../src/api/managementBilling/stripe.js';
 import {createRecoveryRunner} from '../src/api/managementBilling/recovery.js';
 
 const now=Date.UTC(2026,10,12);
@@ -70,4 +72,24 @@ test('old cleanup with exact request evidence completes without a fresh write',a
 test('another operation cannot supply cleanup request evidence',async()=>{
   const f=fixture();await f.run();f.state.steps={};f.state.finished=false;f.state.events[0].request.idempotency_key='different';
   await assert.rejects(f.run(),{code:'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE'});assert.equal(f.state.writes.length,1);assert.equal(f.state.finished,false);
+});
+
+
+test('cleanup grace ends at its original exact boundary and overlays/risk cannot authorize writes',()=>{
+  const account={subscription_status:'past_due',initial_payment_verified:true,grace_started_at:new Date(now-7*86400000+1).toISOString()};
+  assert.equal(cessationCleanupMode(account,now),'grace');assert.equal(cessationCleanupMode(account,now+1),null);
+  assert.equal(cessationCleanupMode({...account,risk_hold:true},now),null);
+  assert.equal(cessationCleanupMode({...account,comp_type:'ongoing'},now),null);
+  assert.equal(cessationCleanupMode({...account,initial_payment_verified:false},now),null);
+});
+test('explicit legacy trial cleanup projects without payment/access while default projection still rejects trials',()=>{
+  const f=fixture();f.sub.status='trialing';f.sub.trial_start=now/1000-86400;f.sub.trial_end=now/1000+86400;
+  f.sub.items.data[0].price={id:'price',currency:'usd',recurring:{interval:'month',usage_type:'licensed'}};
+  const input={subscription:f.sub,account:f.account,invoice:null,now};
+  assert.throws(()=>subscriptionProjection(input),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
+  const projection=subscriptionProjection({...input,cessationCleanup:true});
+  assert.equal(projection.initial_payment_verified,false);assert.equal(entitlement({...f.account,...projection},now).management,false);
+  assert.throws(()=>subscriptionProjection({...input,invoice:{status:'paid'},cessationCleanup:true}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
+  f.sub.status='active';assert.throws(()=>subscriptionProjection({...input,cessationCleanup:true}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
+  f.sub.status='canceled';assert.equal(entitlement({...f.account,...subscriptionProjection({...input,cessationCleanup:true})},now).management,false);
 });

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import {hash,problem} from './contract.js';
+import {hash,problem,cessationCleanupMode} from './contract.js';
 
 // Reuses the account lock: independent property operations share one subscription.
 // Claims and step checkpoints use short transactions. The completion callback
@@ -47,6 +47,9 @@ export const createRecoveryJournal=({store,complete})=>{
       throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
     }
     if(row.kind==='cessation'){
+      if(intent.cleanupMode&&cessationCleanupMode(account,new Date(row.checked_at).getTime())!==intent.cleanupMode){
+        throw problem(409,'BILLING_CESSATION_STATE_CHANGED','Subscription access changed before cleanup.');
+      }
       const preview=await store.cessationPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
       if(!preview.eligible||preview.alreadyCeased||preview.inventoryHash!==intent.inventoryHash){
         throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');
