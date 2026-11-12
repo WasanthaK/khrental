@@ -93,9 +93,9 @@ jobs:
           report_remote_failure() {
             local phase="$1" captured="$2" exit_code="$3" failure_class
             echo "R5_REMOTE_EXEC_STATUS=failed phase=$phase exit_code=$exit_code" | tee -a r5-customer-readonly.txt
-            if grep -Fq 'R5_CUSTOMER_FIXTURE_FAILED=' "$captured"; then
+            if grep -Fq 'R5_CUSTOMER_RUN_READONLY_FAILED=' "$captured"; then
               failure_class=fixture_sql_or_assertion
-              grep -Eo 'R5_CUSTOMER_FIXTURE_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-customer-readonly.txt || :
+              grep -Eo 'R5_CUSTOMER_RUN_READONLY_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-customer-readonly.txt || :
             elif grep -Fq 'R5_CUSTOMER_ROLLBACK_FAILED=' "$captured"; then
               failure_class=fixture_rollback_error
               grep -Eo 'R5_CUSTOMER_ROLLBACK_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-customer-readonly.txt || :
@@ -134,7 +134,7 @@ jobs:
           command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
-            echo 'R5_REMOTE_EXEC_STATUS=success'
+            echo 'R5_REMOTE_EXEC_STATUS=transport_returned_zero'
           else
             remote_rc=$?
             report_remote_failure execute "$RUNNER_TEMP/result.txt" "$remote_rc"
@@ -142,7 +142,14 @@ jobs:
             exit 1
           fi
           stage=evidence
-          grep '^R5_CUSTOMER_RUN_READONLY=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > r5-customer-readonly.txt
+          if grep -Fq 'R5_CUSTOMER_RUN_READONLY_FAILED=' "$RUNNER_TEMP/result.txt"; then
+            report_remote_failure execute "$RUNNER_TEMP/result.txt" 0
+            exit 1
+          fi
+          grep -Eo 'R5_CUSTOMER_RUN_READONLY=\{.*\}' "$RUNNER_TEMP/result.txt" | tr -d '\r' > r5-customer-readonly.txt || {
+            report_remote_failure inspection-missing-marker "$RUNNER_TEMP/result.txt" 0
+            exit 1
+          }
           cat r5-customer-readonly.txt
           jq -e '.inspectOnly==true and .noStripeWrite==true and .noSqlWrite==true and .workerScopeChanged==false and .originalScopeSingle==true and .originalSubscriptionPresent==true' < <(sed 's/^R5_CUSTOMER_RUN_READONLY=//' r5-customer-readonly.txt)
           stage=public_health
