@@ -1,0 +1,96 @@
+{
+  "date": "2026-11-12",
+  "testCompletedAt": "2026-11-12T13:27:55Z",
+  "configurationRestoredAt": "2026-11-12T13:28:38Z",
+  "run": 43227139115,
+  "job": 131213110119,
+  "runUrl": "https://github.com/WasanthaK/khrental/actions/runs/43227139115",
+  "workflowHead": "817bdc8e9ac56ac18cf8c5e9b18d82333bd771f8",
+  "harnessPR": 604,
+  "harnessHead": "5cadf7b7e1b20b083d5de7d45e51d3f70205575f",
+  "harnessCI": {
+    "run": 43226685951,
+    "lint": "passed",
+    "tests": "passed",
+    "build": "passed"
+  },
+  "runtime": {
+    "before": "khrental-app--0000491",
+    "temporaryEnforced": "khrental-app--0000492",
+    "restored": "khrental-app--0000493",
+    "image": "59050153ad96b10be7c1990df846363a1642c046",
+    "imageChanged": false,
+    "originalEnforcementConfigurationRestored": true,
+    "publicHealthAfterRestore": "HTTP 200",
+    "workerScope": "original one-organization recovery scope unchanged"
+  },
+  "artifact": {
+    "id": 13948572357,
+    "name": "scoped-public-http-enforcement",
+    "size_in_bytes": 1049,
+    "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/13948572357",
+    "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/13948572357/zip",
+    "expired": false,
+    "created_at": "2026-11-12T13:28:39Z",
+    "expires_at": "2026-12-12T13:28:38Z",
+    "updated_at": "2026-11-12T13:28:39Z",
+    "digest": "sha256:b544f5b49b0e1e88758499fdfa48038f0f3817488d32f7946a2368a9b2d3280c",
+    "workflow_run": {
+      "id": 43227139115,
+      "repository_id": 963041494,
+      "head_repository_id": 963041494,
+      "head_branch": "main",
+      "head_sha": "817bdc8e9ac56ac18cf8c5e9b18d82333bd771f8"
+    }
+  },
+  "proof": {
+    "fixtureId": "16eab065-f524-476c-b8a8-bcbc02e8380c",
+    "scope": "public authenticated HTTP + deployed SQL; seeded billing states",
+    "checks": [
+      "expired_grace_create_denied_without_write",
+      "current_grace_create_allowed",
+      "expired_grace_update_denied_history_read_allowed",
+      "fixed_complimentary_write_allowed",
+      "natural_fixed_complimentary_expiry_denied",
+      "complimentary_revoke_denied",
+      "seeded_paid_write_allowed",
+      "foreign_organization_denied",
+      "stale_administrator_role_denied"
+    ],
+    "templateId": "d51ac7a6-6a3a-46e7-a9cb-2e3d941b0b50",
+    "passed": true,
+    "protectedBillingFixturesUnchanged": true,
+    "stripeWrites": 0,
+    "seededGraceDates": true,
+    "naturalSevenDayGrace": false,
+    "naturalComplimentaryExpiry": true,
+    "credentialLoginAccepted": false,
+    "persistedSessionAuthority": true,
+    "fullRouteMatrixAccepted": false,
+    "fixtureClosed": true
+  },
+  "boundaries": {
+    "accepted": "Bounded public authenticated agreement-template create/update/read enforcement and nine checks on a temporary server-owned one-fixture scope",
+    "notAccepted": [
+      "all endpoint/job/stock/role/resource enforcement cases",
+      "seven days naturally elapsed and genuine late-payment recovery on deployed SQL",
+      "privileged Platform Administrator complimentary controls and audit",
+      "paid access retained after a complimentary overlay expires",
+      "credential login or UI acceptance",
+      "full R5 or regional launch"
+    ],
+    "seededData": [
+      "expired/current grace timestamps",
+      "verified paid state",
+      "complimentary grants/revoke"
+    ],
+    "naturalTime": "30-second fixed complimentary grant expired using unchanged database UTC time",
+    "fixtureSession": "Created through deployed session service for isolated persisted fixture authority; never logged; revoked after test",
+    "fixtureDisposition": "Synthetic actor/membership/organization inactive; template retained as evidence; no users or properties from accepted billing fixtures changed",
+    "stripeWrites": 0,
+    "eviaCalls": 0,
+    "evia": "paused",
+    "liveCharging": false,
+    "servingEnforcement": "Original OFF configuration restored; no lasting full rollout"
+  }
+}
