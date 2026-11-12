@@ -56,3 +56,11 @@ test('inspector is read-only and refuses a conclusion if local state changes dur
   const result=await createBillingInvariantInspector({store,stripe,clock:{now:()=>now}}).inspect('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   assert.equal(result.status,'inconclusive');assert.deepEqual(methods,['GET']);assert.equal(snapshots,2);
 });
+
+test('pending recovery inspection names stale and review-required operations without suggesting a write',()=>{
+  const f=fixture();f.commands=[{id:'late',stale:1,state:'pending'},{id:'manual',stale:0,state:'failed_needs_review'}];
+  const result=billingInvariants(f);assert.equal(result.status,'operation_pending');
+  assert.deepEqual(result.staleOperations,['late']);assert.deepEqual(result.reviewOperations,['manual']);
+  assert.deepEqual(result.issues,['STALE_RECOVERY_OPERATION','RECOVERY_REVIEW_REQUIRED']);
+  f.subscription.items.data[0].quantity=8;assert.equal(billingInvariants(f).status,'needs_review');
+});

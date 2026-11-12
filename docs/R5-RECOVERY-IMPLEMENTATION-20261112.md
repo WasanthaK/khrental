@@ -1,14 +1,49 @@
 # R5 recovery implementation — 12 November 2026
 
-## R5 transition checkpoint — 12 November 2026
+## Canonical R5 engineering status — 12 November 2026
 
-Restoration is merged in [#579](https://github.com/WasanthaK/khrental/pull/579), merge `2120f2959b3c9cd4c58ecb312290cfb8a7929d2a`, verified head `8cdf662db4695d91ce91ddb96c94e6a452102257`. Final build/lint/tests **43185293868**, real SQL **43185293891**, two-tenant SQL **43185293981**, public-listing regression **43185293973**, browser **43185293871** passed. Final mobile/desktop restoration screens were inspected. Original cessation history is retained; restoration starts from confirmation. No production deployment/apply occurred.
+**Recovery, all-state cessation, restoration and property splitting are implemented and source-verified. R5 itself remains open: Evia service/package retrieval and matching-audit acceptance are blocked, genuine recurring-payment evidence is missing, and production rollout was deliberately not performed under this handoff.** Do not requeue completed implementation or accepted signing. The dated checkpoints below are historical evidence, not the current task queue.
 
-**Current engineering work: property split.** The candidate reserves independent unit definitions privately, confirms renewal-only aggregate billing with no immediate proration, then activates all units atomically with result and audit. Original parent/rental/history remain attached. Existing parent tenancy must close before child offers/agreements or public availability. Nested splits are rejected. Active/grace subscriptions retain current quantity until renewal; complimentary access retains its expiry and provider obligations. Ending subscriptions require an explicit keep-renewing choice first. Trial/incomplete/unpaid/cancelled without a valid complimentary overlay cannot split. Risk holds fail closed.
+| Area | Canonical state | Evidence / remaining boundary |
+| --- | --- | --- |
+| Interrupted provider operations | Implemented and source-verified | Journal, stable provider keys/readback, SQL fencing, disabled worker/dry-run, bounded retries/review alerts; #574 and subsequent operation proofs. Staging dry-run/activation remain rollout work. |
+| All-state cessation | Implemented and source-verified | #576–#578; local no-write cases, grace/trial cleanup, retained unpaid invoices, zero-stock cancellation and duplicate webhook handling. |
+| Restoration | Implemented and source-verified | #579, merge `2120f2959b3c9cd4c58ecb312290cfb8a7929d2a`; retained episodes, paid-capacity policy, no backdating and explicit cancelled-subscription reactivation. |
+| Property split and transition consistency | Implemented and source-verified | #580, merge `7fc7fd66578e2cbb869ba3ebdf393f7fd1ecdbf2`; private reservations, renewal-only billing, parent identity/history retention, overlap guards, compensation before provider intent, atomic activation and transition sequences. |
+| Application clock and replay | Implemented; final guard/inspection closeout under validation | Synthetic webhook replay already merged. Closeout adds lint enforcement of the shared clock and names stale/review-required operations in read-only inspection. SQL remains authoritative for write authorization and persisted dates. |
+| Evia service/package and matching audit | **Blocked / not accepted** | Completed signing stays accepted. A supported service exchange or genuine completed package is still unconfirmed; latest recorded provider failures remain 404/501. See [provider evidence](EVIA-PUBLIC-DOCUMENTATION-REFERENCE.md#r5-service-recovery-recheck--12-november-2026). No guessed routes, resend or re-sign. |
+| Genuine Stripe lifecycle | **Evidence missing** | Read-only approved-sandbox event inventory on 12 November returned 9 matching events, exhausted (`has_more=false`): 7 active subscription updates and 2 initial-payment invoice.paid events. No renewal invoice, payment-failure or deletion event was available. Synthetic replay is not genuine lifecycle acceptance. |
+| Deployment / Sri Lanka launch | Held | No production migration apply, reconciler enablement, live charging or launch. Rental QA and commercial/merchant/tax/privacy exits remain outside this engineering handoff. |
 
-Migration `20261112_03_management_splits` and `MANAGEMENT_SPLIT_SCHEMA_READY=true` require verified prior recovery/restoration readiness. Reserved rows are non-live; provider uncertainty stays queued for recovery/review rather than deleting evidence or repeating a purchase. Preparation failure rolls back the reservation transaction; final audit failure rolls back unit activation. Split validation and screenshots are pending candidate CI. This checkpoint supersedes older next-work statements; do not repeat merged recovery, cessation or restoration work. R5 is not yet closed. Genuine provider/package evidence and broader launch approvals remain distinct from synthetic engineering verification.
+Final split head `8a0529bbfccaa6dc3dc33089f06f2e6780117b0c`: **1,386/1,386 tests**, strict lint and build [43188754958](https://github.com/WasanthaK/khrental/actions/runs/43188754958); real SQL [43188754932](https://github.com/WasanthaK/khrental/actions/runs/43188754932); two-tenant SQL [43188754915](https://github.com/WasanthaK/khrental/actions/runs/43188754915); public regression [43188754870](https://github.com/WasanthaK/khrental/actions/runs/43188754870); desktop/mobile/keyboard browser [43188754985](https://github.com/WasanthaK/khrental/actions/runs/43188754985), all passed. Final split review screenshots at 390/1440 were inspected from artifact **13929583405**. The process suite has **100 SIGKILL/restart cases**, including 10 split cases. Real SQL separately verifies response loss, audit rollback, compensation, parent identity and overlap guards, parent-and-unit restoration, and all three transition sequences. No synthetic result is promoted to provider or production acceptance.
 
-The owner approved the four corrections in [discovery](R5-ENGINEERING-DISCOVERY-20261112.md) and confirmed there are no production clients. This is implementation evidence, not R5 acceptance or a production activation record.
+Current next work: finish clock/inspection closeout validation and reconcile this ledger; then resolve the confirmed external evidence dependencies. Do not restart completed billing features or the accepted signing journey.
+
+
+## Final state-by-action matrix and rollout contract
+
+Complimentary access is an organization overlay and takes precedence except for a risk hold. A fixed grant or grace period is never extended by a stock operation. Every cessation still requires closed tenancy, financial, maintenance and reservation obligations.
+
+| Subscription state | End management | Restore | Split |
+| --- | --- | --- | --- |
+| Paid active | Renewal quantity reduction; final stock cancels at period end | Retain paid capacity; additional capacity from confirmation on next regular invoice | Current billed capacity retained; full target at renewal, no proration |
+| Ending | Keep existing period-end cancellation | Within paid capacity only; no implicit renewal | Explicit keep-renewing choice required first |
+| Trialing | No charge/credit; lower future quantity or final period-end cancellation; no access grant | Payment required | Payment required |
+| Complimentary | Local only, zero Stripe writes | Local only, same expiry; underlying obligations retained | Same organization grant/expiry; zero Stripe writes |
+| Past due within grace | Future quantity cleanup; existing finalized invoices/retries unchanged | Existing paid capacity only | Renewal target only, same grace expiry |
+| Incomplete / initial unpaid | Local only, zero Stripe writes | Payment required | Payment required |
+| Unpaid / expired grace | Local only, zero Stripe writes | Payment required | Payment required |
+| Cancelled with stock | Local only, zero Stripe writes | Explicit reactivation required | Payment required |
+| Cancelled with zero stock | Already-ceased/no new provider write | Explicit reactivation required | Payment required |
+
+Executable cells: `management-cessation-policy.test.js`, `management-cessation-cleanup.test.js`, `management-restoration.test.js`, `management-split.test.js`; service/SQL cases in the corresponding `scripts/test-management-*-sql.mjs` fixtures. Deferred split cessation verifies the existing renewal schedule before preserving current capacity. A later restoration follows its own reviewed D3 policy. Existing paid/ending tests pass unchanged.
+
+Migration/readiness order: inventory staging → cessation → recovery → restoration → splits (`20261112_03_management_splits`). Strict manifest now has **23** managed migrations. New split tables retain operation/reservation identities; nullable unit parent/type metadata supports later design without introducing nested rentals. The shared `dwellingInventory` remains the only billable-unit counting authority. Nested splits are deliberately rejected.
+
+Before an external step intent exists, terminal split validation failure releases private reservations and audits compensation. Once any provider step may have run, the operation retains its definitions and original keys for roll-forward/review. Final activation, inventory snapshot, result and audit share one transaction. Restoration has no local reinstatement to undo before billing. Risk/authority/term changes fail closed rather than issuing a compensating charge or credit.
+
+Rollback is disable/drain, not deletion: stop the recovery worker and new transition requests; retain journal, split reservations, active split identities, restoration episodes, database guards and read-path readiness. Do not turn off inventory/public readiness for already activated transitions or route pending journaled effects through legacy code. No production apply or activation has been executed. Owner-controlled staging dry-run and rollout remain separate from merged-source verification.
+
 
 ## Slice 1: durable cancellation
 

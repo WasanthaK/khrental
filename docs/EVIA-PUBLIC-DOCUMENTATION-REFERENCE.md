@@ -27,3 +27,11 @@ Permission labels and documentation differences are investigation leads, not pro
 - [Request callback options](https://docs.sign.enadocapp.com/evia-sign-api/v2/creating-a-signature-request)
 - [Completed-document retrieval](https://docs.sign.enadocapp.com/evia-sign-api/v2/webhook-management/retrieve-completed-documents-from-a-webhook)
 - [Completed-package retrieval](https://docs.sign.enadocapp.com/evia-sign-api/v2/webhook-management/store-completed-documents-in-sharepoint-using-microsoft-power-automate)
+
+## R5 service-recovery recheck — 12 November 2026
+
+Public-source review reconfirmed the accessible V2 authorization-code/token guide. The linked service API-key and completed-document/package pages could not be retrieved in this review, and targeted official-domain searches did not return a supported machine-to-machine exchange or historical package-token reissue contract. This is an evidence gap, not proof that those APIs do not exist and not a diagnosis of the earlier 404/501 responses.
+
+The latest recorded installation observations remain the 8 November service probes (404 for the documented exchange candidates, 501 for the prior client-credentials candidate) and missing matching audit. No fresh production credential probe, endpoint guess, resend, re-sign, landlord login, or document mutation was performed. Existing completed-signing acceptance is retained. The engineering handoff explicitly requires confirmed documentation or sandbox behavior before modifying this provider contract; Evia service/package retrieval and matching-audit acceptance therefore remain blocked.
+
+Unblocking evidence: an Evia-confirmed service exchange route/grant/scopes for the configured API app, or a genuine verified completion package with a working URL/token and matching audit, plus a sandbox request suitable for read-only retrieval verification. Do not treat the existing synthetic document/package tests as that provider evidence.

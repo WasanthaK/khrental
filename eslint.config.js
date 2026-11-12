@@ -14,5 +14,12 @@ export default [
       'no-unused-vars':['error',{argsIgnorePattern:'^_'}],
       'react/jsx-uses-react':'error','react/jsx-uses-vars':'error','curly':['error','all']}
   },
+  {files:['src/api/managementBilling/**/*.js'],ignores:['src/api/managementBilling/clock.js'],rules:{
+    'no-restricted-syntax':['error',
+      {selector:"CallExpression[callee.object.name='Date'][callee.property.name='now']",message:'Use the injected billing clock.'},
+      {selector:"CallExpression[callee.object.name='Date'][callee.property.value='now']",message:'Use the injected billing clock.'},
+      {selector:"NewExpression[callee.name='Date'][arguments.length=0]",message:'Use the injected billing clock.'},
+      {selector:"CallExpression[callee.name='Date']",message:'Use the injected billing clock.'}]
+  }},
   {files:['**/*.cjs'],languageOptions:{sourceType:'commonjs'}}
 ];
