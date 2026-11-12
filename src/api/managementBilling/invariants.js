@@ -1,4 +1,4 @@
-import {BILLING_ACCOUNT,entitlement,hash,identifier,problem} from './contract.js';
+import {BILLING_ACCOUNT,entitlement,localCessationAllowed,hash,identifier,problem} from './contract.js';
 import {objectId} from './stripe.js';
 import {billingClock} from './recovery.js';
 
@@ -38,7 +38,7 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
       }
       // Complimentary is an access overlay: existing paid obligations remain,
       // but changes made under it must not invent a new provider charge.
-      if(!ending&&state!=='complimentary'&&next!==inventory.length){issues.push('RENEWAL_INVENTORY_QUANTITY');}
+      if(!ending&&!localCessationAllowed(account,now)&&next!==inventory.length){issues.push('RENEWAL_INVENTORY_QUANTITY');}
     }
   }else if(subscription||account.stripe_item_id||account.stripe_schedule_id||current!==0){issues.push('ORPHANED_BILLING_STATE');}
   return {...result,status:issues.length?'needs_review':commands.length?'operation_pending':'consistent',issues,

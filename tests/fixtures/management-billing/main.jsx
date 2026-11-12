@@ -24,7 +24,7 @@ function Fixture(){
   if(['staged-stock','staged-stock-failure'].includes(scenario)){Object.assign(data,{enrolled:false,stagingEnabled:true,inventoryQuantity:0,billedQuantity:0,status:'not_enrolled',inventory:[],
     pendingStock:[{id:'staged-home',kind:'property',label:'Prepared home'}],proposedInventoryQuantity:1});}
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
-  const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:'cancel_at_renewal',eligible:scenario==='cessation-ready',blockers:scenario==='cessation-ready'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
+  const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:scenario==='cessation-local'?'unchanged':'cancel_at_renewal',eligible:scenario!=='cessation-blocked',blockers:scenario!=='cessation-blocked'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
   return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} loading={loading}
     stockDraft={stockDraft} onStockDraftChange={setStockDraft} cessation={cessation} cessationReason={cessationReason} onCessationReason={setCessationReason}
     onAction={async(kind,payload)=>{

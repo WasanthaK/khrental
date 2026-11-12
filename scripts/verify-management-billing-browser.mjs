@@ -50,7 +50,7 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
     if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
@@ -72,7 +72,11 @@ try{
      await page.type('textarea','End fixture management after closing obligations.');
      const disabled=await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm management cessation').disabled);
      assert.equal(disabled,scenario==='cessation-blocked');
-     if(scenario==='cessation-ready'){
+     if(scenario==='cessation-local'){
+      const section=await page.$eval('section[aria-labelledby="cessation-title"]',el=>el.innerText);
+      assert.match(section,/subscription and existing invoices will not change/);assert.doesNotMatch(section,/subscription will end at renewal|lower billed quantity/);
+     }
+     if(scenario!=='cessation-blocked'){
       await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm management cessation').focus());
       await page.keyboard.press('Enter');
       await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: stock/cessation'));
