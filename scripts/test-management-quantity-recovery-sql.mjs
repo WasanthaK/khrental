@@ -63,7 +63,12 @@ export const verifyQuantityRecovery=async(pool,{tenantId,actorId,stripe,remote,c
   await store.locked(tenantId,q=>q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:existing[1],tenantId}));
   const scheduleId=(await store.account(tenantId)).stripe_schedule_id;
   const phased=await applyWithLoss(`/v1/subscription_schedules/${scheduleId}`);assert.equal(phased.nextRenewalQuantity,1);
-  await store.locked(tenantId,q=>q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:prepared,tenantId}));
+  await store.locked(tenantId,async q=>{
+    // Promotion creates listing preferences. Remove only this disposable fixture's
+    // dependent row before simulating zero stock; keep production foreign keys intact.
+    await q('DELETE dbo.public_listing_preferences WHERE property_id=@id AND EXISTS (SELECT 1 FROM dbo.properties WHERE id=@id AND tenant_id=@tenantId)',{id:prepared,tenantId});
+    await q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:prepared,tenantId});
+  });
   const ended=await applyWithLoss(`/v1/subscriptions/${sub.id}`);assert.equal(ended.currentQuantity,3);assert.equal(ended.nextRenewalQuantity,0);
   assert.equal(ended.cancelAtPeriodEnd,true);assert.equal((await store.account(tenantId)).pending_quantity,0);
   assert.equal(calls.some(c=>c.body.items?.some(i=>i.quantity===0)||c.body.phases?.some(p=>p.items.some(i=>i.quantity===0))),false);
