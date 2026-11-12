@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-12",
+  "completedAt": "2026-11-12T12:53:39Z",
+  "run": 43221739128,
+  "job": 131194922907,
+  "runUrl": "https://github.com/WasanthaK/khrental/actions/runs/43221739128",
+  "workflowHead": "9c46cbdc4ea2f8cdfce98509f33ca1c4b6eab6ff",
+  "harnessPR": 600,
+  "harnessHead": "a311dc3f0ec29e76b45c0dd09ab76053374835af",
+  "harnessCI": {
+    "run": 43221214749,
+    "tests": 1400,
+    "lint": "passed",
+    "build": "passed"
+  },
+  "runtime": {
+    "revision": "khrental-app--0000491",
+    "image": "59050153ad96b10be7c1990df846363a1642c046",
+    "replicas": 1,
+    "redeployed": false
+  },
+  "artifact": {
+    "id": 13944798410,
+    "name": "genuine-sandbox-deployed-delayed-failure",
+    "size_in_bytes": 890,
+    "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/13944798410",
+    "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/13944798410/zip",
+    "expired": false,
+    "created_at": "2026-11-12T12:53:40Z",
+    "expires_at": "2026-12-12T12:53:39Z",
+    "updated_at": "2026-11-12T12:53:40Z",
+    "digest": "sha256:b4e260c1f671bec259d27e664faed65534229e5dab5a1d0abb161e1241435344",
+    "workflow_run": {
+      "id": 43221739128,
+      "repository_id": 963041494,
+      "head_repository_id": 963041494,
+      "head_branch": "main",
+      "head_sha": "9c46cbdc4ea2f8cdfce98509f33ca1c4b6eab6ff"
+    }
+  },
+  "proof": {
+    "fixtureId": "2383f4fc-e107-4ac7-9e13-39db501f40ec",
+    "scope": "deployed signed HTTP webhook + SQL; delayed failure after genuine recovery",
+    "livemode": false,
+    "clockId": "clock_1UaxV7Q4sARuLNQazaI2X0i2",
+    "customerId": "cus_VcBsCPq1TS8N9K",
+    "subscriptionId": "sub_1UaxV8Q4sARuLNQaOeDFrlg3",
+    "failureEventId": "evt_1UaxVNQ4sARuLNQa8U6fQeja",
+    "invoiceId": "in_1UaxVFQ4sARuLNQa8zPyBJiV",
+    "paidEventId": "evt_1UaxVRQ4sARuLNQaUPMffQvZ",
+    "passed": true,
+    "recoveryBeforeBinding": true,
+    "signedHttp": true,
+    "delayedFailureLedgerRows": 1,
+    "delayedFailureAuditRows": 1,
+    "duplicateDeliveries": 2,
+    "entitlement": "active",
+    "grace": null,
+    "protectedAccountAndSubscriptionUnchanged": true,
+    "protectedClockUnchanged": true,
+    "workerScopeUnchanged": true,
+    "retainedDedicatedFixture": true,
+    "paidThrough": 1799758393,
+    "fixtureFrozenTime": 1797087193
+  },
+  "sequence": [
+    "Reserve dedicated empty development-testing tenant; no users or memberships",
+    "Create separate sandbox clock/customer/subscription; initial USD 5 invoice paid",
+    "Fail its USD 5 renewal using the documented failing test payment method",
+    "Pay the failed invoice genuinely and confirm active subscription before SQL binding",
+    "Bind the recovered subscription; deliver genuine paid event through signed deployed HTTP",
+    "Deliver the old genuine failure and two signed duplicates; assert active SQL entitlement and no grace each time",
+    "Verify one failure event/audit and one paid event/audit; protected retained state unchanged"
+  ],
+  "boundaries": {
+    "accepted": "BL06.3 delayed failure after recovery through deployed HTTP + SQL",
+    "notAccepted": [
+      "deployed failure-to-grace and grace-expiry write enforcement",
+      "other provider-operation recovery kinds",
+      "authenticated role/resource and remaining tenant isolation",
+      "full R5 or regional launch"
+    ],
+    "evia": "paused",
+    "liveCharging": false,
+    "workerScopeChanged": false,
+    "fixtureDisposition": "Retained separate frozen clock and active sandbox subscription for distinct future cases; no members or stock; outside recovery worker scope. Do not rerun this accepted delayed-event case.",
+    "protectedRetainedClock": "clock_1UYnGgQ4sARuLNQaB716SfPQ"
+  }
+}
