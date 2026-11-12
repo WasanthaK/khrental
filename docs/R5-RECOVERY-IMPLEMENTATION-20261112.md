@@ -59,3 +59,9 @@ Billing service/store factories accept an application clock; their default and t
 The replay fixture exercises the actual billing service/webhook code with a transactional in-memory store and a strictly GET-only synthetic provider. Scenarios cover initial paid access, renewal failure, pinned seven-day grace despite retries, exact expiry, recovery, duplicate delivery, delayed old-failure delivery after recovery, complimentary expiry without provider traffic, and foreign-subscription rollback. The fixed clock is deliberately independent of machine time.
 
 This is **synthetic replay**, not a captured Stripe event, genuine recurring charge, provider test-clock advancement or merchant acceptance. Existing SQL and genuine-provider acceptance requirements remain open. Property transitions and every interruption point still need their own operation-specific tests as those types migrate.
+
+## Slice 5: actual cancellation process interruption
+
+Five tests terminate a child process with `SIGKILL` after claim persistence, step intent persistence, provider effect, step checkpoint and final completion. Two subsequent fresh processes resume the same command; each scenario proves one stable provider key/write and one durable completion. The handler and runner are the actual cancellation implementation.
+
+This harness substitutes atomic test files for SQL/provider durability. It tests abrupt process termination rather than caught exceptions, but does not claim a real SQL process-kill or Stripe outage. Actual SQL claim exclusivity, fencing, revoked authority and audit rollback remain covered separately by the disposable SQL integration suite. Other command types still require migration and their own interruption cases.
