@@ -41,7 +41,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|.github/workflows/verify-r5-customer-recovery-preflight.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|scripts/verify-r5-customer-fixture-rollback.mjs|scripts/verify-deployed-customer-create-recovery.mjs) ;;
+              docs/*|*.md|.github/workflows/inspect-r5-genuine-customer-attempt.yml|scripts/inspect-r5-genuine-customer-attempt.mjs|.github/workflows/verify-r5-customer-recovery-preflight.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|scripts/verify-r5-customer-fixture-rollback.mjs|scripts/verify-deployed-customer-create-recovery.mjs) ;;
               *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
@@ -97,7 +97,7 @@ jobs:
             echo "R5_CUSTOMER_REMOTE_EXEC_STATUS=failed phase=$phase exit_code=$exit_code" | tee -a r5-genuine-customer-recovery.txt
             if grep -Fq 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=' "$captured"; then
               failure_class=provider_or_journal_acceptance
-              grep -Eo 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=\{[^}]{1,440}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
+              grep -Eo 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=\{[^}]{1,2000}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
             elif grep -Fq 'R5_CUSTOMER_ROLLBACK_FAILED=' "$captured"; then
               failure_class=fixture_rollback_error
               grep -Eo 'R5_CUSTOMER_ROLLBACK_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a r5-genuine-customer-recovery.txt || :
@@ -136,7 +136,7 @@ jobs:
           command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
-            echo 'R5_CUSTOMER_REMOTE_EXEC_STATUS=success'
+            echo 'R5_CUSTOMER_REMOTE_EXEC_STATUS=transport_returned_zero'
           else
             remote_rc=$?
             report_remote_failure execute "$RUNNER_TEMP/result.txt" "$remote_rc"
@@ -144,10 +144,18 @@ jobs:
             exit 1
           fi
           stage=evidence
+          # Azure may return zero even when the remote script fails.
+          if grep -Fq 'R5_GENUINE_CUSTOMER_RECOVERY_FAILED=' "$RUNNER_TEMP/result.txt"; then
+            report_remote_failure execute "$RUNNER_TEMP/result.txt" 0
+            exit 1
+          fi
           # The acceptance script logs only structured summary markers.
           # A failure must retain its one-time operation for reconciliation,
           # rather than rerunning an ambiguous Stripe customer write.
-          grep '^R5_GENUINE_CUSTOMER_RECOVERY_PASS=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > r5-genuine-customer-recovery.txt
+          grep -Eo 'R5_GENUINE_CUSTOMER_RECOVERY_PASS=\{[^}]{1,2000}\}' "$RUNNER_TEMP/result.txt" | tr -d '\r' > r5-genuine-customer-recovery.txt || {
+            report_remote_failure acceptance-missing-marker "$RUNNER_TEMP/result.txt" 0
+            exit 1
+          }
           test -s r5-genuine-customer-recovery.txt
           sed 's/^R5_GENUINE_CUSTOMER_RECOVERY_PASS=//' r5-genuine-customer-recovery.txt |
             jq -e '.sandbox==true and .providerWrites==1 and
