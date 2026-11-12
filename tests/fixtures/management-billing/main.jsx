@@ -17,6 +17,9 @@ function Fixture(){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
   if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}
   if(scenario==='cessation-grace'){data.inventoryQuantity=2;data.inventory=[data.inventory[0],{key:'unit:2',label:'Second example residence'}];}
+  if(scenario==='restore-ending'){data.cancelAtPeriodEnd=true;data.entitlement={state:'ending'};data.pendingQuantity=0;}
+  if(scenario==='restore-complimentary'){data.entitlement={state:'complimentary'};}
+  if(scenario==='restore-additional'){data.billedQuantity=1;data.pendingQuantity=null;}
   if(scenario==='cessation-local'){data.entitlement={state:'complimentary'};}
   if(scenario==='applied'){Object.assign(data,{billedQuantity:1,pendingQuantity:null});}
   if(scenario==='cancelled'){data.cancelAtPeriodEnd=true;}

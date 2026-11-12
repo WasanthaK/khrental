@@ -325,7 +325,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     const account=(await q('SELECT *,SYSUTCDATETIME() AS checked_at FROM dbo.management_billing_accounts WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId',params))[0];
     const mode=restorationPolicy(account,proposed.length,new Date(account?.checked_at).getTime());
     return {propertyId:params.propertyId,unitId:params.unitId,label:(await ceasedStock(tenantId,q)).find(item=>String(item.id).toLowerCase()===String(record.id).toLowerCase())?.label,controlId:String(record.id).toLowerCase(),inventoryHash:hash(current),
-      proposedHash:hash(proposed),from:account.quantity,to:proposed.length,mode,proposed};
+      proposedHash:hash(proposed),from:account.quantity,to:proposed.length,ending:Boolean(account.cancel_at_period_end),mode,proposed};
   };
   const restoreStockLocked=async(q,{tenantId,actorId,id,propertyId,unitId=null,inventoryHash,controlId,reason})=>{
     const note=decisionReason(reason),preview=await restorationPreviewLocked(q,{tenantId,actorId,propertyId,unitId,commandId:id});

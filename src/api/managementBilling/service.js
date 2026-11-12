@@ -813,7 +813,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       const current=await requireAccount(args.tenantId,q);
       if(entitlement(current,clock.now()).state!=='complimentary'){await reconcileLocked(q,current,{promoteCheckout:false});}
       const checked=await store.restorationPreviewLocked(q,args);
-      return {...checked,proposed:undefined,timing:checked.mode==='complimentary'?'unchanged':checked.mode==='ending'?'paid_capacity':checked.to>checked.from?'prorated_next_invoice':'next_renewal'};
+      return {...checked,proposed:undefined,timing:checked.mode==='complimentary'?'unchanged':checked.ending?'paid_capacity':checked.to>checked.from?'prorated_next_invoice':'next_renewal'};
     });
   };
   const restoreStock=async args=>{
