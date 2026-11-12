@@ -19,7 +19,7 @@ export const createRecoveryRunner = ({journal,handlers,clock=billingClock,logger
     try{
       const handler=handlers[job.kind];
       if(!handler){throw problem(409,'BILLING_RECOVERY_UNSUPPORTED','This operation requires review before recovery.');}
-      const step=async(name,{input,key,read,write})=>{
+      const step=async(name,{input,key,read,write,confirmResponse})=>{
         const saved=await journal.prepareStep({tenantId,id,token,name,input,inputHash:hash(input),key});
         if(saved.completed_at){return JSON.parse(saved.result_json);}
         // Readback is mandatory even within key retention, and is the only
@@ -30,8 +30,8 @@ export const createRecoveryRunner = ({journal,handlers,clock=billingClock,logger
             throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','The older billing operation needs provider evidence before it can continue.');
           }
           await journal.renew({tenantId,id,token});
-          await write(saved.input,saved.idempotency_key);
-          proof=await read(saved.input);
+          const response=await write(saved.input,saved.idempotency_key);
+          proof=confirmResponse?await confirmResponse(response,saved.input):await read(saved.input);
           if(!proof.confirmed){throw problem(503,'BILLING_RECOVERY_UNCONFIRMED','The provider has not confirmed this billing step.');}
         }
         await journal.completeStep({tenantId,id,token,name,result:proof.result});

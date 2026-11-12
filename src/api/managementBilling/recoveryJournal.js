@@ -37,11 +37,20 @@ export const createRecoveryJournal=({store,complete})=>{
     await store.assertActor(q,args.tenantId,row.actor_id);
     const account=await store.account(args.tenantId,q);
     const intent=JSON.parse(row.intent_json);
-    if(account?.stripe_subscription_id!==intent._subscriptionId||account?.stripe_customer_id!==intent.customerId){
+    if(account?.stripe_subscription_id!==intent._subscriptionId||account?.stripe_customer_id!==intent.customerId||(intent.priceId&&account?.stripe_price_id!==intent.priceId)){
       throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding changed before this billing write.');
     }
-    if(row.kind==='quantity_apply'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.preview.inventoryHash){
+    if(['quantity_apply','quantity_preview'].includes(row.kind)&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.preview.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before this provider write.');
+    }
+    if(row.kind==='checkout'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.inventoryHash){
+      throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
+    }
+    if(row.kind==='cessation'){
+      const preview=await store.cessationPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
+      if(!preview.eligible||preview.alreadyCeased||preview.inventoryHash!==intent.inventoryHash){
+        throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');
+      }
     }
     await q(`UPDATE dbo.management_billing_recovery SET lease_until=DATEADD(minute,5,SYSUTCDATETIME()),
       updated_at=SYSUTCDATETIME() WHERE command_id=@id`,{id:args.id});

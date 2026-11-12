@@ -119,7 +119,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     else if(path==='/v1/checkout/sessions'){
       result={id:`cs_fixture${++sessionCount}`,object:'checkout.session',customer:body.customer,mode:'subscription',livemode:false,status:'open',url:'https://checkout.stripe.com/c/pay/cs_fixture'};
       remote.set(`/v1/checkout/sessions/${result.id}`,result);
-    }else if(path==='/v1/invoices/create_preview'){result={total:1250,currency:'usd'};}
+    }else if(path==='/v1/invoices/create_preview'){result={total:1250,currency:'usd',livemode:false,customer:body.customer};}
     else if(path==='/v1/subscription_schedules'){
       const sub=remote.get(`/v1/subscriptions/${body.from_subscription}`);
       result={id:sub.id==='sub_fixtureA'?'sub_sched_fixture':'sub_sched_staged',customer:sub.customer,subscription:sub.id,status:'active',current_phase:{start_date:sub.items.data[0].current_period_start}};
