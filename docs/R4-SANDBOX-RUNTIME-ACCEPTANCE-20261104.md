@@ -1,5 +1,11 @@
 # R3/R4 current acceptance checkpoint
 
+## Current follow-on R5 checkpoint — 12 November 2026
+
+The [canonical R5 ledger](R5-RECOVERY-IMPLEMENTATION-20261112.md#passing-genuine-stripe-evidence--12-november-2026) supersedes the older follow-on status below. Stripe test-clock failure history is fixed in merged #583, and genuine isolated API/application-service acceptance passed 24 checks in [43194909443](https://github.com/WasanthaK/khrental/actions/runs/43194909443): renewal, failure, clock-controlled grace expiry, recovery within/after grace and event replay. Source validation passed 1,397 tests and both SQL workflows. No Cloud Browser access was used for the passing test. Evia is paused by user direction.
+
+This source/API acceptance is not a production deployment or closure of the original retained quantity-reduction and deployed receiver-ledger cases. The release number in the dated 11 November note is historical, not a fresh current-serving-version assertion. Do not repeat completed recovery/cessation/restore/split or signing work. R3/R4 owner closure remains unchanged; R5 rollout and broader launch exits remain held.
+
 ## Follow-on R5 status — 11 November 2026
 
 This file preserves the R3/R4 closure evidence at its original dates. Current R5 source and acceptance are in the [execution plan](EXECUTION-PLAN.md), [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) and [inventory/cessation release note](R5-INVENTORY-CESSATION-RELEASE-20261110.md). Later sandbox and operational progress does not reopen the owner-closed milestones or certify launch readiness.
