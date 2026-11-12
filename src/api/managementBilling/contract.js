@@ -299,3 +299,22 @@ export const restorationPolicy=(account,target,now=billingClock.now())=>{
   }
   return access.state;
 };
+
+
+export const splitPolicy=(account,now=billingClock.now())=>{
+  const access=entitlement(account,now);
+  if(account?.risk_hold){throw problem(409,'BILLING_SPLIT_REVIEW','Resolve the billing review hold before splitting this dwelling.');}
+  if(access.state==='complimentary'){return 'complimentary';}
+  if(account?.cancel_at_period_end){throw problem(409,'BILLING_SPLIT_RENEWAL_REQUIRED','Keep the subscription renewing before scheduling split capacity. No renewal was changed.');}
+  if(!['active','grace'].includes(access.state)){throw problem(409,'BILLING_SPLIT_PAYMENT_REQUIRED','Restore paid or complimentary management access before splitting this dwelling.');}
+  return access.state;
+};
+export const splitUnits=(propertyId,units)=>{
+  const parent=identifier(propertyId);
+  if(!Array.isArray(units)||units.length<2||units.length>100){throw problem(400,'BILLING_SPLIT_UNITS_REQUIRED','Provide between two and 100 independent units.');}
+  const records=stagedStock(units.map(payload=>({kind:'unit',payload})));
+  if(records.some(r=>r.payload.propertyid!==parent)){throw problem(400,'BILLING_SPLIT_PARENT_MISMATCH','Every unit must belong to the reviewed property.');}
+  const labels=records.map(r=>r.payload.unitnumber.trim().toLowerCase());
+  if(new Set(labels).size!==labels.length){throw problem(400,'BILLING_SPLIT_DUPLICATE_LABEL','Give each unit a distinct name or number.');}
+  return records.map(r=>r.payload);
+};

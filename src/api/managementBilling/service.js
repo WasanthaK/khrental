@@ -1,10 +1,10 @@
-import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, hash, problem} from './contract.js';
+import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, splitPolicy, splitUnits, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
 import {requestObjectEvidence,uniqueProviderObject} from './recoveryEvidence.js';
 import {createRecoveryRunner,billingClock} from './recovery.js';
 import {createRecoveryJournal} from './recoveryJournal.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
-import {cessationCleanupRecovery,quantityRecovery,quantityScheduleBody,quantityScheduleMatches,scheduleFingerprint} from './recoveryQuantity.js';
+import {cessationCleanupRecovery,splitRecovery,splitScheduleBody,quantityRecovery,quantityScheduleBody,quantityScheduleMatches,scheduleFingerprint} from './recoveryQuantity.js';
 
 const safeUrl = (value, host) => {
   const url = new URL(value);
@@ -238,7 +238,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       inventoryHash:hash(proposedInventory),inventoryQuantity:inventory.length,proposedInventoryQuantity:proposedInventory.length,
       stagingEnabled:Boolean(store.stagingEnabled?.()),pendingStock:staged.map(row=>({id:row.id,kind:row.kind,
         label:JSON.parse(row.payload_json)[row.kind==='property'?'name':'unitnumber']})),
-      cessationEnabled:Boolean(store.cessationEnabled?.()),restorationEnabled:Boolean(store.restorationEnabled?.()),
+      cessationEnabled:Boolean(store.cessationEnabled?.()),splitEnabled:Boolean(store.splitEnabled?.()),restorationEnabled:Boolean(store.restorationEnabled?.()),
       ceasedStock:await store.ceasedStock?.(tenantId)||[],
       billedQuantity:account?.quantity || 0,pendingQuantity:account?.pending_quantity ?? null,
       status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account,clock.now()),
@@ -489,6 +489,29 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       return result;
     }
     if(account.stripe_subscription_id!==intent._subscriptionId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');}
+    if(row.kind==='split'){
+      if(!store.splitEnabled?.()){throw problem(503,'BILLING_SPLIT_UNAVAILABLE','Splitting dwellings is not available yet.');}
+      if(account.stripe_customer_id!==intent.customerId||account.stripe_price_id!==intent.priceId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The split billing binding changed.');}
+      const confirmed=intent.splitMode==='complimentary'?account:await reconcileLocked(q,account,{promoteCheckout:false});
+      if(splitPolicy(confirmed,new Date(row.checked_at).getTime())!==intent.splitMode){throw problem(409,'BILLING_SPLIT_STATE_CHANGED','Subscription access changed before split activation.');}
+      if(intent.splitMode!=='complimentary'){
+        if(confirmed.quantity!==result.currentQuantity||confirmed.stripe_item_id!==intent.itemId||confirmed.cancel_at_period_end||!result.schedule){
+          throw problem(409,'BILLING_QUANTITY_UNCONFIRMED','The current subscription no longer confirms this split.');
+        }
+        const schedule=await stripe.request('GET',`/v1/subscription_schedules/${result.schedule.id}`);
+        if(confirmed.stripe_schedule_id!==result.schedule.id||objectId(schedule.customer)!==intent.customerId||objectId(schedule.subscription)!==intent._subscriptionId||
+          schedule.livemode!==false||!quantityScheduleMatches(schedule,result.schedule.body)){
+          throw problem(409,'BILLING_SCHEDULE_UNCONFIRMED','The split renewal schedule changed before activation.');
+        }
+      }
+      const split=await store.activateSplitLocked(q,{tenantId:row.tenant_id,actorId:row.actor_id,id:row.id,...intent});
+      const inventory=await store.inventory(row.tenant_id,q);
+      if(hash(inventory)!==intent.preview.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','Activated units no longer match the reviewed split.');}
+      await q('UPDATE dbo.management_billing_accounts SET inventory_json=@inventory WHERE tenant_id=@tenantId',{tenantId:row.tenant_id,inventory:JSON.stringify(inventory)});
+      if(intent.splitMode!=='complimentary'){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=@quantity WHERE tenant_id=@tenantId',{tenantId:row.tenant_id,quantity:intent.preview.to});}
+      return {...split,splitCompleted:true,propertyId:intent.propertyId,currentQuantity:confirmed.quantity,
+        nextRenewalQuantity:intent.splitMode==='complimentary'?confirmed.pending_quantity??confirmed.quantity:intent.preview.to,timing:intent.preview.timing};
+    }
     if(row.kind==='restore'){
       if(account.stripe_customer_id!==intent.customerId||account.stripe_price_id!==intent.priceId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The restoration billing binding changed.');}
       if(!store.restorationEnabled?.()){throw problem(503,'BILLING_RESTORE_UNAVAILABLE','Restoring management is not available yet.');}
@@ -582,7 +605,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       }else if(confirmed.stripe_schedule_id){throw problem(409,'BILLING_SCHEDULE_UNCONFIRMED','An unexpected schedule needs review.');}
       if(inventory[0]?.stagedRecords?.length){await store.promoteStock(q,{tenantId:row.tenant_id,snapshot:inventory,commandId:row.id});}
       await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
-        {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to<confirmed.quantity?intent.preview.to:null});
+        {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to!==confirmed.quantity?intent.preview.to:null});
       return {currentQuantity:confirmed.quantity,nextRenewalQuantity:intent.preview.to,timing:intent.preview.timing,
         ...((intent.ending||intent.preview.to===0)?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:{}),
         ...(ceased?{managementEnded:true,propertyId:intent.propertyId,unitId:intent.unitId,ceasedAt:new Date(ceased.record.ceased_at).toISOString()}:{})};
@@ -594,6 +617,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(intent.scheduleId){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId:row.tenant_id});}
     return {cancelAtPeriodEnd:result.cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock}),
+    split:splitRecovery({store,stripe,clock}),
     restore:async args=>{
       if(args.job.intent.restoreMode==='complimentary'||args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from};}
       return quantityRecovery({store,stripe,clock})(args);
@@ -788,19 +812,21 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       if(checked.alreadyCeased||!checked.eligible||checked.inventoryHash!==inventoryHash){throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');}
       const inventory=await store.inventory(args.tenantId,q),remaining=inventory.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
       if(localOnly){return {localOnly:true,priceId:account.stripe_price_id,preview:{inventoryHash:hash(remaining),to:remaining.length,timing:'unchanged'}};}
-      if(remaining.length>account.quantity){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the managed inventory and billed quantity before ending management.');}
       const sub=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`),item=sub.items.data[0];
       const schedule=account.stripe_schedule_id?await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`):null;
       if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==account.stripe_subscription_id||objectId(schedule.customer)!==account.stripe_customer_id)){
         throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review.');
       }
-      if(cleanupMode){return {cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,
+      const renewalOnly=Boolean(store.splitEnabled?.()&&account.pending_quantity>account.quantity&&account.pending_quantity===inventory.length&&schedule&&
+        quantityScheduleMatches(schedule,splitScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:inventory.length})));
+      if(remaining.length>account.quantity&&!renewalOnly){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the managed inventory and billed quantity before ending management.');}
+      if(cleanupMode&&!renewalOnly){return {cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,
         periodEnd:item.current_period_end,trialStart:sub.trial_start??null,trialEnd:sub.trial_end??null,
         scheduleId:account.stripe_schedule_id||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
         preview:{from:account.quantity,to:remaining.length,inventoryHash:hash(remaining),timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'future_invoices'}};}
       const target=account.cancel_at_period_end?0:remaining.length;
-      const body=schedule&&target?quantityScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
-      return {ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,
+      const body=schedule&&target?(renewalOnly?splitScheduleBody:quantityScheduleBody)({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
+      return {renewalOnly,renewalMode:cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,
         scheduleId:account.stripe_schedule_id||null,phaseStart:schedule?.current_phase?.start_date||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
         preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body)),
         preview:{from:account.quantity,to:target,inventoryHash:hash(remaining),timing:target?'next_renewal':'cancel_at_renewal'}};
@@ -837,6 +863,35 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         phaseStart:schedule?.current_phase?.start_date||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,preview};
     },()=>{throw problem(409,'BILLING_RESTORE_REVIEW','This restoration requires its saved recovery intent.');});
   };
+  const splitPreview=async args=>{
+    if(!store.splitEnabled?.()){throw problem(503,'BILLING_SPLIT_UNAVAILABLE','Splitting dwellings is not available yet.');}
+    await stripe.assertAccount();
+    return store.locked(args.tenantId,async q=>{
+      const current=await requireAccount(args.tenantId,q);
+      if(entitlement(current,clock.now()).state!=='complimentary'){await reconcileLocked(q,current,{promoteCheckout:false});}
+      const checked=await store.splitPreviewLocked(q,args);
+      return {...checked,proposed:undefined,timing:checked.mode==='complimentary'?'unchanged':'next_renewal'};
+    });
+  };
+  const splitStock=async args=>{
+    if(!store.splitEnabled?.()){throw problem(503,'BILLING_SPLIT_UNAVAILABLE','Splitting dwellings is not available yet.');}
+    const {propertyId,inventoryHash,reason}=args,units=splitUnits(propertyId,args.units);
+    return journalCommand(args,'split',{propertyId,units,inventoryHash,reason},async(q,current)=>{
+      const account=entitlement(current,clock.now()).state==='complimentary'?current:await reconcileLocked(q,current,{promoteCheckout:false});
+      const checked=await store.reserveSplitLocked(q,{...args,units});
+      const preview={from:account.quantity,to:checked.to,inventoryHash:checked.proposedHash,timing:checked.mode==='complimentary'?'unchanged':'next_renewal'};
+      if(checked.mode==='complimentary'){return {splitMode:checked.mode,units:checked.records,unitsHash:checked.unitsHash,priceId:account.stripe_price_id,preview};}
+      const sub=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`),item=sub.items.data[0];
+      const schedule=account.stripe_schedule_id?await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`):null;
+      if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==sub.id||objectId(schedule.customer)!==account.stripe_customer_id)){
+        throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review before splitting.');
+      }
+      const body=schedule?splitScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:checked.to}):null;
+      return {splitMode:checked.mode,units:checked.records,unitsHash:checked.unitsHash,priceId:account.stripe_price_id,itemId:account.stripe_item_id,
+        periodEnd:item.current_period_end,scheduleId:account.stripe_schedule_id||null,phaseStart:schedule?.current_phase?.start_date||null,
+        scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body)),preview};
+    },()=>{throw problem(409,'BILLING_SPLIT_REVIEW','This split requires its saved recovery intent.');});
+  };
   const webhook=async event=>{
     await stripe.assertAccount();
     const supported=/^(checkout\.session\.(completed|async_payment_succeeded|async_payment_failed)|customer\.subscription\.(created|updated|deleted)|invoice\.(paid|payment_failed)|charge\.(refunded|dispute\.created)|radar\.early_fraud_warning\.created)$/;
@@ -865,5 +920,5 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       return {received:true};
     });
   };
-  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,webhook,price};
+  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,splitPreview,splitStock,webhook,price};
 };

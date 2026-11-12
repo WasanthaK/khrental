@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createProviderRecoveryHandlers} from '../../src/api/managementBilling/service.js';
 import {hash,BILLING_PORTAL} from '../../src/api/managementBilling/contract.js';
 import {createRecoveryRunner} from '../../src/api/managementBilling/recovery.js';
-import {quantityRecovery,cessationCleanupRecovery,scheduleFingerprint} from '../../src/api/managementBilling/recoveryQuantity.js';
+import {quantityRecovery,splitRecovery,cessationCleanupRecovery,scheduleFingerprint} from '../../src/api/managementBilling/recoveryQuantity.js';
 import {cancellationRecovery} from '../../src/api/managementBilling/recoveryCancellation.js';
 
 // Process-crash fixture only: disk substitutes for SQL and the provider. Real
@@ -31,9 +31,10 @@ if(scenario.startsWith('cleanup_')){
     preview:{from:2,to:3,inventoryHash:hash(inventory),expiresAt:new Date(now+600000).toISOString(),prorationDate:now/1000}});
   if(scenario==='checkout'){job.intent.customerId=null;job.intent._subscriptionId=null;}
 }else if(scenario!=='cancellation'){
-  const target={increase:3,reduction:1,zero:0}[scenario.replace(/^restore_/,'')];
+  const target={increase:3,reduction:1,zero:0}[scenario.replace(/^(restore_|split_)/,'')];
   if(target===undefined){throw new Error('Unknown scenario');}
-  job.kind=scenario.startsWith('restore_')?'restore':'quantity_apply';
+  job.kind=scenario.startsWith('split_')?'split':scenario.startsWith('restore_')?'restore':'quantity_apply';
+  if(job.kind==='split'){job.intent.splitMode='active';job.intent.units=[{id:'unit-a'},{id:'unit-b'}];job.intent.unitsHash=hash(job.intent.units);}
   if(job.kind==='restore'){job.intent.restoreMode='active';}
   Object.assign(job.intent,{itemId:'si_test',priceId:'price_test',periodEnd:Math.floor(now/1000)+86400,
     preview:{from:2,to:target,prorationDate:Math.floor(now/1000),
@@ -121,7 +122,7 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
   save('provider.json',provider);stop('after_provider_effect',step);
   return object;
 }};
-const store={account:async()=>({stripe_subscription_id:job.intent._subscriptionId,stripe_customer_id:job.intent.customerId,stripe_price_id:'price_test',quantity:2}),inventory:async()=>inventory};
+const store={splitEnabled:()=>true,read:async()=>job.intent.units.map(p=>({id:p.id,payload_json:JSON.stringify(p),payload_hash:hash(p)})),account:async()=>({stripe_subscription_id:job.intent._subscriptionId,stripe_customer_id:job.intent.customerId,stripe_price_id:'price_test',quantity:2}),inventory:async()=>inventory};
 const handlers=createProviderRecoveryHandlers({store,stripe,requireAccount:store.account,clock});
 await createRecoveryRunner({journal,clock,handlers:{cancellation:cancellationRecovery({store,stripe}),
-  quantity_apply:quantityRecovery({store,stripe,clock}),restore:quantityRecovery({store,stripe,clock}),...handlers,cessation:cessationCleanupRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});
+  split:splitRecovery({store,stripe,clock}),quantity_apply:quantityRecovery({store,stripe,clock}),restore:quantityRecovery({store,stripe,clock}),...handlers,cessation:cessationCleanupRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});

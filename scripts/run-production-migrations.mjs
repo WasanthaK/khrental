@@ -1,5 +1,5 @@
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
-import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation,inspectManagementRecovery,inspectManagementRestoration} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation,inspectManagementRecovery,inspectManagementRestoration,inspectManagementSplits} from './inspect-management-billing-schema.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -521,6 +521,12 @@ const MIGRATIONS = [
     file:'migrations/20261112_02_management_restoration.sql',
     inspect:inspectManagementRestoration,
     verify:async pool=>assertSatisfied(inspectManagementRestoration(pool),'Management restoration schema verification failed.')
+  },
+  {
+    id:'20261112_03_management_splits',
+    file:'migrations/20261112_03_management_splits.sql',
+    inspect:inspectManagementSplits,
+    verify:async pool=>assertSatisfied(inspectManagementSplits(pool),'Management split schema verification failed.')
   }
 ];
 

@@ -19,6 +19,23 @@ const PreparedStockForm=({busy,onAction,draft,onChange})=>{
     <button className={button} disabled={busy||!name.trim()}>Prepare dwelling</button>
   </form>;
 };
+const SplitForm=({item,busy,onAction})=>{
+  const [open,setOpen]=useState(false),[review,setReview]=useState(null),[reason,setReason]=useState('');
+  const [units,setUnits]=useState(()=>[1,2].map(n=>({id:crypto.randomUUID(),propertyid:item.propertyId,unitnumber:`Unit ${n}`})));
+  if(!open){return <button className={button} disabled={busy} onClick={()=>setOpen(true)}>Split into units</button>;}
+  return <form aria-label={`Split ${item.label}`} className="w-full space-y-3 rounded-xl border border-teal-200 bg-teal-50 p-4" onSubmit={async e=>{
+    e.preventDefault();const result=await onAction('stock/split-preview',{propertyId:item.propertyId,units});if(result){setReview(result);}
+  }}>
+    <h3 className="font-semibold">Split: {item.label}</h3>
+    <p>Keep the original property and rental history. Units become managed together after confirmation. An existing whole-property tenancy must close before any unit can be offered or let.</p>
+    {units.map((unit,index)=><label key={unit.id} className="block">Unit {index+1} name<input required maxLength={100} className="mt-1 w-full rounded-lg border p-2" value={unit.unitnumber} disabled={busy||Boolean(review)} onChange={e=>setUnits(units.map(u=>u.id===unit.id?{...u,unitnumber:e.target.value}:u))}/></label>)}
+    {!review?<div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||units.length>=100} onClick={()=>setUnits([...units,{id:crypto.randomUUID(),propertyid:item.propertyId,unitnumber:`Unit ${units.length+1}`}])}>Add another unit</button><button className={button} disabled={busy}>Review split</button><button type="button" className={button} disabled={busy} onClick={()=>setOpen(false)}>Cancel</button></div>:<>
+      <p>{review.to} managed dwellings after this split. {review.mode==='complimentary'?'Complimentary access keeps its existing expiry. Subscription obligations remain unchanged.':`Billed quantity remains ${review.from} this period and becomes ${review.to} at renewal. No immediate charge or proration. Existing unpaid invoices and grace expiry remain unchanged.`}</p>
+      <label className="block">Reason for splitting<textarea className="mt-1 w-full rounded-lg border p-2" maxLength={1000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/></label>
+      <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||reason.trim().length<10} onClick={async()=>{const result=await onAction('stock/split',{propertyId:item.propertyId,units,inventoryHash:review.inventoryHash,reason});if(result){setOpen(false);setReview(null);}}}>Confirm split</button><button type="button" className={button} disabled={busy} onClick={()=>setReview(null)}>Edit units</button></div>
+    </>}
+  </form>;
+};
 export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason,restoration,restorationReason='',onRestorationReason})=>{
   const reductionScheduled=Number.isSafeInteger(data?.pendingQuantity)&&data.pendingQuantity>0
     &&data.pendingQuantity<data.billedQuantity&&!data.cancelAtPeriodEnd;
@@ -30,7 +47,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Sandbox test · No live charging</strong><p className="mt-1">This test does not change your workspace’s existing access. Rent, deposits and renter documents are separate from this subscription.</p></div>
   {error&&<p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{error} <button onClick={onReload} className="underline">Retry</button></p>}
   {notice&&<p role="status" className="rounded-xl bg-slate-100 p-4 text-slate-800">{notice}</p>}
-  {loading?<p role="status">Loading subscription…</p>:data&&<>
+  {loading&&!data?<p role="status">Loading subscription…</p>:data&&<>
     <div className="grid gap-4 sm:grid-cols-3">{[['Managed dwellings',data.inventoryQuantity],['Current billed quantity',data.billedQuantity],['Subscription',data.status.replaceAll('_',' ')]].map(([title,value])=><section key={title} className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-sm text-slate-500">{title}</h2><p className="mt-2 text-2xl font-semibold capitalize">{value}</p></section>)}</div>
     {data.stagingEnabled&&<section aria-labelledby="prepared-stock-title" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
       <h2 id="prepared-stock-title" className="text-xl font-semibold">Prepare additions</h2>
@@ -41,6 +58,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
         <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed {data.proposedInventoryQuantity===1?'dwelling':'dwellings'}. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
       </div>}
     </section>}
+    {data.pendingQuantity>data.billedQuantity&&!data.cancelAtPeriodEnd&&<section className="rounded-2xl border border-teal-200 bg-teal-50 p-5"><h2 className="text-xl font-semibold">Scheduled quantity increase</h2><p className="mt-2">Your billed quantity remains {data.billedQuantity} this period and becomes {data.pendingQuantity} at renewal{renewalDate?` on ${renewalDate} (UTC)`:''}. The split creates no immediate charge or proration.</p></section>}
     {reductionScheduled&&<section aria-labelledby="scheduled-quantity-title" className="rounded-2xl border border-teal-200 bg-teal-50 p-5 text-teal-950">
       <h2 id="scheduled-quantity-title" className="text-xl font-semibold">Scheduled quantity reduction</h2>
       <p className="mt-2">Your billed quantity will change from <strong>{data.billedQuantity}</strong> to <strong>{data.pendingQuantity}</strong> at your next renewal{renewalDate?` on ${renewalDate} (UTC)`:''}.</p>
@@ -57,7 +75,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
         </div>
         {data.pendingOperation&&<div className="space-y-2 text-sm text-amber-800">
           <p>An operation is awaiting confirmation: {data.pendingOperation.kind.replaceAll('_',' ')}.</p>
-          <button className={button} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind==='cessation'?'stock/cessation':data.pendingOperation.kind==='restore'?'stock/restore':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button>
+          <button className={button} disabled={busy} onClick={()=>onAction(data.pendingOperation.kind==='quantity_preview'?'quantity-preview':data.pendingOperation.kind==='quantity_apply'?'quantity-apply':data.pendingOperation.kind==='cessation'?'stock/cessation':data.pendingOperation.kind==='restore'?'stock/restore':data.pendingOperation.kind==='split'?'stock/split':data.pendingOperation.kind,data.pendingOperation.payload,data.pendingOperation.id)}>Retry unfinished operation</button>
           {(data.pendingOperation.kind==='quantity_apply'||(data.pendingOperation.kind==='cancellation'&&data.pendingOperation.payload.cancelAtPeriodEnd===true))&&<div>
             <p>If a cancellation was interrupted, check whether it already took effect. This check does not repeat the change.</p>
             <button className={`${button} mt-2`} disabled={busy} onClick={()=>onAction('reconcile-cancellation',{},data.pendingOperation.id)}>Check cancellation result</button>
@@ -96,7 +114,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
       <h2 className="text-xl font-semibold">Management ended</h2><p className="mt-1 text-sm text-slate-500">Review available capacity before restoring a retained dwelling. Cancelled subscriptions require explicit reactivation.</p>
       <ul className="mt-4 divide-y divide-slate-100">{data.ceasedStock.map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span><button className={button} disabled={busy} onClick={()=>onAction('stock/restoration-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review restoration</button></li>)}</ul>
     </section>}
-    <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span>{data.cessationEnabled&&<button className={button} disabled={busy} onClick={()=>onAction('stock/cessation-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review ending management</button>}</li>)}</ul></section>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span>{data.splitEnabled&&!item.unitId&&<SplitForm item={item} busy={busy} onAction={onAction}/>} {data.cessationEnabled&&<button className={button} disabled={busy} onClick={()=>onAction('stock/cessation-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review ending management</button>}</li>)}</ul></section>
   </>}
 </div>;
 };
@@ -118,19 +136,21 @@ export default function ManagementSubscription(){
     let requestId=resumeId || requests.current.get(key);
     if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
     try{
-      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')&&!['stock/cessation','stock/restore'].includes(kind)?payload:{...payload,requestId}});
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')&&!['stock/cessation','stock/restore','stock/split'].includes(kind)?payload:{...payload,requestId}});
       if(context.current!==scope){return;}
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
+      if(kind==='stock/split-preview'){return result;}
       if(kind==='stock/restoration-preview'){setRestoration(result);setRestorationReason('');setCessation(null);setPreview(null);}
       else if(kind==='stock/cessation-preview'){setRestoration(null);setCessation(result);setCessationReason('');setPreview(null);}
       else if(kind==='quantity-preview'){setRestoration(null);setPreview(result);setCessation(null);}
       else{setRestoration(null);setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
+      if(kind==='stock/split'){setNotice('Units are now managed. The original property and rental history remain available.');}
       if(kind==='stock/restore'){setNotice('Management restored from now. Previous records remain available; no billing was backdated.');}
       if(kind==='stock/prepare'){setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});}
       if(kind==='stock/cessation'){setNotice(result.cleanupMode?'Management ended. Existing invoices remain payable; no new charge or credit was created. Historical records remain available.':result.billingUnchanged?'Management ended. Subscription and existing invoices are unchanged; historical records remain available.':'Management ended. Billing changes apply at renewal; historical records remain available.');}
       await load();
-      return true;
+      return result;
     }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500){requests.current.delete(key);}await load();}}finally{if(context.current===scope){setBusy(false);}}
   };
   return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason,restoration,restorationReason}} onRestorationReason={setRestorationReason} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;

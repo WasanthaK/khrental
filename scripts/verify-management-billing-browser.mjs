@@ -50,9 +50,23 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial','restore-paid','restore-ending','restore-complimentary','restore-additional']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial','restore-paid','restore-ending','restore-complimentary','restore-additional','split-active','split-complimentary']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
-    if(scenario==='zero-preview'){
+    if(scenario.startsWith('split-')){
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Split into units').click());
+     await page.type('form[aria-label^="Split"] input',' A');
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Review split').click());
+     await page.waitForSelector('form textarea');
+     const text=await page.$eval('form[aria-label^="Split"]',el=>el.innerText);
+     assert.match(text,/original property and rental history/);
+     assert.match(text,scenario==='split-active'?/No immediate charge or proration/:/keeps its existing expiry/);
+     await page.type('form textarea','Split for independent management from now.');
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm split').focus());
+     await page.screenshot({path:path.join(output,`subscription-${scenario}-review-${width}.png`),fullPage:true});
+     await page.keyboard.press('Enter');
+     await page.waitForFunction(()=>window.splitPayload?.units.length===2);
+     assert.equal(await page.evaluate(()=>window.splitPayload.units[0].unitnumber),'Unit 1 A');
+    }else if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
      assert.ok(confirm);
      const text=await page.$eval('body',el=>el.innerText);

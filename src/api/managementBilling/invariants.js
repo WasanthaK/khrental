@@ -4,8 +4,8 @@ import {billingClock} from './recovery.js';
 
 // Compares three distinct facts: current paid capacity, managed inventory, and
 // verified renewal quantity. This function never proposes a corrective write.
-export const billingInvariants=({account,inventory,commands=[],subscription=null,schedule=null,trialCleanup=null,now})=>{
-  const issues=[];
+export const billingInvariants=({account,inventory,commands=[],subscription=null,schedule=null,trialCleanup=null,splitIssues=[],now})=>{
+  const issues=[...splitIssues];
   const state=entitlement(account,now).state;
   if(!account){return {status:'not_enrolled',issues:[],managedQuantity:inventory.length,entitlement:state};}
   const current=account.quantity||0;
@@ -55,6 +55,13 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
 export const createBillingInvariantInspector=({store,stripe,clock=billingClock})=>{
   const snapshot=tenantId=>store.locked(tenantId,async q=>({
     account:await store.account(tenantId,q),inventory:await store.inventory(tenantId,q),
+    splitIssues:store.splitEnabled?.()?await(async()=>{
+      const rows=await q(`SELECT s.command_id,s.state,c.status,
+        (SELECT COUNT(*) FROM dbo.management_inventory_split_units r WHERE r.command_id=s.command_id) AS reserved,
+        (SELECT COUNT(*) FROM dbo.property_units u WHERE u.split_operation_id=s.command_id AND u.tenant_id=s.tenant_id AND u.propertyid=s.property_id AND u.parent_stock_id=s.property_id AND u.stock_type='apartment_unit') AS live
+        FROM dbo.management_inventory_splits s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE s.tenant_id=@tenantId`,{tenantId});
+      return rows.some(r=>r.state==='active'?(r.status!=='completed'||r.live!==r.reserved||r.live<2):r.live!==0)?['SPLIT_INVENTORY_STATE']:[];
+    })():[],
     trialCleanup:store.recoveryEnabled?.()?await (async()=>{
       const rows=await q(`SELECT TOP (1) r.intent_json,c.result_json FROM dbo.management_billing_commands c
         JOIN dbo.management_billing_recovery r ON r.command_id=c.id WHERE c.tenant_id=@tenantId AND c.kind='cessation'

@@ -30,6 +30,7 @@ function Fixture(){
   if(scenario==='interrupted-cancellation'){data.pendingOperation={id:'fixture-interrupted',kind:'cancellation',payload:{cancelAtPeriodEnd:true}};}
   if(['staged-stock','staged-stock-failure'].includes(scenario)){Object.assign(data,{enrolled:false,stagingEnabled:true,inventoryQuantity:0,billedQuantity:0,status:'not_enrolled',inventory:[],
     pendingStock:[{id:'staged-home',kind:'property',label:'Prepared home'}],proposedInventoryQuantity:1});}
+  if(scenario?.startsWith('split-')){Object.assign(data,{splitEnabled:true,pendingQuantity:null,inventoryQuantity:1,billedQuantity:1,inventory:[{key:'property:split',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,label:'Retained family home'}]});}
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
   const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:scenario==='cessation-local'?'unchanged':'cancel_at_renewal',eligible:scenario!=='cessation-blocked',blockers:scenario!=='cessation-blocked'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
   if(cessation&&['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(cessation,{cleanupMode:scenario==='cessation-grace'?'grace':'trial',remainingManagedDwellings:scenario==='cessation-grace'?1:0,timing:scenario==='cessation-grace'?'future_invoices':'cancel_at_renewal'});}
@@ -44,6 +45,8 @@ function Fixture(){
         setTimeout(()=>{setLoading(false);setNotice('Please retry your prepared addition.');},100);return false;
       }
       setNotice(`Fixture action: ${kind}`);
+      if(kind==='stock/split-preview'){return {to:2,from:1,mode:scenario==='split-complimentary'?'complimentary':'active',inventoryHash:'a'.repeat(64)};}
+      if(kind==='stock/split'){window.splitPayload=payload;return {splitCompleted:true};}
     }} onReload={()=>{}}/>;
  }
  if(screen==='complimentary'){return <><h1 className="mx-auto max-w-6xl p-6 text-3xl font-semibold">Management access</h1><ManagementComplimentaryView

@@ -46,6 +46,12 @@ export const createRecoveryJournal=({store,complete})=>{
     if(row.kind==='checkout'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
     }
+    if(row.kind==='split'){
+      const preview=await store.splitPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
+      if(preview.mode!==intent.splitMode||preview.inventoryHash!==intent.inventoryHash||preview.proposedHash!==intent.preview.inventoryHash||preview.unitsHash!==intent.unitsHash){
+        throw problem(409,'BILLING_SPLIT_STATE_CHANGED','The reviewed split changed before billing.');
+      }
+    }
     if(row.kind==='restore'){
       const preview=await store.restorationPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
       if(preview.mode!==intent.restoreMode||preview.inventoryHash!==intent.inventoryHash||preview.proposedHash!==intent.preview.inventoryHash||preview.controlId!==intent.controlId){
@@ -96,6 +102,17 @@ export const createRecoveryJournal=({store,complete})=>{
   const fail=args=>store.locked(args.tenantId,async q=>{
     const row=await load(q,args.tenantId,args.id);
     if(!row||row.state!=='running'||String(row.lease_token).toLowerCase()!==String(args.token).toLowerCase()){return {review:false};}
+    // A persisted external-step intent may already have reached the provider.
+    // Only absence of every such intent proves that private reservations can
+    // be released. Otherwise retain them and roll forward under review.
+    if(args.review&&row.kind==='split'&&store.splitEnabled?.()){
+      const external=await q("SELECT name FROM dbo.management_billing_steps WHERE command_id=@id AND name<>'reserve_split_units'",{id:args.id});
+      if(!external.length){
+        await q("DELETE dbo.management_inventory_split_units WHERE command_id=@id; UPDATE dbo.management_inventory_splits SET state='aborted' WHERE command_id=@id AND state='reserved'; UPDATE dbo.management_billing_commands SET status='failed',completed_at=SYSUTCDATETIME() WHERE id=@id",{id:args.id});
+        await store.audit(q,{tenantId:args.tenantId,actorId:row.actor_id,action:'inventory.split.compensated',resourceId:args.id,
+          current:{reservationReleased:true},reason:'Private reservation released before any external billing step was prepared.'});
+      }
+    }
     await q(`UPDATE dbo.management_billing_recovery SET state=@state,last_error=@code,lease_token=NULL,lease_until=NULL,
       next_attempt_at=DATEADD(second,@delay,SYSUTCDATETIME()),updated_at=SYSUTCDATETIME() WHERE command_id=@id`,
     {id:args.id,state:args.review?'failed_needs_review':'pending',code:args.code,delay:args.delaySeconds});

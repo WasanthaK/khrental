@@ -10,6 +10,11 @@ export const quantityScheduleBody=({phaseStart,periodEnd,priceId,from,to})=>({
     {start_date:phaseStart,end_date:periodEnd,items:[{price:priceId,quantity:Math.max(from,to)}],proration_behavior:'none'},
     {start_date:periodEnd,duration:{interval:'month',interval_count:1},items:[{price:priceId,quantity:to}],proration_behavior:'none'}]
 });
+export const splitScheduleBody=args=>{
+  const body=quantityScheduleBody(args);
+  body.proration_behavior='none';body.phases[0].items[0].quantity=args.from;
+  return body;
+};
 export const quantityScheduleMatches=(schedule,body)=>{
   const matches=(actual,expected)=>actual?.items?.length===1&&objectId(actual.items[0].price)===expected.items[0].price&&
     actual.items[0].quantity===expected.items[0].quantity&&actual.proration_behavior==='none';
@@ -35,7 +40,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
     const value=await stripe.request('GET',`/v1/subscriptions/${intent._subscriptionId}`),item=value.items?.data?.[0];
     if(value.id!==intent._subscriptionId||value.livemode!==false||objectId(value.customer)!==intent.customerId||
       value.items?.data?.length!==1||item?.id!==intent.itemId||objectId(item?.price)!==intent.priceId||
-      value.status!==(job.kind==='restore'&&intent.restoreMode==='grace'?'past_due':'active')||value.cancel_at_period_end||value.trial_start||value.trial_end){
+      value.status!==((job.kind==='restore'&&intent.restoreMode==='grace')||(job.kind==='split'&&intent.splitMode==='grace')||(job.kind==='cessation'&&intent.renewalOnly&&intent.renewalMode==='grace')?'past_due':'active')||value.cancel_at_period_end||value.trial_start||value.trial_end){
       throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription terms need review before quantity recovery.');
     }
     return value;
@@ -53,7 +58,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
   const key=`quixo:${tenantId}:${id}`;
   const before=await subscription();
   let confirmedSchedule=null;
-  if(preview.to<preview.from||intent.scheduleId){
+  if(job.kind==='split'||intent.renewalOnly||preview.to<preview.from||intent.scheduleId){
     let saved=intent.scheduleId?{scheduleId:intent.scheduleId,phaseStart:intent.phaseStart,fingerprint:intent.scheduleFingerprint}:null;
     if(!saved){
       saved=await step('create_schedule',{
@@ -74,7 +79,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
         write:(input,stepKey)=>stripe.request('POST','/v1/subscription_schedules',{from_subscription:input.subscriptionId},stepKey)
       });
     }
-    const body=quantityScheduleBody({phaseStart:saved.phaseStart,periodEnd:intent.periodEnd,priceId:intent.priceId,from:preview.from,to:preview.to});
+    const body=(job.kind==='split'||intent.renewalOnly?splitScheduleBody:quantityScheduleBody)({phaseStart:saved.phaseStart,periodEnd:intent.periodEnd,priceId:intent.priceId,from:preview.from,to:preview.to});
     await step('set_schedule_phases',{
       input:{scheduleId:saved.scheduleId,body},key:`${key}:phases`,
       read:async input=>{
@@ -116,7 +121,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
   }else if(before.items.data[0].quantity!==preview.from||objectId(before.schedule)){
     throw problem(409,'BILLING_PREVIEW_STALE','The unchanged quantity preview no longer matches.');
   }
-  return {currentQuantity:Math.max(preview.from,preview.to),nextRenewalQuantity:preview.to,timing:preview.timing,...(confirmedSchedule?{schedule:confirmedSchedule}:{})};
+  return {currentQuantity:job.kind==='split'||intent.renewalOnly?preview.from:Math.max(preview.from,preview.to),nextRenewalQuantity:preview.to,timing:preview.timing,...(confirmedSchedule?{schedule:confirmedSchedule}:{})};
 };
 
 // Legacy grace/trial cleanup only. The service must persist reviewed intent and
@@ -199,4 +204,25 @@ export const cessationCleanupRecovery=({store,stripe,clock=billingClock})=>async
   });
   return {currentQuantity:cancel?preview.from:preview.to,nextRenewalQuantity:cancel?0:preview.to,
     cancelAtPeriodEnd:cancel,timing:cancel?'cancel_at_renewal':'future_invoices'};
+};
+
+export const splitRecovery=({store,stripe,clock=billingClock})=>async args=>{
+  const {job,step}=args,{intent,tenant_id:tenantId,id}=job;
+  if(job.kind!=='split'||!store.splitEnabled?.()){throw problem(503,'BILLING_SPLIT_UNAVAILABLE','Splitting dwellings is not available yet.');}
+  await step('reserve_split_units',{
+    input:{propertyId:intent.propertyId,unitsHash:intent.unitsHash},key:`quixo:${tenantId}:${id}:reserve`,
+    read:async()=>{
+      const rows=await store.read(`SELECT u.id,u.payload_json,u.payload_hash FROM dbo.management_inventory_split_units u
+        JOIN dbo.management_inventory_splits s ON s.command_id=u.command_id
+        WHERE s.command_id=@id AND s.tenant_id=@tenantId AND s.property_id=@propertyId AND s.state='reserved'`,{id,tenantId,propertyId:intent.propertyId});
+      if(!Array.isArray(intent.units)||rows.length!==intent.units.length||hash(intent.units)!==intent.unitsHash||rows.some(row=>
+        hash(JSON.parse(row.payload_json))!==row.payload_hash||!intent.units.some(unit=>unit.id===String(row.id).toLowerCase()&&hash(unit)===row.payload_hash))){
+        throw problem(409,'BILLING_SPLIT_RESERVATION_CHANGED','The reserved units no longer match this split.');
+      }
+      return {confirmed:true,result:{unitCount:rows.length,unitsHash:intent.unitsHash}};
+    },
+    write:async()=>{throw problem(409,'BILLING_SPLIT_RESERVATION_CHANGED','Split reservation must precede billing.');}
+  });
+  if(intent.splitMode==='complimentary'){return {currentQuantity:intent.preview.from};}
+  return quantityRecovery({store,stripe,clock})(args);
 };
