@@ -522,3 +522,32 @@ test('missing failure history cannot invent grace and incomplete pagination cann
   assert.equal(await firstRenewalFailure({stripe:{request:async()=>{calls++;}},invoice:failure,account,now}),null);
   assert.equal(calls,0);
  });
+
+test('test-clock failure history uses real clock creation, not future simulated invoice dates',async()=>{
+  const clockCreated=now/1000-60;
+  const failure={...invoice,created:now/1000+60*86400,test_clock:'clock_acceptance'};
+  const events=[30,10].map(seconds=>({id:`evt_${seconds}`,type:'invoice.payment_failed',livemode:false,created:clockCreated+seconds,data:{object:failure}}));
+  const calls=[];
+  const stripe={request:async(method,path,params)=>{
+    calls.push({method,path,params});
+    if(path==='/v1/test_helpers/test_clocks/clock_acceptance'){return {id:'clock_acceptance',livemode:false,created:clockCreated};}
+    return {data:events,has_more:false};
+  }};
+  assert.equal(await firstRenewalFailure({stripe,invoice:failure,account,now}),new Date((clockCreated+10)*1000).toISOString());
+  assert.equal(calls[1].params.created.gte,clockCreated);
+});
+
+test('test-clock history rejects unverified clocks and cannot restart expired retained history',async()=>{
+  const failure={...invoice,created:now/1000+86400,test_clock:'clock_acceptance'};
+  for(const clock of [
+    {id:'clock_other',livemode:false,created:now/1000-60},
+    {id:'clock_acceptance',livemode:true,created:now/1000-60},
+    {id:'clock_acceptance',livemode:false,created:now/1000+1},
+    {id:'clock_acceptance',livemode:false,created:0}
+  ]){
+    await assert.rejects(firstRenewalFailure({stripe:{request:async()=>clock},invoice:failure,account,now}),{code:'BILLING_FAILURE_TIME_UNCONFIRMED'});
+  }
+  let calls=0;
+  assert.equal(await firstRenewalFailure({stripe:{request:async()=>{calls++;return {id:'clock_acceptance',livemode:false,created:now/1000-31*86400};}},invoice:failure,account,now}),null);
+  assert.equal(calls,1,'Expired clock history must not select a recent retry');
+});
