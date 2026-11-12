@@ -227,6 +227,23 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
     assert.equal((await store.read('SELECT name FROM dbo.management_billing_steps WHERE command_id=@id',{id})).length,0);
     assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='inventory.ceased'",{id})).length,1);
   }
+  // A grant can expire after intent but before a resumed completion. Never
+  // silently route that saved no-write operation into a provider mutation.
+  const changedProperty=crypto.randomUUID(),changedId=crypto.randomUUID();
+  sub.status='active';
+  await store.locked(tenantId,async q=>{
+    await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code) VALUES(@id,@tenantId,'Changed entitlement fixture','house','LK')",{id:changedProperty,tenantId});
+    await q("UPDATE dbo.management_billing_accounts SET comp_type='fixed',comp_expires_at=DATEADD(day,1,SYSUTCDATETIME()),subscription_status='active',paid_through=DATEADD(day,30,SYSUTCDATETIME()) WHERE tenant_id=@tenantId",{tenantId});
+  });
+  const changedPreview=await service.cessationPreview({tenantId,actorId,propertyId:changedProperty});
+  const changedArgs={tenantId,actorId,id:changedId,propertyId:changedProperty,inventoryHash:changedPreview.inventoryHash,reason:'Changed entitlement recovery proof.'};
+  failCompletion=true;await assert.rejects(service.ceaseStock(changedArgs),/Synthetic cessation audit rollback/);
+  await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_accounts SET comp_expires_at=DATEADD(second,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId',{tenantId}));
+  await due(changedId);const writesBeforeReview=writes.length;
+  await assert.rejects(service.ceaseStock(changedArgs),{code:'BILLING_CESSATION_STATE_CHANGED'});
+  assert.equal(writes.length,writesBeforeReview);
+  assert.equal((await store.read('SELECT id FROM dbo.management_inventory_controls WHERE id=@id',{id:changedId})).length,0);
+  assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id:changedId}))[0].state,'failed_needs_review');
   console.log('PASS: seven no-write cessation states, rollback/retry, retained billing obligations and exactly one cessation audit');
   console.log('PASS: real SQL customer/Checkout response-loss recovery, open-session reuse, cross-tenant denial, portal evidence/expiry/configuration, exact preview retry and cessation completion; synthetic provider');
 };

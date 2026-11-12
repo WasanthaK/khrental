@@ -11,6 +11,7 @@ const matrix=[
  ['complimentary',{...paid,comp_type:'ongoing'},true],
  ['fixed complimentary',{comp_type:'fixed',comp_expires_at:'2026-11-13T00:00:00Z'},true],
  ['grace provider reduction pending',{...paid,subscription_status:'past_due',grace_started_at:'2026-11-11T00:00:00Z'},false],
+ ['past due without failure evidence',{...paid,subscription_status:'past_due'},false],
  ['incomplete',{subscription_status:'incomplete'},true],['incomplete expired',{subscription_status:'incomplete_expired'},true],
  ['unpaid',{...paid,subscription_status:'unpaid'},true],
  ['grace expired',{...paid,subscription_status:'past_due',grace_started_at:'2026-11-05T00:00:00Z'},true],

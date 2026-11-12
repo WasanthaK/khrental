@@ -186,7 +186,8 @@ export const localCessationAllowed = (account, now = billingClock.now()) => {
   if(!account||account.risk_hold){return false;}
   if(access.state==='complimentary'){return true;}
   return ['incomplete','incomplete_expired','unpaid','canceled'].includes(account.subscription_status)||
-    (account.subscription_status==='past_due'&&access.state==='read_only');
+    (account.subscription_status==='past_due'&&account.initial_payment_verified&&
+      Number.isFinite(Date.parse(account.grace_started_at))&&Date.parse(account.grace_started_at)+7*86400000<=now);
 };
 
 // Source preparation only: no organization is opted into write enforcement by

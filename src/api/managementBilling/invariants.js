@@ -36,8 +36,8 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
       }else if(!ending&&account.pending_quantity!==null&&account.pending_quantity!==undefined&&account.pending_quantity!==current){
         issues.push('MISSING_RENEWAL_SCHEDULE');
       }
-      // Complimentary is an access overlay: existing paid obligations remain,
-      // but changes made under it must not invent a new provider charge.
+      // Complimentary and nonpaying cessation retain provider obligations.
+      // Quantity equality is required again when paid/grace access resumes.
       if(!ending&&!localCessationAllowed(account,now)&&next!==inventory.length){issues.push('RENEWAL_INVENTORY_QUANTITY');}
     }
   }else if(subscription||account.stripe_item_id||account.stripe_schedule_id||current!==0){issues.push('ORPHANED_BILLING_STATE');}
