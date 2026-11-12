@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-12",
+  "status": "blocked_before_provider_execution",
+  "canonicalReconciliationPr": 592,
+  "harnessPr": 593,
+  "harnessMerge": "b00535122634c9be7b9ad213c06885973d2b8af7",
+  "transportPr": 594,
+  "transportMerge": "7a4ceffd52eee7ce701256b851d1624bfb564b48",
+  "loaderPr": 595,
+  "loaderMerge": "f25b42b0274daf4a1844413e0b0b9e1fa13ac7fc",
+  "finalHarnessCi": {
+    "run": 43209944179,
+    "tests": 1400,
+    "passed": 1400,
+    "lint": "passed",
+    "build": "passed"
+  },
+  "applicationSha": "59050153ad96b10be7c1990df846363a1642c046",
+  "revision": "khrental-app--0000491",
+  "workerEnabled": true,
+  "workerScopeCount": 1,
+  "applicationRedeployed": false,
+  "providerProofExecuted": false,
+  "genuineInterruptedOperationRecovered": false,
+  "liveCharge": false,
+  "attempts": [
+    {
+      "run": 43208835622,
+      "job": 131151038603,
+      "failure": "Azure startup-command WebSocket handshake 404 before execution",
+      "artifactId": 13940431674,
+      "artifactSha256": "2d5f7e79352a081d61e722e91037cc0018f4341f600ca7a2a58698aaa96d80a2"
+    },
+    {
+      "run": 43209524809,
+      "job": 131153261087,
+      "failure": "Node data-URL absolute import resolution during module linking, before acceptance execution",
+      "artifactId": 13939877466,
+      "artifactSha256": "7f80153f0c2ae78a6550ba977926699c7e92ae4b8295cbc9933ca60babe71a65"
+    },
+    {
+      "run": 43210336446,
+      "job": 131156018657,
+      "failure": "Azure exec HTTP 429 after payload chunks 0 and 1000; final module never executed",
+      "observedAt": "2026-11-12T11:35:28Z",
+      "retryAfterSeconds": 600,
+      "artifactId": 13941400632,
+      "artifactSha256": "cad2ece181fccd237610c3de0db27563a6c4325d5b2c53bb67c191d627a59cca"
+    }
+  ],
+  "retry": {
+    "notBefore": "2026-11-12T11:45:28Z",
+    "scheduled": false,
+    "workflow": "verify-deployed-portal-recovery.yml",
+    "branch": "main",
+    "expected_build": "59050153ad96b10be7c1990df846363a1642c046",
+    "customer": "cus_VZwNp9LMEdmlL9",
+    "subscription": "sub_1UYmVVQ4sARuLNQakc6Gat2Z",
+    "operation_id": "ce7208e7-bb54-4bc8-81db-8d837f0de221",
+    "confirmation": "VERIFY-SANDBOX-PORTAL-RECOVERY",
+    "existingOperationPolicy": "Inspect an existing command; never replace its ID blindly",
+    "partialPayloadPolicy": "Chunk zero overwrites the same operation-specific temporary file; SHA-256 verified before importing; file-module cleanup in finally"
+  },
+  "acceptanceBoundary": [
+    "Controlled response loss after a genuine restricted sandbox portal creation, recovered by the existing automatic worker using deployed SQL.",
+    "No manual recovery or SQL clock/lease/backoff edits; requires matching key/session/event, exactly one effect/step/audit and unchanged subscription/account.",
+    "Not a whole-process crash test, financial-operation acceptance, HTTP role acceptance or full R5 closure.",
+    "Do not advance the retained clock, repeat accepted signing, widen worker scope or retry paused Evia."
+  ]
+}
