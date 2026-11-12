@@ -1,3 +1,4 @@
+import {billingClock} from './clock.js';
 import crypto from 'node:crypto';
 import {normalizePropertyRentalValues} from '../../utils/listingCategories.js';
 
@@ -162,7 +163,7 @@ export const dwellingInventory = ({tenantId, properties, units}) => {
   return result.sort((a,b) => a.key.localeCompare(b.key));
 };
 
-export const entitlement = (account, now = Date.now()) => {
+export const entitlement = (account, now = billingClock.now()) => {
   if (!account) {return {state:'not_enrolled', management:false, historicalAccess:true};}
   if (account.risk_hold) {return {state:'review_required', management:false, historicalAccess:true};}
   if (account.comp_type === 'ongoing' || (account.comp_type === 'fixed' && Date.parse(account.comp_expires_at) > now))
@@ -220,7 +221,7 @@ export const cessationBlockers=({agreements=[],invoices=[],payments=[],settlemen
   return blockers;
 };
 
-export const complimentaryChange = (input, now = Date.now()) => {
+export const complimentaryChange = (input, now = billingClock.now()) => {
   if (!input || !['fixed', 'ongoing', 'revoke'].includes(input.mode)) {
     throw problem(400, 'BILLING_COMP_INVALID', 'Choose fixed-term, ongoing or revoke complimentary access.');
   }
@@ -241,7 +242,7 @@ export const complimentaryChange = (input, now = Date.now()) => {
     expectedVersion:input.expectedVersion, reason:reason(input.reason)};
 };
 
-export const verifyStripeSignature = ({body, signature, secret, now = Date.now()}) => {
+export const verifyStripeSignature = ({body, signature, secret, now = billingClock.now()}) => {
   if (!Buffer.isBuffer(body) || !secret || typeof signature !== 'string')
     {throw problem(400, 'STRIPE_SIGNATURE_INVALID', 'Invalid webhook signature.');}
   const parts = signature.split(',').map(part => part.split('='));

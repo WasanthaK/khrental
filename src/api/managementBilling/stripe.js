@@ -1,3 +1,4 @@
+import {billingClock} from './clock.js';
 import {BILLING_ACCOUNT, problem} from './contract.js';
 
 const flatten = (value, prefix, output) => {
@@ -42,7 +43,7 @@ export const createStripeClient = ({env=process.env,fetchImpl=globalThis.fetch}=
 export const objectId = object => typeof object === 'string' ? object : object?.id;
 export const invoiceSubscription = invoice => objectId(invoice?.parent?.subscription_details?.subscription || invoice?.subscription);
 
-export const firstRenewalFailure = async ({stripe, invoice, account, now=Date.now()}) => {
+export const firstRenewalFailure = async ({stripe, invoice, account, now=billingClock.now()}) => {
   if (!Number.isSafeInteger(invoice.created) || invoice.created <= 0) {
     throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
   }
@@ -88,7 +89,7 @@ export const firstRenewalFailure = async ({stripe, invoice, account, now=Date.no
   throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
 };
 
-export const subscriptionProjection = ({subscription,invoice,account,firstFailureAt=null,now=Date.now()}) => {
+export const subscriptionProjection = ({subscription,invoice,account,firstFailureAt=null,now=billingClock.now()}) => {
   const items=subscription.items?.data || [];
   const item=items[0];
   if(objectId(subscription.customer)!==account.stripe_customer_id || subscription.id!==account.stripe_subscription_id ||

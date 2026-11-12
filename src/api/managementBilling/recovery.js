@@ -1,7 +1,7 @@
 import {hash,problem} from './contract.js';
+import {billingClock} from './clock.js';
+export {billingClock} from './clock.js';
 
-// Application time only. SQL lease/authorization decisions use locked database time.
-export const billingClock = Object.freeze({now:()=>Date.now()});
 export const recoveryDelay = attempts => Math.min(3600,30*2**Math.max(0,attempts-1));
 export const recoveryCode = error => /^[A-Z][A-Z0-9_]{0,79}$/.test(error?.code||'')?error.code:'BILLING_RECOVERY_FAILED';
 
