@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import {deflateRawSync} from 'node:zlib';
 import {readFile,writeFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
@@ -68,7 +69,7 @@ const main=async()=>{
   const target=targetFromEnv(),mode=process.argv[2];
   if(mode==='receiver-preflight'||mode==='receiver-verify'){
     const evidence=mode==='receiver-verify'?JSON.parse(await readFile('retained-renewal-evidence.json','utf8')):null;
-    console.log(Buffer.from(receiverSource(target,evidence)).toString('base64'));return;
+    console.log(deflateRawSync(receiverSource({customer:target.customer,subscription:target.subscription},evidence&&{eventId:evidence.eventId,paidThrough:evidence.paidThrough})).toString('base64url'));return;
   }
   assert.ok(['advance','duplicate'].includes(mode),'known acceptance mode required');
   const stripe=createStripeClient({env:{...process.env,MANAGEMENT_BILLING_SANDBOX_ENABLED:'true',STRIPE_SANDBOX_ACCOUNT_ID:BILLING_ACCOUNT}});
