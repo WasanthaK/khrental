@@ -1,5 +1,10 @@
 # Quixo.Homes: listing to signing
 
+## Current execution boundary — 12 November 2026
+
+This document retains the product journey design; its 28 October sequence is historical, not the current task queue. The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) and [R5 task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) control execution. Preserve accepted signing, the labelled simulated rental journey through closure/relisting, organization switching and sandbox billing. Remaining negative/stock/usability and matching-audit cases do not reopen those journeys. Form preparation #561 is deployed; recovery through #572 is source-complete for its stated slices, not deployed or complete R5 acceptance. Follow the [completed-work/reopening rule](EXECUTION-PLAN.md#completed-work-and-reopening-rule).
+
+
 Owner direction, 28 October 2026 (Asia/Colombo). This is the product journey and delivery sequence for the public website, connected to the existing rental administration application. It supplements the program master plan and current pilot status; it does not reopen owner-deferred scaling or invoice-archive work.
 
 ## Owner priority — website first, subscriptions afterward

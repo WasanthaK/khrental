@@ -1,5 +1,14 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Current recovery and billing implementation — 12 November 2026
+
+The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) supersede historical implementation queues below. Forms #561 are deployed at Ready 0000488. Recovery #564–#568/#570/#572 is merged, source-verified and not deployed; #572 passed 1,230 tests, lint and build in [43151088826](https://github.com/WasanthaK/khrental/actions/runs/43151088826).
+
+The [approved discovery corrections/defaults](R5-ENGINEERING-DISCOVERY-20261112.md) authorize engineering of aggregate billing, renewal-only split differences and restoration from restoration time while preserving paid capacity. They do not publish customer terms or resolve remaining merchant, tax, FX, refund or privacy decisions. Restore/split implementation, other cessation states and remaining provider recovery operations are unfinished. Follow the [completed-work/reopening rule](EXECUTION-PLAN.md#completed-work-and-reopening-rule); do not repeat accepted signing, initial billing or form preparation. Production migrations/readiness and live charging remain off.
+
+## Historical implementation and commercial checkpoints
+
+
 ## Implementation and commercial boundary — 11 November 2026
 
 The [verified inventory/cessation release](R5-INVENTORY-CESSATION-RELEASE-20261110.md) and [current task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) supersede older implementation-pending wording below. PR #545 provides bound cancellation readback recovery; PR #547 provides private durable preparation and exact paid-confirmed promotion; PR #548 provides atomic obligations-closed cessation for paid active/ending subscriptions with retained history and renewal-only reductions/final cancellation. PR #561 supplies full-metadata normal-form preparation and retry integration with browser/SQL evidence in the task ledger; release #1546 is verified at Ready 0000488, serving `4baeabc14cd96481101cda7071d93393a4819fb2`. Production readiness and controlled live acceptance remain pending. Restoration/splits, other cessation states and broader reconciliation remain open.
