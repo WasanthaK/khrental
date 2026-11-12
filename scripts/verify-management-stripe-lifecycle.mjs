@@ -122,7 +122,24 @@ try{
   const stale=billingReplay({stripeClient:stripe,initialTime:frozen*1000,initialAccount:replay.state().account});
   await stale.deliverEvent(failureEvent);
   check('stale failure cannot revoke recovered access',(await stale.summary()).entitlement.state==='active'&&stale.state().account.grace_started_at===null);
-  report.objects.events={initial:initialEvent.id,renewal:renewalEvent.id,failure:failureEvent.id,recovery:recoveryEvent.id};
+  stage='recovery within a new grace period';
+  await write(`/v1/subscriptions/${subscription.id}`,{default_payment_method:bad.id},'select-failing-method-again');
+  await advance((await getSubscription()).items.data[0].current_period_end);
+  await advance(frozen+7200);
+  const nextFailure=await poll('next failed renewal',getInvoice,i=>i.id!==failed.id&&i.status==='open'&&i.attempted);
+  await record('nextFailure',nextFailure);
+  const nextFailureEvent=await eventFor('invoice.payment_failed',nextFailure.id);
+  replay.setTime(frozen*1000);await replay.deliverEvent(nextFailureEvent);
+  const nextGrace=Date.parse(replay.state().account.grace_started_at);
+  check('new failure starts its own bounded grace',(await replay.summary()).entitlement.state==='grace'&&nextGrace===nextFailureEvent.created*1000&&nextGrace>graceStart);
+  await write(`/v1/subscriptions/${subscription.id}`,{default_payment_method:good},'select-good-method-again');
+  await write(`/v1/invoices/${nextFailure.id}/pay`,{payment_method:good},'recover-within-grace');
+  const earlyPaid=await poll('within-grace invoice paid',()=>read(`/v1/invoices/${nextFailure.id}`),i=>i.status==='paid');
+  await record('withinGraceRecovery',earlyPaid);
+  const earlyEvent=await eventFor('invoice.paid',nextFailure.id);await replay.deliverEvent(earlyEvent);
+  check('payment within grace restores management',frozen*1000<nextGrace+7*86400000&&(await replay.summary()).entitlement.state==='active'&&replay.state().account.grace_started_at===null);
+  report.objects.events={initial:initialEvent.id,renewal:renewalEvent.id,failure:failureEvent.id,recovery:recoveryEvent.id,
+    nextFailure:nextFailureEvent.id,withinGraceRecovery:earlyEvent.id};
   report.passed=true;
 }catch(error){
   report.passed=false;report.failure={stage,code:error.code || 'ACCEPTANCE_FAILED'};
