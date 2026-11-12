@@ -216,9 +216,20 @@ async function main() {
 }
 try{await main();}
 catch(error){
+  // Only auto-clean if no Stripe customer write was attempted, or the exact
+  // created customer has already been confirmed deleted. An ambiguous write
+  // must retain its durable journal for manual reconciliation.
+  const failedStage=stage;
+  if(fixtureCreated&&!fixtureCleaned&&(customerWrites===0||customerDeleted)){
+    try{await cleanupFixture();}catch(cleanupError){
+      console.error('R5_GENUINE_CUSTOMER_CLEANUP_FAILED='+JSON.stringify({
+        code:cleanupError.code||'CLEANUP_UNCONFIRMED',operationId,tenantId
+      }));
+    }
+  }
   const code=/^[A-Z0-9_]{3,80}$/.test(error.code||'')?error.code:'UNCONFIRMED';
   console.error('R5_GENUINE_CUSTOMER_RECOVERY_FAILED='+JSON.stringify({
-    stage,code,operationId,tenantId,customerId,customerWrites,checkoutWrites,
+    stage:failedStage,code,operationId,tenantId,customerId,customerWrites,checkoutWrites,
     fixtureCreated,customerDeleted,fixtureCleaned,fixtureRetained:fixtureCreated&&!fixtureCleaned,
     safety:'No checkout POST or live subscription permitted; retained fixture requires reconciliation before retry'
   }));
