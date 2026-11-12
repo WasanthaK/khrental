@@ -134,7 +134,9 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
     if(fault===path){fault=null;throw Object.assign(new Error('Synthetic lost provider response'),{status:503,code:'STRIPE_UNAVAILABLE'});}
     return structuredClone(result);
   }};
-  const service=createBillingService({store,stripe:transport,env});
+  let failCompletion=false;
+  const recoveryStore={...store,audit:async(q,args)=>{if(failCompletion&&args.action==='sandbox.cessation.recovered'){failCompletion=false;throw Error('Synthetic cessation audit rollback');}return store.audit(q,args);}};
+  const service=createBillingService({store:recoveryStore,stripe:transport,env});
   const due=async id=>store.locked(tenantId,q=>q('UPDATE dbo.management_billing_recovery SET next_attempt_at=SYSUTCDATETIME() WHERE command_id=@id',{id}));
   const age=async id=>store.locked(tenantId,async q=>{
     await q('UPDATE dbo.management_billing_steps SET created_at=DATEADD(hour,-48,SYSUTCDATETIME()) WHERE command_id=@id',{id});
@@ -184,7 +186,10 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
   const ceaseArgs={tenantId,actorId,id:ceaseId,propertyId:propertyIds[0],unitId:null,inventoryHash:ceasePreview.inventoryHash,reason:'Disposable cessation recovery proof.'};
   fault='/v1/subscription_schedules';await assert.rejects(service.ceaseStock(ceaseArgs),{code:'STRIPE_UNAVAILABLE'});
   assert.equal((await store.inventory(tenantId)).length,2,'Stock is not ceased before provider confirmation');
-  await age(ceaseId);const ceased=await service.ceaseStock(ceaseArgs);assert.equal(ceased.managementEnded,true);assert.equal(ceased.nextRenewalQuantity,1);
+  await age(ceaseId);failCompletion=true;await assert.rejects(service.ceaseStock(ceaseArgs),/Synthetic cessation audit rollback/);
+  assert.equal((await store.inventory(tenantId)).length,2,'Final audit failure rolls back the local cessation');
+  assert.equal((await store.read('SELECT id FROM dbo.management_inventory_controls WHERE id=@id',{id:ceaseId})).length,0);
+  await due(ceaseId);const ceased=await service.ceaseStock(ceaseArgs);assert.equal(ceased.managementEnded,true);assert.equal(ceased.nextRenewalQuantity,1);
   assert.deepEqual(await service.ceaseStock(ceaseArgs),ceased);assert.equal((await store.inventory(tenantId)).length,1);
   const savedKey=(await store.read("SELECT idempotency_key FROM dbo.management_billing_steps WHERE command_id=@id AND name='create_schedule'",{id:ceaseId}))[0].idempotency_key;
   assert.equal(writes.filter(w=>w.key===savedKey).length,1,'Exactly one write uses the persisted schedule key, including SQL GUID casing');

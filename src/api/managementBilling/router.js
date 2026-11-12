@@ -79,7 +79,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
         if(selected&&!matches(selected)){throw problem(409,'BILLING_PRICE_MISMATCH','The original provider price changed and needs review.');}
         selected=selected||reusable;
         if(!selected){
-          const age=(await q("SELECT DATEDIFF_BIG(second,MIN(created_at),SYSUTCDATETIME()) AS age FROM dbo.management_billing_audit WHERE resource_id=@id AND action='pricing.publication.attempt'",{id}))[0]?.age;
+          const age=(await q("SELECT DATEDIFF_BIG(second,created_at,SYSUTCDATETIME()) AS age FROM dbo.management_pricing_versions WHERE id=@id",{id}))[0]?.age;
           if(!Number.isFinite(Number(age))||age>=23*3600){throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','The older price publication needs provider evidence.');}
           await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:'usd',unit_amount:rules.baseFeeMinor,
             recurring:{interval:'month',usage_type:'licensed'},metadata:{pricing_version:id,market:rules.market}},`quixo:pricing:${id}`);

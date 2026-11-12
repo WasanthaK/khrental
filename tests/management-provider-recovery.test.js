@@ -4,6 +4,7 @@ import express from 'express';
 import {hash,BILLING_PRODUCT} from '../src/api/managementBilling/contract.js';
 import {createManagementBillingRouter} from '../src/api/managementBilling/router.js';
 import {uniqueProviderObject,requestObjectEvidence} from '../src/api/managementBilling/recoveryEvidence.js';
+import {createProviderRecoveryHandlers} from '../src/api/managementBilling/service.js';
 import {createRecoveryRunner} from '../src/api/managementBilling/recovery.js';
 
 const id='11111111-1111-4111-8111-111111111111';
@@ -111,4 +112,17 @@ test('ephemeral response checkpoint survives local completion failure without a 
   const runner=createRecoveryRunner({journal,handlers:{preview:async({step:runStep})=>runStep('preview',{input:{quantity:3},key:'fixed',
     read:async()=>({confirmed:false}),write:async()=>{writes++;return {total:500};},confirmResponse:async value=>({confirmed:true,result:{total:value.total}})})},logger:{}});
   await assert.rejects(runner.run({tenantId:'tenant',id:'command'}));assert.deepEqual(await runner.run({tenantId:'tenant',id:'command'}),{total:500});assert.equal(writes,1);
+});
+
+test('Checkout cannot create another session when provider history contains a different active operation',async()=>{
+  let writes=0;
+  const account={stripe_customer_id:'cus_bound',stripe_subscription_id:null,stripe_price_id:'price_bound'};
+  const stripe={assertAccount:async()=>{},request:async method=>{
+    if(method==='POST'){writes++;throw Error('Must not create a second checkout');}
+    return {data:[{id:'cs_other',status:'open',metadata:{quixo_operation:'another'}}],has_more:false};
+  }};
+  const handlers=createProviderRecoveryHandlers({store:{},stripe,requireAccount:async()=>account});
+  const job={id:'ours',tenant_id:'tenant',intent:{customerId:'cus_bound',_subscriptionId:null,priceId:'price_bound',inventory:[{}],inventoryHash:'reviewed',origin:'https://app.example.test'}};
+  await assert.rejects(handlers.checkout({job,step:async(_name,config)=>config.read(config.input)}),{code:'BILLING_CHECKOUT_PENDING'});
+  assert.equal(writes,0);
 });
