@@ -92,10 +92,21 @@ jobs:
           console.log(brotliCompressSync(Buffer.from(source)).toString('base64url'));
           JS
           )
-          test "${#encoded}" -lt 3600
-          command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).brotliDecompressSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
+          # Keep every exec URL short; Azure rejects large startup commands before execution.
+          remote="/tmp/r5-recovery-$OPERATION_ID.b64"
+          digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
+          : > deployed-recovery.txt
+          for ((offset=0; offset<${#encoded}; offset+=1000)); do
+            chunk=${encoded:offset:1000}
+            method=appendFileSync; if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
+            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('PAYLOAD_CHUNK_$offset')\""
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            script -q -e -c "$invocation" /dev/null | tee -a deployed-recovery.txt
+            grep -Fq "PAYLOAD_CHUNK_$offset" deployed-recovery.txt
+          done
+          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');await import('data:text/javascript;base64,'+(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')).toString('base64'))\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-          script -q -e -c "$invocation" /dev/null | tee deployed-recovery.txt
+          script -q -e -c "$invocation" /dev/null | tee -a deployed-recovery.txt
           grep -Fq 'DEPLOYED_RECOVERY_PASS=' deployed-recovery.txt
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
           grep '^DEPLOYED_RECOVERY_PASS=' deployed-recovery.txt >> "$GITHUB_STEP_SUMMARY"
