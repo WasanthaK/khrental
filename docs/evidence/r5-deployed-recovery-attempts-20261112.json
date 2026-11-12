@@ -1,6 +1,6 @@
 {
   "date": "2026-11-12",
-  "status": "original_operation_outcome_unverified_inspection_rate_limited",
+  "status": "original_operation_inspected_completed",
   "canonicalReconciliationPr": 592,
   "harnessPr": 593,
   "harnessMerge": "b00535122634c9be7b9ad213c06885973d2b8af7",
@@ -21,7 +21,7 @@
   "workerScopeCount": 1,
   "applicationRedeployed": false,
   "providerProofExecuted": true,
-  "genuineInterruptedOperationRecovered": null,
+  "genuineInterruptedOperationRecovered": true,
   "liveCharge": false,
   "attempts": [
     {
@@ -78,7 +78,9 @@
     "confirmation": "VERIFY-SANDBOX-PORTAL-RECOVERY",
     "existingOperationPolicy": "Read original command/journal/steps/audit and matching events before any new proof; do not reset, delete, replace ID, or blindly rerun",
     "partialPayloadPolicy": "Chunk zero overwrites the same operation-specific temporary file; SHA-256 verified before importing; file-module cleanup in finally",
-    "mode": "inspect"
+    "mode": "inspect",
+    "required": false,
+    "disposition": "Original operation completed; do not retry. A separate bounded response-loss test remains."
   },
   "acceptanceBoundary": [
     "Controlled response loss after a genuine restricted sandbox portal creation, recovered by the existing automatic worker using deployed SQL.",
@@ -90,5 +92,24 @@
   "inspectionPr": 597,
   "inspectionMerge": "7247c0cefb234b41846f7d232e25ca3382cb61d9",
   "inspectionCiRun": 43212519113,
-  "assertionCause": "Likely SQL UUID casing in harness key comparison; not confirmed by live readback"
+  "assertionCause": "Persisted SQL UUID uses uppercase in provider key; original harness expected lowercase operation UUID. Readback confirms mismatch.",
+  "inspectionResult": {
+    "run": 43215152035,
+    "job": 131172404862,
+    "observedAt": "2026-11-12T12:09:17Z",
+    "readOnly": true,
+    "command": "completed",
+    "journal": "succeeded",
+    "attempts": 2,
+    "stepCount": 1,
+    "auditCount": 1,
+    "providerEventCount": 1,
+    "sessionId": "bps_1UawUMQ4sARuLNQac8wqZVTA",
+    "eventId": "evt_1UawUMQ4sARuLNQaOaxCryPD",
+    "livemode": false,
+    "customerMatches": true,
+    "artifactId": 13943326927,
+    "artifactSha256": "6a92ac30cb6c1a0b0f36309449fef233b93550bfcb812a4e6062f6c6e45c1652",
+    "boundary": "Harness assertion before provider write; automatic worker created and committed one portal. Not post-provider response-loss acceptance."
+  }
 }
