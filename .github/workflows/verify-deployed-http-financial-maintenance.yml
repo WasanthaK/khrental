@@ -2,6 +2,11 @@ name: Scoped public HTTP financial and maintenance acceptance
 on:
   workflow_dispatch:
     inputs:
+      inspect_only:
+        description: Read-only fixture schema and cleanup inspection; no enforcement changes or acceptance run
+        type: boolean
+        default: false
+        required: true
       expected_build:
         description: Exact accepted serving application SHA
         required: true
@@ -60,6 +65,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
       - name: Temporarily scope serving HTTP enforcement to the new fixture
+        if: inputs.inspect_only != true
         shell: bash
         run: |
           set -euo pipefail
@@ -83,7 +89,21 @@ jobs:
           test "$ready" = true
           jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
           jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
+      - name: Inspect fixture schema without writes
+        if: inputs.inspect_only == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          revision=$(az containerapp show -g khrental-prod-rg -n khrental-app --query properties.latestReadyRevisionName -o tsv)
+          image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          command="node --input-type=module -e \"const{getMssqlPool,closeMssqlPool}=await import('/app/src/api/mssql/pool.js');try{const p=await getMssqlPool();const r=await p.request().query(\\\"SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,IS_NULLABLE,COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN('properties','app_users','agreements','maintenance_requests') ORDER BY TABLE_NAME,ORDINAL_POSITION\\\");console.log('FIXTURE_SCHEMA='+JSON.stringify(r.recordset));console.log('INSPECT_PASS')}finally{await closeMssqlPool()}\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee deployed-http.txt
+          grep -Fq 'INSPECT_PASS' deployed-http.txt
       - name: Verify public HTTP writes and retained reads
+        if: inputs.inspect_only != true
         shell: bash
         run: |
           set -euo pipefail
