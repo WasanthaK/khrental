@@ -53,22 +53,23 @@ export const verifyQuantityRecovery=async(pool,{tenantId,actorId,stripe,remote,c
     assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='sandbox.quantity_apply.recovered'",{id})).length,1);
     return result;
   };
+  const removeFixture=async id=>store.locked(tenantId,async q=>{
+    // The insert trigger creates preferences for every synthetic property.
+    // Remove that dependent fixture row without disabling production constraints.
+    await q('DELETE dbo.public_listing_preferences WHERE property_id=@id AND tenant_id=@tenantId',{id,tenantId});
+    await q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id,tenantId});
+  });
   const increased=await applyWithLoss(`/v1/subscriptions/${sub.id}`);assert.equal(increased.currentQuantity,3);
   assert.equal((await store.inventory(tenantId)).length,3);
   assert.equal((await store.read('SELECT status FROM dbo.management_inventory_staging WHERE id=@id',{id:prepared}))[0].status,'promoted');
   assert.equal((await store.read('SELECT name FROM dbo.properties WHERE id=@id',{id:prepared}))[0].name,'Prepared recovery home');
-  await store.locked(tenantId,q=>q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:existing[0],tenantId}));
+  await removeFixture(existing[0]);
   const decreased=await applyWithLoss('/v1/subscription_schedules',{extraPosts:1});
   assert.equal(decreased.currentQuantity,3);assert.equal(decreased.nextRenewalQuantity,2);
-  await store.locked(tenantId,q=>q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:existing[1],tenantId}));
+  await removeFixture(existing[1]);
   const scheduleId=(await store.account(tenantId)).stripe_schedule_id;
   const phased=await applyWithLoss(`/v1/subscription_schedules/${scheduleId}`);assert.equal(phased.nextRenewalQuantity,1);
-  await store.locked(tenantId,async q=>{
-    // Promotion creates listing preferences. Remove only this disposable fixture's
-    // dependent row before simulating zero stock; keep production foreign keys intact.
-    await q('DELETE dbo.public_listing_preferences WHERE property_id=@id AND EXISTS (SELECT 1 FROM dbo.properties WHERE id=@id AND tenant_id=@tenantId)',{id:prepared,tenantId});
-    await q('DELETE dbo.properties WHERE id=@id AND tenant_id=@tenantId',{id:prepared,tenantId});
-  });
+  await removeFixture(prepared);
   const ended=await applyWithLoss(`/v1/subscriptions/${sub.id}`);assert.equal(ended.currentQuantity,3);assert.equal(ended.nextRenewalQuantity,0);
   assert.equal(ended.cancelAtPeriodEnd,true);assert.equal((await store.account(tenantId)).pending_quantity,0);
   assert.equal(calls.some(c=>c.body.items?.some(i=>i.quantity===0)||c.body.phases?.some(p=>p.items.some(i=>i.quantity===0))),false);
