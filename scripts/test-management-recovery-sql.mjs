@@ -6,6 +6,7 @@ import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
 import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createRecoveryWorker} from '../src/api/managementBilling/recoveryWorker.js';
+import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
 
 // Called only by the disposable SQL Server harness. Provider transport is synthetic.
 export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,remote,calls})=>{
@@ -80,5 +81,9 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   const dryRun=await createRecoveryWorker({store,service:null,env:{...env,MANAGEMENT_RECOVERY_TENANT_IDS:tenantId}}).run();
   assert.equal(dryRun.dryRun,true);assert.equal(dryRun.candidates.length,1);assert.equal(dryRun.candidates[0].due,0);
   assert.deepEqual(await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}),savedBefore,'Dry-run changes no recovery metadata');
+  const observed=await createBillingInvariantInspector({store,stripe:readOnlyStripe(stripe)}).inspect(tenantId);
+  assert.equal(observed.status,'operation_pending',JSON.stringify(observed));
+  assert.equal(observed.nextRenewalQuantity,0);assert.equal(observed.currentPaidQuantity,account.quantity);
+  assert.deepEqual(await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}),savedBefore,'Invariant inspection changes no recovery metadata');
   console.log('PASS: recovery schema replay/drift, durable intent, aged provider readback, tenant isolation, atomic result/audit, exclusive leases, fencing, revoked actor and attempt cap');
 };
