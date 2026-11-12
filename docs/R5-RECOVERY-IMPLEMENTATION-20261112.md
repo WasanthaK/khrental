@@ -32,4 +32,14 @@ New unit scenarios cover lost cancellation/schedule responses, local completion 
 
 Full strict lint and production build pass locally. The full local suite requires browser process permissions unavailable in this workspace; browser and real SQL acceptance must come from CI. No real provider payment, migration apply, production recovery or launch is claimed.
 
-Still open: disabled worker and read-only dry-run, account-aware invariants, remaining operation migrations, process-interruption harness, full clock/replay coverage, split/restore, remaining cessation states and supported Evia retrieval/audit acceptance. The original R5 ledger remains open.
+Still open after slice 1: disabled worker and read-only dry-run, account-aware invariants, remaining operation migrations, process-interruption harness, full clock/replay coverage, split/restore, remaining cessation states and supported Evia retrieval/audit acceptance. The original R5 ledger remains open.
+
+## Slice 2: scoped worker and inspection
+
+The worker reuses the journal's claim/fencing/backoff authority. It selects at most ten pending journaled operations per workspace and at most ten explicitly named workspaces. Completed and unjournaled legacy commands are not candidates. Review items are visible to inspection but never automatically retried. Competing workers may select the same operation; only the database lease winner proceeds.
+
+The server scheduler is inert unless `MANAGEMENT_RECOVERY_WORKER_ENABLED=true`. Activation also requires verified recovery schema, sandbox billing and a nonempty comma-separated `MANAGEMENT_RECOVERY_TENANT_IDS` UUID list. The first scan is delayed 30 seconds; subsequent scans begin 60 seconds after the preceding scan finishes. Shutdown waits for an in-flight scan before closing the database pool. No activation setting is changed by this implementation.
+
+`node scripts/inspect-management-recovery.mjs` is always read-only and accepts no apply option. It selects scoped candidate IDs, states, attempts and due/lease times; it creates no claims, audit rows or timestamps and has no provider client. Run only against the approved staging database for handoff acceptance. A successful dry-run is inspection evidence, not permission to enable the worker.
+
+Focused tests cover dry-run isolation, default-off/configuration gates, explicit selection, a competing claim, serialized scheduling and shutdown. The disposable SQL proof compares persisted journal metadata before and after inspection. Invariants and other operation types remain separate pending work.
