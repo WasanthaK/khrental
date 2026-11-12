@@ -106,12 +106,15 @@ async function main() {
   await createFixture(price.id);
   assert.equal((await store.inventory(tenantId)).length,1);
   const inventoryHash=hash(await store.inventory(tenantId,undefined,{includePending:true}));
-  const expectedKey='quixo:'+tenantId+':'+operationId+':customer';
+  let expectedKey='quixo:'+tenantId+':'+operationId+':customer';
   const interrupted={...stripe,request:async(method,path,body,key)=>{
     if(method==='GET'){return stripe.request(method,path,body,key);}
     assert.equal(method,'POST');assert.equal(path,'/v1/customers');
     assert.equal(++customerWrites,1);
     assert.equal(String(key).toLowerCase(),expectedKey.toLowerCase());
+    // SQL may return uppercase UUIDs. Stripe keys are case-sensitive: retain
+    // the exact key actually sent for event correlation and duplicate checks.
+    expectedKey=String(key);
     assert.equal(body.metadata.quixo_operation.toLowerCase(),operationId.toLowerCase());
     assert.equal(body.metadata.quixo_tenant.toLowerCase(),tenantId.toLowerCase());
     const response=await stripe.request(method,path,body,key);
