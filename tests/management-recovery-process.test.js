@@ -143,3 +143,19 @@ for(const shape of ['increase','reduction']){
     });
   }
 }
+
+for(const [boundary,step] of [['after_claim',''],['after_completion',''],...['reserve_split_units','create_schedule','set_schedule_phases'].flatMap(s=>['after_intent','after_checkpoint'].map(b=>[b,s])),...['create_schedule','set_schedule_phases'].map(s=>['after_provider_effect',s])]){
+  test(`split SIGKILL ${boundary} ${step} preserves reservation and renewal-only effect`,()=>{
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),'split-recovery-'));
+    try{
+      const stopped=spawnSync(process.execPath,[fixture,directory,boundary,'split_increase',step],{encoding:'utf8',timeout:10000});
+      assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
+      for(let i=0;i<2;i++){const resumed=spawnSync(process.execPath,[fixture,directory,'resume','split_increase'],{encoding:'utf8',timeout:10000});assert.equal(resumed.status,0,resumed.stderr);}
+      const journal=JSON.parse(fs.readFileSync(path.join(directory,'journal.json'),'utf8')),provider=JSON.parse(fs.readFileSync(path.join(directory,'provider.json'),'utf8'));
+      assert.equal(journal.completedCount,1);assert.equal(provider.subscription.items.data[0].quantity,2);
+      assert.deepEqual(provider.schedule.phases.map(p=>p.items[0].quantity),[2,3]);assert.equal(provider.schedule.proration_behavior,'none');
+      assert.deepEqual(provider.writes,['quixo:tenant:operation:schedule','quixo:tenant:operation:phases']);
+      assert.ok(journal.steps.reserve_split_units.completed_at);
+    }finally{fs.rmSync(directory,{recursive:true,force:true});}
+  });
+}

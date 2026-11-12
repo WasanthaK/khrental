@@ -1,5 +1,13 @@
 # R5 recovery implementation — 12 November 2026
 
+## R5 transition checkpoint — 12 November 2026
+
+Restoration is merged in [#579](https://github.com/WasanthaK/khrental/pull/579), merge `2120f2959b3c9cd4c58ecb312290cfb8a7929d2a`, verified head `8cdf662db4695d91ce91ddb96c94e6a452102257`. Final build/lint/tests **43185293868**, real SQL **43185293891**, two-tenant SQL **43185293981**, public-listing regression **43185293973**, browser **43185293871** passed. Final mobile/desktop restoration screens were inspected. Original cessation history is retained; restoration starts from confirmation. No production deployment/apply occurred.
+
+**Current engineering work: property split.** The candidate reserves independent unit definitions privately, confirms renewal-only aggregate billing with no immediate proration, then activates all units atomically with result and audit. Original parent/rental/history remain attached. Existing parent tenancy must close before child offers/agreements or public availability. Nested splits are rejected. Active/grace subscriptions retain current quantity until renewal; complimentary access retains its expiry and provider obligations. Ending subscriptions require an explicit keep-renewing choice first. Trial/incomplete/unpaid/cancelled without a valid complimentary overlay cannot split. Risk holds fail closed.
+
+Migration `20261112_03_management_splits` and `MANAGEMENT_SPLIT_SCHEMA_READY=true` require verified prior recovery/restoration readiness. Reserved rows are non-live; provider uncertainty stays queued for recovery/review rather than deleting evidence or repeating a purchase. Preparation failure rolls back the reservation transaction; final audit failure rolls back unit activation. Split validation and screenshots are pending candidate CI. This checkpoint supersedes older next-work statements; do not repeat merged recovery, cessation or restoration work. R5 is not yet closed. Genuine provider/package evidence and broader launch approvals remain distinct from synthetic engineering verification.
+
 The owner approved the four corrections in [discovery](R5-ENGINEERING-DISCOVERY-20261112.md) and confirmed there are no production clients. This is implementation evidence, not R5 acceptance or a production activation record.
 
 ## Slice 1: durable cancellation

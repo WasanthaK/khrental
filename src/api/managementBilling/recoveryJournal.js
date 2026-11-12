@@ -46,6 +46,12 @@ export const createRecoveryJournal=({store,complete})=>{
     if(row.kind==='checkout'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
     }
+    if(row.kind==='split'){
+      const preview=await store.splitPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
+      if(preview.mode!==intent.splitMode||preview.inventoryHash!==intent.inventoryHash||preview.proposedHash!==intent.preview.inventoryHash||preview.unitsHash!==intent.unitsHash){
+        throw problem(409,'BILLING_SPLIT_STATE_CHANGED','The reviewed split changed before billing.');
+      }
+    }
     if(row.kind==='restore'){
       const preview=await store.restorationPreviewLocked(q,{tenantId:args.tenantId,actorId:row.actor_id,commandId:args.id,...intent});
       if(preview.mode!==intent.restoreMode||preview.inventoryHash!==intent.inventoryHash||preview.proposedHash!==intent.preview.inventoryHash||preview.controlId!==intent.controlId){

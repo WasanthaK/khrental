@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import {resolveRegisteredPhoto,trustedPhotoOrigins} from '../publicListings/sourceImages.js';
 import {getMssqlPool, sql} from '../mssql/pool.js';
 import {runQuery} from '../mssql/query.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement,restorationPolicy, managementWriteEnforced} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement,restorationPolicy,splitPolicy,splitUnits, managementWriteEnforced} from './contract.js';
 
 // The caller must supply its mutation transaction, never an independent pool
 // read. Hold the account row through commit so revoke/reconciliation cannot
@@ -97,11 +97,12 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     {tenantId,actorId,action,resourceId,previous:previous === null ? null : hash(previous),current:hash(current),reason});
   const pendingStock=async(tenantId,q=read)=>stagingEnabled()?q(`SELECT * FROM dbo.management_inventory_staging
     WHERE tenant_id=@tenantId AND status='pending' ORDER BY id`,{tenantId}):[];
-  const inventory = async (tenantId, q = read, {includePending=false,stageIds=null,restoreControlIds=[]}={}) => {
+  const inventory = async (tenantId, q = read, {includePending=false,stageIds=null,restoreControlIds=[],splitRecords=[]}={}) => {
     const properties = await q('SELECT id,tenant_id,name,propertytype FROM dbo.properties WHERE tenant_id=@tenantId',{tenantId});
     // Deliberately includes malformed cross-tenant child relationships so the contract rejects them.
     const units = await q(`SELECT u.id,u.tenant_id,u.propertyid,u.unitnumber FROM dbo.property_units u
       JOIN dbo.properties p ON p.id=u.propertyid WHERE p.tenant_id=@tenantId`,{tenantId});
+    units.push(...splitRecords.map(payload=>({...payload,tenant_id:tenantId})));
     if(cessationEnabled()){
       const controls=await q("SELECT id,property_id,unit_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND state='ceased'"+(restorationEnabled()?" AND restored_at IS NULL":''),{tenantId});
       for(const property of properties){if(controls.filter(c=>!restoreControlIds.includes(String(c.id).toLowerCase())).some(c=>!c.unit_id&&String(c.property_id).toLowerCase()===String(property.id).toLowerCase())){property.management_state='ceased';}}
@@ -344,6 +345,75 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     await audit(q,{tenantId,actorId,action:'inventory.restored',resourceId:id,current:{controlId,propertyId,unitId,restoredAt:restored.restored_at},reason:note});
     return {...preview,restoredAt:new Date(restored.restored_at).toISOString()};
   };
+  const splitEnabled=()=>env.MANAGEMENT_SPLIT_SCHEMA_READY==='true'&&restorationEnabled();
+  const splitPreviewLocked=async(q,{tenantId,actorId,propertyId,units,commandId=null})=>{
+    if(!splitEnabled()){throw problem(503,'BILLING_SPLIT_UNAVAILABLE','Splitting dwellings is not available yet.');}
+    await assertActor(q,tenantId,actorId);
+    const parent=identifier(propertyId),records=splitUnits(parent,units),params={tenantId,propertyId:parent,commandId};
+    validateImages(records.map(payload=>({kind:'unit',payload})),tenantId);
+    const property=(await q('SELECT id,name FROM dbo.properties WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND id=@propertyId',params))[0];
+    if(!property){throw problem(404,'BILLING_SPLIT_NOT_FOUND','The property was not found in this workspace.');}
+    const children=await q('SELECT id FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK) WHERE propertyid=@propertyId',params);
+    const previous=await q("SELECT command_id,state FROM dbo.management_inventory_splits WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId AND property_id=@propertyId AND state<>'aborted'",params);
+    if(children.length||previous.some(row=>String(row.command_id).toLowerCase()!==String(commandId).toLowerCase())){
+      throw problem(409,'BILLING_SPLIT_ALREADY_SPLIT','This property already has units or a reserved split. Nested splitting is not supported.');
+    }
+    if((await q('SELECT id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND property_id=@propertyId AND restored_at IS NULL',params)).length){
+      throw problem(409,'BILLING_SPLIT_RESTORE_REQUIRED','Restore management of this property before splitting it.');
+    }
+    if((await q("SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending' AND (@commandId IS NULL OR id<>@commandId)",params)).length||(await pendingStock(tenantId,q)).length){
+      throw problem(409,'BILLING_SPLIT_PENDING','Finish the pending billing or prepared-stock operation first.');
+    }
+    const holds=await q(`SELECT h.enquiry_id FROM dbo.property_rental_offers h WITH(UPDLOCK,HOLDLOCK)
+      WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId AND
+      ((h.status='offered' AND h.offer_until>SYSUTCDATETIME()) OR (h.status IN('accepted','agreement') AND h.hold_until>SYSUTCDATETIME()))
+      AND NOT EXISTS(SELECT 1 FROM dbo.agreements a WHERE a.id=h.agreement_id AND a.tenant_id=h.tenant_id AND a.status IN('active','closed'))`,params);
+    if(holds.length){throw problem(409,'BILLING_SPLIT_RESERVED','Resolve the pending whole-property offer before splitting.');}
+    for(const payload of records){
+      if((await q('SELECT id FROM dbo.property_units WHERE id=@id',{id:payload.id})).length||
+        (await q('SELECT id FROM dbo.management_inventory_split_units WHERE id=@id AND (@commandId IS NULL OR command_id<>@commandId)',{id:payload.id,commandId})).length){
+        throw problem(409,'BILLING_SPLIT_UNIT_CONFLICT','A unit identity is already in use. Review the split again.');
+      }
+    }
+    const current=await inventory(tenantId,q),proposed=await inventory(tenantId,q,{splitRecords:records});
+    if(!current.some(item=>String(item.propertyId).toLowerCase()===parent&&!item.unitId)||proposed.length!==current.length-1+records.length){
+      throw problem(409,'BILLING_SPLIT_STOCK_REVIEW','Choose one managed residential dwelling without existing units.');
+    }
+    const account=(await q('SELECT *,SYSUTCDATETIME() AS checked_at FROM dbo.management_billing_accounts WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId',params))[0];
+    const mode=splitPolicy(account,new Date(account?.checked_at).getTime());
+    return {propertyId:parent,label:property.name,records,unitsHash:hash(records),inventoryHash:hash(current),proposedHash:hash(proposed),
+      from:account.quantity,to:proposed.length,mode,proposed};
+  };
+  const reserveSplitLocked=async(q,args)=>{
+    const preview=await splitPreviewLocked(q,{...args,commandId:args.id});
+    if(preview.inventoryHash!==args.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','Review the changed dwelling inventory before splitting.');}
+    await q('INSERT dbo.management_inventory_splits(command_id,tenant_id,property_id) VALUES(@id,@tenantId,@propertyId)',
+      {id:args.id,tenantId:args.tenantId,propertyId:preview.propertyId});
+    for(const payload of preview.records){await q('INSERT dbo.management_inventory_split_units(id,command_id,payload_json,payload_hash) VALUES(@id,@commandId,@payload,@hash)',
+      {id:payload.id,commandId:args.id,payload:JSON.stringify(payload),hash:hash(payload)});}
+    return preview;
+  };
+  const activateSplitLocked=async(q,args)=>{
+    const preview=await splitPreviewLocked(q,{...args,commandId:args.id});
+    if(preview.inventoryHash!==args.inventoryHash||preview.unitsHash!==args.unitsHash||preview.proposedHash!==args.preview.inventoryHash){
+      throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed split changed before activation.');
+    }
+    const reserved=await q('SELECT id,payload_hash,payload_json FROM dbo.management_inventory_split_units WHERE command_id=@id ORDER BY id',{id:args.id});
+    if(reserved.length!==preview.records.length||reserved.some(r=>r.payload_hash!==hash(JSON.parse(r.payload_json))||
+      !preview.records.some(p=>p.id===String(r.id).toLowerCase()&&hash(p)===r.payload_hash))){
+      throw problem(409,'BILLING_SPLIT_RESERVATION_CHANGED','Reserved split units changed. Review is required.');
+    }
+    const activated=(await q("UPDATE dbo.management_inventory_splits SET state='active',activated_at=SYSUTCDATETIME() OUTPUT inserted.activated_at WHERE command_id=@id AND tenant_id=@tenantId AND state='reserved'",{id:args.id,tenantId:args.tenantId}))[0];
+    if(!activated){throw problem(409,'BILLING_SPLIT_ALREADY_SPLIT','This split is already active or was withdrawn.');}
+    for(const payload of preview.records){
+      const columns=Object.keys(payload).filter(key=>key!=='availability'),params={tenantId:args.tenantId,commandId:args.id,parent:preview.propertyId,status:payload.availability||'available'};
+      columns.forEach((key,i)=>{params[`v${i}`]=payload[key]!==null&&typeof payload[key]==='object'?JSON.stringify(payload[key]):payload[key];});
+      await q(`INSERT dbo.property_units(tenant_id,status,split_operation_id,parent_stock_id,stock_type,${columns.map(c=>`[${c}]`).join(',')})
+        VALUES(@tenantId,@status,@commandId,@parent,'apartment_unit',${columns.map((_c,i)=>`@v${i}`).join(',')})`,params);
+    }
+    await audit(q,{tenantId:args.tenantId,actorId:args.actorId,action:'inventory.split',resourceId:args.id,current:{propertyId:preview.propertyId,unitsHash:preview.unitsHash},reason:decisionReason(args.reason)});
+    return {activatedAt:new Date(activated.activated_at).toISOString(),unitIds:preview.records.map(p=>p.id)};
+  };
   const listPricing = async () => (await read('SELECT * FROM dbo.management_pricing_versions ORDER BY created_at DESC,version DESC'))
     .map(row => ({...row,rules:JSON.parse(row.rules_json),rules_json:undefined}));
   const savePricing = async ({rules,expectedVersion,actorId}) => locked(`pricing:${rules.market}`, async q => {
@@ -378,7 +448,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     return account(tenantId,q);
   });
   const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false,prepareRecovery=null}) => locked(tenantId,async q => {
-    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation','restore'].includes(kind))){
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation','restore','split'].includes(kind))){
       throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
     }
     await assertActor(q,tenantId,actorId);
@@ -440,5 +510,5 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
   });
   return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
     complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock,
-    restorationEnabled,ceasedStock,restorationPreviewLocked,restoreStockLocked,recoveryEnabled:()=>env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true',cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
+    splitEnabled,splitPreviewLocked,reserveSplitLocked,activateSplitLocked,restorationEnabled,ceasedStock,restorationPreviewLocked,restoreStockLocked,recoveryEnabled:()=>env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true',cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
 };

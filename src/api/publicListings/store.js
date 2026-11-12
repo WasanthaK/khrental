@@ -7,6 +7,7 @@ import {runQuery,runSingleQuery} from '../mssql/query.js';
 // suppressing stock even when new offers are closed. No table is queried before apply.
 const holdsReady=process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY==='true';
 const cessationReady=process.env.MANAGEMENT_CESSATION_SCHEMA_READY==='true';
+const splitAvailability=process.env.MANAGEMENT_SPLIT_SCHEMA_READY==='true'?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_splits s JOIN dbo.agreements a ON a.tenant_id=s.tenant_id AND a.propertyid=s.property_id AND a.unitid IS NULL WHERE s.tenant_id=p.tenant_id AND s.property_id=p.id AND s.state='active' AND LOWER(COALESCE(a.status,'')) NOT IN('closed','cancelled'))`:'';
 const activeCessation=process.env.MANAGEMENT_RESTORATION_SCHEMA_READY==='true'?' AND c.restored_at IS NULL':'';
 // A reservation linked to a settled, explicitly closed tenancy is no longer
 // current stock. Other accepted/draft reservations still suppress availability.
@@ -26,6 +27,7 @@ export const PUBLIC_LISTING_ELIGIBILITY_SQL=`
   WHERE pref.opted_out=0
     ${cessationReady?`AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=p.tenant_id AND c.property_id=p.id AND c.unit_id IS NULL AND c.state='ceased'${activeCessation})`:''}
     ${wholeHold}
+    ${splitAvailability}
     AND p.country_code COLLATE DATABASE_DEFAULT=pref.country_code
     AND (t.status IS NULL OR t.status=N'active')
     AND LOWER(COALESCE(p.status,N'')) IN (N'active',N'available',N'rented')

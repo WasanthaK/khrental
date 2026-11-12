@@ -59,7 +59,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261110_01_management_inventory_staging',
   '20261110_02_management_cessation',
   '20261112_01_management_recovery',
-  '20261112_02_management_restoration'
+  '20261112_02_management_restoration',
+  '20261112_03_management_splits'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -205,3 +205,31 @@ export const inspectManagementRestoration=async pool=>{
   if(!checks.some(c=>c.name==='CK_management_inventory_restoration'&&!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===expected)){problems.push('restoration.constraint');}
   return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Restoration metadata, active episode uniqueness and exact domain guards verified.'};
 };
+
+export const inspectManagementSplits=async pool=>{
+  const base=await inspectManagementRestoration(pool),problems=base.satisfied?[]:[base.detail];
+  const result=await pool.request().query(`
+    SELECT t.name AS table_name,c.name,ty.name AS type_name,c.is_nullable FROM sys.columns c JOIN sys.tables t ON t.object_id=c.object_id
+      JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE t.name IN('management_inventory_splits','management_inventory_split_units','property_units');
+    SELECT name,is_disabled,OBJECT_DEFINITION(object_id) AS definition FROM sys.triggers WHERE name IN('TR_units_split_identity','TR_agreements_split_inventory','TR_offers_split_inventory');
+    SELECT name,is_disabled,is_not_trusted FROM sys.check_constraints WHERE parent_object_id IN(OBJECT_ID('dbo.management_inventory_splits'),OBJECT_ID('dbo.management_inventory_split_units'));
+    SELECT name,is_unique,is_disabled,filter_definition FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.management_inventory_splits');
+    SELECT OBJECT_NAME(parent_object_id) AS table_name,is_disabled,is_not_trusted FROM sys.foreign_keys WHERE parent_object_id IN(OBJECT_ID('dbo.management_inventory_splits'),OBJECT_ID('dbo.management_inventory_split_units'));
+  `);
+  const [columns=[],triggers=[],checks=[],indexes=[],fks=[]]=result.recordsets||[];
+  for(const [table,fields] of [['management_inventory_splits',[['command_id','uniqueidentifier'],['tenant_id','uniqueidentifier'],['property_id','uniqueidentifier'],['state','varchar'],['created_at','datetime2'],['activated_at','datetime2']]],
+    ['management_inventory_split_units',[['id','uniqueidentifier'],['command_id','uniqueidentifier'],['payload_json','nvarchar'],['payload_hash','char']]],
+    ['property_units',[['split_operation_id','uniqueidentifier'],['parent_stock_id','uniqueidentifier'],['stock_type','varchar']]]]){
+    for(const [name,type] of fields){if(!columns.some(c=>c.table_name===table&&c.name===name&&c.type_name===type&&Boolean(c.is_nullable)===(table==='property_units'||name==='activated_at'))){problems.push(table+'.'+name);}}
+  }
+  if(checks.length!==3||checks.some(c=>c.is_disabled||c.is_not_trusted)){problems.push('split.constraints');}
+  if(fks.length!==4||fks.some(f=>f.is_disabled||f.is_not_trusted)){problems.push('split.foreign_keys');}
+  if(!indexes.some(i=>i.name==='UQ_management_split_parent'&&i.is_unique&&!i.is_disabled&&String(i.filter_definition).replace(/[\s[\]()]/g,'').toLowerCase()==="state<>'aborted'")){problems.push('split.parent_uniqueness');}
+  const norm=v=>String(v||'').toLowerCase().replace(/create\s+(?:or\s+alter\s+)?trigger/,'trigger').replace(/\s+/g,'').trim();
+  const source=fs.readFileSync(new URL('../migrations/20261112_03_management_splits.sql',import.meta.url),'utf8');
+  for(const match of source.matchAll(/EXEC\(N'((?:[^']|'')*)'\);/g)){
+    const expected=match[1].replace(/''/g,"'"),name=expected.match(/TR_\w+/)[0],actual=triggers.find(t=>t.name===name);
+    if(!actual||actual.is_disabled||norm(actual.definition)!==norm(expected)){problems.push(name);}
+  }
+  return {satisfied:!problems.length,detail:problems.length?problems.join(', '):'Split reservations, parent uniqueness and exact domain guards verified.'};
+};

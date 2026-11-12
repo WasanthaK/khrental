@@ -7,6 +7,7 @@ import {createBillingService} from '../src/api/managementBilling/service.js';
 import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createRecoveryWorker} from '../src/api/managementBilling/recoveryWorker.js';
 import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
+import {verifySplits} from './test-management-split-sql.mjs';
 import {verifyRestoration} from './test-management-restoration-sql.mjs';
 import {verifyCessationCleanup} from './test-management-cessation-cleanup-sql.mjs';
 import {verifyQuantityRecovery} from './test-management-quantity-recovery-sql.mjs';
@@ -93,6 +94,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   await verifyProviderRecovery(pool,{tenantId,otherTenant,actorId,stripe,remote,calls});
   await verifyCessationCleanup(pool,actorId);
   await verifyRestoration(pool,actorId);
+  await verifySplits(pool,actorId);
 };
 
 // Extends the existing disposable fixture only; never called by production jobs.
