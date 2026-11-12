@@ -1,0 +1,36 @@
+name: Genuine Stripe sandbox lifecycle
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify-management-stripe-lifecycle.mjs'
+      - '.github/workflows/verify-management-stripe-lifecycle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stripe-sandbox-lifecycle
+  cancel-in-progress: false
+jobs:
+  sandbox:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Genuine isolated sandbox renewal, failure and recovery
+        env:
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          STRIPE_LIFECYCLE_CONFIRM: RUN-ISOLATED-SANDBOX
+        run: node scripts/verify-management-stripe-lifecycle.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: stripe-lifecycle-evidence
+          path: stripe-lifecycle-evidence.json
+          if-no-files-found: error
+          retention-days: 30
