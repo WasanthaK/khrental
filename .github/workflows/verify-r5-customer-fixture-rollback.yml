@@ -71,43 +71,73 @@ jobs:
             exit 1
           fi
           stage=payload_size
+          # Reuse the bounded Azure exec transfer proven by genuine portal recovery.
+          # Azure rejects oversized startup commands before executing them.
           encoded=$(node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
-          import {deflateRawSync} from 'node:zlib';
+          import {brotliCompressSync} from 'node:zlib';
           const source=readFileSync('scripts/verify-r5-customer-fixture-rollback.mjs');
-          console.log(deflateRawSync(source).toString('base64url'));
+          console.log(brotliCompressSync(source).toString('base64url'));
           JS
           )
-          # One bounded connection. Abort before execution if the encoded payload is oversized.
           echo "R5_FIXTURE_PHASE=payload_size compressed_characters=${#encoded}"
-          if [ "${#encoded}" -ge 6500 ]; then
-            echo "R5_FIXTURE_BLOCKED=payload_too_large" >&2
+          if [ "${#encoded}" -lt 1 ] || [ "${#encoded}" -ge 6500 ]; then
+            echo 'R5_FIXTURE_BLOCKED=invalid_payload_size' >&2
             exit 1
           fi
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          remote="/tmp/r5-customer-fixture-$GITHUB_RUN_ID.b64"
+          digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
+          # Only bounded explicit failure codes are retained. Never dump the
+          # raw Azure exec terminal transcript or environment variables.
+          report_remote_failure() {
+            local phase="$1" captured="$2" exit_code="$3" failure_class
+            echo "R5_REMOTE_EXEC_STATUS=failed phase=$phase exit_code=$exit_code" | tee -a fixture-rollback.txt
+            if grep -Fq 'R5_CUSTOMER_FIXTURE_FAILED=' "$captured"; then
+              failure_class=fixture_sql_or_assertion
+              grep -Eo 'R5_CUSTOMER_FIXTURE_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a fixture-rollback.txt || :
+            elif grep -Fq 'R5_CUSTOMER_ROLLBACK_FAILED=' "$captured"; then
+              failure_class=fixture_rollback_error
+              grep -Eo 'R5_CUSTOMER_ROLLBACK_FAILED=\{[^}]{1,240}\}' "$captured" | head -n 1 | tee -a fixture-rollback.txt || :
+            elif grep -Eq 'SyntaxError|ERR_INVALID_URL|ERR_MODULE_NOT_FOUND|ERR_UNSUPPORTED_RESOLVE_REQUEST' "$captured"; then
+              failure_class=node_loader
+            elif grep -Eqi 'WebSocket|handshake|unable to connect|connection refused|dial tcp|i/o timeout|Too Many Requests|HTTP 429' "$captured"; then
+              failure_class=azure_exec_transport
+            else
+              failure_class=unclassified_remote_exit
+            fi
+            echo "R5_REMOTE_ERROR_CLASS=$failure_class" | tee -a fixture-rollback.txt
+          }
+          stage=remote_payload_delivery
+          echo "R5_FIXTURE_PHASE=remote_payload_delivery"
+          for ((offset=0; offset<${#encoded}; offset+=1300)); do
+            chunk=${encoded:offset:1300}
+            method=appendFileSync
+            if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
+            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('R5_FIXTURE_CHUNK_$offset')\""
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/chunk.txt"; then
+              if ! grep -Fq "R5_FIXTURE_CHUNK_$offset" "$RUNNER_TEMP/chunk.txt"; then
+                report_remote_failure "chunk_$offset-missing-marker" "$RUNNER_TEMP/chunk.txt" 0
+                exit 1
+              fi
+            else
+              remote_rc=$?
+              report_remote_failure "chunk_$offset" "$RUNNER_TEMP/chunk.txt" "$remote_rc"
+              exit 1
+            fi
+          done
           stage=remote_sql_rollback
-          command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
-          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           echo "R5_FIXTURE_PHASE=remote_sql_rollback"
+          # The execution command verifies the original uploaded archive hash
+          # and cleans up its temporary files even if fixture assertions fail.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
             echo 'R5_REMOTE_EXEC_STATUS=success'
           else
             remote_rc=$?
-            echo "R5_REMOTE_EXEC_STATUS=failed exit_code=$remote_rc"
-            # Only emit explicit test-script structured errors. Never dump the terminal
-            # transcript: Azure exec can include configuration or provider secrets.
-            grep -Eo 'R5_CUSTOMER_(FIXTURE_FAILED|ROLLBACK_FAILED)=\\{[^}]{0,480}\\}' "$RUNNER_TEMP/result.txt" | head -n 3 || :
-            # Classify transport/Node errors without echoing their raw messages.
-            if grep -Eq 'SyntaxError|ERR_INVALID_URL|ERR_MODULE_NOT_FOUND|ERR_UNSUPPORTED_RESOLVE_REQUEST' "$RUNNER_TEMP/result.txt"; then
-              echo 'R5_REMOTE_ERROR_CLASS=node_loader'
-            elif grep -Eqi 'WebSocket|handshake|connect|exec session|unable to connect|connection refused|dial tcp|i/o timeout|429|Too Many Requests' "$RUNNER_TEMP/result.txt"; then
-              echo 'R5_REMOTE_ERROR_CLASS=azure_exec_transport'
-            elif grep -Eq 'R5_CUSTOMER_FIXTURE_FAILED|R5_CUSTOMER_ROLLBACK_FAILED' "$RUNNER_TEMP/result.txt"; then
-              echo 'R5_REMOTE_ERROR_CLASS=fixture_sql_or_assertion'
-            elif grep -Eq 'Error:|error:|Exception|Traceback' "$RUNNER_TEMP/result.txt"; then
-              echo 'R5_REMOTE_ERROR_CLASS=unclassified_remote_error'
-            else
-              echo 'R5_REMOTE_ERROR_CLASS=unclassified_early_exit'
-            fi
+            report_remote_failure execute "$RUNNER_TEMP/result.txt" "$remote_rc"
             echo 'R5_FIXTURE_BLOCKED=remote_execution_failure' >&2
             exit 1
           fi
