@@ -1,0 +1,85 @@
+name: R5 customer recovery read-only preflight
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact SHA serving at app.quixo.homes
+        type: string
+        required: true
+      confirmation:
+        description: INSPECT-R5-CUSTOMER-RECOVERY
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Verify unchanged serving implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = INSPECT-R5-CUSTOMER-RECOVERY
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|.github/workflows/verify-r5-customer-recovery-preflight.yml) ;;
+              *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Inspect existing worker scope and customer recovery eligibility (SELECT only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app.json")
+          image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          encoded=$(node --input-type=module <<'JS'
+          import {deflateRawSync} from 'node:zlib';
+          const source="import assert from 'node:assert/strict';\nimport {createBillingStore} from 'file:///app/src/api/managementBilling/store.js';\nimport {closeMssqlPool} from 'file:///app/src/api/mssql/pool.js';\nconst store=createBillingStore();\ntry {\n  assert.equal(process.env.MANAGEMENT_BILLING_SANDBOX_ENABLED,'true');\n  assert.equal(process.env.MANAGEMENT_RECOVERY_SCHEMA_READY,'true');\n  assert.equal(process.env.MANAGEMENT_RECOVERY_WORKER_ENABLED,'true');\n  const scopes=(process.env.MANAGEMENT_RECOVERY_TENANT_IDS||'').split(',').map(s=>s.trim()).filter(Boolean);\n  assert.equal(scopes.length,1,'Recovery worker must remain limited to one existing sandbox organization');\n  const tenantId=scopes[0];\n  assert.match(tenantId,/^[0-9a-fA-F-]{36}$/);\n  const tenant=await store.read('SELECT status,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});\n  assert.equal(tenant.length,1);assert.equal(tenant[0].status,'active');assert.equal(tenant[0].plan,'development-testing');\n  const accounts=await store.read('SELECT stripe_customer_id,stripe_subscription_id FROM dbo.management_billing_accounts WHERE tenant_id=@tenantId',{tenantId});\n  assert.equal(accounts.length,1);\n  const pending=await store.read(\"SELECT COUNT_BIG(*) AS count FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'\",{tenantId});\n  const subscribed=!!accounts[0].stripe_subscription_id;\n  console.log('R5_CUSTOMER_PREFLIGHT='+JSON.stringify({\n    readOnly:true,workerScopeCount:1,sandbox:true,accountFound:true,existingCustomer:!!accounts[0].stripe_customer_id,\n    existingSubscription:subscribed,pendingOperations:Number(pending[0].count),\n    customerCreationEligible:!subscribed&&!accounts[0].stripe_customer_id,\n    result:subscribed?'BLOCKED_EXISTING_SUBSCRIPTION':accounts[0].stripe_customer_id?'BLOCKED_EXISTING_CUSTOMER':'READY_FOR_SEPARATE_APPROVED_FIXTURE'\n  }));\n} catch(e) {\n  console.error('R5_CUSTOMER_PREFLIGHT_FAILED='+JSON.stringify({code:e.code||'PREFLIGHT_FAILED'}));\n  process.exitCode=1;\n} finally {await closeMssqlPool();}\n";
+          console.log(deflateRawSync(source).toString('base64url'));
+          JS
+          )
+          command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"
+          grep '^R5_CUSTOMER_PREFLIGHT=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > preflight.txt
+          cat preflight.txt
+          grep -Fq '"readOnly":true' preflight.txt
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          cat preflight.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: r5-customer-recovery-readonly-preflight
+          path: preflight.txt
+          if-no-files-found: warn
+          retention-days: 30
