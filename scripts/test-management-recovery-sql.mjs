@@ -57,6 +57,16 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   await assert.rejects(journal.renew({...claimArgs,token:old.token}),{code:'BILLING_RECOVERY_FENCED'});
   await assert.rejects(journal.finish({...claimArgs,token:old.token,result:{}}),{code:'BILLING_RECOVERY_FENCED'});
   assert.deepEqual(await journal.fail({...claimArgs,token:old.token,review:true,code:'STALE',delaySeconds:30}),{review:false});
+  const beforeVersion=(await store.account(tenantId)).version;
+  const failingJournal=createRecoveryJournal({store:{...store,audit:async()=>{throw new Error('Synthetic audit failure');}},
+    complete:async q=>{
+      await q('UPDATE dbo.management_billing_accounts SET version=version+1 WHERE tenant_id=@tenantId',{tenantId});
+      return {confirmed:true};
+    }});
+  await assert.rejects(failingJournal.finish({...claimArgs,token:next.token,result:{}}),/Synthetic audit failure/);
+  assert.equal((await store.account(tenantId)).version,beforeVersion,'Projection rolls back when audit fails');
+  assert.equal((await store.read('SELECT status FROM dbo.management_billing_commands WHERE id=@id',{id:leaseId}))[0].status,'pending');
+  assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}))[0].state,'running');
   await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
   await assert.rejects(journal.finish({...claimArgs,token:next.token,result:{}}),{code:'BILLING_ADMIN_REQUIRED'});
   await store.locked(tenantId,async q=>{
