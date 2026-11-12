@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-12",
+  "accepted": false,
+  "attempts": [
+    {
+      "run": 43233999467,
+      "job": 131236916001,
+      "head": "62e1ed2e7739972113b2f8f80ee9267343233454",
+      "fixtureId": "dd1cdbab-5284-49ac-8f4f-2e45da124f67",
+      "result": "Azure 429 before acceptance script execution",
+      "chunks": [
+        0,
+        1400,
+        2800,
+        4200
+      ],
+      "scriptStarted": false,
+      "httpChecks": 0,
+      "retryAfterSeconds": 600,
+      "earliestRetryUTC": "2026-11-12T14:20:38Z",
+      "restoredRevision": "0000497",
+      "restoredAtUTC": "2026-11-12T14:11:29Z",
+      "originalConfigRestored": true,
+      "healthPassed": true,
+      "artifactId": 13950154724,
+      "artifactSHA256": "efc57a8bdccc781231a973481266df57462390aebb940a9b96f14666044b7c0f"
+    }
+  ],
+  "next": "Merge/deploy tested monthly invoice trigger compatibility correction #610, then fresh-fixture HTTP acceptance. Preserve accepted Stripe lifecycle and portal recovery; Evia paused."
+}

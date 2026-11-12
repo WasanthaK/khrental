@@ -116,29 +116,12 @@ jobs:
           revision=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
           image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
-          encoded=$(node --input-type=module <<'JS'
-          import {readFileSync} from 'node:fs';
-          import {brotliCompressSync} from 'node:zlib';
-          const target=JSON.stringify({id:process.env.OPERATION_ID});
-          const source='process.env.HTTP_ACCEPTANCE_TARGET='+JSON.stringify(target)+';\n'+readFileSync('scripts/verify-deployed-http-financial-maintenance.mjs','utf8');
-          console.log(brotliCompressSync(Buffer.from(source)).toString('base64url'));
-          JS
-          )
-          # Keep every exec URL short; Azure rejects large startup commands before execution.
-          remote="/tmp/r5-http-$OPERATION_ID.b64"
-          digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
-          : > deployed-http.txt
-          for ((offset=0; offset<${#encoded}; offset+=1400)); do
-            chunk=${encoded:offset:1400}
-            method=appendFileSync; if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
-            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('PAYLOAD_CHUNK_$offset')\""
-            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-            script -q -e -c "$invocation" /dev/null | tee -a deployed-http.txt
-            grep -Fq "PAYLOAD_CHUNK_$offset" deployed-http.txt
-          done
-          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          # The accepted image includes this harness. Verify exact bytes before
+          # execution; one short connection avoids multi-chunk exec throttling.
+          digest=$(sha256sum scripts/verify-deployed-http-financial-maintenance.mjs | cut -d ' ' -f 1)
+          command="node --input-type=module -e \"const fs=await import('node:fs');const p='/app/scripts/verify-deployed-http-financial-maintenance.mjs';const b=fs.readFileSync(p);if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Deployed harness mismatch');process.env.HTTP_ACCEPTANCE_TARGET=JSON.stringify({id:'$OPERATION_ID'});await import('file://'+p)\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-          script -q -e -c "$invocation" /dev/null | tee -a deployed-http.txt
+          script -q -e -c "$invocation" /dev/null | tee deployed-http.txt
           marker=HTTP_PASS
           grep -Fq "$marker=" deployed-http.txt
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"

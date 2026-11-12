@@ -68,7 +68,7 @@ const main=async()=>{
   await denied('expired_monthly_generation_denied','POST','billing/monthly-invoices',{billingPeriod:'2035-11'});
   await state("subscription_status='active',paid_through=DATEADD(DAY,1,SYSUTCDATETIME()),grace_started_at=NULL");
   let response=await api('POST','billing/monthly-invoices',{billingPeriod:'2035-11',notes:'Synthetic acceptance draft only'});
-  assert.equal(response.status,200);assert.equal(response.data.data.created.length,1);check('seeded_paid_monthly_draft_allowed');
+  assert.equal(response.status,200,JSON.stringify({stage:'paid_monthly_draft',errors:response.data?.data?.errors}));assert.equal(response.data.data.created.length,1);check('seeded_paid_monthly_draft_allowed');
   const invoice=(await store.read("SELECT * FROM invoices WHERE tenant_id=@id AND billingperiod='2035-11'",{id:target.id}))[0];
   assert.equal(invoice.status,'draft');proof.invoiceId=invoice.id;
   const component=(await store.read('SELECT id FROM invoice_components WHERE tenant_id=@id AND invoice_id=@invoiceId ORDER BY id',{id:target.id,invoiceId:invoice.id}))[0];assert.ok(component);
