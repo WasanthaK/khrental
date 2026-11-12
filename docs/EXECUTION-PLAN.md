@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## BL08.11-A continuation — 12 November 2026
+
+Customer response-loss acceptance remains **unverified**. [Run 43261589439](https://github.com/WasanthaK/khrental/actions/runs/43261589439) passed source/build, Azure login and payload transfer, but transport exit zero was followed by missing acceptance evidence at 16:43:44 UTC / 22:13:44 Asia/Colombo. Customer creation and cleanup remain unknown; do not repeat the provider write.
+
+[PR #619](https://github.com/WasanthaK/khrental/pull/619) already merged SELECT-only reconciliation. Its first [run 43263248995](https://github.com/WasanthaK/khrental/actions/runs/43263248995) failed at the Azure execution transport boundary at 16:52:48 UTC / 22:22:48 Asia/Colombo. That failure establishes no fixture or provider outcome. A read-only retry has been requested; its result must be recorded before any customer-write retry.
+
+The evidence-reporting correction checks structured script failures even when Azure returns zero, retains bounded failure summaries, and accepts terminal-prefixed pass markers while preserving all JSON acceptance assertions. This is a harness correction, not recovery acceptance. Preserve prior accepted lifecycle proofs, the retained clock, existing worker scope, and paused Evia work.
+
 ## Next acceptance slice — invoice/payment and maintenance HTTP, 12 November 2026
 
 **Current checkpoint:** corrected-fixture run [43233999467](https://github.com/WasanthaK/khrental/actions/runs/43233999467) uploaded four payload chunks, then Azure rejected the execution connection with HTTP 429 at **14:10:38 UTC / 19:40:38 Asia/Colombo**, requesting 600 seconds. The acceptance script did not start: no fixture SQL or HTTP checks ran. Exact original enforcement settings and health were restored at **14:11:29 UTC / 19:41:29 Asia/Colombo**, Ready **0000497**, unchanged image `59050153ad96b10be7c1990df846363a1642c046`. Fixture ID `dd1cdbab-5284-49ac-8f4f-2e45da124f67` identifies this transport-only attempt. No new Stripe or Evia operation occurred.
