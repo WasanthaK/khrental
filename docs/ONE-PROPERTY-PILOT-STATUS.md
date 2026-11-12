@@ -1,6 +1,13 @@
 # One-property public pilot — current canonical status
 
-## Current controlling status — 3 November 2026
+## Current controlling status — 12 November 2026
+
+The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) and [R5 task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) supersede the historical website-first queues below. Completed signing and the labelled simulated rental journey through activation, operations, settlement/closure and relisting remain accepted; do not repeat them. Earlier successful audit retrieval and the later missing fresh matching audit are distinct cases: CT03.4/CT03.5 remain open without reopening signing.
+
+R1/R3/R4 retain their scoped owner closure; R2 is deferred; R5 remains incomplete. Property/unit forms #561 are deployed at Ready 0000488; recovery #564–#568/#570/#572 is merged but not deployed. Remaining work is the exact recovery/restore/split/cessation queue and outstanding acceptance/commercial exits in the linked plan. No launch or live charging is enabled. Follow the [completed-work/reopening rule](EXECUTION-PLAN.md#completed-work-and-reopening-rule).
+
+
+## Historical controlling status — 3 November 2026
 
 This document's earlier pilot/release checkpoints are historical. The [current canonical plan](EXECUTION-PLAN.md#current-canonical-status-and-plan-review--3-november-2026) controls status and priorities, including the later approved open-product testing direction.
 

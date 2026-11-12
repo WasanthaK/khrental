@@ -1,5 +1,14 @@
 # Quixo.Homes Stripe B02/B03 — merchant readiness and dwelling policy
 
+## Current engineering versus commercial decisions — 12 November 2026
+
+The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) supersede historical implementation queues below. Forms #561 are deployed at Ready 0000488. Recovery #564–#568/#570/#572 is merged, source-verified and not deployed; #572 passed 1,230 tests, lint and build in [43151088826](https://github.com/WasanthaK/khrental/actions/runs/43151088826).
+
+The [approved discovery corrections/defaults](R5-ENGINEERING-DISCOVERY-20261112.md) authorize engineering of aggregate billing, renewal-only split differences and restoration from restoration time while preserving paid capacity. They do not publish customer terms or resolve remaining merchant, tax, FX, refund or privacy decisions. Restore/split implementation, other cessation states and remaining provider recovery operations are unfinished. Follow the [completed-work/reopening rule](EXECUTION-PLAN.md#completed-work-and-reopening-rule); do not repeat accepted signing, initial billing or form preparation. Production migrations/readiness and live charging remain off.
+
+## Historical implementation and commercial checkpoints
+
+
 ## Implementation reconciliation — 11 November 2026
 
 The [release evidence](R5-INVENTORY-CESSATION-RELEASE-20261110.md) now records tested staged additions and paid active/ending obligations-closed cessation, plus bound readback-only cancellation recovery. These source changes implement parts of the approved behavior below; they do not approve new pricing, FX, refunds, tax, privacy or restoration terms. Production readiness migrations remain pending and rollout/live charging stay OFF.
