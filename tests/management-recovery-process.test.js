@@ -90,3 +90,36 @@ for(const [scenario,steps] of Object.entries({checkout:['create_customer','creat
     });
   }
 }
+
+for(const mode of ['grace','trial']){
+  for(const shape of ['partial','zero','scheduled']){
+    const scenario=`cleanup_${mode}_${shape}`,steps=shape==='scheduled'?['release_cleanup_schedule','cleanup_subscription']:['cleanup_subscription'];
+    const cases=[['after_claim',''],['after_completion',''],...steps.flatMap(step=>
+      ['after_intent','after_provider_effect','after_checkpoint'].map(point=>[point,step]))];
+    for(const [boundary,step] of cases){
+      test(`${scenario}: SIGKILL ${boundary} ${step} recovers once without invoicing`,()=>{
+        const directory=fs.mkdtempSync(path.join(os.tmpdir(),'cessation-cleanup-crash-'));
+        try{
+          const stopped=spawnSync(process.execPath,[fixture,directory,boundary,scenario,step],{encoding:'utf8',timeout:10000});
+          assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
+          for(let attempt=0;attempt<2;attempt++){
+            const resumed=spawnSync(process.execPath,[fixture,directory,'resume',scenario],{encoding:'utf8',timeout:10000});
+            assert.equal(resumed.status,0,resumed.stderr);
+          }
+          const journal=JSON.parse(fs.readFileSync(path.join(directory,'journal.json'),'utf8'));
+          const provider=JSON.parse(fs.readFileSync(path.join(directory,'provider.json'),'utf8'));
+          assert.equal(journal.completedCount,1);assert.deepEqual(Object.keys(journal.steps),steps);
+          assert.deepEqual(provider.writes,(shape==='scheduled'?['cleanup-release','cleanup']:['cleanup']).map(s=>`quixo:tenant:operation:${s}`));
+          assert.equal(provider.subscription.status,mode==='grace'?'past_due':'trialing');
+          assert.equal(provider.subscription.items.data[0].quantity,shape==='zero'?2:1);
+          assert.equal(provider.subscription.cancel_at_period_end,shape==='zero');
+          assert.equal(journal.result.nextRenewalQuantity,shape==='zero'?0:1);
+          assert.equal(provider.subscription.schedule,null);
+          assert.equal(journal.steps.cleanup_subscription.input.body.proration_behavior,'none');
+          assert.deepEqual(Object.keys(journal.steps.cleanup_subscription.input.body).sort(),
+            shape==='zero'?['cancel_at_period_end','proration_behavior']:['items','proration_behavior']);
+        }finally{fs.rmSync(directory,{recursive:true,force:true});}
+      });
+    }
+  }
+}

@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createProviderRecoveryHandlers} from '../../src/api/managementBilling/service.js';
 import {hash,BILLING_PORTAL} from '../../src/api/managementBilling/contract.js';
 import {createRecoveryRunner} from '../../src/api/managementBilling/recovery.js';
-import {quantityRecovery} from '../../src/api/managementBilling/recoveryQuantity.js';
+import {quantityRecovery,cessationCleanupRecovery,scheduleFingerprint} from '../../src/api/managementBilling/recoveryQuantity.js';
 import {cancellationRecovery} from '../../src/api/managementBilling/recoveryCancellation.js';
 
 // Process-crash fixture only: disk substitutes for SQL and the provider. Real
@@ -19,7 +19,13 @@ const stop=(point,step='')=>{if(stopAt===point&&(!targetStep||targetStep===step)
 const state=read('journal.json',{attempts:0,steps:{},result:null,completedCount:0});
 const job={created_at:new Date(now).toISOString(),id:'operation',tenant_id:'tenant',kind:'cancellation',intent:{_subscriptionId:'sub_test',customerId:'cus_test',scheduleId:null,cancelAtPeriodEnd:true}};
 const inventory=[{key:'one'},{key:'two'},{key:'three'}];
-if(['checkout','portal','preview'].includes(scenario)){
+if(scenario.startsWith('cleanup_')){
+  const [,mode,shape]=scenario.split('_');
+  job.kind='cessation';
+  Object.assign(job.intent,{cleanupMode:mode,ending:false,itemId:'si_test',priceId:'price_test',periodEnd:now/1000+86400,
+    trialStart:mode==='trial'?now/1000-86400:null,trialEnd:mode==='trial'?now/1000+86400:null,
+    preview:{from:2,to:shape==='zero'?0:1}});
+}else if(['checkout','portal','preview'].includes(scenario)){
   job.kind=scenario==='preview'?'quantity_preview':scenario;
   Object.assign(job.intent,{priceId:'price_test',itemId:'si_test',origin:'https://app.example.test',inventory,inventoryHash:hash(inventory),
     preview:{from:2,to:3,inventoryHash:hash(inventory),expiresAt:new Date(now+600000).toISOString(),prorationDate:now/1000}});
@@ -51,6 +57,15 @@ const journal={
 const initial={writes:[],events:[],subscription:{id:'sub_test',customer:'cus_test',livemode:false,status:'active',
   schedule:null,cancel_at_period_end:false,items:{data:[{id:'si_test',price:'price_test',quantity:2,
     current_period_end:Math.floor(now/1000)+86400}]}},schedule:null};
+if(scenario.startsWith('cleanup_')){
+  initial.subscription.status=job.intent.cleanupMode==='trial'?'trialing':'past_due';
+  initial.subscription.trial_start=job.intent.trialStart;initial.subscription.trial_end=job.intent.trialEnd;
+  if(scenario.endsWith('_scheduled')){
+    initial.subscription.schedule='sched_test';job.intent.scheduleId='sched_test';
+    initial.schedule={id:'sched_test',customer:'cus_test',subscription:'sub_test',livemode:false,status:'active',phases:[],end_behavior:'release'};
+    job.intent.scheduleFingerprint=scheduleFingerprint(initial.schedule);
+  }
+}
 const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
   const provider=read('provider.json',initial);
   if(method==='GET'){
@@ -80,6 +95,10 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
     provider.schedule={id:'sched_test',customer:'cus_test',subscription:'sub_test',livemode:false,status:'active',
       current_phase:{start_date:Math.floor(now/1000)-86400},phases:[],end_behavior:'release'};
     object=provider.schedule;
+  }else if(url==='/v1/subscription_schedules/sched_test/release'){
+    step='release_cleanup_schedule';type='subscription_schedule.released';
+    provider.subscription.schedule=null;provider.subscription.cancel_at_period_end=false;
+    Object.assign(provider.schedule,{status:'released',subscription:null,released_subscription:'sub_test'});object=provider.schedule;
   }else if(url==='/v1/subscription_schedules/sched_test'){
     step='set_schedule_phases';type='subscription_schedule.updated';
     Object.assign(provider.schedule,body);object=provider.schedule;
@@ -87,6 +106,10 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
     if(body.items){
       step='increase_quantity';provider.subscription.items.data[0].quantity=body.items[0].quantity;
     }else{step='set_cancellation';provider.subscription.cancel_at_period_end=body.cancel_at_period_end;}
+    if(scenario.startsWith('cleanup_')){
+      if(body.proration_behavior!=='none'){throw new Error('Cleanup must not prorate');}
+      step='cleanup_subscription';
+    }
     type='customer.subscription.updated';object=provider.subscription;
   }else{throw new Error(`Unexpected write ${url}`);}
   // Count every request, including duplicate keys: a replay cannot hide behind
@@ -100,4 +123,4 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
 const store={account:async()=>({stripe_subscription_id:job.intent._subscriptionId,stripe_customer_id:job.intent.customerId,stripe_price_id:'price_test',quantity:2}),inventory:async()=>inventory};
 const handlers=createProviderRecoveryHandlers({store,stripe,requireAccount:store.account,clock});
 await createRecoveryRunner({journal,clock,handlers:{cancellation:cancellationRecovery({store,stripe}),
-  quantity_apply:quantityRecovery({store,stripe,clock}),...handlers}}).run({tenantId:'tenant',id:'operation'});
+  quantity_apply:quantityRecovery({store,stripe,clock}),...handlers,cessation:cessationCleanupRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});
