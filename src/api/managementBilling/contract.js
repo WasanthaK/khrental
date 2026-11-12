@@ -179,6 +179,17 @@ export const entitlement = (account, now = billingClock.now()) => {
   return {state:account.initial_payment_verified ? 'read_only' : 'payment_pending', management:false, historicalAccess:true};
 };
 
+// Handoff cessation policy: access withdrawal never cancels a complimentary
+// overlay's existing paid obligations or retries an unpaid purchase.
+export const localCessationAllowed = (account, now = billingClock.now()) => {
+  const access=entitlement(account,now);
+  if(!account||account.risk_hold){return false;}
+  if(access.state==='complimentary'){return true;}
+  return ['incomplete','incomplete_expired','unpaid','canceled'].includes(account.subscription_status)||
+    (account.subscription_status==='past_due'&&account.initial_payment_verified&&
+      Number.isFinite(Date.parse(account.grace_started_at))&&Date.parse(account.grace_started_at)+7*86400000<=now);
+};
+
 // Source preparation only: no organization is opted into write enforcement by
 // enrollment, payment or a caller-supplied request field. Full-path acceptance
 // must precede configuring this server-owned rollout scope.

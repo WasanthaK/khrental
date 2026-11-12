@@ -193,5 +193,57 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
   const savedKey=(await store.read("SELECT idempotency_key FROM dbo.management_billing_steps WHERE command_id=@id AND name='create_schedule'",{id:ceaseId}))[0].idempotency_key;
   assert.equal(writes.filter(w=>w.key===savedKey).length,1,'Exactly one write uses the persisted schedule key, including SQL GUID casing');
   assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='inventory.ceased'",{id:ceaseId})).length,1);
+  // Each new state must cease atomically with no provider write, even on retry.
+  for(const scenario of ['complimentary','complimentary_without_subscription','incomplete','incomplete_expired','unpaid','canceled','past_due']){
+    const propertyId=crypto.randomUUID(),id=crypto.randomUUID();
+    const complimentary=scenario.startsWith('complimentary');
+    sub.status=complimentary?'active':scenario;sub.latest_invoice=null;sub.schedule=null;
+    await store.locked(tenantId,async q=>{
+      await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code) VALUES(@id,@tenantId,'Local cessation fixture','house','LK')",{id:propertyId,tenantId});
+      await q(`UPDATE dbo.management_billing_accounts SET subscription_status=@status,comp_type=@comp,
+        comp_expires_at=NULL,stripe_subscription_id=@subscription,stripe_item_id=@item,quantity=@quantity,stripe_schedule_id=NULL,pending_quantity=NULL,
+        initial_payment_verified=@paid,grace_started_at=DATEADD(day,-8,SYSUTCDATETIME()) WHERE tenant_id=@tenantId`,
+      {tenantId,status:sub.status,comp:complimentary?'ongoing':null,subscription:scenario==='complimentary_without_subscription'?null:sub.id,
+        item:scenario==='complimentary_without_subscription'?null:sub.items.data[0].id,quantity:scenario==='complimentary_without_subscription'?0:sub.items.data[0].quantity,
+        paid:scenario==='incomplete'||scenario==='incomplete_expired'?0:1});
+    });
+    const before=await store.account(tenantId),writeCount=writes.length;
+    const originalStatus=(await store.read('SELECT status FROM dbo.properties WHERE id=@id',{id:propertyId}))[0].status;
+    const preview=await service.cessationPreview({tenantId,actorId,propertyId});
+    assert.equal(preview.eligible,true,scenario);assert.equal(preview.timing,'unchanged');
+    const args={tenantId,actorId,id,propertyId,inventoryHash:preview.inventoryHash,reason:'No-write cessation state matrix.'};
+    failCompletion=true;await assert.rejects(service.ceaseStock(args),/Synthetic cessation audit rollback/);
+    assert.equal((await store.read('SELECT id FROM dbo.management_inventory_controls WHERE id=@id',{id})).length,0,'Audit failure rolls back cessation');
+    assert.equal((await store.read('SELECT status FROM dbo.properties WHERE id=@id',{id:propertyId}))[0].status,originalStatus);
+    await due(id);const result=await service.ceaseStock(args);
+    assert.equal(result.managementEnded,true);assert.equal(result.billingUnchanged,true);assert.equal(result.timing,'unchanged');
+    assert.deepEqual(await service.ceaseStock(args),result);assert.equal(writes.length,writeCount,`${scenario} makes zero Stripe writes`);
+    const after=await store.account(tenantId);
+    for(const field of ['quantity','pending_quantity','comp_type','comp_expires_at','cancel_at_period_end']){
+      assert.deepEqual(after[field],before[field],`${scenario} preserves ${field}`);
+    }
+    const invariants=await createBillingInvariantInspector({store,stripe:readOnlyStripe(transport)}).inspect(tenantId);
+    assert.equal(invariants.status,'consistent',`${scenario}: ${invariants.issues.join(',')}`);
+    assert.equal((await store.read('SELECT name FROM dbo.management_billing_steps WHERE command_id=@id',{id})).length,0);
+    assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='inventory.ceased'",{id})).length,1);
+  }
+  // A grant can expire after intent but before a resumed completion. Never
+  // silently route that saved no-write operation into a provider mutation.
+  const changedProperty=crypto.randomUUID(),changedId=crypto.randomUUID();
+  sub.status='active';
+  await store.locked(tenantId,async q=>{
+    await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code) VALUES(@id,@tenantId,'Changed entitlement fixture','house','LK')",{id:changedProperty,tenantId});
+    await q("UPDATE dbo.management_billing_accounts SET comp_type='fixed',comp_expires_at=DATEADD(day,1,SYSUTCDATETIME()),subscription_status='active',paid_through=DATEADD(day,30,SYSUTCDATETIME()) WHERE tenant_id=@tenantId",{tenantId});
+  });
+  const changedPreview=await service.cessationPreview({tenantId,actorId,propertyId:changedProperty});
+  const changedArgs={tenantId,actorId,id:changedId,propertyId:changedProperty,inventoryHash:changedPreview.inventoryHash,reason:'Changed entitlement recovery proof.'};
+  failCompletion=true;await assert.rejects(service.ceaseStock(changedArgs),/Synthetic cessation audit rollback/);
+  await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_accounts SET comp_expires_at=DATEADD(second,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId',{tenantId}));
+  await due(changedId);const writesBeforeReview=writes.length;
+  await assert.rejects(service.ceaseStock(changedArgs),{code:'BILLING_CESSATION_STATE_CHANGED'});
+  assert.equal(writes.length,writesBeforeReview);
+  assert.equal((await store.read('SELECT id FROM dbo.management_inventory_controls WHERE id=@id',{id:changedId})).length,0);
+  assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id:changedId}))[0].state,'failed_needs_review');
+  console.log('PASS: seven no-write cessation states, rollback/retry, retained billing obligations and exactly one cessation audit');
   console.log('PASS: real SQL customer/Checkout response-loss recovery, open-session reuse, cross-tenant denial, portal evidence/expiry/configuration, exact preview retry and cessation completion; synthetic provider');
 };
