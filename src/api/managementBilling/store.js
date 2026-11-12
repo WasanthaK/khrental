@@ -334,14 +334,18 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     await audit(q,{tenantId,actorId,action:'sandbox.enrolled',resourceId:tenantId,current:{inventory:items,market,price:selectedPrice,pricingVersion,useApprovedSandboxBaseline},reason});
     return account(tenantId,q);
   });
-  const beginCommand = ({tenantId,id,kind,payload,actorId}) => locked(tenantId,async q => {
+  const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false}) => locked(tenantId,async q => {
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||kind!=='cancellation')){
+      throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
+    }
     await assertActor(q,tenantId,actorId);
     const existing=(await q('SELECT * FROM dbo.management_billing_commands WHERE id=@id',{id}))[0];
     const digest=hash(payload);
     if(existing){
       if(String(existing.tenant_id).toLowerCase()!==tenantId.toLowerCase() || existing.kind!==kind || existing.payload_hash!==digest)
         {throw problem(409,'BILLING_REQUEST_CONFLICT','This request identifier belongs to a different operation.');}
-      if(existing.status==='pending' && Date.now()-new Date(existing.created_at).getTime()>23*3600000)
+      const journaled=recovery&&(await q('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id})).length;
+      if(!journaled&&existing.status==='pending' && Date.now()-new Date(existing.created_at).getTime()>23*3600000)
         {throw problem(409,'BILLING_RECONCILIATION_REQUIRED','An older interrupted operation needs reconciliation before retrying.');}
       return {...existing,createdNow:false};
     }
@@ -353,6 +357,12 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
     const storedPayload=current?{...payload,_subscriptionId:current.stripe_subscription_id}:payload;
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
+    if(recovery){
+      if(!current?.stripe_subscription_id){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
+      await q(`INSERT dbo.management_billing_recovery(command_id,actor_id,intent_json)
+        VALUES(@id,@actorId,@intent)`,{id,actorId,intent:JSON.stringify({...storedPayload,
+        customerId:current.stripe_customer_id,scheduleId:current.stripe_schedule_id||null})});
+    }
     return {id,status:'pending',createdNow:true};
   });
   const completeCommand = (q,id,result) => q(`UPDATE dbo.management_billing_commands SET status='completed',result_json=@result,

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
+import {verifyManagementRecovery} from './test-management-recovery-sql.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
 import {BILLING_PRICE,BILLING_PRODUCT,hash,problem} from '../src/api/managementBilling/contract.js';
@@ -296,6 +297,7 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   await assert.rejects(service.checkout({tenantId:tenantB,id:crypto.randomUUID(),actorId,inventoryHash:hash(await store.inventory(tenantB))}),{code:'BILLING_ADMIN_REQUIRED'});
   console.log('PASS: real SQL two-organization billing isolation, ambiguous checkout recovery, first payment, duplicate/out-of-order binding, quantity proration, deferred decrease and schedule cancellation; synthetic Stripe transport');
   await verifyStagedStock(pool,actorId,stripe,remote,price,invoice,calls);
+  await verifyManagementRecovery(pool,{tenantId:tenantA,otherTenant:tenantB,actorId,stripe,remote,calls});
 };
 
 const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{

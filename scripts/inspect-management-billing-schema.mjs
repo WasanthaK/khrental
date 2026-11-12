@@ -1,4 +1,49 @@
 import fs from 'node:fs';
+export const inspectManagementRecovery=async pool=>{
+  const result=await pool.request().query(`
+    SELECT t.name AS table_name,c.name,ty.name AS type_name,c.is_nullable,c.max_length
+    FROM sys.tables t JOIN sys.columns c ON c.object_id=t.object_id JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+    WHERE t.schema_id=SCHEMA_ID('dbo') AND t.name IN('management_billing_recovery','management_billing_steps');
+    SELECT t.name AS table_name,i.is_primary_key,i.is_disabled,
+      (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX),c.name),',') WITHIN GROUP(ORDER BY ic.key_ordinal)
+       FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
+       WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0) AS keys
+    FROM sys.tables t JOIN sys.indexes i ON i.object_id=t.object_id
+    WHERE t.name IN('management_billing_recovery','management_billing_steps');
+    SELECT definition,is_disabled,is_not_trusted FROM sys.check_constraints WHERE parent_object_id IN
+      (OBJECT_ID('dbo.management_billing_recovery'),OBJECT_ID('dbo.management_billing_steps'));
+    SELECT t.name AS table_name,c.name AS column_name,rt.name AS referenced_table,fk.is_disabled,fk.is_not_trusted
+    FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fc ON fc.constraint_object_id=fk.object_id
+    JOIN sys.tables t ON t.object_id=fk.parent_object_id JOIN sys.tables rt ON rt.object_id=fk.referenced_object_id
+    JOIN sys.columns c ON c.object_id=t.object_id AND c.column_id=fc.parent_column_id
+    WHERE t.name IN('management_billing_recovery','management_billing_steps');
+  `);
+  const [columns=[],indexes=[],checks=[],fks=[]]=result.recordsets||[],problems=[];
+  const expected={management_billing_recovery:{command_id:'uniqueidentifier',actor_id:'uniqueidentifier',intent_json:'nvarchar',state:'varchar',attempts:'int',
+    lease_token:'uniqueidentifier',lease_until:'datetime2',next_attempt_at:'datetime2',updated_at:'datetime2',last_error:'varchar',completed_at:'datetime2'},
+  management_billing_steps:{command_id:'uniqueidentifier',name:'varchar',input_hash:'char',input_json:'nvarchar',idempotency_key:'varchar',created_at:'datetime2',result_json:'nvarchar',completed_at:'datetime2'}};
+  for(const [table,fields] of Object.entries(expected)){
+    const nullable=table.endsWith('steps')?['result_json','completed_at']:['lease_token','lease_until','last_error','completed_at'];
+    const lengths={intent_json:-1,state:24,last_error:80,name:60,input_hash:64,input_json:-1,idempotency_key:255,result_json:-1};
+    for(const [name,type] of Object.entries(fields)){
+      if(!columns.some(c=>c.table_name===table&&c.name===name&&c.type_name===type&&Boolean(c.is_nullable)===nullable.includes(name)
+        &&(!(name in lengths)||c.max_length===lengths[name]))){problems.push(`${table}.${name}`);}
+    }
+    const keys=table.endsWith('steps')?'command_id,name':'command_id';
+    if(!indexes.some(i=>i.table_name===table&&i.is_primary_key&&!i.is_disabled&&i.keys===keys)){problems.push(`${table}.primary_key`);}
+  }
+  if(!indexes.some(i=>i.table_name==='management_billing_recovery'&&!i.is_disabled&&i.keys==='state,next_attempt_at,lease_until')){problems.push('recovery.due_index');}
+  const norm=s=>s.toLowerCase().replace(/[\s[\]()]/g,'');
+  for(const expected of ['isjsonintent_json=1',"state='failed_needs_review'orstate='succeeded'orstate='running'orstate='pending'",'attempts>=0andattempts<=8',
+    'isjsoninput_json=1','result_jsonisnullorisjsonresult_json=1']){
+    if(!checks.some(c=>!c.is_disabled&&!c.is_not_trusted&&norm(c.definition)===expected)){problems.push(expected);}
+  }
+  for(const [table,column,target] of [['management_billing_recovery','command_id','management_billing_commands'],
+    ['management_billing_recovery','actor_id','app_users'],['management_billing_steps','command_id','management_billing_recovery']]){
+    if(!fks.some(f=>f.table_name===table&&f.column_name===column&&f.referenced_table===target&&!f.is_disabled&&!f.is_not_trusted)){problems.push(`${table}.${column}.foreign_key`);}
+  }
+  return {satisfied:problems.length===0,detail:problems.length?problems.join(', '):'Recovery journal, step identities, bounds and references verified.'};
+};
 export const managementBillingColumns={
   management_pricing_versions:['id','market','version','rules_json','status','stripe_price_id','created_by','created_at','published_at'],
   management_billing_accounts:['tenant_id','stripe_account_id','stripe_customer_id','stripe_subscription_id','stripe_item_id','stripe_schedule_id','stripe_price_id',

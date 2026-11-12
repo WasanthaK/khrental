@@ -1,5 +1,5 @@
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
-import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation,inspectManagementRecovery} from './inspect-management-billing-schema.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -509,6 +509,12 @@ const MIGRATIONS = [
     file:'migrations/20261110_02_management_cessation.sql',
     inspect:inspectManagementCessation,
     verify:async pool=>assertSatisfied(inspectManagementCessation(pool),'Management cessation schema verification failed.')
+  },
+  {
+    id:'20261112_01_management_recovery',
+    file:'migrations/20261112_01_management_recovery.sql',
+    inspect:inspectManagementRecovery,
+    verify:async pool=>assertSatisfied(inspectManagementRecovery(pool),'Management recovery schema verification failed.')
   }
 ];
 
