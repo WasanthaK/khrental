@@ -38,6 +38,10 @@ END');
 EXEC(N'CREATE OR ALTER TRIGGER dbo.TR_agreements_split_inventory ON dbo.agreements AFTER INSERT,UPDATE AS
 BEGIN
  SET NOCOUNT ON;
+ IF EXISTS(SELECT 1 FROM deleted d JOIN inserted i ON i.id=d.id JOIN dbo.management_inventory_splits s
+   ON s.tenant_id=d.tenant_id AND s.property_id=d.propertyid AND s.state=''active''
+   WHERE d.unitid IS NULL AND (i.unitid IS NOT NULL OR i.propertyid<>d.propertyid OR i.tenant_id<>d.tenant_id))
+ THROW 51080,''Retain the original parent rental identity after splitting.'',1;
  IF EXISTS(SELECT 1 FROM inserted i JOIN dbo.management_inventory_splits s ON s.tenant_id=i.tenant_id AND s.property_id=i.propertyid AND s.state=''active''
    WHERE LOWER(COALESCE(i.status,'''')) NOT IN(''closed'',''cancelled'') AND
    ((i.unitid IS NULL AND (NOT EXISTS(SELECT 1 FROM deleted d WHERE d.id=i.id AND LOWER(COALESCE(d.status,'''')) NOT IN(''closed'',''cancelled'')) OR EXISTS(SELECT 1 FROM dbo.agreements child WHERE child.tenant_id=i.tenant_id AND child.propertyid=i.propertyid AND child.unitid IS NOT NULL AND LOWER(COALESCE(child.status,'''')) NOT IN(''closed'',''cancelled'')))) OR

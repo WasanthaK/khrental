@@ -46,7 +46,7 @@ export const verifySplits=async(pool,actorId)=>{
           current_phase:{start_date:now-86400},phases:[],end_behavior:'release'};sub.schedule=schedule.id;object=schedule;type='subscription_schedule.created';
       }else if(path===`/v1/subscription_schedules/${schedule?.id}/release`){
         Object.assign(schedule,{status:'released',subscription:null,released_subscription:sub.id});sub.schedule=null;sub.cancel_at_period_end=false;object=schedule;type='subscription_schedule.released';
-      }else if(path===`/v1/subscription_schedules/${schedule?.id}`){Object.assign(schedule,body);object=schedule;type='subscription_schedule.updated';}
+      }else if(path===`/v1/subscription_schedules/${schedule?.id}`){Object.assign(schedule,body);sub.items.data[0].quantity=body.phases[0].items[0].quantity;object=schedule;type='subscription_schedule.updated';}
       else{
         assert.equal(path,`/v1/subscriptions/${sub.id}`);
         if(body.items){sub.items.data[0].quantity=body.items[0].quantity;}else{sub.cancel_at_period_end=body.cancel_at_period_end;}
@@ -91,6 +91,7 @@ export const verifySplits=async(pool,actorId)=>{
     await assert.rejects(service.splitPreview({tenantId,actorId,propertyId,units}),{code:'BILLING_SPLIT_ALREADY_SPLIT'});
     await assert.rejects(store.locked(tenantId,q=>q("INSERT dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(NEWID(),@tenantId,@propertyId,@unit,'draft')",{tenantId,propertyId,unit:units[0].id})),/cannot overlap/);
     await assert.rejects(store.locked(tenantId,q=>q('DELETE dbo.property_units WHERE id=@id',{id:units[0].id})),/Retain split identity/);
+    await assert.rejects(store.locked(tenantId,q=>q('UPDATE dbo.agreements SET unitid=@unit WHERE id=@id',{id:parentAgreement,unit:units[0].id})),/original parent rental identity/);
     await store.locked(tenantId,q=>q("UPDATE dbo.agreements SET status='closed' WHERE id=@id",{id:parentAgreement}));
     const childAgreement=crypto.randomUUID();
     await store.locked(tenantId,q=>q("INSERT dbo.agreements(id,tenant_id,propertyid,unitid,status) VALUES(@id,@tenantId,@propertyId,@unit,'active')",{id:childAgreement,tenantId,propertyId,unit:units[0].id}));
