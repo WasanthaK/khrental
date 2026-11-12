@@ -37,7 +37,7 @@ export const verifyQuantityRecovery=async(pool,{tenantId,actorId,stripe,remote,c
   const service=createBillingService({store,stripe:transport,env});
   await service.refresh(tenantId);
   await store.stageStock({tenantId,actorId,reason:'Synthetic prepared recovery proof.',records:[{kind:'property',payload:{
-    id:prepared,name:'Prepared recovery home',propertytype:'house',country_code:'LK'}}]});
+    id:prepared,name:'Prepared recovery home',propertytype:'house',country_code:'LK',rentalvalues:{listingCategory:'residential'}}}]});
   const applyWithLoss=async(path,{extraPosts=0}={})=>{
     const preview=await service.quantityPreview({tenantId,actorId,id:crypto.randomUUID()}),id=crypto.randomUUID();
     fault=path;

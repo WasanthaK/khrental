@@ -36,10 +36,10 @@ export const createRecoveryJournal=({store,complete})=>{
     const row=await owned(q,args);
     await store.assertActor(q,args.tenantId,row.actor_id);
     const account=await store.account(args.tenantId,q);
-    if(account?.stripe_subscription_id!==JSON.parse(row.intent_json)._subscriptionId){
+    const intent=JSON.parse(row.intent_json);
+    if(account?.stripe_subscription_id!==intent._subscriptionId||account?.stripe_customer_id!==intent.customerId){
       throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding changed before this billing write.');
     }
-    const intent=JSON.parse(row.intent_json);
     if(row.kind==='quantity_apply'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.preview.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before this provider write.');
     }

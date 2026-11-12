@@ -81,7 +81,8 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
         const sub=await subscription();
         if(objectId(sub.schedule)!==input.scheduleId){throw problem(409,'BILLING_SCHEDULE_MISMATCH','The subscription schedule changed.');}
         const value=await schedule(input.scheduleId);
-        const proof=await evidence('subscription_schedule.updated',input.scheduleId,`${key}:phases`,s=>quantityScheduleMatches(s,input.body));
+        const proof=await evidence('subscription_schedule.updated',input.scheduleId,`${key}:phases`,s=>
+          objectId(s.subscription)===intent._subscriptionId&&quantityScheduleMatches(s,input.body));
         if(quantityScheduleMatches(value,input.body)){
           if(!proof&&!intent.preconfirmedSchedule){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','The quantity schedule needs matching request evidence.');}
           return {confirmed:true,result:{scheduleId:input.scheduleId,nextQuantity:preview.to,...proof,preconfirmed:Boolean(intent.preconfirmedSchedule)}};
@@ -102,7 +103,7 @@ export const quantityRecovery=({store,stripe,clock=billingClock})=>async({job,st
         if(objectId(value.schedule)){throw problem(409,'BILLING_SCHEDULE_MISMATCH','An unexpected schedule needs review.');}
         const quantity=value.items.data[0].quantity;
         const proof=await evidence('customer.subscription.updated',value.id,`${key}:increase`,s=>
-          s.items?.data?.length===1&&s.items.data[0].id===intent.itemId&&s.items.data[0].quantity===preview.to);
+          s.items?.data?.length===1&&s.items.data[0].id===intent.itemId&&objectId(s.items.data[0].price)===intent.priceId&&s.items.data[0].quantity===preview.to);
         if(quantity===preview.to){
           if(!proof){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','The quantity change needs matching request evidence.');}
           return {confirmed:true,result:{subscriptionId:value.id,quantity,...proof}};

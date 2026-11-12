@@ -16,7 +16,7 @@ export const requestEvidence=async({stripe,type,resourceId,customerId,key,since,
     for(const event of page.data){
       const object=event.data?.object;
       if(typeof event.id==='string'&&event.type===type&&event.livemode===false&&(!event.account||event.account===BILLING_ACCOUNT)&&
-        event.request?.idempotency_key===key&&object?.id===resourceId&&objectId(object.customer)===customerId&&
+        event.request?.idempotency_key===key&&object?.id===resourceId&&object.livemode===false&&objectId(object.customer)===customerId&&
         Number.isSafeInteger(event.created)&&event.created>=start&&event.created*1000<=clock.now()+300000&&matches(object)){
         return {eventId:event.id};
       }
