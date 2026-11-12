@@ -45,15 +45,15 @@ const main=async()=>{
   await store.locked(target.id,async q=>{
     const params={id:target.id,propertyId,renteeId,agreementId,maintenanceId,actor:actorId,email:`r5-fixture-rentee-${target.id}@example.invalid`};
     stage='fixture_properties';
-    await q("INSERT INTO properties(id,tenant_id,name,status) VALUES(@propertyId,@id,'Synthetic R5 acceptance property','available')",params);
+    await q("INSERT INTO properties(id,tenant_id,name,status,createdat,updatedat) VALUES(@propertyId,@id,'Synthetic R5 acceptance property','available',SYSUTCDATETIME(),SYSUTCDATETIME())",params);
     stage='fixture_app_users';
-    await q("INSERT INTO app_users(id,tenant_id,name,email,role,user_type) VALUES(@renteeId,@id,'Synthetic R5 acceptance renter',@email,'rentee','rentee')",params);
+    await q("INSERT INTO app_users(id,tenant_id,name,email,role,user_type,status,invited,active,createdat,updatedat) VALUES(@renteeId,@id,'Synthetic R5 acceptance renter',@email,'rentee','rentee','active',0,1,SYSUTCDATETIME(),SYSUTCDATETIME())",params);
     stage='fixture_tenant_memberships';
     await q("INSERT INTO tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@id,@renteeId,'rentee','active',1)",params);
     stage='fixture_agreements';
-    await q("INSERT INTO agreements(id,tenant_id,renteeid,propertyid,status,rentamount,startdate) VALUES(@agreementId,@id,@renteeId,@propertyId,'active',100,'2035-11-01')",params);
+    await q("INSERT INTO agreements(id,tenant_id,renteeid,propertyid,status,rentamount,startdate,needs_document_generation,createdat,updatedat) VALUES(@agreementId,@id,@renteeId,@propertyId,'active',100,'2035-11-01',0,SYSUTCDATETIME(),SYSUTCDATETIME())",params);
     stage='fixture_maintenance_requests';
-    await q("INSERT INTO maintenance_requests(id,tenant_id,propertyid,title,description,status,assignedto) VALUES(@maintenanceId,@id,@propertyId,'Synthetic R5 acceptance request','Not a customer request','pending',@actor)",params);
+    await q("INSERT INTO maintenance_requests(id,tenant_id,propertyid,title,description,status,assignedto,priority,requesttype,createdat,updatedat) VALUES(@maintenanceId,@id,@propertyId,'Synthetic R5 acceptance request','Not a customer request','pending',@actor,'medium','other',SYSUTCDATETIME(),SYSUTCDATETIME())",params);
   });
   const tables=['invoices','invoice_components','payments','payment_receipts','tenancy_billing_adjustments','maintenance_requests','maintenance_lifecycle_events','maintenance_request_comments','maintenance_request_images','notifications','billing_lifecycle_events'];
   const snapshot=async()=>{
