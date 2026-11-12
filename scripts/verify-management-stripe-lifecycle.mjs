@@ -97,7 +97,8 @@ try{
   check('genuine failed cycle',failed.billing_reason==='subscription_cycle'&&failed.amount_remaining===500&&pastDue.status==='past_due');
   const failureEvent=await eventFor('invoice.payment_failed',failed.id);
   report.objects.failureEvent={id:failureEvent.id,created:failureEvent.created,invoiceCreated:failed.created};
-  replay.setTime(frozen*1000);await replay.deliverEvent(failureEvent);
+  // Stripe events retain real time even though invoice periods use frozen time.
+  replay.setTime(failureEvent.created*1000);await replay.deliverEvent(failureEvent);
   check('failure grants bounded grace',(await replay.summary()).entitlement.state==='grace');
   const graceStart=Date.parse(replay.state().account.grace_started_at);
   check('grace anchored to provider first failure',graceStart===failureEvent.created*1000);
@@ -108,18 +109,19 @@ try{
   check('management denied at exact grace expiry',(await replay.summary()).entitlement.state==='read_only');
 
   stage='late recovery';
-  // Move the provider too: recovery is after the actual simulated grace boundary.
-  await advance(Math.max(frozen+1,Math.floor(graceStart/1000)+7*86400));
+  // Advance both clocks independently. Event time is real; expiry uses the injected
+  // application clock, while provider billing advances by seven simulated days.
+  await advance(frozen+7*86400);
   await write(`/v1/subscriptions/${subscription.id}`,{default_payment_method:good},'select-good-method');
   await write(`/v1/invoices/${failed.id}/pay`,{payment_method:good},'recover-invoice');
   const recovered=await poll('recovered invoice',()=>read(`/v1/invoices/${failed.id}`),i=>i.status==='paid');
   await record('recovery',recovered);
   const recoveryEvent=await eventFor('invoice.paid',failed.id);
-  replay.setTime(frozen*1000);await replay.deliverEvent(recoveryEvent);
+  replay.setTime(graceStart+7*86400000);await replay.deliverEvent(recoveryEvent);
   check('late payment restores management',(await replay.summary()).entitlement.state==='active');
   check('recovery clears grace',replay.state().account.grace_started_at===null);
   // A fresh ledger delivery of the old genuine event must read current Stripe state.
-  const stale=billingReplay({stripeClient:stripe,initialTime:frozen*1000,initialAccount:replay.state().account});
+  const stale=billingReplay({stripeClient:stripe,initialTime:graceStart+7*86400000,initialAccount:replay.state().account});
   await stale.deliverEvent(failureEvent);
   check('stale failure cannot revoke recovered access',(await stale.summary()).entitlement.state==='active'&&stale.state().account.grace_started_at===null);
   stage='recovery within a new grace period';
@@ -129,7 +131,7 @@ try{
   const nextFailure=await poll('next failed renewal',getInvoice,i=>i.id!==failed.id&&i.status==='open'&&i.attempted);
   await record('nextFailure',nextFailure);
   const nextFailureEvent=await eventFor('invoice.payment_failed',nextFailure.id);
-  replay.setTime(frozen*1000);await replay.deliverEvent(nextFailureEvent);
+  replay.setTime(nextFailureEvent.created*1000);await replay.deliverEvent(nextFailureEvent);
   const nextGrace=Date.parse(replay.state().account.grace_started_at);
   check('new failure starts its own bounded grace',(await replay.summary()).entitlement.state==='grace'&&nextGrace===nextFailureEvent.created*1000&&nextGrace>graceStart);
   await write(`/v1/subscriptions/${subscription.id}`,{default_payment_method:good},'select-good-method-again');
@@ -137,7 +139,7 @@ try{
   const earlyPaid=await poll('within-grace invoice paid',()=>read(`/v1/invoices/${nextFailure.id}`),i=>i.status==='paid');
   await record('withinGraceRecovery',earlyPaid);
   const earlyEvent=await eventFor('invoice.paid',nextFailure.id);await replay.deliverEvent(earlyEvent);
-  check('payment within grace restores management',frozen*1000<nextGrace+7*86400000&&(await replay.summary()).entitlement.state==='active'&&replay.state().account.grace_started_at===null);
+  check('payment within grace restores management',earlyEvent.created*1000<nextGrace+7*86400000&&(await replay.summary()).entitlement.state==='active'&&replay.state().account.grace_started_at===null);
   report.objects.events={initial:initialEvent.id,renewal:renewalEvent.id,failure:failureEvent.id,recovery:recoveryEvent.id,
     nextFailure:nextFailureEvent.id,withinGraceRecovery:earlyEvent.id};
   report.passed=true;

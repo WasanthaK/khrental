@@ -47,9 +47,23 @@ export const firstRenewalFailure = async ({stripe, invoice, account, now=billing
   if (!Number.isSafeInteger(invoice.created) || invoice.created <= 0) {
     throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
   }
+  // Test-clock invoice dates use simulated time; event.created remains wall time.
+  // Bound their event history by the verified clock's real creation time instead.
+  let historyStart = invoice.created;
+  const clockId = objectId(invoice.test_clock);
+  if (clockId) {
+    if (invoice.livemode !== false || !/^clock_[a-zA-Z0-9]+$/.test(clockId)) {
+      throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
+    }
+    const clock = await stripe.request('GET', `/v1/test_helpers/test_clocks/${clockId}`);
+    if (clock.id !== clockId || clock.livemode !== false || !Number.isSafeInteger(clock.created) || clock.created <= 0 || clock.created * 1000 > now) {
+      throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
+    }
+    historyStart = clock.created;
+  }
   // An incomplete provider retention window cannot establish the first attempt.
   // Preserve a persisted anchor in projection; otherwise leave management restricted.
-  if (invoice.created * 1000 < now - 30 * 86400000) {
+  if (historyStart * 1000 < now - 30 * 86400000) {
     return null;
   }
   let cursor;
@@ -59,7 +73,7 @@ export const firstRenewalFailure = async ({stripe, invoice, account, now=billing
   // before the original event cannot give a fresh seven days. Never persist payloads.
   for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
     const page = await stripe.request('GET', '/v1/events', {
-      type:'invoice.payment_failed', created:{gte:invoice.created}, limit:100,
+      type:'invoice.payment_failed', created:{gte:historyStart}, limit:100,
       ...(cursor ? {starting_after:cursor} : {})
     });
     if (!Array.isArray(page.data) || typeof page.has_more !== 'boolean') {
@@ -71,7 +85,7 @@ export const firstRenewalFailure = async ({stripe, invoice, account, now=billing
           (!event.account || event.account === BILLING_ACCOUNT) && failed?.id === invoice.id &&
           objectId(failed.customer) === account.stripe_customer_id &&
           invoiceSubscription(failed) === account.stripe_subscription_id &&
-          Number.isSafeInteger(event.created) && event.created >= invoice.created) {
+          Number.isSafeInteger(event.created) && event.created >= historyStart) {
         earliest = Math.min(earliest, event.created);
       }
     }
