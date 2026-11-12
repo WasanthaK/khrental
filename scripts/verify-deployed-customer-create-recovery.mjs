@@ -41,7 +41,7 @@ async function createFixture(priceId) {
       "(SELECT COUNT(*) FROM dbo.public_listing_preferences WHERE property_id=@property AND tenant_id=@tenant AND opted_out=1) AS private_count,"+
       "(SELECT COUNT(*) FROM dbo.management_billing_accounts WHERE tenant_id=@tenant AND stripe_customer_id IS NULL AND stripe_subscription_id IS NULL) AS unsubscribed_count;");
     assert.equal(Object.keys(rows.recordset[0]).length,6);
-    for(const count of Object.values(rows.recordset[0]))assert.equal(count,1);
+    for(const count of Object.values(rows.recordset[0])){assert.equal(count,1);}
     await tx.commit();
     fixtureCreated=true;
   }catch(e){await tx.rollback().catch(()=>{});throw e;}
@@ -76,13 +76,14 @@ async function cleanupFixture() {
       "(SELECT COUNT(*) FROM dbo.management_billing_recovery WHERE command_id=@op) AS recovery,"+
       "(SELECT COUNT(*) FROM dbo.management_billing_steps WHERE command_id=@op) AS steps;");
     assert.equal(Object.keys(result.recordset[0]).length,9);
-    for(const value of Object.values(result.recordset[0]))assert.equal(value,0);
+    for(const value of Object.values(result.recordset[0])){assert.equal(value,0);}
     await tx.commit();fixtureCleaned=true;
   }catch(e){await tx.rollback().catch(()=>{});throw e;}
 }
 async function main() {
-  for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED'])
+  for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED']){
     assert.equal(process.env[flag],'true');
+  }
   assert.match(process.env.STRIPE_SANDBOX_SECRET_KEY||'',/^(sk|rk)_test_/);
   assert.equal(process.env.STRIPE_SANDBOX_ACCOUNT_ID,BILLING_ACCOUNT);
   const scopes=String(process.env.MANAGEMENT_RECOVERY_TENANT_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
@@ -107,7 +108,7 @@ async function main() {
   const inventoryHash=hash(await store.inventory(tenantId,undefined,{includePending:true}));
   const expectedKey='quixo:'+tenantId+':'+operationId+':customer';
   const interrupted={...stripe,request:async(method,path,body,key)=>{
-    if(method==='GET')return stripe.request(method,path,body,key);
+    if(method==='GET'){return stripe.request(method,path,body,key);}
     assert.equal(method,'POST');assert.equal(path,'/v1/customers');
     assert.equal(++customerWrites,1);
     assert.equal(String(key).toLowerCase(),expectedKey.toLowerCase());
@@ -135,7 +136,7 @@ async function main() {
     proof=await requestObjectEvidence({stripe,type:'customer.created',key:expectedKey,since:pending.created_at,
       matches:value=>value.metadata?.quixo_operation?.toLowerCase()===operationId.toLowerCase()&&
         value.metadata?.quixo_tenant?.toLowerCase()===tenantId.toLowerCase()});
-    if(proof)break;
+    if(proof){break;}
     await sleep(5000);
   }
   assert.ok(proof,'Stripe customer.created matching the original idempotency key was not found');
@@ -152,7 +153,7 @@ async function main() {
   }
   assert.ok(due,'Retry backoff did not expire');
   const readbackOnly={...stripe,request:async(method,path,body,key)=>{
-    if(method==='GET')return stripe.request(method,path,body,key);
+    if(method==='GET'){return stripe.request(method,path,body,key);}
     assert.equal(method,'POST');
     if(path==='/v1/checkout/sessions'){
       checkoutBlocked++;
@@ -181,8 +182,9 @@ async function main() {
       created:{gte:Math.floor(new Date(pending.created_at).getTime()/1000)-60},limit:100,...(cursor?{starting_after:cursor}:{})});
     assert.ok(Array.isArray(page.data));assert.equal(typeof page.has_more,'boolean');
     for(const event of page.data){
-      if(event.request?.idempotency_key===expectedKey&&event.data.object?.metadata?.quixo_operation?.toLowerCase()===operationId.toLowerCase())
+      if(event.request?.idempotency_key===expectedKey&&event.data.object?.metadata?.quixo_operation?.toLowerCase()===operationId.toLowerCase()){
         createdEvents.push(event.id);
+      }
     }
     if(!page.has_more){exhausted=true;break;}
     cursor=page.data.at(-1)?.id;assert.ok(cursor);
