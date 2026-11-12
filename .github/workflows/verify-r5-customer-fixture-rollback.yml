@@ -88,9 +88,27 @@ jobs:
           command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           echo "R5_FIXTURE_PHASE=remote_sql_rollback"
-          if ! script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
-            grep -E 'R5_CUSTOMER_FIXTURE_FAILED=|R5_CUSTOMER_ROLLBACK_FAILED=' "$RUNNER_TEMP/result.txt" | tr -d '\\r' || :
-            echo "R5_FIXTURE_BLOCKED=remote_execution_failure" >&2
+          if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
+            echo 'R5_REMOTE_EXEC_STATUS=success'
+          else
+            remote_rc=$?
+            echo "R5_REMOTE_EXEC_STATUS=failed exit_code=$remote_rc"
+            # Only emit explicit test-script structured errors. Never dump the terminal
+            # transcript: Azure exec can include configuration or provider secrets.
+            grep -Eo 'R5_CUSTOMER_(FIXTURE_FAILED|ROLLBACK_FAILED)=\\{[^}]{0,480}\\}' "$RUNNER_TEMP/result.txt" | head -n 3 || :
+            # Classify transport/Node errors without echoing their raw messages.
+            if grep -Eq 'SyntaxError|ERR_INVALID_URL|ERR_MODULE_NOT_FOUND|ERR_UNSUPPORTED_RESOLVE_REQUEST' "$RUNNER_TEMP/result.txt"; then
+              echo 'R5_REMOTE_ERROR_CLASS=node_loader'
+            elif grep -Eqi 'WebSocket|handshake|connect|exec session|unable to connect|connection refused|dial tcp|i/o timeout|429|Too Many Requests' "$RUNNER_TEMP/result.txt"; then
+              echo 'R5_REMOTE_ERROR_CLASS=azure_exec_transport'
+            elif grep -Eq 'R5_CUSTOMER_FIXTURE_FAILED|R5_CUSTOMER_ROLLBACK_FAILED' "$RUNNER_TEMP/result.txt"; then
+              echo 'R5_REMOTE_ERROR_CLASS=fixture_sql_or_assertion'
+            elif grep -Eq 'Error:|error:|Exception|Traceback' "$RUNNER_TEMP/result.txt"; then
+              echo 'R5_REMOTE_ERROR_CLASS=unclassified_remote_error'
+            else
+              echo 'R5_REMOTE_ERROR_CLASS=unclassified_early_exit'
+            fi
+            echo 'R5_FIXTURE_BLOCKED=remote_execution_failure' >&2
             exit 1
           fi
           stage=evidence
