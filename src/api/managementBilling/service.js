@@ -12,6 +12,118 @@ const safeUrl = (value, host) => {
     {throw problem(502,'BILLING_URL_INVALID','Stripe returned an unexpected hosted URL.');}
   return url.href;
 };
+// Exposed for the same process-interruption harness used by other recovery types.
+export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=billingClock})=>{
+  const recoveryBinding=async job=>{
+    const account=await requireAccount(job.tenant_id);
+    if(account.stripe_subscription_id!==job.intent._subscriptionId||account.stripe_customer_id!==job.intent.customerId||
+      account.stripe_price_id!==job.intent.priceId){
+      throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed.');
+    }
+    await stripe.assertAccount();return account;
+  };
+  const checkoutSession=async(intent,sessionId,customerId)=>{
+    const session=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}`);
+    const lines=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}/line_items`,{limit:100});
+    if(session.id!==sessionId||session.livemode!==false||session.mode!=='subscription'||objectId(session.customer)!==customerId||
+      !Array.isArray(lines.data)||lines.has_more!==false||lines.data.length!==1||
+      objectId(lines.data[0].price)!==intent.priceId||lines.data[0].quantity!==intent.inventory.length){
+      throw problem(409,'BILLING_CHECKOUT_MISMATCH','Checkout ownership or inventory needs reconciliation.');
+    }
+    return session;
+  };
+  const recoverCheckout=async({job,step})=>{
+    const {intent,tenant_id:tenantId,id}=job;await recoveryBinding(job);
+    const key=`quixo:${tenantId}:${id}`;
+    let customerId=intent.customerId;
+    if(intent.existingSessionId){await checkoutSession(intent,intent.existingSessionId,customerId);return {sessionId:intent.existingSessionId,customerId};}
+    if(!customerId){
+      const proof=await step('create_customer',{input:{description:'Quixo.Homes organization sandbox subscription',
+        metadata:{quixo_operation:id,quixo_tenant:tenantId}},key:`${key}:customer`,
+      read:async input=>{
+        const evidence=await requestObjectEvidence({stripe,type:'customer.created',key:`${key}:customer`,since:job.created_at,clock,
+          matches:value=>value.metadata?.quixo_operation===id&&value.metadata?.quixo_tenant===tenantId});
+        if(!evidence){return {confirmed:false};}
+        const customer=await stripe.request('GET',`/v1/customers/${evidence.object.id}`);
+        if(customer.deleted||customer.livemode!==false||customer.metadata?.quixo_operation!==input.metadata.quixo_operation||
+          customer.metadata?.quixo_tenant!==tenantId){throw problem(409,'BILLING_CUSTOMER_MISMATCH','The saved customer needs review.');}
+        return {confirmed:true,result:{customerId:customer.id,eventId:evidence.eventId}};
+      },write:(input,stepKey)=>stripe.request('POST','/v1/customers',input,stepKey)});
+      customerId=proof.customerId;
+    }
+    const metadata={quixo_operation:id,quixo_tenant:tenantId,inventory_hash:intent.inventoryHash};
+    const body={mode:'subscription',customer:customerId,line_items:[{price:intent.priceId,quantity:intent.inventory.length}],
+      integration_identifier:'quixo_homes_management_xmptkrva',metadata,
+      success_url:`${intent.origin}/dashboard/subscription?checkout=returned`,cancel_url:`${intent.origin}/dashboard/subscription?checkout=cancelled`,
+      automatic_tax:{enabled:false},allow_promotion_codes:false,
+      custom_text:{submit:{message:'Sandbox test only. Monthly management subscription, no trial. Rent and deposits are separate.'}}};
+    const saved=await step('create_checkout',{input:body,key:`${key}:checkout`,read:async()=>{
+      let otherSession=false;
+      const found=await uniqueProviderObject({stripe,path:'/v1/checkout/sessions',params:{customer:customerId},
+        matches:session=>{
+          if(session.metadata?.quixo_operation!==id&&['open','complete'].includes(session.status)){otherSession=true;}
+          return session.metadata?.quixo_operation===id;
+        }});
+      if(otherSession){throw problem(409,'BILLING_CHECKOUT_PENDING','Another checkout needs review before continuing.');}
+      if(!found){return {confirmed:false};}
+      if(found.metadata?.quixo_tenant!==tenantId||found.metadata?.inventory_hash!==intent.inventoryHash){
+        throw problem(409,'BILLING_CHECKOUT_MISMATCH','The saved checkout needs review.');
+      }
+      await checkoutSession(intent,found.id,customerId);
+      return {confirmed:true,result:{sessionId:found.id,customerId}};
+    },write:(input,stepKey)=>stripe.request('POST','/v1/checkout/sessions',input,stepKey)});
+    return {sessionId:saved.sessionId,customerId};
+  };
+  const recoverPortal=async({job,step})=>{
+    const {intent}=job;await recoveryBinding(job);
+    const expired={requiresNewSession:true,message:'This billing link expired. Select Payment method & invoices again to open a fresh link.'};
+    if(clock.now()-new Date(job.created_at).getTime()>300000){return expired;}
+    const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
+    if(!config.active||config.features?.subscription_update?.enabled||config.features?.subscription_cancel?.enabled||config.features?.subscription_pause?.enabled){
+      throw problem(409,'BILLING_PORTAL_UNSAFE','Portal subscription controls must remain disabled.');
+    }
+    const key=`quixo:${job.tenant_id}:${job.id}`;
+    const read=()=>requestObjectEvidence({stripe,type:'billing_portal.session.created',customerId:intent.customerId,key,since:job.created_at,clock,
+      matches:value=>objectId(value.configuration)===BILLING_PORTAL&&value.return_url===`${intent.origin}/dashboard/subscription`});
+    let response;
+    const saved=await step('create_portal',{input:{customer:intent.customerId,configuration:BILLING_PORTAL,return_url:`${intent.origin}/dashboard/subscription`},key,
+      read:async()=>{const evidence=await read();return evidence?{confirmed:true,result:{sessionId:evidence.object.id,eventId:evidence.eventId}}:{confirmed:false};},
+      write:(input,stepKey)=>stripe.request('POST','/v1/billing_portal/sessions',input,stepKey),
+      confirmResponse:async value=>{
+        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||objectId(value.configuration)!==BILLING_PORTAL||!value.id){
+          throw problem(409,'BILLING_PORTAL_MISMATCH','The billing link needs review.');
+        }
+        response=value;safeUrl(value.url,'billing.stripe.com');return {confirmed:true,result:{sessionId:value.id}};
+      }});
+    const value=response||(await read())?.object;
+    if(!value||value.id!==saved.sessionId){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','The billing link is awaiting confirmation.');}
+    return {url:safeUrl(value.url,'billing.stripe.com')};
+  };
+  const recoverPreview=async({job,step})=>{
+    const {intent}=job;const account=await recoveryBinding(job);
+    if(clock.now()>Date.parse(intent.preview.expiresAt)){
+      return {expired:true,message:'This quantity preview expired. Select Review quantity change again.'};
+    }
+    if(hash(await store.inventory(job.tenant_id,undefined,{includePending:true}))!==intent.preview.inventoryHash||account.quantity!==intent.preview.from){
+      throw problem(409,'BILLING_PREVIEW_STALE','Inventory or subscription changed. Request a new preview.');
+    }
+    let invoice={nextInvoiceTotalMinor:null,currency:'usd'};
+    if(intent.preview.to>intent.preview.from){
+      invoice=await step('preview_invoice',{input:{customer:intent.customerId,subscription:intent._subscriptionId,
+        subscription_details:{items:[{id:intent.itemId,quantity:intent.preview.to}],proration_behavior:'create_prorations',proration_date:intent.preview.prorationDate}},
+      key:`quixo:${job.tenant_id}:${job.id}`,read:async()=>({confirmed:false}),
+      write:(input,stepKey)=>stripe.request('POST','/v1/invoices/create_preview',input,stepKey),
+      confirmResponse:async value=>{
+        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||!Number.isSafeInteger(value.total)||value.currency!=='usd'){
+          throw problem(409,'BILLING_PREVIEW_MISMATCH','The provider preview needs review.');
+        }
+        return {confirmed:true,result:{nextInvoiceTotalMinor:value.total,currency:value.currency}};
+      }});
+    }
+    return {...intent.preview,...invoice};
+  };
+  return {checkout:recoverCheckout,portal:recoverPortal,quantity_preview:recoverPreview,checkoutSession};
+};
 export const createBillingService = ({store,stripe,env=process.env,clock=billingClock}) => {
   const configuredOrigin=()=>{
     let url;
@@ -191,7 +303,12 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const result=await recoverOperation(args);
     if(result.requiresNewSession||result.expired){throw problem(409,'BILLING_REVIEW_EXPIRED',result.message);}
     if(kind==='checkout'){
-      const session=await stripe.request('GET',`/v1/checkout/sessions/${result.sessionId}`);
+      const saved=(await store.read('SELECT intent_json FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id}))[0];
+      const intent=JSON.parse(saved.intent_json),account=await requireAccount(args.tenantId);
+      if(hash(await store.inventory(args.tenantId,undefined,{includePending:true}))!==intent.inventoryHash){
+        throw problem(409,'BILLING_INVENTORY_CHANGED','Checkout inventory changed. Review the existing checkout before continuing.');
+      }
+      const session=await checkoutSession(intent,result.sessionId,account.stripe_customer_id);
       if(session.status!=='open'||session.expires_at*1000<=clock.now()){
         throw problem(409,'BILLING_REVIEW_EXPIRED',session.status==='complete'?'Checkout completed. Refresh subscription status.':'Checkout expired. Open sandbox checkout again.');
       }
@@ -328,109 +445,8 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const confirmed=await cancelLocked(q,account,key,cancelAtPeriodEnd);
     return {cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }});
-  const recoveryBinding=async job=>{
-    const account=await requireAccount(job.tenant_id);
-    if(account.stripe_subscription_id!==job.intent._subscriptionId||account.stripe_customer_id!==job.intent.customerId||
-      account.stripe_price_id!==job.intent.priceId){
-      throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed.');
-    }
-    await stripe.assertAccount();return account;
-  };
-  const checkoutSession=async(intent,sessionId,customerId)=>{
-    const session=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}`);
-    const lines=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}/line_items`,{limit:100});
-    if(session.id!==sessionId||session.livemode!==false||session.mode!=='subscription'||objectId(session.customer)!==customerId||
-      !Array.isArray(lines.data)||lines.has_more!==false||lines.data.length!==1||
-      objectId(lines.data[0].price)!==intent.priceId||lines.data[0].quantity!==intent.inventory.length){
-      throw problem(409,'BILLING_CHECKOUT_MISMATCH','Checkout ownership or inventory needs reconciliation.');
-    }
-    return session;
-  };
-  const recoverCheckout=async({job,step})=>{
-    const {intent,tenant_id:tenantId,id}=job;await recoveryBinding(job);
-    const key=`quixo:${tenantId}:${id}`;
-    let customerId=intent.customerId;
-    if(intent.existingSessionId){await checkoutSession(intent,intent.existingSessionId,customerId);return {sessionId:intent.existingSessionId,customerId};}
-    if(!customerId){
-      const proof=await step('create_customer',{input:{description:'Quixo.Homes organization sandbox subscription',
-        metadata:{quixo_operation:id,quixo_tenant:tenantId}},key:`${key}:customer`,
-      read:async input=>{
-        const evidence=await requestObjectEvidence({stripe,type:'customer.created',key:`${key}:customer`,since:job.created_at,clock,
-          matches:value=>value.metadata?.quixo_operation===id&&value.metadata?.quixo_tenant===tenantId});
-        if(!evidence){return {confirmed:false};}
-        const customer=await stripe.request('GET',`/v1/customers/${evidence.object.id}`);
-        if(customer.deleted||customer.livemode!==false||customer.metadata?.quixo_operation!==input.metadata.quixo_operation||
-          customer.metadata?.quixo_tenant!==tenantId){throw problem(409,'BILLING_CUSTOMER_MISMATCH','The saved customer needs review.');}
-        return {confirmed:true,result:{customerId:customer.id,eventId:evidence.eventId}};
-      },write:(input,stepKey)=>stripe.request('POST','/v1/customers',input,stepKey)});
-      customerId=proof.customerId;
-    }
-    const metadata={quixo_operation:id,quixo_tenant:tenantId,inventory_hash:intent.inventoryHash};
-    const body={mode:'subscription',customer:customerId,line_items:[{price:intent.priceId,quantity:intent.inventory.length}],
-      integration_identifier:'quixo_homes_management_xmptkrva',metadata,
-      success_url:`${intent.origin}/dashboard/subscription?checkout=returned`,cancel_url:`${intent.origin}/dashboard/subscription?checkout=cancelled`,
-      automatic_tax:{enabled:false},allow_promotion_codes:false,
-      custom_text:{submit:{message:'Sandbox test only. Monthly management subscription, no trial. Rent and deposits are separate.'}}};
-    const saved=await step('create_checkout',{input:body,key:`${key}:checkout`,read:async()=>{
-      const found=await uniqueProviderObject({stripe,path:'/v1/checkout/sessions',params:{customer:customerId},
-        matches:session=>session.metadata?.quixo_operation===id});
-      if(!found){return {confirmed:false};}
-      if(found.metadata?.quixo_tenant!==tenantId||found.metadata?.inventory_hash!==intent.inventoryHash){
-        throw problem(409,'BILLING_CHECKOUT_MISMATCH','The saved checkout needs review.');
-      }
-      await checkoutSession(intent,found.id,customerId);
-      return {confirmed:true,result:{sessionId:found.id,customerId}};
-    },write:(input,stepKey)=>stripe.request('POST','/v1/checkout/sessions',input,stepKey)});
-    return {sessionId:saved.sessionId,customerId};
-  };
-  const recoverPortal=async({job,step})=>{
-    const {intent}=job;await recoveryBinding(job);
-    const expired={requiresNewSession:true,message:'This billing link expired. Select Payment method & invoices again to open a fresh link.'};
-    if(clock.now()-new Date(job.created_at).getTime()>300000){return expired;}
-    const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
-    if(!config.active||config.features?.subscription_update?.enabled||config.features?.subscription_cancel?.enabled||config.features?.subscription_pause?.enabled){
-      throw problem(409,'BILLING_PORTAL_UNSAFE','Portal subscription controls must remain disabled.');
-    }
-    const key=`quixo:${job.tenant_id}:${job.id}`;
-    const read=()=>requestObjectEvidence({stripe,type:'billing_portal.session.created',customerId:intent.customerId,key,since:job.created_at,clock,
-      matches:value=>objectId(value.configuration)===BILLING_PORTAL&&value.return_url===`${intent.origin}/dashboard/subscription`});
-    let response;
-    const saved=await step('create_portal',{input:{customer:intent.customerId,configuration:BILLING_PORTAL,return_url:`${intent.origin}/dashboard/subscription`},key,
-      read:async()=>{const evidence=await read();return evidence?{confirmed:true,result:{sessionId:evidence.object.id,eventId:evidence.eventId}}:{confirmed:false};},
-      write:(input,stepKey)=>stripe.request('POST','/v1/billing_portal/sessions',input,stepKey),
-      confirmResponse:async value=>{
-        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||objectId(value.configuration)!==BILLING_PORTAL||!value.id){
-          throw problem(409,'BILLING_PORTAL_MISMATCH','The billing link needs review.');
-        }
-        response=value;safeUrl(value.url,'billing.stripe.com');return {confirmed:true,result:{sessionId:value.id}};
-      }});
-    const value=response||(await read())?.object;
-    if(!value||value.id!==saved.sessionId){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','The billing link is awaiting confirmation.');}
-    return {url:safeUrl(value.url,'billing.stripe.com')};
-  };
-  const recoverPreview=async({job,step})=>{
-    const {intent}=job;const account=await recoveryBinding(job);
-    if(clock.now()>Date.parse(intent.preview.expiresAt)){
-      return {expired:true,message:'This quantity preview expired. Select Review quantity change again.'};
-    }
-    if(hash(await store.inventory(job.tenant_id,undefined,{includePending:true}))!==intent.preview.inventoryHash||account.quantity!==intent.preview.from){
-      throw problem(409,'BILLING_PREVIEW_STALE','Inventory or subscription changed. Request a new preview.');
-    }
-    let invoice={nextInvoiceTotalMinor:null,currency:'usd'};
-    if(intent.preview.to>intent.preview.from){
-      invoice=await step('preview_invoice',{input:{customer:intent.customerId,subscription:intent._subscriptionId,
-        subscription_details:{items:[{id:intent.itemId,quantity:intent.preview.to}],proration_behavior:'create_prorations',proration_date:intent.preview.prorationDate}},
-      key:`quixo:${job.tenant_id}:${job.id}`,read:async()=>({confirmed:false}),
-      write:(input,stepKey)=>stripe.request('POST','/v1/invoices/create_preview',input,stepKey),
-      confirmResponse:async value=>{
-        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||!Number.isSafeInteger(value.total)||value.currency!=='usd'){
-          throw problem(409,'BILLING_PREVIEW_MISMATCH','The provider preview needs review.');
-        }
-        return {confirmed:true,result:{nextInvoiceTotalMinor:value.total,currency:value.currency}};
-      }});
-    }
-    return {...intent.preview,...invoice};
-  };
+  const providerRecovery=createProviderRecoveryHandlers({store,stripe,requireAccount,clock});
+  const {checkoutSession}=providerRecovery;
   const recovery=createRecoveryRunner({clock,journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
     const intent=JSON.parse(row.intent_json);
     const account=await requireAccount(row.tenant_id,q);
@@ -486,7 +502,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(intent.scheduleId){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId:row.tenant_id});}
     return {cancelAtPeriodEnd:result.cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock}),
-    checkout:recoverCheckout,portal:recoverPortal,quantity_preview:recoverPreview,cessation:async args=>{
+    checkout:providerRecovery.checkout,portal:providerRecovery.portal,quantity_preview:providerRecovery.quantity_preview,cessation:async args=>{
       if(args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from,nextRenewalQuantity:0,cancelAtPeriodEnd:true};}
       return quantityRecovery({store,stripe,clock})(args);
     }}});

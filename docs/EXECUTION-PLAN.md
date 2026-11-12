@@ -2,6 +2,9 @@
 
 ## Canonical current status — 12 November 2026
 
+**Provider-operation continuation:** [PR #574](https://github.com/WasanthaK/khrental/pull/574) implements the remaining customer/Checkout, portal, preview, cessation-provider and pricing-publication recovery policies. [Operation coverage and evidence boundaries](R5-RECOVERY-IMPLEMENTATION-20261112.md#remaining-provider-operations--pr-574) distinguish source work from staging/production acceptance. Its final-head validation/merge state is recorded on the PR; this is not a deployment or activation record. After this source package is accepted, do not reimplement those paths: next engineering is restore/split and remaining cessation entitlement states, followed by controlled acceptance. Full Workstream 1 still requires accepted staging/operational recovery evidence.
+
+
 This is the controlling programme summary. It supersedes older dated “current”, “next” and runtime statements below without changing owner-approved milestone scope or deleting historical evidence. The [R5 task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) controls individual acceptance cases; the [commercial record](QUIXO-STRIPE-B02-B03-READINESS.md#controlling-commercial-decision-pack--10-november-2026) separates approved behaviour from held decisions.
 
 | Milestone | Current disposition | Boundary retained |

@@ -31,7 +31,7 @@ const fixture=()=>{
       if(path==='/v1/prices'){return {data:structuredClone(prices),has_more:truncated};}
       return structuredClone(prices.find(p=>path.endsWith(p.id)));
     }
-    assert.equal(path,'/v1/prices');writes.push({body,key});
+    assert.equal(path,'/v1/prices');assert.ok(audits.some(a=>a.action==='pricing.publication.attempt'),'Attempt intent is committed before provider write');writes.push({body,key});
     const price={...body,id:'price_recovered',livemode:false,active:true,type:'recurring',billing_scheme:'per_unit',
       recurring:{...body.recurring,interval_count:1}};prices.push(price);
     if(lost){lost=false;throw Object.assign(Error('Synthetic response loss'),{status:503});}

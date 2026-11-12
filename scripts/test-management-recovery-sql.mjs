@@ -115,6 +115,7 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
       if(path.startsWith('/v1/billing_portal/configurations/')){return {active:true,features:{subscription_update:{enabled:unsafe}}};}
       return stripe.request(method,path,body,key);
     }
+    assert.equal((await store.read('SELECT idempotency_key FROM dbo.management_billing_steps WHERE idempotency_key=@key',{key})).length,1,'Named intent is durable before every provider write');
     writes.push({path,key,body:structuredClone(body)});let result,type;
     if(path==='/v1/customers'){
       result={id:`cus_recovery_${customers.length}`,livemode:false,...body};customers.push(result);type='customer.created';
@@ -185,7 +186,8 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
   assert.equal((await store.inventory(tenantId)).length,2,'Stock is not ceased before provider confirmation');
   await age(ceaseId);const ceased=await service.ceaseStock(ceaseArgs);assert.equal(ceased.managementEnded,true);assert.equal(ceased.nextRenewalQuantity,1);
   assert.deepEqual(await service.ceaseStock(ceaseArgs),ceased);assert.equal((await store.inventory(tenantId)).length,1);
-  assert.equal(writes.filter(w=>w.key===`quixo:${tenantId}:${ceaseId}:schedule`).length,1);
+  const savedKey=(await store.read("SELECT idempotency_key FROM dbo.management_billing_steps WHERE command_id=@id AND name='create_schedule'",{id:ceaseId}))[0].idempotency_key;
+  assert.equal(writes.filter(w=>w.key===savedKey).length,1,'Exactly one write uses the persisted schedule key, including SQL GUID casing');
   assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='inventory.ceased'",{id:ceaseId})).length,1);
   console.log('PASS: real SQL customer/Checkout response-loss recovery, open-session reuse, cross-tenant denial, portal evidence/expiry/configuration, exact preview retry and cessation completion; synthetic provider');
 };

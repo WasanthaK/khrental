@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {createProviderRecoveryHandlers} from '../../src/api/managementBilling/service.js';
+import {hash,BILLING_PORTAL} from '../../src/api/managementBilling/contract.js';
 import {createRecoveryRunner} from '../../src/api/managementBilling/recovery.js';
 import {quantityRecovery} from '../../src/api/managementBilling/recoveryQuantity.js';
 import {cancellationRecovery} from '../../src/api/managementBilling/recoveryCancellation.js';
@@ -16,7 +18,13 @@ const save=(name,value)=>{
 const stop=(point,step='')=>{if(stopAt===point&&(!targetStep||targetStep===step)){process.kill(process.pid,'SIGKILL');}};
 const state=read('journal.json',{attempts:0,steps:{},result:null,completedCount:0});
 const job={created_at:new Date(now).toISOString(),id:'operation',tenant_id:'tenant',kind:'cancellation',intent:{_subscriptionId:'sub_test',customerId:'cus_test',scheduleId:null,cancelAtPeriodEnd:true}};
-if(scenario!=='cancellation'){
+const inventory=[{key:'one'},{key:'two'},{key:'three'}];
+if(['checkout','portal','preview'].includes(scenario)){
+  job.kind=scenario==='preview'?'quantity_preview':scenario;
+  Object.assign(job.intent,{priceId:'price_test',itemId:'si_test',origin:'https://app.example.test',inventory,inventoryHash:hash(inventory),
+    preview:{from:2,to:3,inventoryHash:hash(inventory),expiresAt:new Date(now+600000).toISOString(),prorationDate:now/1000}});
+  if(scenario==='checkout'){job.intent.customerId=null;job.intent._subscriptionId=null;}
+}else if(scenario!=='cancellation'){
   const target={increase:3,reduction:1,zero:0}[scenario];
   if(target===undefined){throw new Error('Unknown scenario');}
   job.kind='quantity_apply';
@@ -46,6 +54,11 @@ const initial={writes:[],events:[],subscription:{id:'sub_test',customer:'cus_tes
 const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
   const provider=read('provider.json',initial);
   if(method==='GET'){
+    if(url==='/v1/customers/cus_created'){return provider.customer;}
+    if(url==='/v1/checkout/sessions'){return {data:provider.checkout?[provider.checkout]:[],has_more:false};}
+    if(url==='/v1/checkout/sessions/cs_created'){return provider.checkout;}
+    if(url==='/v1/checkout/sessions/cs_created/line_items'){return {data:provider.checkout.line_items,has_more:false};}
+    if(url.startsWith('/v1/billing_portal/configurations/')){return {active:true,features:{}};}
     if(url==='/v1/events'){return {data:provider.events.filter(event=>event.type===body.type),has_more:false};}
     if(url==='/v1/subscriptions/sub_test'){return provider.subscription;}
     if(url==='/v1/subscription_schedules/sched_test'){return provider.schedule;}
@@ -53,7 +66,15 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
   }
   if(method!=='POST'){throw new Error('Unexpected provider method');}
   let step,type,object;
-  if(url==='/v1/subscription_schedules'){
+  if(url==='/v1/customers'){
+    step='create_customer';type='customer.created';object={id:'cus_created',livemode:false,...body};provider.customer=object;
+  }else if(url==='/v1/checkout/sessions'){
+    step='create_checkout';type='fixture.checkout.created';object={id:'cs_created',livemode:false,...body};provider.checkout=object;
+  }else if(url==='/v1/billing_portal/sessions'){
+    step='create_portal';type='billing_portal.session.created';object={id:'bps_created',livemode:false,...body,configuration:BILLING_PORTAL,url:'https://billing.stripe.com/p/proof'};
+  }else if(url==='/v1/invoices/create_preview'){
+    step='preview_invoice';type='fixture.preview';object={id:'upcoming',livemode:false,customer:body.customer,total:1500,currency:'usd'};
+  }else if(url==='/v1/subscription_schedules'){
     step='create_schedule';type='subscription_schedule.created';
     provider.subscription.schedule='sched_test';
     provider.schedule={id:'sched_test',customer:'cus_test',subscription:'sub_test',livemode:false,status:'active',
@@ -76,6 +97,7 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
   save('provider.json',provider);stop('after_provider_effect',step);
   return object;
 }};
-const store={account:async()=>({stripe_subscription_id:'sub_test',stripe_customer_id:'cus_test'})};
+const store={account:async()=>({stripe_subscription_id:job.intent._subscriptionId,stripe_customer_id:job.intent.customerId,stripe_price_id:'price_test',quantity:2}),inventory:async()=>inventory};
+const handlers=createProviderRecoveryHandlers({store,stripe,requireAccount:store.account,clock});
 await createRecoveryRunner({journal,clock,handlers:{cancellation:cancellationRecovery({store,stripe}),
-  quantity_apply:quantityRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});
+  quantity_apply:quantityRecovery({store,stripe,clock}),...handlers}}).run({tenantId:'tenant',id:'operation'});

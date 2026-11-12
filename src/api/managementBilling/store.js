@@ -359,8 +359,8 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
     if(recovery){
-      if(!current||( ['cancellation','quantity_apply','quantity_preview','cessation'].includes(kind)&&!current.stripe_subscription_id)){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
-      if(kind!=='cancellation'&&!prepareRecovery){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Quantity recovery requires a reviewed intent.');}
+      if(!current||(['cancellation','quantity_apply','quantity_preview','cessation'].includes(kind)&&!current.stripe_subscription_id)){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
+      if(kind!=='cancellation'&&!prepareRecovery){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery requires a reviewed intent.');}
       const prepared=prepareRecovery?await prepareRecovery(q,current):{};
       await q(`INSERT dbo.management_billing_recovery(command_id,actor_id,intent_json)
         VALUES(@id,@actorId,@intent)`,{id,actorId,intent:JSON.stringify({...storedPayload,

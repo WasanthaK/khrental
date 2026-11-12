@@ -2,6 +2,9 @@
 
 ## Documentation reconciliation — 12 November 2026
 
+**Provider-operation continuation:** [PR #574](https://github.com/WasanthaK/khrental/pull/574) implements the remaining customer/Checkout, portal, preview, cessation-provider and pricing-publication recovery policies. [Operation coverage and evidence boundaries](R5-RECOVERY-IMPLEMENTATION-20261112.md#remaining-provider-operations--pr-574) distinguish source work from staging/production acceptance. Its final-head validation/merge state is recorded on the PR; this is not a deployment or activation record. After this source package is accepted, do not reimplement those paths: next engineering is restore/split and remaining cessation entitlement states, followed by controlled acceptance. Full Workstream 1 still requires accepted staging/operational recovery evidence.
+
+
 The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) controls milestone dispositions and priorities; the [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) controls remaining acceptance. Historical entries below do not requeue completed work.
 
 Latest verified application runtime remains [release #1546](https://github.com/WasanthaK/khrental/actions/runs/43065915681), Ready **0000488**, serving `4baeabc14cd96481101cda7071d93393a4819fb2`. Complete property/unit form preparation, full metadata and exact retry (#561) are deployed and verified. Security/lint work #555–#559, staged inventory #547 and paid/ending cessation #548 remain preserved. Production readiness and enabled-scope acceptance are distinct and still pending.
