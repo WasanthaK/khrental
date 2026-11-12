@@ -1,9 +1,12 @@
 # R3/R4 current acceptance checkpoint
 
-## Deployed grace and recovery — next bounded acceptance
+## Deployed grace and recovery — passed 12 November 2026
 
-**Prepared; execution pending.** The next BL05.4 proof reuses the dedicated empty sandbox fixture from the accepted delayed-event case for a distinct failed renewal. It verifies signed deployed HTTP delivery, SQL grace anchored to the first genuine failure, duplicate stability, genuine payment recovery within grace, and active paid-through readback. The deployed SQL write guard is invoked with an explicit process-local fixture scope, with a missing-account denial as a negative control; the serving HTTP enforcement configuration is unchanged. No database timestamps, leases or backoff are edited. Real seven-day SQL grace expiry, full HTTP enforcement activation and the remaining financial-operation/role/isolation cases remain open. Protect the original retained renewal account and clock; do not repeat accepted tests. Inspect the exact operation and fixture after any failed/unknown result before retrying.
+**BL05.4 passed: genuine failed renewal, grace and recovery within grace.** [Run 43224159517](https://github.com/WasanthaK/khrental/actions/runs/43224159517) passed at **13:09:20 UTC / 18:39:20 Asia/Colombo** on unchanged Ready **0000491**, image `59050153ad96b10be7c1990df846363a1642c046`. A distinct USD 5 renewal on the dedicated sandbox fixture failed; signed deployed HTTP reconciliation persisted grace at the first genuine failure time, **13:09:11 UTC**. A duplicate did not extend its seven-day deadline. Genuine payment within grace restored active paid-through and cleared grace. Failure and payment each retained exactly one SQL event/audit row. [Durable evidence](evidence/r5-deployed-grace-recovery-20261112.json).
 
+The deployed SQL write guard allowed the genuine grace and recovered states and denied an unenrolled negative-control account. These checks used read-only transactions and an explicit **process-local fixture scope**; full serving HTTP enforcement remains OFF. No SQL timestamps, leases or backoff were changed. The original retained account/subscription/clock and worker scope stayed unchanged. Harness [#602](https://github.com/WasanthaK/khrental/pull/602) passed strict lint, **1,400 tests** and build in [43223747593](https://github.com/WasanthaK/khrental/actions/runs/43223747593). No app redeployment or live charge occurred.
+
+The dedicated fixture remains active with paid-through `1802436793` and frozen provider time `1799765593`. Its prior delayed-event proof is historical and still accepted. Recovery cleared grace; the recorded **19 November 13:09:11 UTC** deadline is not a pending expiry. **Next open work:** BL05.5 real SQL grace expiry/later recovery, controlled full HTTP enforcement/role acceptance, and the remaining financial-operation/isolation cases. Do not rerun accepted renewal, portal recovery, delayed-event or within-grace proofs. R5 remains open; Evia stays paused.
 
 ## Deployed delayed failure after recovery — passed 12 November 2026
 
@@ -11,7 +14,7 @@
 
 The dedicated fixture `2383f4fc-e107-4ac7-9e13-39db501f40ec` has no users, memberships or properties and remains outside the automatic worker scope. Its separate frozen clock `clock_1UaxV7Q4sARuLNQazaI2X0i2`, customer `cus_VcBsCPq1TS8N9K` and subscription `sub_1UaxV8Q4sARuLNQaOeDFrlg3` are retained for distinct future acceptance. The original accepted renewal clock remains protected. Harness [#600](https://github.com/WasanthaK/khrental/pull/600) passed strict lint, **1,400 tests** and build in [43221214749](https://github.com/WasanthaK/khrental/actions/runs/43221214749). No application redeploy, worker-scope change, feature activation or live charge occurred.
 
-**Next:** deployed failure-to-grace/recovery and SQL write-enforcement acceptance on the dedicated fixture, then remaining financial-operation and authenticated role/resource/isolation cases. This proof closes only the delayed-event case; it does not establish grace-expiry enforcement or all organization isolation. Do not repeat the accepted retained renewal, portal response-loss or delayed-failure proofs. R5 remains open and Evia remains paused.
+**Subsequent progress:** deployed failure-to-grace/recovery and process-local SQL guard acceptance passed above; real grace expiry, full HTTP enforcement, and remaining financial-operation/role/isolation cases stay open. This proof closes only the delayed-event case; it does not establish grace-expiry enforcement or all organization isolation. Do not repeat the accepted retained renewal, portal response-loss or delayed-failure proofs. R5 remains open and Evia remains paused.
 
 ## Current follow-on R5 checkpoint — 12 November 2026
 
