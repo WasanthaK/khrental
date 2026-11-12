@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {createBillingService} from '../../src/api/managementBilling/service.js';
 
-// Synthetic transport and transactional memory only. Never represents captured
-// Stripe events, provider test-clock advancement or genuine payment acceptance.
-export const billingReplay=()=>{
+// Transactional memory only. Default transport is synthetic; the separate sandbox
+// runner can inject the real API client. Neither mode represents deployed SQL/HTTP acceptance.
+export const billingReplay=({stripeClient,initialAccount={},initialTime}={})=>{
   const tenantId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-  let time=Date.parse('2030-01-01T00:00:00Z');
+  let time=initialTime ?? Date.parse('2030-01-01T00:00:00Z');
   let state={account:{tenant_id:tenantId,stripe_customer_id:'cus_replay',stripe_subscription_id:'sub_replay',stripe_price_id:'price_replay',
-    quantity:1,initial_payment_verified:false,inventory_json:'[]',version:1},events:[],audit:[]};
+    quantity:1,initial_payment_verified:false,inventory_json:'[]',version:1,...initialAccount},events:[],audit:[]};
   const remote=new Map(),history=[],requests=[];
   const q=async(statement,params={})=>{
     if(statement.startsWith('UPDATE dbo.management_billing_accounts SET subscription_status=')){
@@ -21,11 +21,11 @@ export const billingReplay=()=>{
   const store={
     account:async()=>structuredClone(state.account),inventory:async()=>[{propertyId:'home'}],
     read:async(statement,params)=>statement.includes('WHERE stripe_customer_id=')?
-      params.customerId==='cus_replay'?[{tenant_id:tenantId}]:[]:q(statement,params),
+      params.customerId===state.account.stripe_customer_id?[{tenant_id:tenantId}]:[]:q(statement,params),
     locked:async(_id,action)=>{const before=structuredClone(state);try{return await action(q);}catch(error){state=before;throw error;}},
     audit:async(_q,value)=>state.audit.push(value)
   };
-  const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={})=>{
+  const stripe=stripeClient || {configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={})=>{
     assert.equal(method,'GET','Lifecycle replay must not charge or create provider objects');requests.push(path);
     if(path==='/v1/events'){return {data:history.filter(e=>e.type===body.type&&e.created>=body.created.gte),has_more:false};}
     assert.ok(remote.has(path),`Unknown synthetic provider read ${path}`);return structuredClone(remote.get(path));
@@ -43,6 +43,6 @@ export const billingReplay=()=>{
     history.push(event);return event;
   };
   return {publish,deliver:id=>service.webhook(remote.get(`/v1/events/${id}`)),summary:()=>service.summary(tenantId),
-    advance:ms=>{time+=ms;},state:()=>structuredClone(state),time:()=>time,requests,
+    deliverEvent:event=>service.webhook(event),setTime:ms=>{time=ms;},advance:ms=>{time+=ms;},state:()=>structuredClone(state),time:()=>time,requests,
     setComplimentary:expiry=>{state.account.comp_type='fixed';state.account.comp_expires_at=expiry;}};
 };
