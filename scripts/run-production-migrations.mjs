@@ -516,8 +516,12 @@ const MIGRATIONS = [
     inspect:inspectManagementRecovery,
     verify:async pool=>assertSatisfied(inspectManagementRecovery(pool),'Management recovery schema verification failed.')
   },
-  {id:'20261112_02_management_restoration',file:'migrations/20261112_02_management_restoration.sql',
-    inspect:inspectManagementRestoration,verify:async pool=>assertSatisfied(inspectManagementRestoration(pool),'Management restoration schema verification failed.')}
+  {
+    id:'20261112_02_management_restoration',
+    file:'migrations/20261112_02_management_restoration.sql',
+    inspect:inspectManagementRestoration,
+    verify:async pool=>assertSatisfied(inspectManagementRestoration(pool),'Management restoration schema verification failed.')
+  }
 ];
 
 const LEDGER_TABLE = 'dbo.schema_migrations';
