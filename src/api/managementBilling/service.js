@@ -605,7 +605,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       }else if(confirmed.stripe_schedule_id){throw problem(409,'BILLING_SCHEDULE_UNCONFIRMED','An unexpected schedule needs review.');}
       if(inventory[0]?.stagedRecords?.length){await store.promoteStock(q,{tenantId:row.tenant_id,snapshot:inventory,commandId:row.id});}
       await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
-        {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to<confirmed.quantity?intent.preview.to:null});
+        {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to!==confirmed.quantity?intent.preview.to:null});
       return {currentQuantity:confirmed.quantity,nextRenewalQuantity:intent.preview.to,timing:intent.preview.timing,
         ...((intent.ending||intent.preview.to===0)?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:{}),
         ...(ceased?{managementEnded:true,propertyId:intent.propertyId,unitId:intent.unitId,ceasedAt:new Date(ceased.record.ceased_at).toISOString()}:{})};
@@ -812,19 +812,21 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       if(checked.alreadyCeased||!checked.eligible||checked.inventoryHash!==inventoryHash){throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');}
       const inventory=await store.inventory(args.tenantId,q),remaining=inventory.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
       if(localOnly){return {localOnly:true,priceId:account.stripe_price_id,preview:{inventoryHash:hash(remaining),to:remaining.length,timing:'unchanged'}};}
-      if(remaining.length>account.quantity){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the managed inventory and billed quantity before ending management.');}
       const sub=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`),item=sub.items.data[0];
       const schedule=account.stripe_schedule_id?await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`):null;
       if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==account.stripe_subscription_id||objectId(schedule.customer)!==account.stripe_customer_id)){
         throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review.');
       }
-      if(cleanupMode){return {cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,
+      const renewalOnly=Boolean(store.splitEnabled?.()&&account.pending_quantity>account.quantity&&account.pending_quantity===inventory.length&&schedule&&
+        quantityScheduleMatches(schedule,splitScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:inventory.length})));
+      if(remaining.length>account.quantity&&!renewalOnly){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the managed inventory and billed quantity before ending management.');}
+      if(cleanupMode&&!renewalOnly){return {cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,
         periodEnd:item.current_period_end,trialStart:sub.trial_start??null,trialEnd:sub.trial_end??null,
         scheduleId:account.stripe_schedule_id||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
         preview:{from:account.quantity,to:remaining.length,inventoryHash:hash(remaining),timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'future_invoices'}};}
       const target=account.cancel_at_period_end?0:remaining.length;
-      const body=schedule&&target?quantityScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
-      return {ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,
+      const body=schedule&&target?(renewalOnly?splitScheduleBody:quantityScheduleBody)({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
+      return {renewalOnly,renewalMode:cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,
         scheduleId:account.stripe_schedule_id||null,phaseStart:schedule?.current_phase?.start_date||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
         preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body)),
         preview:{from:account.quantity,to:target,inventoryHash:hash(remaining),timing:target?'next_renewal':'cancel_at_renewal'}};

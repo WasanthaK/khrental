@@ -27,8 +27,8 @@ export const verifySplits=async(pool,actorId)=>{
       items:{data:[{id:'si_restore',quantity:2,current_period_end:now+86400,price:{id:BILLING_PRICE,currency:'usd',recurring:{interval:'month',usage_type:'licensed'}}}]}};
     await store.locked(tenantId,q=>q(`UPDATE dbo.management_billing_accounts SET stripe_customer_id=@customer,stripe_subscription_id=@subscription,
       stripe_item_id=@item,quantity=@quantity,subscription_status=@status,initial_payment_verified=@paid,paid_through=DATEADD(day,1,SYSUTCDATETIME()),
-      grace_started_at=DATEADD(day,-1,SYSUTCDATETIME()),comp_type=@comp,cancel_at_period_end=@ending WHERE tenant_id=@tenantId`,
-    {tenantId,customer:sub.customer,subscription:mode==='complimentary'?null:sub.id,item:mode==='complimentary'?null:'si_restore',quantity:mode==='complimentary'?0:2,
+      grace_started_at=@grace,comp_type=@comp,cancel_at_period_end=@ending WHERE tenant_id=@tenantId`,
+    {tenantId,grace:new Date((now-86400)*1000),customer:sub.customer,subscription:mode==='complimentary'?null:sub.id,item:mode==='complimentary'?null:'si_restore',quantity:mode==='complimentary'?0:2,
       status:mode==='complimentary'?'pending':sub.status,paid:mode==='complimentary'?0:1,comp:mode==='complimentary'?'ongoing':null,ending:mode==='ending'}));
     let schedule=null,lose=false,auditFault=false;const events=[],writes=[];
     const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={},key)=>{
@@ -99,6 +99,7 @@ export const verifySplits=async(pool,actorId)=>{
     if(mode==='active'||mode==='complimentary'){
       const ceasePreview=await service.cessationPreview({tenantId,actorId,propertyId,unitId:units[0].id});
       await service.ceaseStock({tenantId,actorId,id:crypto.randomUUID(),propertyId,unitId:units[0].id,inventoryHash:ceasePreview.inventoryHash,reason:'End one split unit after obligations close.'});
+      if(mode==='active'){assert.equal(sub.items.data[0].quantity,2,'Cessation of a deferred split never buys capacity');assert.deepEqual(schedule.phases.map(p=>p.items[0].quantity),[2,3]);assert.equal(schedule.proration_behavior,'none');}
       const restorePreview=await service.restorationPreview({tenantId,actorId,propertyId,unitId:units[0].id});
       await service.restoreStock({tenantId,actorId,id:crypto.randomUUID(),propertyId,unitId:units[0].id,inventoryHash:restorePreview.inventoryHash,reason:'Restore the retained split unit for management.'});
       assert.equal((await store.inventory(tenantId)).length,4);
