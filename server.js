@@ -44,6 +44,10 @@ import {createManualEmailGuards} from './src/api/email/manualEmailPolicy.js';
 import {publicApiError} from './src/api/httpErrors.js';
 import {createSecurityHeaders} from './src/api/securityHeaders.js';
 import { createManagementBillingRouter, createManagementBillingWebhook } from './src/api/managementBilling/router.js';
+import {createBillingStore} from './src/api/managementBilling/store.js';
+import {createStripeClient} from './src/api/managementBilling/stripe.js';
+import {createBillingService} from './src/api/managementBilling/service.js';
+import {createRecoveryWorker,startRecoveryScheduler} from './src/api/managementBilling/recoveryWorker.js';
 
 dotenv.config();
 
@@ -507,9 +511,14 @@ async function createServer() {
     startupDelayMs: process.env.AUTO_MONTHLY_BILLING_STARTUP_DELAY_MS || 30_000
   });
 
+  const recoveryStore=createBillingStore();
+  const recoveryService=createBillingService({store:recoveryStore,stripe:createStripeClient()});
+  const recoveryScheduler=startRecoveryScheduler({worker:createRecoveryWorker({store:recoveryStore,service:recoveryService})});
+
   const shutdown = async () => {
     console.log('\n[Server] Shutting down...');
     billingScheduler.stop();
+    await recoveryScheduler.stop();
     server.close();
     await closeMssqlPool().catch((error) => console.error('[Server] Error closing MSSQL pool:', error));
     process.exit(0);
