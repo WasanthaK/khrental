@@ -48,7 +48,10 @@ export const billingInvariants=({account,inventory,commands=[],subscription=null
       if(!ending&&!localCessationAllowed(account,now)&&next!==inventory.length){issues.push('RENEWAL_INVENTORY_QUANTITY');}
     }
   }else if(subscription||account.stripe_item_id||account.stripe_schedule_id||current!==0){issues.push('ORPHANED_BILLING_STATE');}
-  return {...result,status:issues.length?'needs_review':commands.length?'operation_pending':'consistent',issues,
+  const mismatch=issues.length>0,staleOperations=commands.filter(c=>c.stale).map(c=>c.id),reviewOperations=commands.filter(c=>c.state==='failed_needs_review').map(c=>c.id);
+  if(staleOperations.length){issues.push('STALE_RECOVERY_OPERATION');}
+  if(reviewOperations.length){issues.push('RECOVERY_REVIEW_REQUIRED');}
+  return {...result,status:mismatch?'needs_review':commands.length?'operation_pending':'consistent',issues,staleOperations,reviewOperations,
     pendingOperations:commands.length,reactivationRequired:terminal&&inventory.length>0};
 };
 
@@ -68,7 +71,11 @@ export const createBillingInvariantInspector=({store,stripe,clock=billingClock})
         AND c.status='completed' AND JSON_VALUE(r.intent_json,'$.cleanupMode')='trial' ORDER BY c.completed_at DESC`,{tenantId});
       return rows.length?{intent:JSON.parse(rows[0].intent_json),result:JSON.parse(rows[0].result_json)}:null;
     })():null,
-    commands:await q("SELECT id,kind,status FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending' ORDER BY id",{tenantId})
+    commands:await q(store.recoveryEnabled?.()?`SELECT c.id,c.kind,c.status,r.state,
+      CASE WHEN r.updated_at<DATEADD(minute,-5,SYSUTCDATETIME()) THEN 1 ELSE 0 END AS stale
+      FROM dbo.management_billing_commands c LEFT JOIN dbo.management_billing_recovery r ON r.command_id=c.id
+      WHERE c.tenant_id=@tenantId AND c.status='pending' ORDER BY c.id`:
+      "SELECT id,kind,status FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending' ORDER BY id",{tenantId})
   }));
   const inspect=async value=>{
     const tenantId=identifier(value),before=await snapshot(tenantId);
