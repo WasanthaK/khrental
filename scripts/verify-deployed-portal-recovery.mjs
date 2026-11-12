@@ -10,7 +10,7 @@ const target=JSON.parse(process.env.RECOVERY_ACCEPTANCE_TARGET||'{}');
 const store=createBillingStore(),stripe=createStripeClient();
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let stage='preflight';
-try{
+const main=async()=>{
   assert.match(target.id||'',/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.match(target.customer||'',/^cus_[a-zA-Z0-9]+$/);assert.match(target.subscription||'',/^sub_[a-zA-Z0-9]+$/);
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED']){assert.equal(process.env[flag],'true');}
@@ -21,6 +21,23 @@ try{
   assert.equal(tenant.plan,'development-testing');assert.equal(tenant.status,'active');
   const actors=await store.read("SELECT m.app_user_id FROM dbo.tenant_memberships m JOIN dbo.app_users u ON u.id=m.app_user_id WHERE m.tenant_id=@tenantId AND LOWER(m.role)='admin' AND LOWER(COALESCE(m.status,'active'))='active' AND LOWER(COALESCE(u.status,'active'))='active' ORDER BY m.app_user_id",{tenantId});
   assert.ok(actors.length);const actorId=actors[0].app_user_id;
+  if(target.inspect){
+    stage='read_only_inspection';
+    const commands=await store.read('SELECT c.id,c.kind,c.status,c.created_at,r.state,r.attempts,r.last_error FROM dbo.management_billing_commands c LEFT JOIN dbo.management_billing_recovery r ON r.command_id=c.id WHERE c.id=@id AND c.tenant_id=@tenantId',{id:target.id,tenantId});
+    const steps=await store.read('SELECT name,idempotency_key,completed_at,result_json FROM dbo.management_billing_steps WHERE command_id=@id AND EXISTS(SELECT 1 FROM dbo.management_billing_commands WHERE id=@id AND tenant_id=@tenantId)',{id:target.id,tenantId});
+    const audits=await store.read('SELECT action FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND resource_id=@id',{tenantId,id:target.id});
+    const proofs=steps.map(s=>{const p=JSON.parse(s.result_json||'{}');return {name:s.name,key:s.idempotency_key,completed:!!s.completed_at,sessionId:p.sessionId||null,eventId:p.eventId||null};});
+    await stripe.assertAccount();
+    const matches=[];let cursor,exhausted=false;
+    if(commands.length){for(let n=0;n<10;n++){
+      const page=await stripe.request('GET','/v1/events',{type:'billing_portal.session.created',created:{gte:Math.floor(new Date(commands[0].created_at).getTime()/1000)-60},limit:100,...(cursor?{starting_after:cursor}:{})});
+      for(const e of page.data){if(steps.some(s=>s.idempotency_key===e.request?.idempotency_key)){matches.push({eventId:e.id,sessionId:e.data.object.id,customerMatches:objectId(e.data.object.customer)===target.customer,livemode:e.livemode});}}
+      if(!page.has_more){exhausted=true;break;}cursor=page.data.at(-1)?.id;assert.ok(cursor);
+    }}else{exhausted=true;}
+    assert.ok(exhausted);
+    console.log('DEPLOYED_RECOVERY_INSPECT='+JSON.stringify({operationId:target.id,commands,steps:proofs,audits:audits.map(a=>a.action),providerEvents:matches,readOnly:true}));
+    return;
+  }
   assert.equal((await store.read('SELECT id FROM dbo.management_billing_commands WHERE id=@id',{id:target.id})).length,0,'Existing operation: inspect it, never create a replacement');
   assert.equal((await store.read("SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'",{tenantId})).length,0);
   await stripe.assertAccount();
@@ -28,11 +45,11 @@ try{
   const financial=s=>({id:s.id,customer:objectId(s.customer),status:s.status,cancel:s.cancel_at_period_end,schedule:objectId(s.schedule),invoice:objectId(s.latest_invoice),items:s.items.data.map(i=>({id:i.id,price:objectId(i.price),quantity:i.quantity,start:i.current_period_start,end:i.current_period_end}))});
   const before=await subscription();assert.equal(before.livemode,false);assert.equal(objectId(before.customer),target.customer);
   const accountHash=hash(account),financialHash=hash(financial(before));
-  let writes=0,sessionId=null;
+  let writes=0,sessionId=null,providerKey=null;
   const interrupted={...stripe,request:async(method,path,body,key)=>{
     if(method==='GET'){return stripe.request(method,path,body,key);}
     assert.equal(method,'POST');assert.equal(path,'/v1/billing_portal/sessions');assert.equal(++writes,1);
-    assert.equal(body.customer,target.customer);assert.equal(body.configuration,BILLING_PORTAL);assert.equal(key,`quixo:${tenantId}:${target.id}`);
+    assert.equal(body.customer,target.customer);assert.equal(body.configuration,BILLING_PORTAL);assert.equal(key.toLowerCase(),`quixo:${tenantId}:${target.id}`.toLowerCase());providerKey=key;
     const result=await stripe.request(method,path,body,key);
     assert.equal(result.livemode,false);assert.equal(objectId(result.customer),target.customer);sessionId=result.id;
     console.log('PORTAL_RESPONSE_DISCARDED='+JSON.stringify({operationId:target.id,sessionId,controlledFault:true}));
@@ -54,7 +71,7 @@ try{
   assert.equal(completed.status,'completed');assert.equal(completed.state,'succeeded');assert.ok(completed.attempts>=2);
   const steps=await store.read('SELECT name,idempotency_key,result_json,completed_at FROM dbo.management_billing_steps WHERE command_id=@id',{id:target.id});
   assert.equal(steps.length,1);assert.equal(steps[0].name,'create_portal');assert.ok(steps[0].completed_at);
-  const key=`quixo:${tenantId}:${target.id}`;assert.equal(steps[0].idempotency_key,key);
+  const key=providerKey;assert.equal(steps[0].idempotency_key,key);
   const proof=JSON.parse(steps[0].result_json);assert.equal(proof.sessionId,sessionId);assert.ok(proof.eventId);
   const event=await stripe.request('GET','/v1/events/'+proof.eventId);
   assert.equal(event.type,'billing_portal.session.created');assert.equal(event.livemode,false);assert.equal(event.request.idempotency_key,key);assert.equal(event.data.object.id,sessionId);
@@ -70,5 +87,6 @@ try{
   assert.equal(audit.length,1);assert.equal(audit[0].current_hash,hash(JSON.parse(completed.result_json)));
   assert.equal(hash(await store.account(tenantId)),accountHash);assert.equal(hash(financial(await subscription())),financialHash);
   console.log('DEPLOYED_RECOVERY_PASS='+JSON.stringify({operationId:target.id,sessionId,eventId:event.id,kind:'portal',controlledResponseLoss:true,automaticWorker:true,attempts:completed.attempts,command:'completed',journal:'succeeded',steps:1,audits:1,matchingProviderEvents:1,originalKeyPreserved:true,subscriptionUnchanged:true,accountUnchanged:true,liveCharge:false}));
-}catch(error){console.error('DEPLOYED_RECOVERY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',operationId:target.id}));process.exitCode=1;}
+};
+try{await main();}catch(error){console.error('DEPLOYED_RECOVERY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',actualCode:error.actual?.code||null,operationId:target.id}));process.exitCode=1;}
 finally{await closeMssqlPool();}

@@ -2,6 +2,12 @@ name: Genuine sandbox portal response-loss recovery
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Inspect existing operation without writes, or execute a new guarded proof
+        type: choice
+        default: inspect
+        options: [inspect, run]
+        required: true
       expected_build:
         description: Exact accepted serving application SHA
         required: true
@@ -37,6 +43,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      PROOF_MODE: ${{ inputs.mode }}
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       TARGET_CUSTOMER: ${{ inputs.customer }}
       TARGET_SUBSCRIPTION: ${{ inputs.subscription }}
@@ -53,6 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$PROOF_MODE" = inspect || "$PROOF_MODE" = run ]]
           test "$CONFIRMATION" = VERIFY-SANDBOX-PORTAL-RECOVERY
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$TARGET_CUSTOMER" =~ ^cus_[a-zA-Z0-9]+$ ]]
@@ -87,7 +95,7 @@ jobs:
           encoded=$(node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {brotliCompressSync} from 'node:zlib';
-          const target=JSON.stringify({id:process.env.OPERATION_ID,customer:process.env.TARGET_CUSTOMER,subscription:process.env.TARGET_SUBSCRIPTION});
+          const target=JSON.stringify({inspect:process.env.PROOF_MODE==='inspect',id:process.env.OPERATION_ID,customer:process.env.TARGET_CUSTOMER,subscription:process.env.TARGET_SUBSCRIPTION});
           const source='process.env.RECOVERY_ACCEPTANCE_TARGET='+JSON.stringify(target)+';\n'+readFileSync('scripts/verify-deployed-portal-recovery.mjs','utf8');
           console.log(brotliCompressSync(Buffer.from(source)).toString('base64url'));
           JS
@@ -96,8 +104,8 @@ jobs:
           remote="/tmp/r5-recovery-$OPERATION_ID.b64"
           digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
           : > deployed-recovery.txt
-          for ((offset=0; offset<${#encoded}; offset+=1000)); do
-            chunk=${encoded:offset:1000}
+          for ((offset=0; offset<${#encoded}; offset+=1400)); do
+            chunk=${encoded:offset:1400}
             method=appendFileSync; if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
             command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('PAYLOAD_CHUNK_$offset')\""
             printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
@@ -107,9 +115,10 @@ jobs:
           command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee -a deployed-recovery.txt
-          grep -Fq 'DEPLOYED_RECOVERY_PASS=' deployed-recovery.txt
+          marker=DEPLOYED_RECOVERY_PASS; if [ "$PROOF_MODE" = inspect ]; then marker=DEPLOYED_RECOVERY_INSPECT; fi
+          grep -Fq "$marker=" deployed-recovery.txt
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
-          grep '^DEPLOYED_RECOVERY_PASS=' deployed-recovery.txt >> "$GITHUB_STEP_SUMMARY"
+          grep "^$marker=" deployed-recovery.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
