@@ -12,6 +12,12 @@ const safeUrl = (value, host) => {
     {throw problem(502,'BILLING_URL_INVALID','Stripe returned an unexpected hosted URL.');}
   return url.href;
 };
+const assertPortalConfiguration=async stripe=>{
+    const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
+    if(!config.active||config.features?.subscription_update?.enabled||config.features?.subscription_cancel?.enabled||config.features?.subscription_pause?.enabled){
+      throw problem(409,'BILLING_PORTAL_UNSAFE','Portal subscription controls must remain disabled.');
+    }
+};
 // Exposed for the same process-interruption harness used by other recovery types.
 export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=billingClock})=>{
   const recoveryBinding=async job=>{
@@ -78,10 +84,7 @@ export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=
     const {intent}=job;await recoveryBinding(job);
     const expired={requiresNewSession:true,message:'This billing link expired. Select Payment method & invoices again to open a fresh link.'};
     if(clock.now()-new Date(job.created_at).getTime()>300000){return expired;}
-    const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
-    if(!config.active||config.features?.subscription_update?.enabled||config.features?.subscription_cancel?.enabled||config.features?.subscription_pause?.enabled){
-      throw problem(409,'BILLING_PORTAL_UNSAFE','Portal subscription controls must remain disabled.');
-    }
+    await assertPortalConfiguration(stripe);
     const key=`quixo:${job.tenant_id}:${job.id}`;
     const read=()=>requestObjectEvidence({stripe,type:'billing_portal.session.created',customerId:intent.customerId,key,since:job.created_at,clock,
       matches:value=>objectId(value.configuration)===BILLING_PORTAL&&value.return_url===`${intent.origin}/dashboard/subscription`});
@@ -343,6 +346,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
   },legacyCheckout);
   const portal=async args=>journalCommand(args,'portal',{},async(_q,account)=>{
     if(!account.stripe_customer_id){throw problem(409,'BILLING_CUSTOMER_REQUIRED','Start checkout before opening billing management.');}
+    await assertPortalConfiguration(stripe);
     return {priceId:account.stripe_price_id,origin:configuredOrigin()};
   },legacyPortal);
   const quantityPreview=async args=>journalCommand(args,'quantity_preview',{},async(q,current)=>{

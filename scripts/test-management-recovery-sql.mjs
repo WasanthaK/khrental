@@ -165,8 +165,7 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
   assert.equal(writes.filter(w=>w.path==='/v1/billing_portal/sessions').length,2);
   unsafe=true;const unsafeId=crypto.randomUUID();await assert.rejects(service.portal({tenantId,actorId,id:unsafeId}),{code:'BILLING_PORTAL_UNSAFE'});
   assert.equal(writes.filter(w=>w.path==='/v1/billing_portal/sessions').length,2);
-  // Retire only this deliberate review fixture before the next independent case.
-  await store.locked(tenantId,q=>q("UPDATE dbo.management_billing_commands SET status='failed' WHERE id=@id",{id:unsafeId}));unsafe=false;
+  assert.equal((await store.read('SELECT id FROM dbo.management_billing_commands WHERE id=@id',{id:unsafeId})).length,0,'Initial unsafe portal configuration cannot strand a pending command');unsafe=false;
   const sub=remote.get(`/v1/subscriptions/${original.stripe_subscription_id}`);sub.cancel_at_period_end=false;sub.schedule=null;
   await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_accounts SET stripe_customer_id=@customer,stripe_subscription_id=@subscription,stripe_schedule_id=NULL,initial_payment_verified=1 WHERE tenant_id=@tenantId',
     {tenantId,customer:original.stripe_customer_id,subscription:original.stripe_subscription_id}));
