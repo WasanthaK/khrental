@@ -104,7 +104,7 @@ jobs:
             script -q -e -c "$invocation" /dev/null | tee -a deployed-recovery.txt
             grep -Fq "PAYLOAD_CHUNK_$offset" deployed-recovery.txt
           done
-          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');await import('data:text/javascript;base64,'+(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')).toString('base64'))\""
+          command="node --input-type=module -e \"const fs=await import('node:fs');const b=fs.readFileSync('$remote');if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');fs.unlinkSync('$remote');const p='$remote.mjs';fs.writeFileSync(p,(await import('node:zlib')).brotliDecompressSync(Buffer.from(b.toString(),'base64url')));try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee -a deployed-recovery.txt
           grep -Fq 'DEPLOYED_RECOVERY_PASS=' deployed-recovery.txt
