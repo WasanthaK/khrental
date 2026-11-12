@@ -1,3 +1,4 @@
+import {billingClock} from './clock.js';
 import crypto from 'node:crypto';
 import {resolveRegisteredPhoto,trustedPhotoOrigins} from '../publicListings/sourceImages.js';
 import {getMssqlPool, sql} from '../mssql/pool.js';
@@ -50,7 +51,7 @@ export const runManagementQuery = (statement, params, tenantId = params.tenantId
 export const runSingleManagementQuery = async (statement, params) =>
   (await runManagementQuery(statement, params))[0] || null;
 
-export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}) => {
+export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock=billingClock} = {}) => {
   const validateImages=(records,tenantId)=>{
     for(const {payload} of records){
       for(let index=0;index<(payload.images?.length||0);index++){
@@ -345,7 +346,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
       if(String(existing.tenant_id).toLowerCase()!==tenantId.toLowerCase() || existing.kind!==kind || existing.payload_hash!==digest)
         {throw problem(409,'BILLING_REQUEST_CONFLICT','This request identifier belongs to a different operation.');}
       const journaled=recovery&&(await q('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id})).length;
-      if(!journaled&&existing.status==='pending' && Date.now()-new Date(existing.created_at).getTime()>23*3600000)
+      if(!journaled&&existing.status==='pending' && clock.now()-new Date(existing.created_at).getTime()>23*3600000)
         {throw problem(409,'BILLING_RECONCILIATION_REQUIRED','An older interrupted operation needs reconciliation before retrying.');}
       return {...existing,createdNow:false};
     }
@@ -373,10 +374,10 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env} = {}
       throw problem(409, 'BILLING_NOT_ENROLLED', 'Enroll this sandbox workspace before managing complimentary access.');
     }
     return {version:current.version, mode:current.comp_type, expiresAt:current.comp_expires_at || null,
-      entitlement:entitlement(current), riskHold:Boolean(current.risk_hold), liveChargingEnabled:false};
+      entitlement:entitlement(current,clock.now()), riskHold:Boolean(current.risk_hold), liveChargingEnabled:false};
   };
   const setComplimentary = ({tenantId, actorId, ...input}) => locked(tenantId, async q => {
-    const change = complimentaryChange(input);
+    const change = complimentaryChange(input,clock.now());
     const current = await account(tenantId, q);
     if (!current || current.stripe_account_id !== BILLING_ACCOUNT) {
       throw problem(409, 'BILLING_NOT_ENROLLED', 'Enroll this sandbox workspace before managing complimentary access.');

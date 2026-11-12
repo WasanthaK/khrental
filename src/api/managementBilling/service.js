@@ -1,6 +1,6 @@
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
-import {createRecoveryRunner} from './recovery.js';
+import {createRecoveryRunner,billingClock} from './recovery.js';
 import {createRecoveryJournal} from './recoveryJournal.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
 
@@ -10,7 +10,7 @@ const safeUrl = (value, host) => {
     {throw problem(502,'BILLING_URL_INVALID','Stripe returned an unexpected hosted URL.');}
   return url.href;
 };
-export const createBillingService = ({store,stripe,env=process.env}) => {
+export const createBillingService = ({store,stripe,env=process.env,clock=billingClock}) => {
   const configuredOrigin=()=>{
     let url;
     try {url=new URL(env.PUBLIC_APP_URL || env.PASSWORD_RESET_BASE_URL);} catch {throw problem(503,'BILLING_ORIGIN_REQUIRED','The application return URL is not configured.');}
@@ -73,12 +73,12 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     const invoiceId=objectId(subscription.latest_invoice);
     const invoice=invoiceId?await loadInvoice(invoiceId):null;
     const firstFailureAt=subscription.status==='past_due' && invoice?.status==='open' && invoice.attempted===true && account.initial_payment_verified
-      ? await firstRenewalFailure({stripe,invoice,account}) : null;
-    const projection=subscriptionProjection({subscription,invoice,account,firstFailureAt});
+      ? await firstRenewalFailure({stripe,invoice,account,now:clock.now()}) : null;
+    const projection=subscriptionProjection({subscription,invoice,account,firstFailureAt,now:clock.now()});
     await saveProjection(q,account.tenant_id,projection);
     const snapshot=JSON.parse(account.inventory_json||'[]');
     if(promoteCheckout&&snapshot[0]?.stagedRecords?.length&&projection.initial_payment_verified&&
-      entitlement({...account,...projection}).management){
+      entitlement({...account,...projection},clock.now()).management){
       const rows=await q(`SELECT id,result_json FROM dbo.management_billing_commands
         WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed' ORDER BY created_at DESC`,{tenantId:account.tenant_id});
       let matched=null;
@@ -109,7 +109,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
         label:JSON.parse(row.payload_json)[row.kind==='property'?'name':'unitnumber']})),
       cessationEnabled:Boolean(store.cessationEnabled?.()),
       billedQuantity:account?.quantity || 0,pendingQuantity:account?.pending_quantity ?? null,
-      status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account),
+      status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account,clock.now()),
       cancelAtPeriodEnd:Boolean(account?.cancel_at_period_end),paidThrough:account?.paid_through || null,
       pendingOperation:pending?{id:pending.id,kind:pending.kind,createdAt:pending.created_at,payload:pendingPayload}:null,
       liveChargingEnabled:false,applicationEnforcementEnabled:false};
@@ -273,7 +273,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     const confirmed=await cancelLocked(q,account,key,cancelAtPeriodEnd);
     return {cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }});
-  const recovery=createRecoveryRunner({journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
+  const recovery=createRecoveryRunner({clock,journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
     const intent=JSON.parse(row.intent_json);
     const account=await requireAccount(row.tenant_id,q);
     if(account.stripe_subscription_id!==intent._subscriptionId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');}
@@ -298,9 +298,9 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   };
   const quantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
     account=await reconcileLocked(q,account);
-    if(entitlement(account).state!=='active') {throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');}
+    if(entitlement(account,clock.now()).state!=='active') {throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');}
     const inventory=await store.inventory(tenantId,q,{includePending:true});
-    const prorationDate=Math.floor(Date.now()/1000);
+    const prorationDate=Math.floor(clock.now()/1000);
     const target=inventory.length;
     let invoice=null;
     if(target>account.quantity) {invoice=await stripe.request('POST','/v1/invoices/create_preview',{
@@ -315,8 +315,8 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
   const applyQuantityLocked=async(q,{tenantId,id,account,key,resuming,preview,inventory})=>{
     account=await reconcileLocked(q,account);
     const cancellationRetry=resuming && preview.to===0 && preview.timing==='cancel_at_renewal'
-      && entitlement(account).state==='ending';
-    if((entitlement(account).state!=='active' && !cancellationRetry) || (account.quantity!==preview.from && !(resuming&&account.quantity===Math.max(preview.from,preview.to))))
+      && entitlement(account,clock.now()).state==='ending';
+    if((entitlement(account,clock.now()).state!=='active' && !cancellationRetry) || (account.quantity!==preview.from && !(resuming&&account.quantity===Math.max(preview.from,preview.to))))
       {throw problem(409,'BILLING_PREVIEW_STALE','The subscription changed. Request a new preview.');}
     const target=inventory.length;
     if(target===0) {
@@ -373,7 +373,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     if(!row) {throw problem(409,'BILLING_PREVIEW_REQUIRED','Review a current quantity preview first.');}
     const preview=JSON.parse(row.result_json);
     const inventory=await store.inventory(tenantId,q,{includePending:true});
-    if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<Date.now()))
+    if(hash(inventory)!==preview.inventoryHash || (!resuming&&Date.parse(preview.expiresAt)<clock.now()))
       {throw problem(409,'BILLING_PREVIEW_EXPIRED','Inventory or the preview changed. Request a new preview.');}
     return applyQuantityLocked(q,{tenantId,id,account,key,resuming,preview,inventory});
   }});
@@ -387,7 +387,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
       const items=await store.inventory(tenantId,q);
       const remaining=items.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
       const blockers=[...preview.blockers];
-      if(!['active','ending'].includes(entitlement(account).state)){blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});}
+      if(!['active','ending'].includes(entitlement(account,clock.now()).state)){blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});}
       const visible={...preview};delete visible.record;
       return {...visible,eligible:!blockers.length,blockers,currentBilledQuantity:account.quantity,remainingManagedDwellings:remaining.length,
         timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'next_renewal'};
@@ -397,7 +397,7 @@ export const createBillingService = ({store,stripe,env=process.env}) => {
     if(!store.cessationEnabled?.()){throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');}
     return runCommand({tenantId,id,actorId,kind:'cessation',payload:{propertyId,unitId,inventoryHash,reason},action:async(q,account,key,resuming)=>{
       account=await reconcileLocked(q,account);
-      if(!['active','ending'].includes(entitlement(account).state)){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription to good standing before confirming this management and billing change.');}
+      if(!['active','ending'].includes(entitlement(account,clock.now()).state)){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription to good standing before confirming this management and billing change.');}
       const result=await store.ceaseStockLocked(q,{tenantId,actorId,id,propertyId,unitId,inventoryHash,reason});
       const inventory=await store.inventory(tenantId,q);
       if(inventory.length>account.quantity){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the existing inventory and billed quantity before ending management. No stock or subscription change was saved.');}
