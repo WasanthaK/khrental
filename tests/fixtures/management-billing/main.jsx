@@ -14,6 +14,8 @@ function Fixture(){
    inventory:Array.from({length:12},(_,i)=>({key:`unit:${i}`,label:`Example residence · Unit ${i+1}`}))};
  if(screen==='subscription'){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
+  if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}
+  if(scenario==='cessation-grace'){data.inventoryQuantity=2;data.inventory=[data.inventory[0],{key:'unit:2',label:'Second example residence'}];}
   if(scenario==='cessation-local'){data.entitlement={state:'complimentary'};}
   if(scenario==='applied'){Object.assign(data,{billedQuantity:1,pendingQuantity:null});}
   if(scenario==='cancelled'){data.cancelAtPeriodEnd=true;}
@@ -26,6 +28,7 @@ function Fixture(){
     pendingStock:[{id:'staged-home',kind:'property',label:'Prepared home'}],proposedInventoryQuantity:1});}
   const quantityPreview=scenario==='zero-preview'?{previewId:'fixture-preview',from:2,to:0,timing:'cancel_at_renewal',nextInvoiceTotalMinor:null,currency:'usd'}:null;
   const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:scenario==='cessation-local'?'unchanged':'cancel_at_renewal',eligible:scenario!=='cessation-blocked',blockers:scenario!=='cessation-blocked'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
+  if(cessation&&['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(cessation,{cleanupMode:scenario==='cessation-grace'?'grace':'trial',remainingManagedDwellings:scenario==='cessation-grace'?1:0,timing:scenario==='cessation-grace'?'future_invoices':'cancel_at_renewal'});}
   return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} loading={loading}
     stockDraft={stockDraft} onStockDraftChange={setStockDraft} cessation={cessation} cessationReason={cessationReason} onCessationReason={setCessationReason}
     onAction={async(kind,payload)=>{

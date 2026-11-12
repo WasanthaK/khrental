@@ -398,5 +398,5 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
   });
   return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
     complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock,
-    cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
+    recoveryEnabled:()=>env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true',cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
 };

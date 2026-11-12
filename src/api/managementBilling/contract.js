@@ -190,6 +190,13 @@ export const localCessationAllowed = (account, now = billingClock.now()) => {
       Number.isFinite(Date.parse(account.grace_started_at))&&Date.parse(account.grace_started_at)+7*86400000<=now);
 };
 
+// Grace cleanup reduces future invoices; existing trials gain no access.
+export const cessationCleanupMode=(account,now=billingClock.now())=>{
+  if(!account||account.risk_hold||entitlement(account,now).state==='complimentary'){return null;}
+  if(account.subscription_status==='trialing'){return 'trial';}
+  return entitlement(account,now).state==='grace'?'grace':null;
+};
+
 // Source preparation only: no organization is opted into write enforcement by
 // enrollment, payment or a caller-supplied request field. Full-path acceptance
 // must precede configuring this server-owned rollout scope.

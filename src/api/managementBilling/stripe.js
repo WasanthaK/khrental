@@ -89,13 +89,13 @@ export const firstRenewalFailure = async ({stripe, invoice, account, now=billing
   throw problem(409, 'BILLING_FAILURE_TIME_UNCONFIRMED', 'The renewal failure time needs reconciliation.');
 };
 
-export const subscriptionProjection = ({subscription,invoice,account,firstFailureAt=null,now=billingClock.now()}) => {
+export const subscriptionProjection = ({subscription,invoice,account,firstFailureAt=null,now=billingClock.now(),cessationCleanup=false}) => {
   const items=subscription.items?.data || [];
   const item=items[0];
   if(objectId(subscription.customer)!==account.stripe_customer_id || subscription.id!==account.stripe_subscription_id ||
       subscription.livemode!==false || items.length!==1 || objectId(item?.price)!==account.stripe_price_id ||
       item.price?.recurring?.interval!=='month' || item.price?.recurring?.usage_type!=='licensed' ||
-      !Number.isSafeInteger(item.quantity) || item.quantity<1 || subscription.trial_end || subscription.trial_start)
+      !Number.isSafeInteger(item.quantity) || item.quantity<1 || ((subscription.trial_end || subscription.trial_start)&&!(cessationCleanup&&invoice===null&&['trialing','canceled'].includes(subscription.status))))
     {throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription ownership, price or billing terms need reconciliation.');}
   const periodEnd=item.current_period_end || subscription.current_period_end;
   const invoiceMatches=invoice && invoice.livemode===false && objectId(invoice.customer)===account.stripe_customer_id &&

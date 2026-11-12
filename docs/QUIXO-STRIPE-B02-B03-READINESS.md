@@ -1,5 +1,7 @@
 # Quixo.Homes Stripe B02/B03 — merchant readiness and dwelling policy
 
+**Active continuation:** grace/trial cleanup is now integrated in the source behind existing readiness controls. The [integration record](R5-RECOVERY-IMPLEMENTATION-20261112.md#gracetrial-cleanup-service-integration) separates implementation from pending final-head SQL/browser verification and genuine-provider acceptance. PR #577 is merged; its component must not be rebuilt. Restore/split follows verified integration. R5 remains incomplete; deployment/activation are unchanged.
+
 **12 November recovery checkpoint:** no-provider-write cessation merged in [PR #576](https://github.com/WasanthaK/khrental/pull/576), with final-head tests/SQL/browser proof recorded in the [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026). Grace/trial cleanup now has a separately tested provider recovery component; service/SQL/UI integration remains next. No trial offering, paid access, invoice void/credit, deployment or activation is introduced. [Component scope and remaining acceptance](R5-RECOVERY-IMPLEMENTATION-20261112.md#gracetrial-cleanup-recovery-component) control; R5 stays incomplete.
 
 ## Current engineering versus commercial decisions — 12 November 2026

@@ -1,10 +1,10 @@
-import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, hash, problem} from './contract.js';
+import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
 import {requestObjectEvidence,uniqueProviderObject} from './recoveryEvidence.js';
 import {createRecoveryRunner,billingClock} from './recovery.js';
 import {createRecoveryJournal} from './recoveryJournal.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
-import {quantityRecovery,quantityScheduleBody,quantityScheduleMatches,scheduleFingerprint} from './recoveryQuantity.js';
+import {cessationCleanupRecovery,quantityRecovery,quantityScheduleBody,quantityScheduleMatches,scheduleFingerprint} from './recoveryQuantity.js';
 
 const safeUrl = (value, host) => {
   const url = new URL(value);
@@ -187,6 +187,20 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     }
     if(!account.stripe_subscription_id) {return account;}
     const subscription=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`);
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'&&['trialing','canceled'].includes(subscription.status)&&(subscription.trial_start||subscription.trial_end)){
+      const rows=await q(`SELECT r.intent_json FROM dbo.management_billing_recovery r
+        JOIN dbo.management_billing_commands c ON c.id=r.command_id
+        WHERE c.tenant_id=@tenantId AND c.kind='cessation' AND c.status IN ('pending','completed')`,{tenantId:account.tenant_id});
+      const known=rows.some(row=>{
+        const saved=JSON.parse(row.intent_json);
+        return saved.cleanupMode==='trial'&&saved._subscriptionId===subscription.id&&saved.customerId===account.stripe_customer_id&&
+          saved.priceId===account.stripe_price_id&&saved.trialStart===subscription.trial_start&&saved.trialEnd===subscription.trial_end;
+      });
+      if(known){
+        const projection=subscriptionProjection({subscription,invoice:null,account,now:clock.now(),cessationCleanup:true});
+        await saveProjection(q,account.tenant_id,projection);return {...account,...projection};
+      }
+    }
     const invoiceId=objectId(subscription.latest_invoice);
     const invoice=invoiceId?await loadInvoice(invoiceId):null;
     const firstFailureAt=subscription.status==='past_due' && invoice?.status==='open' && invoice.attempted===true && account.initial_payment_verified
@@ -492,6 +506,29 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         currentQuantity:current.quantity,nextRenewalQuantity:current.cancel_at_period_end||['canceled','incomplete_expired'].includes(current.subscription_status)?0:current.pending_quantity??current.quantity,
         cancelAtPeriodEnd:Boolean(current.cancel_at_period_end)};
     }
+    if(row.kind==='cessation'&&intent.cleanupMode){
+      if(account.stripe_customer_id!==intent.customerId||account.stripe_price_id!==intent.priceId){
+        throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed before completion.');
+      }
+      const remote=await stripe.request('GET',`/v1/subscriptions/${intent._subscriptionId}`),item=remote.items?.data?.[0];
+      if(item?.id!==intent.itemId||item.current_period_end!==intent.periodEnd||(remote.trial_start??null)!==intent.trialStart||(remote.trial_end??null)!==intent.trialEnd){
+        throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription terms changed before cleanup completion.');
+      }
+      const confirmed=await cessationAccount(q,account);
+      if(cessationCleanupMode(confirmed,new Date(row.checked_at).getTime())!==intent.cleanupMode){
+        throw problem(409,'BILLING_CESSATION_STATE_CHANGED','Subscription access changed. Review ending management again.');
+      }
+      if(confirmed.quantity!==result.currentQuantity||Boolean(confirmed.cancel_at_period_end)!==result.cancelAtPeriodEnd||confirmed.stripe_schedule_id){
+        throw problem(409,'BILLING_QUANTITY_UNCONFIRMED','The subscription no longer confirms this cleanup.');
+      }
+      const ceased=await store.ceaseStockLocked(q,{tenantId:row.tenant_id,actorId:row.actor_id,id:row.id,...intent});
+      const inventory=await store.inventory(row.tenant_id,q);
+      if(hash(inventory)!==intent.preview.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before completion.');}
+      await q('UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId',
+        {tenantId:row.tenant_id,inventory:JSON.stringify(inventory),pending:result.cancelAtPeriodEnd?0:null});
+      return {...result,cleanupMode:intent.cleanupMode,managementEnded:true,propertyId:intent.propertyId,unitId:intent.unitId,
+        ceasedAt:new Date(ceased.record.ceased_at).toISOString()};
+    }
     if(row.kind==='quantity_apply'||row.kind==='cessation'){
       let ceased=null;
       if(row.kind==='cessation'){
@@ -526,6 +563,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
   }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock}),
     checkout:providerRecovery.checkout,portal:providerRecovery.portal,quantity_preview:providerRecovery.quantity_preview,cessation:async args=>{
       if(args.job.intent.localOnly){return {localOnly:true};}
+      if(args.job.intent.cleanupMode){return cessationCleanupRecovery({store,stripe,clock})(args);}
       if(args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from,nextRenewalQuantity:0,cancelAtPeriodEnd:true};}
       return quantityRecovery({store,stripe,clock})(args);
     }}});
@@ -651,8 +689,17 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const rows=await store.read('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id});
     return rows.length?recoverOperation(args):legacyQuantityApply(args);
   };
-  const cessationAccount=async(q,current)=>entitlement(current,clock.now()).state==='complimentary'
-    ?current:reconcileLocked(q,current,{promoteCheckout:false});
+  const cessationAccount=async(q,current)=>{
+    if(entitlement(current,clock.now()).state==='complimentary'){return current;}
+    if(current.stripe_subscription_id){
+      const subscription=await stripe.request('GET',`/v1/subscriptions/${current.stripe_subscription_id}`);
+      if(subscription.status==='trialing'){
+        const projection=subscriptionProjection({subscription,invoice:null,account:current,now:clock.now(),cessationCleanup:true});
+        await saveProjection(q,current.tenant_id,projection);return {...current,...projection};
+      }
+    }
+    return reconcileLocked(q,current,{promoteCheckout:false});
+  };
   const cessationPreview=async({tenantId,actorId,propertyId,unitId=null})=>{
     if(!store.cessationEnabled?.()){throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');}
     await stripe.assertAccount();
@@ -661,14 +708,15 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       const current=await requireAccount(tenantId,q);
       const account=env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'?await cessationAccount(q,current):await reconcileLocked(q,current);
       const localOnly=env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'&&localCessationAllowed(account,clock.now());
+      const cleanupMode=env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'?cessationCleanupMode(account,clock.now()):null;
       const preview=await store.cessationPreviewLocked(q,{tenantId,actorId,propertyId,unitId});
       const items=await store.inventory(tenantId,q);
       const remaining=items.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
       const blockers=[...preview.blockers];
-      if(!localOnly&&!['active','ending'].includes(entitlement(account,clock.now()).state)){blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});}
+      if(!localOnly&&!cleanupMode&&!['active','ending'].includes(entitlement(account,clock.now()).state)){blockers.push({code:'SUBSCRIPTION_REVIEW',message:'Restore the paid subscription to good standing before confirming this management and billing change.',count:1});}
       const visible={...preview};delete visible.record;
       return {...visible,eligible:!blockers.length,blockers,currentBilledQuantity:account.quantity,remainingManagedDwellings:remaining.length,
-        timing:localOnly?'unchanged':account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'next_renewal'};
+        cleanupMode,timing:localOnly?'unchanged':account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':cleanupMode?'future_invoices':'next_renewal'};
     });
   };
   const legacyCeaseStock=async({tenantId,id,actorId,propertyId,unitId=null,inventoryHash,reason})=>{
@@ -697,8 +745,8 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const {propertyId,unitId=null,inventoryHash,reason}=args;
     return journalCommand(args,'cessation',{propertyId,unitId,inventoryHash,reason},async(q,current)=>{
       const account=await cessationAccount(q,current);
-      const localOnly=localCessationAllowed(account,clock.now());
-      if(!localOnly&&!['active','ending'].includes(entitlement(account,clock.now()).state)){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription before ending management.');}
+      const localOnly=localCessationAllowed(account,clock.now()),cleanupMode=cessationCleanupMode(account,clock.now());
+      if(!localOnly&&!cleanupMode&&!['active','ending'].includes(entitlement(account,clock.now()).state)){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription before ending management.');}
       const checked=await store.cessationPreviewLocked(q,{tenantId:args.tenantId,actorId:args.actorId,commandId:args.id,propertyId,unitId});
       if(checked.alreadyCeased||!checked.eligible||checked.inventoryHash!==inventoryHash){throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');}
       const inventory=await store.inventory(args.tenantId,q),remaining=inventory.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
@@ -709,6 +757,10 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==account.stripe_subscription_id||objectId(schedule.customer)!==account.stripe_customer_id)){
         throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review.');
       }
+      if(cleanupMode){return {cleanupMode,ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,
+        periodEnd:item.current_period_end,trialStart:sub.trial_start??null,trialEnd:sub.trial_end??null,
+        scheduleId:account.stripe_schedule_id||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
+        preview:{from:account.quantity,to:remaining.length,inventoryHash:hash(remaining),timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'future_invoices'}};}
       const target=account.cancel_at_period_end?0:remaining.length;
       const body=schedule&&target?quantityScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
       return {ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,

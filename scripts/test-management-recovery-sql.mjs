@@ -7,6 +7,7 @@ import {createBillingService} from '../src/api/managementBilling/service.js';
 import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createRecoveryWorker} from '../src/api/managementBilling/recoveryWorker.js';
 import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
+import {verifyCessationCleanup} from './test-management-cessation-cleanup-sql.mjs';
 import {verifyQuantityRecovery} from './test-management-quantity-recovery-sql.mjs';
 
 // Called only by the disposable SQL Server harness. Provider transport is synthetic.
@@ -89,6 +90,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   console.log('PASS: recovery schema replay/drift, durable intent, aged provider readback, tenant isolation, atomic result/audit, exclusive leases, fencing, revoked actor and attempt cap');
   await verifyQuantityRecovery(pool,{tenantId,actorId,stripe,remote,calls,retiredFixtureId:leaseId});
   await verifyProviderRecovery(pool,{tenantId,otherTenant,actorId,stripe,remote,calls});
+  await verifyCessationCleanup(pool,actorId);
 };
 
 // Extends the existing disposable fixture only; never called by production jobs.
