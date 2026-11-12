@@ -336,7 +336,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     return account(tenantId,q);
   });
   const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false,prepareRecovery=null}) => locked(tenantId,async q => {
-    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply'].includes(kind))){
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation'].includes(kind))){
       throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
     }
     await assertActor(q,tenantId,actorId);
@@ -354,13 +354,13 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     if(pending) {throw problem(409,'BILLING_COMMAND_PENDING','Retry the unfinished billing operation before starting another.');}
     // Commit the provider ownership boundary before any external write. Keep
     // the caller payload hash unchanged so retries use the original binding.
-    const current=['cancellation','quantity_apply','cessation'].includes(kind)?await account(tenantId,q):null;
+    const current=(recovery||['cancellation','quantity_apply','cessation'].includes(kind))?await account(tenantId,q):null;
     const storedPayload=current?{...payload,_subscriptionId:current.stripe_subscription_id}:payload;
     await q(`INSERT INTO dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status)
       VALUES(@id,@tenantId,@kind,@digest,@payload,'pending')`,{id,tenantId,kind,digest,payload:JSON.stringify(storedPayload)});
     if(recovery){
-      if(!current?.stripe_subscription_id){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
-      if(kind==='quantity_apply'&&!prepareRecovery){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Quantity recovery requires a reviewed intent.');}
+      if(!current||(['cancellation','quantity_apply','quantity_preview','cessation'].includes(kind)&&!current.stripe_subscription_id)){throw problem(409,'BILLING_CANCELLATION_UNAVAILABLE','An active subscription is required.');}
+      if(kind!=='cancellation'&&!prepareRecovery){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery requires a reviewed intent.');}
       const prepared=prepareRecovery?await prepareRecovery(q,current):{};
       await q(`INSERT dbo.management_billing_recovery(command_id,actor_id,intent_json)
         VALUES(@id,@actorId,@intent)`,{id,actorId,intent:JSON.stringify({...storedPayload,

@@ -1,5 +1,6 @@
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
+import {requestObjectEvidence,uniqueProviderObject} from './recoveryEvidence.js';
 import {createRecoveryRunner,billingClock} from './recovery.js';
 import {createRecoveryJournal} from './recoveryJournal.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
@@ -10,6 +11,121 @@ const safeUrl = (value, host) => {
   if(url.protocol !== 'https:' || url.hostname !== host || url.username || url.password)
     {throw problem(502,'BILLING_URL_INVALID','Stripe returned an unexpected hosted URL.');}
   return url.href;
+};
+const assertPortalConfiguration=async stripe=>{
+    const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
+    if(!config.active||config.features?.subscription_update?.enabled||config.features?.subscription_cancel?.enabled||config.features?.subscription_pause?.enabled){
+      throw problem(409,'BILLING_PORTAL_UNSAFE','Portal subscription controls must remain disabled.');
+    }
+};
+// Exposed for the same process-interruption harness used by other recovery types.
+export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=billingClock})=>{
+  const recoveryBinding=async job=>{
+    const account=await requireAccount(job.tenant_id);
+    if(account.stripe_subscription_id!==job.intent._subscriptionId||account.stripe_customer_id!==job.intent.customerId||
+      account.stripe_price_id!==job.intent.priceId){
+      throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed.');
+    }
+    await stripe.assertAccount();return account;
+  };
+  const checkoutSession=async(intent,sessionId,customerId)=>{
+    const session=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}`);
+    const lines=await stripe.request('GET',`/v1/checkout/sessions/${sessionId}/line_items`,{limit:100});
+    if(session.id!==sessionId||session.livemode!==false||session.mode!=='subscription'||objectId(session.customer)!==customerId||
+      !Array.isArray(lines.data)||lines.has_more!==false||lines.data.length!==1||
+      objectId(lines.data[0].price)!==intent.priceId||lines.data[0].quantity!==intent.inventory.length){
+      throw problem(409,'BILLING_CHECKOUT_MISMATCH','Checkout ownership or inventory needs reconciliation.');
+    }
+    return session;
+  };
+  const recoverCheckout=async({job,step})=>{
+    const {intent,tenant_id:tenantId,id}=job;await recoveryBinding(job);
+    const key=`quixo:${tenantId}:${id}`;
+    let customerId=intent.customerId;
+    if(intent.existingSessionId){await checkoutSession(intent,intent.existingSessionId,customerId);return {sessionId:intent.existingSessionId,customerId};}
+    if(!customerId){
+      const proof=await step('create_customer',{input:{description:'Quixo.Homes organization sandbox subscription',
+        metadata:{quixo_operation:id,quixo_tenant:tenantId}},key:`${key}:customer`,
+      read:async input=>{
+        const evidence=await requestObjectEvidence({stripe,type:'customer.created',key:`${key}:customer`,since:job.created_at,clock,
+          matches:value=>value.metadata?.quixo_operation===id&&value.metadata?.quixo_tenant===tenantId});
+        if(!evidence){return {confirmed:false};}
+        const customer=await stripe.request('GET',`/v1/customers/${evidence.object.id}`);
+        if(customer.deleted||customer.livemode!==false||customer.metadata?.quixo_operation!==input.metadata.quixo_operation||
+          customer.metadata?.quixo_tenant!==tenantId){throw problem(409,'BILLING_CUSTOMER_MISMATCH','The saved customer needs review.');}
+        return {confirmed:true,result:{customerId:customer.id,eventId:evidence.eventId}};
+      },write:(input,stepKey)=>stripe.request('POST','/v1/customers',input,stepKey)});
+      customerId=proof.customerId;
+    }
+    const metadata={quixo_operation:id,quixo_tenant:tenantId,inventory_hash:intent.inventoryHash};
+    const body={mode:'subscription',customer:customerId,line_items:[{price:intent.priceId,quantity:intent.inventory.length}],
+      integration_identifier:'quixo_homes_management_xmptkrva',metadata,
+      success_url:`${intent.origin}/dashboard/subscription?checkout=returned`,cancel_url:`${intent.origin}/dashboard/subscription?checkout=cancelled`,
+      automatic_tax:{enabled:false},allow_promotion_codes:false,
+      custom_text:{submit:{message:'Sandbox test only. Monthly management subscription, no trial. Rent and deposits are separate.'}}};
+    const saved=await step('create_checkout',{input:body,key:`${key}:checkout`,read:async()=>{
+      let otherSession=false;
+      const found=await uniqueProviderObject({stripe,path:'/v1/checkout/sessions',params:{customer:customerId},
+        matches:session=>{
+          if(session.metadata?.quixo_operation!==id&&['open','complete'].includes(session.status)){otherSession=true;}
+          return session.metadata?.quixo_operation===id;
+        }});
+      if(otherSession){throw problem(409,'BILLING_CHECKOUT_PENDING','Another checkout needs review before continuing.');}
+      if(!found){return {confirmed:false};}
+      if(found.metadata?.quixo_tenant!==tenantId||found.metadata?.inventory_hash!==intent.inventoryHash){
+        throw problem(409,'BILLING_CHECKOUT_MISMATCH','The saved checkout needs review.');
+      }
+      await checkoutSession(intent,found.id,customerId);
+      return {confirmed:true,result:{sessionId:found.id,customerId}};
+    },write:(input,stepKey)=>stripe.request('POST','/v1/checkout/sessions',input,stepKey)});
+    return {sessionId:saved.sessionId,customerId};
+  };
+  const recoverPortal=async({job,step})=>{
+    const {intent}=job;await recoveryBinding(job);
+    const expired={requiresNewSession:true,message:'This billing link expired. Select Payment method & invoices again to open a fresh link.'};
+    if(clock.now()-new Date(job.created_at).getTime()>300000){return expired;}
+    await assertPortalConfiguration(stripe);
+    const key=`quixo:${job.tenant_id}:${job.id}`;
+    const read=()=>requestObjectEvidence({stripe,type:'billing_portal.session.created',customerId:intent.customerId,key,since:job.created_at,clock,
+      matches:value=>objectId(value.configuration)===BILLING_PORTAL&&value.return_url===`${intent.origin}/dashboard/subscription`});
+    let response;
+    const saved=await step('create_portal',{input:{customer:intent.customerId,configuration:BILLING_PORTAL,return_url:`${intent.origin}/dashboard/subscription`},key,
+      read:async()=>{const evidence=await read();return evidence?{confirmed:true,result:{sessionId:evidence.object.id,eventId:evidence.eventId}}:{confirmed:false};},
+      write:(input,stepKey)=>stripe.request('POST','/v1/billing_portal/sessions',input,stepKey),
+      confirmResponse:async value=>{
+        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||objectId(value.configuration)!==BILLING_PORTAL||!value.id){
+          throw problem(409,'BILLING_PORTAL_MISMATCH','The billing link needs review.');
+        }
+        response=value;safeUrl(value.url,'billing.stripe.com');return {confirmed:true,result:{sessionId:value.id}};
+      }});
+    const value=response||(await read())?.object;
+    if(!value||value.id!==saved.sessionId){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','The billing link is awaiting confirmation.');}
+    return {url:safeUrl(value.url,'billing.stripe.com')};
+  };
+  const recoverPreview=async({job,step})=>{
+    const {intent}=job;const account=await recoveryBinding(job);
+    if(clock.now()>Date.parse(intent.preview.expiresAt)){
+      return {expired:true,message:'This quantity preview expired. Select Review quantity change again.'};
+    }
+    if(hash(await store.inventory(job.tenant_id,undefined,{includePending:true}))!==intent.preview.inventoryHash||account.quantity!==intent.preview.from){
+      throw problem(409,'BILLING_PREVIEW_STALE','Inventory or subscription changed. Request a new preview.');
+    }
+    let invoice={nextInvoiceTotalMinor:null,currency:'usd'};
+    if(intent.preview.to>intent.preview.from){
+      invoice=await step('preview_invoice',{input:{customer:intent.customerId,subscription:intent._subscriptionId,
+        subscription_details:{items:[{id:intent.itemId,quantity:intent.preview.to}],proration_behavior:'create_prorations',proration_date:intent.preview.prorationDate}},
+      key:`quixo:${job.tenant_id}:${job.id}`,read:async()=>({confirmed:false}),
+      write:(input,stepKey)=>stripe.request('POST','/v1/invoices/create_preview',input,stepKey),
+      confirmResponse:async value=>{
+        if(value.livemode!==false||objectId(value.customer)!==intent.customerId||!Number.isSafeInteger(value.total)||value.currency!=='usd'){
+          throw problem(409,'BILLING_PREVIEW_MISMATCH','The provider preview needs review.');
+        }
+        return {confirmed:true,result:{nextInvoiceTotalMinor:value.total,currency:value.currency}};
+      }});
+    }
+    return {...intent.preview,...invoice};
+  };
+  return {checkout:recoverCheckout,portal:recoverPortal,quantity_preview:recoverPreview,checkoutSession};
 };
 export const createBillingService = ({store,stripe,env=process.env,clock=billingClock}) => {
   const configuredOrigin=()=>{
@@ -146,7 +262,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       throw error;
     }
   };
-  const checkout=async({tenantId,id,actorId,inventoryHash})=>{
+  const legacyCheckout=async({tenantId,id,actorId,inventoryHash})=>{
     const origin=configuredOrigin();
     // Validate before opening a durable command so ordinary validation failures do not block retries.
     const current=await requireAccount(tenantId);
@@ -181,6 +297,65 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       return {sessionId:session.id,url:safeUrl(session.url,'checkout.stripe.com')};
     }});
   };
+  const journalCommand=async(args,kind,payload,prepareRecovery,legacy)=>{
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){return legacy(args);}
+    await stripe.assertAccount();
+    await store.beginCommand({...args,kind,payload,recovery:true,prepareRecovery});
+    const rows=await store.read('SELECT command_id FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id});
+    if(!rows.length){return legacy(args);}
+    const result=await recoverOperation(args);
+    if(result.requiresNewSession||result.expired){throw problem(409,'BILLING_REVIEW_EXPIRED',result.message);}
+    if(kind==='checkout'){
+      const saved=(await store.read('SELECT intent_json FROM dbo.management_billing_recovery WHERE command_id=@id',{id:args.id}))[0];
+      const intent=JSON.parse(saved.intent_json),account=await requireAccount(args.tenantId);
+      if(hash(await store.inventory(args.tenantId,undefined,{includePending:true}))!==intent.inventoryHash){
+        throw problem(409,'BILLING_INVENTORY_CHANGED','Checkout inventory changed. Review the existing checkout before continuing.');
+      }
+      const session=await checkoutSession(intent,result.sessionId,account.stripe_customer_id);
+      if(session.status!=='open'||session.expires_at*1000<=clock.now()){
+        throw problem(409,'BILLING_REVIEW_EXPIRED',session.status==='complete'?'Checkout completed. Refresh subscription status.':'Checkout expired. Open sandbox checkout again.');
+      }
+      return {...result,url:safeUrl(session.url,'checkout.stripe.com')};
+    }
+    if(kind==='portal'){
+      const row=(await store.read('SELECT created_at FROM dbo.management_billing_commands WHERE id=@id',{id:args.id}))[0];
+      if(!row||clock.now()-new Date(row.created_at).getTime()>300000){throw problem(409,'BILLING_REVIEW_EXPIRED','This billing link expired. Select Payment method & invoices again.');}
+    }
+    if(kind==='quantity_preview'&&Date.parse(result.expiresAt)<clock.now()){
+      throw problem(409,'BILLING_REVIEW_EXPIRED','This quantity preview expired. Select Review quantity change again.');
+    }
+    return result;
+  };
+  const checkout=async args=>journalCommand(args,'checkout',{inventoryHash:args.inventoryHash},async(q,current)=>{
+    const account=await reconcileLocked(q,current),inventory=await store.inventory(args.tenantId,q,{includePending:true});
+    if(account.stripe_subscription_id){throw problem(409,'BILLING_SUBSCRIPTION_EXISTS','This workspace already has a subscription.');}
+    if(!inventory.length||hash(inventory)!==args.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','Reload the dwelling preview before continuing.');}
+    // An earlier open session remains authoritative; never create another one.
+    const previous=await q("SELECT result_json FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed'",{tenantId:args.tenantId});
+    let existingSessionId=null;
+    for(const row of previous){
+      const saved=JSON.parse(row.result_json),session=await stripe.request('GET',`/v1/checkout/sessions/${saved.sessionId}`);
+      if(session.status==='complete'){throw problem(409,'BILLING_CHECKOUT_PENDING','Refresh subscription status before starting another checkout.');}
+      if(session.status==='open'){
+        if(existingSessionId&&existingSessionId!==session.id){throw problem(409,'BILLING_CHECKOUT_MISMATCH','Multiple open checkouts need review.');}
+        existingSessionId=session.id;
+      }
+    }
+    await price(account.stripe_price_id);
+    return {origin:configuredOrigin(),priceId:account.stripe_price_id,inventory,existingSessionId};
+  },legacyCheckout);
+  const portal=async args=>journalCommand(args,'portal',{},async(_q,account)=>{
+    if(!account.stripe_customer_id){throw problem(409,'BILLING_CUSTOMER_REQUIRED','Start checkout before opening billing management.');}
+    await assertPortalConfiguration(stripe);
+    return {priceId:account.stripe_price_id,origin:configuredOrigin()};
+  },legacyPortal);
+  const quantityPreview=async args=>journalCommand(args,'quantity_preview',{},async(q,current)=>{
+    const account=await reconcileLocked(q,current);
+    if(entitlement(account,clock.now()).state!=='active'){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');}
+    const inventory=await store.inventory(args.tenantId,q,{includePending:true}),prorationDate=Math.floor(clock.now()/1000),target=inventory.length;
+    return {priceId:account.stripe_price_id,itemId:account.stripe_item_id,preview:{previewId:args.id,inventoryHash:hash(inventory),from:account.quantity,to:target,
+      prorationDate,expiresAt:new Date((prorationDate+600)*1000).toISOString(),timing:target===0?'cancel_at_renewal':target>account.quantity?'prorated_next_invoice':target<account.quantity?'next_renewal':'unchanged'}};
+  },legacyQuantityPreview);
   const refresh=async tenantId=>{
     await stripe.assertAccount();
     await store.locked(tenantId,async q=>reconcileLocked(q,await requireAccount(tenantId,q)));
@@ -238,7 +413,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       return result;
     });
   };
-  const portal=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'portal',payload:{},action:async(_q,account,key)=>{
+  const legacyPortal=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'portal',payload:{},action:async(_q,account,key)=>{
     if(!account.stripe_customer_id) {throw problem(409,'BILLING_CUSTOMER_REQUIRED','Start checkout before opening billing management.');}
     const config=await stripe.request('GET',`/v1/billing_portal/configurations/${BILLING_PORTAL}`);
     if(!config.active || config.features?.subscription_update?.enabled || config.features?.subscription_cancel?.enabled || config.features?.subscription_pause?.enabled)
@@ -274,15 +449,40 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const confirmed=await cancelLocked(q,account,key,cancelAtPeriodEnd);
     return {cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
   }});
+  const providerRecovery=createProviderRecoveryHandlers({store,stripe,requireAccount,clock});
+  const {checkoutSession}=providerRecovery;
   const recovery=createRecoveryRunner({clock,journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
     const intent=JSON.parse(row.intent_json);
     const account=await requireAccount(row.tenant_id,q);
+    if(['checkout','portal','quantity_preview'].includes(row.kind)){
+      if(account.stripe_subscription_id!==intent._subscriptionId||account.stripe_customer_id!==intent.customerId||account.stripe_price_id!==intent.priceId){
+        throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed before completion.');
+      }
+      if(row.kind==='checkout'){
+        if(hash(await store.inventory(row.tenant_id,q,{includePending:true}))!==intent.inventoryHash){
+          throw problem(409,'BILLING_INVENTORY_CHANGED','Checkout inventory changed before completion.');
+        }
+        const session=await checkoutSession(intent,result.sessionId,result.customerId);
+        await q('UPDATE dbo.management_billing_accounts SET stripe_customer_id=@customer,inventory_json=@inventory WHERE tenant_id=@tenantId',
+          {tenantId:row.tenant_id,customer:result.customerId,inventory:JSON.stringify(intent.inventory)});
+        return {sessionId:result.sessionId,...(session.status==='open'&&session.expires_at*1000>clock.now()?{url:safeUrl(session.url,'checkout.stripe.com')}:
+          {requiresNewSession:true,message:session.status==='complete'?'Checkout completed. Refresh subscription status.':'Checkout expired. Open sandbox checkout again.'})};
+      }
+      if(row.kind==='quantity_preview'&&!result.expired&&hash(await store.inventory(row.tenant_id,q,{includePending:true}))!==intent.preview.inventoryHash){
+        throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before completion.');
+      }
+      return result;
+    }
     if(account.stripe_subscription_id!==intent._subscriptionId){throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The subscription binding needs review.');}
-    if(row.kind==='quantity_apply'){
-      const inventory=await store.inventory(row.tenant_id,q,{includePending:true});
+    if(row.kind==='quantity_apply'||row.kind==='cessation'){
+      let ceased=null;
+      if(row.kind==='cessation'){
+        ceased=await store.ceaseStockLocked(q,{tenantId:row.tenant_id,actorId:row.actor_id,id:row.id,...intent});
+      }
+      const inventory=await store.inventory(row.tenant_id,q,{includePending:row.kind==='quantity_apply'});
       if(hash(inventory)!==intent.preview.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before completion.');}
       const confirmed=await reconcileLocked(q,account,{promoteCheckout:false});
-      if(confirmed.quantity!==result.currentQuantity||Boolean(confirmed.cancel_at_period_end)!==(intent.preview.to===0)){
+      if(confirmed.quantity!==result.currentQuantity||Boolean(confirmed.cancel_at_period_end)!==Boolean(intent.ending||intent.preview.to===0)){
         throw problem(409,'BILLING_QUANTITY_UNCONFIRMED','The current subscription no longer confirms this quantity operation.');
       }
       if(result.schedule){
@@ -296,7 +496,8 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       await q(`UPDATE dbo.management_billing_accounts SET inventory_json=@inventory,pending_quantity=@pending WHERE tenant_id=@tenantId`,
         {tenantId:row.tenant_id,inventory:JSON.stringify(await store.inventory(row.tenant_id,q)),pending:intent.preview.to<confirmed.quantity?intent.preview.to:null});
       return {currentQuantity:confirmed.quantity,nextRenewalQuantity:intent.preview.to,timing:intent.preview.timing,
-        ...(intent.preview.to===0?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:{})};
+        ...((intent.ending||intent.preview.to===0)?{cancelAtPeriodEnd:true,paidThrough:confirmed.paid_through}:{}),
+        ...(ceased?{managementEnded:true,propertyId:intent.propertyId,unitId:intent.unitId,ceasedAt:new Date(ceased.record.ceased_at).toISOString()}:{})};
     }
     const confirmed=await reconcileLocked(q,account);
     if(confirmed.cancel_at_period_end!==result.cancelAtPeriodEnd||confirmed.stripe_schedule_id){
@@ -304,7 +505,11 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     }
     if(intent.scheduleId){await q('UPDATE dbo.management_billing_accounts SET pending_quantity=NULL WHERE tenant_id=@tenantId',{tenantId:row.tenant_id});}
     return {cancelAtPeriodEnd:result.cancelAtPeriodEnd,paidThrough:confirmed.paid_through};
-  }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock})}});
+  }}),handlers:{cancellation:cancellationRecovery({store,stripe}),quantity_apply:quantityRecovery({store,stripe,clock}),
+    checkout:providerRecovery.checkout,portal:providerRecovery.portal,quantity_preview:providerRecovery.quantity_preview,cessation:async args=>{
+      if(args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from,nextRenewalQuantity:0,cancelAtPeriodEnd:true};}
+      return quantityRecovery({store,stripe,clock})(args);
+    }}});
   const recoverOperation=async({tenantId,id})=>{
     if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');}
     return recovery.run({tenantId,id});
@@ -317,7 +522,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     // Existing unjournaled requests keep their original replay/readback path.
     return rows.length?recoverOperation(args):legacyCancel(args);
   };
-  const quantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
+  const legacyQuantityPreview=async({tenantId,id,actorId})=>runCommand({tenantId,id,actorId,kind:'quantity_preview',payload:{},action:async(q,account,key)=>{
     account=await reconcileLocked(q,account);
     if(entitlement(account,clock.now()).state!=='active') {throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Quantity changes require a paid subscription in good standing.');}
     const inventory=await store.inventory(tenantId,q,{includePending:true});
@@ -443,7 +648,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         timing:account.cancel_at_period_end||!remaining.length?'cancel_at_renewal':'next_renewal'};
     });
   };
-  const ceaseStock=async({tenantId,id,actorId,propertyId,unitId=null,inventoryHash,reason})=>{
+  const legacyCeaseStock=async({tenantId,id,actorId,propertyId,unitId=null,inventoryHash,reason})=>{
     if(!store.cessationEnabled?.()){throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');}
     return runCommand({tenantId,id,actorId,kind:'cessation',payload:{propertyId,unitId,inventoryHash,reason},action:async(q,account,key,resuming)=>{
       account=await reconcileLocked(q,account);
@@ -463,6 +668,29 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       }
       return {...billing,managementEnded:true,propertyId,unitId,ceasedAt:new Date(result.record.ceased_at).toISOString()};
     }});
+  };
+  const ceaseStock=async args=>{
+    if(!store.cessationEnabled?.()){throw problem(503,'BILLING_CESSATION_UNAVAILABLE','Ending management is not available yet.');}
+    const {propertyId,unitId=null,inventoryHash,reason}=args;
+    return journalCommand(args,'cessation',{propertyId,unitId,inventoryHash,reason},async(q,current)=>{
+      const account=await reconcileLocked(q,current,{promoteCheckout:false});
+      if(!['active','ending'].includes(entitlement(account,clock.now()).state)){throw problem(409,'BILLING_GOOD_STANDING_REQUIRED','Restore the paid subscription before ending management.');}
+      const checked=await store.cessationPreviewLocked(q,{tenantId:args.tenantId,actorId:args.actorId,commandId:args.id,propertyId,unitId});
+      if(checked.alreadyCeased||!checked.eligible||checked.inventoryHash!==inventoryHash){throw problem(409,'BILLING_CESSATION_BLOCKED','The reviewed management change needs review.');}
+      const inventory=await store.inventory(args.tenantId,q),remaining=inventory.filter(item=>unitId?String(item.unitId).toLowerCase()!==unitId.toLowerCase():String(item.propertyId).toLowerCase()!==propertyId.toLowerCase());
+      if(remaining.length>account.quantity){throw problem(409,'BILLING_CESSATION_QUANTITY_REVIEW','Review the managed inventory and billed quantity before ending management.');}
+      const sub=await stripe.request('GET',`/v1/subscriptions/${account.stripe_subscription_id}`),item=sub.items.data[0];
+      const schedule=account.stripe_schedule_id?await stripe.request('GET',`/v1/subscription_schedules/${account.stripe_schedule_id}`):null;
+      if(schedule&&(schedule.livemode!==false||schedule.status!=='active'||objectId(schedule.subscription)!==account.stripe_subscription_id||objectId(schedule.customer)!==account.stripe_customer_id)){
+        throw problem(409,'BILLING_SCHEDULE_MISMATCH','The renewal schedule needs review.');
+      }
+      const target=account.cancel_at_period_end?0:remaining.length;
+      const body=schedule&&target?quantityScheduleBody({phaseStart:schedule.current_phase?.start_date,periodEnd:item.current_period_end,priceId:account.stripe_price_id,from:account.quantity,to:target}):null;
+      return {ending:Boolean(account.cancel_at_period_end),priceId:account.stripe_price_id,itemId:account.stripe_item_id,periodEnd:item.current_period_end,
+        scheduleId:account.stripe_schedule_id||null,phaseStart:schedule?.current_phase?.start_date||null,scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,
+        preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body)),
+        preview:{from:account.quantity,to:target,inventoryHash:hash(remaining),timing:target?'next_renewal':'cancel_at_renewal'}};
+    },legacyCeaseStock);
   };
   const webhook=async event=>{
     await stripe.assertAccount();

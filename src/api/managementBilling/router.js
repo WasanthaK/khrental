@@ -5,7 +5,8 @@ import {hasActiveTenantMembership,isAdminRole} from '../platform/permissionEngin
 import {createBillingStore} from './store.js';
 import {createStripeClient} from './stripe.js';
 import {createBillingService} from './service.js';
-import {BILLING_PRODUCT,identifier,parsePricing,pricingPreview,problem,reason,verifyStripeSignature} from './contract.js';
+import {uniqueProviderObject} from './recoveryEvidence.js';
+import {BILLING_PRODUCT,hash,identifier,parsePricing,pricingPreview,problem,reason,verifyStripeSignature} from './contract.js';
 
 const wrap=fn=>async(req,res,next)=>{try{await fn(req,res,next);}catch(e){next(e);}};
 const send=(res,data)=>res.json({data,error:null});
@@ -39,6 +40,59 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   }));
   router.post('/admin/pricing/:id/publish-sandbox',globalAdmin,wrap(async(req,res)=>{
     exact(req.body,[]);const id=identifier(req.params.id);await stripe.assertAccount();
+    if(env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'){
+      const authorize=async q=>{
+        if(!await checkPlatformAdmin(req.user,{query:async(statement,params)=>(await q(statement,params))[0]||null,env})){
+          throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');
+        }
+      };
+      const prepared=await store.locked(`pricing-publication:${id}`,async q=>{
+        await authorize(q);
+        const record=(await q('SELECT * FROM dbo.management_pricing_versions WHERE id=@id',{id}))[0];
+        if(!record){throw problem(404,'BILLING_PRICING_NOT_FOUND','Pricing version not found.');}
+        if(record.status==='sandbox_published'){return {completed:true,stripePriceId:record.stripe_price_id};}
+        const rules=parsePricing(JSON.parse(record.rules_json));
+        if(!pricingPreview(rules,1).ready){throw problem(409,'BILLING_PRICING_INCOMPLETE','Complete the pricing decision before sandbox publication.');}
+        const attempts=await q("SELECT current_hash,created_at FROM dbo.management_billing_audit WHERE resource_id=@id AND action='pricing.publication.attempt' ORDER BY created_at",{id});
+        if(attempts.some(row=>row.current_hash!==hash(rules))){throw problem(409,'BILLING_RECOVERY_INTENT_CHANGED','The saved publication terms changed.');}
+        if(attempts.length>=8){throw problem(409,'BILLING_RECOVERY_REVIEW','This price publication requires review.');}
+        await store.audit(q,{actorId:req.user.id,action:'pricing.publication.attempt',resourceId:id,current:rules,reason:'Persisted immutable pricing intent and original provider key before publication.'});
+        return {rules};
+      });
+      if(prepared.completed){return send(res,{id,stripePriceId:prepared.stripePriceId});}
+      const result=await store.locked(`pricing-publication:${id}`,async q=>{
+        await authorize(q);
+        const record=(await q('SELECT * FROM dbo.management_pricing_versions WHERE id=@id',{id}))[0];
+        if(!record||hash(parsePricing(JSON.parse(record.rules_json)))!==hash(prepared.rules)){
+          throw problem(409,'BILLING_RECOVERY_INTENT_CHANGED','The saved publication terms changed.');
+        }
+        if(record.status==='sandbox_published'){return {id,stripePriceId:record.stripe_price_id};}
+        const rules=prepared.rules;
+        const matches=p=>p.livemode===false&&p.active&&p.currency==='usd'&&p.unit_amount===rules.baseFeeMinor&&
+          p.type==='recurring'&&p.billing_scheme==='per_unit'&&p.recurring?.interval==='month'&&p.recurring.interval_count===1&&
+          p.recurring.usage_type==='licensed'&&!p.recurring.trial_period_days&&!p.transform_quantity;
+        let reusable=null;
+        let selected=await uniqueProviderObject({stripe,path:'/v1/prices',params:{product:BILLING_PRODUCT},matches:p=>{
+          if(matches(p)&&!reusable){reusable=p;}
+          return p.metadata?.pricing_version===id;
+        }});
+        if(selected&&!matches(selected)){throw problem(409,'BILLING_PRICE_MISMATCH','The original provider price changed and needs review.');}
+        selected=selected||reusable;
+        if(!selected){
+          const age=(await q("SELECT DATEDIFF_BIG(second,created_at,SYSUTCDATETIME()) AS age FROM dbo.management_pricing_versions WHERE id=@id",{id}))[0]?.age;
+          if(!Number.isFinite(Number(age))||age>=23*3600){throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','The older price publication needs provider evidence.');}
+          await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:'usd',unit_amount:rules.baseFeeMinor,
+            recurring:{interval:'month',usage_type:'licensed'},metadata:{pricing_version:id,market:rules.market}},`quixo:pricing:${id}`);
+          selected=await uniqueProviderObject({stripe,path:'/v1/prices',params:{product:BILLING_PRODUCT},matches:p=>p.metadata?.pricing_version===id});
+          if(!selected||!matches(selected)){throw problem(503,'BILLING_RECOVERY_UNCONFIRMED','The provider has not confirmed this price.');}
+        }
+        await service.price(selected.id);
+        await q("UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id=@price,published_at=SYSUTCDATETIME() WHERE id=@id",{id,price:selected.id});
+        await store.audit(q,{actorId:req.user.id,action:'pricing.sandbox_published',resourceId:id,previous:record,current:{price:selected.id,rules},reason:rules.reason});
+        return {id,stripePriceId:selected.id};
+      });
+      return send(res,result);
+    }
     const result=await store.locked(`pricing-publication:${id}`,async q=>{
       const record=(await q('SELECT * FROM dbo.management_pricing_versions WHERE id=@id',{id}))[0];
       if(!record) {throw problem(404,'BILLING_PRICING_NOT_FOUND','Pricing version not found.');}
