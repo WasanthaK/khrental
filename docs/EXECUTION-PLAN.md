@@ -12,7 +12,7 @@ This is the controlling programme summary. It supersedes older dated “current�
 | R4 — Organization billing foundation | CLOSED BY OWNER — deployed sandbox foundation | Genuine paid lifecycle, production enforcement and merchant/commercial exits continue under R5. |
 | R5 — Marketplace and regional rollout | ACTIVE; partially delivered | Finish applicable Sri Lanka exits, then separate Brunei acceptance. Neither regional launch nor live charging is approved. |
 
-**Owner-approved recovery handoff:** the owner confirmed there are no production clients and approved the four [discovery corrections](R5-ENGINEERING-DISCOVERY-20261112.md). The first five engineering slices are merged through `96052ca8e2b0c8a29cc027af2507b06511016b5a`; [implementation and rollback details](R5-RECOVERY-IMPLEMENTATION-20261112.md) distinguish source verification from runtime/acceptance. These merges have not been deployed in this handoff execution.
+**Owner-approved recovery handoff:** the owner confirmed there are no production clients and approved the four [discovery corrections](R5-ENGINEERING-DISCOVERY-20261112.md). The first six engineering slices are merged through `8175d9587d32d657bedc3ee67e4bf81c1edddedd`; [implementation and rollback details](R5-RECOVERY-IMPLEMENTATION-20261112.md) distinguish source verification from runtime/acceptance. These merges have not been deployed in this handoff execution.
 
 | Recovery handoff item | Signal | Verified disposition |
 | --- | --- | --- |
@@ -21,12 +21,15 @@ This is the controlling programme summary. It supersedes older dated “current�
 | Current/renewal inventory invariants | 🟢 Source complete | #566; read-only observations preserve deferred quantity and complimentary-overlay rules. |
 | Application clock and lifecycle replay | 🟢 Source complete | #567; synthetic renewal/grace/recovery/event-ordering scenarios. Locked SQL authorization time retained. |
 | Cancellation process-interruption harness | 🟢 Source complete | #568; five actual SIGKILL/restart boundaries using durable test files, distinct from real SQL/provider proof. |
+| Quantity-application recovery | 🟢 Source complete | #570; persisted increase/schedule steps, request evidence, exact staged promotion and zero-stock recovery pass real SQL with synthetic provider transport. |
 | Workstream 1 as a whole | 🟡 In progress | Other provider operation types still require journal migration and their own failure/evidence tests. |
 | Split/restore and wider cessation states | 🟡 Pending dependent engineering | Existing paid/ending cessation, finished forms and signing remain preserved. |
 | Evia supported retrieval and matching audit | 🟡 Open | No new provider acceptance claimed. |
 | Production schema/readiness/worker activation | ⚪ Not performed | Migrations remain owner-run; worker requires accepted staging dry-run. Live charging remains OFF. |
 
 Final PR-head CI evidence: #564 **1,186 tests**, migration SQL and two-tenant SQL; #565 **1,191 tests**, both SQL suites and default-public regression; #566 **1,198 tests** and both SQL suites; #567 **1,201 tests** and both SQL suites; #568 **1,206 tests/build** in [43140542043](https://github.com/WasanthaK/khrental/actions/runs/43140542043). Strict lint passed for each final head. Exact run IDs are retained in each PR description. These checks do not establish genuine recurring payment, staging activation or production readiness.
+
+Quantity recovery [PR #570](https://github.com/WasanthaK/khrental/pull/570) merged as `8175d9587d32d657bedc3ee67e4bf81c1edddedd`. Final head `3e715e7b69f0f0a2b501904e6f315504a7c0ef15` passed strict lint, **1,212/1,212 tests and build** ([43144399885](https://github.com/WasanthaK/khrental/actions/runs/43144399885)), [migration/recovery SQL](https://github.com/WasanthaK/khrental/actions/runs/43144399988) and [two-tenant SQL](https://github.com/WasanthaK/khrental/actions/runs/43144400074). Sandbox readiness intentionally skipped on the PR. The SQL proof uses synthetic provider events; no genuine payment acceptance, deployment, migration apply or activation occurred.
 
 **Latest verified application runtime:** [manual release #1546](https://github.com/WasanthaK/khrental/actions/runs/43065915681) passed at Ready revision **0000488**, serving `4baeabc14cd96481101cda7071d93393a4819fb2`. The release reran strict lint, **1,180/1,180 tests** and the production build. Independent public build readback matched at **17:22:23 UTC** on 11 November; SQL health returned **HTTP 200 ready at 17:22:29 UTC**. The independent public read-only probe passed all **23** checks across LK/BN routes against the same serving SHA. PR #561 adds complete property/unit form preparation and exact scoped retries. Earlier security fixes #555–#558 and lint cleanup #559 remain included; their historical acceptance is retained in the [security disposition](SECURITY-REVIEW-20261111.md#lint-and-review-follow-up-release--11-november-2026).
 
@@ -35,7 +38,7 @@ Final PR-head CI evidence: #564 **1,186 tests**, migration SQL and two-tenant SQ
 **Completed preparation and next independent engineering:**
 
 1. Property/unit form preparation in [PR #561](https://github.com/WasanthaK/khrental/pull/561) is merged, deployed and independently verified. Complete metadata, scoped exact retry drafts, mobile/desktop/keyboard and real SQL promotion pass. Existing atomic staged batch imports retain their authority. BL08.6 stays YELLOW because production migration/readiness and controlled live acceptance depend on the remaining stock and reconciliation work below.
-2. Finish the remaining provider operation migrations onto durable recovery, with their own evidence and interruption cases; the first five foundation slices above do not close Workstream 1.
+2. Finish the remaining provider operation migrations onto durable recovery, with their own evidence and interruption cases; the six source slices above do not close Workstream 1.
 3. Then complete restoration, parent/unit splits and remaining cessation states using the same locked inventory/quantity authority, including the endpoint/job, stale actor/resource and stock/failure/usability matrix.
 4. Only after those dependencies pass, apply separately governed readiness changes and accept one explicit reversible rollout scope. This documentation update does not authorize apply or activation.
 
