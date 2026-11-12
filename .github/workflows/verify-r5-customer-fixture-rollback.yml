@@ -54,14 +54,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          stage=preflight
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "R5_FIXTURE_BLOCKED_STAGE=$stage" | tee -a fixture-rollback.txt; fi' EXIT
+          echo "R5_FIXTURE_PHASE=preflight"
           az extension add --name containerapp --upgrade --yes >/dev/null
           az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app.json"
           jq -e '.properties.configuration.activeRevisionsMode=="Single" and
             .properties.latestRevisionName==.properties.latestReadyRevisionName and
             .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app.json" >/dev/null
+          stage=runtime_identity
           revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app.json")
+          echo "R5_FIXTURE_PHASE=runtime_identity"
           image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
-          test "${image##*:}" = "$EXPECTED_BUILD"
+          if [ "${image##*:}" != "$EXPECTED_BUILD" ]; then
+            echo "R5_FIXTURE_BLOCKED=serving_image_mismatch" >&2
+            exit 1
+          fi
+          stage=payload_size
           encoded=$(node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {deflateRawSync} from 'node:zlib';
@@ -70,13 +79,25 @@ jobs:
           JS
           )
           # One bounded connection. Abort before execution if the encoded payload is oversized.
-          test "${#encoded}" -lt 6500
+          echo "R5_FIXTURE_PHASE=payload_size compressed_characters=${#encoded}"
+          if [ "${#encoded}" -ge 6500 ]; then
+            echo "R5_FIXTURE_BLOCKED=payload_too_large" >&2
+            exit 1
+          fi
+          stage=remote_sql_rollback
           command="node --input-type=module -e \"await import('data:text/javascript;base64,'+(await import('node:zlib')).inflateRawSync(Buffer.from('$encoded','base64url')).toString('base64'))\""
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-          script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"
+          echo "R5_FIXTURE_PHASE=remote_sql_rollback"
+          if ! script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/result.txt"; then
+            grep -E 'R5_CUSTOMER_FIXTURE_FAILED=|R5_CUSTOMER_ROLLBACK_FAILED=' "$RUNNER_TEMP/result.txt" | tr -d '\\r' || :
+            echo "R5_FIXTURE_BLOCKED=remote_execution_failure" >&2
+            exit 1
+          fi
+          stage=evidence
           grep '^R5_CUSTOMER_FIXTURE_PASS=' "$RUNNER_TEMP/result.txt" | tr -d '\r' > fixture-rollback.txt
           cat fixture-rollback.txt
           jq -e '.rolledBack==true and .existingScopePreserved==true and .customerCreated==false and .workerScopeChanged==false and .syntheticChecks==6 and .rollbackChecks==6' < <(sed 's/^R5_CUSTOMER_FIXTURE_PASS=//' fixture-rollback.txt)
+          stage=public_health
           curl -fsS --max-time 30 https://app.quixo.homes/api/health >/dev/null
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
           cat fixture-rollback.txt >> "$GITHUB_STEP_SUMMARY"
