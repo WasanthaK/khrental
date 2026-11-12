@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import {resolveRegisteredPhoto,trustedPhotoOrigins} from '../publicListings/sourceImages.js';
 import {getMssqlPool, sql} from '../mssql/pool.js';
 import {runQuery} from '../mssql/query.js';
-import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement, managementWriteEnforced} from './contract.js';
+import {BILLING_ACCOUNT, BILLING_PRICE, hash, problem, identifier, dwellingInventory, stagedStock, cessationBlockers, reason as decisionReason, complimentaryChange, entitlement,restorationPolicy, managementWriteEnforced} from './contract.js';
 
 // The caller must supply its mutation transaction, never an independent pool
 // read. Hold the account row through commit so revoke/reconciliation cannot
@@ -97,15 +97,15 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     {tenantId,actorId,action,resourceId,previous:previous === null ? null : hash(previous),current:hash(current),reason});
   const pendingStock=async(tenantId,q=read)=>stagingEnabled()?q(`SELECT * FROM dbo.management_inventory_staging
     WHERE tenant_id=@tenantId AND status='pending' ORDER BY id`,{tenantId}):[];
-  const inventory = async (tenantId, q = read, {includePending=false,stageIds=null}={}) => {
+  const inventory = async (tenantId, q = read, {includePending=false,stageIds=null,restoreControlIds=[]}={}) => {
     const properties = await q('SELECT id,tenant_id,name,propertytype FROM dbo.properties WHERE tenant_id=@tenantId',{tenantId});
     // Deliberately includes malformed cross-tenant child relationships so the contract rejects them.
     const units = await q(`SELECT u.id,u.tenant_id,u.propertyid,u.unitnumber FROM dbo.property_units u
       JOIN dbo.properties p ON p.id=u.propertyid WHERE p.tenant_id=@tenantId`,{tenantId});
     if(cessationEnabled()){
-      const controls=await q("SELECT property_id,unit_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND state='ceased'",{tenantId});
-      for(const property of properties){if(controls.some(c=>!c.unit_id&&String(c.property_id).toLowerCase()===String(property.id).toLowerCase())){property.management_state='ceased';}}
-      for(const unit of units){if(controls.some(c=>c.unit_id&&String(c.unit_id).toLowerCase()===String(unit.id).toLowerCase())){unit.management_state='ceased';}}
+      const controls=await q("SELECT id,property_id,unit_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND state='ceased'"+(restorationEnabled()?" AND restored_at IS NULL":''),{tenantId});
+      for(const property of properties){if(controls.filter(c=>!restoreControlIds.includes(String(c.id).toLowerCase())).some(c=>!c.unit_id&&String(c.property_id).toLowerCase()===String(property.id).toLowerCase())){property.management_state='ceased';}}
+      for(const unit of units){if(controls.filter(c=>!restoreControlIds.includes(String(c.id).toLowerCase())).some(c=>c.unit_id&&String(c.unit_id).toLowerCase()===String(unit.id).toLowerCase())){unit.management_state='ceased';}}
     }
     const staged=includePending?(await pendingStock(tenantId,q)).filter(row=>!stageIds||stageIds.includes(String(row.id).toLowerCase())):[];
     staged.sort((a,b)=>a.kind===b.kind?String(a.id).localeCompare(String(b.id)):a.kind==='property'?-1:1);
@@ -242,7 +242,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     const unit=params.unitId?(await q('SELECT id,unitnumber FROM dbo.property_units WITH(UPDLOCK,HOLDLOCK) WHERE id=@unitId AND propertyid=@propertyId AND tenant_id=@tenantId',params))[0]:null;
     if(params.unitId&&!unit){throw problem(404,'BILLING_STOCK_NOT_FOUND','This unit was not found in the property.');}
     const existing=(await q(`SELECT * FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND property_id=@propertyId
-      AND (unit_id IS NULL OR unit_id=@unitId)`,params))[0]||null;
+      AND (unit_id IS NULL OR unit_id=@unitId) ${restorationEnabled()?'AND restored_at IS NULL':''}`,params))[0]||null;
     const items=await inventory(tenantId,q);
     if(existing){return {propertyId:params.propertyId,unitId:params.unitId,label:unit?`${property.name} · ${unit.unitnumber}`:property.name,
       alreadyCeased:true,record:existing,inventoryHash:hash(items),eligible:true,blockers:[]};}
@@ -302,6 +302,48 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     await audit(q,{tenantId,actorId,action:'inventory.ceased',resourceId:id,current:{propertyId:params.propertyId,unitId:params.unitId},reason:note});
     return {...preview,record};
   };
+  const restorationEnabled=()=>env.MANAGEMENT_RESTORATION_SCHEMA_READY==='true'&&env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'&&cessationEnabled();
+  const ceasedStock=async(tenantId,q=read)=>restorationEnabled()?q(`SELECT c.id,c.property_id AS propertyId,c.unit_id AS unitId,c.ceased_at AS ceasedAt,
+    CASE WHEN c.unit_id IS NULL THEN p.name ELSE CONCAT(p.name,' · ',u.unitnumber) END AS label
+    FROM dbo.management_inventory_controls c JOIN dbo.properties p ON p.id=c.property_id AND p.tenant_id=c.tenant_id
+    LEFT JOIN dbo.property_units u ON u.id=c.unit_id AND u.tenant_id=c.tenant_id
+    WHERE c.tenant_id=@tenantId AND c.restored_at IS NULL ORDER BY c.ceased_at`,{tenantId}):[];
+  const restorationPreviewLocked=async(q,{tenantId,actorId,propertyId,unitId=null,commandId=null})=>{
+    if(!restorationEnabled()){throw problem(503,'BILLING_RESTORE_UNAVAILABLE','Restoring management is not available yet.');}
+    await assertActor(q,tenantId,actorId);
+    const params={tenantId,propertyId:identifier(propertyId),unitId:unitId===null?null:identifier(unitId),commandId};
+    const records=await q(`SELECT * FROM dbo.management_inventory_controls WITH(UPDLOCK,HOLDLOCK)
+      WHERE tenant_id=@tenantId AND property_id=@propertyId AND restored_at IS NULL`,params);
+    if(params.unitId&&records.some(r=>r.unit_id===null)){throw problem(409,'BILLING_RESTORE_PARENT_FIRST','Restore the whole property before restoring an individual unit.');}
+    const record=records.find(r=>(r.unit_id?String(r.unit_id).toLowerCase():null)===params.unitId);
+    if(!record){throw problem(409,'BILLING_RESTORE_NOT_CEASED','This dwelling is not currently ceased in this workspace.');}
+    const pending=await q(`SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'
+      AND (@commandId IS NULL OR id<>@commandId)`,params);
+    if(pending.length||(await pendingStock(tenantId,q)).length){throw problem(409,'BILLING_RESTORE_PENDING','Finish the pending billing or prepared-stock operation first.');}
+    const current=await inventory(tenantId,q),proposed=await inventory(tenantId,q,{restoreControlIds:[String(record.id).toLowerCase()]});
+    if(proposed.length<=current.length){throw problem(409,'BILLING_RESTORE_STOCK_REVIEW','Review the retained property and units before restoring management.');}
+    const account=(await q('SELECT *,SYSUTCDATETIME() AS checked_at FROM dbo.management_billing_accounts WITH(UPDLOCK,HOLDLOCK) WHERE tenant_id=@tenantId',params))[0];
+    const mode=restorationPolicy(account,proposed.length,new Date(account?.checked_at).getTime());
+    return {propertyId:params.propertyId,unitId:params.unitId,label:(await ceasedStock(tenantId,q)).find(item=>String(item.id).toLowerCase()===String(record.id).toLowerCase())?.label,controlId:String(record.id).toLowerCase(),inventoryHash:hash(current),
+      proposedHash:hash(proposed),from:account.quantity,to:proposed.length,mode,proposed};
+  };
+  const restoreStockLocked=async(q,{tenantId,actorId,id,propertyId,unitId=null,inventoryHash,controlId,reason})=>{
+    const note=decisionReason(reason),preview=await restorationPreviewLocked(q,{tenantId,actorId,propertyId,unitId,commandId:id});
+    if(preview.controlId!==controlId||preview.inventoryHash!==inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed restoration changed. Review it again.');}
+    const params={tenantId,actorId,id,controlId,propertyId:preview.propertyId,unitId:preview.unitId,reason:note};
+    const restored=(await q(`UPDATE dbo.management_inventory_controls SET restored_at=SYSUTCDATETIME(),restored_by=@actorId,
+      restoration_command_id=@id,restoration_reason=@reason OUTPUT inserted.restored_at
+      WHERE id=@controlId AND tenant_id=@tenantId AND restored_at IS NULL`,params))[0];
+    if(!restored){throw problem(409,'BILLING_RESTORE_NOT_CEASED','This cessation episode has already been restored.');}
+    if(params.unitId){await q("UPDATE dbo.property_units SET status='available' WHERE id=@unitId AND tenant_id=@tenantId AND propertyid=@propertyId",params);}
+    else{
+      await q("UPDATE dbo.properties SET status='available' WHERE id=@propertyId AND tenant_id=@tenantId",params);
+      await q(`UPDATE u SET status='available' FROM dbo.property_units u WHERE u.propertyid=@propertyId AND u.tenant_id=@tenantId
+        AND NOT EXISTS(SELECT 1 FROM dbo.management_inventory_controls c WHERE c.tenant_id=u.tenant_id AND c.unit_id=u.id AND c.restored_at IS NULL)`,params);
+    }
+    await audit(q,{tenantId,actorId,action:'inventory.restored',resourceId:id,current:{controlId,propertyId,unitId,restoredAt:restored.restored_at},reason:note});
+    return {...preview,restoredAt:new Date(restored.restored_at).toISOString()};
+  };
   const listPricing = async () => (await read('SELECT * FROM dbo.management_pricing_versions ORDER BY created_at DESC,version DESC'))
     .map(row => ({...row,rules:JSON.parse(row.rules_json),rules_json:undefined}));
   const savePricing = async ({rules,expectedVersion,actorId}) => locked(`pricing:${rules.market}`, async q => {
@@ -336,7 +378,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     return account(tenantId,q);
   });
   const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false,prepareRecovery=null}) => locked(tenantId,async q => {
-    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation'].includes(kind))){
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation','restore'].includes(kind))){
       throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
     }
     await assertActor(q,tenantId,actorId);
@@ -398,5 +440,5 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
   });
   return {read,locked,account,assertActor,audit,inventory,listPricing,savePricing,enroll,beginCommand,completeCommand,
     complimentaryStatus,setComplimentary,stagingEnabled,pendingStock,stageStock,withdrawStock,promoteStock,
-    recoveryEnabled:()=>env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true',cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
+    restorationEnabled,ceasedStock,restorationPreviewLocked,restoreStockLocked,recoveryEnabled:()=>env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true',cessationEnabled,cessationPreviewLocked,ceaseStockLocked};
 };

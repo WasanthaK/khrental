@@ -31,9 +31,10 @@ if(scenario.startsWith('cleanup_')){
     preview:{from:2,to:3,inventoryHash:hash(inventory),expiresAt:new Date(now+600000).toISOString(),prorationDate:now/1000}});
   if(scenario==='checkout'){job.intent.customerId=null;job.intent._subscriptionId=null;}
 }else if(scenario!=='cancellation'){
-  const target={increase:3,reduction:1,zero:0}[scenario];
+  const target={increase:3,reduction:1,zero:0}[scenario.replace(/^restore_/,'')];
   if(target===undefined){throw new Error('Unknown scenario');}
-  job.kind='quantity_apply';
+  job.kind=scenario.startsWith('restore_')?'restore':'quantity_apply';
+  if(job.kind==='restore'){job.intent.restoreMode='active';}
   Object.assign(job.intent,{itemId:'si_test',priceId:'price_test',periodEnd:Math.floor(now/1000)+86400,
     preview:{from:2,to:target,prorationDate:Math.floor(now/1000),
       timing:target===0?'cancel_at_renewal':target>2?'prorated_next_invoice':'next_renewal'}});
@@ -123,4 +124,4 @@ const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
 const store={account:async()=>({stripe_subscription_id:job.intent._subscriptionId,stripe_customer_id:job.intent.customerId,stripe_price_id:'price_test',quantity:2}),inventory:async()=>inventory};
 const handlers=createProviderRecoveryHandlers({store,stripe,requireAccount:store.account,clock});
 await createRecoveryRunner({journal,clock,handlers:{cancellation:cancellationRecovery({store,stripe}),
-  quantity_apply:quantityRecovery({store,stripe,clock}),...handlers,cessation:cessationCleanupRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});
+  quantity_apply:quantityRecovery({store,stripe,clock}),restore:quantityRecovery({store,stripe,clock}),...handlers,cessation:cessationCleanupRecovery({store,stripe,clock})}}).run({tenantId:'tenant',id:'operation'});

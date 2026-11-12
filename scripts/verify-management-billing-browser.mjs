@@ -50,7 +50,7 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial','restore-paid','restore-ending','restore-complimentary','restore-additional']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
     if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
@@ -67,6 +67,14 @@ try{
      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Prepare dwelling').click());
      await page.waitForFunction(()=>window.stockAttempts?.length===2&&document.querySelector('input'));
      assert.equal(await page.evaluate(()=>window.stockAttempts[0].records[0].payload.id===window.stockAttempts[1].records[0].payload.id),true,'Loading/failure must preserve the prepared identity for retry');
+    }else if(scenario.startsWith('restore-')){
+     const section=await page.$eval('section[aria-labelledby="restoration-title"]',el=>el.innerText);
+     assert.match(section,/nothing is backdated/);
+     if(scenario==='restore-additional'){assert.match(section,/prorated from confirmation/);}
+     await page.type('textarea','Restore the retained dwelling from today.');
+     await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm restoration').focus());
+     await page.keyboard.press('Enter');
+     await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: stock/restore'));
     }else if(scenario.startsWith('cessation-')){
      assert.match(await page.$eval('body',el=>el.innerText),/Existing records and documents are retained/);
      await page.type('textarea','End fixture management after closing obligations.');

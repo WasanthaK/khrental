@@ -123,3 +123,23 @@ for(const mode of ['grace','trial']){
     }
   }
 }
+
+
+for(const shape of ['increase','reduction']){
+  const steps=shape==='increase'?['increase_quantity']:['create_schedule','set_schedule_phases'];
+  for(const [boundary,step] of [['after_claim',''],['after_completion',''],...steps.flatMap(s=>['after_intent','after_provider_effect','after_checkpoint'].map(b=>[b,s]))]){
+    test(`restore ${shape}: SIGKILL ${boundary} ${step} resumes original billing once`,()=>{
+      const directory=fs.mkdtempSync(path.join(os.tmpdir(),'restore-recovery-crash-')),scenario=`restore_${shape}`;
+      try{
+        const stopped=spawnSync(process.execPath,[fixture,directory,boundary,scenario,step],{encoding:'utf8',timeout:10000});
+        assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
+        for(let n=0;n<2;n++){const resumed=spawnSync(process.execPath,[fixture,directory,'resume',scenario],{encoding:'utf8',timeout:10000});assert.equal(resumed.status,0,resumed.stderr);}
+        const provider=JSON.parse(fs.readFileSync(path.join(directory,'provider.json'),'utf8'));
+        const journal=JSON.parse(fs.readFileSync(path.join(directory,'journal.json'),'utf8'));
+        assert.deepEqual(provider.writes,(shape==='increase'?['increase']:['schedule','phases']).map(k=>`quixo:tenant:operation:${k}`));
+        assert.equal(journal.completedCount,1);assert.equal(journal.result.currentQuantity,shape==='increase'?3:2);
+        assert.equal(journal.result.nextRenewalQuantity,shape==='increase'?3:1);
+      }finally{fs.rmSync(directory,{recursive:true,force:true});}
+    });
+  }
+}

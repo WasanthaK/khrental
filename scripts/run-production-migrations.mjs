@@ -1,5 +1,5 @@
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
-import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation,inspectManagementRecovery} from './inspect-management-billing-schema.mjs';
+import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation,inspectManagementRecovery,inspectManagementRestoration} from './inspect-management-billing-schema.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -515,7 +515,9 @@ const MIGRATIONS = [
     file:'migrations/20261112_01_management_recovery.sql',
     inspect:inspectManagementRecovery,
     verify:async pool=>assertSatisfied(inspectManagementRecovery(pool),'Management recovery schema verification failed.')
-  }
+  },
+  {id:'20261112_02_management_restoration',file:'migrations/20261112_02_management_restoration.sql',
+    inspect:inspectManagementRestoration,verify:async pool=>assertSatisfied(inspectManagementRestoration(pool),'Management restoration schema verification failed.')}
 ];
 
 const LEDGER_TABLE = 'dbo.schema_migrations';

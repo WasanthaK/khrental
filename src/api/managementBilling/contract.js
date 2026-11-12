@@ -280,3 +280,22 @@ export const verifyStripeSignature = ({body, signature, secret, now = billingClo
     {throw problem(400, 'STRIPE_ACCOUNT_INVALID', 'Webhook account does not match this integration.');}
   return event;
 };
+
+
+// Restoration never backdates or automatically reactivates a cancelled purchase.
+export const restorationPolicy=(account,target,now=billingClock.now())=>{
+  if(!account){
+    throw problem(409,'BILLING_REACTIVATION_REQUIRED','Reactivate a subscription before restoring management. No purchase was made.');
+  }
+  const access=entitlement(account,now);
+  if(account.risk_hold){throw problem(409,'BILLING_RESTORE_REVIEW','Resolve the billing review hold before restoring management.');}
+  if(access.state==='complimentary'){return 'complimentary';}
+  if(['canceled','incomplete_expired'].includes(account.subscription_status)){throw problem(409,'BILLING_REACTIVATION_REQUIRED','Reactivate a subscription before restoring management. No purchase was made.');}
+  if(!['active','ending','grace'].includes(access.state)){
+    throw problem(409,'BILLING_RESTORE_PAYMENT_REQUIRED','Restore paid management access before restoring this dwelling.');
+  }
+  if((access.state==='ending'||access.state==='grace')&&target>account.quantity){
+    throw problem(409,'BILLING_RESTORE_CAPACITY_REQUIRED','Restore paid capacity before adding this dwelling. No purchase was made.');
+  }
+  return access.state;
+};
