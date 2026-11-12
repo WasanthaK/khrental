@@ -12,6 +12,8 @@ Application deployment now passed in [43201035104](https://github.com/WasanthaK/
 
 Next: genuine interrupted-operation recovery with deployed SQL evidence, then remaining R5 role/lifecycle/isolation/launch acceptance. Do not reapply the five migrations or repeat the retained renewal.
 
+Current development versus acceptance is maintained in the [controlling development queue](EXECUTION-PLAN.md#development-progress-and-remaining-acceptance--controlling-queue) and reconciled [task dispositions](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions). Historical source-only checkpoints below must not requeue applied migrations or completed activation.
+
 ## Follow-on R5 status — 11 November 2026
 
 This file preserves the R3/R4 closure evidence at its original dates. Current R5 source and acceptance are in the [execution plan](EXECUTION-PLAN.md), [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md) and [inventory/cessation release note](R5-INVENTORY-CESSATION-RELEASE-20261110.md). Later sandbox and operational progress does not reopen the owner-closed milestones or certify launch readiness.
