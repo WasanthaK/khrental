@@ -1,5 +1,15 @@
 # R4 and R5 delivery programme
 
+## R5 checkpoint — 13 November 2026
+
+**Invoice/payment and maintenance HTTP acceptance passed (bounded scope).** [Run 43359060142](https://github.com/WasanthaK/khrental/actions/runs/43359060142), job 131668301669, passed all **21 checks** at **09:00:01 Asia/Colombo / 03:30:01 UTC**. Expired-access writes were denied, invoice and maintenance history remained readable, and seeded paid/grace/complimentary actions were allowed. Original enforcement settings and public health were restored at **09:00:51 Asia/Colombo / 03:30:51 UTC**, revision **khrental-app--0000502**, on unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`.
+
+[#610](https://github.com/WasanthaK/khrental/pull/610) is merged and deployed. Its subsequent run 43238563485 stopped in fixture setup because property country was required (SQL 51001). [#624](https://github.com/WasanthaK/khrental/pull/624), merged as `ddd7b67306706b75221604b55c928e6e9caba23a`, supplies the fixture country/type, opts it out of public listing, and executes a hash-verified corrected harness through one short Azure connection. [CI 43358799803](https://github.com/WasanthaK/khrental/actions/runs/43358799803) passed syntax, lint, authorization tests and build.
+
+[Durable financial/maintenance evidence](evidence/r5-http-financial-maintenance-20261113.json) records the exact 21 checks and limits. The fixture was closed/deactivated and its session revoked; this does not mean every synthetic row was deleted. Both protected billing fixtures were unchanged and Stripe writes were zero. Synthetic rental records, seeded billing states and persisted session authority do **not** establish real payment, credential-login, natural seven-day grace, external dispatch or full role/resource/route acceptance. **BL08.3 and the maintenance portion of BL08.4 advance only for this bounded scope; R5 remains open.**
+
+**BL08.11-A customer response-loss recovery also passed:** [run 43357605904](https://github.com/WasanthaK/khrental/actions/runs/43357605904) recovered the original genuine sandbox customer without duplication, blocked checkout, and deleted the disposable customer. [Customer evidence](evidence/r5-genuine-customer-recovery-20261113.json). Do not repeat either accepted proof. Remaining provider-operation and isolation cases remain open. Live charging stays **OFF**, Evia stays **paused**, and retained clocks and existing worker scope are unchanged.
+
 ## BL08.11-A customer response-loss recovery — passed 13 November 2026
 
 **Bounded customer recovery acceptance is closed.** [Run 43357605904](https://github.com/WasanthaK/khrental/actions/runs/43357605904), job 131663264750, passed at **03:15:48 UTC / 08:45:48 Asia/Colombo** on unchanged serving build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. Exactly one genuine Stripe sandbox customer was created and its successful response deliberately discarded. Provider event readback recovered the original customer step using the preserved provider key; exactly one matching customer event was found. Checkout POST was blocked, no checkout session or subscription was created, and the original scoped account remained unchanged. The exact disposable Stripe customer was deleted and the SQL fixture was cleaned; the one-time completion receipt was recorded.
@@ -8,7 +18,9 @@
 
 [Durable acceptance evidence](evidence/r5-genuine-customer-recovery-20261113.json) records operation `47de6968-9ee2-484d-9c6f-1d40d2291136`, deleted customer `cus_VcPmQebri33EnR` and event `evt_1UbAxKQ4sARuLNQaYa2d4ZDl`. This proves bounded one-shot recovery through the deployed service and SQL journal, not automatic-worker customer recovery, a whole-process outage or completed Checkout/subscription recovery. **Do not repeat this accepted customer proof.** BL08.11 and R5 remain partial for the remaining provider operations, role/resource/isolation and launch cases. Existing worker scope, retained clocks, prior accepted proofs, paused Evia and live-charge fences remain unchanged. Earlier transport-blocked checkpoints below are historical.
 
-## Next acceptance slice — invoice/payment and maintenance HTTP, 12 November 2026
+## Historical financial/maintenance attempts — 12 November 2026
+
+Superseded by the passed 13 November checkpoint above; pending and retry instructions in this dated record are historical.
 
 **Current checkpoint:** corrected-fixture run [43233999467](https://github.com/WasanthaK/khrental/actions/runs/43233999467) uploaded four payload chunks, then Azure rejected the execution connection with HTTP 429 at **14:10:38 UTC / 19:40:38 Asia/Colombo**, requesting 600 seconds. The acceptance script did not start: no fixture SQL or HTTP checks ran. Exact original enforcement settings and health were restored at **14:11:29 UTC / 19:41:29 Asia/Colombo**, Ready **0000497**, unchanged image `59050153ad96b10be7c1990df846363a1642c046`. Fixture ID `dd1cdbab-5284-49ac-8f4f-2e45da124f67` identifies this transport-only attempt. No new Stripe or Evia operation occurred.
 
