@@ -76,8 +76,26 @@ jobs:
           import {readFileSync} from 'node:fs';
           import {brotliCompressSync} from 'node:zlib';
           const text=brotliCompressSync(readFileSync('scripts/verify-platform-comp-controls.mjs')).toString('base64url');
-          for(let i=0;i<text.length;i+=800)console.log(text.slice(i,i+800));
+          for(let i=0;i<text.length;i+=1100)console.log(text.slice(i,i+1100));
           JS
+          # Retry only a rejected handshake: the remote command has not started.
+          # Never replay an ambiguous disconnect or a missing acceptance marker.
+          remote_exec() {
+            local invocation="$1" output="$2" status
+            for attempt in 1 2; do
+              set +e
+              script -q -e -c "$invocation" /dev/null | tee "$output"
+              status=${PIPESTATUS[0]}
+              set -e
+              if [ "$status" -eq 0 ]; then return 0; fi
+              if [ "$attempt" -eq 1 ] && grep -Fq 'Handshake status 429 Too Many Requests' "$output"; then
+                echo 'Azure rejected the connection before execution; respecting 600-second retry delay.'
+                for minute in $(seq 1 10); do sleep 60; done
+              else
+                return "$status"
+              fi
+            done
+          }
           remote="/tmp/comp-$GITHUB_RUN_ID"
           index=0
           # Load first: the interactive exec must not consume the loop input.
@@ -86,14 +104,14 @@ jobs:
             command="node -e \"require('node:fs').writeFileSync('$remote.$index','$chunk',{flag:'wx'});console.log('COMP_CHUNK_$index')\""
             test "${#command}" -le 1400
             printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-            script -q -e -c "$invocation" /dev/null | tee "$RUNNER_TEMP/comp-transfer"
+            remote_exec "$invocation" "$RUNNER_TEMP/comp-transfer"
             grep -Fq "COMP_CHUNK_$index" "$RUNNER_TEMP/comp-transfer"
             index=$((index+1))
           done
           command="node --input-type=module -e \"const fs=await import('node:fs'),z=await import('node:zlib'),cr=await import('node:crypto');let s='';for(let i=0;i<$index;i++)s+=fs.readFileSync('$remote.'+i,'utf8');const b=z.brotliDecompressSync(Buffer.from(s,'base64url'));if(cr.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');const f='$remote.mjs';fs.writeFileSync(f,b,{flag:'wx'});process.env.COMP_MODE='$COMP_MODE';try{await import('file://'+f)}finally{fs.unlinkSync(f);for(let i=0;i<$index;i++)fs.unlinkSync('$remote.'+i)}\""
           test "${#command}" -le 1400
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-          script -q -e -c "$invocation" /dev/null | tee comp-evidence.txt
+          remote_exec "$invocation" comp-evidence.txt
           if grep -Fq COMP_FAILED= comp-evidence.txt; then exit 1; fi
           grep -Eo 'COMP_PASS=\{[^}]+\}' comp-evidence.txt | sed 's/^COMP_PASS=//' | tr -d '\r' > comp-result.json
           jq -e --arg mode "$COMP_MODE" '.passed==true and .mode==$mode and .stripeWrites==0 and .accessDecisionsWrittenByScript==false and .protectedAccountsUnchanged==true' comp-result.json
