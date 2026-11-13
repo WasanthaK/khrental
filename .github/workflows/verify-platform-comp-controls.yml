@@ -1,0 +1,107 @@
+name: Platform complimentary controls evidence
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      mode:
+        description: Prepare private stock or verify completed UI audit
+        required: true
+        type: choice
+        options: [prepare, inspect]
+      confirmation:
+        description: VERIFY-PLATFORM-COMP-CONTROLS
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      COMP_MODE: ${{ inputs.mode }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Validate exact request and unchanged deployed implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-PLATFORM-COMP-CONTROLS
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$COMP_MODE" = prepare || "$COMP_MODE" = inspect ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|scripts/verify-platform-comp-controls.mjs|.github/workflows/verify-platform-comp-controls.yml|scripts/verify-deployed-http-financial-maintenance.mjs|scripts/verify-deployed-paid-comp-expiry.mjs|.github/workflows/verify-deployed-paid-comp-expiry.yml|.github/workflows/inspect-r5-genuine-customer-attempt.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-r5-customer-recovery-preflight.yml|scripts/inspect-r5-genuine-customer-attempt.mjs|scripts/verify-deployed-customer-create-recovery.mjs|scripts/verify-r5-customer-fixture-rollback.mjs|.github/workflows/inspect-management-recovery.yml|.github/workflows/verify-deployed-portal-recovery.yml|scripts/verify-deployed-portal-recovery.mjs|.github/workflows/verify-deployed-delayed-failure.yml|scripts/verify-deployed-delayed-failure.mjs|.github/workflows/verify-deployed-grace-recovery.yml|scripts/verify-deployed-grace-recovery.mjs|.github/workflows/verify-deployed-http-enforcement.yml|scripts/verify-deployed-http-enforcement.mjs|.github/workflows/verify-deployed-http-financial-maintenance.yml|scripts/verify-deployed-paid-comp-expiry.mjs) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Run bounded fixture or read-only audit inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/comp-app.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and .properties.latestRevisionName==.properties.latestReadyRevisionName and .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/comp-app.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/comp-app.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/comp-app.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          node --check scripts/verify-platform-comp-controls.mjs
+          digest=$(sha256sum scripts/verify-platform-comp-controls.mjs | cut -d ' ' -f 1)
+          node --input-type=module - > "$RUNNER_TEMP/comp-chunks" <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {brotliCompressSync} from 'node:zlib';
+          const text=brotliCompressSync(readFileSync('scripts/verify-platform-comp-controls.mjs')).toString('base64url');
+          for(let i=0;i<text.length;i+=800)console.log(text.slice(i,i+800));
+          JS
+          remote="/tmp/comp-$GITHUB_RUN_ID"
+          index=0
+          while IFS= read -r chunk; do
+            command="node -e \"require('node:fs').writeFileSync('$remote.$index','$chunk',{flag:'wx'});console.log('COMP_CHUNK_$index')\""
+            test "${#command}" -le 1400
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            script -q -e -c "$invocation" /dev/null | tee "$RUNNER_TEMP/comp-transfer"
+            grep -Fq "COMP_CHUNK_$index" "$RUNNER_TEMP/comp-transfer"
+            index=$((index+1))
+          done < "$RUNNER_TEMP/comp-chunks"
+          command="node --input-type=module -e \"const fs=await import('node:fs'),z=await import('node:zlib'),cr=await import('node:crypto');let s='';for(let i=0;i<$index;i++)s+=fs.readFileSync('$remote.'+i,'utf8');const b=z.brotliDecompressSync(Buffer.from(s,'base64url'));if(cr.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');const f='$remote.mjs';fs.writeFileSync(f,b,{flag:'wx'});process.env.COMP_MODE='$COMP_MODE';try{await import('file://'+f)}finally{fs.unlinkSync(f);for(let i=0;i<$index;i++)fs.unlinkSync('$remote.'+i)}\""
+          test "${#command}" -le 1400
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee comp-evidence.txt
+          if grep -Fq COMP_FAILED= comp-evidence.txt; then exit 1; fi
+          grep -Eo 'COMP_PASS=\{[^}]+\}' comp-evidence.txt | sed 's/^COMP_PASS=//' | tr -d '\r' > comp-result.json
+          jq -e --arg mode "$COMP_MODE" '.passed==true and .mode==$mode and .stripeWrites==0 and .accessDecisionsWrittenByScript==false and .protectedAccountsUnchanged==true' comp-result.json
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          cat comp-result.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: platform-complimentary-controls
+          path: |
+            comp-evidence.txt
+            comp-result.json
+          retention-days: 30
