@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## BL07.2 live control prerequisite — checked 13 November 2026
+
+The application browser resolved to `https://app.quixo.homes/login`; no signed-in Platform Administrator session was available. No sign-in retry, platform-role change, complimentary mutation, pricing publication or Stripe operation was performed. The earlier declined sign-in remains respected.
+
+Source review confirms platform-only complimentary GET/POST routes, explicit decision/version validation, transactional state update plus audit, and existing disposable SQL coverage for fixed/ongoing grants, revoke, expiry and stale-version rejection without duplicate audit. This is source/test coverage, **not new live acceptance**. The next live sequence requires a genuinely authenticated Platform Administrator: verify server-resolved platform status, select an isolated active development-testing workspace, record its baseline, exercise fixed/ongoing grant and revoke with decision notes, verify stale-version rejection and persisted actor/reason audit, then restore baseline access. Preserve both protected billing fixtures and do not seed platform authority or fabricate a session to close BL07.2.
+
+BL07.3 paid-access fallback already passed run 43362222581. BL07.2 remains open solely for the uncompleted live control/audit acceptance; broader R5 gates remain unchanged.
+
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
 
 [Run 43362222581](https://github.com/WasanthaK/khrental/actions/runs/43362222581), job 131678160465, passed all five checks at **09:28:46 Asia/Colombo / 03:58:46 UTC**. In an isolated fixture with seeded paid state, authenticated writes succeeded before and after a 30-second complimentary grant expired naturally by SQL time; the post-expiry change was read back and billing/complimentary state remained unchanged. Both protected billing fixtures remained unchanged; Stripe writes were zero. The fixture session was revoked and user/membership/tenant deactivated.
@@ -153,7 +161,7 @@ This section and the current engineering status above control execution. Older d
 | All-state cessation — BL08.9 | 🟢 Remaining entitlement states and cleanup integrated through #578; schema applied | 🟡 Controlled genuine-provider and deployed role/stock acceptance. |
 | Restoration, split, transition consistency — BL08.7/BL08.10 | 🟢 Implemented through #579/#580 with retained history, atomic activation and SQL/process/browser fixtures; migrations applied | 🟡 Dedicated feature activation and controlled live transition/role/provider acceptance. Do not rebuild restore/split. |
 | Stripe lifecycle — BL04.2/BL05.4/BL05.5/BL06.3 | 🟢 Isolated genuine lifecycle passed; retained 2→1 renewal, deployed duplicate/delayed-event ledger and within-grace failure/recovery passed | 🟡 Natural grace expiry/later recovery and remaining endpoint/job/organization-isolation coverage; bounded public template-route expiry enforcement passed. Do not advance the accepted retained clock again. |
-| Management enforcement and complimentary controls — BL07/BL08.2–5/BL08.12 | 🟢 Existing endpoint/job guards and SQL fixtures retained | 🟡 Bounded public HTTP template-route expiry/revoke, stale-role/isolation and rollout/restore passed. Remaining route/job/stock coverage, privileged controls and paid-access fallback remain; full enforcement restored OFF. |
+| Management enforcement and complimentary controls — BL07/BL08.2–5/BL08.12 | 🟢 Existing endpoint/job guards and SQL fixtures retained | 🟡 Bounded public HTTP template-route expiry/revoke, stale-role/isolation and rollout/restore passed. Paid-access fallback passed 43362222581. Remaining route/job/stock coverage and privileged controls stay open; full enforcement restored OFF. |
 | Rental operations, retained history and usability — OP/CT04 | 🟢 Preserve accepted signing and delivered lifecycle source | 🟡 Remaining stock/expiry/negative cases, inbox receipt, retained-role reads, naturally paused DB timing and final desktop/mobile/keyboard journeys. |
 | Evia service/package and matching audit — CT03.4/CT03.5 | ⏸ Paused by owner; accepted signing remains accepted | Working provider service/package and matching retention remain unaccepted; no retries or re-signing while paused. |
 | Commercial/merchant/tax/privacy; LK then BN — CM/RG | 🟡 Existing decision pack and regional work retained | Owner/provider decisions and actual merchant readiness remain; no live charging or launch. BN follows LK. R2 stays deferred; distinct-replica R3 proof is only a pre-scaling requirement. |
