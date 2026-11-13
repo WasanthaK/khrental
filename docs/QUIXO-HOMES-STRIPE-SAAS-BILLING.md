@@ -1,5 +1,7 @@
 # Quixo.Homes canonical SaaS billing contract
 
+**BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
+
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
 
 [Run 43362222581](https://github.com/WasanthaK/khrental/actions/runs/43362222581), job 131678160465, passed all five checks at **09:28:46 Asia/Colombo / 03:58:46 UTC**. In an isolated fixture with seeded paid state, authenticated writes succeeded before and after a 30-second complimentary grant expired naturally by SQL time; the post-expiry change was read back and billing/complimentary state remained unchanged. Both protected billing fixtures remained unchanged; Stripe writes were zero. The fixture session was revoked and user/membership/tenant deactivated.
