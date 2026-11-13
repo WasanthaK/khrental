@@ -1,0 +1,187 @@
+name: Controlled inventory transition acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Fresh isolated fixture UUID; never reuse
+        required: true
+        type: string
+      confirmation:
+        description: VERIFY-INVENTORY-TRANSITIONS
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Validate exact request and unchanged deployed implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-INVENTORY-TRANSITIONS
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|scripts/verify-deployed-inventory-transitions.mjs|.github/workflows/verify-deployed-inventory-transitions.yml|scripts/verify-platform-comp-controls.mjs|.github/workflows/verify-platform-comp-controls.yml|scripts/verify-deployed-http-financial-maintenance.mjs|scripts/verify-deployed-paid-comp-expiry.mjs|.github/workflows/verify-deployed-paid-comp-expiry.yml|.github/workflows/inspect-r5-genuine-customer-attempt.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-r5-customer-recovery-preflight.yml|scripts/inspect-r5-genuine-customer-attempt.mjs|scripts/verify-deployed-customer-create-recovery.mjs|scripts/verify-r5-customer-fixture-rollback.mjs|.github/workflows/inspect-management-recovery.yml|.github/workflows/verify-deployed-portal-recovery.yml|scripts/verify-deployed-portal-recovery.mjs|.github/workflows/verify-deployed-delayed-failure.yml|scripts/verify-deployed-delayed-failure.mjs|.github/workflows/verify-deployed-grace-recovery.yml|scripts/verify-deployed-grace-recovery.mjs|.github/workflows/verify-deployed-http-enforcement.yml|scripts/verify-deployed-http-enforcement.mjs|.github/workflows/verify-deployed-http-financial-maintenance.yml|scripts/verify-deployed-paid-comp-expiry.mjs) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Temporarily enable inventory acceptance and scope write enforcement
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/enforcement-before.json" >/dev/null
+          jq '[.properties.template.containers[0].env[]? | select(.name=="MANAGEMENT_INVENTORY_SCHEMA_READY" or .name=="MANAGEMENT_CESSATION_SCHEMA_READY" or .name=="MANAGEMENT_RESTORATION_SCHEMA_READY" or .name=="MANAGEMENT_SPLIT_SCHEMA_READY" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS")]' "$RUNNER_TEMP/enforcement-before.json" > "$RUNNER_TEMP/enforcement-original.json"
+          jq -e 'all(.[]; has("value")) and all(.[]; .name!="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .value=="false")' "$RUNNER_TEMP/enforcement-original.json" >/dev/null
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-before.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          echo 'RESTORE_ENFORCEMENT=true' >> "$GITHUB_ENV"
+          az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars "MANAGEMENT_INVENTORY_SCHEMA_READY=true" "MANAGEMENT_CESSATION_SCHEMA_READY=true" "MANAGEMENT_RESTORATION_SCHEMA_READY=true" "MANAGEMENT_SPLIT_SCHEMA_READY=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS=$OPERATION_ID" -o none
+          ready=false
+          for attempt in $(seq 1 60); do
+            az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-ready.json"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
+          jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
+      - name: Verify deployed inventory transitions and isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/comp-app.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and .properties.latestRevisionName==.properties.latestReadyRevisionName and .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/comp-app.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/comp-app.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/comp-app.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          node --check scripts/verify-deployed-inventory-transitions.mjs
+          digest=$(sha256sum scripts/verify-deployed-inventory-transitions.mjs | cut -d ' ' -f 1)
+          node --input-type=module - > "$RUNNER_TEMP/comp-chunks" <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {brotliCompressSync} from 'node:zlib';
+          const text=brotliCompressSync(readFileSync('scripts/verify-deployed-inventory-transitions.mjs')).toString('base64url');
+          for(let i=0;i<text.length;i+=1100)console.log(text.slice(i,i+1100));
+          JS
+          # Retry only a rejected handshake: the remote command has not started.
+          # Never replay an ambiguous disconnect or a missing acceptance marker.
+          remote_exec() {
+            local invocation="$1" output="$2" status
+            for attempt in 1 2; do
+              set +e
+              script -q -e -c "$invocation" /dev/null | tee "$output"
+              status=${PIPESTATUS[0]}
+              set -e
+              if [ "$status" -eq 0 ]; then return 0; fi
+              if [ "$attempt" -eq 1 ] && grep -Fq 'Handshake status 429 Too Many Requests' "$output"; then
+                echo 'Azure rejected the connection before execution; respecting 600-second retry delay.'
+                for minute in $(seq 1 10); do sleep 60; done
+              else
+                return "$status"
+              fi
+            done
+          }
+          remote="/tmp/comp-$GITHUB_RUN_ID"
+          index=0
+          # Load first: the interactive exec must not consume the loop input.
+          mapfile -t chunks < "$RUNNER_TEMP/comp-chunks"
+          for chunk in "${chunks[@]}"; do
+            command="node -e \"require('node:fs').writeFileSync('$remote.$index','$chunk',{flag:'wx'});console.log('COMP_CHUNK_$index')\""
+            test "${#command}" -le 1400
+            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+            remote_exec "$invocation" "$RUNNER_TEMP/comp-transfer"
+            grep -Fq "COMP_CHUNK_$index" "$RUNNER_TEMP/comp-transfer"
+            index=$((index+1))
+          done
+          command="node --input-type=module -e \"const fs=await import('node:fs'),z=await import('node:zlib'),cr=await import('node:crypto');let s='';for(let i=0;i<$index;i++)s+=fs.readFileSync('$remote.'+i,'utf8');const b=z.brotliDecompressSync(Buffer.from(s,'base64url'));if(cr.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');const f='$remote.mjs';fs.writeFileSync(f,b,{flag:'wx'});process.env.INVENTORY_FIXTURE_ID='$OPERATION_ID';try{await import('file://'+f)}finally{fs.unlinkSync(f);for(let i=0;i<$index;i++)fs.unlinkSync('$remote.'+i)}\""
+          test "${#command}" -le 1400
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          remote_exec "$invocation" comp-evidence.txt
+          if grep -Fq INVENTORY_FAILED= comp-evidence.txt; then exit 1; fi
+          grep -Eo 'INVENTORY_PASS=\{[^}]+\}' comp-evidence.txt | sed 's/^INVENTORY_PASS=//' | tr -d '\r' > comp-result.json
+          jq -e '.passed==true and .fixtureClosed==true and (.checks|length)>=20 and .providerWriteAcceptance==false and .credentialLoginAcceptance==false and .uiAcceptance==false' comp-result.json
+          echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+          cat comp-result.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Restore exact original feature and enforcement configuration
+        if: always() && env.RESTORE_ENFORCEMENT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          for name in MANAGEMENT_INVENTORY_SCHEMA_READY MANAGEMENT_CESSATION_SCHEMA_READY MANAGEMENT_RESTORATION_SCHEMA_READY MANAGEMENT_SPLIT_SCHEMA_READY MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS; do
+            if jq -e --arg name "$name" 'any(.[]; .name==$name)' "$RUNNER_TEMP/enforcement-original.json" >/dev/null; then
+              value=$(jq -r --arg name "$name" '.[] | select(.name==$name) | .value' "$RUNNER_TEMP/enforcement-original.json")
+              args+=(--set-env-vars "$name=$value")
+            else
+              args+=(--remove-env-vars "$name")
+            fi
+          done
+          # Separate set/remove lists avoid repeated argparse options dropping values.
+          set_values=(); remove_names=()
+          for ((i=0;i<${#args[@]};i+=2)); do
+            if [ "${args[i]}" = --set-env-vars ]; then set_values+=("${args[i+1]}"); else remove_names+=("${args[i+1]}"); fi
+          done
+          restore=(); if [ "${#set_values[@]}" -gt 0 ]; then restore+=(--set-env-vars "${set_values[@]}"); fi
+          if [ "${#remove_names[@]}" -gt 0 ]; then restore+=(--remove-env-vars "${remove_names[@]}"); fi
+          az containerapp update -g khrental-prod-rg -n khrental-app "${restore[@]}" -o none
+          ready=false
+          for attempt in $(seq 1 60); do
+            az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-restored.json"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" >/dev/null; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          jq '[.properties.template.containers[0].env[]? | select(.name=="MANAGEMENT_INVENTORY_SCHEMA_READY" or .name=="MANAGEMENT_CESSATION_SCHEMA_READY" or .name=="MANAGEMENT_RESTORATION_SCHEMA_READY" or .name=="MANAGEMENT_SPLIT_SCHEMA_READY" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS")] | sort_by(.name)' "$RUNNER_TEMP/enforcement-restored.json" > "$RUNNER_TEMP/enforcement-actual.json"
+          jq 'sort_by(.name)' "$RUNNER_TEMP/enforcement-original.json" > "$RUNNER_TEMP/enforcement-expected.json"
+          diff -u "$RUNNER_TEMP/enforcement-expected.json" "$RUNNER_TEMP/enforcement-actual.json"
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-restored.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/health >/dev/null
+          jq -r '"HTTP_SCOPE_RESTORED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" | tee -a enforcement-config.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: controlled-inventory-transitions
+          path: |
+            comp-evidence.txt
+            comp-result.json
+            enforcement-config.txt
+          retention-days: 30
