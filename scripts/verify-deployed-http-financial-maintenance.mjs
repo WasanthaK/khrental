@@ -45,7 +45,8 @@ const main=async()=>{
   await store.locked(target.id,async q=>{
     const params={id:target.id,propertyId,renteeId,agreementId,maintenanceId,actor:actorId,email:`r5-fixture-rentee-${target.id}@example.invalid`};
     stage='fixture_properties';
-    await q("INSERT INTO properties(id,tenant_id,name,status,createdat,updatedat) VALUES(@propertyId,@id,'Synthetic R5 acceptance property','available',SYSUTCDATETIME(),SYSUTCDATETIME())",params);
+    await q("INSERT INTO properties(id,tenant_id,name,status,propertytype,country_code,createdat,updatedat) VALUES(@propertyId,@id,'Synthetic R5 acceptance property','available','house','LK',SYSUTCDATETIME(),SYSUTCDATETIME())",params);
+    await q("UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE property_id=@propertyId AND tenant_id=@id",params);
     stage='fixture_app_users';
     await q("INSERT INTO app_users(id,tenant_id,name,email,role,user_type,status,invited,active,createdat,updatedat) VALUES(@renteeId,@id,'Synthetic R5 acceptance renter',@email,'rentee','rentee','active',0,1,SYSUTCDATETIME(),SYSUTCDATETIME())",params);
     stage='fixture_tenant_memberships';
