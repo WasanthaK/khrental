@@ -21,13 +21,14 @@ try {
   }
   await pool.request().query('CREATE DATABASE r5proof'); await pool.close();
   pool=await new sql.ConnectionPool({...config,database:'r5proof'}).connect();
-  for(const file of ['20260913_00_create_fresh_mssql_schema.sql','20260915_01_create_staff_property_assignments.sql','20260915_02_create_user_invitations.sql','20260916_02_add_staff_permission_bundles.sql','20260916_03_add_tenancy_onboarding.sql','20260916_04_add_billing_payment_lifecycle.sql','20260916_06_add_tenancy_exit_settlement.sql','20261103_01_management_billing.sql']) {
+  for(const file of ['20260913_00_create_fresh_mssql_schema.sql','20260915_01_create_staff_property_assignments.sql','20260915_02_create_user_invitations.sql','20260916_02_add_staff_permission_bundles.sql','20260916_03_add_tenancy_onboarding.sql','20260916_04_add_billing_payment_lifecycle.sql','20260916_05_add_maintenance_lifecycle.sql','20260916_06_add_tenancy_exit_settlement.sql','20261103_01_management_billing.sql']) {
     await pool.request().batch(fs.readFileSync(`migrations/${file}`,'utf8'));
   }
   Object.assign(process.env,{MSSQL_SERVER:'127.0.0.1',MSSQL_PORT:String(port),MSSQL_DATABASE:'r5proof',MSSQL_USER:'sa',MSSQL_PASSWORD:password,MSSQL_AUTHENTICATION:'sql-password',MSSQL_ENCRYPT:'false',MSSQL_TRUST_SERVER_CERTIFICATE:'true',ALLOW_LEGACY_AUTH_HEADERS:'false'});
   delete process.env.VITE_ENABLE_DEV_BYPASS;
   const {ensureAuthSchema,createAuthRecord,issueAuthSession,createSessionAuthMiddleware}=await import('../src/api/auth/index.js');
   const {createTenancyOnboardingRouter}=await import('../src/api/platform/tenancyOnboardingRouter.js');
+  const {createMaintenanceLifecycleRouter}=await import('../src/api/platform/maintenanceLifecycleRouter.js');
   const {createTenancyExitRouter}=await import('../src/api/platform/tenancyExitRouter.js');
   const {listTenantRentees}=await import('../src/api/mssql/renteeRepository.js');
   ({closeMssqlPool}=await import('../src/api/mssql/pool.js'));
@@ -81,6 +82,7 @@ try {
 
   const app=express();app.use(express.json());app.use('/api',createSessionAuthMiddleware());app.use('/api/tenancies',createTenancyOnboardingRouter());
   app.use('/api/tenancy-exit',createTenancyExitRouter());
+  app.use('/api/maintenance',createMaintenanceLifecycleRouter());
   app.use((err,req,res,_next)=>res.status(err.status||500).json({error:{message:err.message,code:err.code}}));
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const origin=`http://127.0.0.1:${server.address().port}`;
@@ -88,6 +90,44 @@ try {
     const response=await fetch(`${origin}/api/tenancies/${a.agreementId}${suffix}`,{method,headers:{Authorization:`Bearer ${who.token}`,'x-tenant-id':tenantId,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
     return {status:response.status,json:await response.json()};
   };
+
+  // Enabled AFTER triggers reject bare OUTPUT even when no row changes.
+  // Exercise the actual HTTP router against disposable SQL Server.
+  await pool.request().batch("CREATE TRIGGER dbo.r5_maintenance_output ON dbo.maintenance_requests AFTER INSERT,UPDATE AS BEGIN SET NOCOUNT ON; END");
+  const maintenance=async(path,body,who=a.owner,tenantId=a.tenantId)=>{
+    const response=await fetch(origin+'/api/maintenance/requests'+path,{
+      method:body?'POST':'GET',
+      headers:{Authorization:`Bearer ${who.token}`,'x-tenant-id':tenantId,'Content-Type':'application/json'},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+    const json=await response.json();
+    return {status:response.status,json};
+  };
+  const maintenanceBody={propertyId:a.propertyId,title:'Disposable trigger regression',description:'Synthetic maintenance only'};
+  const createdMaintenance=await maintenance('',maintenanceBody);
+  assert.equal(createdMaintenance.status,201,JSON.stringify(createdMaintenance.json));
+  const maintenanceId=createdMaintenance.json.data.id;
+  assert.equal((await maintenance('/'+maintenanceId,null,b.owner,b.tenantId)).status,404);
+  const assignedMaintenance=await maintenance('/'+maintenanceId+'/assign',{staffUserId:a.owner.id});
+  assert.equal(assignedMaintenance.status,200,JSON.stringify(assignedMaintenance.json));
+  assert.equal(assignedMaintenance.json.data.assignedto,a.owner.id);
+  assert.equal((await maintenance('/'+maintenanceId+'/start',{})).status,200);
+  const completedMaintenance=await maintenance('/'+maintenanceId+'/complete',{completionCost:0});
+  assert.equal(completedMaintenance.status,200,JSON.stringify(completedMaintenance.json));
+  assert.equal(completedMaintenance.json.data.status,'completed');
+  assert.equal((await maintenance('/'+maintenanceId+'/start',{})).status,409);
+  const secondMaintenance=await maintenance('',maintenanceBody);
+  assert.equal(secondMaintenance.status,201);
+  const cancelledMaintenance=await maintenance('/'+secondMaintenance.json.data.id+'/cancel',{reason:'Disposable cancellation'});
+  assert.equal(cancelledMaintenance.status,200,JSON.stringify(cancelledMaintenance.json));
+  assert.equal(cancelledMaintenance.json.data.status,'cancelled');
+  await pool.request().batch("CREATE TRIGGER dbo.r5_maintenance_audit_rollback ON dbo.maintenance_lifecycle_events AFTER INSERT AS BEGIN THROW 51099,'FIXTURE_MAINTENANCE_ROLLBACK',1; END");
+  const maintenanceCount=(await one('SELECT COUNT(*) n FROM maintenance_requests')).n;
+  assert.equal((await maintenance('',maintenanceBody)).status,500);
+  assert.equal((await one('SELECT COUNT(*) n FROM maintenance_requests')).n,maintenanceCount,'audit failure rolls back maintenance creation');
+  await pool.request().batch('DROP TRIGGER dbo.r5_maintenance_audit_rollback');
+  console.log('R5_MAINTENANCE_TRIGGER_SQL=PASS create assign start complete cancel isolation terminal_conflict audit_rollback');
+
   assert.equal((await call('/onboarding',null,b.owner,b.tenantId)).status,404);
   assert.equal((await call('/onboarding',null,a.renter)).status,403);
   assert.equal((await call('/checklist',{})).status,409,'empty property cannot manufacture an inspection');
