@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Rental and maintenance trigger compatibility — 13 November 2026
+
+**Rental-offer readback repaired and verified live.** [PR #632](https://github.com/WasanthaK/khrental/pull/632) replaced bare SQL OUTPUT with trigger-compatible identifier capture. [Release 43458163981](https://github.com/WasanthaK/khrental/actions/runs/43458163981) passed exact-build, revision-readiness and database-connectivity checks. The authenticated owner enquiry page now renders the retained invalidated offer and closed agreement instead of temporary-unavailability errors. No new signing or payment is claimed.
+
+**Maintenance write compatibility repaired; live create/cancel acceptance passed.** [PR #633](https://github.com/WasanthaK/khrental/pull/633) passed disposable SQL HTTP coverage for create, assign, start, complete, cancel, cross-tenant denial, terminal-state conflict and audit rollback ([43459364342](https://github.com/WasanthaK/khrental/actions/runs/43459364342)). Two-tenant billing and lint/authorization/build checks also passed. [Release 43460054437](https://github.com/WasanthaK/khrental/actions/runs/43460054437) passed exact-build, revision-readiness and database-connectivity checks. A clearly labelled demo request was created and cancelled through the authenticated owner UI; retained cancelled history was visible afterward. The request remained unassigned and no service dispatch was performed. Assignment/start/completion passed disposable SQL tests but remain unverified on the deployed UI pending confirmed demo-assignee identity. This is not complete billing-enforcement acceptance.
+
+R5 remains open. Preserve the accepted inventory and recovery proofs. Remaining provider operations/isolation, billing routes/jobs/bypasses, paid inventory transitions and negative cases, inbox receipt, role-based retained-history denial, mobile/keyboard journeys and genuine natural database wake-up remain unverified. Live charging and full enforcement stay OFF; Evia stays paused.
+
+
 ## Inventory deployed acceptance — 13 November 2026
 
 **Bounded complimentary inventory acceptance passed:** [run 43438898429](https://github.com/WasanthaK/khrental/actions/runs/43438898429) passed 22 HTTP/SQL checks covering staging, atomic batch rollback, withdrawal, cessation/restoration, split transitions, replay protection and workspace/role isolation. Fixture cleanup, unchanged protected accounts, exact configuration restoration and public health checks passed. [PR #631](https://github.com/WasanthaK/khrental/pull/631) passed CI and merged; the application image was unchanged.
@@ -28,9 +37,9 @@ Original enforcement settings and public health were restored at **09:29:30 Asia
 
 ### Remaining R5 closure queue
 
-1. **BL07.2:** actual Platform Admin grant/revoke/audit acceptance remains. **BL07.3 paid-underlay expiry:** passed 43362222581; preserve the accepted proof.
+1. **BL07.2 and BL07.3 paid-underlay expiry:** passed within their recorded scope; preserve the accepted proofs.
 2. **BL05.5:** genuine natural seven-day SQL grace expiry and later recovery. Previously recovered fixtures are not pending-expiry evidence.
-3. **BL08:** remaining actor/resource/isolation and external-dispatch matrix; activation/exit, import/staging, restore/split/cessation deployed transitions; remaining provider recovery operations. **BL09.3:** genuine controlled deployed stock cancellation after dependencies. Keep BL08.12 full rollout OFF.
+3. **BL08:** remaining actor/resource/isolation and external-dispatch matrix; activation/exit and remaining inventory transitions beyond the accepted complimentary staging/restore/split/cessation scope; remaining provider recovery operations. **BL09.3:** genuine controlled deployed stock cancellation after dependencies. Keep BL08.12 full rollout OFF.
 4. **Launch journeys:** OP02 stock/reservation matrix, OP08 actual inbox receipt, OP09 negative/stale/duplicate/unsigned expiry, OP10 desktop/mobile/keyboard journey, CT04 retained-history denial. Preserve accepted signing; CT03 Evia exchange remains paused.
 5. **Owner/provider gates:** unresolved commercial formula/versioning/restore/refund decisions and live merchant/payout/tax/privacy evidence. Sri Lanka first; Brunei separate.
 
