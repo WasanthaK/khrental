@@ -112,10 +112,16 @@ jobs:
           console.log(brotliCompressSync(Buffer.from(JSON.stringify([start,a.length-end,b.slice(start,b.length-end)]))).toString('base64url'));
           JS
           )
-          command="node --input-type=module -e \"const fs=await import('node:fs'),cr=await import('node:crypto'),z=await import('node:zlib');const h=b=>cr.createHash('sha256').update(b).digest('hex'),b=fs.readFileSync('/app/scripts/verify-deployed-http-enforcement.mjs');if(h(b)!=='$original_digest')throw Error('Baseline mismatch');const [s,e,t]=JSON.parse(z.brotliDecompressSync(Buffer.from('$patch','base64url'))),a=b.toString(),c=a.slice(0,s)+t+a.slice(e);if(h(c)!=='$digest')throw Error('Harness mismatch');const f='/tmp/r5-http-$OPERATION_ID.mjs';fs.writeFileSync(f,c,{flag:'wx'});process.env.HTTP_ACCEPTANCE_TARGET=JSON.stringify({id:'$OPERATION_ID'});try{await import('file://'+f)}finally{fs.unlinkSync(f)}\""
-          if [ "${#command}" -gt 2000 ]; then echo 'HTTP_BLOCKED=oversized_harness_patch' >&2; exit 1; fi
+          remote="/tmp/r5-paid-$OPERATION_ID.patch"
+          command="node -e \"require('node:fs').writeFileSync('$remote','$patch',{flag:'wx'});console.log('PAID_PATCH_READY')\""
+          if [ "${#command}" -gt 1400 ]; then echo 'HTTP_BLOCKED=oversized_patch_transfer' >&2; exit 1; fi
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee deployed-http.txt
+          grep -Fq PAID_PATCH_READY deployed-http.txt
+          command="node --input-type=module -e \"const fs=await import('node:fs'),cr=await import('node:crypto'),z=await import('node:zlib');const h=b=>cr.createHash('sha256').update(b).digest('hex'),b=fs.readFileSync('/app/scripts/verify-deployed-http-enforcement.mjs');if(h(b)!=='$original_digest')throw Error('Baseline mismatch');const [s,e,t]=JSON.parse(z.brotliDecompressSync(Buffer.from(fs.readFileSync('$remote','utf8'),'base64url'))),a=b.toString(),c=a.slice(0,s)+t+a.slice(e);if(h(c)!=='$digest')throw Error('Harness mismatch');const f='/tmp/r5-http-$OPERATION_ID.mjs';fs.writeFileSync(f,c,{flag:'wx'});fs.unlinkSync('$remote');process.env.HTTP_ACCEPTANCE_TARGET=JSON.stringify({id:'$OPERATION_ID'});try{await import('file://'+f)}finally{fs.unlinkSync(f)}\""
+          if [ "${#command}" -gt 1400 ]; then echo 'HTTP_BLOCKED=oversized_harness_patch' >&2; exit 1; fi
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee -a deployed-http.txt
           marker=HTTP_PASS
           if grep -Eq 'HTTP_FAILED=|HTTP_CLEANUP_FAILED=' deployed-http.txt; then exit 1; fi
           grep -Eo 'HTTP_PASS=\{[^}]+\}' deployed-http.txt | tr -d '\r' > http-acceptance-summary.txt
