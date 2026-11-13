@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## BL07.3 paid access after complimentary expiry — passed 13 November 2026
+
+[Run 43362222581](https://github.com/WasanthaK/khrental/actions/runs/43362222581), job 131678160465, passed all five checks at **09:28:46 Asia/Colombo / 03:58:46 UTC**. In an isolated fixture with seeded paid state, authenticated writes succeeded before and after a 30-second complimentary grant expired naturally by SQL time; the post-expiry change was read back and billing/complimentary state remained unchanged. Both protected billing fixtures remained unchanged; Stripe writes were zero. The fixture session was revoked and user/membership/tenant deactivated.
+
+Original enforcement settings and public health were restored at **09:29:30 Asia/Colombo / 03:59:30 UTC**, revision **khrental-app--0000506**, unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. [PR #625](https://github.com/WasanthaK/khrental/pull/625) added the check; [#626](https://github.com/WasanthaK/khrental/pull/626) corrected the source allowlist; [#627](https://github.com/WasanthaK/khrental/pull/627) shortened Azure commands after a pre-execution handshake 404. All three passed CI. Earlier runs 43361034868 and 43361502496 did not execute acceptance checks and are superseded by this pass.
+
+[Durable evidence](evidence/r5-paid-comp-expiry-20261113.json). **The paid-underlay expiry case is closed; do not rerun it.** Seeded paid/grant state is not real payment or actual Platform Admin grant/revoke/audit acceptance. BL07.2 privileged controls, natural seven-day grace, remaining role/resource/route and launch acceptance stay open; R5 is not complete. Live charging remains **OFF**, Evia **paused**, and accepted prior proofs, worker scope and retained clocks are preserved.
+
 ## R5 checkpoint — 13 November 2026
 
 **Invoice/payment and maintenance HTTP acceptance passed (bounded scope).** [Run 43359060142](https://github.com/WasanthaK/khrental/actions/runs/43359060142), job 131668301669, passed all **21 checks** at **09:00:01 Asia/Colombo / 03:30:01 UTC**. Expired-access writes were denied, invoice and maintenance history remained readable, and seeded paid/grace/complimentary actions were allowed. Original enforcement settings and public health were restored at **09:00:51 Asia/Colombo / 03:30:51 UTC**, revision **khrental-app--0000502**, on unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`.
@@ -12,7 +20,7 @@
 
 ### Remaining R5 closure queue
 
-1. **BL07.3:** prove underlying paid access survives natural complimentary-overlay expiry. **BL07.2:** actual Platform Admin grant/revoke/audit acceptance.
+1. **BL07.2:** actual Platform Admin grant/revoke/audit acceptance remains. **BL07.3 paid-underlay expiry:** passed 43362222581; preserve the accepted proof.
 2. **BL05.5:** genuine natural seven-day SQL grace expiry and later recovery. Previously recovered fixtures are not pending-expiry evidence.
 3. **BL08:** remaining actor/resource/isolation and external-dispatch matrix; activation/exit, import/staging, restore/split/cessation deployed transitions; remaining provider recovery operations. **BL09.3:** genuine controlled deployed stock cancellation after dependencies. Keep BL08.12 full rollout OFF.
 4. **Launch journeys:** OP02 stock/reservation matrix, OP08 actual inbox receipt, OP09 negative/stale/duplicate/unsigned expiry, OP10 desktop/mobile/keyboard journey, CT04 retained-history denial. Preserve accepted signing; CT03 Evia exchange remains paused.
