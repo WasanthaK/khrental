@@ -1,5 +1,13 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## BL07.3 paid access after complimentary expiry — passed 13 November 2026
+
+[Run 43362222581](https://github.com/WasanthaK/khrental/actions/runs/43362222581), job 131678160465, passed all five checks at **09:28:46 Asia/Colombo / 03:58:46 UTC**. In an isolated fixture with seeded paid state, authenticated writes succeeded before and after a 30-second complimentary grant expired naturally by SQL time; the post-expiry change was read back and billing/complimentary state remained unchanged. Both protected billing fixtures remained unchanged; Stripe writes were zero. The fixture session was revoked and user/membership/tenant deactivated.
+
+Original enforcement settings and public health were restored at **09:29:30 Asia/Colombo / 03:59:30 UTC**, revision **khrental-app--0000506**, unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. [PR #625](https://github.com/WasanthaK/khrental/pull/625) added the check; [#626](https://github.com/WasanthaK/khrental/pull/626) corrected the source allowlist; [#627](https://github.com/WasanthaK/khrental/pull/627) shortened Azure commands after a pre-execution handshake 404. All three passed CI. Earlier runs 43361034868 and 43361502496 did not execute acceptance checks and are superseded by this pass.
+
+[Durable evidence](evidence/r5-paid-comp-expiry-20261113.json). **The paid-underlay expiry case is closed; do not rerun it.** Seeded paid/grant state is not real payment or actual Platform Admin grant/revoke/audit acceptance. BL07.2 privileged controls, natural seven-day grace, remaining role/resource/route and launch acceptance stay open; R5 is not complete. Live charging remains **OFF**, Evia **paused**, and accepted prior proofs, worker scope and retained clocks are preserved.
+
 ## R5 checkpoint — 13 November 2026
 
 **Invoice/payment and maintenance HTTP acceptance passed (bounded scope).** [Run 43359060142](https://github.com/WasanthaK/khrental/actions/runs/43359060142), job 131668301669, passed all **21 checks** at **09:00:01 Asia/Colombo / 03:30:01 UTC**. Expired-access writes were denied, invoice and maintenance history remained readable, and seeded paid/grace/complimentary actions were allowed. Original enforcement settings and public health were restored at **09:00:51 Asia/Colombo / 03:30:51 UTC**, revision **khrental-app--0000502**, on unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`.
@@ -292,7 +300,7 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | BL05.5 grace expiry/later recovery | YELLOW — PARTIAL DEPLOYED ACCEPTANCE | Isolated exact application-clock expiry/genuine later recovery passed in 43194909443. Seeded expired-grace public HTTP create/update denial and retained reads passed in 43227139115. Natural seven-day grace/later recovery remains separate; do not repeat the bounded checks. |
 | BL06.3 event ledger/replay | YELLOW — PARTIAL ACCEPTANCE | Genuine renewal and two signed duplicate deliveries preserved one deployed event/audit row in 43199377112. Deployed delayed failure-after-recovery also passed in 43221739128, preserving active/no-grace access and one event/audit after two duplicates. Remaining isolation cases stay open. |
 | BL07.2 platform comp grant/revoke/audit | YELLOW | Technical tests retained; hold privileged live mutation until an authorized platform session exists. |
-| BL07.3 complimentary expiry | YELLOW — PARTIAL DEPLOYED ACCEPTANCE | 43227139115: public write allowed during a fixed grant, denied after natural 30-second expiry; revoke denial passed. Remaining: paid underlying access must survive overlay expiry, plus privileged control acceptance. |
+| BL07.3 complimentary expiry | GREEN — BOUNDED EXPIRY BEHAVIOR; BL07.2 CONTROLS OPEN | 43227139115 proved expiry/revoke denial; 43362222581 proved seeded paid access survives natural overlay expiry with unchanged billing state. Actual Platform Admin grant/revoke/audit acceptance remains BL07.2; no real-payment or full-route claim. |
 | BL09.3 zero-stock cancellation | YELLOW | PR #536 deployed; finish genuine deployed disposable-stock confirmation after cessation/staging dependencies. |
 | BL08.2 monthly rollout | YELLOW | Monthly guard deployed, flags off; activate only after complete write/stock/cessation dependencies pass. |
 | BL08.3 invoice/payment/adjustment | YELLOW | PR #540 merged/deployed with final SQL/build proof; remaining affected live role/resource acceptance and rollout dependencies stay open. |
