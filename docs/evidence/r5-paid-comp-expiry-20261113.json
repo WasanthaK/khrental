@@ -1,0 +1,94 @@
+{
+  "recordedAt": "2026-11-13",
+  "status": "passed-bounded-scope",
+  "gate": "BL07.3 paid underlying access survives natural complimentary expiry",
+  "runId": 43362222581,
+  "runUrl": "https://github.com/WasanthaK/khrental/actions/runs/43362222581",
+  "jobId": 131678160465,
+  "sourceCommit": "b6deb06bf27b800f4e6fd982715920dc3ced07b7",
+  "servingBuild": "5dff24f354ed0f3a40d5d51bd61829b145d6fbf8",
+  "acceptedAtUtc": "2026-11-13T03:58:46Z",
+  "restoration": {
+    "completedAtUtc": "2026-11-13T03:59:30Z",
+    "revision": "khrental-app--0000506",
+    "originalEnforcementConfigurationRestored": true,
+    "publicHealthPassed": true
+  },
+  "result": {
+    "fixtureId": "dcc77197-c993-46da-b873-f2443bdcf0a4",
+    "scope": "public authenticated HTTP + deployed SQL; seeded billing states",
+    "checks": [
+      "seeded_paid_create_allowed",
+      "paid_with_active_complimentary_write_allowed",
+      "paid_write_after_natural_complimentary_expiry_allowed",
+      "post_expiry_write_persisted_and_readable",
+      "paid_and_comp_state_unchanged"
+    ],
+    "templateId": "79678734-2030-42c2-a921-5a8e3fa65b63",
+    "expiry": "2026-11-13T03:58:45.041Z",
+    "observedAfterExpiry": "2026-11-13T03:58:45.664Z",
+    "passed": true,
+    "protectedBillingFixturesUnchanged": true,
+    "stripeWrites": 0,
+    "seededGraceDates": false,
+    "seededPaidState": true,
+    "successfulPaymentAccepted": false,
+    "paidAccessAfterComplimentaryExpiry": true,
+    "naturalSevenDayGrace": false,
+    "naturalComplimentaryExpiry": true,
+    "credentialLoginAccepted": false,
+    "persistedSessionAuthority": true,
+    "fullRouteMatrixAccepted": false,
+    "fixtureClosed": true
+  },
+  "changes": [
+    {
+      "pr": 625,
+      "merge": "9f9d3c815282a36945961dffbd6fa7303faa4004",
+      "ci": 43360754642
+    },
+    {
+      "pr": 626,
+      "merge": "8ee6b57b089558f0ac6c9ad119c3df232804eae2",
+      "ci": 43361204953
+    },
+    {
+      "pr": 627,
+      "merge": "b6deb06bf27b800f4e6fd982715920dc3ced07b7",
+      "ci": 43361909763
+    }
+  ],
+  "priorAttempts": [
+    {
+      "runId": 43361034868,
+      "fixtureId": "923a9727-1d11-4886-a7ce-f6c238321d97",
+      "outcome": "Source guard rejected already reviewed financial harness before Azure login; no fixture/configuration mutations."
+    },
+    {
+      "runId": 43361502496,
+      "fixtureId": "163d96c0-debd-4054-a48f-6f76f1c45ecd",
+      "outcome": "Azure WebSocket handshake HTTP 404 before script execution; no acceptance checks ran.",
+      "restoredRevision": "khrental-app--0000504",
+      "restoredAtUtc": "2026-11-13T03:52:07Z",
+      "publicHealthPassed": true
+    }
+  ],
+  "transport": {
+    "patchTransferCharacters": 1220,
+    "executionCharacters": 992,
+    "sha256Checks": [
+      "image baseline",
+      "reconstructed reviewed harness"
+    ],
+    "patchConsumedBeforeImport": true
+  },
+  "cleanup": "Persisted session revoked; fixture user/membership and tenant deactivated. Synthetic template and billing rows retained; not a deletion claim.",
+  "limits": [
+    "Paid state seeded in SQL; no successful payment accepted",
+    "Complimentary grant seeded in SQL; no Platform Admin grant/revoke/audit acceptance",
+    "Natural 30-second complimentary expiry observed using SQL time; not natural seven-day grace",
+    "Persisted-session public HTTP acceptance; not credential login or browser usability",
+    "No full actor/resource/route matrix acceptance",
+    "Live charging OFF; Evia paused; existing worker scope and retained clocks unchanged"
+  ]
+}
