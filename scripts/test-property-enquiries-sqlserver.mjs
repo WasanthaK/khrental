@@ -83,6 +83,10 @@ try {
   const applicationMigration=fs.readFileSync('migrations/20261028_03_property_applications.sql','utf8');
   await pool.request().batch(applicationMigration);await pool.request().batch(applicationMigration);
   await pool.request().batch(fs.readFileSync('migrations/20261029_01_rental_offers_and_holds.sql','utf8'));
+  // Production split protection installs an AFTER trigger on this table.
+  // Even zero-row lifecycle updates must use OUTPUT INTO when a trigger exists.
+  await pool.request().batch(`CREATE TRIGGER dbo.TR_offer_output_compatibility
+    ON dbo.property_rental_offers AFTER INSERT,UPDATE AS BEGIN SET NOCOUNT ON; END`);
   const applicationSchema=await inspectPropertyApplications(pool);
   assert.equal(applicationSchema.satisfied,true,applicationSchema.detail);
   await query('ALTER TABLE property_applications NOCHECK CONSTRAINT CK_property_applications_consent');

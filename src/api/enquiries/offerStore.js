@@ -15,14 +15,17 @@ const audit=(q,row,actor=null,input=null,eventType=row.status)=>q(`INSERT INTO d
 // Run inside the caller's transaction. Keep the offer/agreement bridge and
 // immutable terms, but retire only holds belonging to a closed tenancy.
 export const retireClosedRentalOffers=async(q,{tenantId,propertyId,agreementId=null})=>{
-  const rows=await q(`UPDATE h SET status='invalidated',version=h.version+1,updated_at=SYSUTCDATETIME()
-    OUTPUT INSERTED.* FROM dbo.property_rental_offers h
+  const rows=await q(`DECLARE @changed TABLE(enquiry_id UNIQUEIDENTIFIER PRIMARY KEY);
+    UPDATE h SET status='invalidated',version=h.version+1,updated_at=SYSUTCDATETIME()
+    OUTPUT INSERTED.enquiry_id INTO @changed FROM dbo.property_rental_offers h
     WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId
       AND h.status IN('accepted','agreement')
       AND (@agreementId IS NULL OR h.agreement_id=@agreementId)
       AND EXISTS(SELECT 1 FROM dbo.agreements ended WHERE ended.id=h.agreement_id
         AND ended.tenant_id=h.tenant_id AND ended.propertyid=h.property_id
-        AND (ended.unitid=h.unit_id OR (ended.unitid IS NULL AND h.unit_id IS NULL)) AND ended.status='closed')`,{tenantId,propertyId,agreementId});
+        AND (ended.unitid=h.unit_id OR (ended.unitid IS NULL AND h.unit_id IS NULL)) AND ended.status='closed');
+    SELECT h.* FROM dbo.property_rental_offers h JOIN @changed c ON c.enquiry_id=h.enquiry_id
+      WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId`,{tenantId,propertyId,agreementId});
   // This is a system lifecycle event, like expiry. The closure actor remains
   // in agreements.closed_by and the transaction's tenancy_lifecycle_events.
   for(const row of rows){await audit(q,row,null,null,'tenancy_closed');}
@@ -30,10 +33,13 @@ export const retireClosedRentalOffers=async(q,{tenantId,propertyId,agreementId=n
 };
 export const expireRentalOffers=async(q,propertyId,tenantId)=>{
   await retireClosedRentalOffers(q,{tenantId,propertyId});
-  const rows=await q(`UPDATE dbo.property_rental_offers SET status='expired',version=version+1,updated_at=SYSUTCDATETIME()
-    OUTPUT INSERTED.* WHERE property_id=@propertyId AND
+  const rows=await q(`DECLARE @changed TABLE(enquiry_id UNIQUEIDENTIFIER PRIMARY KEY);
+    UPDATE dbo.property_rental_offers SET status='expired',version=version+1,updated_at=SYSUTCDATETIME()
+    OUTPUT INSERTED.enquiry_id INTO @changed WHERE property_id=@propertyId AND tenant_id=@tenantId AND
     ((status='offered' AND offer_until<=SYSUTCDATETIME()) OR (status IN('accepted','agreement') AND hold_until<=SYSUTCDATETIME()))
-    AND NOT EXISTS(SELECT 1 FROM dbo.agreements a WHERE a.id=agreement_id AND a.status='active')`,{propertyId});
+    AND NOT EXISTS(SELECT 1 FROM dbo.agreements a WHERE a.id=agreement_id AND a.status='active');
+    SELECT h.* FROM dbo.property_rental_offers h JOIN @changed c ON c.enquiry_id=h.enquiry_id
+      WHERE h.tenant_id=@tenantId AND h.property_id=@propertyId`,{propertyId,tenantId});
   for(const row of rows){await audit(q,row,null,null,'expired');}
 };
 export const createOfferStore=({poolProvider}={})=>{
