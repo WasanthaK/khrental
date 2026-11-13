@@ -80,14 +80,16 @@ jobs:
           JS
           remote="/tmp/comp-$GITHUB_RUN_ID"
           index=0
-          while IFS= read -r chunk; do
+          # Load first: the interactive exec must not consume the loop input.
+          mapfile -t chunks < "$RUNNER_TEMP/comp-chunks"
+          for chunk in "${chunks[@]}"; do
             command="node -e \"require('node:fs').writeFileSync('$remote.$index','$chunk',{flag:'wx'});console.log('COMP_CHUNK_$index')\""
             test "${#command}" -le 1400
             printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
             script -q -e -c "$invocation" /dev/null | tee "$RUNNER_TEMP/comp-transfer"
             grep -Fq "COMP_CHUNK_$index" "$RUNNER_TEMP/comp-transfer"
             index=$((index+1))
-          done < "$RUNNER_TEMP/comp-chunks"
+          done
           command="node --input-type=module -e \"const fs=await import('node:fs'),z=await import('node:zlib'),cr=await import('node:crypto');let s='';for(let i=0;i<$index;i++)s+=fs.readFileSync('$remote.'+i,'utf8');const b=z.brotliDecompressSync(Buffer.from(s,'base64url'));if(cr.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Payload mismatch');const f='$remote.mjs';fs.writeFileSync(f,b,{flag:'wx'});process.env.COMP_MODE='$COMP_MODE';try{await import('file://'+f)}finally{fs.unlinkSync(f);for(let i=0;i<$index;i++)fs.unlinkSync('$remote.'+i)}\""
           test "${#command}" -le 1400
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
