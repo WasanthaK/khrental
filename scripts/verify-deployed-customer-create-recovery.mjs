@@ -31,7 +31,7 @@ async function createFixture(priceId) {
     const rows=await q.query("INSERT dbo.tenants(id,name,slug,status,[plan]) VALUES(@tenant,'BL08.11-A isolated customer recovery fixture',@slug,'active','development-testing');"+
       "INSERT dbo.app_users(id,tenant_id,name,email,role,user_type,status) VALUES(@actor,@tenant,'BL08.11-A synthetic admin',@email,'admin','admin','active');"+
       "INSERT dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@tenant,@actor,'admin','active',1);"+
-      "INSERT dbo.properties(id,tenant_id,name,status,propertytype,country_code,createdat,updatedat) VALUES(@property,@tenant,'BL08.11-A unpublished test stock','available','residential','LK',SYSUTCDATETIME(),SYSUTCDATETIME());"+
+      "INSERT dbo.properties(id,tenant_id,name,status,propertytype,country_code,createdat,updatedat) VALUES(@property,@tenant,'BL08.11-A unpublished test stock','available','house','LK',SYSUTCDATETIME(),SYSUTCDATETIME());"+
       "UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE property_id=@property AND tenant_id=@tenant;"+
       "INSERT dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json,subscription_status) VALUES(@tenant,@account,@price,'LK','[]','pending');"+
       "SELECT (SELECT COUNT(*) FROM dbo.tenants WHERE id=@tenant AND [plan]='development-testing') AS tenant_count,"+
@@ -104,7 +104,10 @@ async function main() {
   assert.equal(price.id,originalTenant.stripe_price_id);
   assert.equal(price.livemode,false);assert.equal(price.active,true);
   await createFixture(price.id);
-  assert.equal((await store.inventory(tenantId)).length,1);
+  stage='verify_billable_fixture_inventory';
+  const inventory=await store.inventory(tenantId);
+  assert.equal(inventory.length,1,'Customer recovery fixture must contain one billable house');
+  assert.equal(inventory[0].propertyId.toLowerCase(),propertyId.toLowerCase());
   const inventoryHash=hash(await store.inventory(tenantId,undefined,{includePending:true}));
   let expectedKey='quixo:'+tenantId+':'+operationId+':customer';
   const interrupted={...stripe,request:async(method,path,body,key)=>{
