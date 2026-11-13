@@ -1,0 +1,48 @@
+{
+  "checkpoint": "BL07.2 Platform Administrator complimentary controls",
+  "date": "2026-11-13",
+  "status": "open",
+  "authentication": "Real user-authorized Platform Administrator sign-in and protected administration page confirmed",
+  "fixture": "New isolated development workspace with no users or memberships; empty-inventory enrollment rejection confirmed",
+  "preparation": {
+    "status": "not_executed",
+    "attempts": [
+      {
+        "run": 43370254166,
+        "result": "Incomplete transfer; decompression failed before script import",
+        "fix_pr": 629
+      },
+      {
+        "run": 43370796155,
+        "result": "Complete transfer; execution handshake rejected with 429 and Retry-After 600",
+        "fix_pr": 630
+      }
+    ]
+  },
+  "implementation": {
+    "pr": 628,
+    "ci": 43369907418,
+    "transfer_fix_ci": 43370499012,
+    "throttle_fix_ci": 43371097584
+  },
+  "acceptance": {
+    "fixed_grant": false,
+    "ongoing_grant": false,
+    "stale_write_rejection": false,
+    "revoke": false,
+    "persisted_audit": false,
+    "fixture_closed": false
+  },
+  "safety": {
+    "stripe_operations": 0,
+    "platform_authority_seeded": false,
+    "serving_configuration_changed": false,
+    "live_charging_enabled": false,
+    "evia": "paused"
+  },
+  "limits": [
+    "No completed live complimentary acceptance claimed",
+    "Earlier accepted R5 proofs remain accepted",
+    "Full R5 completion and launch readiness remain open"
+  ]
+}
