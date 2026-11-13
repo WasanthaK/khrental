@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## BL08.11-A fixture diagnosis — 13 November 2026
+
+Corrected workflow [43265704416](https://github.com/WasanthaK/khrental/actions/runs/43265704416) did start on 12 November; its first attempt failed during payload chunk 3900 before script execution. Attempt 2 on 13 November reached the script and reported its actual failure at **00:37:49 UTC / 06:07:49 Asia/Colombo**: ERR_ASSERTION after fixture commit, zero customer/checkout writes, and confirmed SQL fixture cleanup (fixtureRetained=false). No customer recovery is accepted.
+
+Root cause: the harness inserted propertytype=residential, but the unchanged billing contract recognizes house/condo/condominium/apartment/apartment complex. Inventory therefore contained zero billable dwellings. The narrow harness correction uses house and checks the exact inventory property ID under its own diagnostic stage. A local check against the actual dwellingInventory function reproduces zero for residential and one matching dwelling for house. Controlled deployed acceptance remains pending; do not repeat already accepted lifecycle proofs.
+
 ## BL08.11-A continuation — 12 November 2026
 
 Customer response-loss acceptance remains **unverified**. [Run 43261589439](https://github.com/WasanthaK/khrental/actions/runs/43261589439) passed source/build, Azure login and payload transfer, but transport exit zero was followed by missing acceptance evidence at 16:43:44 UTC / 22:13:44 Asia/Colombo. Customer creation and cleanup remain unknown; do not repeat the provider write.
