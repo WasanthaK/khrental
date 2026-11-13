@@ -291,14 +291,18 @@ export const createMaintenanceLifecycleRouter = () => {
         await assertManagementWrite({tenantId: req.tenantId, transaction});
         const created = await singleTransaction(
           transaction,
-          `INSERT INTO maintenance_requests (
+          `DECLARE @changed TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+           INSERT INTO maintenance_requests (
              tenant_id, propertyid, renteeid, agreementid, unitid,
              title, description, priority, status, requesttype, notes
-           ) OUTPUT INSERTED.*
+           ) OUTPUT INSERTED.id INTO @changed
            VALUES (
              @tenantId, @propertyId, @renteeId, @agreementId, @unitId,
              @title, @description, @priority, 'pending', @requestType, @notes
-           )`,
+           );
+           SELECT mr.* FROM maintenance_requests mr
+           INNER JOIN @changed changed ON changed.id = mr.id
+           WHERE mr.tenant_id = @tenantId`,
           {
             tenantId: req.tenantId,
             propertyId: agreement?.propertyid || propertyId,
@@ -385,13 +389,17 @@ export const createMaintenanceLifecycleRouter = () => {
         await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
-          `UPDATE maintenance_requests
+          `DECLARE @changed TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+           UPDATE maintenance_requests
            SET assignedto = @staffUserId,
                assignedat = COALESCE(@scheduledAt, SYSUTCDATETIME()),
                assigned_by = @actorUserId,
                updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE tenant_id = @tenantId AND id = @requestId`,
+           OUTPUT INSERTED.id INTO @changed
+           WHERE tenant_id = @tenantId AND id = @requestId;
+           SELECT mr.* FROM maintenance_requests mr
+           INNER JOIN @changed changed ON changed.id = mr.id
+           WHERE mr.tenant_id = @tenantId`,
           {
             tenantId: req.tenantId,
             requestId: request.id,
@@ -441,10 +449,14 @@ export const createMaintenanceLifecycleRouter = () => {
         await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
-          `UPDATE maintenance_requests
+          `DECLARE @changed TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+           UPDATE maintenance_requests
            SET status = 'in_progress', startedat = COALESCE(startedat, SYSUTCDATETIME()), updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE tenant_id = @tenantId AND id = @requestId AND status = 'pending'`,
+           OUTPUT INSERTED.id INTO @changed
+           WHERE tenant_id = @tenantId AND id = @requestId AND status = 'pending';
+           SELECT mr.* FROM maintenance_requests mr
+           INNER JOIN @changed changed ON changed.id = mr.id
+           WHERE mr.tenant_id = @tenantId`,
           { tenantId: req.tenantId, requestId: request.id }
         );
         if (!updated) {throw createRequestError(409, 'Maintenance request status changed before work could start.', 'MAINTENANCE_STATE_CONFLICT');}
@@ -494,13 +506,17 @@ export const createMaintenanceLifecycleRouter = () => {
         await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
-          `UPDATE maintenance_requests
+          `DECLARE @changed TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+           UPDATE maintenance_requests
            SET status = 'completed', completedat = SYSUTCDATETIME(), completed_by = @actorUserId,
                completion_cost = @completionCost,
                notes = CASE WHEN @notes IS NULL OR @notes = '' THEN notes ELSE @notes END,
                updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE tenant_id = @tenantId AND id = @requestId AND status = 'in_progress'`,
+           OUTPUT INSERTED.id INTO @changed
+           WHERE tenant_id = @tenantId AND id = @requestId AND status = 'in_progress';
+           SELECT mr.* FROM maintenance_requests mr
+           INNER JOIN @changed changed ON changed.id = mr.id
+           WHERE mr.tenant_id = @tenantId`,
           {
             tenantId: req.tenantId,
             requestId: request.id,
@@ -557,11 +573,15 @@ export const createMaintenanceLifecycleRouter = () => {
         await assertManagementWrite({tenantId: req.tenantId, transaction});
         const updated = await singleTransaction(
           transaction,
-          `UPDATE maintenance_requests
+          `DECLARE @changed TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+           UPDATE maintenance_requests
            SET status = 'cancelled', cancelledat = SYSUTCDATETIME(), cancelled_by = @actorUserId,
                cancellationreason = @reason, updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE tenant_id = @tenantId AND id = @requestId AND status IN ('pending', 'in_progress')`,
+           OUTPUT INSERTED.id INTO @changed
+           WHERE tenant_id = @tenantId AND id = @requestId AND status IN ('pending', 'in_progress');
+           SELECT mr.* FROM maintenance_requests mr
+           INNER JOIN @changed changed ON changed.id = mr.id
+           WHERE mr.tenant_id = @tenantId`,
           { tenantId: req.tenantId, requestId: request.id, actorUserId: req.user.id, reason }
         );
         if (!updated) {throw createRequestError(409, 'Maintenance request status changed before cancellation.', 'MAINTENANCE_STATE_CONFLICT');}
