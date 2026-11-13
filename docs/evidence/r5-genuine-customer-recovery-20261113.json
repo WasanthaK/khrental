@@ -1,0 +1,38 @@
+{
+  "checkpoint": "BL08.11-A",
+  "status": "passed",
+  "observedAtUtc": "2026-11-13T03:15:48Z",
+  "observedAtAsiaColombo": "2026-11-13T08:45:48+05:30",
+  "runId": 43357605904,
+  "jobId": 131663264750,
+  "runUrl": "https://github.com/WasanthaK/khrental/actions/runs/43357605904",
+  "workflowCommit": "52394fabcf1b7ea4a743460cd098bddc7647b547",
+  "servingBuild": "5dff24f354ed0f3a40d5d51bd61829b145d6fbf8",
+  "transport": {
+    "stagedPayloadRun": 43343006109,
+    "execConnections": 1,
+    "checksumVerified": true
+  },
+  "proof": {
+    "operationId": "47de6968-9ee2-484d-9c6f-1d40d2291136",
+    "customerId": "cus_VcPmQebri33EnR",
+    "eventId": "evt_1UbAxKQ4sARuLNQaYa2d4ZDl",
+    "sandbox": true,
+    "providerWrites": 1,
+    "responseDiscarded": true,
+    "customerStepCompleted": true,
+    "recoveredByProviderEvidence": true,
+    "originalIdempotencyKeyPreserved": true,
+    "matchingCustomerEvents": 1,
+    "checkoutSessionPosts": 0,
+    "checkoutPostBlocked": 1,
+    "subscriptionsCreated": 0,
+    "originalScopedAccountUnchanged": true,
+    "customerDeleted": true,
+    "fixtureCleaned": true,
+    "automaticWorkerRetargeted": false,
+    "liveChargingEnabled": false
+  },
+  "boundary": "Genuine sandbox customer response discarded after creation; bounded one-shot recovery via deployed service and SQL journal. Does not establish automatic-worker customer recovery, checkout/subscription completion, process outage or remaining role/resource isolation acceptance.",
+  "publicHealthCheck": "passed"
+}
