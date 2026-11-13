@@ -6,6 +6,11 @@ on:
         description: Exact unchanged application SHA serving publicly
         type: string
         required: true
+      staged_payload_run:
+        description: Optional run ID with a fully uploaded payload and a confirmed rejected execution handshake
+        type: string
+        required: false
+        default: ''
       confirmation:
         description: CREATE-ONE-SANDBOX-CUSTOMER-AND-RECOVER
         type: string
@@ -27,6 +32,7 @@ jobs:
     env:
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       CONFIRMATION: ${{ inputs.confirmation }}
+      STAGED_PAYLOAD_RUN: ${{ inputs.staged_payload_run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -90,7 +96,12 @@ jobs:
             exit 1
           fi
           [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
-          remote="/tmp/r5-genuine-customer-$GITHUB_RUN_ID.b64"
+          payload_run="$GITHUB_RUN_ID"
+          if [ -n "$STAGED_PAYLOAD_RUN" ]; then
+            [[ "$STAGED_PAYLOAD_RUN" =~ ^[0-9]+$ ]]
+            payload_run="$STAGED_PAYLOAD_RUN"
+          fi
+          remote="/tmp/r5-genuine-customer-$payload_run.b64"
           digest=$(printf '%s' "$encoded" | sha256sum | cut -d ' ' -f 1)
           # Only bounded explicit failure codes are retained. Never dump the
           # raw Azure exec terminal transcript or environment variables.
@@ -143,25 +154,32 @@ jobs:
           }, separators=(",", ":")))
           PY
           }
-          stage=remote_payload_delivery
-          echo "R5_CUSTOMER_PHASE=remote_payload_delivery"
-          for ((offset=0; offset<${#encoded}; offset+=1300)); do
-            chunk=${encoded:offset:1300}
-            method=appendFileSync
-            if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
-            command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('R5_CUSTOMER_CHUNK_$offset')\""
-            printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
-            if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/chunk.txt" 2>&1; then
-              if ! grep -Fq "R5_CUSTOMER_CHUNK_$offset" "$RUNNER_TEMP/chunk.txt"; then
-                report_remote_failure "chunk_$offset-missing-marker" "$RUNNER_TEMP/chunk.txt" 0
+          if [ -z "$STAGED_PAYLOAD_RUN" ]; then
+            stage=remote_payload_delivery
+            echo "R5_CUSTOMER_PHASE=remote_payload_delivery"
+            for ((offset=0; offset<${#encoded}; offset+=1300)); do
+              chunk=${encoded:offset:1300}
+              method=appendFileSync
+              if [ "$offset" -eq 0 ]; then method=writeFileSync; fi
+              command="node -e \"require('node:fs').$method('$remote','$chunk');console.log('R5_CUSTOMER_CHUNK_$offset')\""
+              printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+              if script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/chunk.txt" 2>&1; then
+                if ! grep -Fq "R5_CUSTOMER_CHUNK_$offset" "$RUNNER_TEMP/chunk.txt"; then
+                  report_remote_failure "chunk_$offset-missing-marker" "$RUNNER_TEMP/chunk.txt" 0
+                  exit 1
+                fi
+              else
+                remote_rc=$?
+                report_remote_failure "chunk_$offset" "$RUNNER_TEMP/chunk.txt" "$remote_rc"
                 exit 1
               fi
-            else
-              remote_rc=$?
-              report_remote_failure "chunk_$offset" "$RUNNER_TEMP/chunk.txt" "$remote_rc"
-              exit 1
-            fi
-          done
+            done
+          else
+            # Reuse only a fully delivered payload whose execution handshake was
+            # confirmed rejected. The execution command checks its exact hash
+            # before import, and consumes it so an accepted write cannot replay.
+            echo "R5_CUSTOMER_PHASE=reuse_staged_payload source_run=$payload_run"
+          fi
           stage=provider_customer_write_and_journal_recovery
           echo "R5_CUSTOMER_PHASE=provider_customer_write_and_journal_recovery"
           # The execution command verifies the original uploaded archive hash
