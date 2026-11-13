@@ -7,6 +7,7 @@ import { formatDate } from '../utils/helpers';
 import { MAINTENANCE_STATUS, MAINTENANCE_PRIORITY } from '../utils/constants';
 import { useAuth } from '../hooks/useAuth';
 import { PERMISSIONS } from '../utils/accessPolicy';
+import { canActOnMaintenance } from '../utils/maintenanceActionPolicy';
 import { isValidUUID } from '../utils/validators';
 import { toast } from 'react-hot-toast';
 
@@ -40,7 +41,7 @@ const initialMaintenanceRequest = () => ({
 const MaintenanceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, activeTenantId, hasPermission } = useAuth();
+  const { user, membership, activeTenantId, hasPermission } = useAuth();
   const mayManageMaintenance = hasPermission(PERMISSIONS.MAINTENANCE_MANAGE);
 
   // State
@@ -436,7 +437,7 @@ const MaintenanceDetails = () => {
 
   // Check if user can perform actions
   const canPerformActions = () => {
-    return user && (user.role === 'admin' || user.role === 'staff' || user.role === 'maintenance');
+    return canActOnMaintenance({ user, membership, request });
   };
 
   // Add this function before the return statement
