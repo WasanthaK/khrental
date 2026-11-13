@@ -1,12 +1,6 @@
 # KH Rentals Execution Plan
 
-## BL07.2 live control prerequisite — checked 13 November 2026
-
-The application browser resolved to `https://app.quixo.homes/login`; no signed-in Platform Administrator session was available. No sign-in retry, platform-role change, complimentary mutation, pricing publication or Stripe operation was performed. The earlier declined sign-in remains respected.
-
-Source review confirms platform-only complimentary GET/POST routes, explicit decision/version validation, transactional state update plus audit, and existing disposable SQL coverage for fixed/ongoing grants, revoke, expiry and stale-version rejection without duplicate audit. This is source/test coverage, **not new live acceptance**. The next live sequence requires a genuinely authenticated Platform Administrator: verify server-resolved platform status, select an isolated active development-testing workspace, record its baseline, exercise fixed/ongoing grant and revoke with decision notes, verify stale-version rejection and persisted actor/reason audit, then restore baseline access. Preserve both protected billing fixtures and do not seed platform authority or fabricate a session to close BL07.2.
-
-BL07.3 paid-access fallback already passed run 43362222581. BL07.2 remains open solely for the uncompleted live control/audit acceptance; broader R5 gates remain unchanged.
+**BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
 
