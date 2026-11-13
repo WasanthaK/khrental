@@ -55,7 +55,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|tests/*|.github/workflows/inspect-management-recovery.yml|.github/workflows/verify-deployed-portal-recovery.yml|scripts/verify-deployed-portal-recovery.mjs|.github/workflows/verify-deployed-delayed-failure.yml|scripts/verify-deployed-delayed-failure.mjs|.github/workflows/verify-deployed-grace-recovery.yml|scripts/verify-deployed-grace-recovery.mjs|.github/workflows/verify-deployed-http-enforcement.yml|scripts/verify-deployed-http-enforcement.mjs|.github/workflows/verify-deployed-http-financial-maintenance.yml|scripts/verify-deployed-http-financial-maintenance.mjs) ;;
+              docs/*|*.md|tests/*|.github/workflows/inspect-r5-genuine-customer-attempt.yml|.github/workflows/verify-deployed-customer-create-recovery.yml|.github/workflows/verify-r5-customer-fixture-rollback.yml|.github/workflows/verify-r5-customer-recovery-preflight.yml|scripts/inspect-r5-genuine-customer-attempt.mjs|scripts/verify-deployed-customer-create-recovery.mjs|scripts/verify-r5-customer-fixture-rollback.mjs|.github/workflows/inspect-management-recovery.yml|.github/workflows/verify-deployed-portal-recovery.yml|scripts/verify-deployed-portal-recovery.mjs|.github/workflows/verify-deployed-delayed-failure.yml|scripts/verify-deployed-delayed-failure.mjs|.github/workflows/verify-deployed-grace-recovery.yml|scripts/verify-deployed-grace-recovery.mjs|.github/workflows/verify-deployed-http-enforcement.yml|scripts/verify-deployed-http-enforcement.mjs|.github/workflows/verify-deployed-http-financial-maintenance.yml|scripts/verify-deployed-http-financial-maintenance.mjs) ;;
               *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
@@ -116,16 +116,31 @@ jobs:
           revision=$(jq -r '.properties.latestReadyRevisionName' "$folder/app")
           image=$(az containerapp revision show -g khrental-prod-rg -n khrental-app --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
           test "${image##*:}" = "$EXPECTED_BUILD"
-          # The accepted image includes this harness. Verify exact bytes before
-          # execution; one short connection avoids multi-chunk exec throttling.
+          # Transfer only the bounded difference from the image-bundled harness.
+          # Verify both original and corrected bytes before importing a temp file.
+          git show "$EXPECTED_BUILD:scripts/verify-deployed-http-financial-maintenance.mjs" > "$folder/baseline.mjs"
+          node --check scripts/verify-deployed-http-financial-maintenance.mjs
+          original_digest=$(sha256sum "$folder/baseline.mjs" | cut -d ' ' -f 1)
           digest=$(sha256sum scripts/verify-deployed-http-financial-maintenance.mjs | cut -d ' ' -f 1)
-          command="node --input-type=module -e \"const fs=await import('node:fs');const p='/app/scripts/verify-deployed-http-financial-maintenance.mjs';const b=fs.readFileSync(p);if((await import('node:crypto')).createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Deployed harness mismatch');process.env.HTTP_ACCEPTANCE_TARGET=JSON.stringify({id:'$OPERATION_ID'});await import('file://'+p)\""
+          patch=$(node --input-type=module - "$folder/baseline.mjs" <<'JS'
+          import {readFileSync} from 'node:fs';
+          const a=readFileSync(process.argv[2],'utf8'),b=readFileSync('scripts/verify-deployed-http-financial-maintenance.mjs','utf8');
+          let start=0,end=0;
+          while(start<a.length&&start<b.length&&a[start]===b[start]){start++;}
+          while(end<a.length-start&&end<b.length-start&&a[a.length-1-end]===b[b.length-1-end]){end++;}
+          console.log(Buffer.from(JSON.stringify([start,a.length-end,b.slice(start,b.length-end)])).toString('base64url'));
+          JS
+          )
+          command="node --input-type=module -e \"const fs=await import('node:fs');const hash=b=>(awaitCrypto.createHash('sha256').update(b).digest('hex'));const awaitCrypto=await import('node:crypto');const p='/app/scripts/verify-deployed-http-financial-maintenance.mjs';const b=fs.readFileSync(p);if(hash(b)!=='$original_digest')throw Error('Deployed harness mismatch');const [s,e,t]=JSON.parse(Buffer.from('$patch','base64url'));const a=b.toString();const c=a.slice(0,s)+t+a.slice(e);if(hash(c)!=='$digest')throw Error('Corrected harness mismatch');const f='/tmp/r5-http-$OPERATION_ID.mjs';fs.writeFileSync(f,c,{flag:'wx'});process.env.HTTP_ACCEPTANCE_TARGET=JSON.stringify({id:'$OPERATION_ID'});try{await import('file://'+f)}finally{fs.unlinkSync(f)}\""
+          if [ "${#command}" -gt 2000 ]; then echo 'HTTP_BLOCKED=oversized_harness_patch' >&2; exit 1; fi
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee deployed-http.txt
           marker=HTTP_PASS
-          grep -Fq "$marker=" deployed-http.txt
+          if grep -Eq 'HTTP_FAILED=|HTTP_CLEANUP_FAILED=' deployed-http.txt; then exit 1; fi
+          grep -Eo 'HTTP_PASS=\{[^}]+\}' deployed-http.txt | tr -d '\r' > http-acceptance-summary.txt
+          sed 's/^HTTP_PASS=//' http-acceptance-summary.txt | jq -e '.passed==true and .fixtureClosed==true and .protectedBillingFixturesUnchanged==true and .stripeWrites==0 and (.checks|length)==21' >/dev/null
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
-          grep "^$marker=" deployed-http.txt >> "$GITHUB_STEP_SUMMARY"
+          cat http-acceptance-summary.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Restore original HTTP enforcement configuration
         if: always() && env.RESTORE_ENFORCEMENT == 'true'
         shell: bash
