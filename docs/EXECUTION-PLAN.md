@@ -1,5 +1,11 @@
 # KH Rentals Execution Plan
 
+## Inventory deployed acceptance — 13 November 2026
+
+**Bounded complimentary inventory acceptance passed:** [run 43438898429](https://github.com/WasanthaK/khrental/actions/runs/43438898429) passed 22 HTTP/SQL checks covering staging, atomic batch rollback, withdrawal, cessation/restoration, split transitions, replay protection and workspace/role isolation. Fixture cleanup, unchanged protected accounts, exact configuration restoration and public health checks passed. [PR #631](https://github.com/WasanthaK/khrental/pull/631) passed CI and merged; the application image was unchanged.
+
+Inventory advances to **partial deployed acceptance**. Paid provider transitions, activation/promotion, obligation negatives and rendered UI acceptance remain open. Provider-operation recovery, remaining billing routes/jobs/bypasses and rental/usability acceptance remain partial. R5 remains open; full enforcement and live charging remain OFF; Evia remains paused. Preserve this proof rather than rerunning it.
+
 **BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
