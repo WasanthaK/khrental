@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## BL08.11-A corrected fixture awaiting transport — 13 November 2026
+
+[PR #621](https://github.com/WasanthaK/khrental/pull/621) merged as `3a595e2bd9e94e8aac7f325b5d49b029e8d6cbb8`; [CI 43338836207](https://github.com/WasanthaK/khrental/actions/runs/43338836207) passed syntax, lint, authorization tests and build. No application deployment was performed.
+
+[Acceptance run 43339203313](https://github.com/WasanthaK/khrental/actions/runs/43339203313) uses the corrected house fixture and unchanged expected serving build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. Attempt 1 stopped during upload chunk 2600 at **00:43:52 UTC / 06:13:52 Asia/Colombo**; bounded retry attempt 2 stopped during chunk 1300 at **00:45:57 UTC / 06:15:57 Asia/Colombo**. Both classified azure_exec_transport and stopped before the script execution phase. Neither attempt executed fixture SQL or Stripe customer writes. The logs do not retain an exact HTTP code or Retry-After, so do not label these failures as confirmed throttling.
+
+**Current status:** fixture defect fixed and merged; earlier failing fixture cleanup confirmed; corrected deployed customer response-loss acceptance **OPEN / transport blocked**. Next: restore reliable Azure execution transport, then run this exact corrected harness and require structured recovery plus cleanup evidence. Do not weaken acceptance assertions or replay any operation with an ambiguous provider outcome. Prior accepted renewal/portal/lifecycle evidence remains closed; worker scope, retained clock, paused Evia and live-charge fences are unchanged.
+
 ## BL08.11-A fixture diagnosis — 13 November 2026
 
 Corrected workflow [43265704416](https://github.com/WasanthaK/khrental/actions/runs/43265704416) did start on 12 November; its first attempt failed during payload chunk 3900 before script execution. Attempt 2 on 13 November reached the script and reported its actual failure at **00:37:49 UTC / 06:07:49 Asia/Colombo**: ERR_ASSERTION after fixture commit, zero customer/checkout writes, and confirmed SQL fixture cleanup (fixtureRetained=false). No customer recovery is accepted.
