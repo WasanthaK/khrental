@@ -1,5 +1,15 @@
 # KH Rentals Execution Plan
 
+## BL08.11-A Azure exec throttling confirmed — 13 November 2026
+
+[PR #622](https://github.com/WasanthaK/khrental/pull/622) merged as `67451ca9632bb11ab28672e476d1d27b09abeb7f` after [CI 43342282015](https://github.com/WasanthaK/khrental/actions/runs/43342282015) passed syntax, lint, authorization tests and build. The workflow captures stderr and publishes only allowlisted transport categories, HTTP status codes, numeric retry delays and CLI versions; raw transcripts, headers, URLs and credentials are not published. Local synthetic transcript checks passed, including secret exclusion.
+
+[Acceptance run 43343006109](https://github.com/WasanthaK/khrental/actions/runs/43343006109), job 131615597401, passed source/build verification, Azure authentication and all payload uploads on unchanged serving build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. At **01:12:42 UTC / 06:42:42 Asia/Colombo**, the final execution connection failed its WebSocket handshake with **HTTP 429**, **Retry-After 600 seconds**, and signals websocket_bad_status, handshake_failure and too_many_requests. Azure CLI was 2.91.0; containerapp extension was 1.3.0b6. This establishes throttling for this attempt, not the exact status of earlier attempts. The rejected execution handshake provides no customer-recovery acceptance; the uploaded payload was not executed through that connection.
+
+User-provided Azure Activity Log rows show successful Container App Dev API token issuance immediately before the earlier 00:43:52 and 00:45:57 failures. The 01:01:27 log-stream connection and older billing scheduler lines do not establish execution-transport health at those failure times.
+
+**Current status: OPEN / Azure exec throttling confirmed.** Earliest retry under the returned delay is **01:22:42 UTC / 06:52:42 Asia/Colombo**; this is a minimum wait, not a guarantee of restored capacity. Do not immediately rerun or restart the application. Next transport improvement should reduce repeated exec connections before one controlled acceptance attempt; retain every recovery and cleanup assertion and never replay an ambiguous provider write. No application deployment, live charge, worker-scope change, accepted-proof replay or Evia activation was performed.
+
 ## BL08.11-A corrected fixture awaiting transport — 13 November 2026
 
 [PR #621](https://github.com/WasanthaK/khrental/pull/621) merged as `3a595e2bd9e94e8aac7f325b5d49b029e8d6cbb8`; [CI 43338836207](https://github.com/WasanthaK/khrental/actions/runs/43338836207) passed syntax, lint, authorization tests and build. No application deployment was performed.
