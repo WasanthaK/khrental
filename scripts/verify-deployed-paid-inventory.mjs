@@ -130,7 +130,18 @@ try{
       rentalvalues:{listingCategory:'residential'},availability:'inactive'}}));
     const stagedRows=()=>store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
     const stockRows=()=>store.read('SELECT id,name,description,status FROM dbo.properties WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
-    const snapshot=async()=>hash({staged:await stagedRows(),stock:await stockRows(),audit:await audit()});
+    // Provider webhooks may append unrelated reconciliation audit rows during a
+    // no-op retry. Preserve all stock/command audit invariants, excluding only
+    // that asynchronous event stream; compare each component independently.
+    const operationAudit=()=>store.read("SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action<>'stripe.event_reconciled' ORDER BY id",{tenantId});
+    const snapshot=async()=>({staged:hash(await stagedRows()),stock:hash(await stockRows()),audit:hash(await operationAudit())});
+    const unchanged=async before=>{
+      const after=await snapshot();
+      for(const component of Object.keys(before)){
+        if(after[component]!==before[component]){console.log('PAID_INVENTORY_RETRY_DIAGNOSTIC='+JSON.stringify({stage,component,before:before[component],after:after[component]}));}
+        assert.equal(after[component],before[component],component);
+      }
+    };
     const prepare=records=>store.stageStock({tenantId,actorId,records,reason:'Prepare private paid inventory acceptance.'});
     stage='paid_stage_create_import';
     await prepare([records[0]]);await prepare(records.slice(1));
@@ -138,17 +149,18 @@ try{
     assert.equal((await stockRows()).length,2);assert.equal(await count(),2);
     assert.equal((await store.inventory(tenantId,undefined,{includePending:true})).length,5);
     check('create_and_import_remain_private_pending');
+    stage='paid_stage_retry';
     const stagedSnapshot=await snapshot();await prepare(records);
-    assert.equal(await snapshot(),stagedSnapshot);check('staging_retry_no_duplicate_effect');
+    await unchanged(stagedSnapshot);check('staging_retry_no_duplicate_effect');
     stage='paid_stage_atomic_conflict';
     const rollback={...records[0],payload:{...records[0].payload,id:randomUUID()}};
     await assert.rejects(()=>prepare([rollback,{...records[1],payload:{...records[1].payload,name:'Conflicting identity'}}]),
       error=>error.code==='BILLING_STOCK_CONFLICT');
-    assert.equal(await snapshot(),stagedSnapshot);check('conflicting_import_rolls_back_entire_batch');
+    await unchanged(stagedSnapshot);check('conflicting_import_rolls_back_entire_batch');
     stage='paid_stage_nonmember';
     await assert.rejects(()=>store.stageStock({tenantId,actorId:randomUUID(),records:[rollback],reason:'Nonmember must not stage stock.'}),
       error=>error.code==='BILLING_ADMIN_REQUIRED');
-    assert.equal(await snapshot(),stagedSnapshot);check('nonmember_cannot_stage_stock');
+    await unchanged(stagedSnapshot);check('nonmember_cannot_stage_stock');
     stage='paid_promotion_preview';
     const preview=await service.quantityPreview({tenantId,actorId,id:randomUUID()});
     assert.equal(preview.from,2);assert.equal(preview.to,5);assert.equal(preview.timing,'prorated_next_invoice');
@@ -172,7 +184,7 @@ try{
     stage='paid_promotion_retry';
     const promotedSnapshot=await snapshot(),remoteHash=hash(remote);
     assert.deepEqual(await service.quantityApply(apply),result);
-    assert.equal(await snapshot(),promotedSnapshot);assert.equal(hash(await provider()),remoteHash);
+    await unchanged(promotedSnapshot);assert.equal(hash(await provider()),remoteHash);
     assert.equal((await stagedRows()).length,3);check('promotion_retry_no_duplicate_effect');
   }else{
   stage='paid_cessation_preview';
