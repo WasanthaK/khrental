@@ -1,4 +1,10 @@
-# Current R5 prelaunch completion ledger — 12 November 2026
+# R5 prelaunch completion ledger
+
+## Current canonical status — 14 November 2026
+
+**R5 is partial. Live charging and full enforcement are OFF; Evia is paused.** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Latest accepted result: ten genuine sandbox paid cessation/restoration/split service/SQL checks passed, with cleanup, at 23:38:40 Asia/Colombo.
+
+The dated checkpoints are retained as evidence history. Their earlier “current”, “remaining” and “next” wording describes that checkpoint only; use the controlling queue for today's work. Accepted signing, the controlled rental lifecycle, retained-history role checks and completed reservation cases must not be reopened. No claim is made that the original paid-test SQL error's exact cause was identified.
 
 ## Paid cessation, restoration and split — bounded service/SQL pass — 14 November 2026
 
@@ -167,7 +173,7 @@ The dedicated fixture `2383f4fc-e107-4ac7-9e13-39db501f40ec` has no users, membe
 
 **Subsequent progress:** deployed failure-to-grace/recovery and process-local SQL guard acceptance passed above; real grace expiry, full HTTP enforcement, and remaining financial-operation/role/isolation cases stay open. This proof closes only the delayed-event case; it does not establish grace-expiry enforcement or all organization isolation. Do not repeat the accepted retained renewal, portal response-loss or delayed-failure proofs. R5 remains open and Evia remains paused.
 
-## Canonical R5 engineering status — 12 November 2026
+## Historical engineering snapshot — 12 November 2026
 
 **Recovery, all-state cessation, restoration and property splitting are implemented and source-verified. The Stripe test-clock failure-history bug is fixed and genuine isolated renewal/failure/recovery acceptance passed. Evia is paused by the user. The app currently serves Ready 0000493 (`5905015`) after the scoped HTTP enforcement test and exact configuration restore recorded above. The retained two-to-one renewal and deployed genuine-event/duplicate ledger proof also passed. Scoped recovery activation passed. The deployed genuine portal response-loss, delayed failure-after-recovery and within-grace failure/recovery cases passed. R5 remains open for other provider-operation and acceptance cases and broader launch exits.** Do not requeue completed implementation or accepted signing. The dated checkpoints below are historical evidence, not the current task queue.
 
@@ -203,21 +209,28 @@ The transport and inspection blockers are resolved for this original operation. 
 
 ## Development progress and remaining acceptance — controlling queue
 
-This section and the current engineering status above control execution. Older dated checkpoints retain their evidence, but their “next”, “not implemented”, “migration pending” and “worker off” statements are historical. The detailed [handoff task dispositions](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) are reconciled to this queue; an acceptance gap must not be turned back into an implementation task.
+**Reconciled through 14 November 2026, 23:38:40 Asia/Colombo. This is the current execution queue.** Dated checkpoints below and above are evidence snapshots; their older pending/next statements do not reopen the accepted cases listed here.
 
-| Workstream / task IDs | Development and rollout | Remaining acceptance or decision |
+| Workstream / task IDs | Accepted evidence | Remaining acceptance or decision |
 | --- | --- | --- |
-| Provider-operation recovery — BL08.11 | 🟢 Implemented; journal/fencing and 100 process-interruption cases; deployed, 23/23 schema verified, single-organization worker enabled on 0000491 | 🟢 Bounded portal response-loss case passed in 43216870550: automatic attempt 2, same key/session, one step/audit/event, unchanged account/subscription. 🟡 Other operation kinds and authenticated role/resource/isolation acceptance remain. Do not repeat accepted portal proof. |
-| Staged create/import — BL08.6 | 🟢 Normal forms/full metadata and exact promotion implemented; staging migration applied | 🟡 Dedicated feature readiness and controlled live actor/resource/form acceptance; recovery activation did not enable stock feature flags. |
-| All-state cessation — BL08.9 | 🟢 Remaining entitlement states and cleanup integrated through #578; schema applied | 🟡 Controlled genuine-provider and deployed role/stock acceptance. |
-| Restoration, split, transition consistency — BL08.7/BL08.10 | 🟢 Implemented through #579/#580 with retained history, atomic activation and SQL/process/browser fixtures; migrations applied | 🟡 Dedicated feature activation and controlled live transition/role/provider acceptance. Do not rebuild restore/split. |
-| Stripe lifecycle — BL04.2/BL05.4/BL05.5/BL06.3 | 🟢 Isolated genuine lifecycle passed; retained 2→1 renewal, deployed duplicate/delayed-event ledger and within-grace failure/recovery passed | 🟡 Natural grace expiry/later recovery and remaining endpoint/job/organization-isolation coverage; bounded public template-route expiry enforcement passed. Do not advance the accepted retained clock again. |
-| Management enforcement and complimentary controls — BL07/BL08.2–5/BL08.12 | 🟢 Existing endpoint/job guards and SQL fixtures retained | 🟡 Bounded public HTTP template-route expiry/revoke, stale-role/isolation and rollout/restore passed. Paid-access fallback passed 43362222581. Remaining route/job/stock coverage and privileged controls stay open; full enforcement restored OFF. |
-| Rental operations, retained history and usability — OP/CT04 | 🟢 Preserve accepted signing and delivered lifecycle source | 🟡 Remaining stock/expiry/negative cases, inbox receipt, retained-role reads, naturally paused DB timing and final desktop/mobile/keyboard journeys. |
-| Evia service/package and matching audit — CT03.4/CT03.5 | ⏸ Paused by owner; accepted signing remains accepted | Working provider service/package and matching retention remain unaccepted; no retries or re-signing while paused. |
-| Commercial/merchant/tax/privacy; LK then BN — CM/RG | 🟡 Existing decision pack and regional work retained | Owner/provider decisions and actual merchant readiness remain; no live charging or launch. BN follows LK. R2 stays deferred; distinct-replica R3 proof is only a pre-scaling requirement. |
+| Core rental lifecycle — OP03–OP06 | 🟢 Approved demo signing, move-in/activation, invoices/receipts, maintenance, notice/settlement/closure and relisting accepted. | Remaining stale-authority/enforcement and broader usability cases only. Do not reactivate or re-sign the closed demo. |
+| Reservations and unsigned negatives — OP02/OP09 | 🟢 SQL conflict checks; deployed withdrawal/relisting (43604875739), natural short hold expiry (43612128152), cancellation plus explicit release (43617929711). | Remaining rendered stock/stale-URL/conflict/negative matrix; these passes do not establish every UI journey or long-duration expiry. |
+| Retained history — CT04.2 | 🟢 14 deployed role/access/denial checks passed (43553999954). | Credential-login/full rendered journeys and matching Evia audit retention are separate; do not requeue accepted retained-role checks. |
+| Staged create/import — BL08.6 | 🟢 Implemented; 22-check complimentary HTTP/SQL inventory case passed (43438898429), including staging, batch rollback, withdrawal and isolation. | Paid create/import/Checkout promotion and remaining actor/resource/form acceptance. |
+| Cessation/restoration/split — BL08.7/9/10 | 🟢 Complimentary HTTP/SQL scope passed (43438898429); genuine sandbox paid service/SQL transitions, history and exact retries passed all 10 checks (43624803051). | Paid authenticated HTTP roles/resources, rendered UI, obligation negatives, all remaining entitlement states and actual renewal execution for these transitions. Do not rebuild or repeat accepted cases. |
+| Provider-operation recovery — BL08.11 | 🟢 Journal/fencing implemented and scoped worker active; portal (43216870550) and customer (43357605904) response-loss recovery passed. | Checkout/subscription and other operation kinds, authenticated role/resource/isolation matrix. Preserve existing worker scope. |
+| Billing lifecycle — BL04/05/06 | 🟢 Hosted sandbox Checkout/return/reload, payment-method and cancellation/resume controls accepted; retained 2→1 renewal (43199377112), within-grace recovery (43224159517), duplicates/delayed failure (43221739128) passed. | Natural seven-day SQL grace expiry/later recovery and remaining event/organization-isolation coverage. Do not advance accepted retained clocks again. |
+| Enforcement and complimentary controls — BL07/BL08.2–5/12 | 🟢 BL07.2 grant/revoke/stale-save/audit and BL07.3 paid-underlay expiry accepted; scoped template and 21 invoice/payment/maintenance HTTP checks passed (43359060142). | Remaining routes/jobs/import/generic bypasses, stale actor/resource cases and controlled complete rollout. Full enforcement OFF. |
+| Zero-stock cancellation — BL09.3 | 🟢 Implemented; prior provider cancellation evidence retained. | Genuine deployed disposable-stock final-dwelling cancellation acceptance remains distinct from the 2→1 cessation test. |
+| Usability, receipt and wake-up — OP08/OP10 | 🟢 Recorded bounded desktop/mobile/keyboard and public-browsing checks retained. | Actual intended-mailbox receipt, remaining complete desktop/mobile/keyboard journeys, genuinely naturally paused database recovery. |
+| Evia service/package and matching audit — CT03.4/5 | ⏸ Paused by owner; signing accepted. | Service/package and matching automatic audit retention unaccepted. No provider retries or re-signing while paused. |
+| Commercial/merchant/privacy and regions — CM/RG | 🟡 Existing decisions/drafts retained; no live charging. | Final formula/FX/rounding/versioning/reactivation/refund decisions, merchant/payout/tax/privacy evidence and LK launch acceptance; BN follows as separate rollout. |
 
-Evidence: [schema rollout](evidence/r5-migration-apply-20261112.json), [worker activation and enabled readback](evidence/r5-recovery-activation-20261112.json), [isolated Stripe lifecycle](evidence/stripe-lifecycle-20261112.json), [retained renewal/deployed duplicate ledger](evidence/retained-stripe-renewal-20261112.json). Current application image remains `59050153ad96b10be7c1990df846363a1642c046`; #590–#597 are controls, documentation and acceptance-harness changes, not another runtime-image release. R5 remains open for the listed acceptance and launch exits.
+**Programme:** R1/R3/R4 retain owner-closed dispositions within their recorded scope; R4 paid-launch obligations are carried into R5. R2 remains deferred. R3 distinct-replica proof is required before scaling. **R5 remains partial; Sri Lanka is not launch-ready; live charging/full enforcement OFF; Evia paused.**
+
+**Last verified runtime:** build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready `khrental-app--0000512`, unchanged configuration and SQL health in run 43624803051. This is a dated verified observation, not a new live probe. The initial paid-test `EREQUEST` did not recur; exact cause remains unconfirmed. Both attempts and verified cleanup are retained in [paid evidence](evidence/r5-paid-inventory-20261114.json).
+
+**Next execution order:** paid inventory HTTP/role and create/import promotion → remaining recovery/enforcement/zero-stock cases → remaining stock/UI/mailbox/natural-wake evidence → LK commercial and launch exits → BN. Natural seven-day grace evidence and owner/provider decisions remain separate dependencies.
 
 ## Historical recovery handoff engineering — before the completed rollout
 
@@ -252,7 +265,7 @@ The existing staging API remains the atomic full-metadata batch/import authority
 
 Documentation reconciled **11 November 2026**. The latest verified implementation/release checkpoints below supersede older pending statements; dated historical evidence and owner milestone dispositions are retained. No rollout, pricing or production mutation is authorized by this documentation update.
 
-## Current programme and runtime checkpoint — 11 November 2026
+## Historical programme and runtime checkpoint — 11 November 2026
 
 The [canonical current status](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) is the controlling milestone/runtime summary. R1 is owner-closed; R2 is owner-deferred and incomplete; R3 is owner-closed within single-replica scope; R4 is owner-closed for its deployed sandbox foundation; **R5 remains active and incomplete**. Sri Lanka precedes Brunei; live charging remains disabled.
 
@@ -388,7 +401,7 @@ These are existing automated cases reconciled to the handoff; no accepted signin
 
 ### Handoff task-level dispositions
 
-**Reconciled 12 November after #591:** this table is current. Source completion, deployment and live acceptance are separate; rows below retain every unresolved obligation while removing superseded engineering tasks.
+**Reconciled 14 November through run 43624803051:** use this task-level table with the controlling queue. Source completion, deployment and live acceptance are separate; rows below retain every unresolved obligation while removing superseded engineering tasks.
 
 Statuses below describe the exact handoff acceptance, not merely helper availability. Yellow = implemented or bounded evidence with a stated gap; red = unfinished engineering, failed acceptance or concrete blocker. This table controls over superseded pending wording in older dated checkpoints.
 
@@ -396,8 +409,8 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | --- | --- | --- |
 | OP02.1 availability/stock | YELLOW | Preserve accepted closure/relisting; finish remaining rented/withdrawn/opted-out/reserved/stale-URL rendered matrix using disposable stock. |
 | OP08.1 actual mailbox receipt | YELLOW | Provider acceptance remains distinct; obtain controlled intended-mailbox receipt correlated with message and time. |
-| OP09.2 expiry/cancellation/negatives | YELLOW | Existing lifecycle rollback/idempotency proof retained; map and complete outstanding unsigned expiry/conflict/retry cases without altering signed records. |
-| OP10.1 usability | YELLOW | Prior accepted renders retained; complete affected desktop/mobile/keyboard interactions once a usable live session exists; latest browser readback is the ordinary sign-in page. |
+| OP09.2 expiry/cancellation/negatives | YELLOW — BOUNDED HTTP CASES PASSED | Deployed withdrawal, natural short hold expiry and unsigned cancellation/explicit release passed (43604875739, 43612128152, 43617929711); remaining rendered stock/conflict/negative cases only. |
+| OP10.1 usability | YELLOW — PARTIAL | Recorded desktop/mobile/public browsing and isolated keyboard checks passed; remaining full deployed actor journeys remain. A historical signed-out browser observation is not a current blocker. |
 | OP10.3 natural database pause | YELLOW | HTTP ready observed, not prior pause; wait for authorized telemetry confirming a genuine natural pause and measure recovery. |
 | CT03.4 Evia service/package delivery | PAUSED / UNACCEPTED | Owner paused Evia; prior 404/501 evidence retained. Do not retry/re-sign. Supported service/package acceptance remains separate from accepted signing. |
 | CT03.5 fresh matching audit retention | PAUSED / UNACCEPTED | Matching automatic audit retention remains unaccepted; preserve existing signed artifacts and await resumed provider work. |
@@ -407,17 +420,17 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | BL05.5 grace expiry/later recovery | YELLOW — PARTIAL DEPLOYED ACCEPTANCE | Isolated exact application-clock expiry/genuine later recovery passed in 43194909443. Seeded expired-grace public HTTP create/update denial and retained reads passed in 43227139115. Natural seven-day grace/later recovery remains separate; do not repeat the bounded checks. |
 | BL06.3 event ledger/replay | YELLOW — PARTIAL ACCEPTANCE | Genuine renewal and two signed duplicate deliveries preserved one deployed event/audit row in 43199377112. Deployed delayed failure-after-recovery also passed in 43221739128, preserving active/no-grace access and one event/audit after two duplicates. Remaining isolation cases stay open. |
 | BL07.2 platform comp grant/revoke/audit | GREEN — PASSED | Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open. |
-| BL07.3 complimentary expiry | GREEN — BOUNDED EXPIRY BEHAVIOR; BL07.2 CONTROLS OPEN | 43227139115 proved expiry/revoke denial; 43362222581 proved seeded paid access survives natural overlay expiry with unchanged billing state. Actual Platform Admin grant/revoke/audit acceptance remains BL07.2; no real-payment or full-route claim. |
+| BL07.3 complimentary expiry | GREEN — BOUNDED EXPIRY BEHAVIOR | 43227139115 proved expiry/revoke denial; 43362222581 proved paid access survives overlay expiry. BL07.2 grant/revoke/stale-save/audit also passed. No full-route or real-payment claim from seeded evidence. |
 | BL09.3 zero-stock cancellation | YELLOW | PR #536 deployed; finish genuine deployed disposable-stock confirmation after cessation/staging dependencies. |
 | BL08.2 monthly rollout | YELLOW | Monthly guard deployed, flags off; activate only after complete write/stock/cessation dependencies pass. |
-| BL08.3 invoice/payment/adjustment | YELLOW | PR #540 merged/deployed with final SQL/build proof; remaining affected live role/resource acceptance and rollout dependencies stay open. |
-| BL08.4 maintenance/activation/exit | YELLOW | PRs #540/#541 merged/deployed with full SQL transaction/expiry/no-partial-write proof; finish enabled-scope live and stale actor/resource acceptance after stock dependencies. |
+| BL08.3 invoice/payment/adjustment | YELLOW — BOUNDED HTTP PASS | Run 43359060142 passed the recorded invoice/payment/maintenance 21-check scope. Remaining affected routes and actor/resource coverage and rollout remain. |
+| BL08.4 maintenance/activation/exit | YELLOW — PARTIAL | Maintenance HTTP scope passed in 43359060142; approved demo activation/exit remains accepted. Remaining stale-authority/resource and enforcement cases remain. |
 | BL08.5 generic/import bypass | YELLOW | PR #542 merged/deployed transactional generic/repository/RPC and utility/master guards with atomic import rollback; stock-staging bypass and broader live actor/resource acceptance remain. |
-| BL08.6 staged create/import | YELLOW — SOURCE COMPLETE | Normal-form/full-metadata integration and exact retries implemented through #561; staging migration applied in 43202047924. Dedicated feature readiness and controlled live acceptance remain. |
-| BL08.7 staged restore/split | YELLOW — SOURCE COMPLETE | #579/#580 implement restoration, renewal-only splitting and retained-history/atomic transition behavior with SQL/process/browser evidence. Both migrations applied; dedicated feature activation/live acceptance remains. |
-| BL08.11 async reconciliation | YELLOW — PORTAL RESPONSE-LOSS CASE GREEN | Original readback 43215152035 and genuine post-provider response-loss 43216870550 passed with deployed SQL/automatic worker. Same key/session, attempt 2, one step/audit/event, unchanged financial state. Other operation kinds and authenticated role/resource/isolation acceptance remain; do not repeat portal proof. |
-| BL08.9 audited cessation | YELLOW — SOURCE COMPLETE | All-state cessation and grace/trial cleanup integrated through #578; SQL guards/migration applied. Controlled provider/live role/stock acceptance remains. |
-| BL08.10 ceased/restored consistency | YELLOW — SOURCE COMPLETE | #579/#580 cover restored/split identities, retained history, overlap guards and transition sequences. Controlled deployed consistency remains; no restoration reimplementation. |
+| BL08.6 staged create/import | YELLOW — COMPLIMENTARY HTTP/SQL PASS | 43438898429 passed staging, atomic batch rollback, withdrawal and role/workspace isolation. Paid promotion, remaining actor/resource/form acceptance remain. |
+| BL08.7 staged restore/split | YELLOW — PAID SERVICE/SQL PASS | Complimentary HTTP/SQL (43438898429) and genuine paid service/SQL (43624803051) passed with retries/history/cleanup. Paid authenticated HTTP, rendered UI and remaining transitions remain. |
+| BL08.11 async reconciliation | YELLOW — PORTAL AND CUSTOMER PASSED | Portal response loss 43216870550 and customer response loss 43357605904 passed. Checkout/subscription and other operation/role/resource/isolation cases remain. |
+| BL08.9 audited cessation | YELLOW — PAID SERVICE/SQL PASS | Complimentary HTTP/SQL and genuine paid 2→1 deferred reduction with exact retry passed (43438898429, 43624803051). Remaining states/obligation negatives, paid HTTP/UI and final-dwelling case remain. |
+| BL08.10 ceased/restored consistency | YELLOW — BOUNDED DEPLOYED PASS | 43624803051 verified restored property identity/history and split quantities/retries. Remaining transition combinations, HTTP roles/resources and rendered UI remain. |
 | BL08.12 controlled full rollout | RED | Keep disabled until BL08 engineering and complete endpoint/job acceptance pass; then enable one reversible explicit scope. |
 | CM01.3 LK calculation/FX/rounding | YELLOW | Exact symbolic boundary examples and a reviewable formula/rounding proposal are prepared in the existing commercial record; final FX/basis choice remains held for the owner. |
 | CM01.4 effective price publication | YELLOW | Existing draft/version/preview controls retained; prepare approved effective commercial version and customer treatment before publication. |
@@ -435,7 +448,7 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | R3.07 distinct-replica limiter | YELLOW — BEFORE SCALING | Preserve single-replica R3 closure; require distinct-replica proof only before actual authorized scaling. |
 | R3.08 expired/replayed signup tokens | YELLOW | Existing isolated-flow/SQL proof retained; complete fresh supported issuance/HTTP negatives with disposable identities when available. |
 
-No production fixture, subscription, occupied stock, signed artifact or real customer financial record was mutated in this checkpoint. Disposable SQL fixtures belong to the test harness and its container cleanup; final cleanup results must be read from the completed final-head job. No migration, flag enablement, infrastructure scale-up, secret change or live charge is introduced. Rollback for this source slice is the existing application release procedure using prior serving source `5caced59fa6b344ca5b21a91d114203ff9151c90`; keep rollout disabled throughout.
+This reconciliation changes documentation only. Each recorded acceptance run retains its own fixture effects, cleanup and evidence limits. Use the current controlling queue's runtime observation; historical rollback SHAs are not current deployment instructions.
 
 ## Monthly invoice guard release — 10 November 2026
 
