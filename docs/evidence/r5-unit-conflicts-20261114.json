@@ -1,0 +1,18 @@
+{
+  "scope": "Disposable SQL Server acceptance, not deployed HTTP/UI",
+  "pull_request": 639,
+  "head": "e2af7e7d90f72a2fa42b365d0f24b4146da851f9",
+  "merge": "8d7049be8b5bfa79ebfec7afcc581f6cfc7f81d2",
+  "sql_browser_run": 43575302896,
+  "job": 132388127939,
+  "lint_authorization_build_run": 43575302875,
+  "result": "passed",
+  "markers": [
+    "2026-11-14T08:23:30.8438107Z RENTAL_SAME_UNIT_CONFLICT=PASS one_winner withdrawal_relist stale_acceptance_no_resurrection",
+    "2026-11-14T08:23:31.3659356Z RENTAL_DISTINCT_UNIT_CONCURRENCY=PASS both_held all_hidden partial_release other_hold_preserved",
+    "2026-11-14T08:23:32.7462928Z RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race partial_unit_availability active_occupancy_race legacy_nonoccupancy_edit catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation"
+  ],
+  "production_mutations": 0,
+  "deployment": false,
+  "remaining": "Deployed reservation-driven withdrawal/readback, activation/closure transitions and wider R5 exits"
+}
