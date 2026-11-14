@@ -1,0 +1,90 @@
+{
+  "observed_at_utc": "2026-11-14T04:46:30.203201+00:00",
+  "http_checks": [
+    {
+      "check": "lk_catalog",
+      "status": 200,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "lk_detail",
+      "status": 200,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "wrong_country_detail",
+      "status": 404,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "wrong_country_enquiry",
+      "status": 404,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "wrong_country_photo",
+      "status": 404,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "missing_country",
+      "status": 400,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    },
+    {
+      "check": "invalid_id",
+      "status": 404,
+      "passed": true,
+      "cacheControl": "no-store, max-age=0"
+    }
+  ],
+  "mutations": 0,
+  "scope": "Read-only live public browsing and market isolation",
+  "listing_public_id": "3214F572-41C3-42BA-8D04-FF2912564E85",
+  "browser_checks": [
+    {
+      "check": "unfiltered_LK_catalog",
+      "result": "10 listings rendered"
+    },
+    {
+      "check": "keyboard_name_and_rent_filter",
+      "result": "WATER FALL + maxRent 100000 returned WATER FALL VILLA only"
+    },
+    {
+      "check": "below_price_boundary",
+      "result": "99999 returned zero with adjust-or-clear guidance"
+    },
+    {
+      "check": "category_filter_preservation",
+      "result": "residential link retained WATER FALL and 99999"
+    },
+    {
+      "check": "clear_filters",
+      "result": "retained residential category; rendered 9 listings, excluding land"
+    },
+    {
+      "check": "property_detail",
+      "result": "photo, name and LKR 100000 rendered; enquiry href retained listingId and country LK; no submission"
+    },
+    {
+      "check": "cross_country_detail",
+      "result": "BN page for LK listing displayed unavailable state; no listing photo/details/enquiry link"
+    }
+  ],
+  "visual_review": "Desktop browser screenshots inspected for filtered listing, property detail and unavailable state; not mobile acceptance.",
+  "limits": [
+    "No reservation/activation/closure or other inventory mutation",
+    "No concurrent conflict acceptance",
+    "No full keyboard accessibility or mobile acceptance",
+    "No Brunei launch acceptance",
+    "No natural expiry or database wake-up claim"
+  ],
+  "r5_status": "partial",
+  "changes": "Documentation only; no application deployment or flags changed"
+}
