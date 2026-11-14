@@ -1,5 +1,16 @@
 # R4 and R5 delivery programme
 
+## Maintenance comment history correction — 14 November 2026
+
+**Bounded usability finding closed.** [PR #635](https://github.com/WasanthaK/khrental/pull/635) removes completion notes from the comments fallback, which had invented an unattributed comment with the current time during loading or failed reads. Completion notes remain in their existing section; comments now have explicit loading, failure/retry and successful-empty states. Superseded reads cannot replace current comments.
+
+Final-head checks passed: [lint/authorization/build 43538440782](https://github.com/WasanthaK/khrental/actions/runs/43538440782), [two-tenant SQL 43538440734](https://github.com/WasanthaK/khrental/actions/runs/43538440734) and [browser suite 43538440749](https://github.com/WasanthaK/khrental/actions/runs/43538440749). The real-page synthetic browser regression forced a failed comments read, verified no fabricated history, retried successfully and verified the persisted author. The 390px and 1440px screenshots were inspected for the affected comments layout. An earlier browser run passed this regression but hit a navigation interruption in the security fixture; adding that fixture to dependency discovery resolved the final run without removing assertions.
+
+[Release 43538934334](https://github.com/WasanthaK/khrental/actions/runs/43538934334) passed at **06:48:28 Asia/Colombo / 01:18:28 UTC**, serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c` on Ready revision **0000512**, with MSSQL ready. The authenticated owner reloaded the retained completed demo: completed status and completion notes persisted, while Comments correctly showed “No comments yet” without the fabricated author/date. This was readback only; no lifecycle action, comment, signing or payment was repeated.
+
+**R5 remains partial.** Preserve the accepted customer/portal recovery, complimentary inventory and maintenance lifecycle proofs. Remaining provider operations/isolation, billing routes/jobs/bypasses, paid inventory transitions and negatives, actual inbox receipt, retained-history role denials, broader mobile/keyboard journeys and genuine natural database wake-up remain open. Live charging and full enforcement stay OFF; Evia stays paused.
+
+
 **BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
