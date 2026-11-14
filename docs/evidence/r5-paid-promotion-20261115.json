@@ -1,0 +1,36 @@
+{
+  "scenario": "promotion",
+  "scope": "genuine sandbox provider + deployed service/SQL",
+  "httpAccepted": false,
+  "uiAccepted": false,
+  "status": "failed; acceptance remains open",
+  "pullRequests": [
+    647
+  ],
+  "attempts": [
+    {
+      "runId": 43626889492,
+      "jobId": 132544911133,
+      "operation": "6cae3d18-9fb7-482d-a247-d57247c657ce",
+      "mustNotReplay": true,
+      "failedAtUtc": "2026-11-14T18:31:05Z",
+      "failedAtAsiaColombo": "2026-11-15T00:01:05+05:30",
+      "stage": "paid_stage_create_import",
+      "code": "ERR_ASSERTION",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "create_and_import_remain_private_pending"
+      ],
+      "cleanup": {
+        "verified": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "recordsRetained": true
+      },
+      "unchangedRevisionAndPublicHealth": true,
+      "artifactId": 14126631805,
+      "diagnosis": "Aggregate retry fingerprint changed; original run did not identify component. Snapshot included unrelated asynchronous webhook reconciliation audits. PR #648 separates component fingerprints and excludes only stripe.event_reconciled audits."
+    }
+  ]
+}
