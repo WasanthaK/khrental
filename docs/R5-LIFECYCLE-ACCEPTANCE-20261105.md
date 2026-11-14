@@ -1,5 +1,18 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## CT04.2 retained-history authority — passed 14 November 2026
+
+**Bounded deployed authorization accepted.** [Run 43553999954](https://github.com/WasanthaK/khrental/actions/runs/43553999954), job 132322784044, passed all **14 checks** at **09:26:06 Asia/Colombo / 03:56:06 UTC**. The existing closed demo agreement and identical retained PDF were readable by its administrator and original renter. Unrelated renter, foreign administrator, forced workspace/owner filters, revoked membership, revoked test session and anonymous document access were denied. Metadata queries used the same central select API as the renter page.
+
+All four test sessions were revoked; two disposable identities/memberships and the foreign fixture workspace were deactivated with verified cleanup. Existing agreement, owner/renter identities and memberships, and protected billing accounts remained unchanged. The serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready revision **0000512**, configuration and MSSQL health were unchanged. No signing, Evia, document creation or provider write occurred.
+
+[PR #636](https://github.com/WasanthaK/khrental/pull/636) added the harness; [PR #637](https://github.com/WasanthaK/khrental/pull/637) corrected its use of an administrator-only legacy metadata route. Both passed CI. First run 43553455204 passed administrator readback but stopped at renter acceptance; it is superseded for CT04.2 by the complete pass. [Durable evidence](evidence/r5-retained-history-20261114.json).
+
+**Evidence boundary:** persisted-session authority, not credential sign-in, full rendered desktop/mobile/keyboard acceptance, or matching Evia audit retention. Test records remain inactive rather than deleted. Preserve accepted signing and do not rerun this completed role matrix without a new regression.
+
+**R5 remains partial.** Next independent acceptance is OP02/OP09 outstanding stock, reservation, unsigned-expiry and conflict cases; broader OP10 browser journeys remain. Remaining provider-operation recovery/isolation, billing routes/jobs/bypasses, paid inventory transitions, actual inbox receipt, genuine natural database pause, natural seven-day SQL grace/later recovery and commercial/merchant/privacy decisions remain open. Live charging and full enforcement stay OFF; Evia stays paused. This latest checkpoint supersedes older statements below that retained-history role readback is unperformed.
+
+
 **BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
@@ -296,7 +309,7 @@ Statuses below describe the exact handoff acceptance, not merely helper availabi
 | OP10.3 natural database pause | YELLOW | HTTP ready observed, not prior pause; wait for authorized telemetry confirming a genuine natural pause and measure recovery. |
 | CT03.4 Evia service/package delivery | PAUSED / UNACCEPTED | Owner paused Evia; prior 404/501 evidence retained. Do not retry/re-sign. Supported service/package acceptance remains separate from accepted signing. |
 | CT03.5 fresh matching audit retention | PAUSED / UNACCEPTED | Matching automatic audit retention remains unaccepted; preserve existing signed artifacts and await resumed provider work. |
-| CT04.2 retained role readback | YELLOW | Preserve completed signing; verify renter/admin history and unrelated/revoked denials from persisted authority. |
+| CT04.2 retained role readback | GREEN — bounded deployed authority | All 14 checks passed in run 43553999954; admin/renter reads, unrelated/foreign/revoked denials and cleanup verified. Credential sign-in, full browser usability and Evia audit retention remain separate. |
 | BL04.2 genuine scheduled renewal | GREEN — PASSED | Run 43199377112 completed the retained 2→1 renewal with paid invoice and deployed projection. Retain original objects; do not advance the clock again. |
 | BL05.4 failure/recovery in grace | GREEN — DEPLOYED HTTP/SQL ACCEPTANCE | 43224159517: genuine failure enters pinned grace, duplicate does not extend it, genuine payment restores active access and clears grace; one event/audit each. Deployed SQL guard passed with process-local scope and negative control. Full HTTP enforcement remains a separate BL07 rollout. Do not repeat. |
 | BL05.5 grace expiry/later recovery | YELLOW — PARTIAL DEPLOYED ACCEPTANCE | Isolated exact application-clock expiry/genuine later recovery passed in 43194909443. Seeded expired-grace public HTTP create/update denial and retained reads passed in 43227139115. Natural seven-day grace/later recovery remains separate; do not repeat the bounded checks. |
