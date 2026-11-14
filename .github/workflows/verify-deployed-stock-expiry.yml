@@ -1,0 +1,103 @@
+name: Rollback-only stock and expiry acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Fresh rollback-only fixture UUID
+        required: true
+        type: string
+      confirmation:
+        description: VERIFY-STOCK-EXPIRY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify reviewed source and serving build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-STOCK-EXPIRY
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+          node --check scripts/verify-deployed-stock-expiry.mjs
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Verify stock and expiry inside rollback-only transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and .properties.latestRevisionName==.properties.latestReadyRevisionName and .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app-before.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-before.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/app-before.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          digest=$(sha256sum scripts/verify-deployed-stock-expiry.mjs | cut -d ' ' -f 1)
+          # One short Azure connection. Fetch only this reviewed commit and verify
+          # exact script bytes before execution; no unpinned remote code or retry.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-stock-expiry.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/stock-expiry-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.STOCK_EXPIRY_OPERATION='$OPERATION_ID';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          test "${#command}" -lt 2000
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee stock-expiry.txt
+          if grep -Eq 'STOCK_FAILED=|STOCK_CLEANUP_FAILED' stock-expiry.txt; then exit 1; fi
+          grep -Eo 'STOCK_PASS=\{[^}]+\}' stock-expiry.txt | tr -d '\r' | sed 's/^STOCK_PASS=//' > stock-expiry-summary.json
+          jq -e '.passed and .rolledBack and .fixtureRowsAbsent and .protectedBillingUnchanged and .providerWrites==0 and (.checks|length)==13' stock-expiry-summary.json
+      - name: Verify unchanged revision and public health
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/app-before.json" ]; then exit 0; fi
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-after.json"
+          for side in before after; do
+            jq '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+          done
+          diff -u "$RUNNER_TEMP/config-before.json" "$RUNNER_TEMP/config-after.json" >/dev/null
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: stock-expiry-role-acceptance
+          path: |
+            stock-expiry.txt
+            stock-expiry-summary.json
+          retention-days: 30
