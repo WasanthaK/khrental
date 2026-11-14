@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Owner opt-out withdrawal and relisting — passed 14 November 2026
+
+**Bounded live transition accepted at 11:20:54 Asia/Colombo / 05:50:54 UTC.** The existing +514 administrator in JEERY'S PLACE used the normal property UI to opt the approved SUWADA villa demo property out, then restore its original opt-out=false setting. Public listing reference `8B647B58-8957-4AF5-9C0B-B97D4D02826A` was absent from the catalog while withdrawn; detail and enquiry-status returned 404, and the rendered public page showed unavailable guidance without an enquiry action.
+
+After restoration, catalog membership, detail 200 and enquiry-status 200/open were independently verified. The public detail payload exactly matched its pre-test baseline, including LKR 125,000 and no approved public photos. Owner eligibility and the public enquiry link were visibly restored; desktop screenshots were inspected. [Durable evidence](evidence/r5-public-withdrawal-20261114.json).
+
+**Scope:** owner opt-out withdrawal/relisting is accepted. Reservation-driven withdrawal, concurrent conflicts, activation/closure transitions, mobile and full keyboard acceptance remain open. No photo-withdrawal proof is claimed because this fixture has no public photos. The existing disposable SQL suite contains concurrency scenarios but also fixture schema/trigger changes; it was reviewed, not run against the deployed database. Next work is an isolated conflict proof without weakening deployed guards. **R5 remains partial.** No signing, payment, application deployment or feature-flag change; live charging/full enforcement OFF and Evia paused.
+
 ## Public browsing and market isolation — bounded pass 14 November 2026
 
 Live read-only acceptance completed by **10:16 Asia/Colombo / 04:46 UTC**. The Sri Lanka catalog rendered 10 listings; name and maximum-rent filters submitted by keyboard selected WATER FALL VILLA at LKR 100,000. A 99,999 limit excluded it with clear empty-state guidance. Category navigation preserved filters; clearing filters retained the residential category and rendered 9 residential listings. Property detail displayed the approved photo, price and a listing/country-preserving enquiry link with the non-reservation explanation.
