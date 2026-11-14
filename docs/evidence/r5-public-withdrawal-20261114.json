@@ -1,0 +1,71 @@
+{
+  "checkpoint": "Live owner opt-out withdrawal and relisting",
+  "accepted_at_utc": "2026-11-14T05:50:54Z",
+  "role": "Existing +514 demo organization administrator",
+  "workspace": "JEERY'S PLACE",
+  "property_id": "9B2E3D9D-8B9E-48BD-827F-E248B7BF22A9",
+  "public_id": "8B647B58-8957-4AF5-9C0B-B97D4D02826A",
+  "method": "Saved owner opt-out through normal property UI, independently checked public HTTP and rendered page, then restored the original opt-out=false setting.",
+  "withdrawn": {
+    "at": "2026-11-14T05:50:02.068998+00:00",
+    "checks": [
+      {
+        "path": "?country=LK",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "path": "/8B647B58-8957-4AF5-9C0B-B97D4D02826A?country=LK",
+        "status": 404,
+        "passed": true
+      },
+      {
+        "path": "/8B647B58-8957-4AF5-9C0B-B97D4D02826A/enquiry-status?country=LK",
+        "status": 404,
+        "passed": true
+      }
+    ]
+  },
+  "restored": {
+    "at": "2026-11-14T05:50:53.957593+00:00",
+    "checks": [
+      {
+        "path": "?country=LK",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "path": "/8B647B58-8957-4AF5-9C0B-B97D4D02826A?country=LK",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "path": "/8B647B58-8957-4AF5-9C0B-B97D4D02826A/enquiry-status?country=LK",
+        "status": 200,
+        "passed": true
+      }
+    ],
+    "public_detail_matches_baseline": true
+  },
+  "browser": {
+    "withdrawn": "Owner checkbox checked and ineligible; public detail unavailable with no enquiry link",
+    "restored": "Owner checkbox unchecked and eligible; public detail and enquiry link rendered with LKR 125000 and existing photo placeholder",
+    "desktop_visual_review": true
+  },
+  "scope_limits": [
+    "No concurrent reservation conflict test",
+    "No reservation, activation or tenancy closure acceptance",
+    "No photo withdrawal proof: this fixture had no public photos",
+    "No mobile or full keyboard accessibility acceptance"
+  ],
+  "controls": {
+    "original_listing_setting_restored": true,
+    "public_detail_unchanged": true,
+    "signing": false,
+    "payments": false,
+    "application_deployment": false,
+    "live_charging": "OFF",
+    "full_enforcement": "OFF",
+    "evia": "paused"
+  }
+}
