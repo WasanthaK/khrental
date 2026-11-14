@@ -1,5 +1,14 @@
 # KH Rentals Execution Plan
 
+## Natural unsigned reservation expiry — bounded HTTP pass 14 November 2026
+
+**Ten deployed HTTP/SQL checks passed at 21:20:43 Asia/Colombo / 15:50:43 UTC.** [Run 43612128152](https://github.com/WasanthaK/khrental/actions/runs/43612128152), job 132499327306, used a fresh labelled synthetic workspace, operator, property and unsigned draft. A 90-second hold deadline elapsed naturally according to SQL time, without backdating or rewriting it. Catalog, detail and enquiry availability returned before lazy audit processing; the authorized owner read then recorded expired version 2. Repeated reads retained exactly one system expiry event. The complete unsigned draft remained unchanged and a fresh terminal withdrawal was denied without writes.
+
+**Cleanup passed:** public stock opted out/inactive, enquiry closed, fixture identity/membership/workspace inactive and session revoked. The draft remains retained unchanged in the inactive fixture. Both protected billing snapshots were unchanged. [PR #642](https://github.com/WasanthaK/khrental/pull/642) merged as `2a37582d317cea30c5e3ea6e3015398903d4031b` after syntax and lint/authorization/build CI passed. Serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, configuration, Ready revision and public SQL health remained unchanged; no runtime deployment, schema/flag change or provider write. [Durable evidence](evidence/r5-reservation-natural-expiry-20261114.json).
+
+**Acceptance boundary:** natural short-duration unsigned-hold expiry through deployed HTTP is accepted; do not repeat this bounded case. Synthetic acceptance fields and fixture authority do not establish real participant consent, credential login, rendered deployed UI, long-duration expiry or seven-day billing grace. Unsigned-agreement cancellation, remaining stock/role/enforcement cases and broader mobile/keyboard journeys remain open. Prior OP03 activation and OP06 closure remain accepted. **R5 remains partial**, live charging/full enforcement OFF and Evia paused. This checkpoint supersedes older wording below that all natural reservation expiry is pending.
+
+
 ## Deployed reservation withdrawal and public relisting — bounded pass 14 November 2026
 
 **Ten deployed HTTP/SQL checks passed at 19:57:58 Asia/Colombo / 14:27:58 UTC.** [Run 43604875739](https://github.com/WasanthaK/khrental/actions/runs/43604875739), job 132477445880, used a new labelled synthetic workspace, operator, property and seeded accepted hold. Catalog exclusion plus detail/enquiry-status 404 established hold suppression. The normal authenticated owner withdrawal endpoint returned withdrawn version 2; catalog membership and both detail/enquiry-status 200 then returned. Public responses were no-store.
