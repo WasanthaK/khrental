@@ -183,6 +183,44 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner,denyExpir
  assert.equal(await available(multi),Boolean(winning.unitLabel),'Other available units remain visible');
  await store.change(winner.actor,winner.id,request('withdraw',winning.version));
  assert.equal(await available(multi),true);
+ // Two seekers targeting the same unit must never both acquire a hold.
+ const sameUnit=await property(1),sameCandidates=[await candidate(sameUnit),await candidate(sameUnit)];
+ const sameRequests=sameCandidates.map(()=>request('accept',1,false,{consent:true}));
+ for(const seeker of sameCandidates){await store.change(owner,seeker.id,request('issue',0,true,{...terms(),unitId:sameUnit.unitIds[0]}),true);}
+ const sameRace=await Promise.allSettled(sameCandidates.map((seeker,index)=>store.change(seeker.actor,seeker.id,sameRequests[index])));
+ assert.equal(sameRace.filter(result=>result.status==='fulfilled').length,1,'Exactly one same-unit reservation succeeds');
+ for(const result of sameRace){if(result.status==='rejected'){assert.ok(['ENQUIRY_RETRY','RENTAL_OCCUPANCY_CONFLICT','RENTAL_OFFER_UNAVAILABLE'].includes(result.reason.code),result.reason.code);}}
+ assert.equal((await q("SELECT COUNT(*) AS n FROM property_rental_offers WHERE property_id=@id AND status='accepted'",{id:sameUnit.id}))[0].n,1);
+ assert.equal(await available(sameUnit),false,'A hold on the only unit hides the property');
+ const sameWinner=sameRace.findIndex(result=>result.status==='fulfilled'),winningSeeker=sameCandidates[sameWinner];
+ await store.change(winningSeeker.actor,winningSeeker.id,request('withdraw',2));
+ const replayAfterWithdrawal=await store.change(winningSeeker.actor,winningSeeker.id,sameRequests[sameWinner]);
+ assert.equal(replayAfterWithdrawal.offer.status,'withdrawn','Old acceptance replay cannot resurrect a withdrawn hold');
+ assert.equal(replayAfterWithdrawal.offer.version,3);
+ assert.equal(await available(sameUnit),true);
+ assert.equal((await q("SELECT COUNT(*) AS n FROM property_rental_offer_events WHERE enquiry_id=@id AND event_type='accept'",{id:winningSeeker.id}))[0].n,1);
+ console.log('RENTAL_SAME_UNIT_CONFLICT=PASS one_winner withdrawal_relist stale_acceptance_no_resurrection');
+ // Independent units can both be held. A serialization retry is allowed, but
+ // the identical request must succeed once the competing transaction settles.
+ const independent=await property(2),independentCandidates=[await candidate(independent),await candidate(independent)];
+ const independentRequests=independentCandidates.map(()=>request('accept',1,false,{consent:true}));
+ for(let index=0;index<2;index++){await store.change(owner,independentCandidates[index].id,request('issue',0,true,{...terms(),unitId:independent.unitIds[index]}),true);}
+ const independentRace=await Promise.allSettled(independentCandidates.map((seeker,index)=>store.change(seeker.actor,seeker.id,independentRequests[index])));
+ for(let index=0;index<2;index++){
+  if(independentRace[index].status==='rejected'){
+   assert.equal(independentRace[index].reason.code,'ENQUIRY_RETRY');
+   await store.change(independentCandidates[index].actor,independentCandidates[index].id,independentRequests[index]);
+  }
+  assert.equal((await store.get(independentCandidates[index].actor,independentCandidates[index].id)).offer.status,'accepted');
+ }
+ assert.equal((await q("SELECT COUNT(*) AS n FROM property_rental_offers WHERE property_id=@id AND status='accepted'",{id:independent.id}))[0].n,2);
+ assert.equal(await available(independent),false,'Holding every unit hides the property');
+ await store.change(independentCandidates[0].actor,independentCandidates[0].id,request('withdraw',2));
+ assert.equal(await available(independent),true,'Releasing one unit restores partial availability');
+ assert.equal((await store.get(independentCandidates[1].actor,independentCandidates[1].id)).offer.status,'accepted','Other unit reservation remains intact');
+ await store.change(independentCandidates[1].actor,independentCandidates[1].id,request('withdraw',2));
+ assert.equal(await available(independent),true);
+ console.log('RENTAL_DISTINCT_UNIT_CONCURRENCY=PASS both_held all_hidden partial_release other_hold_preserved');
  // Whole-property availability includes every unit's authoritative status,
  // even where legacy occupancy has no active agreement record.
  const partial=await property(2),partialCandidate=await candidate(partial);
