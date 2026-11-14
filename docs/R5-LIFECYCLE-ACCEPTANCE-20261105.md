@@ -1,5 +1,13 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## Paid inventory acceptance prepared — 14 November 2026
+
+[PR #645](https://github.com/WasanthaK/khrental/pull/645) prepares a separate genuine-sandbox paid cessation → restoration → split case. The existing complimentary harness is not evidence for this paid path. The new manual workflow uses a fresh private workspace, a non-login synthetic administrator and two properties; it verifies a genuine sandbox USD 10 initial invoice, next-renewal reduction/restoration/split quantities, exact retries, retained property/history, and unchanged protected subscriptions/clocks. The accepted renewal clock is not advanced.
+
+The service/store receive inventory readiness only through local dependency configuration in the short-lived test process. Serving flags, application build and worker scope remain unchanged. Cleanup cancels only the new sandbox subscription without proration or an additional invoice, reconciles cancellation, deactivates the fixture actor/workspace and retains evidence. Ambiguous provider creation must be inspected, not replayed. The workflow requires ten checks, cleanup and unchanged revision/health before success.
+
+**Prepared, not accepted:** local syntax/YAML validation and PR syntax CI passed; authorization/build CI and merge/execution remain to be completed. This covers genuine provider + deployed service/SQL only. Paid create/import/Checkout promotion, HTTP roles/resources, rendered UI and actual next-renewal execution remain separate. Completed complimentary, reservation, cancellation, retained-history and lifecycle cases stay accepted. **R5 remains partial; live charging/full enforcement OFF; Evia paused.**
+
 ## Unsigned cancellation and explicit release — bounded HTTP pass 14 November 2026
 
 **Ten deployed HTTP/SQL checks passed at 22:23:11 Asia/Colombo / 16:53:11 UTC.** [Run 43617929711](https://github.com/WasanthaK/khrental/actions/runs/43617929711), job 132517125321, verified unsigned-draft cancellation through the normal authenticated endpoint. Anonymous and foreign-workspace cancellation were denied without writes. Cancellation preserved document content/identity, the reservation and public-stock suppression; owner readback showed the cancelled draft and replacement option. Explicit withdrawal then restored catalog, detail and enquiry availability. Exact retry preserved cancelled history, its link and a single withdrawal audit.
