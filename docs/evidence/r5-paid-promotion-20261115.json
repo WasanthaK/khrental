@@ -3,9 +3,10 @@
   "scope": "genuine sandbox provider + deployed service/SQL",
   "httpAccepted": false,
   "uiAccepted": false,
-  "status": "failed; acceptance remains open",
+  "status": "accepted within service/SQL scope",
   "pullRequests": [
-    647
+    647,
+    648
   ],
   "attempts": [
     {
@@ -30,7 +31,52 @@
       },
       "unchangedRevisionAndPublicHealth": true,
       "artifactId": 14126631805,
-      "diagnosis": "Aggregate retry fingerprint changed; original run did not identify component. Snapshot included unrelated asynchronous webhook reconciliation audits. PR #648 separates component fingerprints and excludes only stripe.event_reconciled audits."
+      "diagnosis": "Aggregate retry fingerprint changed; original run did not identify component. Snapshot included unrelated asynchronous webhook reconciliation audits. PR #648 separates component fingerprints and excludes only stripe.event_reconciled audits.",
+      "artifactSha256": "e9c2ebb0e97a592e6871f9236d7e42e5d70bae71c4cd8249aeb72a3980f3a99d"
+    },
+    {
+      "runId": 43627476690,
+      "jobId": 132546776890,
+      "passedAtUtc": "2026-11-14T18:37:38Z",
+      "passedAtAsiaColombo": "2026-11-15T00:07:38+05:30",
+      "mustNotReplay": true,
+      "operation": "c64532f8-f71e-4a10-a1de-662018cd682a",
+      "scenario": "promotion",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "create_and_import_remain_private_pending",
+        "staging_retry_no_duplicate_effect",
+        "conflicting_import_rolls_back_entire_batch",
+        "nonmember_cannot_stage_stock",
+        "quantity_preview_does_not_promote_stock",
+        "paid_quantity_confirmation_promotes_exact_records",
+        "promotion_retry_no_duplicate_effect",
+        "protected_accounts_subscriptions_and_clocks_unchanged"
+      ],
+      "scope": "genuine sandbox provider + deployed service/SQL",
+      "httpAccepted": false,
+      "uiAccepted": false,
+      "passed": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "protectedBillingUnchanged": true,
+      "cleanup": {
+        "verified": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "recordsRetained": true
+      },
+      "unchangedRevisionAndPublicHealth": true,
+      "artifactId": 14126242517,
+      "artifactSha256": "5e436dc2ff0e2b5e2dcefd0275eb48c65a2bd961d1e35cacb5b6712bd390da5f"
     }
+  ],
+  "remaining": [
+    "Paid authenticated HTTP roles/resources and rendered form/UI acceptance",
+    "Paid staged-stock hosted Checkout promotion",
+    "All remaining entitlement states and obligation negatives",
+    "Transition-specific actual renewal execution",
+    "Final-dwelling zero-stock cancellation"
   ]
 }
