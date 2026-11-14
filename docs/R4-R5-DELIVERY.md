@@ -1,5 +1,11 @@
 # R4 and R5 delivery programme
 
+## Current canonical status — 14 November 2026
+
+**R5 is partial. Live charging and full enforcement are OFF; Evia is paused.** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Latest accepted result: ten genuine sandbox paid cessation/restoration/split service/SQL checks passed, with cleanup, at 23:38:40 Asia/Colombo.
+
+The dated checkpoints are retained as evidence history. Their earlier “current”, “remaining” and “next” wording describes that checkpoint only; use the controlling queue for today's work. Accepted signing, the controlled rental lifecycle, retained-history role checks and completed reservation cases must not be reopened. No claim is made that the original paid-test SQL error's exact cause was identified.
+
 ## Paid cessation, restoration and split — bounded service/SQL pass — 14 November 2026
 
 **Ten checks passed at 23:38:40 Asia/Colombo / 18:08:40 UTC.** [Run 43624803051](https://github.com/WasanthaK/khrental/actions/runs/43624803051), job 132538205325, verified genuine sandbox paid-capacity reconciliation, cessation with next-renewal reduction, restoration of the same property/history, split into exactly three units, and exact retries without duplicate effects. Current billed quantity stayed two; renewal schedule quantities moved through one, two and four. Protected accounts, subscriptions and frozen clocks remained unchanged.
@@ -186,7 +192,7 @@ The dedicated fixture `2383f4fc-e107-4ac7-9e13-39db501f40ec` has no users, membe
 
 **Subsequent progress:** deployed failure-to-grace/recovery and process-local SQL guard acceptance passed above; real grace expiry, full HTTP enforcement, and remaining financial-operation/role/isolation cases stay open. This proof closes only the delayed-event case; it does not establish grace-expiry enforcement or all organization isolation. Do not repeat the accepted retained renewal, portal response-loss or delayed-failure proofs. R5 remains open and Evia remains paused.
 
-## Canonical R5 engineering status — 12 November 2026
+## Historical engineering snapshot — 12 November 2026
 
 **Recovery, all-state cessation, restoration and property splitting are implemented and source-verified. The Stripe test-clock failure-history bug is fixed and genuine isolated renewal/failure/recovery acceptance passed. Evia is paused by the user. The app currently serves Ready 0000493 (`5905015`) after the scoped HTTP enforcement test and exact configuration restore recorded above. The retained two-to-one renewal and deployed genuine-event/duplicate ledger proof also passed. Scoped recovery activation passed. The deployed genuine portal response-loss, delayed failure-after-recovery and within-grace failure/recovery cases passed. R5 remains open for other provider-operation and acceptance cases and broader launch exits.** Do not requeue completed implementation or accepted signing. The dated checkpoints below are historical evidence, not the current task queue.
 
@@ -222,21 +228,28 @@ The transport and inspection blockers are resolved for this original operation. 
 
 ## Development progress and remaining acceptance — controlling queue
 
-This section and the current engineering status above control execution. Older dated checkpoints retain their evidence, but their “next”, “not implemented”, “migration pending” and “worker off” statements are historical. The detailed [handoff task dispositions](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) are reconciled to this queue; an acceptance gap must not be turned back into an implementation task.
+**Reconciled through 14 November 2026, 23:38:40 Asia/Colombo. This is the current execution queue.** Dated checkpoints below and above are evidence snapshots; their older pending/next statements do not reopen the accepted cases listed here.
 
-| Workstream / task IDs | Development and rollout | Remaining acceptance or decision |
+| Workstream / task IDs | Accepted evidence | Remaining acceptance or decision |
 | --- | --- | --- |
-| Provider-operation recovery — BL08.11 | 🟢 Implemented; journal/fencing and 100 process-interruption cases; deployed, 23/23 schema verified, single-organization worker enabled on 0000491 | 🟢 Bounded portal response-loss case passed in 43216870550: automatic attempt 2, same key/session, one step/audit/event, unchanged account/subscription. 🟢 Bounded one-shot customer response-loss recovery passed in 43357605904 with one customer, provider evidence and confirmed cleanup. 🟡 Checkout/subscription and other operation kinds plus authenticated role/resource/isolation acceptance remain. Do not repeat accepted portal or customer proofs. |
-| Staged create/import — BL08.6 | 🟢 Normal forms/full metadata and exact promotion implemented; staging migration applied | 🟡 Dedicated feature readiness and controlled live actor/resource/form acceptance; recovery activation did not enable stock feature flags. |
-| All-state cessation — BL08.9 | 🟢 Remaining entitlement states and cleanup integrated through #578; schema applied | 🟡 Controlled genuine-provider and deployed role/stock acceptance. |
-| Restoration, split, transition consistency — BL08.7/BL08.10 | 🟢 Implemented through #579/#580 with retained history, atomic activation and SQL/process/browser fixtures; migrations applied | 🟡 Dedicated feature activation and controlled live transition/role/provider acceptance. Do not rebuild restore/split. |
-| Stripe lifecycle — BL04.2/BL05.4/BL05.5/BL06.3 | 🟢 Isolated genuine lifecycle passed; retained 2→1 renewal, deployed duplicate/delayed-event ledger and within-grace failure/recovery passed | 🟡 Natural grace expiry/later recovery and remaining endpoint/job/organization-isolation coverage; bounded public template-route expiry enforcement passed. Do not advance the accepted retained clock again. |
-| Management enforcement and complimentary controls — BL07/BL08.2–5/BL08.12 | 🟢 Existing endpoint/job guards and SQL fixtures retained | 🟡 Bounded public HTTP template-route expiry/revoke, stale-role/isolation and rollout/restore passed. Remaining route/job/stock coverage, privileged controls and paid-access fallback remain; full enforcement restored OFF. |
-| Rental operations, retained history and usability — OP/CT04 | 🟢 Preserve accepted signing and delivered lifecycle source | 🟡 Remaining stock/expiry/negative cases, inbox receipt, retained-role reads, naturally paused DB timing and final desktop/mobile/keyboard journeys. |
-| Evia service/package and matching audit — CT03.4/CT03.5 | ⏸ Paused by owner; accepted signing remains accepted | Working provider service/package and matching retention remain unaccepted; no retries or re-signing while paused. |
-| Commercial/merchant/tax/privacy; LK then BN — CM/RG | 🟡 Existing decision pack and regional work retained | Owner/provider decisions and actual merchant readiness remain; no live charging or launch. BN follows LK. R2 stays deferred; distinct-replica R3 proof is only a pre-scaling requirement. |
+| Core rental lifecycle — OP03–OP06 | 🟢 Approved demo signing, move-in/activation, invoices/receipts, maintenance, notice/settlement/closure and relisting accepted. | Remaining stale-authority/enforcement and broader usability cases only. Do not reactivate or re-sign the closed demo. |
+| Reservations and unsigned negatives — OP02/OP09 | 🟢 SQL conflict checks; deployed withdrawal/relisting (43604875739), natural short hold expiry (43612128152), cancellation plus explicit release (43617929711). | Remaining rendered stock/stale-URL/conflict/negative matrix; these passes do not establish every UI journey or long-duration expiry. |
+| Retained history — CT04.2 | 🟢 14 deployed role/access/denial checks passed (43553999954). | Credential-login/full rendered journeys and matching Evia audit retention are separate; do not requeue accepted retained-role checks. |
+| Staged create/import — BL08.6 | 🟢 Implemented; 22-check complimentary HTTP/SQL inventory case passed (43438898429), including staging, batch rollback, withdrawal and isolation. | Paid create/import/Checkout promotion and remaining actor/resource/form acceptance. |
+| Cessation/restoration/split — BL08.7/9/10 | 🟢 Complimentary HTTP/SQL scope passed (43438898429); genuine sandbox paid service/SQL transitions, history and exact retries passed all 10 checks (43624803051). | Paid authenticated HTTP roles/resources, rendered UI, obligation negatives, all remaining entitlement states and actual renewal execution for these transitions. Do not rebuild or repeat accepted cases. |
+| Provider-operation recovery — BL08.11 | 🟢 Journal/fencing implemented and scoped worker active; portal (43216870550) and customer (43357605904) response-loss recovery passed. | Checkout/subscription and other operation kinds, authenticated role/resource/isolation matrix. Preserve existing worker scope. |
+| Billing lifecycle — BL04/05/06 | 🟢 Hosted sandbox Checkout/return/reload, payment-method and cancellation/resume controls accepted; retained 2→1 renewal (43199377112), within-grace recovery (43224159517), duplicates/delayed failure (43221739128) passed. | Natural seven-day SQL grace expiry/later recovery and remaining event/organization-isolation coverage. Do not advance accepted retained clocks again. |
+| Enforcement and complimentary controls — BL07/BL08.2–5/12 | 🟢 BL07.2 grant/revoke/stale-save/audit and BL07.3 paid-underlay expiry accepted; scoped template and 21 invoice/payment/maintenance HTTP checks passed (43359060142). | Remaining routes/jobs/import/generic bypasses, stale actor/resource cases and controlled complete rollout. Full enforcement OFF. |
+| Zero-stock cancellation — BL09.3 | 🟢 Implemented; prior provider cancellation evidence retained. | Genuine deployed disposable-stock final-dwelling cancellation acceptance remains distinct from the 2→1 cessation test. |
+| Usability, receipt and wake-up — OP08/OP10 | 🟢 Recorded bounded desktop/mobile/keyboard and public-browsing checks retained. | Actual intended-mailbox receipt, remaining complete desktop/mobile/keyboard journeys, genuinely naturally paused database recovery. |
+| Evia service/package and matching audit — CT03.4/5 | ⏸ Paused by owner; signing accepted. | Service/package and matching automatic audit retention unaccepted. No provider retries or re-signing while paused. |
+| Commercial/merchant/privacy and regions — CM/RG | 🟡 Existing decisions/drafts retained; no live charging. | Final formula/FX/rounding/versioning/reactivation/refund decisions, merchant/payout/tax/privacy evidence and LK launch acceptance; BN follows as separate rollout. |
 
-Evidence: [schema rollout](evidence/r5-migration-apply-20261112.json), [worker activation and enabled readback](evidence/r5-recovery-activation-20261112.json), [isolated Stripe lifecycle](evidence/stripe-lifecycle-20261112.json), [retained renewal/deployed duplicate ledger](evidence/retained-stripe-renewal-20261112.json). Current application image remains `59050153ad96b10be7c1990df846363a1642c046`; #590–#597 are controls, documentation and acceptance-harness changes, not another runtime-image release. R5 remains open for the listed acceptance and launch exits.
+**Programme:** R1/R3/R4 retain owner-closed dispositions within their recorded scope; R4 paid-launch obligations are carried into R5. R2 remains deferred. R3 distinct-replica proof is required before scaling. **R5 remains partial; Sri Lanka is not launch-ready; live charging/full enforcement OFF; Evia paused.**
+
+**Last verified runtime:** build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready `khrental-app--0000512`, unchanged configuration and SQL health in run 43624803051. This is a dated verified observation, not a new live probe. The initial paid-test `EREQUEST` did not recur; exact cause remains unconfirmed. Both attempts and verified cleanup are retained in [paid evidence](evidence/r5-paid-inventory-20261114.json).
+
+**Next execution order:** paid inventory HTTP/role and create/import promotion → remaining recovery/enforcement/zero-stock cases → remaining stock/UI/mailbox/natural-wake evidence → LK commercial and launch exits → BN. Natural seven-day grace evidence and owner/provider decisions remain separate dependencies.
 
 ## Historical documentation checkpoint — before the completed rollout
 
@@ -384,32 +397,32 @@ Closure accepts the recorded scope and changes the execution priority. It does n
 
 ## Accepted R4 foundation
 
-| Outcome | Accepted evidence at owner closure | Carried-forward paid-launch work |
-| --- | --- | --- |
-| R4.1 Global Admin pricing | Market versions, UTC effective dates, minor-unit preview, audit and concurrency checks; live USD 5 preview and persisted LK draft; one development workspace enrolled | Final thresholds/excess/FX policy and effective commercial publication |
-| R4.2 Sandbox Checkout | Deployed organization/customer/session/subscription binding, server-derived inventory and pinned catalogue; credentials configured | Genuine hosted Checkout payment and return/refresh, two-organization acceptance |
-| R4.3 Webhooks | Registered receiver activated; strict schema/runtime permissions, signed synthetic probe and unsigned denial passed; SQL duplicate/concurrent/isolation proof | Genuine Stripe-origin events, retry/out-of-order and lifecycle reconciliation |
-| R4.4 Quantity lifecycle | Server inventory counting, proration/deferred reduction commands, confirmed schedule readback and durable retry proof | Actual Stripe quantity/proration/renewal testing; staged create/import/restore/split/cessation with no generic-write bypass |
-| R4.5 Entitlements and complimentary access | Initial-payment/grace/cancellation/risk projection plus audited grant/revoke/expiry controls deployed; SQL and desktop/mobile evidence | Live complimentary operations; production guards and asynchronous reconciliation across routes, jobs and imports |
-| R4.6 Renewal/cancellation | Deployed reconciliation and period-end cancellation; synthetic schedule-decrease/cancellation/recovery proof | Genuine renewal success/failure/recovery, seven-day expiry, cancellation, payment-method update and history/renter preservation |
-| R4.7 Merchant readiness | Selected sandbox/catalogue retained; live collection remains disabled | Merchant eligibility, tax responsibility, collection/payout readiness, commercial terms and unresolved lifecycle policies |
+R4 remains owner-closed within its foundation scope. This table incorporates subsequent accepted R5 evidence; its remaining column is current, not the original 5 November backlog.
 
-Evidence: [R3/R4 closure checkpoint](R4-SANDBOX-RUNTIME-ACCEPTANCE-20261104.md), deployed [PR #500](https://github.com/WasanthaK/khrental/pull/500) and successful [deployment](https://github.com/WasanthaK/khrental/actions/runs/41972688322). All 881 merged application tests passed. Acceptance types remain distinct: real application observations, disposable SQL/browser fixtures, synthetic Stripe transport and genuine hosted payment events are not interchangeable.
+| Outcome | Accepted evidence | Carried-forward paid-launch work |
+| --- | --- | --- |
+| R4.1 Pricing | Versioned drafts, previews, audit and concurrency; existing approved commercial direction retained. | Final formula/FX/rounding and effective commercial publication. |
+| R4.2 Checkout | Genuine hosted sandbox payment and organization-scoped return/reload accepted on 6 November. | Remaining second-organization/isolation and paid staged-stock Checkout promotion. |
+| R4.3 Webhooks | Genuine events, retained renewal ledger, signed duplicates and deployed delayed-event behavior accepted in bounded cases. | Remaining event/operation/isolation matrix. |
+| R4.4 Quantities | Quantity/proration scheduling, retained 2→1 renewal; paid cessation/restoration/split service/SQL pass 43624803051. | Paid create/import promotion, HTTP/UI/roles, remaining states/obligations and transition-specific renewal execution. |
+| R4.5 Entitlements/complimentary | BL07.2 grant/revoke/stale-save/audit, BL07.3 overlay expiry and selected HTTP enforcement passed. | Remaining routes/jobs/import/bypass and complete controlled rollout; full enforcement OFF. |
+| R4.6 Renewal/cancellation | Hosted payment-method and cancellation/resume controls; genuine retained renewal and deployed within-grace recovery accepted. | Natural seven-day SQL grace/later recovery, zero-stock deployed case and remaining isolation. |
+| R4.7 Merchant readiness | Sandbox foundation accepted. | Live entity/country/collection/payout/tax/privacy and terms readiness; live charging OFF. |
+
+Evidence is recorded in the dated checkpoints and [acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md). Sandbox, SQL, HTTP and rendered UI evidence retain separate boundaries.
 
 ## Active R5 execution ledger
 
 | Work item | Current evidence | Remaining exit / next action |
 | --- | --- | --- |
-| R5.1 Contract design and completion artifacts — **FIX DEPLOYED; LIVE RETENTION OPEN** | Historical demo discovery-through-signing/download acceptance retained. PR #503 layout fix deployed at 268e409b; seven-page render and desktop/mobile evidence reviewed | Verify provider-placed signatures and automatic signed/audit retention on the next legitimate signing. Preserve the historical signed PDF. |
-| R5.2 Move-in and activation | PR #503 required-item checklist, deposit retry/ledger and activation retry fixes deployed; disposable concurrent/isolation/rollback acceptance passed | Meaningful checklist evidence, authorized deposit ledger/readback, explicit tenancy activation, occupancy and public-stock withdrawal. An empty checklist is not inspection evidence; any authorized simulation must be labelled. |
-| R5.3 Ongoing tenancy and exit | PR #504 disposable continuation passed notice acknowledgement, inspection, refund-reference settlement, concurrent closure, stock release, retained history and renter access; existing invoice/payment/maintenance suite also passed | Complete the same demo journey through invoice, payment/receipt, maintenance, notice/exit, settlement and eligible relisting with history and actor/workspace isolation. |
-| R5.4 Sri Lanka commercial acceptance | Scoped LK browsing and operational journey results retained | Consolidated desktop/mobile content/UX/UI/usability, country currency/date/notifications, support, terms, privacy/retention, unavailable/withdrawn-stock cases and applicable paid-launch prerequisites below. |
-| R5.5 Brunei rollout | Regional surface partially prepared | Follow Sri Lanka acceptance with country-specific commercial and complete lifecycle verification. LK results do not establish BN acceptance. |
-| R5.6 Paid-launch prerequisites carried from R4 | Sandbox foundation accepted and milestone owner-closed | Complete every carried-forward item in the R4 table before live paid launch: genuine payment lifecycle; inventory/entitlement enforcement; final commercial/lifecycle policies; merchant/tax/collection readiness. Operational R5 work continues while these remain open. |
+| R5.1 Contracts/artifacts | 🟢 Signing and historical signed document accepted; CT04.2 retained-role checks passed. | ⏸ Evia service/package and matching automatic audit retention remain paused/unaccepted. Do not repeat signing. |
+| R5.2 Move-in/activation | 🟢 Approved demo checklist, labelled simulated deposit, activation and stock withdrawal accepted. | Remaining stale-authority/enforcement/UI cases only; preserve closed demo. |
+| R5.3 Ongoing tenancy/exit | 🟢 Approved demo invoice/receipt, maintenance, notice/settlement/closure/relisting accepted; bounded reservation withdrawal/expiry/cancellation passed. | Remaining stock/conflict/negative, mailbox, natural-wake and full desktop/mobile/keyboard matrix. |
+| R5.4 Sri Lanka launch | 🟡 Bounded public browsing, market isolation and operational evidence retained. | Consolidated remaining usability, commercial/merchant/tax/privacy and applicable paid-launch exits; not launch-ready. |
+| R5.5 Brunei rollout | 🟡 Regional surface partly prepared. | Separate BN commercial and full lifecycle acceptance after LK; not an automatic first-LK-launch blocker. |
+| R5.6 Paid-launch obligations | 🟡 Bounded paid inventory service/SQL, provider lifecycle/recovery and selected enforcement passes. | The remaining work in the controlling queue and R4 table; no blanket paid-launch completion. |
 
-Execution order: **future-contract layout → meaningful move-in/deposit/activation → ongoing tenancy/exit/relisting → Sri Lanka launch acceptance → Brunei**. Paid-launch prerequisites must pass before collecting live subscription payments; they are not a reason to repeat accepted R3/R4 work or pause the operational journey. Issue [#459](https://github.com/WasanthaK/khrental/issues/459) remains the active operational tracker.
-
-R1 remains owner-closed with its recorded narrow waivers. R2 invoice immutability remains owner-deferred and incomplete. Multi-replica R3 verification remains a separate mandatory pre-scaling check. Live charging remains disabled. No runtime flag, access grant, payment, tenancy, capacity or deployment change is made by this status decision.
+Execution follows the [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue), not the original already-completed demo sequence. R1/R3/R4 owner dispositions and deferred R2 remain unchanged. Distinct-replica R3 proof is a pre-scaling requirement. This reconciliation does not enable charging, enforcement, scaling or Evia work.
 
 ## Current sandbox bindings
 
