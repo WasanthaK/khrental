@@ -1,4 +1,4 @@
-// Seeded synthetic hold, actual deployed HTTP withdrawal. Acceptance fields
+// Seeded synthetic hold, actual deployed HTTP reservation transitions. Acceptance fields
 // are schema-required synthetic fixture data, not participant consent. No real
 // agreement, signature, payment, email or provider operation is performed.
 import assert from 'node:assert/strict';
@@ -6,7 +6,7 @@ import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {sql,getMssqlPool,closeMssqlPool} from '/app/src/api/mssql/pool.js';
 import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
 const operation=process.env.RESERVATION_HTTP_OPERATION;
-const scenario=process.env.RESERVATION_HTTP_SCENARIO||'withdrawal',expiry=scenario==='natural_expiry';
+const scenario=process.env.RESERVATION_HTTP_SCENARIO||'withdrawal',expiry=scenario==='natural_expiry',cancel=scenario==='unsigned_cancellation';
 const agreement=randomUUID();let draftBaseline,expiryTiming;
 const hash=x=>createHash('sha256').update(typeof x==='string'?x:JSON.stringify(x)).digest('hex');
 const checks=[],actor=randomUUID(),authId=randomUUID(),property=randomUUID(),enquiry=randomUUID();
@@ -16,9 +16,9 @@ const q=(statement,args={})=>execute(pool,statement,args);
 const check=name=>{checks.push(name);console.log('RESERVATION_CHECK='+name);};
 const protectedState=async()=>hash(await q('SELECT * FROM management_billing_accounts WHERE tenant_id IN (@a,@b) ORDER BY tenant_id',{a:'80a4b392-13f8-484d-81fa-a110a6ef75f0',b:'2383f4fc-e107-4ac7-9e13-39db501f40ec'}));
 const snapshot=async()=>hash({offer:await q('SELECT * FROM property_rental_offers WHERE enquiry_id=@enquiry',{enquiry}),events:await q('SELECT * FROM property_rental_offer_events WHERE enquiry_id=@enquiry ORDER BY id',{enquiry})});
-const http=async(path,{body,authorized=false,tenant=operation}={})=>{
- assert.ok(path.startsWith('/api/public-listings')||path==='/api/owner-enquiries/'+enquiry+'/offer');
- const r=await fetch('https://app.quixo.homes'+path,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),headers:{...(authorized?{Authorization:'Bearer '+token,'x-tenant-id':tenant}:{}),...(body?{'Content-Type':'application/json',Origin:'https://app.quixo.homes'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+const http=async(path,{body,method=body?'POST':'GET',authorized=false,tenant=operation}={})=>{
+ assert.ok(path.startsWith('/api/public-listings')||path==='/api/owner-enquiries/'+enquiry+'/offer'||path==='/api/mssql/agreements/'+agreement);
+ const r=await fetch('https://app.quixo.homes'+path,{method,redirect:'error',signal:AbortSignal.timeout(30000),headers:{...(authorized?{Authorization:'Bearer '+token,'x-tenant-id':tenant}:{}),...(body?{'Content-Type':'application/json',Origin:'https://app.quixo.homes'}:{})},...(body?{body:JSON.stringify(body)}:{})});
  const data=await r.json();return {status:r.status,data,cache:r.headers.get('cache-control')};
 };
 const publicState=async visible=>{
@@ -30,7 +30,7 @@ const publicState=async visible=>{
  if(visible){assert.equal(detail.data.data.title,'TEST ONLY — no rental available');assert.ok(!JSON.stringify(detail.data).includes('@example.invalid'));}
 };
 try{
- assert.ok(['withdrawal','natural_expiry'].includes(scenario));
+ assert.ok(['withdrawal','natural_expiry','unsigned_cancellation'].includes(scenario));
  assert.match(operation||'',/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
  assert.equal(process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY,'true');
  assert.equal(process.env.PROPERTY_ENQUIRIES_ENABLED,'true');
@@ -48,8 +48,11 @@ try{
   listing=String((await run('SELECT public_id FROM public_listing_preferences WHERE property_id=@property AND tenant_id=@id',{property,id:operation}))[0].public_id);
   await run("INSERT property_enquiries(id,listing_public_id,tenant_id,property_id,seeker_id,seeker_name,seeker_email,country_code,listing_title,message,consent_version,request_id,payload_hash) VALUES(@enquiry,@listing,@id,@property,@actor,'Synthetic fixture',@email,'LK','TEST ONLY — no rental available','Seeded fixture; no customer enquiry or consent','fixture-only',@request,@hash)",{enquiry,listing,id:operation,property,actor,email,request:randomUUID(),hash:'0'.repeat(64)});
   await run("INSERT property_rental_offers(enquiry_id,tenant_id,property_id,application_version,status,version,currency,rent,deposit,fees,start_date,end_date,terms,offer_until,hold_until,accepted_at,consent_version) VALUES(@enquiry,@id,@property,1,'accepted',1,'LKR',100,0,0,CONVERT(date,SYSUTCDATETIME()),CONVERT(date,DATEADD(day,30,SYSUTCDATETIME())),'Seeded synthetic hold; no participant acceptance, tenancy or payment',DATEADD(second,@offerSeconds,SYSUTCDATETIME()),DATEADD(second,@holdSeconds,SYSUTCDATETIME()),SYSUTCDATETIME(),'rental-offer-v1')",{enquiry,id:operation,property,offerSeconds:expiry?30:3600,holdSeconds:expiry?90:7200});
-  if(expiry){
-   await run("INSERT agreements(id,tenant_id,propertyid,renteeid,status,title) VALUES(@agreement,@id,@property,@actor,'draft','TEST ONLY unsigned expiry fixture'); UPDATE property_rental_offers SET status='agreement',agreement_id=@agreement WHERE enquiry_id=@enquiry",{agreement,id:operation,property,actor,enquiry});
+  if(expiry||cancel){
+   await run("INSERT agreements(id,tenant_id,propertyid,renteeid,status,title) VALUES(@agreement,@id,@property,@actor,'draft','TEST ONLY unsigned reservation fixture'); UPDATE property_rental_offers SET status='agreement',agreement_id=@agreement WHERE enquiry_id=@enquiry",{agreement,id:operation,property,actor,enquiry});
+  }
+  if(cancel){
+   await run("INSERT rental_offer_agreement_links(agreement_id,enquiry_id,accepted_version,application_version,unit_id,rent,deposit,start_date,end_date) SELECT @agreement,enquiry_id,1,application_version,unit_id,rent,deposit,start_date,end_date FROM property_rental_offers WHERE enquiry_id=@enquiry",{agreement,enquiry});
   }
   await tx.commit();created=true;
  }catch(error){await tx.rollback().catch(()=>{});throw error;}
@@ -95,6 +98,35 @@ try{
   check('repeat_read_preserves_single_system_expiry_audit');
   const denied=await http(path,{authorized:true,body:{action:'withdraw',version:2,requestId:randomUUID()}});
   assert.equal(denied.status,409);assert.equal(denied.data.code,'RENTAL_OFFER_CHANGED');assert.equal(await snapshot(),afterExpiry);check('expired_hold_cannot_be_withdrawn_again');
+ }else if(cancel){
+  const agreementPath='/api/mssql/agreements/'+agreement;
+  const draftRows=()=>q('SELECT * FROM agreements WHERE id=@agreement AND tenant_id=@id',{agreement,id:operation});
+  const beforeDraft=await draftRows(),beforeOffer=await snapshot();
+  draftBaseline=hash(beforeDraft);
+  const unchanged=async()=>{assert.equal(hash(await draftRows()),draftBaseline);assert.equal(await snapshot(),beforeOffer);};
+  const body={status:'cancelled',notes:'TEST ONLY unsigned draft cancellation'};
+  stage='cancel_anonymous_denial';
+  const anonymous=await http(agreementPath,{method:'PUT',body});assert.ok([401,403].includes(anonymous.status));await unchanged();check('anonymous_cancellation_denied_without_writes');
+  stage='cancel_foreign_scope_denial';
+  const foreign=await http(agreementPath,{method:'PUT',body,authorized:true,tenant:randomUUID()});assert.equal(foreign.status,403);await unchanged();check('foreign_workspace_cancellation_denied_without_writes');
+  stage='cancel_unsigned_draft';
+  const result=await http(agreementPath,{method:'PUT',body,authorized:true});assert.equal(result.status,200);assert.equal(result.data.data.status,'cancelled');
+  const cancelledRows=await draftRows();
+  const preserved=row=>Object.fromEntries(Object.entries(row).filter(([key])=>!['status','notes','updatedat'].includes(key.toLowerCase())));
+  assert.deepEqual(preserved(cancelledRows[0]),preserved(beforeDraft[0]));
+  draftBaseline=hash(cancelledRows);check('unsigned_cancellation_preserves_document_and_identity');
+  stage='cancel_preserves_hold';await publicState(false);assert.equal(await snapshot(),beforeOffer);check('draft_cancellation_does_not_release_reservation');
+  const read=await http(path,{authorized:true});assert.equal(read.status,200);assert.equal(read.data.data.agreement.status,'cancelled');assert.equal(read.data.data.offer.status,'agreement');assert.equal(read.data.data.canReplaceAgreement,true);assert.equal(await snapshot(),beforeOffer);check('cancelled_draft_and_replacement_option_read_back');
+  stage='cancel_then_withdraw';
+  const withdrawal={action:'withdraw',version:1,requestId:randomUUID()};
+  const released=await http(path,{authorized:true,body:withdrawal});assert.equal(released.status,200);assert.equal(released.data.data.offer.status,'withdrawn');assert.equal(released.data.data.offer.version,2);assert.equal(released.data.data.canReplaceAgreement,false);check('explicit_withdrawal_releases_cancelled_draft_hold');
+  await publicState(true);check('cancel_then_withdraw_restores_public_stock');
+  const after=await snapshot();const retry=await http(path,{authorized:true,body:withdrawal});
+  assert.equal(retry.status,200);assert.equal(await snapshot(),after);assert.equal(hash(await draftRows()),draftBaseline);
+  const events=await q('SELECT event_type,version,actor_id FROM property_rental_offer_events WHERE enquiry_id=@enquiry',{enquiry});
+  assert.equal(events.length,1);assert.equal(events[0].event_type,'withdraw');assert.equal(events[0].version,2);assert.equal(String(events[0].actor_id).toLowerCase(),actor);
+  assert.equal((await q('SELECT agreement_id FROM rental_offer_agreement_links WHERE agreement_id=@agreement AND enquiry_id=@enquiry',{agreement,enquiry})).length,1);
+  check('retry_preserves_cancelled_history_link_and_single_withdrawal_audit');
  }else{
  const before=await snapshot();
  stage='anonymous_denial';assert.equal((await http(path,{body:{action:'withdraw',version:1,requestId:randomUUID()}})).status,401);assert.equal(await snapshot(),before);check('anonymous_withdrawal_denied_without_writes');
