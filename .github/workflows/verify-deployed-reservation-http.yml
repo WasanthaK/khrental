@@ -14,6 +14,7 @@ on:
         options:
           - withdrawal
           - natural_expiry
+          - unsigned_cancellation
       expected_build:
         description: Exact accepted serving application SHA
         required: true
@@ -67,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-RESERVATION-HTTP
-          [[ "$SCENARIO" = withdrawal || "$SCENARIO" = natural_expiry ]]
+          [[ "$SCENARIO" = withdrawal || "$SCENARIO" = natural_expiry || "$SCENARIO" = unsigned_cancellation ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
