@@ -14,6 +14,14 @@ on:
         description: Fresh isolated synthetic fixture UUID
         required: true
         type: string
+      scenario:
+        description: Acceptance case (do not repeat an already accepted case)
+        required: true
+        type: choice
+        default: promotion
+        options:
+          - promotion
+          - transitions
       confirmation:
         description: VERIFY-PAID-INVENTORY
         required: true
@@ -45,6 +53,7 @@ jobs:
     env:
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       OPERATION_ID: ${{ inputs.operation_id }}
+      SCENARIO: ${{ inputs.scenario }}
       CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -58,6 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
+          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -87,13 +97,13 @@ jobs:
           digest=$(sha256sum scripts/verify-deployed-paid-inventory.mjs | cut -d ' ' -f 1)
           # One short Azure connection. Fetch only this reviewed commit and verify
           # exact script bytes before execution; no unpinned remote code or retry.
-          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-paid-inventory.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/paid-inventory-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.PAID_INVENTORY_OPERATION='$OPERATION_ID';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-paid-inventory.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/paid-inventory-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.PAID_INVENTORY_OPERATION='$OPERATION_ID';process.env.PAID_INVENTORY_SCENARIO='$SCENARIO';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           test "${#command}" -lt 2000
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
           grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-          jq -e '.passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==false) and (.uiAccepted==false) and (.checks|length)==10' paid-inventory-summary.json
+          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==false) and (.uiAccepted==false) and (.checks|length)==10' paid-inventory-summary.json
       - name: Verify unchanged revision and public health
         if: always()
         shell: bash
