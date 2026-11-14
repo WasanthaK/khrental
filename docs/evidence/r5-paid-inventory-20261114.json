@@ -1,40 +1,90 @@
 {
-  "status": "failed_acceptance_cleanup_verified",
-  "run": "https://github.com/WasanthaK/khrental/actions/runs/43624143226",
-  "job": 132536152919,
-  "sourceSha": "ec1786b7a1c90c0c82314d44a4504770ff86a45f",
-  "operation": "e45089b2-bc94-4eae-b720-54d3459c0130",
-  "doNotReplay": true,
-  "failedAtUtc": "2026-11-14T18:01:07Z",
-  "failedAtColombo": "2026-11-14T23:31:07+05:30",
-  "stage": "paid_cessation",
-  "code": "EREQUEST",
-  "rootCause": "Not determined; original harness did not record SQL error number or distinguish preview/apply.",
-  "checksPassed": [
-    "isolated_private_fixture",
-    "genuine_paid_capacity_reconciled"
-  ],
-  "cleanup": {
-    "verified": true,
-    "fixtureInactive": true,
-    "subscriptionCanceled": true,
-    "recordsRetained": true,
-    "protectedBillingUnchanged": true
+  "status": "bounded_paid_service_sql_acceptance_passed",
+  "scope": "genuine sandbox provider + deployed service/SQL",
+  "httpAccepted": false,
+  "uiAccepted": false,
+  "priorFailedAttempt": {
+    "status": "failed_acceptance_cleanup_verified",
+    "run": "https://github.com/WasanthaK/khrental/actions/runs/43624143226",
+    "job": 132536152919,
+    "sourceSha": "ec1786b7a1c90c0c82314d44a4504770ff86a45f",
+    "operation": "e45089b2-bc94-4eae-b720-54d3459c0130",
+    "doNotReplay": true,
+    "failedAtUtc": "2026-11-14T18:01:07Z",
+    "failedAtColombo": "2026-11-14T23:31:07+05:30",
+    "stage": "paid_cessation",
+    "code": "EREQUEST",
+    "rootCause": "Not determined; original harness did not record SQL error number or distinguish preview/apply.",
+    "checksPassed": [
+      "isolated_private_fixture",
+      "genuine_paid_capacity_reconciled"
+    ],
+    "cleanup": {
+      "verified": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "recordsRetained": true,
+      "protectedBillingUnchanged": true
+    },
+    "deployment": {
+      "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+      "revision": "khrental-app--0000512",
+      "configurationUnchanged": true,
+      "publicSqlHealthPassed": true
+    },
+    "artifact": {
+      "id": 14125212293,
+      "sha256": "41e09c21bff11330564245040ffa2724cdc9a728e5842ff69baaf088bfdbcf2c"
+    },
+    "acceptance": {
+      "paidTransitions": false,
+      "http": false,
+      "ui": false
+    },
+    "followup": "https://github.com/WasanthaK/khrental/pull/646"
   },
-  "deployment": {
-    "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
-    "revision": "khrental-app--0000512",
-    "configurationUnchanged": true,
-    "publicSqlHealthPassed": true
+  "successfulAttempt": {
+    "run": "https://github.com/WasanthaK/khrental/actions/runs/43624803051",
+    "job": 132538205325,
+    "sourceSha": "3c042aa90527ad07897ae28d6c48238dab42a11a",
+    "passedAtUtc": "2026-11-14T18:08:40Z",
+    "passedAtColombo": "2026-11-14T23:38:40+05:30",
+    "operation": "3b1f19f2-5fd5-4541-9814-2790c6e9e8d4",
+    "doNotReplay": true,
+    "checks": [
+      "isolated_private_fixture",
+      "genuine_paid_capacity_reconciled",
+      "cessation_defers_provider_reduction_to_renewal",
+      "cessation_retry_no_duplicate_effect",
+      "restoration_updates_paid_renewal_schedule",
+      "restoration_retry_no_duplicate_effect",
+      "original_property_and_cessation_history_retained",
+      "split_activates_exact_units_with_next_renewal_quantity",
+      "split_retry_no_duplicate_effect",
+      "protected_accounts_subscriptions_and_clocks_unchanged"
+    ],
+    "cleanup": {
+      "verified": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "recordsRetained": true,
+      "protectedBillingUnchanged": true
+    },
+    "deployment": {
+      "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+      "revision": "khrental-app--0000512",
+      "configurationUnchanged": true,
+      "publicSqlHealthPassed": true
+    },
+    "artifact": {
+      "id": 14125867080,
+      "sha256": "2f3c7490e2be3c86ec47299e3a05b45420f4a42b0ba3d2fb2089bce993d4179a"
+    }
   },
-  "artifact": {
-    "id": 14125212293,
-    "sha256": "41e09c21bff11330564245040ffa2724cdc9a728e5842ff69baaf088bfdbcf2c"
+  "change": {
+    "pr": 646,
+    "mergeSha": "3c042aa90527ad07897ae28d6c48238dab42a11a",
+    "description": "Add stock SQL preflight before provider creation and numeric SQL diagnostics; no application runtime change."
   },
-  "acceptance": {
-    "paidTransitions": false,
-    "http": false,
-    "ui": false
-  },
-  "followup": "https://github.com/WasanthaK/khrental/pull/646"
+  "rootCause": "Original EREQUEST did not reproduce. Its exact SQL cause remains unconfirmed; a passing fresh run is not proof of root-cause correction."
 }
