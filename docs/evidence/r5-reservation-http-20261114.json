@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-14",
+  "completedUtc": "2026-11-14T14:27:58Z",
+  "completedAsiaColombo": "2026-11-14T19:57:58+05:30",
+  "pr": 641,
+  "head": "49750022d0f27b5f22fb5a40ffd9b355740abfbf",
+  "merge": "61af9e3f96330297662a0667364fdeac7f1b861d",
+  "run": 43604875739,
+  "job": 132477445880,
+  "operation": "ad7b4895-3a22-42d6-88f2-75619f9e8a5c",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "result": {
+    "passed": true,
+    "checks": [
+      "seeded_hold_hidden_from_catalog_detail_and_enquiry",
+      "anonymous_withdrawal_denied_without_writes",
+      "foreign_workspace_withdrawal_denied_without_writes",
+      "stale_withdrawal_denied_without_writes",
+      "authenticated_http_withdrawal_recorded",
+      "withdrawal_restores_catalog_detail_and_enquiry",
+      "exact_retry_preserves_withdrawn_state_and_audit",
+      "new_terminal_withdrawal_denied_without_writes",
+      "one_authorized_withdrawal_audit",
+      "protected_billing_unchanged"
+    ],
+    "fixtureInactive": true,
+    "sessionRevoked": true,
+    "protectedBillingUnchanged": true,
+    "providerWrites": 0,
+    "seededHold": true,
+    "participantAcceptance": false,
+    "uiAccepted": false
+  },
+  "configurationUnchanged": true,
+  "publicSqlHealthPassed": true,
+  "artifact": {
+    "id": 14117677229,
+    "sha256": "89ac87572c95a6464425642aa7fb417e31bf4a9ab4c6c13675a23ab932f7d1e4"
+  },
+  "boundary": "Seeded synthetic accepted hold and persisted five-minute fixture session. Actual deployed owner HTTP withdrawal and public readback. No real participant consent, credential login, rendered application UI, unsigned-agreement cancellation, natural expiry, signatures, payments or provider writes. Records retained inactive, not deleted."
+}
