@@ -52,6 +52,7 @@ try{
    await run("INSERT agreements(id,tenant_id,propertyid,renteeid,status,title) VALUES(@agreement,@id,@property,@actor,'draft','TEST ONLY unsigned reservation fixture'); UPDATE property_rental_offers SET status='agreement',agreement_id=@agreement WHERE enquiry_id=@enquiry",{agreement,id:operation,property,actor,enquiry});
   }
   if(cancel){
+   await run("UPDATE a SET rentamount=o.rent,depositamount=o.deposit,startdate=o.start_date,enddate=o.end_date FROM agreements a JOIN property_rental_offers o ON o.agreement_id=a.id WHERE a.id=@agreement AND o.enquiry_id=@enquiry",{agreement,enquiry});
    await run("INSERT rental_offer_agreement_links(agreement_id,enquiry_id,accepted_version,application_version,unit_id,rent,deposit,start_date,end_date) SELECT @agreement,enquiry_id,1,application_version,unit_id,rent,deposit,start_date,end_date FROM property_rental_offers WHERE enquiry_id=@enquiry",{agreement,enquiry});
   }
   await tx.commit();created=true;
@@ -110,7 +111,7 @@ try{
   stage='cancel_foreign_scope_denial';
   const foreign=await http(agreementPath,{method:'PUT',body,authorized:true,tenant:randomUUID()});assert.equal(foreign.status,403);await unchanged();check('foreign_workspace_cancellation_denied_without_writes');
   stage='cancel_unsigned_draft';
-  const result=await http(agreementPath,{method:'PUT',body,authorized:true});assert.equal(result.status,200);assert.equal(result.data.data.status,'cancelled');
+  const result=await http(agreementPath,{method:'PUT',body,authorized:true});assert.equal(result.status,200,'Cancellation HTTP status '+result.status+'; code '+String(result.data.code||'none'));assert.equal(result.data.data.status,'cancelled');
   const cancelledRows=await draftRows();
   const preserved=row=>Object.fromEntries(Object.entries(row).filter(([key])=>!['status','notes','updatedat'].includes(key.toLowerCase())));
   assert.deepEqual(preserved(cancelledRows[0]),preserved(beforeDraft[0]));
@@ -141,7 +142,7 @@ try{
  const events=await q('SELECT event_type,actor_id,version FROM property_rental_offer_events WHERE enquiry_id=@enquiry',{enquiry});assert.equal(events.length,1);assert.equal(events[0].event_type,'withdraw');assert.equal(events[0].version,2);assert.equal(String(events[0].actor_id).toLowerCase(),actor);check('one_authorized_withdrawal_audit');
  }
  assert.equal(await protectedState(),baseline);check('protected_billing_unchanged');passed=true;
-}catch(error){console.error('RESERVATION_FAILED='+JSON.stringify({stage,code:error.code||'ASSERTION',number:error.number||null,checks}));process.exitCode=1;}
+}catch(error){console.error('RESERVATION_FAILED='+JSON.stringify({stage,code:error.code||'ASSERTION',number:error.number||null,...(stage==='cancel_unsigned_draft'?{diagnostic:String(error.message||'').slice(0,250)}:{}),checks}));process.exitCode=1;}
 finally{
  if(created){
   try{await q("UPDATE public_listing_preferences SET opted_out=1 WHERE tenant_id=@id; UPDATE properties SET status='inactive' WHERE tenant_id=@id; UPDATE property_rental_offers SET status='withdrawn' WHERE tenant_id=@id AND status IN('accepted','agreement','offered'); UPDATE property_enquiries SET status='closed' WHERE tenant_id=@id; UPDATE tenant_memberships SET status='inactive' WHERE tenant_id=@id; UPDATE app_users SET status='inactive',active=0 WHERE tenant_id=@id; UPDATE tenants SET status='inactive' WHERE id=@id",{id:operation});}catch{cleanup=false;}
