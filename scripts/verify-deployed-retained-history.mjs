@@ -15,11 +15,22 @@ const session=async record=>{
   await q('INSERT INTO auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@hash,DATEADD(MINUTE,5,SYSUTCDATETIME()))',{id:record.id,hash:digest(token)});
   return token;
 };
-const read=async(path,token,tenant)=>{
-  assert.ok(path.startsWith('/api/mssql/agreements')||path.startsWith('/storage/documents/tenants/'));
-  const r=await fetch('https://app.quixo.homes'+path,{method:'GET',redirect:'error',signal:AbortSignal.timeout(30000),headers:{...(token?{Authorization:'Bearer '+token}:{}),'x-tenant-id':tenant}});
+const read=async(path,token,tenant,filters=[])=>{
+  const query=path==='/api/platform/query';
+  assert.ok(query||path.startsWith('/storage/documents/tenants/'));
+  assert.ok(filters.every(x=>['id','renteeid'].includes(x.column)&&x.operator==='eq'));
+  const r=await fetch('https://app.quixo.homes'+path,{method:query?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),
+    headers:{...(token?{Authorization:'Bearer '+token}:{}),'x-tenant-id':tenant,...(query?{'Content-Type':'application/json'}:{})},
+    ...(query?{body:JSON.stringify({action:'select',table:'agreements',select:'id,renteeid,status,signed_document_url',filters,limit:500})}:{})});
   const bytes=new Uint8Array(await r.arrayBuffer());assert.ok(bytes.length<25*1024*1024);
   return {status:r.status,type:r.headers.get('content-type')||'',bytes};
+};
+const rows=response=>{
+  const result=JSON.parse(new TextDecoder().decode(response.bytes));
+  assert.equal(result.error,null);
+  assert.ok(result.meta?.databaseConfigured!==false&&!result.meta?.missingTable);
+  assert.ok(Array.isArray(result.data));
+  return result.data;
 };
 const makeFixture=async(tenant,role)=>{
   const id=randomUUID(),authId=randomUUID(),email=`ct04-${operation}-${role}@example.invalid`;
@@ -68,12 +79,19 @@ try{
   checkpoint('existing_closed_demo_archive_selected');
   stage='authorized_history';
   const adminToken=await session(records[0]),renterToken=await session(records[1]);
-  const detail='/api/mssql/agreements/'+agreement.id;
+  const detail='/api/platform/query';
+  const recordFilter=[{column:'id',operator:'eq',value:agreement.id}];
   let pdfHash;
   for(const [role,token] of [['administrator',adminToken],['original_renter',renterToken]]){
-    const metadata=await read(detail,token,sourceTenant);assert.equal(metadata.status,200);
-    const parsed=JSON.parse(new TextDecoder().decode(metadata.bytes));assert.ok(same(parsed.data?.id,agreement.id));
-    const pdf=await read(agreement.signed_document_url,token,sourceTenant);assert.equal(pdf.status,200);
+    stage=role+'_metadata';
+    const metadata=await read(detail,token,sourceTenant,recordFilter);
+    console.log('HISTORY_HTTP='+JSON.stringify({stage,status:metadata.status}));
+    assert.equal(metadata.status,200);
+    const data=rows(metadata);assert.equal(data.length,1);assert.ok(same(data[0].id,agreement.id));
+    stage=role+'_pdf';
+    const pdf=await read(agreement.signed_document_url,token,sourceTenant);
+    console.log('HISTORY_HTTP='+JSON.stringify({stage,status:pdf.status,pdfContentType:/application\/pdf/i.test(pdf.type)}));
+    assert.equal(pdf.status,200);
     assert.match(pdf.type,/application\/pdf/i);assert.equal(new TextDecoder().decode(pdf.bytes.slice(0,5)),'%PDF-');
     const current=digest(Buffer.from(pdf.bytes));if(pdfHash){assert.equal(current,pdfHash);}else{pdfHash=current;}
     checkpoint(role+'_retained_metadata_and_pdf_allowed');
@@ -83,16 +101,17 @@ try{
   await q("INSERT INTO tenants(id,name,slug,status,[plan]) VALUES(@id,'CT04 disposable foreign workspace',@slug,'active','development-testing')",{id:operation,slug:'ct04-'+operation});
   const unrelated=await makeFixture(sourceTenant,'rentee'),foreign=await makeFixture(operation,'admin');
   const deny=async(name,path,token,tenant,statuses=[403,404])=>{
-    const response=await read(path,token,tenant);assert.ok(statuses.includes(response.status),name+': '+response.status);
+    const response=await read(path,token,tenant,path===detail?recordFilter:[]);assert.ok(statuses.includes(response.status),name+': '+response.status);
+    if(path===detail&&response.status===200){assert.equal(rows(response).length,0);}
     assert.ok(!response.type.includes('application/pdf'));assert.ok(!new TextDecoder().decode(response.bytes).includes(agreement.signed_document_url));checkpoint(name);
   };
   for(const [name,actor,tenant] of [['unrelated_renter',unrelated,sourceTenant],['foreign_administrator',foreign,operation]]){
-    await deny(name+'_metadata_denied',detail,actor.token,tenant);
+    await deny(name+'_metadata_denied',detail,actor.token,tenant,[200]);
     await deny(name+'_pdf_denied',agreement.signed_document_url,actor.token,tenant);
   }
   await deny('foreign_workspace_override_denied',agreement.signed_document_url,foreign.token,sourceTenant,[403]);
-  const list=await read('/api/mssql/agreements?pageSize=500&renteeId='+renter.id,unrelated.token,sourceTenant);
-  assert.equal(list.status,200);assert.ok(!new TextDecoder().decode(list.bytes).toLowerCase().includes(String(agreement.id).toLowerCase()));checkpoint('unrelated_forced_renter_list_excludes_history');
+  const list=await read(detail,unrelated.token,sourceTenant,[{column:'renteeid',operator:'eq',value:renter.id}]);
+  assert.equal(list.status,200);assert.equal(rows(list).length,0);assert.ok(!new TextDecoder().decode(list.bytes).toLowerCase().includes(String(agreement.id).toLowerCase()));checkpoint('unrelated_forced_renter_list_excludes_history');
   await q("UPDATE tenant_memberships SET status='inactive' WHERE tenant_id=@tenant AND app_user_id=@id",{tenant:sourceTenant,id:unrelated.id});
   assert.equal((await q('SELECT id FROM auth_sessions WHERE token_hash=@hash AND revoked_at IS NULL AND expires_at>SYSUTCDATETIME()',{hash:digest(unrelated.token)})).length,1);
   await deny('revoked_membership_metadata_denied',detail,unrelated.token,sourceTenant,[403]);
@@ -116,6 +135,7 @@ finally{
       if(baseline){assert.equal(await snapshot(),baseline);}
     }catch{cleanup=false;}
   }
+  console.log('HISTORY_CLEANUP='+JSON.stringify({verified:cleanup,sessions:tokens.length,fixtures:fixtures.length,foreignCreated,existingHistoryUnchanged:baseline?cleanup:null}));
   if(!cleanup){console.error('HISTORY_CLEANUP_FAILED');process.exitCode=1;}
   if(passed&&cleanup){console.log('HISTORY_PASS='+JSON.stringify({passed:true,checks,fixtureClosed:true,sessionsRevoked:true,existingHistoryUnchanged:true,providerWrites:0,credentialLoginAccepted:false}));}
   await closeMssqlPool();
