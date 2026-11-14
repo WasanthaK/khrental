@@ -299,39 +299,6 @@ const MaintenanceDetails = () => {
 
   // Handle completion images change
 
-  // Modify the parseNotes function to better handle JSON format
-  const parseNotes = (notes) => {
-    if (!notes) {return [];}
-
-    try {
-      // Try to parse as JSON
-      const parsedNotes = JSON.parse(notes);
-      if (Array.isArray(parsedNotes)) {
-        // Add proper display formatting for admin messages
-        return parsedNotes.map(note => ({
-          ...note,
-          isAdminMessage: note.role === 'admin' || !!note.isAdminMessage,
-          // Ensure content is extracted correctly
-          content: note.content || note.text || ''
-        }));
-      } else if (typeof parsedNotes === 'object') {
-        // If notes is a JSON object but not an array, wrap it in an array
-        return [{
-          content: parsedNotes.content || parsedNotes.text || JSON.stringify(parsedNotes),
-          createdat: parsedNotes.createdat || new Date().toISOString(),
-          isAdminMessage: parsedNotes.role === 'admin' || !!parsedNotes.isAdminMessage
-        }];
-      }
-    } catch (e) {
-      // If notes is not valid JSON, treat it as a single comment
-      console.log("Failed to parse notes as JSON:", e);
-      return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
-    }
-
-    // Fallback
-    return [{ content: notes, createdat: new Date().toISOString(), isAdminMessage: false }];
-  };
-
   // Update the organizeImagesByStage function to be more forgiving with data
   const organizeImagesByStage = (images) => {
     // Debug output to check what we're receiving
@@ -907,7 +874,6 @@ const MaintenanceDetails = () => {
 
           {/* Comments Section */}
           <CommentSection
-            comments={parseNotes(request.notes)}
             onAddComment={handleAddComment}
             userRole={user?.role || 'guest'}
             userName={user?.name || 'Guest'}

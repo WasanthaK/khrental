@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const output=process.env.BILLING_SCREENSHOT_DIR || '/tmp/khrental-management-billing-screens';
 const vite=await createServer({root:process.cwd(),configFile:false,logLevel:'error',plugins:[react()],
- optimizeDeps:{entries:['tests/fixtures/management-billing/index.html']},server:{host:'127.0.0.1',port:0,strictPort:false}});
+ optimizeDeps:{entries:['tests/fixtures/management-billing/index.html','tests/fixtures/security/index.html']},server:{host:'127.0.0.1',port:0,strictPort:false}});
 let browser;
 try{
  await vite.listen();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;

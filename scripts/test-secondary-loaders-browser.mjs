@@ -28,7 +28,10 @@ try{
    const body=options.body?JSON.parse(options.body):{};
    // The comments child independently reads the same projection. Keep its
    // immediate empty fixture separate from the page's signal-bearing read.
-   if(/^\/api\/maintenance-lifecycle\/requests\/[^/]+$/.test(path)&&!options.signal){return Response.json({data:{request:{id:path.split('/').at(-1)},images:[],comments:[]}});}
+   if(/^\/api\/maintenance-lifecycle\/requests\/[^/]+$/.test(path)&&!options.signal){
+    if(window.fixtureCommentFailure){return Response.json({error:'Synthetic comment read failure'},{status:503});}
+    return Response.json({data:{request:{id:path.split('/').at(-1)},images:[],comments:window.fixturePersistedComments||[]}});
+   }
    if((path==='/api/platform/query'&&body.table==='properties')||/^\/api\/maintenance-lifecycle\/requests\/[^/]+$/.test(path)){
     // Deliberately return a late success even after abort: scope guards must
     // reject it independently of browser/network cancellation.
@@ -37,7 +40,7 @@ try{
      options.signal?.addEventListener('abort',()=>{read.aborted=true;},{once:true});
      read.release=name=>{
       const id=body.filters?.find(f=>f.column==='id')?.value||path.split('/').at(-1);
-      const data=path.includes('maintenance-lifecycle')?{request:{id,title:name,description:name,status:'pending',priority:'medium',requesttype:'plumbing',createdat:'2026-11-11T00:00:00Z'},images:[]}:[{id,name,address:'Synthetic location',country_code:'LK',images:[],amenities:[],status:'active'}];
+      const data=path.includes('maintenance-lifecycle')?{request:{id,title:name,description:name,status:name==='Completed demo'?'completed':'pending',notes:name==='Completed demo'?'Retained completion evidence':null,priority:'medium',requesttype:'plumbing',createdat:'2026-11-11T00:00:00Z'},images:[]}:[{id,name,address:'Synthetic location',country_code:'LK',images:[],amenities:[],status:'active'}];
       resolve(Response.json({data}));
      };
      window.pendingFixtureReads.push(read);
@@ -67,6 +70,19 @@ try{
   await page.evaluate(()=>window.fixtureControls.navigate('/'));await page.waitForFunction(()=>window.pendingFixtureReads[3].aborted);
   await page.evaluate(()=>window.pendingFixtureReads[3].release('Unmounted request'));assert.match(await visible(),/Fixture home/);
  }
+ // A failed comments read must not relabel completion notes as a new comment.
+ await page.goto(origin+'/maintenance/'+a,{waitUntil:'networkidle0'});
+ await page.waitForFunction(()=>window.pendingFixtureReads.length===1);
+ await page.evaluate(()=>{window.fixtureCommentFailure=true;window.pendingFixtureReads[0].release('Completed demo');});
+ await page.waitForFunction(()=>document.body.innerText.includes('Retry loading comments'));
+ assert.equal(await page.$eval('textarea#comment',el=>el.closest('form').parentElement.innerText.includes('Retained completion evidence')),false);
+ assert.doesNotMatch(await page.evaluate(()=>document.body.innerText),/Unknown User|No comments yet/);
+ await page.evaluate(()=>{window.fixtureCommentFailure=false;window.fixturePersistedComments=[{id:'comment-proof',comment:'Persisted comment evidence',user_name:'Demo author',created_at:'2026-11-10T10:00:00Z'}];});
+ await page.evaluate(()=>[...document.querySelectorAll('button')].find(el=>el.textContent==='Retry loading comments').click());
+ await page.waitForFunction(()=>document.body.innerText.includes('Persisted comment evidence'));
+ assert.match(await page.evaluate(()=>document.body.innerText),/Demo author/);
+ for(const width of [390,1440]){await page.setViewport({width,height:1000});await page.screenshot({path:'r5-browser-proof/maintenance-comments-'+width+'.png',fullPage:true});}
+ console.log('MAINTENANCE_COMMENTS_BROWSER=PASS failed_read_no_fabricated_history retry_persisted_author desktop_mobile');
  assert.deepEqual(errors,[]);console.log('SECONDARY_LOADERS_BROWSER=PASS real_pages real_clients route_abort tenant_reset stale_success_denied unmount_abort synthetic_reads_only');
 }catch(error){
  if(page){console.error('FIXTURE_STATE',await page.evaluate(()=>({text:document.body.innerText.slice(0,600),pending:window.pendingFixtureReads?.map(r=>({path:r.path,hasSignal:r.hasSignal,aborted:r.aborted}))})).catch(()=>null));await page.screenshot({path:'r5-browser-proof/secondary-failure.png',fullPage:true}).catch(()=>{});}
