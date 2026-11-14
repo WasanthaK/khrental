@@ -9,11 +9,12 @@ import {BILLING_ACCOUNT,BILLING_PRICE,hash} from '/app/src/api/managementBilling
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
 const tenantId=process.env.PAID_INVENTORY_OPERATION,actorId=randomUUID(),propertyId=randomUUID(),second=randomUUID();
+const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
   MANAGEMENT_RESTORATION_SCHEMA_READY:'true',MANAGEMENT_SPLIT_SCHEMA_READY:'true'};
 const store=createBillingStore({env}),stripe=createStripeClient(),service=createBillingService({store,stripe,env});
 const protectedIds=['80a4b392-13f8-484d-81fa-a110a6ef75f0','2383f4fc-e107-4ac7-9e13-39db501f40ec'];
-const proof={operation:tenantId,checks:[],scope:'genuine sandbox provider + deployed service/SQL',httpAccepted:false,uiAccepted:false};
+const proof={operation:tenantId,scenario,checks:[],scope:'genuine sandbox provider + deployed service/SQL',httpAccepted:false,uiAccepted:false};
 let created=false,passed=false,cleanup=false,providerClean=false,stage='preflight',providerAttempted=false,customer,subscription,baseline;
 const check=name=>{proof.checks.push(name);console.log('PAID_INVENTORY_CHECK='+name);};
 const progress=()=>console.log('PAID_INVENTORY_PROGRESS='+JSON.stringify(proof));
@@ -55,6 +56,8 @@ const cleanupFixture=async()=>{
   try{
     if(created){
       await store.locked(tenantId,async q=>{
+        await q("UPDATE dbo.properties SET status='inactive' WHERE tenant_id=@tenantId",{tenantId});
+        await q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId',{tenantId});
         await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId});
         await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@actorId AND tenant_id=@tenantId",{tenantId,actorId});
         await q("UPDATE dbo.tenants SET status='inactive' WHERE id=@tenantId",{tenantId});
@@ -75,6 +78,7 @@ const cleanupFixture=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
+  assert.ok(['transitions','promotion'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');
   assert.equal(String(process.env.MANAGEMENT_RECOVERY_TENANT_IDS).toLowerCase(),protectedIds[0]);
@@ -119,6 +123,58 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
+  if(scenario==='promotion'){
+    const ids=[randomUUID(),randomUUID(),randomUUID()];
+    const records=ids.map((id,n)=>({kind:'property',payload:{id,name:'Private paid addition '+n,
+      description:'Synthetic staged promotion evidence '+n,propertytype:'house',country_code:'LK',
+      rentalvalues:{listingCategory:'residential'},availability:'inactive'}}));
+    const stagedRows=()=>store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    const stockRows=()=>store.read('SELECT id,name,description,status FROM dbo.properties WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    const snapshot=async()=>hash({staged:await stagedRows(),stock:await stockRows(),audit:await audit()});
+    const prepare=records=>store.stageStock({tenantId,actorId,records,reason:'Prepare private paid inventory acceptance.'});
+    stage='paid_stage_create_import';
+    await prepare([records[0]]);await prepare(records.slice(1));
+    assert.equal((await stagedRows()).length,3);assert.ok((await stagedRows()).every(r=>r.status==='pending'));
+    assert.equal((await stockRows()).length,2);assert.equal(await count(),2);
+    assert.equal((await store.inventory(tenantId,undefined,{includePending:true})).length,5);
+    check('create_and_import_remain_private_pending');
+    const stagedSnapshot=await snapshot();await prepare(records);
+    assert.equal(await snapshot(),stagedSnapshot);check('staging_retry_no_duplicate_effect');
+    stage='paid_stage_atomic_conflict';
+    const rollback={...records[0],payload:{...records[0].payload,id:randomUUID()}};
+    await assert.rejects(()=>prepare([rollback,{...records[1],payload:{...records[1].payload,name:'Conflicting identity'}}]),
+      error=>error.code==='BILLING_STOCK_CONFLICT');
+    assert.equal(await snapshot(),stagedSnapshot);check('conflicting_import_rolls_back_entire_batch');
+    stage='paid_stage_nonmember';
+    await assert.rejects(()=>store.stageStock({tenantId,actorId:randomUUID(),records:[rollback],reason:'Nonmember must not stage stock.'}),
+      error=>error.code==='BILLING_ADMIN_REQUIRED');
+    assert.equal(await snapshot(),stagedSnapshot);check('nonmember_cannot_stage_stock');
+    stage='paid_promotion_preview';
+    const preview=await service.quantityPreview({tenantId,actorId,id:randomUUID()});
+    assert.equal(preview.from,2);assert.equal(preview.to,5);assert.equal(preview.timing,'prorated_next_invoice');
+    assert.equal(await count(),2);assert.ok((await stagedRows()).every(r=>r.status==='pending'));
+    assert.equal((await provider()).items.data[0].quantity,2);check('quantity_preview_does_not_promote_stock');
+    stage='paid_promotion_apply';
+    const apply={tenantId,actorId,id:randomUUID(),previewId:preview.previewId};
+    const result=await service.quantityApply(apply);
+    assert.equal(result.currentQuantity,5);assert.equal(await count(),5);
+    const promoted=await stagedRows();assert.equal(promoted.length,3);
+    assert.ok(promoted.every(r=>r.status==='promoted'&&String(r.promotion_command_id).toLowerCase()===apply.id));
+    const stock=await stockRows();assert.equal(stock.length,5);
+    for(const record of records){
+      const row=stock.find(r=>String(r.id).toLowerCase()===record.payload.id);
+      assert.ok(row);assert.equal(row.name,record.payload.name);assert.equal(row.description,record.payload.description);
+      assert.equal(row.status,'inactive');
+    }
+    const remote=await provider();assert.equal(remote.items.data[0].quantity,5);
+    assert.equal(remote.livemode,false);assert.equal(objectId(remote.latest_invoice),proof.initialInvoice);
+    check('paid_quantity_confirmation_promotes_exact_records');
+    stage='paid_promotion_retry';
+    const promotedSnapshot=await snapshot(),remoteHash=hash(remote);
+    assert.deepEqual(await service.quantityApply(apply),result);
+    assert.equal(await snapshot(),promotedSnapshot);assert.equal(hash(await provider()),remoteHash);
+    assert.equal((await stagedRows()).length,3);check('promotion_retry_no_duplicate_effect');
+  }else{
   stage='paid_cessation_preview';
   const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
   const cease={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Cease private synthetic stock for paid acceptance.'};
@@ -147,6 +203,7 @@ try{
   check('split_activates_exact_units_with_next_renewal_quantity');
   const splitAudit=await audit();assert.deepEqual(await service.splitStock(split),result);
   assert.equal(await audit(),splitAudit);assert.equal(await scheduled(4),splitSchedule);check('split_retry_no_duplicate_effect');
+  }
   assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
   passed=true;
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
