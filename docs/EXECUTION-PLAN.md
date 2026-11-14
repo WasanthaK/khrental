@@ -1,10 +1,18 @@
 # KH Rentals Execution Plan
 
-## Current canonical status — 14 November 2026
+## Current canonical status — 15 November 2026
 
-**R5 is partial. Live charging and full enforcement are OFF; Evia is paused.** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Latest accepted result: ten genuine sandbox paid cessation/restoration/split service/SQL checks passed, with cleanup, at 23:38:40 Asia/Colombo.
+**R5 is partial. Live charging and full enforcement are OFF; Evia is paused.** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Latest accepted result: ten genuine sandbox paid create/import promotion service/SQL checks passed, with cleanup, at 00:07:38 Asia/Colombo on 15 November. The earlier ten-check paid cessation/restoration/split acceptance remains intact.
 
 The dated checkpoints are retained as evidence history. Their earlier “current”, “remaining” and “next” wording describes that checkpoint only; use the controlling queue for today's work. Accepted signing, the controlled rental lifecycle, retained-history role checks and completed reservation cases must not be reopened. No claim is made that the original paid-test SQL error's exact cause was identified.
+
+## Paid create/import promotion — bounded service/SQL pass — 15 November 2026
+
+**Ten checks passed at 00:07:38 Asia/Colombo / 18:37:38 UTC on 14 November.** [Run 43627476690](https://github.com/WasanthaK/khrental/actions/runs/43627476690) verified private staging of one property plus a two-property import, exact staging retries, full rollback of a conflicting import, nonmember denial, preview without activation, provider-confirmed quantity increase from two to five, exact promotion of the three records and duplicate-free apply retry. Protected accounts, subscriptions and frozen clocks remained unchanged. Cleanup cancelled the disposable sandbox subscription without another invoice, deactivated the fixture and retained private records; revision, configuration, serving build and public SQL health checks passed.
+
+[PR #647](https://github.com/WasanthaK/khrental/pull/647) added the promotion case. Its first run 43626889492 failed the aggregate staging-retry fingerprint after three checks; cleanup passed. [PR #648](https://github.com/WasanthaK/khrental/pull/648) excluded only asynchronous `stripe.event_reconciled` audits from the operation audit invariant and separated staging/stock/audit diagnostics. All other operation audits, exact stock comparisons and provider assertions remain enforced. The earlier run did not identify the changed component, so its exact cause is unconfirmed. Both PRs passed syntax and lint/authorization/build CI. Both used operations must not be replayed; [durable evidence and artifact hashes](evidence/r5-paid-promotion-20261115.json) retain both attempts.
+
+**Boundary:** genuine sandbox provider + deployed service/SQL quantity-confirmed promotion is accepted. Authenticated HTTP roles/resources, rendered forms/UI, staged-stock hosted Checkout promotion, remaining entitlement/obligation cases and actual renewal execution remain open. R5 is partial; live charging/full enforcement OFF; Evia paused.
 
 ## Paid cessation, restoration and split — bounded service/SQL pass — 14 November 2026
 
@@ -279,14 +287,14 @@ The transport and inspection blockers are resolved for this original operation. 
 
 ## Development progress and remaining acceptance — controlling queue
 
-**Reconciled through 14 November 2026, 23:38:40 Asia/Colombo. This is the current execution queue.** Dated checkpoints below and above are evidence snapshots; their older pending/next statements do not reopen the accepted cases listed here.
+**Reconciled through 15 November 2026, 00:07:38 Asia/Colombo. This is the current execution queue.** Dated checkpoints below and above are evidence snapshots; their older pending/next statements do not reopen the accepted cases listed here.
 
 | Workstream / task IDs | Accepted evidence | Remaining acceptance or decision |
 | --- | --- | --- |
 | Core rental lifecycle — OP03–OP06 | 🟢 Approved demo signing, move-in/activation, invoices/receipts, maintenance, notice/settlement/closure and relisting accepted. | Remaining stale-authority/enforcement and broader usability cases only. Do not reactivate or re-sign the closed demo. |
 | Reservations and unsigned negatives — OP02/OP09 | 🟢 SQL conflict checks; deployed withdrawal/relisting (43604875739), natural short hold expiry (43612128152), cancellation plus explicit release (43617929711). | Remaining rendered stock/stale-URL/conflict/negative matrix; these passes do not establish every UI journey or long-duration expiry. |
 | Retained history — CT04.2 | 🟢 14 deployed role/access/denial checks passed (43553999954). | Credential-login/full rendered journeys and matching Evia audit retention are separate; do not requeue accepted retained-role checks. |
-| Staged create/import — BL08.6 | 🟢 Implemented; 22-check complimentary HTTP/SQL inventory case passed (43438898429), including staging, batch rollback, withdrawal and isolation. | Paid create/import/Checkout promotion and remaining actor/resource/form acceptance. |
+| Staged create/import — BL08.6 | 🟢 Complimentary HTTP/SQL inventory case passed (43438898429); genuine sandbox paid create/import service/SQL promotion passed all 10 checks (43627476690), including private staging, rollback, nonmember denial and exact retries; cleanup verified. | Paid authenticated HTTP roles/resources, rendered forms/UI and staged-stock hosted Checkout promotion. Do not repeat accepted service/SQL quantity-confirmed promotion. |
 | Cessation/restoration/split — BL08.7/9/10 | 🟢 Complimentary HTTP/SQL scope passed (43438898429); genuine sandbox paid service/SQL transitions, history and exact retries passed all 10 checks (43624803051). | Paid authenticated HTTP roles/resources, rendered UI, obligation negatives, all remaining entitlement states and actual renewal execution for these transitions. Do not rebuild or repeat accepted cases. |
 | Provider-operation recovery — BL08.11 | 🟢 Journal/fencing implemented and scoped worker active; portal (43216870550) and customer (43357605904) response-loss recovery passed. | Checkout/subscription and other operation kinds, authenticated role/resource/isolation matrix. Preserve existing worker scope. |
 | Billing lifecycle — BL04/05/06 | 🟢 Hosted sandbox Checkout/return/reload, payment-method and cancellation/resume controls accepted; retained 2→1 renewal (43199377112), within-grace recovery (43224159517), duplicates/delayed failure (43221739128) passed. | Natural seven-day SQL grace expiry/later recovery and remaining event/organization-isolation coverage. Do not advance accepted retained clocks again. |
@@ -298,9 +306,9 @@ The transport and inspection blockers are resolved for this original operation. 
 
 **Programme:** R1/R3/R4 retain owner-closed dispositions within their recorded scope; R4 paid-launch obligations are carried into R5. R2 remains deferred. R3 distinct-replica proof is required before scaling. **R5 remains partial; Sri Lanka is not launch-ready; live charging/full enforcement OFF; Evia paused.**
 
-**Last verified runtime:** build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready `khrental-app--0000512`, unchanged configuration and SQL health in run 43624803051. This is a dated verified observation, not a new live probe. The initial paid-test `EREQUEST` did not recur; exact cause remains unconfirmed. Both attempts and verified cleanup are retained in [paid evidence](evidence/r5-paid-inventory-20261114.json).
+**Last verified runtime:** build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready `khrental-app--0000512`, unchanged configuration and SQL health in run 43627476690. This is a dated verified observation, not a new live probe. The initial paid-test `EREQUEST` did not recur; exact cause remains unconfirmed. Both attempts and verified cleanup are retained in [paid evidence](evidence/r5-paid-inventory-20261114.json).
 
-**Next execution order:** paid inventory HTTP/role and create/import promotion → remaining recovery/enforcement/zero-stock cases → remaining stock/UI/mailbox/natural-wake evidence → LK commercial and launch exits → BN. Natural seven-day grace evidence and owner/provider decisions remain separate dependencies.
+**Next execution order:** paid inventory HTTP/role and staged-stock hosted Checkout promotion → remaining recovery/enforcement/zero-stock cases → remaining stock/UI/mailbox/natural-wake evidence → LK commercial and launch exits → BN. Natural seven-day grace evidence and owner/provider decisions remain separate dependencies.
 
 ## Historical source checkpoint — before the completed rollout
 
