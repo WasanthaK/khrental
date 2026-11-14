@@ -71,9 +71,15 @@ try{
   const detail='/api/mssql/agreements/'+agreement.id;
   let pdfHash;
   for(const [role,token] of [['administrator',adminToken],['original_renter',renterToken]]){
-    const metadata=await read(detail,token,sourceTenant);assert.equal(metadata.status,200);
+    stage=role+'_metadata';
+    const metadata=await read(detail,token,sourceTenant);
+    console.log('HISTORY_HTTP='+JSON.stringify({stage,status:metadata.status}));
+    assert.equal(metadata.status,200);
     const parsed=JSON.parse(new TextDecoder().decode(metadata.bytes));assert.ok(same(parsed.data?.id,agreement.id));
-    const pdf=await read(agreement.signed_document_url,token,sourceTenant);assert.equal(pdf.status,200);
+    stage=role+'_pdf';
+    const pdf=await read(agreement.signed_document_url,token,sourceTenant);
+    console.log('HISTORY_HTTP='+JSON.stringify({stage,status:pdf.status,pdfContentType:/application\/pdf/i.test(pdf.type)}));
+    assert.equal(pdf.status,200);
     assert.match(pdf.type,/application\/pdf/i);assert.equal(new TextDecoder().decode(pdf.bytes.slice(0,5)),'%PDF-');
     const current=digest(Buffer.from(pdf.bytes));if(pdfHash){assert.equal(current,pdfHash);}else{pdfHash=current;}
     checkpoint(role+'_retained_metadata_and_pdf_allowed');
@@ -116,6 +122,7 @@ finally{
       if(baseline){assert.equal(await snapshot(),baseline);}
     }catch{cleanup=false;}
   }
+  console.log('HISTORY_CLEANUP='+JSON.stringify({verified:cleanup,sessions:tokens.length,fixtures:fixtures.length,foreignCreated,existingHistoryUnchanged:baseline?cleanup:null}));
   if(!cleanup){console.error('HISTORY_CLEANUP_FAILED');process.exitCode=1;}
   if(passed&&cleanup){console.log('HISTORY_PASS='+JSON.stringify({passed:true,checks,fixtureClosed:true,sessionsRevoked:true,existingHistoryUnchanged:true,providerWrites:0,credentialLoginAccepted:false}));}
   await closeMssqlPool();
