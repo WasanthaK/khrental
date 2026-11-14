@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Stock and unsigned reservation expiry — bounded pass 14 November 2026
+
+[PR #638](https://github.com/WasanthaK/khrental/pull/638) is merged with CI passing. [Deployed run 43555208780](https://github.com/WasanthaK/khrental/actions/runs/43555208780), job 132326444319, passed **13 checks** at **09:40:13 Asia/Colombo / 04:10:13 UTC**. Actual deployed expiry logic and public-listing SQL predicates verified offered/accepted/unsigned-agreement hold expiry, audit-once/replay behavior, foreign tenant/property scope, future holds, unchanged unsigned agreement content, and hidden opted-out/inactive/rented/reserved whole-property stock.
+
+All synthetic records existed only inside one SERIALIZABLE transaction, which was rolled back; absence of fixture rows and unchanged protected billing accounts were verified. Serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, Ready revision **0000512**, configuration and public SQL health remained unchanged. No provider write, signing, deployment or flag change occurred. Live charging and full enforcement remain **OFF**; Evia remains paused. [Durable evidence](evidence/r5-stock-expiry-20261114.json).
+
+**Boundary / canonical status:** this accepts deployed SQL predicates and expiry behavior with seeded deadlines, not naturally elapsed long-duration expiry, public HTTP, rendered UI, role authorization or the remaining conflict matrix. **OP02, OP09 and R5 remain partial.** This narrows earlier stock/expiry gaps without closing the broader acceptance rows. Next bounded work is the public HTTP/rendered stock and conflict matrix; previously accepted retained-history and maintenance proofs remain valid.
+
 ## CT04.2 retained-history authority — passed 14 November 2026
 
 **Bounded deployed authorization accepted.** [Run 43553999954](https://github.com/WasanthaK/khrental/actions/runs/43553999954), job 132322784044, passed all **14 checks** at **09:26:06 Asia/Colombo / 03:56:06 UTC**. The existing closed demo agreement and identical retained PDF were readable by its administrator and original renter. Unrelated renter, foreign administrator, forced workspace/owner filters, revoked membership, revoked test session and anonymous document access were denied. Metadata queries used the same central select API as the renter page.
