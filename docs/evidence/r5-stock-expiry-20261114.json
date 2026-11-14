@@ -1,0 +1,54 @@
+{
+  "checkpoint": "R5 bounded deployed stock and unsigned reservation expiry",
+  "accepted_at_utc": "2026-11-14T04:10:13Z",
+  "run_url": "https://github.com/WasanthaK/khrental/actions/runs/43555208780",
+  "job_id": 132326444319,
+  "operation_id": "9da4b587-2172-4cd0-8b4b-8aff13214d56",
+  "pull_request": 638,
+  "merge_commit": "166e4e3f9cc3ddd1f252f033e2a1cebb1048c884",
+  "serving_build": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "ready_revision": "khrental-app--0000512",
+  "result": {
+    "passed": true,
+    "checks": [
+      "unaccepted_offer_expiry_audited_once",
+      "current_whole_property_hold_hides_stock",
+      "foreign_tenant_expiry_cannot_change_hold",
+      "foreign_property_expiry_cannot_change_hold",
+      "future_hold_is_not_expired",
+      "elapsed_hold_releases_stock_before_lazy_audit",
+      "accepted_hold_expiry_audited_once",
+      "expiry_replay_preserves_version_and_audit",
+      "unsigned_agreement_hold_expiry_releases_stock",
+      "unsigned_agreement_content_and_status_preserved",
+      "unaccepted_offer_does_not_reserve_stock",
+      "opted_out_stock_hidden",
+      "inactive_rented_reserved_whole_stock_hidden"
+    ],
+    "rolledBack": true,
+    "fixtureRowsAbsent": true,
+    "protectedBillingUnchanged": true,
+    "providerWrites": 0,
+    "publicHttpAccepted": false,
+    "uiAccepted": false
+  },
+  "postflight": {
+    "unchanged_revision_configuration_and_public_health": true
+  },
+  "method": "Actual deployed expiry function and listing SQL predicate executed against deployed Azure SQL in one SERIALIZABLE transaction, always rolled back. Past deadlines were seeded; no natural-duration expiry claim.",
+  "limitations": [
+    "Public HTTP and rendered UI acceptance remain open",
+    "Role authorization and remaining conflict matrix not established by this run",
+    "Natural-duration expiry not established",
+    "OP02, OP09 and overall R5 remain partial",
+    "No provider transitions, signing or customer consent acceptance"
+  ],
+  "controls": {
+    "provider_writes": 0,
+    "signing": false,
+    "application_redeployment": false,
+    "live_charging": "OFF",
+    "full_enforcement": "OFF",
+    "evia": "paused"
+  }
+}
