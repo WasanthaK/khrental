@@ -1,0 +1,40 @@
+{
+  "status": "failed_acceptance_cleanup_verified",
+  "run": "https://github.com/WasanthaK/khrental/actions/runs/43624143226",
+  "job": 132536152919,
+  "sourceSha": "ec1786b7a1c90c0c82314d44a4504770ff86a45f",
+  "operation": "e45089b2-bc94-4eae-b720-54d3459c0130",
+  "doNotReplay": true,
+  "failedAtUtc": "2026-11-14T18:01:07Z",
+  "failedAtColombo": "2026-11-14T23:31:07+05:30",
+  "stage": "paid_cessation",
+  "code": "EREQUEST",
+  "rootCause": "Not determined; original harness did not record SQL error number or distinguish preview/apply.",
+  "checksPassed": [
+    "isolated_private_fixture",
+    "genuine_paid_capacity_reconciled"
+  ],
+  "cleanup": {
+    "verified": true,
+    "fixtureInactive": true,
+    "subscriptionCanceled": true,
+    "recordsRetained": true,
+    "protectedBillingUnchanged": true
+  },
+  "deployment": {
+    "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+    "revision": "khrental-app--0000512",
+    "configurationUnchanged": true,
+    "publicSqlHealthPassed": true
+  },
+  "artifact": {
+    "id": 14125212293,
+    "sha256": "41e09c21bff11330564245040ffa2724cdc9a728e5842ff69baaf088bfdbcf2c"
+  },
+  "acceptance": {
+    "paidTransitions": false,
+    "http": false,
+    "ui": false
+  },
+  "followup": "https://github.com/WasanthaK/khrental/pull/646"
+}
