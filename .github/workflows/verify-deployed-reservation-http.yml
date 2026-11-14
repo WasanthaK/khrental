@@ -1,0 +1,117 @@
+name: Deployed reservation withdrawal HTTP acceptance
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-deployed-reservation-http.mjs'
+      - '.github/workflows/verify-deployed-reservation-http.yml'
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Fresh isolated synthetic fixture UUID
+        required: true
+        type: string
+      confirmation:
+        description: VERIFY-RESERVATION-HTTP
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: node --check scripts/verify-deployed-reservation-http.mjs
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify reviewed source and serving build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-RESERVATION-HTTP
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          while IFS= read -r changed; do
+            case "$changed" in
+              docs/*|*.md|tests/*|scripts/test-rental-offers-sql.mjs|scripts/test-rental-offers-browser.mjs|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-reservation-http.mjs|.github/workflows/verify-deployed-reservation-http.yml) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
+          node --check scripts/verify-deployed-reservation-http.mjs
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Verify seeded hold withdrawal through deployed HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and .properties.latestRevisionName==.properties.latestReadyRevisionName and .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/app-before.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-before.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/app-before.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          digest=$(sha256sum scripts/verify-deployed-reservation-http.mjs | cut -d ' ' -f 1)
+          # One short Azure connection. Fetch only this reviewed commit and verify
+          # exact script bytes before execution; no unpinned remote code or retry.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-reservation-http.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/reservation-http-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.RESERVATION_HTTP_OPERATION='$OPERATION_ID';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          test "${#command}" -lt 2000
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
+          script -q -e -c "$invocation" /dev/null | tee reservation-http.txt
+          if grep -Eq 'RESERVATION_FAILED=|RESERVATION_CLEANUP_FAILED' reservation-http.txt; then exit 1; fi
+          grep -Eo 'RESERVATION_PASS=\{[^}]+\}' reservation-http.txt | tr -d '\r' | sed 's/^RESERVATION_PASS=//' > reservation-http-summary.json
+          jq -e '.passed and .fixtureInactive and .sessionRevoked and .protectedBillingUnchanged and .providerWrites==0 and .seededHold and (.participantAcceptance==false) and (.checks|length)==10' reservation-http-summary.json
+      - name: Verify unchanged revision and public health
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/app-before.json" ]; then exit 0; fi
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-after.json"
+          for side in before after; do
+            jq '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+          done
+          diff -u "$RUNNER_TEMP/config-before.json" "$RUNNER_TEMP/config-after.json" >/dev/null
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: reservation-http-role-acceptance
+          path: |
+            reservation-http.txt
+            reservation-http-summary.json
+          retention-days: 30
