@@ -1,0 +1,51 @@
+{
+  "task": "CT04.2",
+  "status": "passed_bounded_deployed_authorization",
+  "runId": 43553999954,
+  "jobId": 132322784044,
+  "acceptedAtUtc": "2026-11-14T03:56:06Z",
+  "acceptedAtAsiaColombo": "2026-11-14T09:26:06+05:30",
+  "workflowCommit": "6be8dd26c47dbc589110648d2994dbdf153fec9b",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "readyRevision": "khrental-app--0000512",
+  "operationId": "014ac107-5930-4617-b921-a985f81617c7",
+  "passed": true,
+  "checks": [
+    "existing_closed_demo_archive_selected",
+    "administrator_retained_metadata_and_pdf_allowed",
+    "original_renter_retained_metadata_and_pdf_allowed",
+    "unrelated_renter_metadata_denied",
+    "unrelated_renter_pdf_denied",
+    "foreign_administrator_metadata_denied",
+    "foreign_administrator_pdf_denied",
+    "foreign_workspace_override_denied",
+    "unrelated_forced_renter_list_excludes_history",
+    "revoked_membership_metadata_denied",
+    "revoked_membership_pdf_denied",
+    "revoked_session_pdf_denied",
+    "anonymous_pdf_denied",
+    "retained_agreement_existing_authority_and_billing_unchanged"
+  ],
+  "fixtureClosed": true,
+  "sessionsRevoked": true,
+  "existingHistoryUnchanged": true,
+  "providerWrites": 0,
+  "credentialLoginAccepted": false,
+  "cleanup": {
+    "sessionsRevoked": 4,
+    "fixtureIdentitiesDeactivated": 2,
+    "foreignFixtureTenantDeactivated": true,
+    "verified": true
+  },
+  "unchangedRevisionConfigurationAndHealth": true,
+  "limits": [
+    "Persisted test-session authorization, not credential sign-in",
+    "No new signing, document creation, Evia calls or provider writes",
+    "No full desktop/mobile/keyboard journey or audit retention claim",
+    "Fixture authority deactivated, retained test records not deleted"
+  ],
+  "supersedes": {
+    "runId": 43553455204,
+    "reason": "Harness called administrator-only legacy metadata API for renter; PR637 corrected it to central select API used by renter page."
+  }
+}
