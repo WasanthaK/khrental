@@ -1,5 +1,13 @@
 # KH Rentals Execution Plan
 
+## Same-unit conflicts and independent reservations — SQL acceptance passed 14 November 2026
+
+[PR #639](https://github.com/WasanthaK/khrental/pull/639) merged as `8d7049be8b5bfa79ebfec7afcc581f6cfc7f81d2`. On head `e2af7e7d90f72a2fa42b365d0f24b4146da851f9`, [enquiry acceptance run 43575302896](https://github.com/WasanthaK/khrental/actions/runs/43575302896) passed the actual stores and schema in disposable SQL Server. New assertions passed at **13:53:31 Asia/Colombo / 08:23:31 UTC**: two seekers racing for the same unit produce exactly one accepted hold; replaying acceptance after withdrawal leaves the hold withdrawn with one acceptance audit; separate units can both be reserved; all-held stock is hidden; releasing one unit restores partial availability while preserving the other hold.
+
+The same run passed the existing whole/unit and activation-race matrix and browser suites. [Lint, authorization and build run 43575302875](https://github.com/WasanthaK/khrental/actions/runs/43575302875) also passed; deployment was skipped. [Durable evidence](evidence/r5-unit-conflicts-20261114.json).
+
+**Boundary:** these additional conflict cases are accepted in isolated SQL, not deployed reservation-driven public HTTP/UI acceptance. Only the existing test script changed. No production fixtures, schema, signing, payment, feature flags or application deployment changed. **R5 remains partial**; next is controlled deployed reservation/withdrawal readback and remaining activation/closure transitions. Accepted owner opt-out, public browsing, expiry and retained-history results remain closed. Live charging/full enforcement remain OFF; Evia remains paused.
+
 ## Owner opt-out withdrawal and relisting — passed 14 November 2026
 
 **Bounded live transition accepted at 11:20:54 Asia/Colombo / 05:50:54 UTC.** The existing +514 administrator in JEERY'S PLACE used the normal property UI to opt the approved SUWADA villa demo property out, then restore its original opt-out=false setting. Public listing reference `8B647B58-8957-4AF5-9C0B-B97D4D02826A` was absent from the catalog while withdrawn; detail and enquiry-status returned 404, and the rendered public page showed unavailable guidance without an enquiry action.
