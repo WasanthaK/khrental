@@ -1,5 +1,13 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## Public browsing and market isolation — bounded pass 14 November 2026
+
+Live read-only acceptance completed by **10:16 Asia/Colombo / 04:46 UTC**. The Sri Lanka catalog rendered 10 listings; name and maximum-rent filters submitted by keyboard selected WATER FALL VILLA at LKR 100,000. A 99,999 limit excluded it with clear empty-state guidance. Category navigation preserved filters; clearing filters retained the residential category and rendered 9 residential listings. Property detail displayed the approved photo, price and a listing/country-preserving enquiry link with the non-reservation explanation.
+
+**Seven direct public HTTP checks passed:** LK catalog/detail 200; the same LK listing's detail, enquiry-status and photo under BN each 404; omitted country 400; invalid listing ID 404. All returned `no-store`. The actual BN detail page also showed unavailable guidance without exposing the LK property. Desktop screenshots were inspected. No enquiry or consent was submitted and no records, flags or application deployment changed. [Durable evidence](evidence/r5-public-browsing-20261114.json).
+
+**Boundary:** this accepts current public browsing, the tested filter interactions and market isolation. It does not close reservation/activation/closure transitions, concurrent conflicts, full keyboard accessibility, mobile acceptance or Brunei launch readiness. **OP02, OP09 and overall R5 remain partial.** Next: controlled public withdrawal/relisting with reservation-conflict acceptance. Prior SQL stock/expiry and retained-history proofs remain accepted.
+
 ## Stock and unsigned reservation expiry — bounded pass 14 November 2026
 
 [PR #638](https://github.com/WasanthaK/khrental/pull/638) is merged with CI passing. [Deployed run 43555208780](https://github.com/WasanthaK/khrental/actions/runs/43555208780), job 132326444319, passed **13 checks** at **09:40:13 Asia/Colombo / 04:10:13 UTC**. Actual deployed expiry logic and public-listing SQL predicates verified offered/accepted/unsigned-agreement hold expiry, audit-once/replay behavior, foreign tenant/property scope, future holds, unchanged unsigned agreement content, and hidden opted-out/inactive/rented/reserved whole-property stock.
