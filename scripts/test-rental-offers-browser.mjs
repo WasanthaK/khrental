@@ -43,6 +43,7 @@ try{
   const owner=req.path.startsWith('/api/owner');
   try{
    const input=parseOfferAction(req.body,owner);
+   if(!open&&input.action!=='withdraw'){return res.status(409).json({error:'New offers are temporarily closed.'});}
    if(failNext){failNext=false;return res.status(503).json({error:'Synthetic retryable failure'});}
    if(requests.has(input.requestId)){assert.equal(requests.get(input.requestId),input.payloadHash);return res.json({data:snapshot()});}
    assert.equal(input.version,offer?.version??0);
@@ -87,6 +88,50 @@ try{
  await click('Withdraw offer or reservation');await page.waitForFunction(()=>document.body.innerText.includes('Offer version 5'));
  releaseRead();await new Promise(resolve=>setTimeout(resolve,200));assert.equal(await page.evaluate(()=>document.body.innerText.includes('withdrawn')),true);
  open=false;await page.reload({waitUntil:'networkidle0'});assert.equal(await page.$('input[type="checkbox"]'),null);
+ // With new offers disabled, either participant must still be able to
+ // release an existing hold. Exercise the real button with keyboard input.
+ const buttonLabels=()=>page.$$eval('button',bs=>bs.map(b=>b.textContent.trim()));
+ const noNewActions=async()=>{
+  const labels=await buttonLabels();
+  for(const label of ['Accept offer and reserve','Decline rental offer','Issue rental offer','Prepare agreement for existing account','Prepare replacement agreement']){
+   assert.equal(labels.includes(label),false,'Unavailable action: '+label);
+  }
+ };
+ for(const route of ['/owner','/rental-journey']){
+  cancelled=false;offer={...offer,status:'accepted',agreementId:null,version:offer.version+1};
+  await page.goto(origin+route,{waitUntil:'networkidle0'});
+  await page.waitForFunction(()=>document.body.innerText.includes('accepted'));
+  await noNewActions();
+  const labels=await buttonLabels(),index=labels.indexOf('Withdraw offer or reservation');
+  assert.notEqual(index,-1,'Withdrawal remains available while new offers are closed');
+  const buttons=await page.$$('button');await buttons[index].focus();
+  const beforeCount=requests.size,beforeVersion=offer.version;
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.body.innerText.includes('withdrawn'));
+  assert.equal(offer.version,beforeVersion+1);assert.equal(requests.size,beforeCount+1);
+  await page.reload({waitUntil:'networkidle0'});
+  await page.waitForFunction(()=>document.body.innerText.includes('withdrawn'));
+  assert.equal((await buttonLabels()).includes('Withdraw offer or reservation'),false);
+  await noNewActions();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+ }
+ console.log('RENTAL_WITHDRAWAL_BROWSER=PASS owner_and_seeker keyboard flags_closed reload terminal_controls');
+ // Server-provided expiry must remove acceptance and agreement preparation,
+ // including when a retained unsigned agreement remains linked.
+ open=true;
+ for(const status of ['expired','withdrawn','invalidated']){
+  offer={...offer,status,agreementId,version:offer.version+1};
+  for(const route of ['/owner','/rental-journey']){
+   await page.goto(origin+route,{waitUntil:'networkidle0'});
+   await page.waitForFunction(status=>document.body.innerText.includes(status),{},status);
+   await noNewActions();
+   assert.equal((await buttonLabels()).includes('Withdraw offer or reservation'),false);
+   assert.equal(await page.$('input[type="checkbox"]'),null);
+   assert.ok(await page.$(route==='/owner'?'a[href$="/onboarding"]':'a[href="/rentee/agreements"]'),'Retained agreement remains reachable');
+  }
+ }
+ await page.screenshot({path:'enquiry-browser-proof/rental-terminal-mobile.png',fullPage:true});
+ console.log('RENTAL_TERMINAL_BROWSER=PASS expired_withdrawn_invalidated no_acceptance no_preparation retained_links');
  assert.deepEqual(errors,[]);
  console.log('RENTAL_OFFERS_BROWSER=PASS exact_terms market_deadlines consent retry acceptance_no_signature existing_account_agreement onboarding_links mobile withdrawal delayed_refresh rollback_readonly');
 }catch(error){if(page){await fs.mkdir('enquiry-browser-proof',{recursive:true});await page.screenshot({path:'enquiry-browser-proof/rental-offer-failure.png',fullPage:true}).catch(()=>{});}throw error;}
