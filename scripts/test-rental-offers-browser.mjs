@@ -90,7 +90,7 @@ try{
  open=false;await page.reload({waitUntil:'networkidle0'});assert.equal(await page.$('input[type="checkbox"]'),null);
  // With new offers disabled, either participant must still be able to
  // release an existing hold. Exercise the real button with keyboard input.
- const buttonLabels=()=>page.$eval('button',bs=>bs.map(b=>b.textContent.trim()));
+ const buttonLabels=()=>page.$$eval('button',bs=>bs.map(b=>b.textContent.trim()));
  const noNewActions=async()=>{
   const labels=await buttonLabels();
   for(const label of ['Accept offer and reserve','Decline rental offer','Issue rental offer','Prepare agreement for existing account','Prepare replacement agreement']){
@@ -104,7 +104,7 @@ try{
   await noNewActions();
   const labels=await buttonLabels(),index=labels.indexOf('Withdraw offer or reservation');
   assert.notEqual(index,-1,'Withdrawal remains available while new offers are closed');
-  const buttons=await page.$('button');await buttons[index].focus();
+  const buttons=await page.$$('button');await buttons[index].focus();
   const beforeCount=requests.size,beforeVersion=offer.version;
   await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.body.innerText.includes('withdrawn'));
