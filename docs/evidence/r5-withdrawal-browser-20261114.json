@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-14",
+  "scope": "Isolated real React components with synthetic API; no deployed acceptance claimed",
+  "pr": 640,
+  "head": "8a58b65d032caa1e5a2d9ea586cda0566bb0f948",
+  "merge": "dedc2c1d68099212d5020f50fca35b9e3aacd0d3",
+  "runs": {
+    "enquiries": 43601004158,
+    "lintAuthorizationBuild": 43601004162
+  },
+  "job": 132465523993,
+  "checks": [
+    "owner and seeker keyboard withdrawal with new offers disabled",
+    "one new request and one version increment",
+    "withdrawal survives reload and terminal controls removed",
+    "expired/withdrawn/invalidated offers cannot be accepted or prepared",
+    "retained unsigned agreement navigation remains available",
+    "390px no horizontal overflow"
+  ],
+  "markers": [
+    "2026-11-14T13:45:18.1442263Z RENTAL_WITHDRAWAL_BROWSER=PASS owner_and_seeker keyboard flags_closed reload terminal_controls",
+    "2026-11-14T13:45:24.0626292Z RENTAL_TERMINAL_BROWSER=PASS expired_withdrawn_invalidated no_acceptance no_preparation retained_links"
+  ],
+  "artifact": {
+    "id": 14116039760,
+    "name": "enquiry-browser-proof",
+    "sha256": "548db519619cdb0422629efc32239cb26e766b90e4a5d3424df80bff38cb8887",
+    "visuallyInspected": "rental-terminal-mobile.png"
+  },
+  "firstAttempt": {
+    "run": 43600583722,
+    "result": "Test harness selector mistake; corrected before merge. Not an application acceptance failure."
+  },
+  "productionChanges": false,
+  "signing": false,
+  "payment": false,
+  "remaining": "Deployed reservation-driven public withdrawal/relisting and remaining negative/role/stock cases; full mobile/keyboard journeys remain partial."
+}
