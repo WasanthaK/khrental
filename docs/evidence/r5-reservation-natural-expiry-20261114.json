@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "case": "natural short-duration unsigned reservation expiry through deployed HTTP",
+  "date": "2026-11-14",
+  "pr": 642,
+  "head": "06fa6f46af0f0637141040522cf4711238a2b06c",
+  "merge": "2a37582d317cea30c5e3ea6e3015398903d4031b",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "ciRuns": [
+    43611826868,
+    43611826912
+  ],
+  "run": 43612128152,
+  "operation": "f0f38ad1-9ce5-42e7-9c14-fd3310266fe6",
+  "scenario": "natural_expiry",
+  "boundary": {
+    "syntheticFixture": true,
+    "participantAcceptance": false,
+    "credentialLoginAccepted": false,
+    "renderedLiveUiAccepted": false,
+    "longDurationExpiryAccepted": false,
+    "billingGraceAccepted": false,
+    "liveCharging": false,
+    "fullEnforcement": false,
+    "evia": "paused"
+  },
+  "job": 132499327306,
+  "status": "passed",
+  "passedAt": "2026-11-14T15:50:43Z",
+  "timing": {
+    "initialSqlTime": "2026-11-14T15:49:11.482Z",
+    "holdUntil": "2026-11-14T15:50:40.749Z",
+    "expiredSqlTime": "2026-11-14T15:50:41.783Z"
+  },
+  "cleanup": {
+    "verified": true,
+    "created": true,
+    "fixtureInactive": true,
+    "sessionRevoked": true
+  },
+  "result": {
+    "passed": true,
+    "scenario": "natural_expiry",
+    "checks": [
+      "seeded_hold_hidden_from_catalog_detail_and_enquiry",
+      "unsigned_draft_hold_is_current",
+      "short_deadline_elapsed_by_sql_time_without_backdating",
+      "natural_expiry_restores_catalog_detail_and_enquiry",
+      "public_release_does_not_require_lazy_audit",
+      "authorized_read_records_expiry",
+      "unsigned_draft_preserved_without_signing",
+      "repeat_read_preserves_single_system_expiry_audit",
+      "expired_hold_cannot_be_withdrawn_again",
+      "protected_billing_unchanged"
+    ],
+    "fixtureInactive": true,
+    "sessionRevoked": true,
+    "protectedBillingUnchanged": true,
+    "providerWrites": 0,
+    "seededHold": true,
+    "participantAcceptance": false,
+    "uiAccepted": false
+  },
+  "artifacts": [
+    {
+      "id": 14120467599,
+      "name": "reservation-http-role-acceptance",
+      "size_in_bytes": 1377,
+      "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14120467599",
+      "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14120467599/zip",
+      "expired": false,
+      "created_at": "2026-11-14T15:50:47Z",
+      "expires_at": "2026-12-14T15:50:46Z",
+      "updated_at": "2026-11-14T15:50:47Z",
+      "digest": "sha256:59084a0e0a1b45fda86c6521f33d251e8abf337bdfb280f01586a9f63671d270",
+      "workflow_run": {
+        "id": 43612128152,
+        "repository_id": 963041494,
+        "head_repository_id": 963041494,
+        "head_branch": "main",
+        "head_sha": "2a37582d317cea30c5e3ea6e3015398903d4031b"
+      }
+    }
+  ],
+  "unchangedRevisionConfigurationAndHealth": true,
+  "postMergeBuildRun": 43612014461
+}
