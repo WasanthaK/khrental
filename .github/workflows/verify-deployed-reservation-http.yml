@@ -6,6 +6,14 @@ on:
       - '.github/workflows/verify-deployed-reservation-http.yml'
   workflow_dispatch:
     inputs:
+      scenario:
+        description: Bounded case to run; completed cases need not be repeated
+        required: true
+        type: choice
+        default: withdrawal
+        options:
+          - withdrawal
+          - natural_expiry
       expected_build:
         description: Exact accepted serving application SHA
         required: true
@@ -43,6 +51,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      SCENARIO: ${{ inputs.scenario }}
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       OPERATION_ID: ${{ inputs.operation_id }}
       CONFIRMATION: ${{ inputs.confirmation }}
@@ -58,6 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-RESERVATION-HTTP
+          [[ "$SCENARIO" = withdrawal || "$SCENARIO" = natural_expiry ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -74,7 +84,7 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
-      - name: Verify seeded hold withdrawal through deployed HTTP
+      - name: Verify selected reservation case through deployed HTTP
         shell: bash
         run: |
           set -euo pipefail
@@ -87,13 +97,13 @@ jobs:
           digest=$(sha256sum scripts/verify-deployed-reservation-http.mjs | cut -d ' ' -f 1)
           # One short Azure connection. Fetch only this reviewed commit and verify
           # exact script bytes before execution; no unpinned remote code or retry.
-          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-reservation-http.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/reservation-http-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.RESERVATION_HTTP_OPERATION='$OPERATION_ID';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-reservation-http.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='/tmp/reservation-http-$OPERATION_ID.mjs';fs.writeFileSync(p,b,{flag:'wx'});process.env.RESERVATION_HTTP_OPERATION='$OPERATION_ID';process.env.RESERVATION_HTTP_SCENARIO='$SCENARIO';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           test "${#command}" -lt 2000
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee reservation-http.txt
           if grep -Eq 'RESERVATION_FAILED=|RESERVATION_CLEANUP_FAILED' reservation-http.txt; then exit 1; fi
           grep -Eo 'RESERVATION_PASS=\{[^}]+\}' reservation-http.txt | tr -d '\r' | sed 's/^RESERVATION_PASS=//' > reservation-http-summary.json
-          jq -e '.passed and .fixtureInactive and .sessionRevoked and .protectedBillingUnchanged and .providerWrites==0 and .seededHold and (.participantAcceptance==false) and (.checks|length)==10' reservation-http-summary.json
+          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .sessionRevoked and .protectedBillingUnchanged and .providerWrites==0 and .seededHold and (.participantAcceptance==false) and (.checks|length)==10' reservation-http-summary.json
       - name: Verify unchanged revision and public health
         if: always()
         shell: bash

@@ -6,6 +6,8 @@ import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {sql,getMssqlPool,closeMssqlPool} from '/app/src/api/mssql/pool.js';
 import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
 const operation=process.env.RESERVATION_HTTP_OPERATION;
+const scenario=process.env.RESERVATION_HTTP_SCENARIO||'withdrawal',expiry=scenario==='natural_expiry';
+const agreement=randomUUID();let draftBaseline,expiryTiming;
 const hash=x=>createHash('sha256').update(typeof x==='string'?x:JSON.stringify(x)).digest('hex');
 const checks=[],actor=randomUUID(),authId=randomUUID(),property=randomUUID(),enquiry=randomUUID();
 let pool,token,listing,baseline,created=false,passed=false,cleanup=true,stage='preflight';
@@ -28,6 +30,7 @@ const publicState=async visible=>{
  if(visible){assert.equal(detail.data.data.title,'TEST ONLY — no rental available');assert.ok(!JSON.stringify(detail.data).includes('@example.invalid'));}
 };
 try{
+ assert.ok(['withdrawal','natural_expiry'].includes(scenario));
  assert.match(operation||'',/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
  assert.equal(process.env.PROPERTY_RENTAL_OFFERS_SCHEMA_READY,'true');
  assert.equal(process.env.PROPERTY_ENQUIRIES_ENABLED,'true');
@@ -44,7 +47,10 @@ try{
   await run("INSERT properties(id,tenant_id,name,status,propertytype,country_code,rentalvalues,createdat,updatedat) VALUES(@property,@id,'TEST ONLY — no rental available','available','house','LK',N'{\"listingCategory\":\"residential\",\"rent\":100}',SYSUTCDATETIME(),SYSUTCDATETIME()); UPDATE public_listing_preferences SET opted_out=1,public_headline='TEST ONLY — no rental available',location_label='Synthetic acceptance fixture',country_code='LK' WHERE property_id=@property AND tenant_id=@id",{property,id:operation});
   listing=String((await run('SELECT public_id FROM public_listing_preferences WHERE property_id=@property AND tenant_id=@id',{property,id:operation}))[0].public_id);
   await run("INSERT property_enquiries(id,listing_public_id,tenant_id,property_id,seeker_id,seeker_name,seeker_email,country_code,listing_title,message,consent_version,request_id,payload_hash) VALUES(@enquiry,@listing,@id,@property,@actor,'Synthetic fixture',@email,'LK','TEST ONLY — no rental available','Seeded fixture; no customer enquiry or consent','fixture-only',@request,@hash)",{enquiry,listing,id:operation,property,actor,email,request:randomUUID(),hash:'0'.repeat(64)});
-  await run("INSERT property_rental_offers(enquiry_id,tenant_id,property_id,application_version,status,version,currency,rent,deposit,fees,start_date,end_date,terms,offer_until,hold_until,accepted_at,consent_version) VALUES(@enquiry,@id,@property,1,'accepted',1,'LKR',100,0,0,CONVERT(date,SYSUTCDATETIME()),CONVERT(date,DATEADD(day,30,SYSUTCDATETIME())),'Seeded synthetic hold; no participant acceptance, tenancy or payment',DATEADD(hour,1,SYSUTCDATETIME()),DATEADD(hour,2,SYSUTCDATETIME()),SYSUTCDATETIME(),'rental-offer-v1')",{enquiry,id:operation,property});
+  await run("INSERT property_rental_offers(enquiry_id,tenant_id,property_id,application_version,status,version,currency,rent,deposit,fees,start_date,end_date,terms,offer_until,hold_until,accepted_at,consent_version) VALUES(@enquiry,@id,@property,1,'accepted',1,'LKR',100,0,0,CONVERT(date,SYSUTCDATETIME()),CONVERT(date,DATEADD(day,30,SYSUTCDATETIME())),'Seeded synthetic hold; no participant acceptance, tenancy or payment',DATEADD(second,@offerSeconds,SYSUTCDATETIME()),DATEADD(second,@holdSeconds,SYSUTCDATETIME()),SYSUTCDATETIME(),'rental-offer-v1')",{enquiry,id:operation,property,offerSeconds:expiry?30:3600,holdSeconds:expiry?90:7200});
+  if(expiry){
+   await run("INSERT agreements(id,tenant_id,propertyid,renteeid,status,title) VALUES(@agreement,@id,@property,@actor,'draft','TEST ONLY unsigned expiry fixture'); UPDATE property_rental_offers SET status='agreement',agreement_id=@agreement WHERE enquiry_id=@enquiry",{agreement,id:operation,property,actor,enquiry});
+  }
   await tx.commit();created=true;
  }catch(error){await tx.rollback().catch(()=>{});throw error;}
  const email='reservation-'+operation+'@example.invalid';
@@ -55,6 +61,41 @@ try{
  await q('UPDATE public_listing_preferences SET opted_out=0 WHERE property_id=@property AND tenant_id=@id',{property,id:operation});
  stage='held_public_state';await publicState(false);check('seeded_hold_hidden_from_catalog_detail_and_enquiry');
  const path='/api/owner-enquiries/'+enquiry+'/offer';
+ if(expiry){
+  stage='unsigned_baseline';
+  draftBaseline=hash(await q('SELECT * FROM agreements WHERE id=@agreement AND tenant_id=@id',{agreement,id:operation}));
+  const clock=(await q('SELECT SYSUTCDATETIME() AS now,hold_until,status,version FROM property_rental_offers WHERE enquiry_id=@enquiry',{enquiry}))[0];
+  assert.equal(clock.status,'agreement');assert.equal(clock.version,1);assert.ok(clock.now<clock.hold_until);
+  expiryTiming={initialSqlTime:clock.now.toISOString(),holdUntil:clock.hold_until.toISOString()};
+  check('unsigned_draft_hold_is_current');
+  stage='natural_deadline';
+  const until=Date.now()+120000;
+  let elapsed;
+  while(Date.now()<until){
+   elapsed=(await q('SELECT SYSUTCDATETIME() AS now,hold_until FROM property_rental_offers WHERE enquiry_id=@enquiry',{enquiry}))[0];
+   assert.equal(elapsed.hold_until.toISOString(),expiryTiming.holdUntil,'Deadline must never be rewritten');
+   if(elapsed.now>=elapsed.hold_until){break;}
+   await new Promise(resolve=>setTimeout(resolve,2000));
+  }
+  assert.ok(elapsed.now>=elapsed.hold_until,'SQL deadline did not elapse within the bounded wait');
+  expiryTiming.expiredSqlTime=elapsed.now.toISOString();
+  console.log('RESERVATION_TIMING='+JSON.stringify(expiryTiming));
+  check('short_deadline_elapsed_by_sql_time_without_backdating');
+  stage='expiry_public_release';await publicState(true);check('natural_expiry_restores_catalog_detail_and_enquiry');
+  const unchanged=(await q('SELECT status,version FROM property_rental_offers WHERE enquiry_id=@enquiry',{enquiry}))[0];
+  assert.equal(unchanged.status,'agreement');assert.equal(unchanged.version,1);check('public_release_does_not_require_lazy_audit');
+  stage='lazy_expiry';
+  const read=await http(path,{authorized:true});assert.equal(read.status,200);assert.equal(read.data.data.offer.status,'expired');assert.equal(read.data.data.offer.version,2);
+  assert.equal(read.data.data.agreement.status,'draft');check('authorized_read_records_expiry');
+  assert.equal(hash(await q('SELECT * FROM agreements WHERE id=@agreement AND tenant_id=@id',{agreement,id:operation})),draftBaseline);check('unsigned_draft_preserved_without_signing');
+  const afterExpiry=await snapshot();
+  const retry=await http(path,{authorized:true});assert.equal(retry.status,200);assert.equal(retry.data.data.offer.version,2);assert.equal(await snapshot(),afterExpiry);
+  const events=await q('SELECT event_type,version,actor_id FROM property_rental_offer_events WHERE enquiry_id=@enquiry',{enquiry});
+  assert.equal(events.length,1);assert.equal(events[0].event_type,'expired');assert.equal(events[0].version,2);assert.equal(events[0].actor_id,null);
+  check('repeat_read_preserves_single_system_expiry_audit');
+  const denied=await http(path,{authorized:true,body:{action:'withdraw',version:2,requestId:randomUUID()}});
+  assert.equal(denied.status,409);assert.equal(denied.data.code,'RENTAL_OFFER_CHANGED');assert.equal(await snapshot(),afterExpiry);check('expired_hold_cannot_be_withdrawn_again');
+ }else{
  const before=await snapshot();
  stage='anonymous_denial';assert.equal((await http(path,{body:{action:'withdraw',version:1,requestId:randomUUID()}})).status,401);assert.equal(await snapshot(),before);check('anonymous_withdrawal_denied_without_writes');
  stage='foreign_scope_denial';assert.equal((await http(path,{authorized:true,tenant:randomUUID(),body:{action:'withdraw',version:1,requestId:randomUUID()}})).status,403);assert.equal(await snapshot(),before);check('foreign_workspace_withdrawal_denied_without_writes');
@@ -66,6 +107,7 @@ try{
  stage='retry';const retry=await http(path,{authorized:true,body});assert.equal(retry.status,200);assert.equal(retry.data.data.offer.version,2);assert.equal(retry.data.data.offer.status,'withdrawn');assert.equal(await snapshot(),after);check('exact_retry_preserves_withdrawn_state_and_audit');
  stage='terminal_denial';const terminal=await http(path,{authorized:true,body:{action:'withdraw',version:2,requestId:randomUUID()}});assert.equal(terminal.status,409);assert.equal(terminal.data.code,'RENTAL_OFFER_CHANGED');assert.equal(await snapshot(),after);check('new_terminal_withdrawal_denied_without_writes');
  const events=await q('SELECT event_type,actor_id,version FROM property_rental_offer_events WHERE enquiry_id=@enquiry',{enquiry});assert.equal(events.length,1);assert.equal(events[0].event_type,'withdraw');assert.equal(events[0].version,2);assert.equal(String(events[0].actor_id).toLowerCase(),actor);check('one_authorized_withdrawal_audit');
+ }
  assert.equal(await protectedState(),baseline);check('protected_billing_unchanged');passed=true;
 }catch(error){console.error('RESERVATION_FAILED='+JSON.stringify({stage,code:error.code||'ASSERTION',number:error.number||null,checks}));process.exitCode=1;}
 finally{
@@ -83,10 +125,11 @@ finally{
    await publicState(false);
   }
   if(token){assert.equal((await q('SELECT id FROM auth_sessions WHERE token_hash=@hash AND revoked_at IS NULL',{hash:hash(token)})).length,0);}
+  if(draftBaseline){assert.equal(hash(await q('SELECT * FROM agreements WHERE id=@agreement AND tenant_id=@id',{agreement,id:operation})),draftBaseline);}
   if(baseline){assert.equal(await protectedState(),baseline);}
  }catch{cleanup=false;}}
  console.log('RESERVATION_CLEANUP='+JSON.stringify({verified:cleanup,created,fixtureInactive:created&&cleanup,sessionRevoked:!!token&&cleanup}));
  if(!cleanup){console.error('RESERVATION_CLEANUP_FAILED');process.exitCode=1;}
- if(passed&&cleanup){console.log('RESERVATION_PASS='+JSON.stringify({passed:true,checks,fixtureInactive:true,sessionRevoked:true,protectedBillingUnchanged:true,providerWrites:0,seededHold:true,participantAcceptance:false,uiAccepted:false}));}
+ if(passed&&cleanup){console.log('RESERVATION_PASS='+JSON.stringify({passed:true,scenario,checks,fixtureInactive:true,sessionRevoked:true,protectedBillingUnchanged:true,providerWrites:0,seededHold:true,participantAcceptance:false,uiAccepted:false}));}
  await closeMssqlPool();
 }
