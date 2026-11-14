@@ -1,0 +1,42 @@
+{
+  "case": "unsigned cancellation and explicit reservation release",
+  "status": "not_accepted",
+  "date": "2026-11-14",
+  "pr": 643,
+  "merge": "4f1b56fed22d572bd3bdc668183362340f0667e6",
+  "run": 43615627417,
+  "job": 132509929601,
+  "operation": "b8d6bcc2-ce51-4e36-8fff-0a42c8d119ef",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "passedChecks": [
+    "seeded_hold_hidden_from_catalog_detail_and_enquiry",
+    "anonymous_cancellation_denied_without_writes",
+    "foreign_workspace_cancellation_denied_without_writes"
+  ],
+  "failure": {
+    "stage": "cancel_unsigned_draft",
+    "code": "ERR_ASSERTION",
+    "at": "2026-11-14T16:27:18Z",
+    "diagnosis": "Source inspection identified incomplete fixture terms: linked agreement omitted rentamount, depositamount, startdate and enddate required by TR_agreements_rental_occupancy. Original log did not retain HTTP status/code."
+  },
+  "cleanup": {
+    "verified": true,
+    "fixtureInactive": true,
+    "sessionRevoked": true
+  },
+  "unchangedRevisionConfigurationAndHealth": true,
+  "correction": {
+    "pr": 644,
+    "head": "ced41b2de096e209456075cc1cdf982260a3326e",
+    "ciRuns": [
+      43615811318,
+      43615811273
+    ],
+    "ci": "passed",
+    "merged": false,
+    "blocked": "Automatic approval review requires separate explicit approval for corrective PR 644"
+  },
+  "liveCharging": false,
+  "fullEnforcement": false,
+  "evia": "paused"
+}
