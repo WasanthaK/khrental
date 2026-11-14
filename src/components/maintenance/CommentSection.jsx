@@ -1,28 +1,45 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { formatDateTime } from '../../utils/helpers';
 import { getMaintenanceComments } from '../../services/maintenanceService';
 
-const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => {
+const CommentSection = ({ onAddComment, userRole, userName }) => {
   const { id: requestId } = useParams();
   const [newComment, setNewComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [lifecycleComments, setLifecycleComments] = useState(null);
+  const [lifecycleComments, setLifecycleComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState(null);
+  const commentRead = useRef(0);
 
   const refreshComments = useCallback(async () => {
-    if (!requestId) {return;}
-    const result = await getMaintenanceComments(requestId);
-    if (!result.success) {
-      console.error('Failed to load maintenance lifecycle comments:', result.error);
+    const read = ++commentRead.current;
+    setCommentsLoading(true);
+    setCommentsError(null);
+    setLifecycleComments([]);
+    if (!requestId) {
+      setCommentsError('Comments could not be loaded.');
+      setCommentsLoading(false);
       return;
     }
-    setLifecycleComments(result.data || []);
+    try {
+      const result = await getMaintenanceComments(requestId);
+      if (read !== commentRead.current) {return;}
+      if (!result.success) {throw new Error('Comments could not be loaded.');}
+      setLifecycleComments(result.data || []);
+    } catch {
+      if (read !== commentRead.current) {return;}
+      setCommentsError('Comments could not be loaded. Please try again.');
+    } finally {
+      if (read === commentRead.current) {setCommentsLoading(false);}
+    }
   }, [requestId]);
 
   useEffect(() => {
     refreshComments();
+    return () => {commentRead.current += 1;};
   }, [refreshComments]);
 
   // Handle comment submission
@@ -62,11 +79,10 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
   };
 
   const isStaff = userRole === 'staff' || userRole === 'admin' || userRole === 'maintenance';
-  const sourceComments = lifecycleComments === null ? comments : lifecycleComments;
 
   // The server already strips internal comments from tenant projections. Keep the
   // client filter as a second display guard for legacy/fallback comment data.
-  const visibleComments = sourceComments.filter(comment => {
+  const visibleComments = lifecycleComments.filter(comment => {
     if (userRole === 'admin' || userRole === 'staff' || userRole === 'maintenance') {
       return true;
     }
@@ -125,7 +141,16 @@ const CommentSection = ({ comments = [], onAddComment, userRole, userName }) => 
         </div>
       </form>
       
-      {visibleComments.length === 0 ? (
+      {commentsLoading ? (
+        <p className="text-gray-500 py-4" role="status">Loading comments...</p>
+      ) : commentsError ? (
+        <div role="alert" className="py-4">
+          <p className="text-red-700">{commentsError}</p>
+          <button type="button" onClick={refreshComments} className="mt-2 text-blue-700 underline">
+            Retry loading comments
+          </button>
+        </div>
+      ) : visibleComments.length === 0 ? (
         <p className="text-gray-500 text-center py-4">No comments yet.</p>
       ) : (
         <div className="space-y-4">
