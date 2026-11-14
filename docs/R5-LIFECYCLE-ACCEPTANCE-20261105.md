@@ -1,5 +1,16 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## Accepted lifecycle preserved — status correction 14 November 2026
+
+The task-level ledger already accepts **OP03 move-in/activation**, **OP04 invoice/receipt history**, and **OP06 notice, settlement, explicit closure and relisting** for the approved controlled demo. These are completed bounded journeys, not new work. Recent shorthand describing “activation/closure transitions” as generally pending was too broad and must not reopen those accepted cases.
+
+A read-only live owner UI check on 14 November confirmed the existing demo agreement remains **closed**, signature **completed**, with the labelled simulated deposit, completed move-in checklist and retained **Activated November 5, 2026** date. Its linked offer is **invalidated**; the property is **Available**, has no current rentees and is eligible for public listing. No deposit, checklist, consent, signature, offer or tenancy was created or changed. This corroborates retained state; it is not a fresh execution of the original transition.
+
+**Remaining rental acceptance:** reservation-driven withdrawal/relisting and unsigned cancellation/expiry through the deployed HTTP/UI surfaces; remaining stock/conflict/negative cases; scoped billing-enforcement and stale-authority checks for activation/exit; broader mobile/keyboard journeys. SQL conflict/expiry proofs retain their recorded boundaries. Do not reactivate or re-sign the closed demo agreement. A fresh reservation test must use an appropriate disposable fixture and preserve explicit participant consent.
+
+**R5 remains partial.** Live charging/full enforcement stay OFF and Evia stays paused. This correction supersedes broad pending-activation/closure wording in dated summaries below, while preserving every historical result and the specific open cases.
+
+
 ## Same-unit conflicts and independent reservations — SQL acceptance passed 14 November 2026
 
 [PR #639](https://github.com/WasanthaK/khrental/pull/639) merged as `8d7049be8b5bfa79ebfec7afcc581f6cfc7f81d2`. On head `e2af7e7d90f72a2fa42b365d0f24b4146da851f9`, [enquiry acceptance run 43575302896](https://github.com/WasanthaK/khrental/actions/runs/43575302896) passed the actual stores and schema in disposable SQL Server. New assertions passed at **13:53:31 Asia/Colombo / 08:23:31 UTC**: two seekers racing for the same unit produce exactly one accepted hold; replaying acceptance after withdrawal leaves the hold withdrawn with one acceptance audit; separate units can both be reserved; all-held stock is hidden; releasing one unit restores partial availability while preserving the other hold.
