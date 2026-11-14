@@ -1,5 +1,16 @@
 # R4 and R5 delivery programme
 
+## Deployed reservation withdrawal and public relisting — bounded pass 14 November 2026
+
+**Ten deployed HTTP/SQL checks passed at 19:57:58 Asia/Colombo / 14:27:58 UTC.** [Run 43604875739](https://github.com/WasanthaK/khrental/actions/runs/43604875739), job 132477445880, used a new labelled synthetic workspace, operator, property and seeded accepted hold. Catalog exclusion plus detail/enquiry-status 404 established hold suppression. The normal authenticated owner withdrawal endpoint returned withdrawn version 2; catalog membership and both detail/enquiry-status 200 then returned. Public responses were no-store.
+
+Anonymous, foreign-workspace override and stale-version withdrawal were denied with unchanged offer/audit snapshots. Exact-request replay preserved the withdrawn state and single authorized withdrawal audit; a fresh terminal withdrawal was denied without writes. **Cleanup passed:** fixture stock opted out/inactive, enquiry closed, identity/membership/workspace inactive and test session revoked; final public absence and both protected billing accounts unchanged were verified. Records are retained inactive, not deleted.
+
+[PR #641](https://github.com/WasanthaK/khrental/pull/641) merged as `61af9e3f96330297662a0667364fdeac7f1b861d` after syntax and lint/authorization/build CI passed. Exact serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c`, configuration, Ready revision and public SQL health were unchanged. No runtime deployment, schema change, flag change or provider write. [Durable evidence](evidence/r5-reservation-http-20261114.json).
+
+**Acceptance boundary:** deployed withdrawal/public HTTP behavior from a seeded synthetic hold is now accepted; do not repeat this bounded case. Schema-required acceptance fields and persisted fixture-session authority are synthetic, not real participant consent or credential-login evidence. This does not close the rendered deployed reservation journey, unsigned-agreement cancellation, natural expiry, broader role/stock conflicts or full mobile/keyboard acceptance. Prior OP03 activation and OP06 closure remain accepted. **R5 remains partial**, live charging/full enforcement OFF and Evia paused. This supersedes older wording below that all deployed reservation withdrawal/readback is pending.
+
+
 ## Withdrawal keyboard and terminal controls — isolated browser pass 14 November 2026
 
 [PR #640](https://github.com/WasanthaK/khrental/pull/640) merged as `dedc2c1d68099212d5020f50fca35b9e3aacd0d3`. On head `8a58b65d032caa1e5a2d9ea586cda0566bb0f948`, [enquiry run 43601004158](https://github.com/WasanthaK/khrental/actions/runs/43601004158) and [lint/authorization/build run 43601004162](https://github.com/WasanthaK/khrental/actions/runs/43601004162) passed.
