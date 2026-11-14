@@ -96,6 +96,10 @@ try{
       assert.equal((await q('SELECT property_id FROM dbo.public_listing_preferences WHERE property_id=@id AND tenant_id=@tenantId AND opted_out=1',{id,tenantId})).length,1);
     }
   });created=true;check('isolated_private_fixture');
+  // Check the deployed stock/blocker queries before creating provider objects.
+  stage='cessation_sql_preflight';
+  const stockPreview=await store.locked(tenantId,q=>store.cessationPreviewLocked(q,{tenantId,actorId,propertyId}));
+  assert.equal(stockPreview.eligible,true);
   stage='genuine_paid_subscription';providerAttempted=true;
   customer=await write('/v1/customers',{description:'R5 private paid stock '+tenantId,payment_method:'pm_card_visa',
     invoice_settings:{default_payment_method:'pm_card_visa'},metadata:{acceptance_fixture:tenantId}},'customer');
@@ -115,9 +119,10 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  stage='paid_cessation';
+  stage='paid_cessation_preview';
   const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
   const cease={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Cease private synthetic stock for paid acceptance.'};
+  stage='paid_cessation_apply';
   const ceased=await service.ceaseStock(cease);assert.equal(await count(),1);const ceasedSchedule=await scheduled(1);
   check('cessation_defers_provider_reduction_to_renewal');
   const ceaseAudit=await audit();assert.deepEqual(await service.ceaseStock(cease),ceased);
@@ -144,5 +149,5 @@ try{
   assert.equal(await audit(),splitAudit);assert.equal(await scheduled(4),splitSchedule);check('split_retry_no_duplicate_effect');
   assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
   passed=true;
-}catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
+}catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}
