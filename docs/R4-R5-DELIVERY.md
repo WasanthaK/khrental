@@ -1,5 +1,15 @@
 # R4 and R5 delivery programme
 
+## Unsigned cancellation acceptance — fixture correction awaiting merge, 14 November 2026
+
+[PR #643](https://github.com/WasanthaK/khrental/pull/643) merged after explicit owner approval as `4f1b56fed22d572bd3bdc668183362340f0667e6`. [Controlled run 43615627417](https://github.com/WasanthaK/khrental/actions/runs/43615627417), job 132509929601, stopped at the unsigned-draft cancellation assertion at **21:57:18 Asia/Colombo / 16:27:18 UTC**. Held public-stock suppression and anonymous/foreign-workspace cancellation denials passed. **Cancellation/release acceptance remains OPEN.**
+
+Cleanup passed: fixture inactive, public stock absent and test session revoked. Unchanged application configuration, Ready revision, serving build `95a6e147baf236ef61a64b6c5579e9cb5055838c` and SQL health passed. No application deployment, schema/flag change or provider operation occurred.
+
+Source inspection identified a harness defect: the synthetic linked draft omitted rent, deposit and date fields required by the accepted-terms database guard. [PR #644](https://github.com/WasanthaK/khrental/pull/644) populates matching fixture terms before linking and adds a bounded cancellation status/code diagnostic. Syntax and lint/authorization/build CI passed on `ced41b2de096e209456075cc1cdf982260a3326e` (runs 43615811318 and 43615811273). **Unmerged:** automatic approval review requires explicit approval for #644 separately from #643. After approval, merge the tested correction and run only unsigned_cancellation with a fresh fixture; do not replay the failed operation ID.
+
+The established contract remains: cancelling an unsigned document preserves the reservation for replacement; explicit reservation withdrawal or expiry releases stock. Prior draft-replacement and natural-expiry acceptance stay accepted. [Durable evidence](evidence/r5-unsigned-cancellation-http-20261114.json). **R5 remains partial; live charging/full enforcement OFF, Evia paused.**
+
 ## Natural unsigned reservation expiry — bounded HTTP pass 14 November 2026
 
 **Ten deployed HTTP/SQL checks passed at 21:20:43 Asia/Colombo / 15:50:43 UTC.** [Run 43612128152](https://github.com/WasanthaK/khrental/actions/runs/43612128152), job 132499327306, used a fresh labelled synthetic workspace, operator, property and unsigned draft. A 90-second hold deadline elapsed naturally according to SQL time, without backdating or rewriting it. Catalog, detail and enquiry availability returned before lazy audit processing; the authorized owner read then recorded expired version 2. Repeated reads retained exactly one system expiry event. The complete unsigned draft remained unchanged and a fresh terminal withdrawal was denied without writes.
