@@ -1,5 +1,14 @@
 # Current R5 prelaunch completion ledger — 12 November 2026
 
+## Withdrawal keyboard and terminal controls — isolated browser pass 14 November 2026
+
+[PR #640](https://github.com/WasanthaK/khrental/pull/640) merged as `dedc2c1d68099212d5020f50fca35b9e3aacd0d3`. On head `8a58b65d032caa1e5a2d9ea586cda0566bb0f948`, [enquiry run 43601004158](https://github.com/WasanthaK/khrental/actions/runs/43601004158) and [lint/authorization/build run 43601004162](https://github.com/WasanthaK/khrental/actions/runs/43601004162) passed.
+
+At **19:15:24 Asia/Colombo / 13:45:24 UTC**, the actual React component with an isolated synthetic API verified owner and seeker keyboard withdrawal while new offers are disabled, one request/version increment, reload persistence and removal of terminal controls. Expired, withdrawn and invalidated linked offers exposed neither acceptance nor agreement preparation, while retained agreement links remained reachable. The 390px overflow checks passed; the terminal-state mobile screenshot was downloaded and visually inspected. The first attempt failed on a test-harness selector mistake, corrected before this passing run. [Durable evidence](evidence/r5-withdrawal-browser-20261114.json).
+
+**Boundary:** browser regression acceptance only. No runtime code, application deployment, live reservation, consent, signing, payment or flags changed. Deployed reservation-driven public withdrawal/relisting and remaining negative/role/stock cases remain open; full mobile/keyboard acceptance is still partial. Accepted OP03 activation and OP06 closure/relisting remain closed. R5 stays partial, live charging/full enforcement OFF, Evia paused.
+
+
 ## Accepted lifecycle preserved — status correction 14 November 2026
 
 The task-level ledger already accepts **OP03 move-in/activation**, **OP04 invoice/receipt history**, and **OP06 notice, settlement, explicit closure and relisting** for the approved controlled demo. These are completed bounded journeys, not new work. Recent shorthand describing “activation/closure transitions” as generally pending was too broad and must not reopen those accepted cases.
