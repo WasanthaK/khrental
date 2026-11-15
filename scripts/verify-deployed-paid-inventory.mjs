@@ -186,6 +186,9 @@ try{
     const foreign=randomUUID(),foreignCommand=randomUUID();
     await store.locked(foreign,async q=>{
       await q("INSERT dbo.tenants(id,name,slug,status,[plan]) VALUES(@foreign,'Private command isolation fixture',@slug,'active','development-testing')",{foreign,slug:'r5-paid-http-'+foreign});
+      // Commands reference billing_accounts, not tenants directly. Keep the
+      // foreign fixture unenrolled with any provider: no customer/subscription.
+      await q("INSERT dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json) VALUES(@foreign,@account,@price,'LK','[]')",{foreign,account:BILLING_ACCOUNT,price:BILLING_PRICE});
       await q("INSERT dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status,result_json,completed_at) VALUES(@id,@foreign,'quantity_preview',@digest,'{}','completed',@result,SYSUTCDATETIME())",{id:foreignCommand,foreign,digest:hash({}),result:JSON.stringify({...preview,previewId:foreignCommand})});
     });foreignTenant=foreign;
     const snapshot=async()=>hash({
