@@ -1,14 +1,15 @@
 # R5 self-handoff — 15 November 2026
 
-Latest verified acceptance: 15 November 2026, 15:59:06 Asia/Colombo (10:29:06 UTC).
+Latest verified acceptance: 15 November 2026, 16:26:11 Asia/Colombo (10:56:11 UTC).
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 
 ## Current decision
 R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. Evia is paused by owner; BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
 
-Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43704182377. Reverify the runtime baseline before a new deployed test.
+Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43706276982. Reverify the runtime baseline before a new deployed test.
 
 ## Accepted evidence and limits
+- Actual restoration renewal: [run 43706276982](https://github.com/WasanthaK/khrental/actions/runs/43706276982), twelve groups passed. The 2→1→2 fixture renewed at USD 10 for two dwellings; reconciliation, retries, retained states/history, privacy, protected accounts, cleanup, configuration and build/SQL health passed. [Both attempts and cleanup evidence](evidence/r5-restoration-renewal-20261115.json). First run 43705778853 remains failed; PR #664 corrected its retained-state assertion. Do not replay either fixture. Service/SQL scope only.
 - Actual cessation renewal: [run 43704182377](https://github.com/WasanthaK/khrental/actions/runs/43704182377), ten groups passed. A fresh sandbox clock advanced only this fixture: 2→1 cessation preserved the original USD 10 invoice, then the next invoice automatically paid USD 5 for one dwelling; pending quantity cleared, retries/history passed, cleanup/configuration/build/SQL health passed. [All attempts and cleanup evidence](evidence/r5-cessation-renewal-20261115.json). This is service/SQL acceptance, not HTTP/UI or natural grace-expiry acceptance.
 - Staged-stock hosted Checkout: [run 43677343501](https://github.com/WasanthaK/khrental/actions/runs/43677343501), ten groups passed. Genuine hosted sandbox payment for three dwellings (USD 15) reconciled exactly three private inactive records; retries did not duplicate stock, Checkout or subscription. Cleanup, full configuration restoration and build/SQL health passed. [Evidence, including two failed attempts and their verified cleanup](evidence/r5-hosted-checkout-20261115.json). PRs #656–658 changed the acceptance harness only. Rendered stock forms and credential login are not accepted by this result.
 - Paid HTTP cessation, restoration and split: [run 43673712405](https://github.com/WasanthaK/khrental/actions/runs/43673712405), 17 groups and 15 negative requests; cleanup, exact configuration restoration, serving build and SQL health passed. [Evidence](evidence/r5-paid-http-transitions-20261115.json). Current quantity stayed 2; schedules changed to [2,1], [2,2], then [2,4]. No actual renewal or clock advancement was accepted.
@@ -20,8 +21,8 @@ Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in 
 - Portal/customer recovery and recorded billing renewal/grace checks are accepted. Other recovery kinds and natural seven-day grace expiry are not thereby accepted.
 
 ## Next executable slice
-**Restoration/split renewal execution, then remaining stock states and obligations.**
-Inspect the existing transition harness and choose a fresh isolated sandbox fixture to verify actual next-period invoice quantities after restoration and split. Cessation scheduling and its actual 2→1 renewal are accepted; do not repeat those as standalone acceptance. Keep final-dwelling zero-stock behavior separately explicit. Do not advance protected or previously accepted clocks.
+**Split renewal execution, then remaining stock states and obligations.**
+Inspect the existing transition harness and choose a fresh isolated sandbox fixture to verify actual next-period invoice quantity after split. Cessation 2→1 and restoration 2→1→2 actual renewals are accepted; do not repeat those as standalone acceptance. Keep final-dwelling zero-stock behavior separately explicit. Do not advance protected or previously accepted clocks.
 
 PR #660 normalized UUID billing lock names; real SQL regression and both SQL suites passed before deployment. Earlier deadlock graphs were not retained, so exact prior contention is unproven. PRs #661–662 corrected financial invoice comparison and cleanup. Compare stable invoice identity/financial fields, not the entire provider JSON. Never issue even redundant UPDATEs to already-inactive ceased properties: SQL 51074 intentionally rejects them. Cleanup-only run 43704049415 resolved the prior fixture; all prior attempts have verified cleanup. Never replay any creation UUID recorded in the evidence.
 
@@ -29,7 +30,7 @@ Hosted Checkout remains accepted within its recorded scope. Explicitly set synth
 
 ## Remaining queue and exit criteria
 1. Rendered create/import forms remain; hosted Checkout payment/promotion is accepted.
-2. Remaining stock/resource states, stale/conflict cases, obligations, transition combinations, restoration/split renewal quantities and genuine final-dwelling zero-stock acceptance.
+2. Remaining stock/resource states, stale/conflict cases, obligations, transition combinations, split renewal quantity and genuine final-dwelling zero-stock acceptance.
 3. Checkout/subscription operation recovery, isolation and broader authority/resource-state combinations. Preserve the recovery worker's exact existing tenant scope.
 4. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
 5. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
@@ -50,3 +51,4 @@ Hosted Checkout remains accepted within its recorded scope. Explicitly set synth
 
 ## Completion discipline
 For every new slice, retain immutable run/artifact evidence and explicit limits, update current headers/queues/task rows in all three canonical documents, and read back exact written content. Keep historical failed runs failed. Report what passed, what remains, and the next executable slice. Update this handoff when the next slice changes.
+

@@ -17,7 +17,8 @@ let actorId=randomUUID();
 const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
 const httpTransitions=scenario==='http-transitions';
 const restorationRenewal=scenario==='restoration-renewal';
-const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal;
+const splitRenewal=scenario==='split-renewal';
+const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal||splitRenewal;
 let fixtureClock=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
@@ -139,9 +140,25 @@ const cleanupFixture=async()=>{
 
 
 const verifyCessationRenewal=async()=>{
-  const quantity=restorationRenewal?2:1,amount=quantity*500;
+  const quantity=splitRenewal?4:restorationRenewal?2:1,amount=quantity*500;
+  let splitArgs,splitResult;
   proof.scope='genuine sandbox '+scenario+' + deployed service/SQL reconciliation';
   proof.credentialLoginAccepted=false;proof.actualRenewalAccepted=false;
+  if(splitRenewal){
+    stage='renewal_split_preview';
+    const units=[1,2,3].map(n=>({id:randomUUID(),propertyid:propertyId,unitnumber:'Private renewal unit '+n,availability:'inactive'}));
+    const preview=await service.splitPreview({tenantId,actorId,propertyId,units});
+    splitArgs={tenantId,actorId,propertyId,units,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Verify split units replace the parent dwelling in the actual next sandbox renewal.'};
+    stage='renewal_split_apply';
+    splitResult=await service.splitStock(splitArgs);assert.equal(splitResult.splitCompleted,true);assert.equal(await count(),4);
+    const schedule=await scheduled(4),beforeAudit=await audit();
+    assert.equal((await store.account(tenantId)).pending_quantity,4);
+    assert.equal((await read('/v1/invoices/'+proof.initialInvoice)).amount_paid,1000);
+    check('split_preserves_current_invoice_and_schedules_four');
+    assert.deepEqual(await service.splitStock(splitArgs),splitResult);
+    assert.equal(await scheduled(4),schedule);assert.equal(await audit(),beforeAudit);assert.equal(await count(),4);
+    check('split_retry_preserves_schedule_audit_and_unit_count');
+  }else{
   stage='renewal_cessation_preview';
   const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
   const args={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Verify one ceased dwelling is excluded from the actual next sandbox renewal.'};
@@ -166,6 +183,7 @@ const verifyCessationRenewal=async()=>{
     assert.equal(await scheduled(2),restoreSchedule);assert.equal(await audit(),restoreAudit);
     check('restoration_retry_preserves_schedule_and_audit');
   }
+  }
   const boundary=(await provider()).items.data[0].current_period_end;
   const advance=async(target,key)=>{
     const ownedCustomer=await read('/v1/customers/'+customer.id),ownedSub=await provider();
@@ -189,7 +207,7 @@ const verifyCessationRenewal=async()=>{
   const draft=await read('/v1/invoices/'+proof.renewalInvoice);
   assert.equal(draft.billing_reason,'subscription_cycle');assert.equal(draft.total,amount);assert.equal(draft.currency,'usd');
   assert.equal(objectId(draft.customer),customer.id);assert.equal(draft.livemode,false);
-  check(restorationRenewal?'renewal_boundary_applies_two_restored_dwellings':'renewal_boundary_applies_one_dwelling_quantity');
+  check(splitRenewal?'renewal_boundary_applies_four_split_dwellings':restorationRenewal?'renewal_boundary_applies_two_restored_dwellings':'renewal_boundary_applies_one_dwelling_quantity');
   stage='renewal_automatic_payment';await advance(boundary+3600,'renewal-payment');
   let invoice;
   for(let attempt=0;attempt<60;attempt++){
@@ -204,7 +222,7 @@ const verifyCessationRenewal=async()=>{
   const invoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});
   assert.equal(invoices.has_more,false);assert.equal(invoices.data.length,2);
   assert.deepEqual(invoices.data.map(i=>i.id).sort(),[proof.initialInvoice,proof.renewalInvoice].sort());
-  check(restorationRenewal?'automatic_renewal_paid_exactly_two_dwellings_without_extra_invoice':'automatic_renewal_paid_exactly_one_dwelling_without_extra_invoice');
+  check(splitRenewal?'automatic_renewal_paid_exactly_four_dwellings_without_extra_invoice':restorationRenewal?'automatic_renewal_paid_exactly_two_dwellings_without_extra_invoice':'automatic_renewal_paid_exactly_one_dwelling_without_extra_invoice');
   stage='renewal_application_projection';
   const refreshed=await service.refresh(tenantId),account=await store.account(tenantId);
   assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.billedQuantity,quantity);
@@ -223,9 +241,30 @@ const verifyCessationRenewal=async()=>{
   assert.equal(retriedInvoices.has_more,false);assert.deepEqual(retriedInvoices.data.map(i=>i.id).sort(),[proof.initialInvoice,proof.renewalInvoice].sort());
   assert.equal((await store.account(tenantId)).quantity,quantity);
   check('renewal_refresh_retry_preserves_stock_and_invoice');
+  if(splitRenewal){
+    stage='retained_split_history';
+    const splits=await store.read('SELECT command_id,property_id,state,activated_at FROM dbo.management_inventory_splits WHERE tenant_id=@tenantId',{tenantId});
+    assert.equal(splits.length,1);assert.equal(String(splits[0].command_id).toLowerCase(),splitArgs.id);
+    assert.equal(String(splits[0].property_id).toLowerCase(),propertyId);assert.equal(splits[0].state,'active');assert.ok(splits[0].activated_at);
+    const units=await store.read('SELECT id,propertyid,parent_stock_id,split_operation_id,stock_type,status,unitnumber FROM dbo.property_units WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    assert.equal(units.length,3);
+    for(const expected of splitArgs.units){
+      const unit=units.find(u=>String(u.id).toLowerCase()===expected.id);assert.ok(unit);
+      assert.equal(String(unit.propertyid).toLowerCase(),propertyId);assert.equal(String(unit.parent_stock_id).toLowerCase(),propertyId);
+      assert.equal(String(unit.split_operation_id).toLowerCase(),splitArgs.id);assert.equal(unit.stock_type,'apartment_unit');
+      assert.equal(unit.status,'inactive');assert.equal(unit.unitnumber,expected.unitnumber);
+    }
+    const reserved=await store.read('SELECT id FROM dbo.management_inventory_split_units WHERE command_id=@id',{id:splitArgs.id});
+    assert.deepEqual(reserved.map(u=>String(u.id).toLowerCase()).sort(),splitArgs.units.map(u=>u.id).sort());
+    const beforeRetry={units:hash(units),audit:await audit(),stock:hash(await store.inventory(tenantId))};
+    assert.deepEqual(await service.splitStock(splitArgs),splitResult);
+    assert.equal(await audit(),beforeRetry.audit);assert.equal(hash(await store.inventory(tenantId)),beforeRetry.stock);
+    assert.equal(hash(await store.read('SELECT id,propertyid,parent_stock_id,split_operation_id,stock_type,status,unitnumber FROM dbo.property_units WHERE tenant_id=@tenantId ORDER BY id',{tenantId})),beforeRetry.units);
+  }else{
   stage='retained_cessation_history';
   const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
   assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);if(restorationRenewal){assert.ok(controls[0].restored_at);}else{assert.equal(controls[0].restored_at,null);}
+  }
   stage='retained_property_states';
   const retained=await store.read('SELECT id,status FROM dbo.properties WHERE tenant_id=@tenantId',{tenantId});
   assert.equal(retained.length,2);
@@ -233,7 +272,7 @@ const verifyCessationRenewal=async()=>{
   assert.equal(retained.find(p=>String(p.id).toLowerCase()===second)?.status,'inactive');
   stage='retained_listing_privacy';
   assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
-  check(restorationRenewal?'restored_history_and_private_records_retained_after_renewal':'ceased_history_and_private_records_retained_after_renewal');
+  check(splitRenewal?'split_identity_history_and_private_records_retained_after_renewal':restorationRenewal?'restored_history_and_private_records_retained_after_renewal':'ceased_history_and_private_records_retained_after_renewal');
   proof.actualRenewalAccepted=true;proof.renewalQuantity=quantity;proof.renewalAmountMinor=amount;proof.clockAdvancedTo=boundary+3600;
 };
 
@@ -390,7 +429,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -725,3 +764,4 @@ try{
   }
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}
+
