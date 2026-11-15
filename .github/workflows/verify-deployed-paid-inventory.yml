@@ -18,10 +18,11 @@ on:
         description: Acceptance case (do not repeat an already accepted case)
         required: true
         type: choice
-        default: cessation-renewal
+        default: restoration-renewal
         options:
           - cleanup-cessation-renewal
           - cessation-renewal
+          - restoration-renewal
           - http-hosted-checkout
           - cleanup-hosted-checkout
           - http-transitions
@@ -74,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == cleanup-cessation-renewal || "$SCENARIO" == cessation-renewal || "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout || "$SCENARIO" == cleanup-hosted-checkout ]]
+          [[ "$SCENARIO" == restoration-renewal || "$SCENARIO" == cleanup-cessation-renewal || "$SCENARIO" == cessation-renewal || "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout || "$SCENARIO" == cleanup-hosted-checkout ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -143,7 +144,7 @@ jobs:
             jq -e '.verified and .sessionExpired and .noSubscription and .fixtureInactive and .protectedBillingUnchanged and .recordsRetained' paid-inventory-summary.json
           else
             grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-            jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion" or $scenario=="http-transitions" or $scenario=="http-hosted-checkout")) and (.uiAccepted==false) and (if $scenario=="http-hosted-checkout" then .hostedCheckoutCompleted==true elif $scenario=="cessation-renewal" then .actualRenewalAccepted==true and .renewalQuantity==1 and .renewalAmountMinor==500 else true end) and (.checks|length)==(if $scenario=="http-transitions" then 17 elif $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
+            jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion" or $scenario=="http-transitions" or $scenario=="http-hosted-checkout")) and (.uiAccepted==false) and (if $scenario=="http-hosted-checkout" then .hostedCheckoutCompleted==true elif $scenario=="restoration-renewal" then .actualRenewalAccepted==true and .renewalQuantity==2 and .renewalAmountMinor==1000 elif $scenario=="cessation-renewal" then .actualRenewalAccepted==true and .renewalQuantity==1 and .renewalAmountMinor==500 else true end) and (.checks|length)==(if $scenario=="restoration-renewal" then 12 elif $scenario=="http-transitions" then 17 elif $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
           fi
       - name: Restore exact original feature and enforcement configuration
         if: always() && env.RESTORE_ENFORCEMENT == 'true'
