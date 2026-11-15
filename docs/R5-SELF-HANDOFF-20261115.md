@@ -31,9 +31,15 @@ The earlier dispatch issue is resolved by the owner's submission. Operation `97d
 
 **Next executable slice:** genuine final-dwelling zero-stock cancellation and retained-history acceptance on a fresh isolated sandbox fixture. R5 remains partial; live charging/full enforcement OFF; Evia paused.
 
+## Final-dwelling cancellation — harness ready, execution pending — 15 November 2026
+
+[PR #666](https://github.com/WasanthaK/khrental/pull/666) merged as `7b02b44e533399a200fffa0aa344a3fae59d0566` after successful CI runs 43712486629 and 43712486632. Local Node, workflow YAML, embedded Bash and positive/negative proof-gate checks passed. The new `zero-stock-cancellation` case ceases two paid dwellings, checks schedule release and period-end cancellation, advances only its fresh fixture clock, and requires no renewal invoice, read-only historical access, retained private records, exact retries and the existing protected-account/cleanup/configuration/health gates. No application code or serving flags changed.
+
+Browser submission closed the form without producing a workflow run; the latest observed manual run remains split acceptance 43711743955. **Execution and acceptance remain pending.** The prepared fixture UUID is `b1d18f31-6fd5-41bb-b1ee-467b4c8abb65`, expected build `e0f7e821b8e511898836f71df86fde2fa8399463`, branch `main`, confirmation `VERIFY-PAID-INVENTORY`. Before submitting or retrying, check for a new run using that UUID; once used, never replay it. The next action is submit this prepared case and inspect immutable proof plus cleanup/configuration/build/SQL health before marking it accepted.
+
 ## Next executable slice
 **Final-dwelling zero-stock cancellation and retained-history acceptance.**
-Use a fresh isolated sandbox fixture to verify ending management of the last dwelling, the intended cancellation timing, billing projection and retained private records. Review current service and policy before preparing the scenario. Actual cessation, restoration and split renewals have passed; do not repeat accepted fixtures or advance their clocks.
+The harness is now merged in PR #666 with green CI. Submit the prepared `zero-stock-cancellation` form after checking no run already used UUID `b1d18f31-6fd5-41bb-b1ee-467b4c8abb65`, then verify cancellation timing, no renewal invoice, billing projection, retained private records and cleanup. Browser submission produced no run; manual submission is pending. Actual cessation, restoration and split renewals have passed; do not repeat accepted fixtures or advance their clocks.
 
 PR #660 normalized UUID billing lock names; real SQL regression and both SQL suites passed before deployment. Earlier deadlock graphs were not retained, so exact prior contention is unproven. PRs #661–662 corrected financial invoice comparison and cleanup. Compare stable invoice identity/financial fields, not the entire provider JSON. Never issue even redundant UPDATEs to already-inactive ceased properties: SQL 51074 intentionally rejects them. Cleanup-only run 43704049415 resolved the prior fixture; all prior attempts have verified cleanup. Never replay any creation UUID recorded in the evidence.
 
