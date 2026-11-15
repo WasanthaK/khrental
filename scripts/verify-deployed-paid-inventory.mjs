@@ -1,6 +1,7 @@
 // Genuine sandbox provider acceptance. HTTP permissions are a separate scenario;
 // service scenarios do not establish HTTP, and none establishes UI or login.
-// Local dependency flags enable this isolated process only; serving flags stay unchanged.
+// HTTP promotion uses temporary serving readiness and fixture-scoped enforcement;
+// its workflow restores original flags. Other scenarios leave serving flags unchanged.
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
@@ -20,6 +21,23 @@ const proof={operation:tenantId,scenario,checks:[],scope:'genuine sandbox provid
 const httpTokens=[],httpActors=[];
 let foreignTenant=null;
 let created=false,passed=false,cleanup=false,providerClean=false,stage='preflight',providerAttempted=false,customer,subscription,baseline;
+    const makeSession=async(id,role)=>{
+      const authId=randomUUID(),email='r5-paid-http-'+id+'@example.invalid';
+      if(id!==actorId){
+        await store.locked(tenantId,async q=>{
+          await q("INSERT dbo.app_users(id,tenant_id,name,email,role,user_type,auth_id,status) VALUES(@id,@tenantId,'Private paid HTTP fixture',@email,@role,@role,@authId,'active')",{id,tenantId,email,role,authId});
+          await q("INSERT dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@tenantId,@id,@role,'active',1)",{tenantId,id,role});
+        });httpActors.push(id);
+      }else{
+        await store.locked(tenantId,q=>q('UPDATE dbo.app_users SET auth_id=@authId,email=@email WHERE id=@id AND tenant_id=@tenantId',{authId,email,id,tenantId}));
+      }
+      const record=await createAuthRecord({authId,appUserId:id,email,role,password:randomBytes(32).toString('base64url'),metadata:{acceptance_fixture:tenantId}});
+      const token=randomBytes(32).toString('base64url');httpTokens.push(token);
+      const digest=createHash('sha256').update(token).digest('hex');
+      await store.locked(tenantId,q=>q('INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@digest,DATEADD(MINUTE,5,SYSUTCDATETIME()))',{id:record.id,digest}));
+      return token;
+    };
+
 const check=name=>{proof.checks.push(name);console.log('PAID_INVENTORY_CHECK='+name);};
 const progress=()=>console.log('PAID_INVENTORY_PROGRESS='+JSON.stringify(proof));
 const read=(path,body)=>stripe.request('GET',path,body);
@@ -94,9 +112,12 @@ const cleanupFixture=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
-  assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');
+  if(scenario==='http-promotion'){
+    for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
+    assert.equal(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS,tenantId);
+  }else{assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');}
   assert.equal(String(process.env.MANAGEMENT_RECOVERY_TENANT_IDS).toLowerCase(),protectedIds[0]);
   await stripe.assertAccount();const price=await service.price(BILLING_PRICE);assert.equal(price.unit_amount,500);
   for(const table of ['management_inventory_staging','management_inventory_controls','management_inventory_splits','management_inventory_split_units','management_billing_recovery','management_billing_steps']){
@@ -142,22 +163,6 @@ try{
   if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
-    const makeSession=async(id,role)=>{
-      const authId=randomUUID(),email='r5-paid-http-'+id+'@example.invalid';
-      if(id!==actorId){
-        await store.locked(tenantId,async q=>{
-          await q("INSERT dbo.app_users(id,tenant_id,name,email,role,user_type,auth_id,status) VALUES(@id,@tenantId,'Private paid HTTP fixture',@email,@role,@role,@authId,'active')",{id,tenantId,email,role,authId});
-          await q("INSERT dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@tenantId,@id,@role,'active',1)",{tenantId,id,role});
-        });httpActors.push(id);
-      }else{
-        await store.locked(tenantId,q=>q('UPDATE dbo.app_users SET auth_id=@authId,email=@email WHERE id=@id AND tenant_id=@tenantId',{authId,email,id,tenantId}));
-      }
-      const record=await createAuthRecord({authId,appUserId:id,email,role,password:randomBytes(32).toString('base64url'),metadata:{acceptance_fixture:tenantId}});
-      const token=randomBytes(32).toString('base64url');httpTokens.push(token);
-      const digest=createHash('sha256').update(token).digest('hex');
-      await store.locked(tenantId,q=>q('INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@digest,DATEADD(MINUTE,5,SYSUTCDATETIME()))',{id:record.id,digest}));
-      return token;
-    };
     stage='http_sessions';
     const admin=await makeSession(actorId,'admin'),staff=await makeSession(randomUUID(),'staff');
     const http=async(method,path,body,token=admin,workspace=tenantId,extra={})=>{
@@ -219,7 +224,23 @@ try{
     stage='http_revoked_session';await revokeAccessToken(admin);
     await denied(admin,tenantId,401,'INVALID_SESSION');check('revoked_session_route_matrix_denied_without_effect');
     proof.httpAccepted=true;
-  }else if(scenario==='promotion'){
+  }else if(['promotion','http-promotion'].includes(scenario)){
+    let stockHttp=null,staffToken=null;
+    if(scenario==='http-promotion'){
+      proof.scope='genuine sandbox provider + deployed public HTTP paid create/import promotion';
+      proof.credentialLoginAccepted=false;
+      const adminToken=await makeSession(actorId,'admin');staffToken=await makeSession(randomUUID(),'staff');
+      stockHttp=async(path,body,token=adminToken)=>{
+        const response=await fetch('https://app.quixo.homes/api/management-billing/'+path,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),
+          headers:{Authorization:'Bearer '+token,'x-tenant-id':tenantId,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+        const result=await response.json();
+        if(!response.ok){throw Object.assign(Error('Controlled stock HTTP request failed'),{code:result.code||'HTTP_UNCONFIRMED',status:response.status});}
+        assert.equal(response.status,200);assert.equal(result.error,null);return result.data;
+      };
+      stage='http_stock_readiness';const status=await stockHttp('status');
+      assert.equal(status.entitlement.state,'active');assert.equal(status.stagingEnabled,true);
+      check('public_http_paid_stock_readiness');
+    }
     const ids=[randomUUID(),randomUUID(),randomUUID()];
     const records=ids.map((id,n)=>({kind:'property',payload:{id,name:'Private paid addition '+n,
       description:'Synthetic staged promotion evidence '+n,propertytype:'house',country_code:'LK',
@@ -238,7 +259,7 @@ try{
         assert.equal(after[component],before[component],component);
       }
     };
-    const prepare=records=>store.stageStock({tenantId,actorId,records,reason:'Prepare private paid inventory acceptance.'});
+    const prepare=records=>stockHttp?stockHttp('stock/prepare',{records,reason:'Prepare private paid inventory acceptance.'}):store.stageStock({tenantId,actorId,records,reason:'Prepare private paid inventory acceptance.'});
     stage='paid_stage_create_import';
     await prepare([records[0]]);await prepare(records.slice(1));
     assert.equal((await stagedRows()).length,3);assert.ok((await stagedRows()).every(r=>r.status==='pending'));
@@ -254,17 +275,33 @@ try{
       error=>error.code==='BILLING_STOCK_CONFLICT');
     await unchanged(stagedSnapshot);check('conflicting_import_rolls_back_entire_batch');
     stage='paid_stage_nonmember';
-    await assert.rejects(()=>store.stageStock({tenantId,actorId:randomUUID(),records:[rollback],reason:'Nonmember must not stage stock.'}),
+    await assert.rejects(()=>stockHttp?stockHttp('stock/prepare',{records:[rollback],reason:'Nonadmin must not stage stock.'},staffToken):store.stageStock({tenantId,actorId:randomUUID(),records:[rollback],reason:'Nonmember must not stage stock.'}),
       error=>error.code==='BILLING_ADMIN_REQUIRED');
-    await unchanged(stagedSnapshot);check('nonmember_cannot_stage_stock');
+    await unchanged(stagedSnapshot);check(stockHttp?'nonadmin_cannot_stage_stock':'nonmember_cannot_stage_stock');
+    if(stockHttp){
+      stage='http_foreign_staged_resource';
+      const foreign=randomUUID(),record={...records[0].payload,id:randomUUID()};
+      // Explicit private fixture data: no operational property or provider object.
+      await store.locked(foreign,async q=>{
+        await q("INSERT dbo.tenants(id,name,slug,status,[plan]) VALUES(@foreign,'Private pending stock isolation',@slug,'active','development-testing')",{foreign,slug:'r5-pending-'+foreign});
+        await q("INSERT dbo.management_inventory_staging(id,tenant_id,kind,payload_json,payload_hash,created_by) VALUES(@id,@foreign,'property',@payload,@digest,@actorId)",{id:record.id,foreign,payload:JSON.stringify(record),digest:hash(record),actorId});
+      });foreignTenant=foreign;
+      const foreignBefore=hash(await store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@foreign ORDER BY id',{foreign}));
+      await assert.rejects(()=>stockHttp('stock/withdraw',{ids:[record.id],reason:'Foreign prepared record must remain unchanged.'}),e=>e.status===404&&e.code==='BILLING_STOCK_NOT_FOUND');
+      await assert.rejects(()=>prepare([{kind:'property',payload:record}]),e=>e.status===409&&e.code==='BILLING_STOCK_CONFLICT');
+      await assert.rejects(()=>stockHttp('stock/prepare',{tenantId:foreign,records:[rollback],reason:'Body cannot override authenticated workspace.'}),e=>e.status===400&&e.code==='BILLING_FIELDS_INVALID');
+      assert.equal(hash(await store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@foreign ORDER BY id',{foreign})),foreignBefore);
+      await unchanged(stagedSnapshot);check('foreign_prepared_stock_and_workspace_override_rejected');
+    }
     stage='paid_promotion_preview';
-    const preview=await service.quantityPreview({tenantId,actorId,id:randomUUID()});
+    const preview=stockHttp?await stockHttp('quantity-preview',{requestId:randomUUID()}):await service.quantityPreview({tenantId,actorId,id:randomUUID()});
     assert.equal(preview.from,2);assert.equal(preview.to,5);assert.equal(preview.timing,'prorated_next_invoice');
     assert.equal(await count(),2);assert.ok((await stagedRows()).every(r=>r.status==='pending'));
     assert.equal((await provider()).items.data[0].quantity,2);check('quantity_preview_does_not_promote_stock');
     stage='paid_promotion_apply';
     const apply={tenantId,actorId,id:randomUUID(),previewId:preview.previewId};
-    const result=await service.quantityApply(apply);
+    const applyStock=()=>stockHttp?stockHttp('quantity-apply',{requestId:apply.id,previewId:apply.previewId}):service.quantityApply(apply);
+    const result=await applyStock();
     assert.equal(result.currentQuantity,5);assert.equal(await count(),5);
     const promoted=await stagedRows();assert.equal(promoted.length,3);
     assert.ok(promoted.every(r=>r.status==='promoted'&&String(r.promotion_command_id).toLowerCase()===apply.id));
@@ -279,9 +316,10 @@ try{
     check('paid_quantity_confirmation_promotes_exact_records');
     stage='paid_promotion_retry';
     const promotedSnapshot=await snapshot(),remoteHash=hash(remote);
-    assert.deepEqual(await service.quantityApply(apply),result);
+    assert.deepEqual(await applyStock(),result);
     await unchanged(promotedSnapshot);assert.equal(hash(await provider()),remoteHash);
     assert.equal((await stagedRows()).length,3);check('promotion_retry_no_duplicate_effect');
+    if(stockHttp){proof.httpAccepted=true;proof.httpStockMutationAccepted=true;}
   }else{
   stage='paid_cessation_preview';
   const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
@@ -316,4 +354,5 @@ try{
   passed=true;
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}
+
 
