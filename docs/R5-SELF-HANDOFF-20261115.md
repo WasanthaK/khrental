@@ -1,14 +1,15 @@
 # R5 self-handoff — 15 November 2026
 
-Latest verified acceptance: 15 November 2026, 17:59:32 Asia/Colombo (12:29:32 UTC).
+Latest verified acceptance: 15 November 2026, 19:04:05 Asia/Colombo (13:34:05 UTC).
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 
 ## Current decision
 R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. Evia is paused by owner; BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
 
-Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43714006196. Reverify the runtime baseline before a new deployed test.
+Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43719440920. Reverify the runtime baseline before a new deployed test.
 
 ## Accepted evidence and limits
+- Cessation financial obligations: [run 43719440920](https://github.com/WasanthaK/khrental/actions/runs/43719440920), eleven groups; five refusals across an outstanding invoice and a pending payment review preserved local/provider state, then resolving both synthetic records allowed cessation with retained history. Cleanup/configuration/build/SQL health passed. [Evidence](evidence/r5-cessation-financial-conflict-20261115.json). Never replay the fixture.
 - Cessation maintenance conflict: [run 43714006196](https://github.com/WasanthaK/khrental/actions/runs/43714006196), ten groups; three denials after a new obligation preserved local/provider state, then canceled synthetic maintenance allowed cessation with retained history. Cleanup/configuration/build/SQL health passed. [Evidence](evidence/r5-cessation-maintenance-conflict-20261115.json). Never replay the fixture.
 - Final-dwelling zero-stock cancellation: [run 43712985596](https://github.com/WasanthaK/khrental/actions/runs/43712985596), ten groups passed; exact paid-boundary cancellation, no renewal invoice, read-only historical access, retries/privacy/protected accounts and cleanup/configuration/build/SQL health verified. [Evidence](evidence/r5-zero-stock-cancellation-20261115.json). Never replay its fixture or clock.
 - Actual split renewal: [run 43711743955](https://github.com/WasanthaK/khrental/actions/runs/43711743955), ten groups passed; USD 20 for four dwellings, exact units/history, retries, privacy, protected accounts, cleanup/configuration/build/SQL health verified. [Evidence](evidence/r5-split-renewal-20261115.json). Never replay the accepted operation or clock.
@@ -53,11 +54,21 @@ UUID `1ffc8507-0386-4081-8b72-471fee1471cb` is used and must never be replayed. 
 
 **Next executable slice:** genuine deployed cessation financial-obligation blockers (outstanding invoices and pending payment review), using fresh isolated records after checking production schema and accepted evidence. R5 remains partial; live charging/full enforcement OFF; Evia paused.
 
-## Next executable slice
-**Cessation financial-obligation blockers: outstanding invoices and pending payment review.**
-Review the production schema and existing accepted negatives, then prepare fresh private records with no real customer obligations. Maintenance added after clean review now passed three no-effect denials and resolved-obligation cessation in 43714006196. Preserve that evidence and do not replay it. Other obligation kinds/states, simultaneous races and HTTP/UI remain separate.
+## Cessation financial obligations — bounded pass — 15 November 2026
 
-Workflow submission succeeded through the native accessible Run workflow button after filling the form. Prefer this supported browser action if Playwright submission closes the form without creating a run; always verify the actual run ID before retrying. PR #667 is merged; no application deployment was needed.
+[Run 43719440920](https://github.com/WasanthaK/khrental/actions/runs/43719440920) passed eleven groups. A synthetic issued invoice introduced after a clean cessation preview blocked confirmation as `FINANCIAL_OPEN` with the inventory hash unchanged; the stale confirmation, exact retry and a fresh command were refused. A synthetic pending payment against that invoice was then reported together with it (`FINANCIAL_OPEN` and `PAYMENT_OPEN`) and a fresh command was refused. Canceling the invoice left the pending payment review blocking alone, and a further command was refused. All five refusals left stock, invoice, payment, command/recovery/step records, operation audit and provider billing snapshots unchanged. Rejecting the synthetic payment allowed fresh review and cessation, scheduling one dwelling at renewal while preserving the current USD 10 paid invoice. Exact retry, the canceled invoice and rejected payment, cessation history, inactive private stock and protected accounts/subscriptions/clocks passed.
+
+Cleanup passed at **19:04:01 Asia/Colombo**; the fixture subscription was canceled without invoice/proration and fixture deactivated with history retained. Full configuration equality, unchanged build `e0f7e821b8e511898836f71df86fde2fa8399463`, Ready `khrental-app--0000523` and independent SQL health passed through **19:04:05 Asia/Colombo**. [Durable evidence](evidence/r5-cessation-financial-conflict-20261115.json) retains the proof, source SHA and artifact digest. PR #668 supplied the harness; no application code or serving flags changed. The owner authorized the merge and dispatch; the workflow was submitted once through the GitHub REST dispatch API.
+
+UUID `2c267f29-f4dd-4dd1-87f8-69c904f8a648` is used and must never be replayed. This proves an outstanding issued invoice and a pending payment review added between review and confirmation in the paid whole-property service/SQL case. The synthetic records carried no renter, agreement or due date. Draft invoices, refund balances, settlements, deposits, reservations, open tenancies, other entitlement states, simultaneous races, HTTP/UI and credential login remain separate. No clock was advanced.
+
+**Next executable slice:** remaining cessation obligation kinds (settlements, deposits and reservations) on fresh isolated fixtures, after reviewing the canonical matrix and accepted negatives to avoid repeating accepted cases. R5 remains partial; live charging/full enforcement OFF; Evia paused.
+
+## Next executable slice
+**Remaining cessation obligation kinds: settlements, deposits and reservations.**
+Review the canonical matrix and existing accepted negatives, then prepare fresh private records with no real customer obligations. Maintenance (43714006196) and outstanding-invoice/pending-payment-review (43719440920) blockers added after clean review passed their no-effect refusals and resolved-obligation cessation. Preserve that evidence and do not replay either fixture. Draft invoices, refund balances, open tenancies, other entitlement states, simultaneous races and HTTP/UI remain separate.
+
+PR #668 is merged; no application deployment was needed. Run 43719440920 was submitted once through the GitHub REST dispatch API after the owner authorized merge and dispatch, and its run ID was verified before polling. Workflow submission succeeded through the native accessible Run workflow button after filling the form. Prefer this supported browser action if Playwright submission closes the form without creating a run; always verify the actual run ID before retrying. PR #667 is merged; no application deployment was needed.
 
 PR #660 normalized UUID billing lock names; real SQL regression and both SQL suites passed before deployment. Earlier deadlock graphs were not retained, so exact prior contention is unproven. PRs #661–662 corrected financial invoice comparison and cleanup. Compare stable invoice identity/financial fields, not the entire provider JSON. Never issue even redundant UPDATEs to already-inactive ceased properties: SQL 51074 intentionally rejects them. Cleanup-only run 43704049415 resolved the prior fixture; all prior attempts have verified cleanup. Never replay any creation UUID recorded in the evidence.
 
