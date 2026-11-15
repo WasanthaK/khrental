@@ -4,7 +4,9 @@ Latest verified acceptance: 15 November 2026, 19:23:51 Asia/Colombo (13:53:51 UT
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 
 ## Current decision
-R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. Evia is paused by owner; BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
+R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
+
+Owner scope decision, 15 November 2026 19:36 Asia/Colombo: natural seven-day grace expiry/later recovery (BL05.5) and the Evia service/package and matching audit (CT03.4/5) are OUT OF R5. Neither is accepted. Grace expiry moves to field testing; Evia moves to later troubleshooting because it affects the audit report only. Every other queue item stays in R5 and must be closed there. Do not work on either item as R5 work, and do not retry, resend or re-sign anything with Evia without a new owner instruction.
 
 Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43721199917. Reverify the runtime baseline before a new deployed test.
 
@@ -91,8 +93,11 @@ Hosted Checkout remains accepted within its recorded scope. Explicitly set synth
 3. Checkout/subscription operation recovery, isolation and broader authority/resource-state combinations. Preserve the recovery worker's exact existing tenant scope.
 4. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
 5. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
-6. Natural grace-expiry/later recovery observation without advancing accepted clocks; paused Evia work only after owner resumes it.
-7. LK commercial and launch decisions: formula/FX/rounding/versioning, reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
+6. LK commercial and launch decisions: formula/FX/rounding/versioning, reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
+
+## Outside R5 by owner decision
+- Natural seven-day grace expiry and later recovery. [PR #672](https://github.com/WasanthaK/khrental/pull/672) holds a prepared harness (start, inspect, expiry-recovery, cleanup); it is unmerged and has not been run. Start it only on an owner instruction, for field testing. Never advance accepted retained clocks.
+- Evia service/package retrieval and matching audit retention. Completed signing stays accepted.
 
 ## Execution and safety boundaries
 - User authorized continued R5 work, merges and controlled deployed sandbox acceptance; do not repeatedly ask for the same authorization.
