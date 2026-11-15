@@ -1,0 +1,117 @@
+{
+  "date": "2026-11-15",
+  "scope": "Paid public HTTP cessation, restoration and split",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "pullRequests": [
+    654,
+    655
+  ],
+  "preflightAttempt": {
+    "run": 43673420246,
+    "job": 132688320855,
+    "operation": "b04f270e-0f4b-41f2-a209-7935dd27ff4a",
+    "conclusion": "failure",
+    "cause": "New http-transitions scenario absent from workflow shell preflight allowlist",
+    "azureAuthentication": "skipped",
+    "configurationMutation": false,
+    "fixtureCreated": false,
+    "providerMutation": false,
+    "independentBuildAndSqlHealth": "passed"
+  },
+  "doNotReplayOperations": [
+    "b04f270e-0f4b-41f2-a209-7935dd27ff4a",
+    "5c7808bf-8c5c-4932-bc8e-b66668ad7d7e"
+  ],
+  "mergeCommits": {
+    "pr654": "ca7173dd76d103a278eaf25009c273c545f7841c",
+    "pr655": "4f5763a48819e04d1a1331e9c7ab6fb0e34601f0"
+  },
+  "ci": {
+    "pr654": [
+      43673239781,
+      43673239657
+    ],
+    "pr655": [
+      43673556643,
+      43673556456
+    ],
+    "conclusion": "success"
+  },
+  "acceptedRun": {
+    "id": 43673712405,
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43673712405",
+    "job": 132689157759,
+    "conclusion": "success",
+    "acceptancePassedAtUtc": "2026-11-15T03:47:26Z",
+    "acceptancePassedAtColombo": "2026-11-15T09:17:26+05:30",
+    "acceptance": {
+      "operation": "5c7808bf-8c5c-4932-bc8e-b66668ad7d7e",
+      "scenario": "http-transitions",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "public_http_paid_transition_readiness",
+        "foreign_property_and_mismatched_unit_transitions_rejected",
+        "stale_cessation_preview_rejected_without_effect",
+        "cessation_defers_provider_reduction_to_renewal",
+        "cessation_retry_no_duplicate_effect",
+        "stale_restoration_preview_rejected_without_effect",
+        "restoration_updates_paid_renewal_schedule",
+        "restoration_retry_no_duplicate_effect",
+        "original_property_and_cessation_history_retained",
+        "stale_split_preview_rejected_without_effect",
+        "foreign_unit_identity_reuse_rejected_without_effect",
+        "split_activates_exact_units_with_next_renewal_quantity",
+        "split_retry_no_duplicate_effect",
+        "second_split_command_rejected_without_effect",
+        "protected_accounts_subscriptions_and_clocks_unchanged"
+      ],
+      "scope": "genuine sandbox provider + deployed public HTTP paid cessation/restoration/split",
+      "httpAccepted": true,
+      "uiAccepted": false,
+      "credentialLoginAccepted": false,
+      "transitionNegativeRequests": 15,
+      "httpStockMutationAccepted": true,
+      "passed": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "protectedBillingUnchanged": true
+    },
+    "cleanup": {
+      "verified": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "recordsRetained": true,
+      "sessionsRevoked": true
+    },
+    "runtime": {
+      "originalSixFlagsRestored": true,
+      "readyRevision": "khrental-app--0000516",
+      "fullConfigurationAndTemplateComparison": {
+        "equal": true,
+        "differentPaths": [],
+        "normalization": "Single-revision 100% traffic target checked against each snapshot Ready revision, then represented equivalently; environment order and object key order normalized."
+      },
+      "publicBuildUnchanged": true,
+      "publicSqlHealth": "ready",
+      "verifiedAtUtc": "2026-11-15T03:48:35Z"
+    },
+    "artifact": {
+      "id": 14145516225,
+      "digest": "sha256:4ba58d1601d0c4ea782e53eb4dbac55e83e59564271e035b51f70b9f9489fa90",
+      "name": "paid-inventory-role-acceptance"
+    }
+  },
+  "boundaries": {
+    "renderedUi": false,
+    "credentialLogin": false,
+    "actualTransitionRenewal": false,
+    "allEntitlementStates": false,
+    "allObligationNegatives": false,
+    "finalDwellingCancellation": false,
+    "hostedCheckoutStockPromotion": false,
+    "liveCharging": false,
+    "fullEnforcement": false,
+    "foreignRestoration": "Generic not-ceased response tested for foreign property; not every foreign cessation-state combination."
+  }
+}
