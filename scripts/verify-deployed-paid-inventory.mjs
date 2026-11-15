@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
-import {createBillingStore} from '/app/src/api/managementBilling/store.js';
+import {createBillingStore,assertManagementWrite} from '/app/src/api/managementBilling/store.js';
 import {createBillingService} from '/app/src/api/managementBilling/service.js';
 import {createStripeClient,objectId} from '/app/src/api/managementBilling/stripe.js';
 import {BILLING_ACCOUNT,BILLING_PRICE,hash} from '/app/src/api/managementBilling/contract.js';
-import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
+import {getMssqlPool,closeMssqlPool,sql} from '/app/src/api/mssql/pool.js';
 
 const tenantId=process.env.PAID_INVENTORY_OPERATION,propertyId=randomUUID(),second=randomUUID();
 let actorId=randomUUID();
@@ -20,6 +20,13 @@ const restorationRenewal=scenario==='restoration-renewal';
 const splitRenewal=scenario==='split-renewal';
 const zeroStockCancellation=scenario==='zero-stock-cancellation';
 const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal||splitRenewal||zeroStockCancellation;
+// Natural grace: start leaves one past-due fixture untouched for seven real days;
+// inspect only reads it; expiry-recovery and cleanup attach to that same fixture.
+const naturalGraceStart=scenario==='natural-grace-start',naturalGraceInspect=scenario==='natural-grace-inspect';
+const naturalGraceExpiry=scenario==='natural-grace-expiry-recovery',naturalGraceCleanup=scenario==='natural-grace-cleanup';
+const clockFixture=cessationRenewal||naturalGraceStart;
+const GRACE_MS=7*86400000;
+let retainFixture=naturalGraceInspect||naturalGraceExpiry;
 let fixtureClock=null;
 let cessationMaintenanceId=null;
 let cessationInvoiceId=null,cessationPaymentId=null;
@@ -76,6 +83,14 @@ const scheduled=async expected=>{
   proof.scheduleId=schedule.id;return hash(schedule);
 };
 const cleanupFixture=async()=>{
+  if(retainFixture){
+    // Deliberately no provider or SQL cleanup: the fixture must survive unchanged.
+    try{
+      if(baseline){assert.deepEqual(await protectedState(),baseline);}
+      console.log('PAID_NATURAL_GRACE_RETAINED='+JSON.stringify({...proof,passed,fixtureRetained:true,protectedBillingUnchanged:Boolean(baseline)}));
+    }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
+    await closeMssqlPool();return;
+  }
   // Keep evidence on failure; never replay an ambiguous creation. Known fixture
   // subscription cancellation is bounded and verified, with no proration/invoice.
   try{
@@ -624,6 +639,169 @@ const verifyCessationSettlementDeposit=async()=>{
   proof.obligationBlockers='SETTLEMENT_OPEN,DEPOSIT_OPEN';
 };
 
+// SQL-time write guard with process-local scope: serving flags are not changed.
+const sqlGuard=async denied=>{
+  const guardEnv={...process.env,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:'true',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:tenantId};
+  const transaction=new sql.Transaction(await getMssqlPool());await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+  try{
+    if(denied){await assert.rejects(assertManagementWrite({tenantId,transaction,env:guardEnv}),{status:403,code:'MANAGEMENT_READ_ONLY'});}
+    else{await assertManagementWrite({tenantId,transaction,env:guardEnv});}
+  }finally{await transaction.rollback();}
+};
+const graceFields=account=>({status:account.subscription_status,grace:account.grace_started_at?new Date(account.grace_started_at).getTime():null,
+  paid:account.paid_through?new Date(account.paid_through).getTime():null,quantity:account.quantity,verified:Boolean(account.initial_payment_verified)});
+const sqlNow=async()=>new Date((await store.read('SELECT SYSUTCDATETIME() AS checked_at FROM dbo.tenants WHERE id=@tenantId',{tenantId}))[0].checked_at).getTime();
+
+// A genuine failed renewal starts grace at the real provider failure time. The
+// fixture clock is then left frozen: no later advance, seeded date or SQL edit.
+const verifyNaturalGraceStart=async()=>{
+  proof.scope='genuine sandbox failed renewal starting natural seven-day grace + deployed service/SQL';
+  proof.credentialLoginAccepted=false;proof.naturalGraceStarted=false;proof.naturalGraceExpiryAccepted=false;
+  stage='grace_guard_while_paid';
+  await sqlGuard(false);check('sql_guard_permits_management_write_while_paid');
+  stage='grace_failing_method';
+  const bad=await write('/v1/payment_methods/pm_card_chargeCustomerFail/attach',{customer:customer.id},'bad-method');
+  await write('/v1/subscriptions/'+subscription.id,{default_payment_method:bad.id},'fail-renewal');
+  const renewalAt=(await provider()).items.data[0].current_period_end;
+  stage='grace_advance_to_renewal';
+  for(const time of [renewalAt,renewalAt+7200]){await advanceFixtureClock(time,'advance-'+time);}
+  stage='grace_failed_invoice';
+  let invoice=null;
+  for(let attempt=0;attempt<90&&!invoice;attempt++){
+    const current=await provider(),candidate=await read('/v1/invoices/'+objectId(current.latest_invoice));
+    if(candidate.id!==proof.initialInvoice&&candidate.status==='open'&&candidate.attempted===true&&current.status==='past_due'){invoice=candidate;}else{await delay(2000);}
+  }
+  assert.ok(invoice,'Failed renewal invoice');
+  assert.equal(invoice.livemode,false);assert.equal(objectId(invoice.customer),customer.id);
+  assert.equal(invoice.billing_reason,'subscription_cycle');assert.equal(invoice.amount_remaining,1000);
+  // Checked now so the day-seven clock comparison cannot fail on a wrong assumption.
+  assert.equal((await provider()).items.data[0].current_period_start,renewalAt);
+  check('genuine_renewal_payment_failed_and_subscription_past_due');
+  stage='grace_reconcile';
+  const summary=await service.refresh(tenantId),account=await store.account(tenantId);
+  assert.equal(account.subscription_status,'past_due');
+  const graceStart=new Date(account.grace_started_at).getTime(),now=await sqlNow();
+  // Real provider event time, not the simulated clock: otherwise no natural wait is possible.
+  assert.ok(Number.isFinite(graceStart)&&graceStart<=now&&now-graceStart<30*60000,'Grace must start at the real failure time');
+  assert.equal(summary.entitlement.state,'grace');assert.equal(summary.entitlement.management,true);
+  assert.equal(Date.parse(summary.entitlement.graceEndsAt),graceStart+GRACE_MS);
+  check('grace_started_at_real_failure_time_with_seven_day_deadline');
+  stage='grace_guard_during_grace';
+  await sqlGuard(false);check('sql_guard_permits_management_write_during_grace');
+  stage='grace_reconcile_retry';
+  const saved=graceFields(account);await service.refresh(tenantId);
+  assert.deepEqual(graceFields(await store.account(tenantId)),saved);
+  const clock=await read('/v1/test_helpers/test_clocks/'+fixtureClock.id);
+  assert.equal(clock.status,'ready');assert.equal(clock.frozen_time,renewalAt+7200);assert.equal(await count(),2);
+  check('repeat_reconciliation_does_not_move_grace_start');
+  proof.naturalGraceStarted=true;proof.graceStartedAt=new Date(graceStart).toISOString();proof.graceEndsAt=new Date(graceStart+GRACE_MS).toISOString();
+  proof.clockFrozenAt=clock.frozen_time;proof.failedInvoiceAmountMinor=1000;
+  // From here the fixture must stay exactly as it is until the deadline passes.
+  retainFixture=true;
+};
+
+// Attach to the fixture created by natural-grace-start. Ownership is proven from
+// the retained slug, synthetic actor, provider metadata and the named clock.
+const attachNaturalGraceFixture=async()=>{
+  stage='natural_grace_ownership';
+  const tenants=await store.read('SELECT slug,[plan],status FROM dbo.tenants WHERE id=@tenantId',{tenantId});
+  assert.equal(tenants.length,1);assert.equal(tenants[0].slug,'r5-paid-stock-'+tenantId);
+  assert.equal(tenants[0].plan,'development-testing');assert.equal(tenants[0].status,'active');
+  const actors=await store.read('SELECT id,auth_id,email FROM dbo.app_users WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(actors.length,1);assert.equal(actors[0].email,'r5-paid-stock-'+tenantId+'@example.invalid');assert.ok(!actors[0].auth_id);
+  const account=await store.account(tenantId);assert.equal(account.stripe_account_id,BILLING_ACCOUNT);assert.equal(account.stripe_price_id,BILLING_PRICE);
+  customer=await read('/v1/customers/'+account.stripe_customer_id);
+  assert.equal(customer.livemode,false);assert.equal(customer.metadata.acceptance_fixture,tenantId);assert.ok(!customer.email);
+  subscription=await read('/v1/subscriptions/'+account.stripe_subscription_id);
+  assert.equal(subscription.livemode,false);assert.equal(subscription.metadata.acceptance_fixture,tenantId);
+  assert.equal(objectId(subscription.customer),customer.id);assert.equal(objectId(subscription.test_clock),objectId(customer.test_clock));
+  fixtureClock=await read('/v1/test_helpers/test_clocks/'+objectId(subscription.test_clock));
+  assert.equal(fixtureClock.name,'r5-natural-grace-start-'+tenantId);assert.equal(fixtureClock.status,'ready');
+  actorId=String(actors[0].id).toLowerCase();
+  check('natural_grace_fixture_ownership_verified');
+  return account;
+};
+
+const verifyNaturalGraceExisting=async()=>{
+  proof.credentialLoginAccepted=false;
+  const before=await attachNaturalGraceFixture();
+  if(naturalGraceCleanup){
+    // Operator recovery only: retire the fixture whatever state it reached.
+    proof.scope='natural grace fixture cleanup only; no acceptance claimed';
+    proof.naturalGraceCleanup=true;proof.naturalGraceExpiryAccepted=false;created=true;
+  }else{
+  const graceStart=before.grace_started_at?new Date(before.grace_started_at).getTime():NaN,now=await sqlNow();
+  const current=await provider(),clock=await read('/v1/test_helpers/test_clocks/'+fixtureClock.id);
+  proof.graceStartedAt=Number.isFinite(graceStart)?new Date(graceStart).toISOString():'none';
+  proof.graceEndsAt=Number.isFinite(graceStart)?new Date(graceStart+GRACE_MS).toISOString():'none';
+  proof.observedAt=new Date(now).toISOString();proof.expired=Number.isFinite(graceStart)&&now>=graceStart+GRACE_MS;
+  proof.subscriptionStatus=before.subscription_status;proof.providerStatus=current.status;proof.clockFrozenAt=clock.frozen_time;
+  if(naturalGraceInspect){
+    stage='natural_grace_inspect';
+    proof.scope='read-only inspection of the retained natural grace fixture';proof.readOnly=true;proof.naturalGraceExpiryAccepted=false;
+    proof.entitlement=(await service.summary(tenantId)).entitlement.state;
+    assert.deepEqual(graceFields(await store.account(tenantId)),graceFields(before));
+    check('natural_grace_state_read_without_writes');
+  }else{
+  proof.scope='naturally elapsed seven-day grace expiry and later recovery + deployed service/SQL';
+  proof.naturalGraceExpiryAccepted=false;proof.laterRecoveryAccepted=false;
+  stage='natural_expiry_precondition';
+  assert.equal(before.subscription_status,'past_due');assert.ok(before.initial_payment_verified);assert.ok(Number.isFinite(graceStart));
+  // Fail closed and change nothing when dispatched early; the fixture stays retained.
+  if(!proof.expired){throw Object.assign(Error('Grace has not expired'),{code:'NATURAL_GRACE_NOT_EXPIRED'});}
+  assert.equal(current.status,'past_due');
+  // The clock still sits two hours after the failed renewal: nobody advanced it.
+  assert.equal(clock.frozen_time,current.items.data[0].current_period_start+7200);
+  const invoice=await read('/v1/invoices/'+objectId(current.latest_invoice));
+  assert.equal(invoice.livemode,false);assert.equal(objectId(invoice.customer),customer.id);assert.equal(invoice.status,'open');
+  assert.equal(invoice.attempted,true);assert.equal(invoice.billing_reason,'subscription_cycle');assert.equal(invoice.amount_remaining,1000);
+  assert.equal((await store.read("SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND status='pending'",{tenantId})).length,0);
+  assert.equal(await count(),2);
+  check('fixture_still_past_due_with_unadvanced_clock_and_open_invoice');
+  stage='natural_expiry_entitlement';
+  const expired=await service.summary(tenantId);
+  assert.equal(expired.entitlement.state,'read_only');assert.equal(expired.entitlement.management,false);
+  assert.deepEqual(graceFields(await store.account(tenantId)),graceFields(before));
+  check('entitlement_read_only_after_natural_seven_days_without_any_write');
+  stage='natural_expiry_sql_guard';
+  await sqlGuard(true);check('sql_guard_denies_management_write_after_natural_expiry');
+  stage='natural_expiry_reconcile';
+  const refreshed=await service.refresh(tenantId);
+  assert.equal(refreshed.entitlement.state,'read_only');assert.deepEqual(graceFields(await store.account(tenantId)),graceFields(before));
+  await sqlGuard(true);
+  check('reconciliation_after_expiry_does_not_extend_or_restart_grace');
+  proof.naturalGraceExpiryAccepted=true;proof.waitedSeconds=Math.floor((now-graceStart)/1000);
+  stage='later_recovery_payment';
+  const good=objectId(customer.invoice_settings?.default_payment_method);assert.match(good||'',/^pm_/);
+  await write('/v1/subscriptions/'+subscription.id,{default_payment_method:good},'restore-method');
+  await write('/v1/invoices/'+invoice.id+'/pay',{payment_method:good},'recover-invoice');
+  let paid=null,active=null;
+  for(let attempt=0;attempt<60&&!(paid&&active);attempt++){
+    const candidate=await read('/v1/invoices/'+invoice.id),sub=await provider();
+    if(candidate.status==='paid'&&sub.status==='active'){paid=candidate;active=sub;}else{await delay(2000);}
+  }
+  assert.ok(paid&&active,'Later recovery payment');assert.equal(paid.amount_paid,1000);assert.equal(paid.amount_remaining,0);
+  check('genuine_later_payment_recovers_provider_subscription');
+  stage='later_recovery_reconcile';
+  const recovered=await service.refresh(tenantId),final=await store.account(tenantId);
+  assert.equal(recovered.entitlement.state,'active');assert.equal(final.subscription_status,'active');assert.equal(final.grace_started_at,null);
+  assert.equal(new Date(final.paid_through).getTime(),active.items.data[0].current_period_end*1000);
+  await sqlGuard(false);
+  check('later_recovery_restores_management_and_clears_grace');
+  stage='later_recovery_retry';
+  await service.refresh(tenantId);assert.deepEqual(graceFields(await store.account(tenantId)),graceFields(final));
+  assert.equal(await count(),2);
+  assert.equal((await read('/v1/test_helpers/test_clocks/'+fixtureClock.id)).frozen_time,clock.frozen_time);
+  check('repeat_reconciliation_after_recovery_changes_nothing');
+  proof.laterRecoveryAccepted=true;
+  // Evidence is complete: the fixture may now be retired with records retained.
+  retainFixture=false;created=true;
+  }
+  }
+  assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
+  passed=true;
+};
+
 const prepareRenewalCleanup=async()=>{
   stage='existing_renewal_cleanup_ownership';
   const tenants=await store.read('SELECT slug,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});
@@ -776,7 +954,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','natural-grace-start','natural-grace-inspect','natural-grace-expiry-recovery','natural-grace-cleanup','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -788,7 +966,7 @@ try{
     assert.ok((await store.read('SELECT OBJECT_ID(@name) AS id',{name:'dbo.'+table}))[0]?.id,'Required schema: '+table);
   }
   baseline=await protectedState();
-  if(scenario==='cleanup-cessation-renewal'){await prepareRenewalCleanup();}else if(scenario==='cleanup-hosted-checkout'){await cleanupUnpaidHostedCheckout();}else{
+  if(scenario==='cleanup-cessation-renewal'){await prepareRenewalCleanup();}else if(scenario==='cleanup-hosted-checkout'){await cleanupUnpaidHostedCheckout();}else if(naturalGraceInspect||naturalGraceExpiry||naturalGraceCleanup){await verifyNaturalGraceExisting();}else{
   stage='private_fixture';
   await store.locked(tenantId,async q=>{
     assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@tenantId',{tenantId})).length,0,'Never replay an existing fixture');
@@ -808,11 +986,11 @@ try{
   const stockPreview=await store.locked(tenantId,q=>store.cessationPreviewLocked(q,{tenantId,actorId,propertyId}));
   assert.equal(stockPreview.eligible,true);
   stage='genuine_paid_subscription';providerAttempted=true;
-  if(cessationRenewal){
+  if(clockFixture){
     fixtureClock=await write('/v1/test_helpers/test_clocks',{frozen_time:Math.floor(Date.now()/1000),name:'r5-'+scenario+'-'+tenantId},'clock');
     assert.equal(fixtureClock.status,'ready');proof.testClockId=fixtureClock.id;progress();
   }
-  customer=await write('/v1/customers',{description:'R5 private paid stock '+tenantId,...(cessationRenewal?{test_clock:fixtureClock.id}:{}),payment_method:'pm_card_visa',
+  customer=await write('/v1/customers',{description:'R5 private paid stock '+tenantId,...(clockFixture?{test_clock:fixtureClock.id}:{}),payment_method:'pm_card_visa',
     invoice_settings:{default_payment_method:'pm_card_visa'},metadata:{acceptance_fixture:tenantId}},'customer');
   proof.customerId=customer.id;progress();assert.equal(customer.livemode,false);assert.ok(!customer.email);
   subscription=await write('/v1/subscriptions',{customer:customer.id,items:[{price:BILLING_PRICE,quantity:2}],
@@ -820,7 +998,7 @@ try{
     metadata:{acceptance_fixture:tenantId}},'subscription');
   proof.subscriptionId=subscription.id;progress();assert.equal(subscription.livemode,false);assert.equal(subscription.status,'active');
   assert.equal(objectId(subscription.customer),customer.id);
-  if(cessationRenewal){assert.equal(objectId(subscription.test_clock),fixtureClock.id);}else{assert.ok(!subscription.test_clock);}
+  if(clockFixture){assert.equal(objectId(subscription.test_clock),fixtureClock.id);}else{assert.ok(!subscription.test_clock);}
   const invoice=await read('/v1/invoices/'+objectId(subscription.latest_invoice));
   assert.equal(invoice.livemode,false);assert.equal(objectId(invoice.customer),customer.id);assert.equal(invoice.status,'paid');
   assert.equal(invoice.amount_paid,1000);assert.equal(invoice.currency,'usd');assert.equal(invoice.billing_reason,'subscription_create');
@@ -831,7 +1009,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(naturalGraceStart){await verifyNaturalGraceStart();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
