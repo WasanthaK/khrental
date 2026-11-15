@@ -1,0 +1,116 @@
+{
+  "status": "bounded_acceptance_passed",
+  "scenario": "cessation-reservation-conflict",
+  "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+  "pullRequests": [
+    674
+  ],
+  "latestAcceptedRun": 43723325597,
+  "attempts": [
+    {
+      "runId": 43723325597,
+      "runAttempt": 1,
+      "runUrl": "https://github.com/WasanthaK/khrental/actions/runs/43723325597",
+      "jobId": 132840101070,
+      "sourceSha": "648674d8e447a73297fb9209805a45bad393bd3e",
+      "conclusion": "success",
+      "proof": {
+        "operation": "ca5c25a6-9cf6-4724-9b34-a5a4f9c049de",
+        "scenario": "cessation-reservation-conflict",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "cessation_preview_clean_before_reservation",
+          "open_rental_offer_blocks_preview_without_changing_inventory_hash",
+          "open_rental_offer_stale_retry_and_new_command_rejected_without_effect",
+          "accepted_hold_still_blocks_preview_and_rejects_new_command_without_effect",
+          "withdrawn_offer_allows_fresh_review_with_unchanged_inventory_hash",
+          "resolved_obligation_cessation_schedules_one_without_current_invoice_change",
+          "withdrawn_offer_enquiry_and_cessation_history_retained_with_exact_retry",
+          "protected_accounts_subscriptions_and_clocks_unchanged"
+        ],
+        "scope": "genuine sandbox paid cessation reservation obligation + deployed service/SQL",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "reservationConflictAccepted": true,
+        "blockedCessationRequests": 4,
+        "obligationRetained": true,
+        "obligationBlockers": "RESERVATION_OPEN",
+        "passed": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "protectedBillingUnchanged": true
+      },
+      "refusalSnapshotVerification": [
+        {
+          "offerState": "offered",
+          "requests": 3,
+          "commands": [
+            "stale confirmation",
+            "exact retry",
+            "fresh command"
+          ],
+          "localAndProviderSnapshotsEqual": true,
+          "measurement": "one snapshot before and after the three-request batch; no intermediate per-request snapshots"
+        },
+        {
+          "offerState": "accepted",
+          "requests": 1,
+          "commands": [
+            "fresh command"
+          ],
+          "localAndProviderSnapshotsEqual": true,
+          "measurement": "snapshot before and after the accepted-hold refusal"
+        }
+      ],
+      "cleanup": {
+        "verified": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "recordsRetained": true,
+        "at": "2026-11-15T14:17:20Z"
+      },
+      "configurationEqual": true,
+      "configurationComparison": {
+        "equal": true,
+        "differentPaths": []
+      },
+      "buildAndSqlHealthy": true,
+      "buildVerifiedAt": "2026-11-15T14:17:22.858Z",
+      "healthVerifiedAt": "2026-11-15T14:17:23.367Z",
+      "readyRevision": "khrental-app--0000523",
+      "artifact": {
+        "id": 14166090323,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2081,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14166090323",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14166090323/zip",
+        "expired": false,
+        "created_at": "2026-11-15T14:17:24Z",
+        "expires_at": "2026-12-15T14:17:23Z",
+        "updated_at": "2026-11-15T14:17:24Z",
+        "digest": "sha256:a8c93c80e305facd5656b3a2d572ced145cf288e25168080ea8f2646663ab320",
+        "workflow_run": {
+          "id": 43723325597,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "648674d8e447a73297fb9209805a45bad393bd3e"
+        }
+      },
+      "artifactDigestVerifiedFromDownloadedZip": true,
+      "neverReplayOperation": true,
+      "providerIdentifiersOmitted": true
+    }
+  ],
+  "limits": [
+    "Paid whole-property service/SQL reservation blocker only; not HTTP/UI or credential-login acceptance",
+    "The enquiry, offered reservation, accepted-hold and consent fields were explicit synthetic SQL fixture data; no genuine seeker enquiry, participant consent, signing or rendered offer journey is established",
+    "Unchanged state is measured across the three offered-state refusals as one batch and separately across the accepted-hold refusal, not after each of the first three requests",
+    "Other obligation and entitlement states, open tenancies, approved settlements, refund balances, draft invoices, simultaneous races, interrupted provider recovery and rendered journeys remain separate",
+    "No clock advancement, hold-expiry proof or new renewal invoice acceptance in this case",
+    "The six obligation families have bounded paid whole-property service/SQL proof; this does not close all cessation acceptance",
+    "R5 partial; live charging/full enforcement OFF; natural seven-day grace expiry and Evia service/package/matching audit outside R5 by owner decision, not accepted"
+  ]
+}
