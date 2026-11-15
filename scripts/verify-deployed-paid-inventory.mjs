@@ -226,8 +226,12 @@ const verifyHostedCheckout=async()=>{
   await store.locked(tenantId,q=>q('INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@digest,DATEADD(MINUTE,5,SYSUTCDATETIME()))',
     {id:authSession.auth_user_id,digest:createHash('sha256').update(token).digest('hex')}));
   stage='hosted_checkout_http_refresh';
-  const refreshed=await http('refresh',{});assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.billedQuantity,3);
+  const refreshed=await http('refresh',{});
+  console.log('PAID_HOSTED_REFRESH='+JSON.stringify({state:refreshed.entitlement.state,billedQuantity:refreshed.billedQuantity,
+    inventoryQuantity:refreshed.inventoryQuantity,pendingStockCount:refreshed.pendingStock.length}));
+  assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.billedQuantity,3);
   assert.equal(refreshed.inventoryQuantity,3);assert.equal(refreshed.pendingStock.length,0);
+  stage='hosted_promoted_record_identity';
   const promoted=await staged();assert.equal(promoted.length,3);
   assert.ok(promoted.every(r=>r.status==='promoted'&&String(r.promotion_command_id).toLowerCase()===checkoutCommandId));
   const rows=await stock();assert.equal(rows.length,3);
@@ -235,6 +239,11 @@ const verifyHostedCheckout=async()=>{
     const row=rows.find(r=>String(r.id).toLowerCase()===record.payload.id);assert.ok(row);
     assert.equal(row.name,record.payload.name);assert.equal(row.description,record.payload.description);assert.equal(row.status,'inactive');
   }
+  stage='hosted_private_listing_preferences';
+  // The normal insert trigger defaults opted_out to 0. Inactive availability
+  // already withholds these fixtures; set the additional fixture-only opt-out
+  // explicitly after verifying every promoted row is the intended inactive stock.
+  await store.locked(tenantId,q=>q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId',{tenantId}));
   assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,3);
   check('completed_checkout_promotes_exact_private_staged_records');
   stage='hosted_refresh_retry';
