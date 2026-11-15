@@ -70,12 +70,16 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
   };
   const read = async (statement, params) => query(await getPool(), statement, params);
   const locked = async (resource, action) => {
+    // SQL UUIDs and HTTP UUIDs can differ in casing, but sp_getapplock
+    // compares resource names as binary text even on case-insensitive databases.
+    // Preserve non-tenant namespaces (for example pricing:LK) unchanged.
+    const lockResource=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(resource)?resource.toLowerCase():resource;
     const tx = new sql.Transaction(await getPool());
     await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     try {
       await query(tx, `DECLARE @result INT;
         EXEC @result=sys.sp_getapplock @Resource=@resource,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000;
-        IF @result<0 THROW 51000,'Billing operation is busy; retry.',1;`, {resource:`management-billing:${resource}`});
+        IF @result<0 THROW 51000,'Billing operation is busy; retry.',1;`, {resource:`management-billing:${lockResource}`});
       const q = (statement, params) => query(tx, statement, params);
       const result = await action(q);
       await tx.commit();

@@ -47,6 +47,21 @@ export const verifyManagementBilling=async pool=>{
   const actor=(await pool.request().query('SELECT TOP 1 id FROM dbo.app_users')).recordset[0];
   assert.ok(actor,'The migration proof must provide an actor fixture.');
   const store=createBillingStore({getPool:async()=>pool});
+  // Same tenant from SQL (uppercase) and HTTP (lowercase) must share one
+  // transaction-owned application lock; unrelated tenants must remain independent.
+  const lockTenant='abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  for(const spelling of [lockTenant,lockTenant.toUpperCase()]){
+    await store.locked(spelling,async q=>{
+      const modes=(await q("SELECT APPLOCK_MODE('public',@same,'Transaction') AS sameTenant, APPLOCK_MODE('public',@other,'Transaction') AS otherTenant",{
+        same:'management-billing:'+lockTenant,other:'management-billing:12345678-1234-4234-8234-123456789abc'}))[0];
+      assert.equal(modes.sameTenant,'Exclusive','SQL and request UUID spellings must serialize on one lock');
+      assert.equal(modes.otherTenant,'NoLock','Other tenants retain independent lock resources');
+    });
+  }
+  await store.locked('pricing:LK',async q=>{
+    assert.equal((await q("SELECT APPLOCK_MODE('public','management-billing:pricing:LK','Transaction') AS mode"))[0].mode,'Exclusive');
+  });
+  console.log('PASS: billing UUID lock casing shares one resource; tenants and pricing namespace remain distinct');
   const rules={market:'LK',billingCurrency:'USD',baseFeeMinor:500,rentCurrency:'LKR',includedRentMinor:null,
     excessPolicy:'pending',effectiveAt:null,reason:'Synthetic migration proof; no commercial policy approval.'};
   const attempts=await Promise.allSettled(Array.from({length:4},()=>store.savePricing({rules,expectedVersion:0,actorId:actor.id})));
