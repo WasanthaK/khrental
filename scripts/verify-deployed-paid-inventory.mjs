@@ -1,6 +1,6 @@
 // Genuine sandbox provider acceptance. HTTP permissions are a separate scenario;
 // service scenarios do not establish HTTP, and none establishes UI or login.
-// HTTP promotion uses temporary serving readiness and fixture-scoped enforcement;
+// HTTP stock mutations use temporary serving readiness and fixture-scoped enforcement;
 // its workflow restores original flags. Other scenarios leave serving flags unchanged.
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
@@ -13,6 +13,7 @@ import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
 const tenantId=process.env.PAID_INVENTORY_OPERATION,actorId=randomUUID(),propertyId=randomUUID(),second=randomUUID();
 const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
+const httpTransitions=scenario==='http-transitions';
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
   MANAGEMENT_RESTORATION_SCHEMA_READY:'true',MANAGEMENT_SPLIT_SCHEMA_READY:'true'};
 const store=createBillingStore({env}),stripe=createStripeClient(),service=createBillingService({store,stripe,env});
@@ -49,7 +50,7 @@ const protectedState=async()=>Promise.all(protectedIds.map(async id=>{
   return {account:hash(account),subscription:hash(sub),clock:clock?.frozen_time};
 }));
 const count=async()=> (await store.inventory(tenantId)).length;
-const audit=async()=>hash(await store.read('SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@tenantId ORDER BY id',{tenantId}));
+const audit=async()=>hash(await store.read("SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action<>'stripe.event_reconciled' ORDER BY id",{tenantId}));
 const provider=()=>read('/v1/subscriptions/'+subscription.id);
 const scheduled=async expected=>{
   const sub=await provider();assert.equal(sub.livemode,false);assert.equal(objectId(sub.customer),customer.id);
@@ -112,9 +113,9 @@ const cleanupFixture=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
-  if(scenario==='http-promotion'){
+  if(scenario==='http-promotion'||httpTransitions){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
     assert.equal(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS,tenantId);
   }else{assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');}
@@ -321,34 +322,118 @@ try{
     assert.equal((await stagedRows()).length,3);check('promotion_retry_no_duplicate_effect');
     if(stockHttp){proof.httpAccepted=true;proof.httpStockMutationAccepted=true;}
   }else{
+  let transitionHttp=null,foreignProperty=null,foreignUnit=null;
+  if(httpTransitions){
+    proof.scope='genuine sandbox provider + deployed public HTTP paid cessation/restoration/split';
+    proof.credentialLoginAccepted=false;
+    const token=await makeSession(actorId,'admin');
+    transitionHttp=async(path,body)=>{
+      const response=await fetch('https://app.quixo.homes/api/management-billing/'+path,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),
+        headers:{Authorization:'Bearer '+token,'x-tenant-id':tenantId,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+      const result=await response.json();
+      if(!response.ok){throw Object.assign(Error('Controlled transition HTTP request failed'),{code:result.code||'HTTP_UNCONFIRMED',status:response.status});}
+      assert.equal(response.status,200);assert.equal(result.error,null);return result.data;
+    };
+    stage='http_transition_readiness';const status=await transitionHttp('status');
+    assert.equal(status.entitlement.state,'active');assert.equal(status.stagingEnabled,true);
+    check('public_http_paid_transition_readiness');
+    const foreign=randomUUID();foreignProperty=randomUUID();foreignUnit=randomUUID();
+    await store.locked(foreign,async q=>{
+      await q("INSERT dbo.tenants(id,name,slug,status,[plan]) VALUES(@foreign,'Private transition isolation',@slug,'active','development-testing')",{foreign,slug:'r5-transition-'+foreign});
+      await q("INSERT dbo.properties(id,tenant_id,name,status,propertytype,country_code) VALUES(@property,@foreign,'Private foreign transition stock','inactive','house','LK')",{property:foreignProperty,foreign});
+      await q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE tenant_id=@foreign',{foreign});
+      await q("INSERT dbo.property_units(id,tenant_id,propertyid,unitnumber,status) VALUES(@unit,@foreign,@property,'Private foreign unit','inactive')",{unit:foreignUnit,foreign,property:foreignProperty});
+      assert.equal((await q('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@foreign AND opted_out=1',{foreign})).length,1);
+    });foreignTenant=foreign;
+  }
+  const snapshot=async()=>{
+    const params={tenantId,foreign:foreignTenant||tenantId};
+    const tables=[['properties','id'],['property_units','id'],['management_inventory_staging','id'],['management_inventory_controls','id'],
+      ['management_inventory_splits','command_id'],['management_billing_commands','id']];
+    const state={};
+    for(const [table,key] of tables){state[table]=await store.read('SELECT * FROM dbo.'+table+' WHERE tenant_id IN (@tenantId,@foreign) ORDER BY '+key,params);}
+    state.recovery=await store.read('SELECT r.* FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE c.tenant_id IN (@tenantId,@foreign) ORDER BY r.command_id',params);
+    state.steps=await store.read('SELECT s.* FROM dbo.management_billing_steps s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE c.tenant_id IN (@tenantId,@foreign) ORDER BY s.command_id,s.name',params);
+    state.splitUnits=await store.read('SELECT u.* FROM dbo.management_inventory_split_units u JOIN dbo.management_inventory_splits s ON s.command_id=u.command_id WHERE s.tenant_id IN (@tenantId,@foreign) ORDER BY u.id',params);
+    state.audit=await store.read("SELECT * FROM dbo.management_billing_audit WHERE tenant_id IN (@tenantId,@foreign) AND action<>'stripe.event_reconciled' ORDER BY id",params);
+    return hash(state);
+  };
+  const remoteState=async()=>{
+    const sub=await provider();return hash({sub,schedule:objectId(sub.schedule)?await read('/v1/subscription_schedules/'+objectId(sub.schedule)):null});
+  };
+  const denied=async(cases,name)=>{
+    const before=await snapshot(),remote=await remoteState();
+    for(const [path,body,status,code] of cases){await assert.rejects(()=>transitionHttp(path,body),e=>e.status===status&&e.code===code);}
+    assert.equal(await snapshot(),before);assert.equal(await remoteState(),remote);
+    proof.transitionNegativeRequests=(proof.transitionNegativeRequests||0)+cases.length;check(name);
+  };
+  const previewCall=(path,args,fn)=>transitionHttp?transitionHttp(path,args):fn();
+  const applyCall=(path,args,fn)=>transitionHttp?transitionHttp(path,{requestId:args.id,propertyId:args.propertyId,
+    ...(args.units?{units:args.units}:{unitId:args.unitId||null}),inventoryHash:args.inventoryHash,reason:args.reason}):fn();
+  if(httpTransitions){
+    stage='http_foreign_transition_resources';
+    const target={propertyId:foreignProperty,unitId:null},mutation={...target,requestId:randomUUID(),inventoryHash:'0'.repeat(64),reason:'Reject foreign transition resource.'};
+    const units=[1,2].map(n=>({id:randomUUID(),propertyid:foreignProperty,unitnumber:'Private foreign attempt '+n,availability:'inactive'}));
+    await denied([
+      ['stock/cessation-preview',target,404,'BILLING_STOCK_NOT_FOUND'],
+      ['stock/cessation',mutation,404,'BILLING_STOCK_NOT_FOUND'],
+      ['stock/restoration-preview',target,409,'BILLING_RESTORE_NOT_CEASED'],
+      ['stock/restore',{...mutation,requestId:randomUUID()},409,'BILLING_RESTORE_NOT_CEASED'],
+      ['stock/split-preview',{propertyId:foreignProperty,units},404,'BILLING_SPLIT_NOT_FOUND'],
+      ['stock/split',{propertyId:foreignProperty,units,requestId:randomUUID(),inventoryHash:'0'.repeat(64),reason:mutation.reason},404,'BILLING_SPLIT_NOT_FOUND'],
+      ['stock/cessation-preview',{propertyId,unitId:foreignUnit},404,'BILLING_STOCK_NOT_FOUND'],
+      ['stock/cessation',{...mutation,propertyId,unitId:foreignUnit,requestId:randomUUID()},404,'BILLING_STOCK_NOT_FOUND']
+    ],'foreign_property_and_mismatched_unit_transitions_rejected');
+  }
   stage='paid_cessation_preview';
-  const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
+  const preview=await previewCall('stock/cessation-preview',{propertyId,unitId:null},()=>service.cessationPreview({tenantId,actorId,propertyId}));assert.equal(preview.eligible,true);
   const cease={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Cease private synthetic stock for paid acceptance.'};
+  if(httpTransitions){stage='http_stale_cessation';await denied([['stock/cessation',{requestId:randomUUID(),propertyId,unitId:null,inventoryHash:'0'.repeat(64),reason:cease.reason},409,'BILLING_CESSATION_BLOCKED']],'stale_cessation_preview_rejected_without_effect');}
   stage='paid_cessation_apply';
-  const ceased=await service.ceaseStock(cease);assert.equal(await count(),1);const ceasedSchedule=await scheduled(1);
+  const ceased=await applyCall('stock/cessation',cease,()=>service.ceaseStock(cease));assert.equal(await count(),1);const ceasedSchedule=await scheduled(1);
   check('cessation_defers_provider_reduction_to_renewal');
-  const ceaseAudit=await audit();assert.deepEqual(await service.ceaseStock(cease),ceased);
+  const ceaseAudit=await audit();assert.deepEqual(await applyCall('stock/cessation',cease,()=>service.ceaseStock(cease)),ceased);
   assert.equal(await audit(),ceaseAudit);assert.equal(await scheduled(1),ceasedSchedule);check('cessation_retry_no_duplicate_effect');
   stage='paid_restoration';
-  const restorePreview=await service.restorationPreview({tenantId,actorId,propertyId});
+  const restorePreview=await previewCall('stock/restoration-preview',{propertyId,unitId:null},()=>service.restorationPreview({tenantId,actorId,propertyId}));
   const restore={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:restorePreview.inventoryHash,reason:'Restore the same synthetic paid property.'};
-  const restored=await service.restoreStock(restore);assert.equal(restored.managementRestored,true);assert.equal(await count(),2);
+  if(httpTransitions){stage='http_stale_restoration';await denied([['stock/restore',{requestId:randomUUID(),propertyId,unitId:null,inventoryHash:'0'.repeat(64),reason:restore.reason},409,'BILLING_INVENTORY_CHANGED']],'stale_restoration_preview_rejected_without_effect');}
+  stage='paid_restoration_apply';
+  const restored=await applyCall('stock/restore',restore,()=>service.restoreStock(restore));assert.equal(restored.managementRestored,true);assert.equal(await count(),2);
   const restoredSchedule=await scheduled(2);check('restoration_updates_paid_renewal_schedule');
-  const restoreAudit=await audit();assert.deepEqual(await service.restoreStock(restore),restored);
+  const restoreAudit=await audit();assert.deepEqual(await applyCall('stock/restore',restore,()=>service.restoreStock(restore)),restored);
   assert.equal(await audit(),restoreAudit);assert.equal(await scheduled(2),restoredSchedule);check('restoration_retry_no_duplicate_effect');
   const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
   assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.ok(controls[0].restored_at);
   check('original_property_and_cessation_history_retained');
   stage='paid_split';
   const units=[1,2,3].map(n=>({id:randomUUID(),propertyid:propertyId,unitnumber:'Private acceptance unit '+n,availability:'inactive'}));
-  const splitPreview=await service.splitPreview({tenantId,actorId,propertyId,units});
+  const splitPreview=await previewCall('stock/split-preview',{propertyId,units},()=>service.splitPreview({tenantId,actorId,propertyId,units}));
   const split={tenantId,actorId,propertyId,units,id:randomUUID(),inventoryHash:splitPreview.inventoryHash,reason:'Split private synthetic property under paid subscription.'};
-  const result=await service.splitStock(split);assert.equal(result.splitCompleted,true);assert.equal(await count(),4);
+  if(httpTransitions){
+    stage='http_stale_split';await denied([['stock/split',{requestId:randomUUID(),propertyId,units,inventoryHash:'0'.repeat(64),reason:split.reason},409,'BILLING_INVENTORY_CHANGED']],'stale_split_preview_rejected_without_effect');
+    stage='http_foreign_split_unit';
+    const conflicting=units.map((u,i)=>i===0?{...u,id:foreignUnit}:u);
+    await denied([
+      ['stock/split-preview',{propertyId,units:conflicting},409,'BILLING_SPLIT_UNIT_CONFLICT'],
+      ['stock/split',{requestId:randomUUID(),propertyId,units:conflicting,inventoryHash:split.inventoryHash,reason:split.reason},409,'BILLING_SPLIT_UNIT_CONFLICT']
+    ],'foreign_unit_identity_reuse_rejected_without_effect');
+  }
+  stage='paid_split_apply';
+  const result=await applyCall('stock/split',split,()=>service.splitStock(split));assert.equal(result.splitCompleted,true);assert.equal(await count(),4);
   assert.equal((await store.read('SELECT id FROM dbo.property_units WHERE tenant_id=@tenantId AND propertyid=@propertyId',{tenantId,propertyId})).length,3);
   const splitSchedule=await scheduled(4);assert.equal((await store.account(tenantId)).pending_quantity,4);
   check('split_activates_exact_units_with_next_renewal_quantity');
-  const splitAudit=await audit();assert.deepEqual(await service.splitStock(split),result);
+  const splitAudit=await audit();assert.deepEqual(await applyCall('stock/split',split,()=>service.splitStock(split)),result);
   assert.equal(await audit(),splitAudit);assert.equal(await scheduled(4),splitSchedule);check('split_retry_no_duplicate_effect');
+  if(httpTransitions){
+    stage='http_repeat_split_new_command';
+    await denied([
+      ['stock/split-preview',{propertyId,units},409,'BILLING_SPLIT_ALREADY_SPLIT'],
+      ['stock/split',{requestId:randomUUID(),propertyId,units,inventoryHash:split.inventoryHash,reason:split.reason},409,'BILLING_SPLIT_ALREADY_SPLIT']
+    ],'second_split_command_rejected_without_effect');
+    proof.httpAccepted=true;proof.httpStockMutationAccepted=true;
+  }
   }
   assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
   passed=true;

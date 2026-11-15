@@ -18,8 +18,9 @@ on:
         description: Acceptance case (do not repeat an already accepted case)
         required: true
         type: choice
-        default: http-promotion
+        default: http-transitions
         options:
+          - http-transitions
           - http-promotion
           - http-permissions
           - promotion
@@ -87,7 +88,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
       - name: Temporarily enable inventory acceptance and scope write enforcement
-        if: inputs.scenario == 'http-promotion'
+        if: inputs.scenario == 'http-promotion' || inputs.scenario == 'http-transitions'
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +131,7 @@ jobs:
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
           grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion")) and (.uiAccepted==false) and (.checks|length)==(if $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
+          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion" or $scenario=="http-transitions")) and (.uiAccepted==false) and (.checks|length)==(if $scenario=="http-transitions" then 17 elif $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
       - name: Restore exact original feature and enforcement configuration
         if: always() && env.RESTORE_ENFORCEMENT == 'true'
         shell: bash
@@ -174,7 +175,7 @@ jobs:
           set -euo pipefail
           if [ ! -f "$RUNNER_TEMP/app-before.json" ]; then exit 0; fi
           az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-after.json"
-          if [ "$SCENARIO" = http-promotion ]; then
+          if [ "$SCENARIO" = http-promotion ] || [ "$SCENARIO" = http-transitions ]; then
             cp "$RUNNER_TEMP/enforcement-before.json" "$RUNNER_TEMP/app-before.json"
             jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-after.json" >/dev/null
             for side in before after; do
