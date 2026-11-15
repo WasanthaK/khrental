@@ -1,0 +1,81 @@
+{
+  "status": "bounded_acceptance_passed",
+  "scenario": "cessation-financial-conflict",
+  "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+  "pullRequests": [
+    668
+  ],
+  "latestAcceptedRun": 43719440920,
+  "attempts": [
+    {
+      "runId": 43719440920,
+      "jobId": 132828376132,
+      "sourceSha": "02593dca4adcbea32e6283f1605a924610d05603",
+      "conclusion": "success",
+      "proof": {
+        "operation": "2c267f29-f4dd-4dd1-87f8-69c904f8a648",
+        "scenario": "cessation-financial-conflict",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "cessation_preview_clean_before_financial_obligation",
+          "outstanding_invoice_blocks_preview_without_changing_inventory_hash",
+          "outstanding_invoice_stale_retry_and_new_command_rejected_without_effect",
+          "pending_payment_review_reported_with_outstanding_invoice_and_rejected",
+          "pending_payment_review_alone_still_blocks_after_invoice_cancelled",
+          "resolved_financial_obligations_allow_fresh_review",
+          "resolved_obligation_cessation_schedules_one_without_current_invoice_change",
+          "resolved_financial_records_and_cessation_history_retained_with_exact_retry",
+          "protected_accounts_subscriptions_and_clocks_unchanged"
+        ],
+        "scope": "genuine sandbox paid cessation financial obligations + deployed service/SQL",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "financialConflictAccepted": true,
+        "blockedCessationRequests": 5,
+        "obligationRetained": true,
+        "financialBlockers": "FINANCIAL_OPEN,PAYMENT_OPEN",
+        "passed": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "protectedBillingUnchanged": true
+      },
+      "cleanup": {
+        "verified": true,
+        "at": "2026-11-15T13:34:01Z"
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthy": true,
+      "healthVerifiedAt": "2026-11-15T13:34:05Z",
+      "readyRevision": "khrental-app--0000523",
+      "artifact": {
+        "id": 14163414451,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2141,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14163414451",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14163414451/zip",
+        "expired": false,
+        "created_at": "2026-11-15T13:34:06Z",
+        "expires_at": "2026-12-15T13:34:05Z",
+        "updated_at": "2026-11-15T13:34:06Z",
+        "digest": "sha256:b7353dce22aa0853f898f16ee041360c0d6169b8cdcd3b3adabff0ccdb0d8149",
+        "workflow_run": {
+          "id": 43719440920,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "02593dca4adcbea32e6283f1605a924610d05603"
+        }
+      },
+      "neverReplayOperation": true,
+      "providerIdentifiersOmitted": true
+    }
+  ],
+  "limits": [
+    "Paid whole-property service/SQL outstanding issued invoice and pending payment review added between preview and confirmation only; not HTTP/UI or credential login",
+    "Draft invoices, refund balances, settlements, deposits, reservations, open tenancies, other entitlement states and simultaneous database races remain separate",
+    "No clock advancement or new renewal acceptance in this case",
+    "R5 partial; live charging/full enforcement OFF; Evia paused"
+  ]
+}
