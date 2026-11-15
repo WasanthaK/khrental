@@ -1,0 +1,82 @@
+{
+  "status": "bounded_acceptance_passed",
+  "scenario": "cessation-settlement-deposit-conflict",
+  "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+  "pullRequests": [
+    670
+  ],
+  "latestAcceptedRun": 43721199917,
+  "attempts": [
+    {
+      "runId": 43721199917,
+      "jobId": 132833610376,
+      "sourceSha": "f8844e73e5f2499f3ed088fe40450d126b4466a9",
+      "conclusion": "success",
+      "proof": {
+        "operation": "3723cb4a-f474-4789-93b6-513652b6cf08",
+        "scenario": "cessation-settlement-deposit-conflict",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "cessation_preview_clean_with_closed_synthetic_tenancy",
+          "draft_settlement_blocks_preview_without_changing_inventory_hash",
+          "draft_settlement_stale_retry_and_new_command_rejected_without_effect",
+          "held_deposit_reported_with_draft_settlement_and_rejected",
+          "held_deposit_alone_still_blocks_after_settlement_voided",
+          "resolved_settlement_and_deposit_allow_fresh_review",
+          "resolved_obligation_cessation_schedules_one_without_current_invoice_change",
+          "resolved_settlement_deposit_and_cessation_history_retained_with_exact_retry",
+          "protected_accounts_subscriptions_and_clocks_unchanged"
+        ],
+        "scope": "genuine sandbox paid cessation settlement and deposit obligations + deployed service/SQL",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "settlementDepositConflictAccepted": true,
+        "blockedCessationRequests": 5,
+        "obligationRetained": true,
+        "obligationBlockers": "SETTLEMENT_OPEN,DEPOSIT_OPEN",
+        "passed": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "protectedBillingUnchanged": true
+      },
+      "cleanup": {
+        "verified": true,
+        "at": "2026-11-15T13:53:47Z"
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthy": true,
+      "healthVerifiedAt": "2026-11-15T13:53:51Z",
+      "readyRevision": "khrental-app--0000523",
+      "artifact": {
+        "id": 14164458173,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2170,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14164458173",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14164458173/zip",
+        "expired": false,
+        "created_at": "2026-11-15T13:53:52Z",
+        "expires_at": "2026-12-15T13:53:51Z",
+        "updated_at": "2026-11-15T13:53:52Z",
+        "digest": "sha256:88cc49a7f4278299a657bab3a180d228b1602818c2c8c992b4bb007c4838de8f",
+        "workflow_run": {
+          "id": 43721199917,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "f8844e73e5f2499f3ed088fe40450d126b4466a9"
+        }
+      },
+      "neverReplayOperation": true,
+      "providerIdentifiersOmitted": true
+    }
+  ],
+  "limits": [
+    "Paid whole-property service/SQL draft settlement and held deposit added between preview and confirmation only; not HTTP/UI or credential login",
+    "Reservations, approved settlements, refund balances, open tenancies, other entitlement states and simultaneous database races remain separate",
+    "Synthetic closed agreement with no renter, contract or signature; the deposit renter field used the fixture's non-login actor",
+    "No clock advancement or new renewal acceptance in this case",
+    "R5 partial; live charging/full enforcement OFF; Evia paused"
+  ]
+}
