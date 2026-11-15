@@ -1,0 +1,67 @@
+{
+  "status": "acceptance_pending",
+  "attempts": [
+    {
+      "scenario": "http-hosted-checkout",
+      "status": "failed_before_payment",
+      "date": "2026-11-15",
+      "timeZone": "Asia/Colombo",
+      "pullRequest": 656,
+      "sourceHead": "10b640a6534d80ff135a2459464993f8c52a7cfb",
+      "mergeCommit": "a05dc7a14f4dbc6c9d50ba1780615820cf0cf3a8",
+      "runId": 43675670718,
+      "operationId": "9cc7f6a9-635d-43e6-846d-bb69d5a12864",
+      "replayAllowed": false,
+      "ciRuns": [
+        43675517960,
+        43675517976
+      ],
+      "boundaries": {
+        "credentialLoginAccepted": false,
+        "applicationUiAccepted": false,
+        "liveChargingEnabled": false,
+        "fullEnforcementEnabled": false,
+        "evia": "owner-paused"
+      },
+      "jobId": 132695377530,
+      "failure": {
+        "stage": "hosted_checkout_create",
+        "code": "ERR_ASSERTION",
+        "cause": "Test harness compared lowercase UUIDs against uppercase SQL-backed UUID metadata; the same assertion blocked provider cleanup.",
+        "confirmedBy": "Sandbox Checkout readback: matching UUIDs differing only in case; open/unpaid session with no subscription."
+      },
+      "cleanup": {
+        "sqlFixtureInactive": true,
+        "providerVerified": false,
+        "followupRun": 43676365001
+      },
+      "restoration": {
+        "originalFlags": true,
+        "fullConfigurationEqual": true,
+        "differentPaths": [],
+        "servingBuildUnchanged": true,
+        "sqlHealthReady": true
+      },
+      "artifact": {
+        "id": 14146562093,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 1152,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14146562093",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14146562093/zip",
+        "expired": false,
+        "created_at": "2026-11-15T04:15:31Z",
+        "expires_at": "2026-12-15T04:15:30Z",
+        "updated_at": "2026-11-15T04:15:31Z",
+        "digest": "sha256:939002c44320fa6bdf48267b1a8d121c692f47253dbe140d7df0adc68216a721",
+        "workflow_run": {
+          "id": 43675670718,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "a05dc7a14f4dbc6c9d50ba1780615820cf0cf3a8"
+        }
+      },
+      "followupPullRequest": 657
+    }
+  ]
+}
