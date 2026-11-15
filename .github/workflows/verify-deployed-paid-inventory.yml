@@ -20,6 +20,7 @@ on:
         type: choice
         default: cessation-renewal
         options:
+          - cleanup-cessation-renewal
           - cessation-renewal
           - http-hosted-checkout
           - cleanup-hosted-checkout
@@ -73,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == cessation-renewal || "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout || "$SCENARIO" == cleanup-hosted-checkout ]]
+          [[ "$SCENARIO" == cleanup-cessation-renewal || "$SCENARIO" == cessation-renewal || "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout || "$SCENARIO" == cleanup-hosted-checkout ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -133,7 +134,11 @@ jobs:
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
-          if [ "$SCENARIO" = cleanup-hosted-checkout ]; then
+          if [ "$SCENARIO" = cleanup-cessation-renewal ]; then
+            grep -q 'PAID_RENEWAL_CLEANUP_OWNERSHIP=' paid-inventory.txt
+            grep -Eo 'PAID_INVENTORY_CLEANUP=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_CLEANUP=//' > paid-inventory-summary.json
+            jq -e '.verified and .fixtureInactive and .subscriptionCanceled and .recordsRetained' paid-inventory-summary.json
+          elif [ "$SCENARIO" = cleanup-hosted-checkout ]; then
             grep -Eo 'PAID_HOSTED_CLEANUP_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_HOSTED_CLEANUP_PASS=//' > paid-inventory-summary.json
             jq -e '.verified and .sessionExpired and .noSubscription and .fixtureInactive and .protectedBillingUnchanged and .recordsRetained' paid-inventory-summary.json
           else
